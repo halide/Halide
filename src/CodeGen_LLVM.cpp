@@ -1246,6 +1246,22 @@ void CodeGen_LLVM::optimize_module() {
 
     llvm::PassBuilder pb(tm.get(), pto);
 
+    if (!do_loop_opt) {
+        // Blow away llvm's loop idiom recognition pass, which does
+        // unhelpful things like replacing carefully-scheduled
+        // situationally-appropriate memcpys with generic memcpys that
+        // are slower because they involve a function
+        // call. Unfortunately there's no way to skip the pass, but we
+        // can clobber the loop pass manager just after it gets added
+        // a fresh one, and re-add the passes we actually want.
+        auto strip_loop_idioms_pass = [](LoopPassManager &m, llvm::PassBuilder::OptimizationLevel) {
+            m = LoopPassManager(false);
+            m.addPass(llvm::IndVarSimplifyPass());
+        };
+
+        pb.registerLateLoopOptimizationsEPCallback(strip_loop_idioms_pass);
+    }
+
     bool debug_pass_manager = false;
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam(debug_pass_manager);

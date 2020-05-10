@@ -66,9 +66,9 @@
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
 
-#include <llvm/Transforms/Scalar/GVN.h>
-
 #include <llvm/Transforms/IPO/AlwaysInliner.h>
+#include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Scalar/IndVarSimplify.h>
 
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/IR/DataLayout.h>
