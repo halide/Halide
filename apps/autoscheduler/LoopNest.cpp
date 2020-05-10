@@ -1475,13 +1475,51 @@ std::pair<const LoopNest *, const LoopNest *> LoopNest::find_innermost_and_paren
     return {child, parent};
 }
 
-int64_t LoopNest::points_accessed_per_thread(const GPULoopInfo &gpu_loop_info, const FunctionDAG::Node*producer) const {
-    const auto& bounds = gpu_loop_info.current_thread_loop->get_bounds(producer);
+double LoopNest::points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const FunctionDAG::Node* producer, const LoopNest* parent, const LoopNest* grandparent, double n, const ScheduleFeatures &feat, bool verbose) const {
+    std::unique_ptr<LoopNest> innermost_parent_clone = make_unique<LoopNest>();
+    innermost_parent_clone->copy_from(*parent);
+    double unrolled_loop_extent = feat.unrolled_loop_extent;
+    std::vector<int64_t> tiling;
+    for (size_t i = 0; i < parent->size.size(); i++) {
+        if (!stage->loop[i].pure) {
+            continue;
+        }
+
+        if (unrolled_loop_extent > 1) {
+            tiling.push_back(parent->size[i]);
+        } else {
+            tiling.push_back(1);
+        }
+    }
+
+    IntrusivePtr<const LoopNest> innermost_parent = innermost_parent_clone->parallelize_in_tiles(params, tiling, grandparent, target, true, false, false);
+
+    const auto& bounds = innermost_parent->get_bounds(producer);
     int64_t num_points = 1;
     for (int i = 0; i < producer->dimensions; i++) {
         num_points *= bounds->region_required(i).extent();
+        if (verbose) {
+            aslog(0) << "region_required(i) = " << bounds->region_required(i).extent() << "; ";
+        }
     }
-    return num_points;
+
+    double non_unrolled_inner_serial_extents = gpu_loop_info.total_inner_serial_extents / unrolled_loop_extent;
+
+    double points_accessed = std::min(non_unrolled_inner_serial_extents * num_points, (double)n * gpu_loop_info.total_inner_serial_extents) * gpu_loop_info.total_outer_serial_extents;
+
+    if (verbose) {
+        aslog(0) << "\n";
+        innermost_parent->dump("", grandparent);
+        aslog(0) << "original points_accessed_per_thread = " << num_points;
+        aslog(0) << "; unrolled_loop_extent = " << unrolled_loop_extent;
+        aslog(0) << "; non_unrolled_inner_serial_extents = " << non_unrolled_inner_serial_extents;
+        aslog(0) << "; total_inner_serial_extents = " << gpu_loop_info.total_inner_serial_extents;
+        aslog(0) << "; total_outer_serial_extents = " << gpu_loop_info.total_outer_serial_extents;
+        aslog(0) << "; final points_accessed_per_thread = " << points_accessed;
+        aslog(0) << "; n = " << n << "\n";
+    }
+
+    return points_accessed;
 }
 
 int64_t LoopNest::compute_licm_amortization(const LoopNest *innermost, const LoopNest *parent, const ScheduleFeatures &feat, const LoadJacobian &jac, int producer_dims) const {
@@ -2482,15 +2520,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     aslog(0) << "BEGIN global_mem_load. consumer: " << node->func.name() <<  "; producer: " << e->producer->func.name() <<"\n";
                                 }
 
-                                double points = points_accessed_per_thread(gpu_loop_info, e->producer);
-                                double serial_loop_accesses = std::min(points, (double)n * gpu_loop_info.total_inner_serial_extents) * gpu_loop_info.total_outer_serial_extents;
-
-                                if (verbose) {
-                                    aslog(0) << "points_accessed_per_thread = " << points;
-                                    aslog(0) << "; total_inner_serial_extents = " << gpu_loop_info.total_inner_serial_extents;
-                                    aslog(0) << "; serial_loop_accesses = " << serial_loop_accesses;
-                                    aslog(0) << "; n = " << n << "\n";
-                                }
+                                double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, e->producer, parent, grandparent, n, feat, verbose);
 
                                 compute_global_mem_load_features(
                                     jac.first,
@@ -2500,7 +2530,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     producer_has_been_scheduled,
                                     *gpu_loop_info.thread_info,
                                     global_mem_loads,
-                                    serial_loop_accesses,
+                                    points_accessed,
                                     1,
                                     root,
                                     1,
@@ -3215,7 +3245,8 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
                                                             const LoopNest *parent,
                                                             const Target &target,
                                                             bool inner_tiling,
-                                                            bool adjust_tiling) const {
+                                                            bool adjust_tiling,
+                                                            bool move_rvars_inward) const {
 
     // Split this loop and move factors to the inner loop
     LoopNest *inner = new LoopNest, *outer = new LoopNest;
@@ -3237,6 +3268,10 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
         } else if (gpu_label == thread) {
             inner->gpu_label = serial;
             outer->gpu_label = thread;
+            outer->parallel = false;
+        } else if (gpu_label == serial) {
+            inner->gpu_label = serial;
+            outer->gpu_label = serial;
             outer->parallel = false;
         } else {
             internal_error << "invalid gpu label " << gpu_label << " for parallelized loop\n";
@@ -3273,10 +3308,13 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
                 internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
                 outer_extent = (outer->size[i] + tiling[l] - 1) / tiling[l];
                 inner->size[i] = tiling[l];
-            } else {
+            } else if (move_rvars_inward) {
                 // RVars are moved inwards
                 outer_extent = 1;
                 inner->size[i] = outer->size[i];
+            } else {
+                outer_extent = outer->size[i];
+                inner->size[i] = 1;
             }
             if (adjust_tiling) {
                 inner->size[i] = (outer->size[i] + outer_extent - 1) / outer_extent;
@@ -3286,9 +3324,12 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
                 internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
                 inner->size[i] = (outer->size[i] + tiling[l] - 1) / tiling[l];
                 outer_extent = tiling[l];
-            } else {
+            } else if (move_rvars_inward) {
                 outer_extent = 1;
                 inner->size[i] = outer->size[i];
+            } else {
+                outer_extent = outer->size[i];
+                inner->size[i] = 1;
             }
             if (adjust_tiling) {
                 outer_extent = (outer->size[i] + inner->size[i] - 1) / inner->size[i];
