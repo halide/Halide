@@ -27,23 +27,6 @@ public:
 
         relu(c, x, y, n) = max(0, conv(c, x, y, n));
 
-        relu.dim(0).set_bounds(0, CO).set_stride(1)
-            .dim(1).set_bounds(0, W).set_stride(CO)
-            .dim(2).set_bounds(0, H).set_stride(CO * W)
-            .dim(3).set_bounds(0, N).set_stride(CO * H * W);
-
-        input.dim(0).set_bounds(0, CI).set_stride(1)
-            .dim(1).set_bounds(0, W + 2).set_stride(CI)
-            .dim(2).set_bounds(0, H + 2).set_stride(CI * (W + 2))
-            .dim(3).set_bounds(0, N).set_stride(CI * (W + 2) * (H + 2));
-
-        filter.dim(0).set_bounds(0, CO).set_stride(1)
-            .dim(1).set_bounds(0, 3).set_stride(CO)
-            .dim(2).set_bounds(0, 3).set_stride(CO * 3)
-            .dim(3).set_bounds(0, CI).set_stride(CO * 3 * 3);
-
-        bias.dim(0).set_bounds(0, CO).set_stride(1);
-
         // MKL JITs code for the specific size and strides, so we'll
         // do the same and ask Halide to compile for this specific
         // size:
@@ -78,9 +61,9 @@ public:
 
             bias.dim(0).set_estimate(0, CO);
 
-            relu.dim(0).set_estimate(0, W);
-            relu.dim(1).set_estimate(0, H);
-            relu.dim(2).set_estimate(0, CO);
+            relu.dim(0).set_estimate(0, CO);
+            relu.dim(1).set_estimate(0, W);
+            relu.dim(2).set_estimate(0, H);
             relu.dim(3).set_estimate(0, N);
 
         } else if (get_target().has_feature(Target::CUDA)) {
