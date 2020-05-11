@@ -93,7 +93,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
     get_timeout_cmd TIMEOUT_CMD
 else
     echo "Train only mode: ON"
-    EPOCHS=100000
+    EPOCHS=10000
 fi
 
 record_command() {
