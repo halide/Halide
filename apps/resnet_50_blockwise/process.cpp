@@ -645,7 +645,7 @@ int main(int argc, char **argv) {
   
   // if (schedule_type_name == "manual, auto_schedule, classic_auto_schedule
   if (schedule_type_name == "manual") {
-      std::cout << "Manually tuned time: " << best * 1e3 << "ms\n";
+      std::cout << "Manually-tuned time: " << best * 1e3 << "ms\n";
   } else {
       std::cout << "Auto-scheduled time: " << best * 1e3 << "ms\n";
   }

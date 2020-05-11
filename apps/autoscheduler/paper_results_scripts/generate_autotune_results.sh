@@ -5,6 +5,8 @@ else
     improved=1
 fi
 
+export AUTOTUNE_AUTOSCHEDULER="$autoscheduler"
+
 HALIDE=$(dirname $0)/../../..
 
 echo "Using Halide in " $HALIDE
@@ -91,7 +93,9 @@ fi
 
 # APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator"
 
-APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
+APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul" # Missing resnet_50_blockwise
+
+APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul" # Missing resnet_50_blockwise
 
 for app in $APPS; do
     echo "$app ($autoscheduler) (retrain=$RETRAIN)" >> autoprogress
@@ -158,4 +162,15 @@ for app in $APPS; do
 done
 
 ./show_autotune_results.sh "$autoscheduler"
+
+# Store the newly created samples in directories so we can find them later
+for app in $APPS; do
+    echo "Moving samples of ${app}"
+
+    i=0
+    while [ -d "${HALIDE}/apps/${app}/samples_${autoscheduler}_$i" ]; do
+        i=$((i+1))
+    done
+    mv "${HALIDE}/apps/${app}/samples" "${HALIDE}/apps/${app}/samples_${autoscheduler}_$i"
+done
 

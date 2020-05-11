@@ -18,5 +18,10 @@ For all the commands given above, the optional "--improved" argument will run us
 To retrain the cost model on the random pipelines, run the following command:
     $ ./train_cost_model.sh beam
 
-Afterwards, the updated weights will be found in apps/random_pipeline/samples.
+Afterwards, the updated weights will be found in apps/random_pipeline/samples/updated.weights.
+
+Instead, you may wish to retrain the cost model on the benchmark applications themselves. To do so, run the following command:
+    $ ./train_cost_model_on_benchmarks.sh beam
+
+Afterwards, the updated weights will be found in apps/autoscheduler/paper_results_scripts/samples/updated.weights.
 

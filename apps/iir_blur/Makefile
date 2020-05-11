@@ -41,5 +41,5 @@ autotune: # We assume here that our scripts have already built the autotuning bi
 		$(HL_WEIGHTS_DIR) \
 		$(AUTOSCHED_BIN) \
 		$(HALIDE_DISTRIB_PATH) \
-		samples/
+		$(HL_SAMPLES)
 

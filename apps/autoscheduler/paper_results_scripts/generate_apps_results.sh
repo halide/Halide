@@ -9,7 +9,7 @@ HALIDE=$(dirname $0)/../../..
 echo "Using Halide in " $HALIDE
 
 # export CXX="ccache c++"
-export CXX="c++ -fopenmp"
+export CXX="c++"
 
 # Best single set of params for master on the benchmarking machine, found with grid search on the runtime pipelines
 # There are already baked into src/AutoSchedule.cpp as the default
@@ -90,41 +90,76 @@ if [ "$autoscheduler" != "master" ]; then
     cd -
 fi
 
-
 #APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50_blockwise bgu"
  
-APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
+APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer mat_mul iir_blur bgu" # resnet_50_blockwise is handled by a special case at the end
 
-# Uncomment when there's a change that wouldn't be picked up by the Makefiles (e.g. new weights)
-for app in ${APPS}; do make -C ${HALIDE}/apps/${app} clean; done
+APPS="" # resnet_50_blockwise is handled by a special case at the end
 
-for app in ${APPS}; do
+benchmark_resnet="true"
+
+if [ "$APPS" != "" ]; then
+    # Uncomment when there's a change that wouldn't be picked up by the Makefiles (e.g. new weights)
+    for app in ${APPS}; do make -C ${HALIDE}/apps/${app} clean; done
+
+    for app in ${APPS}; do
+        echo "building $app (autoscheduler == $autoscheduler)" >> progress
+
+        if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
+            make -C ${HALIDE}/apps/${app} build
+        else
+            make -C ${HALIDE}/apps/${app} all
+        fi
+
+        if [ $? -ne 0 ]; then
+            echo "Failed to build $app"
+            echo "Failed to build $app (autoscheduler == $autoscheduler)" >> errors
+            # exit 1
+        fi
+    done
+
+    mkdir $results 2>/dev/null
+
+    # benchmark everything
+    for app in ${APPS}; do
+        echo "running $app (autoscheduler == $autoscheduler)" >> progress
+        make -C ${HALIDE}/apps/${app} test &> $results/$app.txt
+
+        if [ $? -ne 0 ]; then
+            echo "Failed to benchmark $app"
+            echo "Failed to benchmark $app (autoscheduler == $autoscheduler)" >> errors
+            # exit 1
+        fi
+    done
+fi
+
+# Special case for resnet_50_blockwise
+if [ "$benchmark_resnet" == "true" ]; then
+    app="resnet_50_blockwise"
+
     echo "building $app (autoscheduler == $autoscheduler)" >> progress
 
-    if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
-        make -C ${HALIDE}/apps/${app} build
+    if [ "$autoscheduler" != "master" ]; then
+        make -C ${HALIDE}/apps/${app} clean
+    fi
+
+    if [ "$autoscheduler" != "mcts" ]; then
+        cores=$(nproc)
     else
-        make -C ${HALIDE}/apps/${app} all
+        cores=2
     fi
 
-    if [ $? -ne 0 ]; then
-        echo "Failed to build $app"
-        echo "Failed to build $app (autoscheduler == $autoscheduler)" >> errors
-        # exit 1
-    fi
-done
+    make -C ${HALIDE}/apps/${app} all -j${cores}
 
-mkdir $results 2>/dev/null
-
-# benchmark everything
-for app in ${APPS}; do
     echo "running $app (autoscheduler == $autoscheduler)" >> progress
-    make -C ${HALIDE}/apps/${app} test &> $results/$app.txt
 
-    if [ $? -ne 0 ]; then
-        echo "Failed to benchmark $app"
-        echo "Failed to benchmark $app (autoscheduler == $autoscheduler)" >> errors
-        # exit 1
+    if [ "$autoscheduler" == "greedy" ]; then
+        make -C ${HALIDE}/apps/${app} test_manual &> $results/$app.txt
+        make -C ${HALIDE}/apps/${app} test_auto_schedule &>> $results/$app.txt
+    elif [ "$autoscheduler" == "master" ]; then
+        make -C ${HALIDE}/apps/${app} test_classic_auto_schedule &> $results/$app.txt
+    else
+        make -C ${HALIDE}/apps/${app} test_auto_schedule &> $results/$app.txt
     fi
-done
+fi
 

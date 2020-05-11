@@ -12,6 +12,7 @@ SHELL = bash
 PYTHON ?= python3
 
 HL_CUSTOM_AUTOSCHEDULER ?= -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019
+HL_SAMPLES ?= "samples/"
 
 # TODO(srj): the python bindings need to be put into the distrib folders;
 # this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
@@ -53,7 +54,7 @@ GXX ?= g++
 OPTIMIZE ?= -O3
 
 CFLAGS += $(OPTIMIZE) -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
-CXXFLAGS += $(OPTIMIZE) -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
+CXXFLAGS += $(OPTIMIZE) -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp
 
 CXX_VERSION = $(shell $(CXX) --version | head -n1)
 ifneq (,$(findstring clang,$(CXX_VERSION)))

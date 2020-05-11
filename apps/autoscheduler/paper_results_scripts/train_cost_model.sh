@@ -9,7 +9,7 @@ export CXX="c++"
 
 export HL_MACHINE_PARAMS=32,24000000,160
 export HL_PERMIT_FAILED_UNROLL=1
-export HL_WEIGHTS_DIR="$PWD/../baseline.weights"
+export HL_WEIGHTS_DIR="$PWD/../improved.weights"
 # export HL_TARGET=x86-64-avx2
 export HL_TARGET="host"
 
@@ -84,10 +84,12 @@ fi
 
 # APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
 
-APPS="random_pipeline" # Missing mat_mul_generator and resnet_50_blockwise
+APPS="random_pipeline"
 
 for app in $APPS; do
     echo "$app ($autoscheduler) (retrain=$RETRAIN)" >> retrainprogress
+
+    make clean
 
     # Build app
     if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
@@ -118,14 +120,13 @@ for app in $APPS; do
     # fi
     MAX_SECONDS=21600 # 6 hours
 
-    # first_autotune="true"
     SECONDS=0
 
     while [[ SECONDS -lt $MAX_SECONDS ]]; do
         # Use the correct weights
         if [ ! -d "${HALIDE}/apps/${app}/samples" ]; then
-            export HL_WEIGHTS_DIR="$PWD/../baseline.weights"
-            # first_autotune="false"
+            # export HL_WEIGHTS_DIR="$PWD/../baseline.weights"
+            export HL_WEIGHTS_DIR="$PWD/../improved.weights"
         else
             export HL_WEIGHTS_DIR="$PWD/../../${app}/samples/updated.weights"
         fi
