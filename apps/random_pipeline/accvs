@@ -5,7 +5,7 @@ i=250
 while [ $i -lt 1000 ]; do
     if [ -f samples/batch_${i}_0/training_output.txt ]; then 
         printf "%d " $i
-        grep Hoss samples/batch_${i}_0/training_output.txt | tail -n1 | sed 's/\(Hoss: \<\S*\>\).*/\1/'
+        grep "HASAN: size of validation set" samples/batch_${i}_0/training_output.txt | tail -n1 | sed 's/^.*\(size of validation set = \<\S*\>\).*/\1/'
     fi
     i=$((i+1))
 done

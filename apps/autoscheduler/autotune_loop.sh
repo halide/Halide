@@ -106,18 +106,19 @@ make_featurization() {
     mkdir -p ${D}
     rm -f "${D}/${FNAME}.featurization"
     rm -f "${D}/${FNAME}.sample"
-    if [[ $D == */0 ]]; then
-        # Sample 0 in each batch is best effort beam search, with no randomness
-        dropout=100
-        beam=32
-    else
-        # The other samples are random probes biased by the cost model
-        dropout=1  # 1% chance of operating entirely greedily
-        beam=1
-    fi
 
     # TODO can we avoid the code duplication here?
     if [ "$PIPELINE" == "random_pipeline" ]; then
+        if [[ $D == */0 ]]; then
+            # Sample 0 in each batch is best effort beam search, with no randomness
+            dropout=100
+            beam=32
+        else
+            # The other samples are random probes biased by the cost model
+            dropout=1  # 1% chance of operating entirely greedily
+            beam=1
+        fi
+
         HL_SEED=${SEED} \
             HL_WEIGHTS_DIR=${WEIGHTS} \
             HL_RANDOM_DROPOUT=${dropout} \
@@ -138,23 +139,113 @@ make_featurization() {
             -s Adams2019 \
               2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
     else
-        HL_SEED=${SEED} \
-            HL_WEIGHTS_DIR=${WEIGHTS} \
-            HL_RANDOM_DROPOUT=${dropout} \
-            HL_BEAM_SIZE=${beam} \
-            HL_MACHINE_PARAMS=32,24000000,40 \
-            ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
-            ${GENERATOR} \
-            -g ${PIPELINE} \
-            -f ${FNAME} \
-            -o ${D} \
-            -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
-            target=${HL_TARGET} \
-            auto_schedule=true \
-            ${EXTRA_GENERATOR_ARGS} \
-            -p ${AUTOSCHED_BIN}/libauto_schedule.so \
-            -s Adams2019 \
-              2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+
+        if [[ $D == */0 ]]; then
+            # Sample 0 is best effor from autoscheduler
+            if [ "$AUTOTUNE_AUTOSCHEDULER" == "greedy" ]; then
+                HL_SEED=${SEED} \
+                    HL_WEIGHTS_DIR=${WEIGHTS} \
+                    HL_RANDOM_DROPOUT=100 \
+                    HL_BEAM_SIZE=1 \
+                    HL_NUM_PASSES=1 \
+                    HL_MACHINE_PARAMS=32,24000000,40 \
+                    ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
+                    ${GENERATOR} \
+                    -g ${PIPELINE} \
+                    -f ${FNAME} \
+                    -o ${D} \
+                    -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
+                    target=${HL_TARGET} \
+                    auto_schedule=true \
+                    ${EXTRA_GENERATOR_ARGS} \
+                    -p ${AUTOSCHED_BIN}/libauto_schedule.so \
+                    -s Adams2019 \
+                      2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+            elif [ "$AUTOTUNE_AUTOSCHEDULER" == "beam" ]; then
+                HL_SEED=${SEED} \
+                    HL_WEIGHTS_DIR=${WEIGHTS} \
+                    HL_RANDOM_DROPOUT=100 \
+                    HL_BEAM_SIZE=32 \
+                    HL_NUM_PASSES=5 \
+                    HL_MACHINE_PARAMS=32,24000000,40 \
+                    ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
+                    ${GENERATOR} \
+                    -g ${PIPELINE} \
+                    -f ${FNAME} \
+                    -o ${D} \
+                    -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
+                    target=${HL_TARGET} \
+                    auto_schedule=true \
+                    ${EXTRA_GENERATOR_ARGS} \
+                    -p ${AUTOSCHED_BIN}/libauto_schedule.so \
+                    -s Adams2019 \
+                      2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+            elif [ "$AUTOTUNE_AUTOSCHEDULER" == "master" ]; then
+                HL_SEED=${SEED} \
+                    HL_WEIGHTS_DIR=${WEIGHTS} \
+                    HL_RANDOM_DROPOUT=100 \
+                    HL_BEAM_SIZE=1 \
+                    HL_NUM_PASSES=1 \
+                    HL_MACHINE_PARAMS=32,24000000,40 \
+                    ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
+                    ${GENERATOR} \
+                    -g ${PIPELINE} \
+                    -f ${FNAME} \
+                    -o ${D} \
+                    -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
+                    target=${HL_TARGET} \
+                    auto_schedule=true \
+                    ${EXTRA_GENERATOR_ARGS} \
+                      2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+            elif [ "$AUTOTUNE_AUTOSCHEDULER" == "mcts" ]; then
+                HL_SEED=${SEED} \
+                    HL_WEIGHTS_DIR=${WEIGHTS} \
+                    HL_RANDOM_DROPOUT=100 \
+                    HL_NUM_PASSES=20 \
+                    HL_NUM_PASSES=20 \
+                    MCTS_MAX_MILLIS=0 \
+                    MCTS_MAX_ITERATIONS=1000 \
+                    HL_MACHINE_PARAMS=32,24000000,40 \
+                    ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
+                    ${GENERATOR} \
+                    -g ${PIPELINE} \
+                    -f ${FNAME} \
+                    -o ${D} \
+                    -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
+                    target=${HL_TARGET} \
+                    auto_schedule=true \
+                    ${EXTRA_GENERATOR_ARGS} \
+                    -p ${AUTOSCHED_BIN}/libauto_schedule.so \
+                    -s Adams2019 \
+                      2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+            else
+                echo "AUTOTUNE_AUTOSCHEDULER must be [mcts|master|beam|greedy]"
+                exit 1
+            fi
+
+        else
+            # The other samples are random probes biased by the cost model
+            dropout=1  # 1% chance of operating entirely greedily
+            beam=1
+
+            HL_SEED=${SEED} \
+                HL_WEIGHTS_DIR=${WEIGHTS} \
+                HL_RANDOM_DROPOUT=${dropout} \
+                HL_BEAM_SIZE=${beam} \
+                HL_MACHINE_PARAMS=32,24000000,40 \
+                ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
+                ${GENERATOR} \
+                -g ${PIPELINE} \
+                -f ${FNAME} \
+                -o ${D} \
+                -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
+                target=${HL_TARGET} \
+                auto_schedule=true \
+                ${EXTRA_GENERATOR_ARGS} \
+                -p ${AUTOSCHED_BIN}/libauto_schedule.so \
+                -s Adams2019 \
+                  2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+        fi
     fi
 
     # We don't need image I/O for this purpose,
@@ -319,6 +410,9 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
                     --best_benchmark=${SAMPLES}/best.${PIPELINE}.benchmark.txt \
                     --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h | \
             tee ${DIR}/training_output.txt
+
+            # --rates="0.0001" \
+            # --rates="0.00002" \
         else
             echo "Skipping retraining model..."
         fi

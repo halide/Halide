@@ -10,10 +10,11 @@ export CXX="c++"
 export HL_MACHINE_PARAMS=32,24000000,160
 export HL_PERMIT_FAILED_UNROLL=1
 export HL_WEIGHTS_DIR="$PWD/../improved.weights"
-# export HL_TARGET=x86-64-avx2
 export HL_TARGET="host"
 
 export HL_RANDOM_DROPOUT=100
+
+export HL_SAMPLES="$PWD/samples/"
 
 #export HL_BEAM_SIZE=1
 #export HL_NUM_PASSES=1
@@ -63,10 +64,6 @@ else
     exit 1
 fi
 
-# if [ "$RETRAIN" != "true" ] && [ "$RETRAIN" != "false" ]; then
-#     echo You must set RETRAIN env variable to \"true\" or \"false\"
-#     exit 1
-# fi
 export RETRAIN="true"
 
 if [ "$autoscheduler" != "master" ]; then
@@ -82,17 +79,14 @@ fi
 
 # APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator"
 
-# APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
-
-APPS="random_pipeline"
+APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul resnet_50_blockwise"
 
 for app in $APPS; do
-    echo "$app ($autoscheduler) (retrain=$RETRAIN)" >> retrainprogress
 
     make -C ${HALIDE}/apps/${app} clean
 
     # Build app
-    if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
+    if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] && [ "$app" != "resnet_50_blockwise" ] ; then
         make -C ${HALIDE}/apps/${app} build
     else
         make -C ${HALIDE}/apps/${app} all
@@ -103,29 +97,17 @@ for app in $APPS; do
         echo "Failed to build $app ($autoscheduler) (retrain=$RETRAIN)" >> retrainerrors
         # exit 1
     fi
+done
 
-    # Move old samples away
-    # if [ -d "${HALIDE}/apps/${app}/samples" ]; then
-    #     i=0
-    #     while [ -d "${HALIDE}/apps/${app}/old_samples_$i" ]; do
-    #         i=$((i+1))
-    #     done
-    #     mv "${HALIDE}/apps/${app}/samples" "${HALIDE}/apps/${app}/old_samples_$i"
-    # fi
+MAX_SECONDS=216000 # 60 hours
+SECONDS=0
 
-    # if [ "$RETRAIN" == "true" ]; then
-    #     MAX_SECONDS=10800 # 3 hours
-    # else
-    #     MAX_SECONDS=600 # 10 minutes
-    # fi
-    MAX_SECONDS=21600 # 6 hours
+while [[ SECONDS -lt $MAX_SECONDS ]]; do
+    for app in $APPS; do
+        echo "$app ($autoscheduler) (retrain=$RETRAIN)" >> retrainprogress
 
-    SECONDS=0
-
-    while [[ SECONDS -lt $MAX_SECONDS ]]; do
         # Use the correct weights
-        if [ ! -d "${HALIDE}/apps/${app}/samples" ]; then
-            # export HL_WEIGHTS_DIR="$PWD/../baseline.weights"
+        if [ ! -d "$HL_SAMPLES" ]; then
             export HL_WEIGHTS_DIR="$PWD/../improved.weights"
         else
             export HL_WEIGHTS_DIR="$PWD/../../${app}/samples/updated.weights"
@@ -141,10 +123,10 @@ for app in $APPS; do
             # exit 1
         fi
     done
-
-    TOTAL_SECONDS=$SECONDS
-
-    echo "$app took $TOTAL_SECONDS seconds (max_seconds=$MAX_SECONDS)"
-    echo "$app took $TOTAL_SECONDS seconds ($autoscheduler) (retrain=$RETRAIN) (max_seconds=$MAX_SECONDS)" >> autostats
 done
+
+TOTAL_SECONDS=$SECONDS
+
+echo "retraining took $TOTAL_SECONDS seconds (max_seconds=$MAX_SECONDS)"
+echo "retraining took $TOTAL_SECONDS seconds ($autoscheduler) (retrain=$RETRAIN) (max_seconds=$MAX_SECONDS)" >> autostats
 
