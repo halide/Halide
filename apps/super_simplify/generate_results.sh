@@ -2,7 +2,8 @@
 
 APPS="harris local_laplacian unsharp bilateral_grid camera_pipe nl_means stencil_chain iir_blur interpolate max_filter lens_blur resnet_50 resize"
 
-rm names.csv
+rm -f names.csv
+rm -f crashes.csv
 touch names.csv
 
 # Assumes that run_all_experiments.sh has run
@@ -14,12 +15,15 @@ for app in $APPS; do
     echo "ours,baseline,ratio" > ${app}_proof_failures.csv
     echo "ours,baseline,ratio" > ${app}_non_monotonic.csv
     echo "ours,baseline,ratio" > ${app}_code_size.csv
-    for ((i=0;i<256;i++)); do
+    for ((i=256;i<512;i++)); do
         echo -n .
         A=$(grep BEST ../${app}/results/${i}/benchmark_stdout.txt | cut -d' ' -f5)
         B=$(grep BEST ../${app}/results_baseline/${i}/benchmark_stdout.txt | cut -d' ' -f5)        
         # If the baseline crashes we get a pass
-        if [ -z $B ]; then A=0; B=0; fi
+        if [ -z $B ]; then
+            echo $app $i >> crashes.csv
+            A=0; B=0;
+        fi
         R=$(echo "scale=3; ${A}00001/${B}00001" | bc)
         echo "$A,$B,$R" >> ${app}_runtime.csv
         
