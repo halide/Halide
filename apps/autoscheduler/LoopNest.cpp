@@ -1485,25 +1485,7 @@ std::pair<const LoopNest *, const LoopNest *> LoopNest::find_innermost_and_paren
 }
 
 double LoopNest::points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const FunctionDAG::Node* producer, const LoopNest* parent, const LoopNest* grandparent, double n, const ScheduleFeatures &feat, bool verbose) const {
-    std::unique_ptr<LoopNest> innermost_parent_clone = make_unique<LoopNest>();
-    innermost_parent_clone->copy_from(*parent);
-    double unrolled_loop_extent = feat.unrolled_loop_extent;
-    std::vector<int64_t> tiling;
-    for (size_t i = 0; i < parent->size.size(); i++) {
-        if (!stage->loop[i].pure) {
-            continue;
-        }
-
-        if (unrolled_loop_extent > 1) {
-            tiling.push_back(parent->size[i]);
-        } else {
-            tiling.push_back(1);
-        }
-    }
-
-    IntrusivePtr<const LoopNest> innermost_parent = innermost_parent_clone->parallelize_in_tiles(params, tiling, grandparent, target, true, false, false);
-
-    const auto& bounds = innermost_parent->get_bounds(producer);
+    const auto& bounds = gpu_loop_info.current_thread_loop->get_bounds(producer);
     int64_t num_points = 1;
     for (int i = 0; i < producer->dimensions; i++) {
         num_points *= bounds->region_required(i).extent();
@@ -1512,16 +1494,11 @@ double LoopNest::points_accessed_per_thread(const MachineParams& params, const T
         }
     }
 
-    double non_unrolled_inner_serial_extents = gpu_loop_info.total_inner_serial_extents / unrolled_loop_extent;
-
-    double points_accessed = std::min(non_unrolled_inner_serial_extents * num_points, (double)n * gpu_loop_info.total_inner_serial_extents) * gpu_loop_info.total_outer_serial_extents;
+    double points_accessed = std::min((double)num_points, (double)n * gpu_loop_info.total_inner_serial_extents) * gpu_loop_info.total_outer_serial_extents;
 
     if (verbose) {
         aslog(0) << "\n";
-        innermost_parent->dump("", grandparent);
         aslog(0) << "original points_accessed_per_thread = " << num_points;
-        aslog(0) << "; unrolled_loop_extent = " << unrolled_loop_extent;
-        aslog(0) << "; non_unrolled_inner_serial_extents = " << non_unrolled_inner_serial_extents;
         aslog(0) << "; total_inner_serial_extents = " << gpu_loop_info.total_inner_serial_extents;
         aslog(0) << "; total_outer_serial_extents = " << gpu_loop_info.total_outer_serial_extents;
         aslog(0) << "; final points_accessed_per_thread = " << points_accessed;
