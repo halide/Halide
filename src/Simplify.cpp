@@ -40,6 +40,12 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
 
     use_synthesized_rules = get_use_synthesized_rules_from_environment();
 
+    // Don't require this one to be set
+    if (get_env_variable("HL_DISABLE_CAN_PROVE_RULES") == "1") {
+        user_warning << "HL_DISABLE_CAN_PROVE_RULES=1, ignoring all rules that use can_prove()\n";
+        should_disable_can_prove_rules = true;
+    }
+
     // Only respect the constant bounds from the containing scope.
     if (bi) {
         for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
