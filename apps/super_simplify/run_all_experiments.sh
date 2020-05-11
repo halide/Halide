@@ -10,6 +10,6 @@ for app in harris local_laplacian unsharp bilateral_grid camera_pipe nl_means st
     pushd ../${app}
     make clean
     rm -rf results results_baseline
-    bash ../super_simplify/run_experiment.sh 0 256
+    bash ../super_simplify/run_experiment.sh 256 512
     popd
 done
