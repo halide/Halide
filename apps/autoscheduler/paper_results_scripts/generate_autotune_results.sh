@@ -100,6 +100,8 @@ APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chai
 for app in $APPS; do
     echo "$app ($autoscheduler) (retrain=$RETRAIN)" >> autoprogress
 
+    make -C ${HALIDE}/apps/${app} clean
+
     # Build app
     if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
         make -C ${HALIDE}/apps/${app} build
