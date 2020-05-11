@@ -1,6 +1,6 @@
 #!/bin/bash
 
-i=50
+i=250
 # while [ -f samples/batch_${i}_0/training_output.txt ]; do
 while [ $i -lt 1000 ]; do
     if [ -f samples/batch_${i}_0/training_output.txt ]; then 
