@@ -323,11 +323,9 @@ public:
 
         Expr num_shared_mem_loads_per_block = schedule_features(n, idx++, w);
         Expr num_global_mem_loads_per_block = schedule_features(n, idx++, w);
-        Expr num_global_mem_loads_with_pure_licm_per_block = schedule_features(n, idx++, w);
         Expr num_local_mem_loads_per_thread = schedule_features(n, idx++, w);
         Expr num_shared_mem_stores_per_block = schedule_features(n, idx++, w);
         Expr num_global_mem_stores_per_block = schedule_features(n, idx++, w);
-        Expr num_global_mem_stores_with_pure_licm_per_block = schedule_features(n, idx++, w);
         Expr num_local_mem_stores_per_thread = schedule_features(n, idx++, w);
 
         Expr shared_mem_store_efficiency = schedule_features(n, idx++, w);
@@ -439,10 +437,8 @@ public:
 
         load_cost = print_wrap(load_cost, "load_cost_initial", n, w);
 
-        Expr b = sigmoid(relu1(38, w, n));
-        Expr global_mem_load_cost = b * num_blocks * num_global_mem_loads_per_block * relu1(28, w, n);
+        Expr global_mem_load_cost = num_blocks * num_global_mem_loads_per_block * relu1(28, w, n);
 
-        global_mem_load_cost += (1 - b) * num_blocks * num_global_mem_loads_with_pure_licm_per_block * relu1(28, w, n);
         global_mem_load_cost = print_wrap(global_mem_load_cost, "global_mem_load_cost", n, w);
 
         global_mem_load_cost *= select(inlined_calls == 0, 1.f / global_mem_load_efficiency, 1);
@@ -471,9 +467,7 @@ public:
 
         shared_mem_store_cost = print_wrap(shared_mem_store_cost, "shared_mem_store_cost_after_store_efficiency", n, w);
 
-        Expr factor = sigmoid(relu1(39, w, n));
-        Expr global_mem_store_cost = factor * num_blocks * num_global_mem_stores_per_block * relu1(30, w, n);
-        global_mem_store_cost += (1 - factor) * num_blocks * num_global_mem_stores_with_pure_licm_per_block * relu1(30, w, n);
+        Expr global_mem_store_cost = num_blocks * num_global_mem_stores_per_block * relu1(30, w, n);
         global_mem_store_cost *= select(inlined_calls == 0, 1.f / global_mem_store_efficiency, 1);
 
         global_mem_store_cost = print_wrap(global_mem_store_cost, "global_mem_store_cost_after_store_efficiency", n, w);

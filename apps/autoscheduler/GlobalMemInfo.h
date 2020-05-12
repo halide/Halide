@@ -22,31 +22,24 @@ struct GlobalMemInfo {
         return total_num_transactions;
     }
 
-    double num_transactions_with_pure_licm() const {
-        return total_num_transactions_with_pure_licm;
-    }
-
-    void add_access_info(double num_requests, double num_requests_with_pure_licm, double num_transactions_per_request, double num_bytes_used_per_request, int N, double amortization) {
+    void add_access_info(double num_requests, double num_transactions_per_request, double num_bytes_used_per_request, int N, double amortization) {
         internal_assert(num_bytes_used_per_request > 0);
 
         num_requests /= amortization;
-        num_requests_with_pure_licm /= amortization;
 
         double total_transactions = num_requests * num_transactions_per_request;
-        double total_transactions_with_pure_licm = num_requests_with_pure_licm * num_transactions_per_request;
         double total_bytes = total_transactions * 32.0;
         double total_bytes_used = num_requests * num_bytes_used_per_request;
 
         internal_assert(total_bytes_used <= total_bytes);
 
         for (int i = 0; i < N; ++i) {
-            add_access_info(total_transactions, total_transactions_with_pure_licm, total_bytes_used, total_bytes);
+            add_access_info(total_transactions, total_bytes_used, total_bytes);
         }
     }
 
     void add(const GlobalMemInfo& other) {
         total_num_transactions += other.total_num_transactions;
-        total_num_transactions_with_pure_licm += other.total_num_transactions_with_pure_licm;
         total_num_bytes_used += other.total_num_bytes_used;
         total_num_bytes += other.total_num_bytes;
     }
@@ -62,15 +55,13 @@ struct GlobalMemInfo {
     }
 
 private:
-    void add_access_info(double num_transactions, double num_transactions_with_pure_licm, double num_bytes_used, double num_bytes) {
+    void add_access_info(double num_transactions, double num_bytes_used, double num_bytes) {
         total_num_transactions += num_transactions;
-        total_num_transactions_with_pure_licm += num_transactions_with_pure_licm;
         total_num_bytes_used += num_bytes_used;
         total_num_bytes += num_bytes;
     }
 
     double total_num_transactions = 0;
-    double total_num_transactions_with_pure_licm = 0;
     double total_num_bytes_used = 0;
     double total_num_bytes = 0;
 };
@@ -147,7 +138,7 @@ struct GlobalAccessAccumulator {
         }
     }
 
-    void add_access_info(int num_requests, int num_requests_with_pure_licm, double access_count, double amortization, GlobalMemInfo& global_mem_info) const {
+    void add_access_info(int num_requests, double access_count, double amortization, GlobalMemInfo& global_mem_info) const {
         int num_transactions_per_request = sectors_accessed.size() + unknown_sectors;
 
         if (verbose) {
@@ -167,7 +158,6 @@ struct GlobalAccessAccumulator {
 
         global_mem_info.add_access_info(
             num_requests,
-            num_requests_with_pure_licm,
             num_transactions_per_request,
             num_bytes_used_per_request,
             access_count,
