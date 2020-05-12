@@ -1,6 +1,7 @@
 ((b.node_type() == IRNodeType::Add) && (
  rewrite((x < (y + 1)), (x <= y)) ||
  rewrite((x < (y + c0)), (x <= y), ((c0 <= 1) && (0 < c0))) ||
+ rewrite((x < (y + c0)), (x <= y), (((c0 <= 1) && (0 < c0)) && (-1 < c0))) ||
  rewrite((x < (y + (x + z))), (0 < (y + z))) ||
  rewrite((x < (y + (z + x))), (0 < (y + z))) ||
  rewrite((x < ((x + y) + z)), (0 < (y + z))) ||
@@ -101,13 +102,18 @@
  rewrite(((x*x) < c0), false, (c0 <= 0)) ||
 ((b.node_type() == IRNodeType::Add) && (
  rewrite(((x*c0) < (x + y)), (x < y), ((1 <= c0) && (-4 <= (c0*-2)))) ||
- rewrite(((x*c0) < (y + x)), (x < y), ((1 <= c0) && (-4 <= (c0*-2)))))))) ||
+ rewrite(((x*c0) < (y + x)), (x < y), ((1 <= c0) && (-4 <= (c0*-2)))) ||
+ rewrite(((x*y) < (z + c0)), ((x*y) <= z), (((c0 <= 2) && (0 < c0)) && (c0 <= 1))))))) ||
 ((a.node_type() == IRNodeType::Min) && EVAL_IN_LAMBDA(
 ((b.node_type() == IRNodeType::Add) && (
- rewrite((min(x, (y + c0)) < (min(x, y) + c1)), false, (((c1 + -1) <= min(c0, -1)) && (c1 <= min(c0, 0)))) ||
- rewrite((min(x, (y + c0)) < (min(y, x) + c1)), false, (((c1 + -1) <= min(c0, -1)) && (c1 <= min(c0, 0)))) ||
- rewrite((min((x + c0), y) < (min(x, y) + c1)), false, (((c1 + -1) <= min(c0, -1)) && (c1 <= min(c0, 0)))) ||
- rewrite((min((x + c0), y) < (min(y, x) + c1)), false, (((c1 + -1) <= min(c0, -1)) && (c1 <= min(c0, 0)))))) ||
+ rewrite((min(x, (y + c0)) < (min(x, y) + c1)), false, ((c1 <= min(c0, 0)) && ((c1 + -1) <= min(c0, -1)))) ||
+ rewrite((min(x, (y + c0)) < (min(x, y) + c1)), false, (((c1 <= min(c0, 0)) && ((c1 + -1) <= min(c0, -1))) && (c1 <= min(c0, 1)))) ||
+ rewrite((min(x, (y + c0)) < (min(y, x) + c1)), false, ((c1 <= min(c0, 0)) && ((c1 + -1) <= min(c0, -1)))) ||
+ rewrite((min(x, (y + c0)) < (min(y, x) + c1)), false, (((c1 <= min(c0, 0)) && ((c1 + -1) <= min(c0, -1))) && (c1 <= min(c0, 1)))) ||
+ rewrite((min((x + c0), y) < (min(x, y) + c1)), false, ((c1 <= min(c0, 0)) && ((c1 + -1) <= min(c0, -1)))) ||
+ rewrite((min((x + c0), y) < (min(x, y) + c1)), false, (((c1 <= min(c0, 0)) && ((c1 + -1) <= min(c0, -1))) && (c1 <= min(c0, 1)))) ||
+ rewrite((min((x + c0), y) < (min(y, x) + c1)), false, ((c1 <= min(c0, 0)) && ((c1 + -1) <= min(c0, -1)))) ||
+ rewrite((min((x + c0), y) < (min(y, x) + c1)), false, (((c1 <= min(c0, 0)) && ((c1 + -1) <= min(c0, -1))) && (c1 <= min(c0, 1)))))) ||
 ((b.node_type() == IRNodeType::Min) && (
  rewrite((min(x, y) < min(z, min(w, x))), (y < min(z, min(w, x)))) ||
  rewrite((min(x, y) < min(z, min(w, y))), (x < min(z, min(w, y)))) ||

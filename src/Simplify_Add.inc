@@ -244,6 +244,7 @@
  rewrite((((select(x, c0, c1) - y) + z) + c2), ((select(x, fold((c0 + c2)), fold((c1 + c2))) + z) - y)) ||
  rewrite((((x*c0) + (y + (z*c1))) + w), (y + (((z - x)*fold((0 - c0))) + w)), ((c0 + c1) == 0)) ||
  rewrite((((x*c0) + ((y*c1) + z)) + w), ((z + ((y - x)*fold((0 - c0)))) + w), ((c0 + c1) == 0)) ||
+ rewrite((((x*c0) + ((y - (z*c1)) - w)) + c2), ((y - (((z + x)*fold(((c1 - c2) + c2))) + w)) + c2), (((c1 - c2) + (c0 + c2)) == 0)) ||
  rewrite(((max(x, (y + (z - w))) + u) + w), (max((x + w), (z + y)) + u)) ||
  rewrite(((max(x, ((y - z) + w)) + u) + z), (max((x + z), (y + w)) + u)) ||
  rewrite(((max((x + (y - z)), w) + u) + z), (u + max((x + y), (w + z)))) ||
@@ -463,6 +464,7 @@
  rewrite(((x - y) + ((z + y) - w)), (x + (z - w))))))) ||
 ((a.node_type() == IRNodeType::Mul) && EVAL_IN_LAMBDA(
  rewrite(((x*(c0 - y)) + z), (z - (x*y)), (c0 == 0)) ||
+ rewrite((((c0 - x)*c1) + c2), ((x*fold(((((c0 + -1)*c1) + c2) - ((c0*c1) + c2)))) + fold(((c0*c1) + c2)))) ||
  rewrite((((c0 - x)*y) + z), (z - (x*y)), (c0 == 0)) ||
 ((b.node_type() == IRNodeType::Add) && (
  rewrite(((x*c0) + (y + (z + (w*c1)))), (z + (y + ((w - x)*c1))), ((c0 + c1) == 0)) ||
@@ -551,7 +553,9 @@
  rewrite((((x + y)*z) + (w + (u*(y + x)))), (((u + z)*(y + x)) + w)) ||
  rewrite((((x + y)*z) + (w + ((y + x)*u))), (((u + z)*(y + x)) + w)) ||
  rewrite((((x + y)*z) + ((w*(y + x)) + u)), (((w + z)*(y + x)) + u)) ||
- rewrite((((x + y)*z) + (((y + x)*w) + u)), (((w + z)*(y + x)) + u)))) ||
+ rewrite((((x + y)*z) + (((y + x)*w) + u)), (((w + z)*(y + x)) + u)) ||
+ rewrite(((min(x, y)*c0) + (z + (w*c1))), (((min(x, y) + w)*c1) + z), (((c1*-4) + ((c0*3) + c1)) == 0)) ||
+ rewrite(((min(x, y)*c0) + ((z*c1) + w)), (((min(x, y) + z)*c1) + w), (((c1*-4) + ((c0*3) + c1)) == 0)))) ||
 ((b.node_type() == IRNodeType::Sub) && (
  rewrite(((x*2) + (y - x)), (y + x)) ||
  rewrite(((x*c0) + (y - x)), (y + x), (c0 == 2)) ||
@@ -569,8 +573,8 @@
  rewrite(((x*c0) + ((y*c1) - z)), (((y + x)*c1) - z), (c0 == c1)) ||
  rewrite(((x*c0) + ((y*c1) - (z + (w*c2)))), (((x - w)*c0) + ((y*c1) - z)), (c0 == c2)) ||
  rewrite(((x*c0) + ((y*c1) - ((z*c2) + w))), (((x - z)*c0) + ((y*c1) - w)), (c0 == c2)) ||
- rewrite(((x*c0) + (((c1 - (x*c2))*c3) - y)), (fold((((c1 - c2)*c3) + c0)) - y), ((c2*c3) == c0)) ||
- rewrite(((x*c0) + (((y - (x*c1))*c2) - z)), ((y*c2) - z), ((c1*c2) == c0)) ||
+ rewrite(((x*c0) + (((c1 - (x*c2))*c3) - y)), (fold((((c1 - c2)*c3) + c0)) - y), ((c1*c3) == (((c1 - c2)*c3) + c0))) ||
+ rewrite(((x*c0) + (((y - (x*c1))*c2) - z)), ((y*c2) - z), ((((0 - c1)*c2) + c0) == 0)) ||
  rewrite(((x*y) + (z - (w + (u + (v*x))))), (z - (u + (w - (x*(y - v)))))) ||
  rewrite(((x*y) + (z - (w + (u + (v*y))))), (z - (u + (w - (y*(x - v)))))) ||
  rewrite(((x*y) + (z - (w + (u + (x*v))))), (z - (w + (u - (x*(y - v)))))) ||
@@ -648,7 +652,7 @@
 ((a.node_type() == IRNodeType::Select) && EVAL_IN_LAMBDA(
  rewrite((select(x, y, (z + c0)) + c1), select(x, (y + c1), z), ((c0 + c1) == 0)) ||
  rewrite((select(x, (y + c0), (z + c1)) + c2), select(x, (y + fold((c0 + c2))), z), ((c1 + c2) == 0)) ||
- rewrite((select(x, (c0 - y), c1) + c2), (fold((c0 + c2)) - select(x, y, fold((c0 - c1))))) ||
+ rewrite((select(x, (c0 - y), c1) + c2), (fold((c0 + c2)) - select(x, y, fold((c0 - c1)))), ((((0 - c1) - c2) + (c1 + c2)) == 0)) ||
 ((b.node_type() == IRNodeType::Sub) && (
  rewrite((select(x, (y + (z + w)), u) + (v - w)), (select(x, (y + z), (u - w)) + v)) ||
  rewrite((select(x, (y + (z + w)), u) + (v - z)), (select(x, (y + w), (u - z)) + v)) ||
