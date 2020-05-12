@@ -111,6 +111,13 @@ class NonlinearOpsCount : public IRVisitor {
         op->a.accept(this);
         op->b.accept(this);
     }
+    void visit(const Call *op) override {
+        if (op->name == "fold") {
+            return;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
 
 public:
     int counter = 0;
@@ -383,6 +390,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     if (get_vector_count(LHS) > get_vector_count(RHS)) {
         return true;
     } else if (get_vector_count(LHS) < get_vector_count(RHS)) {
+        debug(0) << __LINE__ << "\n";
         return false;
     }
 
@@ -395,6 +403,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
         if (varcount.first.front() != 'c' &&
             (lhs_vars.count(varcount.first) == 0 ||
              varcount.second.second > lhs_vars[varcount.first].second)) {
+            debug(0) << __LINE__ << "\n";
             return false;
         }
     }
@@ -411,6 +420,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     if (get_nonlinear_op_count(LHS) > get_nonlinear_op_count(RHS)) {
         return true;
     } else if (get_nonlinear_op_count(LHS) < get_nonlinear_op_count(RHS)) {
+        debug(0) << __LINE__ << "\n";
         return false;
     }
 
@@ -418,6 +428,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     if (get_total_leaf_count(LHS) > get_total_leaf_count(RHS)) {
         return true;
     } else if (get_total_leaf_count(LHS) < get_total_leaf_count(RHS)) {
+        debug(0) << __LINE__ << "\n";
         return false;
     }
 
@@ -425,6 +436,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     if (get_total_op_count(LHS) > get_total_op_count(RHS)) {
         return true;
     } else if (get_total_op_count(LHS) < get_total_op_count(RHS)) {
+        debug(0) << __LINE__ << "\n";
         return false;
     }
 
@@ -433,6 +445,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     if (rule_histogram_ordering == 1) {
         return true;
     } else if (rule_histogram_ordering == -1) {
+        debug(0) << __LINE__ << "\n";
         return false;
     }
 
@@ -445,6 +458,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
         return true;
     }
     if (is_LHS_add_sub && !(is_RHS_add_sub)) {
+        debug(0) << __LINE__ << "\n";
         return false;
     }
 
@@ -455,6 +469,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
         return true;
     }
     if (is_right_child_constant(LHS) && !(is_right_child_constant(RHS))) {
+        debug(0) << __LINE__ << "\n";
         return false;
     }
 
@@ -466,9 +481,11 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
         return true;
     }
     if (nto[lhs_root_type] > nto[rhs_root_type]) {
+        debug(0) << __LINE__ << "\n";
         return false;
     }
 
     // It's a tie. No good.
+    debug(0) << __LINE__ << "\n";
     return false;
 }
