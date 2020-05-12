@@ -1784,7 +1784,7 @@ IntrusivePtr<State> optimal_mcts_schedule(
             meta_uct.max_millis = max_millis;
             meta_uct.max_iterations = max_iterations;
             meta_uct.father_value = global_best_value;
-            if (initialized) meta_uct.use_father_value = true;
+            if (initialized) meta_uct.use_father_value = false;
             bool valid = false;
             actions[i] = meta_uct.run(states[i],valid);
             // make sure actions[i] gets updated
