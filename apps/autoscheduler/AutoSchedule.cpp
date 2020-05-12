@@ -814,42 +814,65 @@ struct State {
     }
 
     // return possible actions from this state
-    void get_actions(std::vector<Action>& vactions) const{
-            inner->generate_actions(dag, params, cost_model,vactions);
+    void get_actions(std::vector<Action>& vactions, const bool in_simulation = false) const{
+            inner->generate_actions(dag, params, cost_model,vactions, in_simulation);
     }
     // find best action to apply next, used during simulation to improve the estimate over random
+    bool get_random_index(unsigned& index, std::vector<Action>& actions){
+        bool found = false;
+        if (actions.size() == 0|| inner->num_decisions_made == 2 * (int)dag.nodes.size()){
+            return found;
+        }
+        if (actions.size() == 1 && 
+           (actions[0].ae==ActionEnum::Parallelize || actions[0].ae==ActionEnum::Input)){
+                found = true;
+                index = 0;
+                return found;    
+        }
+
+        std::random_shuffle(actions.begin(),actions.end());
+        for (unsigned i=0;i<actions.size();++i){
+            if(actions[i].state->calculate_cost(dag, params, cost_model)) {
+                found = true;
+                index = i;
+                return found;
+            }
+        }
+         
+        
+        return found;
+    }    
     bool apply_best_action(double& bestReward){//, std::vector<Action>& backup_actions) {
         std::vector<Action> actions;
-        get_actions(actions);
+        const bool in_simulation = true; // adds greediness when false
+        get_actions(actions, in_simulation); 
         //std::cout << "action size: " <<actions.size() << std::endl;
-        if (actions.size() == 0 || inner->num_decisions_made == 2 * (int)dag.nodes.size()){// return true;
+        unsigned rand_idx = 0;
+        bool found = get_random_index(rand_idx,actions);
+        if (!found){// return true;
             inner->calculate_cost(dag, params, cost_model, false, true);
             cost_model->evaluate_costs();    
             bestReward = inner->cost;
         //std::cout << "reward "<< bestReward << std::endl;
             return true;
         }
-        unsigned best = 0;
-        if(actions.size()==1) best = 0; 
         // with 50% probabality pick best
-        else if(rand()%2 ==0) {
+        if(!in_simulation && rand()%2 ==0) {
                 for(auto& act : actions) {
                     act.state->calculate_cost(dag, params, cost_model, false, true);
                 }
                 internal_assert(cost_model && "bug, cost model not defined");
                 cost_model->evaluate_costs();
 
-                best = 0;
+                rand_idx = 0;
                 for(unsigned i=1; i<actions.size(); i++) {
-                    if (actions[i].state->cost < actions[best].state->cost) {
-                        best = i;
+                    if (actions[i].state->cost < actions[rand_idx].state->cost) {
+                        rand_idx = i;
                     }
                 }
-            }
-        // otherwise random
-        else best = rand() % actions.size();
+        }
         // AHA: an optimization to keep last actions when node had more than 1 child to pick best later
-        Action & random_action = actions[best];
+        Action & random_action = actions[rand_idx];
         internal_assert(inner->num_decisions_made+1 == random_action.state->num_decisions_made);
         inner = std::move(random_action.state);
         //if(random_action.ae == ActionEnum::Inline ||
@@ -931,7 +954,8 @@ struct State {
     void generate_actions(const FunctionDAG &dag,
                           const MachineParams &params,
                           CostModel *cost_model,
-                          std::vector<Action> &actions) const {
+                          std::vector<Action> &actions,
+                          const bool in_simulation=false) const {
         internal_assert(root.defined() && root->is_root());
         if (num_decisions_made == 2*(int)dag.nodes.size()) {
             return;
@@ -994,7 +1018,7 @@ struct State {
                     new_root->inline_func(node);
                     child->root = new_root;
                     child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (in_simulation || child->calculate_cost(dag, params, cost_model)) {
                         num_children++;
                         actions.emplace_back(Action(ActionEnum::Inline,num_children-1, std::move(child)));
                     }
@@ -1052,7 +1076,7 @@ struct State {
                     auto child = make_child();
                     child->root = std::move(n);
                     child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (in_simulation || child->calculate_cost(dag, params, cost_model)) {
                         num_children++;
                         // AHA: shouldn't the index (num_children-1) fix the hash issue?
                         unsigned hash = vector_dim;
@@ -1214,7 +1238,7 @@ struct State {
                     }
                     child->root = new_root;
                     child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (in_simulation || child->calculate_cost(dag, params, cost_model)) {
                         num_children++;
                         actions.emplace_back(Action(ActionEnum::Option,num_children-1, o.hash(), std::move(child)));
                     }
@@ -1760,7 +1784,7 @@ IntrusivePtr<State> optimal_mcts_schedule(
             meta_uct.max_millis = max_millis;
             meta_uct.max_iterations = max_iterations;
             meta_uct.father_value = global_best_value;
-            if (initialized) meta_uct.use_father_value = false;
+            if (initialized) meta_uct.use_father_value = true;
             bool valid = false;
             actions[i] = meta_uct.run(states[i],valid);
             // make sure actions[i] gets updated

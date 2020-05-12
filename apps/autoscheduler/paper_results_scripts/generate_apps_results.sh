@@ -94,8 +94,6 @@ fi
  
 APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer mat_mul iir_blur bgu" # resnet_50_blockwise is handled by a special case at the end
 
-APPS="" # resnet_50_blockwise is handled by a special case at the end
-
 benchmark_resnet="true"
 
 if [ "$APPS" != "" ]; then

@@ -52,7 +52,7 @@ namespace msa {
                 // sanity check
                 if(!node->is_fully_expanded()) return NULL;
 
-                float best_utc_score = -std::numeric_limits<float>::max();
+                float best_uct_score = -std::numeric_limits<float>::max();
                 TreeNode* best_node = NULL;
 
                 // iterate all immediate children and find best UTC score
@@ -74,13 +74,13 @@ namespace msa {
                         float uct_exploration = sqrt( log((float)node->get_num_visits() + 1) / (child->get_num_visits() + FLT_EPSILON) );
                         float uct_score = uct_exploitation + uct_k * uct_exploration;
 
-                        if(uct_score > best_utc_score) {
-                            best_utc_score = uct_score;
+                        if(uct_score > best_uct_score) {
+                            best_uct_score = uct_score;
                             best_node = child;
                   //          best = i;
                         }
                     }
-                    //std::cout << "uct_score of child: "<< i << " is "<<uct_score  << std::endl;
+                   //std::cout << "uct_score of child: "<< best << " is "<<best_uct_score  << std::endl;
                 //}
                 //std::cout << "picking "<<best<<"/"<<num_children << std::endl; 
                 return best_node;
