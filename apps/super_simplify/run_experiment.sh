@@ -6,6 +6,16 @@ LAST_SEED=$2
 
 echo Running experiment for app $APP
 
+if [ $APP == "harris" -o $APP == "camera_pipe" ]; then
+    # These apps don't have boundary conditions
+    INPUT_BOUNDS=auto
+else
+    INPUT_BOUNDS=estimate_then_auto    
+fi
+
+echo Using input size method $INPUT_BOUNDS
+
+
 if [ -z $FIRST_SEED ]; then
 FIRST_SEED=0
 fi
@@ -94,8 +104,8 @@ for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
     echo "Running benchmark ${SEED}"
     for r in results results_baseline; do 
         # Most of the autoschedules do better at 16 threads on my machine. Probably due to avx-512 use
-        HL_NUM_THREADS=16 ${r}/${SEED}/benchmark --benchmark_min_time=1 --benchmarks=all --default_input_buffers=random:0:auto --default_input_scalars --output_extents=estimate --parsable_output > ${r}/${SEED}/benchmark_stdout.txt 2> ${r}/${SEED}/benchmark_stderr.txt
-        ${r}/${SEED}/benchmark --benchmark_min_time=0 --track_memory --benchmarks=all --default_input_buffers=random:0:auto --default_input_scalars --output_extents=estimate --parsable_output > ${r}/${SEED}/memory_stdout.txt 2> ${r}/${SEED}/memory_stderr.txt
+        HL_NUM_THREADS=16 ${r}/${SEED}/benchmark --benchmark_min_time=1 --benchmarks=all --default_input_buffers=random:0:${INPUT_BOUNDS} --default_input_scalars --output_extents=estimate --parsable_output > ${r}/${SEED}/benchmark_stdout.txt 2> ${r}/${SEED}/benchmark_stderr.txt
+        ${r}/${SEED}/benchmark --benchmark_min_time=0 --track_memory --benchmarks=all --default_input_buffers=random:0:${INPUT_BOUNDS} --default_input_scalars --output_extents=estimate --parsable_output > ${r}/${SEED}/memory_stdout.txt 2> ${r}/${SEED}/memory_stderr.txt
     done
 done
 
