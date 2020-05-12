@@ -1956,8 +1956,12 @@ struct CanProve {
     // Includes a raw call to an inlined make method, so don't inline.
     HALIDE_NEVER_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         Expr condition = a.make(state, {});
-        condition = prover->mutate(condition, nullptr);
-        val.u.u64 = is_one(condition);
+        if (!prover->disable_can_prove_rules()) {
+            condition = prover->mutate(condition, nullptr);
+            val.u.u64 = is_one(condition);
+        } else {
+            val.u.u64 = 0;
+        }
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = condition.type().lanes();
