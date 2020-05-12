@@ -237,7 +237,7 @@ class CSEEveryExprInStmt : public IRMutator {
         // from turning into
         // f[x] = f[z] + y
         // due to the two equal x's indices being CSE'd differently due to the presence of y.
-        Expr dummy = Call::make(Int(32), std::string{}, {op->value, op->index}, Call::PureIntrinsic);
+        Expr dummy = Call::make(Int(32), Call::bundle, {op->value, op->index}, Call::PureIntrinsic);
         dummy = common_subexpression_elimination(dummy, lift_all);
         vector<pair<string, Expr>> lets;
         while (const Let *let = dummy.as<Let>()) {
@@ -245,7 +245,7 @@ class CSEEveryExprInStmt : public IRMutator {
             dummy = let->body;
         }
         const Call *c = dummy.as<Call>();
-        internal_assert(c && c->name.empty() && c->args.size() == 2) << dummy << "\n";
+        internal_assert(c && c->is_intrinsic(Call::bundle) && c->args.size() == 2);
         Stmt s = Store::make(op->name, c->args[0], c->args[1],
                              op->param, mutate(op->predicate), op->alignment);
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
