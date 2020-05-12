@@ -1,6 +1,12 @@
 #ifndef GPU_MEM_INFO_H
 #define GPU_MEM_INFO_H
 
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+#include "ASLog.h"
+
 /** \file
  *
  * Data structure that helps track global memory access information. Useful when 
@@ -67,6 +73,115 @@ private:
     double total_num_transactions_with_pure_licm = 0;
     double total_num_bytes_used = 0;
     double total_num_bytes = 0;
+};
+
+struct StorageStrides {
+public:
+    void add_valid(double stride) {
+        add(stride, true);
+    }
+
+    void add_invalid() {
+        add(0, false);
+    }
+
+    void multiply_by_scalar(double scalar) {
+        for (double& s : values) {
+            s *= scalar;
+        }
+    }
+
+    bool valid(size_t i) const {
+        return is_valid[i];
+    }
+
+    double operator[](size_t i) const {
+        return values[i];
+    }
+private:
+    void add(double stride, bool e) {
+        values.push_back(stride);
+        is_valid.push_back(e);
+    }
+    std::vector<double> values;
+    std::vector<bool> is_valid;
+};
+
+struct GlobalAccessAccumulator {
+    GlobalAccessAccumulator(int bytes_per_access, size_t dimensions, const StorageStrides& strides, bool verbose)
+        : bytes_per_access{bytes_per_access}
+        , dimensions{dimensions}
+        , strides{strides}
+        , verbose{verbose}
+    {}
+
+    void operator()(int thread_id, int x, int y, int z, int active, bool last_thread) {
+        if (!active) {
+            return;
+        }
+
+        if (verbose) {
+            aslog(0) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n"; 
+        }
+
+        int thread_ids[3] = {x, y, z};
+        int64_t byte = 0;
+        for (size_t i = 0; i < dimensions; ++i) {
+            if (!strides.valid(i)) {
+                ++unknown_sectors;
+                return;
+            }
+            byte += bytes_per_access * (int)(thread_ids[i] * strides[i]);
+        }
+
+        if (verbose) {
+            aslog(0) << "byte accessed: " << byte << "\n";
+        }
+
+        int64_t sector = byte / 32;
+        for (int i = 0; i < bytes_per_access; ++i) {
+            if (verbose) {
+                aslog(0) << "sector accessed: " << sector << "\n";
+            }
+            sectors_accessed[sector].insert(byte + i);
+        }
+    }
+
+    void add_access_info(int num_requests, int num_requests_with_pure_licm, double access_count, double amortization, GlobalMemInfo& global_mem_info) const {
+        int num_transactions_per_request = sectors_accessed.size() + unknown_sectors;
+
+        if (verbose) {
+            aslog(0) << "num_transactions_per_request = " << num_transactions_per_request << "\n";
+        }
+
+        int num_bytes_used_per_request = 0;
+        for (const auto& sector : sectors_accessed) {
+            num_bytes_used_per_request += sector.second.size();
+        }
+
+        num_bytes_used_per_request += unknown_sectors * bytes_per_access;
+
+        if (verbose) {
+            aslog(0) << "num_requests = " << num_requests << "\n";
+        }
+
+        global_mem_info.add_access_info(
+            num_requests,
+            num_requests_with_pure_licm,
+            num_transactions_per_request,
+            num_bytes_used_per_request,
+            access_count,
+            amortization
+        );
+    }
+
+private:
+    int bytes_per_access;
+    size_t dimensions;
+    StorageStrides strides;
+    bool verbose;
+    int unknown_sectors = 0;
+    std::unordered_map<int64_t, std::unordered_set<int64_t>> sectors_accessed;
 };
 
 struct LocalMemInfo {

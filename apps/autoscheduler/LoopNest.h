@@ -282,38 +282,6 @@ struct LoopNest {
     // index
     double storage_stride(const LoadJacobian& jac, int innermost_storage_dim, const FunctionDAG::Node* storage_node, const Bound& store_bounds, const LoopNest& root) const;
 
-    struct StorageStrides {
-    public:
-        void add_valid(double stride) {
-            add(stride, true);
-        }
-
-        void add_invalid() {
-            add(0, false);
-        }
-
-        void multiply_by_scalar(double scalar) {
-            for (double& s : values) {
-                s *= scalar;
-            }
-        }
-
-        bool valid(size_t i) const {
-            return is_valid[i];
-        }
-
-        double operator[](size_t i) const {
-            return values[i];
-        }
-    private:
-        void add(double stride, bool e) {
-            values.push_back(stride);
-            is_valid.push_back(e);
-        }
-        std::vector<double> values;
-        std::vector<bool> is_valid;
-    };
-
     StorageStrides storage_strides(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const LoopNest &root, const ThreadInfo& thread_info) const;
 
     bool all_strides_exist(const LoadJacobian& jac, const FunctionDAG::Node* storage_node, const LoopNest& root) const;

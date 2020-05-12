@@ -106,7 +106,7 @@ struct ThreadInfo {
     }
 
     template <typename Fn>
-    void for_each_thread_id_in_first_warp(const Fn& fn) const {
+    void for_each_thread_id_in_first_warp(Fn& fn) const {
         int thread_id = 0;
         for (int z = 0; z < threads_in_this_block[2]; z++) {
             for (int y = 0; y < threads_in_this_block[1]; y++) {
@@ -131,6 +131,28 @@ struct ThreadInfo {
                     }
                 }
             }
+        }
+    }
+
+    template <typename Fn>
+    void for_each_thread_id_in_tail_warp(Fn& fn) const {
+        int thread_id = final_warp_initial_thread_id;
+        int last_thread_id = thread_id + num_threads_in_final_warp - 1;
+
+        for (; thread_id <= last_thread_id; ++thread_id) {
+            int z = thread_id / (threads_in_this_block[1] * threads_in_this_block[0]);
+            int y = (thread_id - z * threads_in_this_block[1] * threads_in_this_block[0]) / threads_in_this_block[0];
+            int x = thread_id % threads_in_this_block[0];
+
+            internal_assert(z < threads_in_this_block[2]);
+            internal_assert(y < threads_in_this_block[1]);
+            internal_assert(x < threads_in_this_block[0]);
+
+            bool active = x < threads[0]
+                && y < threads[1]
+                && z < threads[2];
+
+            fn(thread_id, x, y, z, active, thread_id == last_thread_id);
         }
     }
 
@@ -179,6 +201,10 @@ struct ThreadInfo {
 
     int num_warps_per_block = 0;
     int num_active_warps_per_block = 0;
+    int num_regular_active_warps_per_block = 0;
+    bool has_tail_warp = false;
+    int final_warp_initial_thread_id = 0;
+    int num_threads_in_final_warp = 0;
 
     int threads_in_this_block[3] = {1, 1, 1};
     int64_t num_threads_in_this_block = 1;
@@ -213,17 +239,46 @@ private:
 
     void count_num_active_warps_per_block() {
         bool current_warp_is_active = false;
+        int num_active_threads_in_cur_warp = 0;
+        int num_active_threads_in_first_warp = 0;
+        int num_threads_in_cur_warp = 0;
+        bool first_warp = true;
 
         for_each_thread_id([&](int thread_id, bool is_active, bool is_last_thread) {
             current_warp_is_active |= is_active;
 
+            if (is_active) {
+                ++num_active_threads_in_cur_warp;
+            }
+            ++num_threads_in_cur_warp;
+
             if ((thread_id + 1) % 32 == 0 || is_last_thread) {
                 if (current_warp_is_active) {
                     ++num_active_warps_per_block;
+
+                    if (first_warp) {
+                        first_warp = false;
+                        num_active_threads_in_first_warp = num_active_threads_in_cur_warp;
+                    }
+
+                    if (is_last_thread) {
+                        num_threads_in_final_warp = num_threads_in_cur_warp;
+                        has_tail_warp = num_active_threads_in_first_warp != num_active_threads_in_cur_warp;
+                        final_warp_initial_thread_id = thread_id - num_threads_in_cur_warp + 1;
+
+                        internal_assert(num_threads_in_final_warp <= 32);
+                    }
                 }
                 current_warp_is_active = false;
+                num_threads_in_cur_warp = 0;
+                num_active_threads_in_cur_warp = 0;
             }
         });
+
+        num_regular_active_warps_per_block = num_active_warps_per_block;
+        if (has_tail_warp) {
+            --num_regular_active_warps_per_block;
+        }
     }
 };
 

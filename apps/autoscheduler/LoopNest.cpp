@@ -884,7 +884,7 @@ double LoopNest::storage_stride(const LoadJacobian &jac, int innermost_storage_d
 
 // Get the stride over "node's" storage for a unit increment in the vectorized loop's
 // (index)
-LoopNest::StorageStrides LoopNest::storage_strides(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const LoopNest &root, const ThreadInfo& thread_info) const {
+StorageStrides LoopNest::storage_strides(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const LoopNest &root, const ThreadInfo& thread_info) const {
     internal_assert(innermost_storage_dim >= 0);
 
     // The node's storage dimensions (from innermost outward)
@@ -1160,8 +1160,9 @@ double LoopNest::min_global_mem_accesses(const FunctionDAG::Node *node, const Th
 void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double serial_loop_extents, double serial_loop_extents_with_pure_licm, double access_count, GlobalMemInfo &global_mem_info, const LoopNest &root, double amortization, bool verbose) const {
     StorageStrides strides = storage_strides(jac, innermost_dim, node, store_bounds, root, thread_info);
 
+    size_t dimensions = thread_info.loop_indices.size();
     if (verbose) {
-        for (size_t i = 0; i < thread_info.loop_indices.size(); ++i) {
+        for (size_t i = 0; i < dimensions; ++i) {
             if (!strides.valid(i)) {
                 aslog(0) << "stride " << i << ": invalid\n";
             }
@@ -1171,62 +1172,48 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
 
     int bytes_per_access = node->bytes_per_point;
 
-    std::unordered_map<int64_t, std::unordered_set<int64_t>> sectors_accessed;
-    int unknown_sectors = 0;
-    thread_info.for_each_thread_id_in_first_warp([&](int thread_id, int x, int y, int z, int active, bool last_thread) {
-        if (!active) {
-            return;
-        }
+    {
+        int num_requests = thread_info.num_regular_active_warps_per_block * serial_loop_extents;
+        int num_requests_with_pure_licm = thread_info.num_regular_active_warps_per_block * serial_loop_extents_with_pure_licm;
 
-        int thread_ids[3] = {x, y, z};
-        int64_t byte = 0;
-        for (size_t i = 0; i < thread_info.loop_indices.size(); ++i) {
-            if (!strides.valid(i)) {
-                ++unknown_sectors;
-                return;
-            }
-            byte += bytes_per_access * (int)(thread_ids[i] * strides[i]);
-        }
-        if (verbose) {
-            aslog(0) << "byte accessed: " << byte << "\n";
-        }
+        GlobalAccessAccumulator accumulator(bytes_per_access, dimensions, strides, verbose);
+        thread_info.for_each_thread_id_in_first_warp(accumulator);
 
-        int64_t sector = byte / 32;
-        for (int i = 0; i < bytes_per_access; ++i) {
-            if (verbose) {
-                aslog(0) << "sector accessed: " << sector << "\n";
-            }
-            sectors_accessed[sector].insert(byte + i);
-        }
-    });
+        accumulator.add_access_info(
+            num_requests,
+            num_requests_with_pure_licm,
+            access_count,
+            amortization,
+            global_mem_info
+        );
+    }
 
-    int num_transactions_per_request = sectors_accessed.size() + unknown_sectors;
+    if (!thread_info.has_tail_warp) {
+        return;
+    }
 
     if (verbose) {
-        aslog(0) << "num_transactions_per_request = " << num_transactions_per_request << "\n";
+        aslog(0) << "BEGIN tail warp\n";
+        aslog(0) << "# threads in tail warp: " << thread_info.num_threads_in_final_warp << "\n";
     }
 
-    int num_bytes_used_per_request = 0;
-    for (const auto& sector : sectors_accessed) {
-        num_bytes_used_per_request += sector.second.size();
-    }
+    int num_requests = serial_loop_extents;
+    int num_requests_with_pure_licm = serial_loop_extents_with_pure_licm;
 
-    num_bytes_used_per_request += unknown_sectors * bytes_per_access;
-    int num_requests = thread_info.num_active_warps_per_block * serial_loop_extents;
-    int num_requests_with_pure_licm = thread_info.num_active_warps_per_block * serial_loop_extents_with_pure_licm;
+    GlobalAccessAccumulator accumulator(bytes_per_access, dimensions, strides, verbose);
+    thread_info.for_each_thread_id_in_tail_warp(accumulator);
 
-    if (verbose) {
-        aslog(0) << "num_requests = " << num_requests << "\n";
-    }
-
-    global_mem_info.add_access_info(
+    accumulator.add_access_info(
         num_requests,
         num_requests_with_pure_licm,
-        num_transactions_per_request,
-        num_bytes_used_per_request,
         access_count,
-        amortization
+        amortization,
+        global_mem_info
     );
+
+    if (verbose) {
+        aslog(0) << "END tail warp\n";
+    }
 }
 
 std::pair<double, double> LoopNest::compute_local_mem_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const LoopNest &root, double serial_loop_extents) const {
