@@ -122,18 +122,14 @@ void JSONCompilerLogger::record_compilation_time(Phase phase, double duration) {
 void JSONCompilerLogger::obfuscate() {
     {
         std::map<std::string, std::vector<Expr>> n;
-        int i = 0;
-        for (const auto &it : non_monotonic_loop_vars) {
-            std::string loop_name = "loop" + std::to_string(i++);
+        for (const auto &it : matched_simplifier_rules) {
+            std::string rule = it.first;
             for (const auto &e : it.second) {
-                // Create a new obfuscater for every Expr, but take pains to ensure
-                // that the loop var has a distinct name. (Note that for nested loops,
-                // loop vars of enclosing loops will be treated like any other var.)
-                ObfuscateNames obfuscater({{it.first, loop_name}});
-                n[loop_name].emplace_back(obfuscater.mutate(e));
+                ObfuscateNames obfuscater;
+                n[rule].emplace_back(obfuscater.mutate(e));
             }
         }
-        non_monotonic_loop_vars = n;
+        matched_simplifier_rules = n;
     }
     {
         std::vector<std::pair<Expr, Expr>> n;
@@ -185,7 +181,10 @@ std::ostream &emit_value(std::ostream &o, const VALUE &value) {
 
 template<>
 std::ostream &emit_value<std::string>(std::ostream &o, const std::string &value) {
-    o << "\"" << value << "\"";
+    std::string v = value;
+    v = replace_all(v, "\\", "\\\\");
+    v = replace_all(v, "\"", "\\\"");
+    o << "\"" << v << "\"";
     return o;
 }
 
