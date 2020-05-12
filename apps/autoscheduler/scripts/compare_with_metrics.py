@@ -4,6 +4,7 @@ import pdb
 import sh
 import os
 import math
+from enum import Enum
 
 class Result:
   def __init__(self, actual, predicted):
@@ -27,6 +28,11 @@ class IntResult(Result):
   def __str__(self):
     return "{:>14d} {:>14d} {:>7.2f}".format(int(self.actual), int(self.predicted), self.ratio)
 
+class Features(Enum):
+  GLOBAL_LOAD_TRANSACTIONS = "global load transactions"
+  GLOBAL_STORE_TRANSACTIONS = "global store transactions"
+  GLOBAL_LOAD_EFFICIENCY = "global load efficiency"
+  GLOBAL_STORE_EFFICIENCY = "global store efficiency"
 
 class Sample:
   def __init__(self, path, metrics_path, features_path):
@@ -36,12 +42,12 @@ class Sample:
     self.results = {}
 
     self.comparisons = {}
-    self.comparisons["global load transactions"] = self.global_load_transactions
+    self.comparisons[Features.GLOBAL_LOAD_TRANSACTIONS] = self.global_load_transactions
     #self.comparisons["global load transactions (pure licm)"] = self.global_load_transactions_with_pure_licm
-    self.comparisons["global store transactions"] = self.global_store_transactions
+    self.comparisons[Features.GLOBAL_STORE_TRANSACTIONS] = self.global_store_transactions
     #self.comparisons["global store transactions (pure licm)"] = self.global_store_transactions_with_pure_licm
-    self.comparisons["global load efficiency"] = self.global_load_efficiency
-    self.comparisons["global store efficiency"] = self.global_store_efficiency
+    self.comparisons[Features.GLOBAL_LOAD_EFFICIENCY] = self.global_load_efficiency
+    self.comparisons[Features.GLOBAL_STORE_EFFICIENCY] = self.global_store_efficiency
 
     self.success = self.compare_metrics_and_features()
 
@@ -121,7 +127,7 @@ class Sample:
     first = True
     for stage in self.results:
 
-      width = max([len(k) for k in self.comparisons.keys()])
+      width = max([len(k.value) for k in self.comparisons.keys()])
 
       if first:
         first = False
@@ -131,7 +137,7 @@ class Sample:
 
       for label in self.results[stage]:
         result = self.results[stage][label]
-        out += "  {:{width}} {}\n".format(label, str(self.results[stage][label]), width=width)
+        out += "  {:{width}} {}\n".format(label.value, str(self.results[stage][label]), width=width)
 
     return out
 

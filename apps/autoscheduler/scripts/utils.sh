@@ -384,7 +384,8 @@ function format_metrics() {
     fi
 
     if [ -f "${formatted_metrics_file}" ]; then
-        rm "${formatted_metrics_file}"
+        echo "Formatted metrics found in ${formatted_metrics_file}"
+        return
     fi
 
     for stage in ${stages}; do
@@ -406,7 +407,8 @@ function format_features() {
     local -r formatted_features_file="${dir}/formatted_features.txt"
 
     if [ -f "${formatted_features_file}" ]; then
-        rm "${formatted_features_file}"
+        echo "Formatted features found in ${formatted_features_file}"
+        return
     fi
 
     for stage in ${stages}; do
