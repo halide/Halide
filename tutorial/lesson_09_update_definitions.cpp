@@ -515,8 +515,8 @@ int main(int argc, char **argv) {
         Func producer, consumer;
         producer(x, y) = (x * y) / 10 + 8;
         consumer(x, y) = x + y;
-        consumer(x, 0) = producer(x, x);
-        consumer(0, y) = producer(y, 9 - y);
+        consumer(x, 0) += producer(x, x);
+        consumer(0, y) += producer(y, 9 - y);
 
         // In this case neither producer.compute_at(consumer, x)
         // nor producer.compute_at(consumer, y) will work, because
