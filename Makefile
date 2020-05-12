@@ -1205,6 +1205,10 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCP
 # https://github.com/halide/Halide/issues/2093
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_parallel,$(GENERATOR_AOTCPP_TESTS))
 
+# https://github.com/halide/Halide/issues/4916
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
+
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
 
 # Similar story: filter out the tests that aren't workable/useful for wasm
