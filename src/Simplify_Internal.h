@@ -32,6 +32,7 @@ class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
     using Super = VariadicVisitor<Simplify, Expr, Stmt>;
 
     bool use_synthesized_rules = false;
+    bool should_disable_can_prove_rules = false;
 
 public:
     Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai);
@@ -164,6 +165,11 @@ public:
     HALIDE_ALWAYS_INLINE
     bool no_overflow(Type t) {
         return t.is_float() || no_overflow_int(t);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    bool disable_can_prove_rules() const {
+        return should_disable_can_prove_rules;
     }
 
     struct VarInfo {

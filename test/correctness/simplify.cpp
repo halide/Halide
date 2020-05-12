@@ -1280,8 +1280,8 @@ void check_boolean() {
     check(x >= 20 || x <= 18, 20 <= x || x <= 18);
     check(x <= 18 && x >= 19, f);
     check(x >= 19 && x <= 18, f);
-    check(x <= 20 && x >= 20, x <= 20 && 20 <= x);
-    check(x >= 20 && x <= 20, 20 <= x && x <= 20);
+    check(x <= 20 && x >= 20, x == 20);
+    check(x >= 20 && x <= 20, x == 20);
 
     check(min(x, 20) < min(x, 19), const_false());
     check(min(x, 23) < min(x, 18) - 3, const_false());
