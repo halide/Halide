@@ -12,7 +12,7 @@ namespace msa {
     //template <class Clock>	// template doesn't work for some reason, reverting to typedef
     class LoopTimer {
         typedef std::chrono::high_resolution_clock Clock;
-        typedef std::chrono::microseconds Units;
+        typedef std::chrono::milliseconds Units;
     public:
         bool verbose;
 
