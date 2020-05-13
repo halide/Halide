@@ -202,7 +202,7 @@ make_featurization() {
                     HL_WEIGHTS_DIR=${WEIGHTS} \
                     HL_RANDOM_DROPOUT=100 \
                     HL_NUM_PASSES=20 \
-                    MCTS_MAX_MILLIS=1000 \
+                    MCTS_MAX_MILLIS=5000 \
                     MCTS_MAX_ITERATIONS=1000 \
                     HL_MACHINE_PARAMS=32,24000000,40 \
                     ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
