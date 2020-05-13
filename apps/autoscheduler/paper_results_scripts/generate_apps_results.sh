@@ -130,7 +130,14 @@ if [ "$APPS" != "" ]; then
     # benchmark everything
     for app in ${APPS}; do
         echo "running $app (autoscheduler == $autoscheduler)" >> progress
-        make -C ${HALIDE}/apps/${app} test &> $results/$app.txt
+
+        if [ "$RL_FIRST" != "false" ]; then
+            echo > $results/$app.txt
+        fi
+
+        make -C ${HALIDE}/apps/${app} test &>> $results/$app.txt
+
+        printf "\n\nRL_END_OF_RUN %d\n\n" $HL_SEED >> $results/$app.txt
 
         if [ $? -ne 0 ]; then
             echo "Failed to benchmark $app"
@@ -146,9 +153,7 @@ if [ "$benchmark_resnet" == "true" ]; then
 
     echo "building $app (autoscheduler == $autoscheduler)" >> progress
 
-    if [ "$autoscheduler" != "master" ]; then
-        make -C ${HALIDE}/apps/${app} clean
-    fi
+    make -C ${HALIDE}/apps/${app} clean
 
     if [ "$autoscheduler" != "mcts" ]; then
         cores=$(nproc)
@@ -160,13 +165,19 @@ if [ "$benchmark_resnet" == "true" ]; then
 
     echo "running $app (autoscheduler == $autoscheduler)" >> progress
 
+    if [ "$RL_FIRST" != "false" ]; then
+        echo > $results/$app.txt
+    fi
+
     if [ "$autoscheduler" == "greedy" ]; then
-        make -C ${HALIDE}/apps/${app} test_manual &> $results/$app.txt
+        make -C ${HALIDE}/apps/${app} test_manual &>> $results/$app.txt
         make -C ${HALIDE}/apps/${app} test_auto_schedule &>> $results/$app.txt
     elif [ "$autoscheduler" == "master" ]; then
-        make -C ${HALIDE}/apps/${app} test_classic_auto_schedule &> $results/$app.txt
+        make -C ${HALIDE}/apps/${app} test_classic_auto_schedule &>> $results/$app.txt
     else
-        make -C ${HALIDE}/apps/${app} test_auto_schedule &> $results/$app.txt
+        make -C ${HALIDE}/apps/${app} test_auto_schedule &>> $results/$app.txt
     fi
+
+    printf "\n\nRL_END_OF_RUN %d\n\n" $HL_SEED >> $results/$app.txt
 fi
 
