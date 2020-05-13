@@ -147,10 +147,9 @@ namespace msa {
                     TreeNode root_node(current_state);
 
                     TreeNode* best_node = NULL;
-
                     for(unsigned iterations=0;
                         (max_iterations == 0 || iterations < max_iterations) &&
-                        (max_millis == 0 || timer.check_duration(max_millis))
+                        (max_millis == 0 || iterations == 0 || !timer.check_duration(max_millis)) //in the first iteration check_duration is garbage
                                                ; iterations++) {
                         //int depth = 0;
                         // indicate start of loop
