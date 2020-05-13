@@ -631,11 +631,18 @@ int main(int argc, char **argv) {
 
     vector<Rule> rules;
 
+    vector<Expr> generalized;
     for (Expr e : exprs) {
-        // Make constant vars unique. Maybe they were equal by
+        // Add a variant with all constants unique
         // coincidence in the original rule.
-        e = UniqueConstantVars().mutate(e);
+        Expr new_e = UniqueConstantVars().mutate(e);
+        if (!equal(new_e, e)) {
+            generalized.push_back(new_e);
+        }
+    }
+    exprs.insert(generalized.begin(), generalized.end());
 
+    for (Expr e : exprs) {
         if (const Call *call = e.as<Call>()) {
             if (call->name != "rewrite") {
                 std::cerr << "Expr is not a rewrite rule: " << e << "\n";
