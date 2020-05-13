@@ -1,8 +1,12 @@
 autoscheduler="$1"
-if [ "$#" -lt 2 ] || [ "$2" != "--improved" ]; then
-    improved=0
+if [ "$#" -lt 2 ]; then
+    weights=0
+elif  [ "$2" == "--improved" ]; then
+    weights=1
+elif  [ "$2" == "--value_func" ]; then
+    weights=2
 else
-    improved=1
+    echo "Invalid command line option!"
 fi
 
 HALIDE=$(dirname $0)/../../..
@@ -17,10 +21,15 @@ export CXX="c++ -fopenmp"
 
 export HL_PERMIT_FAILED_UNROLL=1
 # export HL_WEIGHTS_DIR=${HALIDE}/apps/autoscheduler/weights
-if [ "$improved" -ne 1 ]; then
+if [ "$weights" -lt 1 ]; then
     export HL_WEIGHTS_DIR="$PWD/../baseline.weights"
-else
+elif [ "$weights" -eq 1 ]; then
     export HL_WEIGHTS_DIR="$PWD/../improved.weights"
+elif [ "$weights" -eq 2 ]; then
+    echo "Use $PWD/../value_func.weights."
+    export HL_WEIGHTS_DIR="$PWD/../value_func.weights"
+else
+    echo "Invalid weights option!"
 fi
 export HL_TARGET="host" # x86-64-avx2
 
