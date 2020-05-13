@@ -1,4 +1,7 @@
 autoscheduler="$1"
+export AUTOTUNE_AUTOSCHEDULER="$autoscheduler"
+
+export TRAINING_ON_BENCHMARKS="true"
 
 HALIDE=$(dirname $0)/../../..
 
@@ -83,7 +86,7 @@ APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chai
 
 for app in $APPS; do
 
-    make -C ${HALIDE}/apps/${app} clean
+    # make -C ${HALIDE}/apps/${app} clean
 
     # Build app
     if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] && [ "$app" != "resnet_50_blockwise" ] ; then
@@ -103,6 +106,8 @@ MAX_SECONDS=216000 # 60 hours
 SECONDS=0
 
 while [[ SECONDS -lt $MAX_SECONDS ]]; do
+    export PIPELINE_ID=0
+
     for app in $APPS; do
         echo "$app ($autoscheduler) (retrain=$RETRAIN)" >> retrainprogress
 
@@ -122,6 +127,8 @@ while [[ SECONDS -lt $MAX_SECONDS ]]; do
             echo "Failed to retrain $app ($autoscheduler) (retrain=$RETRAIN)" >> retrainerrors
             # exit 1
         fi
+
+        export PIPELINE_ID=$((PIPELINE_ID+1))
     done
 done
 

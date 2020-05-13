@@ -1,5 +1,7 @@
 #!/usr/bin/env python3.6
 
+from statistics import median
+
 apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul resnet_50_blockwise".split(" ")
 
 def strip_non_digits(s):
@@ -7,51 +9,36 @@ def strip_non_digits(s):
 
 print("test,master,greedy,beam,manual,mcts")
 
+END_OF_RUN = "RL_END_OF_RUN"
+
+def get_median(fname, scale, linestart="Auto-scheduled time:"):
+    value = 0
+    values = []
+
+    try:
+        with open(fname) as f:
+            for line in f:
+                if line.startswith(linestart):
+                    value += float(strip_non_digits(line)) / scale
+                elif line.startswith(END_OF_RUN):
+                    values.append(value)
+                    value = 0
+    except FileNotFoundError:
+        pass
+
+    if len(values) == 0:
+        values.append(value)
+
+    return median(values)
+
 for app in apps:
     scale = 1000 if app != "camera_pipe" else 1000000
 
-    # Get manual and greedy results
-    manual = 0
-    greedy = 0
-    try:
-        with open(f"../greedy/{app}.txt") as f:
-            for line in f:
-                if line.startswith("Manually-tuned time:") or "schedule_type=manual" in line:
-                    manual += float(strip_non_digits(line)) / scale
-                elif line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
-                    greedy += float(strip_non_digits(line)) / scale
-    except FileNotFoundError:
-        pass
-
-    # Get beam results
-    beam = 0
-    try:
-        with open(f"../beam/{app}.txt") as f:
-            for line in f:
-                if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
-                    beam += float(strip_non_digits(line)) / scale
-    except FileNotFoundError:
-        pass
-
-    # Get mcts results
-    mcts = 0
-    try:
-        with open(f"../mcts/{app}.txt") as f:
-            for line in f:
-                if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
-                    mcts += float(strip_non_digits(line)) / scale
-    except FileNotFoundError:
-        pass
-
-    # Get master results
-    master = 0
-    try:
-        with open(f"../master/{app}.txt") as f:
-            for line in f:
-                if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
-                    master += float(strip_non_digits(line)) / scale
-    except FileNotFoundError:
-        pass
+    manual = get_median(f"../greedy/{app}.txt", scale, "Manually-tuned time:")
+    greedy = get_median(f"../greedy/{app}.txt", scale)
+    beam = get_median(f"../beam/{app}.txt", scale)
+    mcts = get_median(f"../mcts/{app}.txt", scale)
+    master = get_median(f"../master/{app}.txt", scale)
 
     print(f"{app},{master},{greedy},{beam},{manual},{mcts}")
 

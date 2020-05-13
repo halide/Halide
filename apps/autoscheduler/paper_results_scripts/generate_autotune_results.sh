@@ -60,11 +60,9 @@ elif [ "$autoscheduler" == "mcts" ]; then
     fi
 
     # mcts
-    export HL_NUM_PASSES=1
-    export MCTS_MAX_MILLIS=0
-    export MCTS_MAX_ITERATIONS=16
-    export MCTS_SIMULATION_DEPTH=5
-    export MCTS_DEPTH=16
+    export HL_NUM_PASSES=20
+    export MCTS_MAX_MILLIS=1000
+    export MCTS_MAX_ITERATIONS=1000
 elif [ "$autoscheduler" == "master" ]; then
     # master
     export HL_BEAM_SIZE=1

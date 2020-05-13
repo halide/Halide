@@ -202,8 +202,7 @@ make_featurization() {
                     HL_WEIGHTS_DIR=${WEIGHTS} \
                     HL_RANDOM_DROPOUT=100 \
                     HL_NUM_PASSES=20 \
-                    HL_NUM_PASSES=20 \
-                    MCTS_MAX_MILLIS=0 \
+                    MCTS_MAX_MILLIS=1000 \
                     MCTS_MAX_ITERATIONS=1000 \
                     HL_MACHINE_PARAMS=32,24000000,40 \
                     ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
@@ -392,6 +391,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
             FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
             if [ "$PIPELINE" == "random_pipeline" ]; then
                 benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH_ID $FNAME
+            elif [ "$TRAINING_ON_BENCHMARKS" == "true" ]; then
+                benchmark_sample "${DIR}/${SAMPLE_ID}" $S $((PIPELINE_ID*100+EXTRA_ARGS_IDX)) $FNAME
             else
                 benchmark_sample "${DIR}/${SAMPLE_ID}" $S $EXTRA_ARGS_IDX $FNAME
             fi
@@ -413,6 +414,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
             # --rates="0.0001" \
             # --rates="0.00002" \
+            # --rates="0.000008" \
         else
             echo "Skipping retraining model..."
         fi
