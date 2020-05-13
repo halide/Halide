@@ -67,6 +67,7 @@ elif [ "$autoscheduler" == "mcts" ]; then
 
     # mcts
     export HL_NUM_PASSES=20
+    export HL_SEED=11
     export MCTS_MAX_MILLIS=0
     export MCTS_MAX_ITERATIONS=1000
     results="mcts"

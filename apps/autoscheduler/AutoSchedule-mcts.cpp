@@ -1954,8 +1954,8 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
-    aslog(1) << "Dropout seed = " << seed << '\n';
-    std::mt19937 rng((uint32_t)seed);
+    srand(seed);
+    aslog(0) << "Seed = " << seed << '\n';
 
     string weights_in_path = get_env_variable("HL_WEIGHTS_DIR");
     string weights_out_path;  // deliberately empty
