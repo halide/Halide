@@ -584,8 +584,8 @@
  rewrite(min((x - (y + (z - w))), ((w - u) + v)), (w + min((x - (z + y)), (v - u)))) ||
  rewrite(min((x - ((y - z) + w)), (u + (z - v))), (z + min((x - (y + w)), (u - v)))) ||
  rewrite(min((x - ((y - z) + w)), ((z - u) + v)), (z + min((x - (y + w)), (v - u)))) ||
- rewrite(min((x - (y*c0)), (z + (w - (y*c1)))), (min(x, (w + z)) - (y*fold(max(c0, c1)))), (((max(c0, c1) + min((7 - c0), (5 - c1))) == 5) && ((min((c1*7), ((c0*7) + 6)) + (max(c0, c1)*-7)) == 0))) ||
- rewrite(min((x - (y*c0)), ((z - (y*c1)) + w)), (min(x, (z + w)) - (y*fold(max(c0, c1)))), (((max(c0, c1) + min((7 - c0), (5 - c1))) == 5) && ((min((c1*7), ((c0*7) + 6)) + (max(c0, c1)*-7)) == 0))) ||
+ rewrite(min((x - (y*c0)), (z + (w - (y*c1)))), (min(x, (w + z)) - (y*fold(max(c0, c1)))), (((max(c0, c1) + min((7 - c0), (5 - c1))) == 5) && ((min((c1*5), ((c0*5) + 3)) + (max(c0, c1)*-5)) == 0))) ||
+ rewrite(min((x - (y*c0)), ((z - (y*c1)) + w)), (min(x, (z + w)) - (y*fold(max(c0, c1)))), (((max(c0, c1) + min((7 - c0), (5 - c1))) == 5) && ((min((c1*5), ((c0*5) + 3)) + (max(c0, c1)*-5)) == 0))) ||
  rewrite(min((x - (y*z)), (w + (u - (z*y)))), (min(x, (u + w)) - (z*y))) ||
  rewrite(min((x - (y*z)), ((w - (z*y)) + u)), (min(x, (w + u)) - (z*y))) ||
  rewrite(min(((x + y) - z), (w + x)), (x + min((y - z), w))) ||
@@ -640,12 +640,9 @@
  rewrite(min((x - (y + z)), (w - y)), (min(w, (x - z)) - y)) ||
  rewrite(min((x - (y + z)), (w - z)), (min(w, (x - y)) - z)) ||
  rewrite(min((x - (y*c0)), (z - (w + (y*c1)))), (min(x, (z - w)) - (y*fold(max(c0, c1)))), (((min((c0*8), ((c1*8) + 10)) + (max(c0, c1)*-8)) == 0) && ((min((-1 - (c0*8)), (-9 - (c1*8))) + (max(c0, c1)*8)) == -9))) ||
- rewrite(min((x - (y*c0)), (z - (w + (y*c1)))), (min(x, (z - w)) - (y*fold(max(c0, c1)))), (((min((c0*8), ((c1*8) + 10)) + (max(c0, c1)*-8)) == 0) && (max(c0, c1) == min(c0, c1)))) ||
  rewrite(min((x - (y*c0)), (z - ((y*c1) + w))), (min(x, (z - w)) - (y*fold(max(c0, c1)))), (((min((c0*8), ((c1*8) + 10)) + (max(c0, c1)*-8)) == 0) && ((min((-1 - (c0*8)), (-9 - (c1*8))) + (max(c0, c1)*8)) == -9))) ||
- rewrite(min((x - (y*c0)), (z - ((y*c1) + w))), (min(x, (z - w)) - (y*fold(max(c0, c1)))), (((min((c0*8), ((c1*8) + 10)) + (max(c0, c1)*-8)) == 0) && (max(c0, c1) == min(c0, c1)))) ||
  rewrite(min((x - (y*z)), (w - (u + (z*y)))), (min(x, (w - u)) - (z*y))) ||
  rewrite(min((x - (y*z)), (w - ((z*y) + u))), (min(x, (w - u)) - (z*y))) ||
- rewrite(min(((c0 - x) - y), (c1 - z)), (fold(min((c0 + 1), c1)) - max((y + x), z)), ((c1 <= c0) && (c0 == c1))) ||
  rewrite(min(((x - y) - z), (x - w)), (x - max((y + z), w))) ||
  rewrite(min((((x + y) - z) - w), (x - u)), (x - max(((w - y) + z), u))) ||
  rewrite(min((((x + y) - z) - w), (y - u)), (y - max((w - (x - z)), u))) ||

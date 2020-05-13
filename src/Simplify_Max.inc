@@ -1,6 +1,4 @@
 ((b.node_type() == IRNodeType::Add) && (
- rewrite(max(x, ((y - (z*c0)) + (w + (z*c1)))), max(x, (y + w)), ((c1 <= c0) && (c0 == c1))) ||
- rewrite(max(x, ((y - (z*c0)) + ((z*c1) + w))), max(x, (y + w)), ((c1 <= c0) && (c0 == c1))) ||
  rewrite(max(x, (min(x, y) + c0)), x, (c0 <= 0)) ||
  rewrite(max(x, (min(y, x) + c0)), x, (c0 <= 0)) ||
  rewrite(max(x, (max(y, max(x, z)) + c0)), (max(y, max(x, z)) + fold(max(c0, -1))), (max(min(c0, 0), -1) == 0)) ||
@@ -105,8 +103,6 @@
 ((b.node_type() == IRNodeType::Select) && (
  rewrite(max(x, select(y, z, x)), select(y, max(z, x), x)))) ||
 ((a.node_type() == IRNodeType::Add) && EVAL_IN_LAMBDA(
- rewrite(max(((x - (y*c0)) + (z + (y*c1))), w), max((x + z), w), ((c1 <= c0) && (c0 == c1))) ||
- rewrite(max(((x - (y*c0)) + ((y*c1) + z)), w), max((x + z), w), ((c1 <= c0) && (c0 == c1))) ||
  rewrite(max((min(x, y) + c0), x), x, (c0 <= 0)) ||
  rewrite(max((min(x, y) + c0), y), y, (c0 <= 0)) ||
  rewrite(max((max(x, max(y, z)) + c0), y), (max(x, max(y, z)) + fold(max(c0, -1))), (max(min(c0, 0), -1) == 0)) ||
@@ -373,9 +369,7 @@
  rewrite(max((x - (y + z)), ((w - (u + z)) - v)), (max((x - y), (w - (u + v))) - z)) ||
  rewrite(max((x - (y + z)), ((w - (y + u)) - v)), (max((x - z), (w - (v + u))) - y)) ||
  rewrite(max((x - (y + z)), ((w - (z + u)) - v)), (max((x - y), (w - (v + u))) - z)) ||
- rewrite(max((x - (y*c0)), (z - (w + (y*c1)))), (max(x, (z - w)) - (y*fold(min(c0, c1)))), (((max((1 - (c0*4)), (0 - (c1*4))) + (min(c0, c1)*4)) == 1) && ((max((0 - c0), (3 - c1)) + min(c0, c1)) == 3))) ||
  rewrite(max((x - (y*c0)), (z - (w + (y*c1)))), (max(x, (z - w)) - (y*fold(min(c0, c1)))), (((max((1 - (c0*4)), (0 - (c1*4))) + (min(c0, c1)*4)) == 1) && ((max(((1 - c1)*2), (0 - (c0*2))) + (min(c0, c1)*2)) == 2))) ||
- rewrite(max((x - (y*c0)), (z - ((y*c1) + w))), (max(x, (z - w)) - (y*fold(min(c0, c1)))), (((max((1 - (c0*4)), (0 - (c1*4))) + (min(c0, c1)*4)) == 1) && ((max((0 - c0), (3 - c1)) + min(c0, c1)) == 3))) ||
  rewrite(max((x - (y*c0)), (z - ((y*c1) + w))), (max(x, (z - w)) - (y*fold(min(c0, c1)))), (((max((1 - (c0*4)), (0 - (c1*4))) + (min(c0, c1)*4)) == 1) && ((max(((1 - c1)*2), (0 - (c0*2))) + (min(c0, c1)*2)) == 2))) ||
  rewrite(max((x - (y*z)), (w - (u + (z*y)))), (max(x, (w - u)) - (z*y))) ||
  rewrite(max((x - (y*z)), (w - ((z*y) + u))), (max(x, (w - u)) - (z*y))) ||
@@ -399,10 +393,10 @@
  rewrite(max(((x - y) - z), (w - (y + u))), (max((x - z), (w - u)) - y)))))) ||
 ((a.node_type() == IRNodeType::Mul) && EVAL_IN_LAMBDA(
 ((b.node_type() == IRNodeType::Add) && (
- rewrite(max((x*c0), (x + y)), (x + max(x, y)), (c0 == 2)) ||
+ rewrite(max((x*2), (x + y)), (x + max(x, y))) ||
+ rewrite(max((x*2), (y + x)), (x + max(y, x))) ||
  rewrite(max((x*c0), (x + max(x, y))), (x + max(x, y)), (((c0 <= 2) && ((c0*-1) <= 4)) && ((c0*-1) <= -2))) ||
  rewrite(max((x*c0), (x + max(y, x))), (x + max(y, x)), (((c0 <= 2) && ((c0*-1) <= 4)) && ((c0*-1) <= -2))) ||
- rewrite(max((x*c0), (y + x)), (x + max(y, x)), (c0 == 2)) ||
  rewrite(max((x*c0), (max(x, y) + x)), (x + max(y, x)), (((c0 <= 2) && ((c0*-1) <= 4)) && ((c0*-1) <= -2))) ||
  rewrite(max((x*c0), (max(y, x) + x)), (x + max(y, x)), (((c0 <= 2) && ((c0*-1) <= 4)) && ((c0*-1) <= -2))) ||
  rewrite(max((x*y), (max(z, max(w, (y*x))) + c0)), (max(z, max(w, (y*x))) + fold(max(c0, -1))), (max(min(c0, 0), -1) == 0)) ||

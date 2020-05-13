@@ -538,6 +538,31 @@ void check_rule(Rule &r) {
             }
         }
 
+        // Eliminate constant vars that occur on the LHS
+        {
+            for (auto v : find_vars(r.lhs)) {
+                for (Expr t : unpack_binary_op<And>(new_predicate)) {
+                    auto result = solve_expression(t, v.first);
+                    if (result.fully_solved) {
+                        if (const EQ *eq = result.result.as<EQ>()) {
+                            if (equal(eq->a, Variable::make(Int(32), v.first))) {
+                                Expr replacement = simplify(eq->b);
+                                const Variable *r_var = replacement.as<Variable>();
+                                bool lower_numbered_constant_var =
+                                    r_var && (r_var->name[0] == 'c' && (r_var->name[1] < v.first[1]));
+                                if (lower_numbered_constant_var || is_const(replacement)) {
+                                    new_predicate = simplify(substitute(v.first, replacement, new_predicate));
+                                    r.lhs = substitute(v.first, replacement, r.lhs);
+                                    r.rhs = substitute(v.first, replacement, r.rhs);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Save human attention for things small enough to be tractable - one clause only please.
         if (const Call *c = new_predicate.as<Call>()) {
             if (c->name == "prove_me") {
