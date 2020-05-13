@@ -1858,14 +1858,15 @@ IntrusivePtr<State> optimal_mcts_schedule(
     }
     tick.clear();
     //we are supposed to get to the same final result
-    states[0].evaluate();
-    best = states[0].inner;
-    
-    aslog(0) << "Best cost: " << best->cost << "\n";
-    if (global_best_value>-1*best->cost){
-        best = global_best_state;
-    }    
+    best = global_best_state;
     aslog(0) << "global best cost: " << -1*global_best_value << "\n";
+    
+    if (states[0].inner->num_decisions_made == 2 * (int)dags[0]->nodes.size() &&
+        global_best_value<-1*best->cost){
+        states[0].evaluate();
+        best = states[0].inner;
+        aslog(0) << "Best final_state cost: " << best->cost << "\n";
+    }    
     //aslog(0) << "** global schedule " << global_best_state.get() << ":\n";
     
     best->apply_schedule(*dags[global_dag_best_idx], params);
