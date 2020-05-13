@@ -331,7 +331,7 @@ int main(int argc, char **argv) {
 
     std::cout << blacklist.size() << " blacklisted patterns\n";
 
-    map<Expr, int, IRDeepCompare> patterns_without_constants;
+    map<Expr, int, IRDeepCompare> inputs_without_constants, patterns_without_constants;
 
     set<Expr, IRDeepCompare> patterns;
     size_t handled = 0, total = 0;
@@ -355,7 +355,7 @@ int main(int argc, char **argv) {
         } else {
             {
                 ReplaceConstants replacer;
-                int count = patterns_without_constants[replacer.mutate(e)]++;
+                int count = inputs_without_constants[replacer.mutate(e)]++;
                 // We don't want tons of exprs that are the same except for different constants
                 if (count > 1) {
                     std::cout << "Skipping. Already seen it too many times\n";
