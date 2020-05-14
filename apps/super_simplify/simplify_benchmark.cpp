@@ -236,15 +236,19 @@ int main(int argc, char **argv) {
     uintptr_t tracker = 0;
     std::ostringstream o;
 
+    struct Info {
+        Expr expr;
+        int nodes;
+        double simplify_time_usec;
+        double print_time_usec;
+    };
+    std::vector<Info> infos;
+
     double simplify_time_total = 0;
     double print_time_total = 0;
     int nodes_total = 0;
 
     for (const auto &e : exprs) {
-        NodeCounter n;
-        e.accept(&n);
-        const int nodes = n.count;
-        nodes_total += nodes;
 
         std::cout << "\nBenchmarking: " << e << " ...\n";
 
@@ -263,15 +267,23 @@ int main(int argc, char **argv) {
             tracker += (uintptr_t)o.str().c_str();
         });
 
+        NodeCounter n;
+        e.accept(&n);
+
+        Info info;
+        info.expr = e;
+        info.nodes = n.count;
+        info.simplify_time_usec = s.wall_time * 10000000.0;
+        info.print_time_usec = p.wall_time * 10000000.0;
+        infos.push_back(info);
+
+        std::cout << "IR nodes: " << info.nodes << "\n";
+        std::cout << "simplify time:  " << info.simplify_time_usec << " usec, " << info.simplify_time_usec / info.nodes << " usec/node\n";
+        std::cout << "printing time: " << info.print_time_usec << " usec, " << info.print_time_usec / info.nodes << " usec/node\n";
+
         simplify_time_total += s.wall_time;
         print_time_total += p.wall_time;
-
-        double simp_time_usec = s.wall_time * 10000000.0;
-        double print_time_usec = p.wall_time * 10000000.0;
-
-        std::cout << "IR nodes: " << nodes << "\n";
-        std::cout << "simplify time:  " << simp_time_usec << " usec, " << simp_time_usec / nodes << " usec/node\n";
-        std::cout << "printing time: " << print_time_usec << " usec, " << print_time_usec / nodes << " usec/node\n";
+        nodes_total += info.nodes;
     }
 
     simplify_time_total *= 1000000.0;
@@ -281,6 +293,14 @@ int main(int argc, char **argv) {
     std::cout << "avg nodes/Expr:  " << (double)nodes_total / (double)exprs.size() << "\n";
     std::cout << "avg simplify time:  " << simplify_time_total << " usec, avg per node " << simplify_time_total / nodes_total << " usec\n";
     std::cout << "avg printing time:  " << print_time_total << " usec, avg per node " << print_time_total / nodes_total << " usec\n";
+
+    std::cout << "\n\nCSV:\n";
+    std::cout << "----\n";
+    std::cout << "expr,nodes,simplify_time_usec,print_time_usec\n";
+    for (const auto &info : infos) {
+        std::cout << "\"" << info.expr << "\"" << "," << info.nodes << "," << info.simplify_time_usec << "," << info.print_time_usec << "\n";
+    }
+    std::cout << "----\n";
 
     std::cout << "\n(Ignore: " << tracker << ")\n";
     return 0;
