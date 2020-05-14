@@ -2,11 +2,11 @@ include ../support/Makefile.inc
 
 OBJECTS = $(BIN)/parser.o $(BIN)/z3.o $(BIN)/expr_util.o $(BIN)/reduction_order.o $(BIN)/synthesize_predicate.o $(BIN)/super_simplify.o
 
-all: $(BIN)/find_rules $(BIN)/synthesize_predicates $(BIN)/filter_rewrite_rules $(BIN)/super_simplify 
+all: $(BIN)/find_rules $(BIN)/synthesize_predicates $(BIN)/filter_rewrite_rules $(BIN)/super_simplify
 
 CXXFLAGS += -O3 -g
 
-LDFLAGS += -L ../../distrib/bin -L ../../distrib/lib -Wl,-rpath ../../distrib/bin 
+LDFLAGS += -L ../../distrib/bin -L ../../distrib/lib -Wl,-rpath ../../distrib/bin
 
 STATIC_LDFLAGS = $(filter-out -lpthread,$(LDFLAGS)) -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive
 
@@ -42,6 +42,10 @@ $(BIN)/enumerate_exprs: enumerate_exprs.cpp $(OBJECTS) $(LIB_HALIDE)
 $(BIN)/anonymize_exprs: anonymize_exprs.cpp $(OBJECTS) $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
+
+$(BIN)/simplify_benchmark: simplify_benchmark.cpp $(BIN)/parser.o $(LIB_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $< $(BIN)/parser.o -o $@ $(LDFLAGS) -lHalide
 
 clean:
 	rm -rf $(BIN)
