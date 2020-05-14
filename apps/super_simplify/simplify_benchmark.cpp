@@ -2,8 +2,8 @@
 #include <sstream>
 
 #include "Halide.h"
-#include "parser.h"
 #include "halide_benchmark.h"
+#include "parser.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -16,78 +16,220 @@ public:
     int count = 0;
 
 protected:
-    void visit(const IntImm *op) override { count++; IRVisitor::visit(op); }
-    void visit(const UIntImm *op) override { count++; IRVisitor::visit(op); }
-    void visit(const FloatImm *op) override { count++; IRVisitor::visit(op); }
-    void visit(const StringImm *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Cast *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Variable *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Add *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Sub *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Mul *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Div *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Mod *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Min *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Max *op) override { count++; IRVisitor::visit(op); }
-    void visit(const EQ *op) override { count++; IRVisitor::visit(op); }
-    void visit(const NE *op) override { count++; IRVisitor::visit(op); }
-    void visit(const LT *op) override { count++; IRVisitor::visit(op); }
-    void visit(const LE *op) override { count++; IRVisitor::visit(op); }
-    void visit(const GT *op) override { count++; IRVisitor::visit(op); }
-    void visit(const GE *op) override { count++; IRVisitor::visit(op); }
-    void visit(const And *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Or *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Not *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Select *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Load *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Ramp *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Broadcast *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Call *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Let *op) override { count++; IRVisitor::visit(op); }
-    void visit(const LetStmt *op) override { count++; IRVisitor::visit(op); }
-    void visit(const AssertStmt *op) override { count++; IRVisitor::visit(op); }
-    void visit(const ProducerConsumer *op) override { count++; IRVisitor::visit(op); }
-    void visit(const For *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Store *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Provide *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Allocate *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Free *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Realize *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Block *op) override { count++; IRVisitor::visit(op); }
-    void visit(const IfThenElse *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Evaluate *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Shuffle *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Prefetch *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Fork *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Acquire *op) override { count++; IRVisitor::visit(op); }
-    void visit(const Atomic *op) override { count++; IRVisitor::visit(op); }
+    void visit(const IntImm *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const UIntImm *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const FloatImm *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const StringImm *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Cast *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Variable *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Add *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Sub *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Mul *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Div *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Mod *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Min *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Max *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const EQ *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const NE *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const LT *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const LE *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const GT *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const GE *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const And *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Or *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Not *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Select *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Load *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Ramp *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Broadcast *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Call *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Let *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const LetStmt *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const AssertStmt *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const ProducerConsumer *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const For *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Store *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Provide *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Allocate *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Free *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Realize *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Block *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const IfThenElse *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Evaluate *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Shuffle *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Prefetch *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Fork *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Acquire *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+    void visit(const Atomic *op) override {
+        count++;
+        IRVisitor::visit(op);
+    }
+};
+
+const char *builtin_exprs[] = {
+    // lots of nodes (but not unreasonably slow)
+    "((((min(((((loop0*16) + anon1)*2) + 2), anon2) - (select((0 < anon1), (((min((((loop0*16) + anon1)*2), anon2) + anon3) + 3)/2), (((loop0*16) + ((anon3/2) + anon1)) + -1))*2)) + anon3) + 1)/2)",
+    "((((min(((((loop0*16) + anon1)*2) + 2), anon2) - (select((0 < anon1), (((min((((loop0*16) + anon1)*2), anon2) + anon3) + 3)/2), (((loop0*16) + ((anon3/2) + anon1)) + -1))*2)) + anon3) + 3)/2)",
+
+    // very few nodes (but not unreasonably slow)
+    "((anon1*loop0) + anon2)",
+    "((loop0 % 2) + 1)",
+
+    // lots of nodes (and unusally slow per node)
+    "(let anon1 = (0 < anon2) in (let anon3 = (select(anon1, 3, -3) + ((anon4/2) + anon2)) in (let anon5 = ((anon6 == 4) || (anon6 == 2)) in (let anon7 = ((anon8/2) - (int32(anon5)/2)) in (let anon9 = ((loop0*32) + (select(anon1, 1, 7) + anon3)) in (min(max(max((((anon8/2) + (anon10/2)) - ((int32(anon5) + 1)/2)), anon7), ((loop0*32) + anon3)), anon9) - min(max(((loop0*32) + anon3), anon7), anon9)))))))",
+    "(let anon1 = ((anon2/16) + (anon3/16)) in (max(((anon3/16)*16), ((min((anon1*4), (min((((anon4*128) + loop0) + 2), anon5) + anon6))*4) + -1)) - max(((anon3/16)*16), (min((anon1*16), (((((anon4*128) + anon6) + loop0)*4) + 5)) + -1))))",
+    "(let anon1 = (anon2 - (((anon3*2) - max(anon4, 0)) + anon5)) in (min(max((0 - anon6), (max((((min((anon7 - anon4), (min(anon4, 0) + anon7)) - (anon3*2)) + anon2) - anon5), anon1) + ((loop0 + anon8)*-2))), (anon6 + 1)) - min(max((0 - anon6), (((loop0 + anon8)*-2) + anon1)), (anon6 + 1))))",
+    "(let anon1 = (anon2 - ((anon3 - max(anon4, 0)) + anon5)) in (min(max(((max((((min((anon6 - anon4), (min(anon4, 0) + anon6)) - anon3) + anon2) - anon5), anon1) - anon7) - loop0), (0 - anon8)), (anon8 + 1)) - min(max(((anon1 - anon7) - loop0), (0 - anon8)), (anon8 + 1))))",
+    "(let anon1 = max(max(anon2, anon3), (max(anon2, anon4) - anon5)) in (min(max(max(min(min(min((anon6 + anon2), (anon7 + anon3)), (min((anon6 + anon2), (anon8 + anon4)) - max((anon9/2), anon5))), ((anon8 + anon4) - (anon9/2))), anon1), ((loop0*16) + anon10)), (((loop0*16) + anon10) + 16)) - min(max(((loop0*16) + anon10), anon1), (((loop0*16) + anon10) + 16))))",
 };
 
 }  // namespace
 
 int main(int argc, char **argv) {
-    Var loop0, loop1, loop2;
-    Var anon0, anon1, anon2, anon3, anon4, anon5;
-    std::vector<Expr> exprs = {
-        (((((min(((loop0 * -3) + anon1), 3) + (loop0 * 3)) + anon2) * 2) + 7) / 3),
-        ((((anon1 + anon2) + loop0) / 2) - ((((select((0 < loop0), 1, 0) + loop0) + anon1) + anon2) / 2)),
-        ((((anon1 + anon2) + loop0) / 2) - (((select((0 < loop0), 1, 0) + loop0) + (anon1 + anon2)) / 2)),
-        ((((loop0 - ((((anon1 + loop0) + -1) / 3) * 3)) + anon1) + 2) / 3),
-        ((((loop0 - ((((anon1 + loop0) + -2) / 4) * 4)) + anon1) + 2) / 4),
-        ((((loop0 - ((((select((0 < loop0), 4, -1) + loop0) + anon1) / 3) * 3)) + anon1) + 5) / 3),
-        ((((loop0 - ((((select((0 < loop0), 5, -2) + loop0) + anon1) / 4) * 4)) + anon1) + 6) / 4),
-        ((((loop0 - (max((((anon1 + loop0) + -1) / 2), ((max(anon2, 0) + anon3) - (anon4 * 8))) * 2)) + anon1) + 3) / 2),
-        ((((loop0 - (max((((anon1 + loop0) + -1) / 3), ((max(anon2, 0) + anon3) - (anon4 * 8))) * 3)) + anon1) + 5) / 3),
-        ((((loop0 - (max((((anon1 + loop0) + -2) / 4), ((max(anon2, 0) + anon3) - (anon4 * 8))) * 4)) + anon1) + 6) / 4),
-        ((((loop0 - (min(select((0 < loop0), (((anon1 + loop0) / 2) + 1), (((anon1 + loop0) + -1) / 2)), (((anon1 + loop0) + -1) / 2)) * 2)) + anon1) + 1) / 2),
-        ((((loop0 - (select((0 < loop0), (((anon1 + loop0) / 2) + 1), (((anon1 + loop0) + -1) / 2)) * 2)) + anon1) + 3) / 2),
-    };
+    std::vector<Expr> exprs;
 
     if (argc > 1) {
         std::cout << "Using exprs in file: " << argv[1] << "\n";
         exprs = parse_halide_exprs_from_file(argv[1]);
-        std::cout << exprs.size() << " exprs parsed.\n";
+    } else {
+        std::cout << "Using builtin_exprs\n";
+        for (const char *e : builtin_exprs) {
+            exprs.push_back(parse_halide_expr(e, e + strlen(e), Type{}));
+        }
     }
+    std::cout << exprs.size() << " exprs parsed.\n";
 
     uintptr_t tracker = 0;
     std::ostringstream o;
@@ -134,7 +276,7 @@ int main(int argc, char **argv) {
     print_time_total *= 1000000.0;
 
     std::cout << "\n\ntotal IR nodes seen:  " << nodes_total << "\n";
-    std::cout << "avg nodes/Expr:  " << (double) nodes_total / (double) exprs.size() << "\n";
+    std::cout << "avg nodes/Expr:  " << (double)nodes_total / (double)exprs.size() << "\n";
     std::cout << "avg simplify time:  " << simplify_time_total << " usec, avg per node " << simplify_time_total / nodes_total << " usec\n";
     std::cout << "avg simplify time:  " << print_time_total << " usec, avg per node " << print_time_total / nodes_total << " usec\n";
 
