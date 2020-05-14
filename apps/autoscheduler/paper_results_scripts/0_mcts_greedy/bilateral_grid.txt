@@ -1,0 +1,8 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/bilateral_grid'
+bin/host/filter ../images/gray.png bin/host/out.png 0.1 10
+Manually-tuned time: 5.94497ms
+Auto-scheduled time: 5.32302ms
+bin/host/filter ../images/gray.png bin/host/out.tiff 0.1 10
+Manually-tuned time: 5.69843ms
+Auto-scheduled time: 5.35743ms
+make: Leaving directory '/scratch/ameerh/Halide/apps/bilateral_grid'

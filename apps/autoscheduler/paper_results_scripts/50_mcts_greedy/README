@@ -1,0 +1,7 @@
+the used parameters:
+    export HL_NUM_PASSES=20 
+    export HL_SEED=13
+    export MCTS_MAX_MILLIS=30000
+    export MCTS_MAX_ITERATIONS=10000
+
+with 50% greediness

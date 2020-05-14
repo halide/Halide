@@ -1,0 +1,90 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/harris'
+bin/host/harris.generator -g harris -f harris -o bin/host target=host-no_runtime auto_schedule=false
+bin/host/harris.generator -g harris -f harris_auto_schedule -o bin/host target=host-no_runtime auto_schedule=true -p /scratch/ameerh/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-no_runtime-sse41
+Seed = 13
+mcts_depth 26
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -3.0959
+finished depth 1 best value so far -3.0959
+Cost evaluated this many times: 3651247
+best intermediate value -3.16778
+finished depth 2 best value so far -3.0959
+Cost evaluated this many times: 7107315
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -3.0959
+Cost evaluated this many times: 7107315
+best intermediate value -3.14432
+finished depth 4 best value so far -3.0959
+Cost evaluated this many times: 10327376
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -3.0959
+Cost evaluated this many times: 10327376
+best intermediate value -3.14248
+finished depth 6 best value so far -3.0959
+Cost evaluated this many times: 13277465
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -3.0959
+Cost evaluated this many times: 13277465
+best intermediate value -3.14432
+finished depth 8 best value so far -3.0959
+Cost evaluated this many times: 16073059
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -3.0959
+Cost evaluated this many times: 16073059
+best intermediate value -3.15393
+finished depth 10 best value so far -3.0959
+Cost evaluated this many times: 18560128
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -3.0959
+Cost evaluated this many times: 18560128
+best intermediate value -3.10321
+finished depth 12 best value so far -3.0959
+Cost evaluated this many times: 20987422
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -3.0959
+Cost evaluated this many times: 20987422
+best intermediate value -3.09031
+finished depth 14 best value so far -3.09031
+Cost evaluated this many times: 22477876
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -3.09031
+Cost evaluated this many times: 22477876
+best intermediate value -3.04237
+finished depth 16 best value so far -3.04237
+Cost evaluated this many times: 23448482
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -3.04237
+Cost evaluated this many times: 23448482
+best intermediate value -3.03484
+finished depth 18 best value so far -3.03484
+Cost evaluated this many times: 23855219
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -3.03484
+Cost evaluated this many times: 23855219
+best intermediate value -3.03484
+finished depth 20 best value so far -3.03484
+Cost evaluated this many times: 24084125
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -3.03484
+Cost evaluated this many times: 24084125
+best intermediate value -3.03484
+finished depth 22 best value so far -3.03484
+Cost evaluated this many times: 24286886
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -3.03484
+Cost evaluated this many times: 24286886
+best intermediate value -1.11111e+11
+finished depth 24 best value so far -3.03484
+Cost evaluated this many times: 24286886
+global best cost: 3.03484
+Cost evaluated this many times: 24286886
+bin/host/harris.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++11 -I /scratch/ameerh/Halide/distrib/include/ -I /scratch/ameerh/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host -Wall -O3 filter.cpp bin/host/harris.a bin/host/harris_auto_schedule.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..   
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 1.9817ms
+Auto-scheduled time: 2.35472ms
+rm bin/host/harris.a bin/host/runtime.a bin/host/harris_auto_schedule.a
+make: Leaving directory '/scratch/ameerh/Halide/apps/harris'

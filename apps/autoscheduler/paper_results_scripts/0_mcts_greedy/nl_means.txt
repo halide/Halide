@@ -1,0 +1,96 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/nl_means'
+bin/host/nl_means.generator -g nl_means -e static_library,h,registration,stmt,assembly -o bin/host -f nl_means target=host auto_schedule=false
+bin/host/nl_means.generator -g nl_means -e static_library,h,registration,stmt,assembly -o bin/host -f nl_means_auto_schedule target=host-no_runtime auto_schedule=true -p /scratch/ameerh/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-no_runtime-sse41
+Seed = 13
+mcts_depth 28
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -30.2137
+finished depth 1 best value so far -30.2137
+Cost evaluated this many times: 6254
+best intermediate value -31.7049
+finished depth 2 best value so far -30.2137
+Cost evaluated this many times: 11903
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -30.2137
+Cost evaluated this many times: 11903
+best intermediate value -28.3368
+finished depth 4 best value so far -28.3368
+Cost evaluated this many times: 15902
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -28.3368
+Cost evaluated this many times: 15902
+best intermediate value -24.4721
+finished depth 6 best value so far -24.4721
+Cost evaluated this many times: 22227
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -24.4721
+Cost evaluated this many times: 22227
+best intermediate value -25.7136
+finished depth 8 best value so far -24.4721
+Cost evaluated this many times: 30042
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -24.4721
+Cost evaluated this many times: 30042
+best intermediate value -23.4489
+finished depth 10 best value so far -23.4489
+Cost evaluated this many times: 39057
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -23.4489
+Cost evaluated this many times: 39057
+best intermediate value -21.6778
+finished depth 12 best value so far -21.6778
+Cost evaluated this many times: 47925
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -21.6778
+Cost evaluated this many times: 47925
+best intermediate value -20.8615
+finished depth 14 best value so far -20.8615
+Cost evaluated this many times: 62592
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -20.8615
+Cost evaluated this many times: 62592
+best intermediate value -19.1524
+finished depth 16 best value so far -19.1524
+Cost evaluated this many times: 74149
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -19.1524
+Cost evaluated this many times: 74149
+best intermediate value -19.0859
+finished depth 18 best value so far -19.0859
+Cost evaluated this many times: 269145
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -19.0859
+Cost evaluated this many times: 269145
+best intermediate value -18.9931
+finished depth 20 best value so far -18.9931
+Cost evaluated this many times: 468897
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -18.9931
+Cost evaluated this many times: 468897
+best intermediate value -18.9931
+finished depth 22 best value so far -18.9931
+Cost evaluated this many times: 668724
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -18.9931
+Cost evaluated this many times: 668724
+best intermediate value -1.11111e+11
+finished depth 24 best value so far -18.9931
+Cost evaluated this many times: 668724
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -18.9931
+Cost evaluated this many times: 668724
+best intermediate value -1.11111e+11
+finished depth 26 best value so far -18.9931
+Cost evaluated this many times: 668724
+global best cost: 18.9931
+Cost evaluated this many times: 668724
+c++ -O3 -std=c++11 -I /scratch/ameerh/Halide/distrib/include/ -I /scratch/ameerh/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host -Wall process.cpp bin/host/nl_means.a bin/host/nl_means_auto_schedule.a -o bin/host/process  -ldl -lpthread -lz -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..   
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 101.317ms
+Auto-scheduled time: 99.3687ms
+rm bin/host/nl_means.a bin/host/nl_means_auto_schedule.a
+make: Leaving directory '/scratch/ameerh/Halide/apps/nl_means'

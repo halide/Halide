@@ -1,0 +1,3396 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/resnet_50_blockwise'
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule4 target=host auto_schedule=true block_id=4 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 52
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -4.33344
+finished depth 1 best value so far -4.33344
+Cost evaluated this many times: 8983
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -4.33344
+Cost evaluated this many times: 8983
+best intermediate value -4.48502
+finished depth 3 best value so far -4.33344
+Cost evaluated this many times: 17272
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -4.33344
+Cost evaluated this many times: 17272
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -4.33344
+Cost evaluated this many times: 17272
+best intermediate value -4.12002
+finished depth 6 best value so far -4.12002
+Cost evaluated this many times: 28193
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -4.12002
+Cost evaluated this many times: 28193
+best intermediate value -3.47162
+finished depth 8 best value so far -3.47162
+Cost evaluated this many times: 39905
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -3.47162
+Cost evaluated this many times: 39905
+best intermediate value -4.04344
+finished depth 10 best value so far -3.47162
+Cost evaluated this many times: 52019
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -3.47162
+Cost evaluated this many times: 52019
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -3.47162
+Cost evaluated this many times: 52019
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -3.47162
+Cost evaluated this many times: 52019
+best intermediate value -3.49183
+finished depth 14 best value so far -3.47162
+Cost evaluated this many times: 64289
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -3.47162
+Cost evaluated this many times: 64289
+best intermediate value -3.84277
+finished depth 16 best value so far -3.47162
+Cost evaluated this many times: 77100
+best intermediate value -3.75765
+finished depth 17 best value so far -3.47162
+Cost evaluated this many times: 87381
+best intermediate value -3.93359
+finished depth 18 best value so far -3.47162
+Cost evaluated this many times: 95828
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -3.47162
+Cost evaluated this many times: 95828
+best intermediate value -4.04404
+finished depth 20 best value so far -3.47162
+Cost evaluated this many times: 102583
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -3.47162
+Cost evaluated this many times: 102583
+best intermediate value -3.94264
+finished depth 22 best value so far -3.47162
+Cost evaluated this many times: 106016
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -3.47162
+Cost evaluated this many times: 106016
+best intermediate value -3.78815
+finished depth 24 best value so far -3.47162
+Cost evaluated this many times: 112568
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -3.47162
+Cost evaluated this many times: 112568
+best intermediate value -3.73139
+finished depth 26 best value so far -3.47162
+Cost evaluated this many times: 119735
+best intermediate value -1.11111e+11
+finished depth 27 best value so far -3.47162
+Cost evaluated this many times: 119735
+best intermediate value -3.25265
+finished depth 28 best value so far -3.25265
+Cost evaluated this many times: 139742
+best intermediate value -3.47539
+finished depth 29 best value so far -3.25265
+Cost evaluated this many times: 160775
+best intermediate value -3.46896
+finished depth 30 best value so far -3.25265
+Cost evaluated this many times: 189022
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -3.25265
+Cost evaluated this many times: 189022
+best intermediate value -3.39521
+finished depth 32 best value so far -3.25265
+Cost evaluated this many times: 214748
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -3.25265
+Cost evaluated this many times: 214748
+best intermediate value -3.35925
+finished depth 34 best value so far -3.25265
+Cost evaluated this many times: 264734
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -3.25265
+Cost evaluated this many times: 264734
+best intermediate value -3.33626
+finished depth 36 best value so far -3.25265
+Cost evaluated this many times: 328513
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -3.25265
+Cost evaluated this many times: 328513
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -3.25265
+Cost evaluated this many times: 328513
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -3.25265
+Cost evaluated this many times: 328513
+best intermediate value -3.33932
+finished depth 40 best value so far -3.25265
+Cost evaluated this many times: 395299
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -3.25265
+Cost evaluated this many times: 395299
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -3.25265
+Cost evaluated this many times: 395299
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -3.25265
+Cost evaluated this many times: 395299
+best intermediate value -3.33626
+finished depth 44 best value so far -3.25265
+Cost evaluated this many times: 435378
+best intermediate value -3.33626
+finished depth 45 best value so far -3.25265
+Cost evaluated this many times: 474961
+best intermediate value -3.33626
+finished depth 46 best value so far -3.25265
+Cost evaluated this many times: 524001
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -3.25265
+Cost evaluated this many times: 524001
+best intermediate value -3.33626
+finished depth 48 best value so far -3.25265
+Cost evaluated this many times: 723775
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -3.25265
+Cost evaluated this many times: 723775
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -3.25265
+Cost evaluated this many times: 723775
+global best cost: 3.25265
+Cost evaluated this many times: 723775
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule5 target=host auto_schedule=true block_id=5 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 52
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -4.45219
+finished depth 1 best value so far -4.45219
+Cost evaluated this many times: 8549
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -4.45219
+Cost evaluated this many times: 8549
+best intermediate value -3.94764
+finished depth 3 best value so far -3.94764
+Cost evaluated this many times: 16448
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -3.94764
+Cost evaluated this many times: 16448
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -3.94764
+Cost evaluated this many times: 16448
+best intermediate value -4.31305
+finished depth 6 best value so far -3.94764
+Cost evaluated this many times: 24383
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -3.94764
+Cost evaluated this many times: 24383
+best intermediate value -4.40568
+finished depth 8 best value so far -3.94764
+Cost evaluated this many times: 35241
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -3.94764
+Cost evaluated this many times: 35241
+best intermediate value -3.83261
+finished depth 10 best value so far -3.83261
+Cost evaluated this many times: 46309
+best intermediate value -3.94306
+finished depth 11 best value so far -3.83261
+Cost evaluated this many times: 57057
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -3.83261
+Cost evaluated this many times: 57057
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -3.83261
+Cost evaluated this many times: 57057
+best intermediate value -3.27523
+finished depth 14 best value so far -3.27523
+Cost evaluated this many times: 68284
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -3.27523
+Cost evaluated this many times: 68284
+best intermediate value -4.00292
+finished depth 16 best value so far -3.27523
+Cost evaluated this many times: 80298
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -3.27523
+Cost evaluated this many times: 80298
+best intermediate value -3.9224
+finished depth 18 best value so far -3.27523
+Cost evaluated this many times: 92473
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -3.27523
+Cost evaluated this many times: 92473
+best intermediate value -3.81994
+finished depth 20 best value so far -3.27523
+Cost evaluated this many times: 104387
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -3.27523
+Cost evaluated this many times: 104387
+best intermediate value -3.71472
+finished depth 22 best value so far -3.27523
+Cost evaluated this many times: 109868
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -3.27523
+Cost evaluated this many times: 109868
+best intermediate value -3.40615
+finished depth 24 best value so far -3.27523
+Cost evaluated this many times: 124824
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -3.27523
+Cost evaluated this many times: 124824
+best intermediate value -3.27287
+finished depth 26 best value so far -3.27287
+Cost evaluated this many times: 141267
+best intermediate value -1.11111e+11
+finished depth 27 best value so far -3.27287
+Cost evaluated this many times: 141267
+best intermediate value -3.3135
+finished depth 28 best value so far -3.27287
+Cost evaluated this many times: 160035
+best intermediate value -3.28941
+finished depth 29 best value so far -3.27287
+Cost evaluated this many times: 178845
+best intermediate value -3.24217
+finished depth 30 best value so far -3.24217
+Cost evaluated this many times: 206719
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -3.24217
+Cost evaluated this many times: 206719
+best intermediate value -3.25266
+finished depth 32 best value so far -3.24217
+Cost evaluated this many times: 235334
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -3.24217
+Cost evaluated this many times: 235334
+best intermediate value -3.09459
+finished depth 34 best value so far -3.09459
+Cost evaluated this many times: 286022
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -3.09459
+Cost evaluated this many times: 286022
+best intermediate value -3.08359
+finished depth 36 best value so far -3.08359
+Cost evaluated this many times: 324404
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -3.08359
+Cost evaluated this many times: 324404
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -3.08359
+Cost evaluated this many times: 324404
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -3.08359
+Cost evaluated this many times: 324404
+best intermediate value -3.08359
+finished depth 40 best value so far -3.08359
+Cost evaluated this many times: 354224
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -3.08359
+Cost evaluated this many times: 354224
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -3.08359
+Cost evaluated this many times: 354224
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -3.08359
+Cost evaluated this many times: 354224
+best intermediate value -3.08359
+finished depth 44 best value so far -3.08359
+Cost evaluated this many times: 371239
+best intermediate value -3.08678
+finished depth 45 best value so far -3.08359
+Cost evaluated this many times: 387660
+best intermediate value -3.08678
+finished depth 46 best value so far -3.08359
+Cost evaluated this many times: 406933
+best intermediate value -3.08678
+finished depth 47 best value so far -3.08359
+Cost evaluated this many times: 426647
+best intermediate value -3.08678
+finished depth 48 best value so far -3.08359
+Cost evaluated this many times: 626359
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -3.08359
+Cost evaluated this many times: 626359
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -3.08359
+Cost evaluated this many times: 626359
+global best cost: 3.08359
+Cost evaluated this many times: 626359
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule6 target=host auto_schedule=true block_id=6 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 52
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -4.6812
+finished depth 1 best value so far -4.6812
+Cost evaluated this many times: 8707
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -4.6812
+Cost evaluated this many times: 8707
+best intermediate value -4.43353
+finished depth 3 best value so far -4.43353
+Cost evaluated this many times: 16915
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -4.43353
+Cost evaluated this many times: 16915
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -4.43353
+Cost evaluated this many times: 16915
+best intermediate value -3.79161
+finished depth 6 best value so far -3.79161
+Cost evaluated this many times: 27671
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -3.79161
+Cost evaluated this many times: 27671
+best intermediate value -3.67435
+finished depth 8 best value so far -3.67435
+Cost evaluated this many times: 39915
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -3.67435
+Cost evaluated this many times: 39915
+best intermediate value -3.59207
+finished depth 10 best value so far -3.59207
+Cost evaluated this many times: 52226
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -3.59207
+Cost evaluated this many times: 52226
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -3.59207
+Cost evaluated this many times: 52226
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -3.59207
+Cost evaluated this many times: 52226
+best intermediate value -3.40028
+finished depth 14 best value so far -3.40028
+Cost evaluated this many times: 65101
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -3.40028
+Cost evaluated this many times: 65101
+best intermediate value -2.95018
+finished depth 16 best value so far -2.95018
+Cost evaluated this many times: 78715
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -2.95018
+Cost evaluated this many times: 78715
+best intermediate value -3.40178
+finished depth 18 best value so far -2.95018
+Cost evaluated this many times: 91904
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -2.95018
+Cost evaluated this many times: 91904
+best intermediate value -3.11824
+finished depth 20 best value so far -2.95018
+Cost evaluated this many times: 104987
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -2.95018
+Cost evaluated this many times: 104987
+best intermediate value -2.9325
+finished depth 22 best value so far -2.9325
+Cost evaluated this many times: 124287
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -2.9325
+Cost evaluated this many times: 124287
+best intermediate value -2.80381
+finished depth 24 best value so far -2.80381
+Cost evaluated this many times: 147897
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -2.80381
+Cost evaluated this many times: 147897
+best intermediate value -2.71768
+finished depth 26 best value so far -2.71768
+Cost evaluated this many times: 170291
+best intermediate value -1.11111e+11
+finished depth 27 best value so far -2.71768
+Cost evaluated this many times: 170291
+best intermediate value -2.66321
+finished depth 28 best value so far -2.66321
+Cost evaluated this many times: 190623
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -2.66321
+Cost evaluated this many times: 190623
+best intermediate value -2.70118
+finished depth 30 best value so far -2.66321
+Cost evaluated this many times: 214510
+best intermediate value -2.74193
+finished depth 31 best value so far -2.66321
+Cost evaluated this many times: 237163
+best intermediate value -2.69942
+finished depth 32 best value so far -2.66321
+Cost evaluated this many times: 264764
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -2.66321
+Cost evaluated this many times: 264764
+best intermediate value -2.59383
+finished depth 34 best value so far -2.59383
+Cost evaluated this many times: 319313
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -2.59383
+Cost evaluated this many times: 319313
+best intermediate value -2.56149
+finished depth 36 best value so far -2.56149
+Cost evaluated this many times: 359599
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -2.56149
+Cost evaluated this many times: 359599
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -2.56149
+Cost evaluated this many times: 359599
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -2.56149
+Cost evaluated this many times: 359599
+best intermediate value -2.5536
+finished depth 40 best value so far -2.5536
+Cost evaluated this many times: 393996
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -2.5536
+Cost evaluated this many times: 393996
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -2.5536
+Cost evaluated this many times: 393996
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -2.5536
+Cost evaluated this many times: 393996
+best intermediate value -2.5536
+finished depth 44 best value so far -2.5536
+Cost evaluated this many times: 411458
+best intermediate value -2.5536
+finished depth 45 best value so far -2.5536
+Cost evaluated this many times: 428180
+best intermediate value -2.5536
+finished depth 46 best value so far -2.5536
+Cost evaluated this many times: 447982
+best intermediate value -2.5536
+finished depth 47 best value so far -2.5536
+Cost evaluated this many times: 468576
+best intermediate value -2.5536
+finished depth 48 best value so far -2.5536
+Cost evaluated this many times: 668453
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -2.5536
+Cost evaluated this many times: 668453
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -2.5536
+Cost evaluated this many times: 668453
+global best cost: 2.5536
+Cost evaluated this many times: 668453
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule7 target=host auto_schedule=true block_id=7 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 50
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -7.3624
+finished depth 1 best value so far -7.3624
+Cost evaluated this many times: 12936
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -7.3624
+Cost evaluated this many times: 12936
+best intermediate value -8.60763
+finished depth 3 best value so far -7.3624
+Cost evaluated this many times: 25459
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -7.3624
+Cost evaluated this many times: 25459
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -7.3624
+Cost evaluated this many times: 25459
+best intermediate value -8.86303
+finished depth 6 best value so far -7.3624
+Cost evaluated this many times: 37806
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -7.3624
+Cost evaluated this many times: 37806
+best intermediate value -8.53414
+finished depth 8 best value so far -7.3624
+Cost evaluated this many times: 49275
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -7.3624
+Cost evaluated this many times: 49275
+best intermediate value -8.54834
+finished depth 10 best value so far -7.3624
+Cost evaluated this many times: 63800
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -7.3624
+Cost evaluated this many times: 63800
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -7.3624
+Cost evaluated this many times: 63800
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -7.3624
+Cost evaluated this many times: 63800
+best intermediate value -8.34824
+finished depth 14 best value so far -7.3624
+Cost evaluated this many times: 78891
+best intermediate value -8.22211
+finished depth 15 best value so far -7.3624
+Cost evaluated this many times: 95032
+best intermediate value -7.81202
+finished depth 16 best value so far -7.3624
+Cost evaluated this many times: 107042
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -7.3624
+Cost evaluated this many times: 107042
+best intermediate value -7.97118
+finished depth 18 best value so far -7.3624
+Cost evaluated this many times: 121094
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -7.3624
+Cost evaluated this many times: 121094
+best intermediate value -7.88098
+finished depth 20 best value so far -7.3624
+Cost evaluated this many times: 142184
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -7.3624
+Cost evaluated this many times: 142184
+best intermediate value -1.11111e+11
+finished depth 22 best value so far -7.3624
+Cost evaluated this many times: 142184
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -7.3624
+Cost evaluated this many times: 142184
+best intermediate value -7.39945
+finished depth 24 best value so far -7.3624
+Cost evaluated this many times: 162868
+best intermediate value -7.53939
+finished depth 25 best value so far -7.3624
+Cost evaluated this many times: 184402
+best intermediate value -7.53003
+finished depth 26 best value so far -7.3624
+Cost evaluated this many times: 213865
+best intermediate value -1.11111e+11
+finished depth 27 best value so far -7.3624
+Cost evaluated this many times: 213865
+best intermediate value -7.2825
+finished depth 28 best value so far -7.2825
+Cost evaluated this many times: 246297
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -7.2825
+Cost evaluated this many times: 246297
+best intermediate value -7.03496
+finished depth 30 best value so far -7.03496
+Cost evaluated this many times: 285215
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -7.03496
+Cost evaluated this many times: 285215
+best intermediate value -7.04205
+finished depth 32 best value so far -7.03496
+Cost evaluated this many times: 346354
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -7.03496
+Cost evaluated this many times: 346354
+best intermediate value -7.04205
+finished depth 34 best value so far -7.03496
+Cost evaluated this many times: 431569
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -7.03496
+Cost evaluated this many times: 431569
+best intermediate value -1.11111e+11
+finished depth 36 best value so far -7.03496
+Cost evaluated this many times: 431569
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -7.03496
+Cost evaluated this many times: 431569
+best intermediate value -7.05019
+finished depth 38 best value so far -7.03496
+Cost evaluated this many times: 553306
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -7.03496
+Cost evaluated this many times: 553306
+best intermediate value -7.05019
+finished depth 40 best value so far -7.03496
+Cost evaluated this many times: 692611
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -7.03496
+Cost evaluated this many times: 692611
+best intermediate value -7.05019
+finished depth 42 best value so far -7.03496
+Cost evaluated this many times: 892521
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -7.03496
+Cost evaluated this many times: 892521
+best intermediate value -1.11111e+11
+finished depth 44 best value so far -7.03496
+Cost evaluated this many times: 892521
+best intermediate value -1.11111e+11
+finished depth 45 best value so far -7.03496
+Cost evaluated this many times: 892521
+best intermediate value -7.05019
+finished depth 46 best value so far -7.03496
+Cost evaluated this many times: 1092371
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -7.03496
+Cost evaluated this many times: 1092371
+best intermediate value -1.11111e+11
+finished depth 48 best value so far -7.03496
+Cost evaluated this many times: 1092371
+global best cost: 7.03496
+Cost evaluated this many times: 1092371
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule8 target=host auto_schedule=true block_id=8 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 52
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -4.87329
+finished depth 1 best value so far -4.87329
+Cost evaluated this many times: 9846
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -4.87329
+Cost evaluated this many times: 9846
+best intermediate value -4.47579
+finished depth 3 best value so far -4.47579
+Cost evaluated this many times: 18979
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -4.47579
+Cost evaluated this many times: 18979
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -4.47579
+Cost evaluated this many times: 18979
+best intermediate value -4.61623
+finished depth 6 best value so far -4.47579
+Cost evaluated this many times: 29365
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -4.47579
+Cost evaluated this many times: 29365
+best intermediate value -4.91595
+finished depth 8 best value so far -4.47579
+Cost evaluated this many times: 39825
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -4.47579
+Cost evaluated this many times: 39825
+best intermediate value -4.43908
+finished depth 10 best value so far -4.43908
+Cost evaluated this many times: 45887
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -4.43908
+Cost evaluated this many times: 45887
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -4.43908
+Cost evaluated this many times: 45887
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -4.43908
+Cost evaluated this many times: 45887
+best intermediate value -4.1289
+finished depth 14 best value so far -4.1289
+Cost evaluated this many times: 58713
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -4.1289
+Cost evaluated this many times: 58713
+best intermediate value -4.32057
+finished depth 16 best value so far -4.1289
+Cost evaluated this many times: 71366
+best intermediate value -3.93538
+finished depth 17 best value so far -3.93538
+Cost evaluated this many times: 84186
+best intermediate value -4.15149
+finished depth 18 best value so far -3.93538
+Cost evaluated this many times: 99238
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -3.93538
+Cost evaluated this many times: 99238
+best intermediate value -3.8684
+finished depth 20 best value so far -3.8684
+Cost evaluated this many times: 113823
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -3.8684
+Cost evaluated this many times: 113823
+best intermediate value -4.0021
+finished depth 22 best value so far -3.8684
+Cost evaluated this many times: 127352
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -3.8684
+Cost evaluated this many times: 127352
+best intermediate value -3.75348
+finished depth 24 best value so far -3.75348
+Cost evaluated this many times: 141346
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -3.75348
+Cost evaluated this many times: 141346
+best intermediate value -3.53844
+finished depth 26 best value so far -3.53844
+Cost evaluated this many times: 150595
+best intermediate value -3.72262
+finished depth 27 best value so far -3.53844
+Cost evaluated this many times: 158327
+best intermediate value -3.41934
+finished depth 28 best value so far -3.41934
+Cost evaluated this many times: 168823
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -3.41934
+Cost evaluated this many times: 168823
+best intermediate value -3.46208
+finished depth 30 best value so far -3.41934
+Cost evaluated this many times: 184388
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -3.41934
+Cost evaluated this many times: 184388
+best intermediate value -3.36348
+finished depth 32 best value so far -3.36348
+Cost evaluated this many times: 199097
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -3.36348
+Cost evaluated this many times: 199097
+best intermediate value -3.31096
+finished depth 34 best value so far -3.31096
+Cost evaluated this many times: 209720
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -3.31096
+Cost evaluated this many times: 209720
+best intermediate value -3.25981
+finished depth 36 best value so far -3.25981
+Cost evaluated this many times: 221204
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -3.25981
+Cost evaluated this many times: 221204
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -3.25981
+Cost evaluated this many times: 221204
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -3.25981
+Cost evaluated this many times: 221204
+best intermediate value -3.1902
+finished depth 40 best value so far -3.1902
+Cost evaluated this many times: 236117
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -3.1902
+Cost evaluated this many times: 236117
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -3.1902
+Cost evaluated this many times: 236117
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -3.1902
+Cost evaluated this many times: 236117
+best intermediate value -3.16102
+finished depth 44 best value so far -3.16102
+Cost evaluated this many times: 240000
+best intermediate value -3.19707
+finished depth 45 best value so far -3.16102
+Cost evaluated this many times: 243819
+best intermediate value -3.20317
+finished depth 46 best value so far -3.16102
+Cost evaluated this many times: 247652
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -3.16102
+Cost evaluated this many times: 247652
+best intermediate value -3.18686
+finished depth 48 best value so far -3.16102
+Cost evaluated this many times: 447340
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -3.16102
+Cost evaluated this many times: 447340
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -3.16102
+Cost evaluated this many times: 447340
+global best cost: 3.16102
+Cost evaluated this many times: 447340
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule9 target=host auto_schedule=true block_id=9 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 52
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -4.2296
+finished depth 1 best value so far -4.2296
+Cost evaluated this many times: 9504
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -4.2296
+Cost evaluated this many times: 9504
+best intermediate value -4.15074
+finished depth 3 best value so far -4.15074
+Cost evaluated this many times: 18315
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -4.15074
+Cost evaluated this many times: 18315
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -4.15074
+Cost evaluated this many times: 18315
+best intermediate value -5.04099
+finished depth 6 best value so far -4.15074
+Cost evaluated this many times: 27476
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -4.15074
+Cost evaluated this many times: 27476
+best intermediate value -4.77102
+finished depth 8 best value so far -4.15074
+Cost evaluated this many times: 36279
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -4.15074
+Cost evaluated this many times: 36279
+best intermediate value -4.69326
+finished depth 10 best value so far -4.15074
+Cost evaluated this many times: 46871
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -4.15074
+Cost evaluated this many times: 46871
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -4.15074
+Cost evaluated this many times: 46871
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -4.15074
+Cost evaluated this many times: 46871
+best intermediate value -4.51226
+finished depth 14 best value so far -4.15074
+Cost evaluated this many times: 57078
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -4.15074
+Cost evaluated this many times: 57078
+best intermediate value -5.1332
+finished depth 16 best value so far -4.15074
+Cost evaluated this many times: 67125
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -4.15074
+Cost evaluated this many times: 67125
+best intermediate value -4.82362
+finished depth 18 best value so far -4.15074
+Cost evaluated this many times: 77351
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -4.15074
+Cost evaluated this many times: 77351
+best intermediate value -4.75636
+finished depth 20 best value so far -4.15074
+Cost evaluated this many times: 88109
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -4.15074
+Cost evaluated this many times: 88109
+best intermediate value -4.86384
+finished depth 22 best value so far -4.15074
+Cost evaluated this many times: 99351
+best intermediate value -4.51653
+finished depth 23 best value so far -4.15074
+Cost evaluated this many times: 110634
+best intermediate value -4.69547
+finished depth 24 best value so far -4.15074
+Cost evaluated this many times: 119506
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -4.15074
+Cost evaluated this many times: 119506
+best intermediate value -4.49443
+finished depth 26 best value so far -4.15074
+Cost evaluated this many times: 142730
+best intermediate value -1.11111e+11
+finished depth 27 best value so far -4.15074
+Cost evaluated this many times: 142730
+best intermediate value -4.4343
+finished depth 28 best value so far -4.15074
+Cost evaluated this many times: 168790
+best intermediate value -4.45287
+finished depth 29 best value so far -4.15074
+Cost evaluated this many times: 195892
+best intermediate value -4.38155
+finished depth 30 best value so far -4.15074
+Cost evaluated this many times: 229487
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -4.15074
+Cost evaluated this many times: 229487
+best intermediate value -4.21863
+finished depth 32 best value so far -4.15074
+Cost evaluated this many times: 245657
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -4.15074
+Cost evaluated this many times: 245657
+best intermediate value -4.31556
+finished depth 34 best value so far -4.15074
+Cost evaluated this many times: 260868
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -4.15074
+Cost evaluated this many times: 260868
+best intermediate value -4.1877
+finished depth 36 best value so far -4.15074
+Cost evaluated this many times: 314837
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -4.15074
+Cost evaluated this many times: 314837
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -4.15074
+Cost evaluated this many times: 314837
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -4.15074
+Cost evaluated this many times: 314837
+best intermediate value -4.17762
+finished depth 40 best value so far -4.15074
+Cost evaluated this many times: 403139
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -4.15074
+Cost evaluated this many times: 403139
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -4.15074
+Cost evaluated this many times: 403139
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -4.15074
+Cost evaluated this many times: 403139
+best intermediate value -4.17644
+finished depth 44 best value so far -4.15074
+Cost evaluated this many times: 518756
+best intermediate value -1.11111e+11
+finished depth 45 best value so far -4.15074
+Cost evaluated this many times: 518756
+best intermediate value -4.17644
+finished depth 46 best value so far -4.15074
+Cost evaluated this many times: 716729
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -4.15074
+Cost evaluated this many times: 716729
+best intermediate value -4.17644
+finished depth 48 best value so far -4.15074
+Cost evaluated this many times: 916404
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -4.15074
+Cost evaluated this many times: 916404
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -4.15074
+Cost evaluated this many times: 916404
+global best cost: 4.15074
+Cost evaluated this many times: 916404
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule10 target=host auto_schedule=true block_id=10 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 52
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -4.8459
+finished depth 1 best value so far -4.8459
+Cost evaluated this many times: 9933
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -4.8459
+Cost evaluated this many times: 9933
+best intermediate value -4.5829
+finished depth 3 best value so far -4.5829
+Cost evaluated this many times: 19190
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -4.5829
+Cost evaluated this many times: 19190
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -4.5829
+Cost evaluated this many times: 19190
+best intermediate value -3.8244
+finished depth 6 best value so far -3.8244
+Cost evaluated this many times: 30899
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -3.8244
+Cost evaluated this many times: 30899
+best intermediate value -5.14383
+finished depth 8 best value so far -3.8244
+Cost evaluated this many times: 45003
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -3.8244
+Cost evaluated this many times: 45003
+best intermediate value -5.22408
+finished depth 10 best value so far -3.8244
+Cost evaluated this many times: 59939
+best intermediate value -5.57742
+finished depth 11 best value so far -3.8244
+Cost evaluated this many times: 74212
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -3.8244
+Cost evaluated this many times: 74212
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -3.8244
+Cost evaluated this many times: 74212
+best intermediate value -5.69138
+finished depth 14 best value so far -3.8244
+Cost evaluated this many times: 89842
+best intermediate value -5.58457
+finished depth 15 best value so far -3.8244
+Cost evaluated this many times: 102369
+best intermediate value -5.41922
+finished depth 16 best value so far -3.8244
+Cost evaluated this many times: 115500
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -3.8244
+Cost evaluated this many times: 115500
+best intermediate value -5.57242
+finished depth 18 best value so far -3.8244
+Cost evaluated this many times: 127888
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -3.8244
+Cost evaluated this many times: 127888
+best intermediate value -4.97771
+finished depth 20 best value so far -3.8244
+Cost evaluated this many times: 138042
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -3.8244
+Cost evaluated this many times: 138042
+best intermediate value -5.048
+finished depth 22 best value so far -3.8244
+Cost evaluated this many times: 147829
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -3.8244
+Cost evaluated this many times: 147829
+best intermediate value -5.12856
+finished depth 24 best value so far -3.8244
+Cost evaluated this many times: 157854
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -3.8244
+Cost evaluated this many times: 157854
+best intermediate value -4.86959
+finished depth 26 best value so far -3.8244
+Cost evaluated this many times: 165623
+best intermediate value -4.79346
+finished depth 27 best value so far -3.8244
+Cost evaluated this many times: 172162
+best intermediate value -4.73475
+finished depth 28 best value so far -3.8244
+Cost evaluated this many times: 177359
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -3.8244
+Cost evaluated this many times: 177359
+best intermediate value -4.58436
+finished depth 30 best value so far -3.8244
+Cost evaluated this many times: 187826
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -3.8244
+Cost evaluated this many times: 187826
+best intermediate value -4.53251
+finished depth 32 best value so far -3.8244
+Cost evaluated this many times: 198663
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -3.8244
+Cost evaluated this many times: 198663
+best intermediate value -4.45788
+finished depth 34 best value so far -3.8244
+Cost evaluated this many times: 207691
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -3.8244
+Cost evaluated this many times: 207691
+best intermediate value -4.361
+finished depth 36 best value so far -3.8244
+Cost evaluated this many times: 216599
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -3.8244
+Cost evaluated this many times: 216599
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -3.8244
+Cost evaluated this many times: 216599
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -3.8244
+Cost evaluated this many times: 216599
+best intermediate value -4.21595
+finished depth 40 best value so far -3.8244
+Cost evaluated this many times: 226324
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -3.8244
+Cost evaluated this many times: 226324
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -3.8244
+Cost evaluated this many times: 226324
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -3.8244
+Cost evaluated this many times: 226324
+best intermediate value -4.20971
+finished depth 44 best value so far -3.8244
+Cost evaluated this many times: 228914
+best intermediate value -4.21595
+finished depth 45 best value so far -3.8244
+Cost evaluated this many times: 231485
+best intermediate value -4.22796
+finished depth 46 best value so far -3.8244
+Cost evaluated this many times: 233886
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -3.8244
+Cost evaluated this many times: 233886
+best intermediate value -4.20037
+finished depth 48 best value so far -3.8244
+Cost evaluated this many times: 433518
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -3.8244
+Cost evaluated this many times: 433518
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -3.8244
+Cost evaluated this many times: 433518
+global best cost: 3.8244
+Cost evaluated this many times: 433518
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule11 target=host auto_schedule=true block_id=11 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 52
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -4.85219
+finished depth 1 best value so far -4.85219
+Cost evaluated this many times: 9689
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -4.85219
+Cost evaluated this many times: 9689
+best intermediate value -4.73328
+finished depth 3 best value so far -4.73328
+Cost evaluated this many times: 18559
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -4.73328
+Cost evaluated this many times: 18559
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -4.73328
+Cost evaluated this many times: 18559
+best intermediate value -4.77765
+finished depth 6 best value so far -4.73328
+Cost evaluated this many times: 28452
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -4.73328
+Cost evaluated this many times: 28452
+best intermediate value -3.60513
+finished depth 8 best value so far -3.60513
+Cost evaluated this many times: 39429
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -3.60513
+Cost evaluated this many times: 39429
+best intermediate value -4.62726
+finished depth 10 best value so far -3.60513
+Cost evaluated this many times: 51395
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -3.60513
+Cost evaluated this many times: 51395
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -3.60513
+Cost evaluated this many times: 51395
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -3.60513
+Cost evaluated this many times: 51395
+best intermediate value -4.0854
+finished depth 14 best value so far -3.60513
+Cost evaluated this many times: 64245
+best intermediate value -4.11512
+finished depth 15 best value so far -3.60513
+Cost evaluated this many times: 77108
+best intermediate value -4.18399
+finished depth 16 best value so far -3.60513
+Cost evaluated this many times: 92174
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -3.60513
+Cost evaluated this many times: 92174
+best intermediate value -3.79238
+finished depth 18 best value so far -3.60513
+Cost evaluated this many times: 107470
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -3.60513
+Cost evaluated this many times: 107470
+best intermediate value -3.44599
+finished depth 20 best value so far -3.44599
+Cost evaluated this many times: 121149
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -3.44599
+Cost evaluated this many times: 121149
+best intermediate value -4.18165
+finished depth 22 best value so far -3.44599
+Cost evaluated this many times: 132755
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -3.44599
+Cost evaluated this many times: 132755
+best intermediate value -3.8943
+finished depth 24 best value so far -3.44599
+Cost evaluated this many times: 146658
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -3.44599
+Cost evaluated this many times: 146658
+best intermediate value -3.47654
+finished depth 26 best value so far -3.44599
+Cost evaluated this many times: 158189
+best intermediate value -3.45131
+finished depth 27 best value so far -3.44599
+Cost evaluated this many times: 166731
+best intermediate value -3.37962
+finished depth 28 best value so far -3.37962
+Cost evaluated this many times: 171005
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -3.37962
+Cost evaluated this many times: 171005
+best intermediate value -3.02233
+finished depth 30 best value so far -3.02233
+Cost evaluated this many times: 186028
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -3.02233
+Cost evaluated this many times: 186028
+best intermediate value -3.02596
+finished depth 32 best value so far -3.02233
+Cost evaluated this many times: 204571
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -3.02233
+Cost evaluated this many times: 204571
+best intermediate value -2.84242
+finished depth 34 best value so far -2.84242
+Cost evaluated this many times: 219341
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -2.84242
+Cost evaluated this many times: 219341
+best intermediate value -2.78181
+finished depth 36 best value so far -2.78181
+Cost evaluated this many times: 247936
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -2.78181
+Cost evaluated this many times: 247936
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -2.78181
+Cost evaluated this many times: 247936
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -2.78181
+Cost evaluated this many times: 247936
+best intermediate value -2.72197
+finished depth 40 best value so far -2.72197
+Cost evaluated this many times: 262823
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -2.72197
+Cost evaluated this many times: 262823
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -2.72197
+Cost evaluated this many times: 262823
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -2.72197
+Cost evaluated this many times: 262823
+best intermediate value -2.71905
+finished depth 44 best value so far -2.71905
+Cost evaluated this many times: 271472
+best intermediate value -2.71905
+finished depth 45 best value so far -2.71905
+Cost evaluated this many times: 279953
+best intermediate value -2.71905
+finished depth 46 best value so far -2.71905
+Cost evaluated this many times: 296553
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -2.71905
+Cost evaluated this many times: 296553
+best intermediate value -2.71905
+finished depth 48 best value so far -2.71905
+Cost evaluated this many times: 496226
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -2.71905
+Cost evaluated this many times: 496226
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -2.71905
+Cost evaluated this many times: 496226
+global best cost: 2.71905
+Cost evaluated this many times: 496226
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule12 target=host auto_schedule=true block_id=12 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 52
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -4.54329
+finished depth 1 best value so far -4.54329
+Cost evaluated this many times: 9722
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -4.54329
+Cost evaluated this many times: 9722
+best intermediate value -4.45023
+finished depth 3 best value so far -4.45023
+Cost evaluated this many times: 18758
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -4.45023
+Cost evaluated this many times: 18758
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -4.45023
+Cost evaluated this many times: 18758
+best intermediate value -5.02632
+finished depth 6 best value so far -4.45023
+Cost evaluated this many times: 29571
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -4.45023
+Cost evaluated this many times: 29571
+best intermediate value -4.52214
+finished depth 8 best value so far -4.45023
+Cost evaluated this many times: 40428
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -4.45023
+Cost evaluated this many times: 40428
+best intermediate value -4.68904
+finished depth 10 best value so far -4.45023
+Cost evaluated this many times: 52811
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -4.45023
+Cost evaluated this many times: 52811
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -4.45023
+Cost evaluated this many times: 52811
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -4.45023
+Cost evaluated this many times: 52811
+best intermediate value -3.98908
+finished depth 14 best value so far -3.98908
+Cost evaluated this many times: 66279
+best intermediate value -4.32432
+finished depth 15 best value so far -3.98908
+Cost evaluated this many times: 79688
+best intermediate value -4.14718
+finished depth 16 best value so far -3.98908
+Cost evaluated this many times: 94438
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -3.98908
+Cost evaluated this many times: 94438
+best intermediate value -3.78571
+finished depth 18 best value so far -3.78571
+Cost evaluated this many times: 108574
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -3.78571
+Cost evaluated this many times: 108574
+best intermediate value -4.10379
+finished depth 20 best value so far -3.78571
+Cost evaluated this many times: 122219
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -3.78571
+Cost evaluated this many times: 122219
+best intermediate value -3.76831
+finished depth 22 best value so far -3.76831
+Cost evaluated this many times: 136614
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -3.76831
+Cost evaluated this many times: 136614
+best intermediate value -3.74288
+finished depth 24 best value so far -3.74288
+Cost evaluated this many times: 150733
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -3.74288
+Cost evaluated this many times: 150733
+best intermediate value -3.96959
+finished depth 26 best value so far -3.74288
+Cost evaluated this many times: 163490
+best intermediate value -3.35949
+finished depth 27 best value so far -3.35949
+Cost evaluated this many times: 172817
+best intermediate value -3.21223
+finished depth 28 best value so far -3.21223
+Cost evaluated this many times: 187564
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -3.21223
+Cost evaluated this many times: 187564
+best intermediate value -3.10372
+finished depth 30 best value so far -3.10372
+Cost evaluated this many times: 218122
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -3.10372
+Cost evaluated this many times: 218122
+best intermediate value -2.78166
+finished depth 32 best value so far -2.78166
+Cost evaluated this many times: 243305
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -2.78166
+Cost evaluated this many times: 243305
+best intermediate value -2.77688
+finished depth 34 best value so far -2.77688
+Cost evaluated this many times: 276102
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -2.77688
+Cost evaluated this many times: 276102
+best intermediate value -2.78249
+finished depth 36 best value so far -2.77688
+Cost evaluated this many times: 332075
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -2.77688
+Cost evaluated this many times: 332075
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -2.77688
+Cost evaluated this many times: 332075
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -2.77688
+Cost evaluated this many times: 332075
+best intermediate value -2.76962
+finished depth 40 best value so far -2.76962
+Cost evaluated this many times: 356932
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -2.76962
+Cost evaluated this many times: 356932
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -2.76962
+Cost evaluated this many times: 356932
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -2.76962
+Cost evaluated this many times: 356932
+best intermediate value -2.76962
+finished depth 44 best value so far -2.76962
+Cost evaluated this many times: 380949
+best intermediate value -2.76962
+finished depth 45 best value so far -2.76962
+Cost evaluated this many times: 409760
+best intermediate value -2.76962
+finished depth 46 best value so far -2.76962
+Cost evaluated this many times: 443646
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -2.76962
+Cost evaluated this many times: 443646
+best intermediate value -2.76962
+finished depth 48 best value so far -2.76962
+Cost evaluated this many times: 643390
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -2.76962
+Cost evaluated this many times: 643390
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -2.76962
+Cost evaluated this many times: 643390
+global best cost: 2.76962
+Cost evaluated this many times: 643390
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule13 target=host auto_schedule=true block_id=13 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 50
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -7.89214
+finished depth 1 best value so far -7.89214
+Cost evaluated this many times: 15228
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -7.89214
+Cost evaluated this many times: 15228
+best intermediate value -8.08795
+finished depth 3 best value so far -7.89214
+Cost evaluated this many times: 29863
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -7.89214
+Cost evaluated this many times: 29863
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -7.89214
+Cost evaluated this many times: 29863
+best intermediate value -8.43972
+finished depth 6 best value so far -7.89214
+Cost evaluated this many times: 44905
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -7.89214
+Cost evaluated this many times: 44905
+best intermediate value -8.08369
+finished depth 8 best value so far -7.89214
+Cost evaluated this many times: 59253
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -7.89214
+Cost evaluated this many times: 59253
+best intermediate value -7.61909
+finished depth 10 best value so far -7.61909
+Cost evaluated this many times: 73584
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -7.61909
+Cost evaluated this many times: 73584
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -7.61909
+Cost evaluated this many times: 73584
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -7.61909
+Cost evaluated this many times: 73584
+best intermediate value -7.73058
+finished depth 14 best value so far -7.61909
+Cost evaluated this many times: 87865
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -7.61909
+Cost evaluated this many times: 87865
+best intermediate value -7.40772
+finished depth 16 best value so far -7.40772
+Cost evaluated this many times: 99100
+best intermediate value -7.5731
+finished depth 17 best value so far -7.40772
+Cost evaluated this many times: 110299
+best intermediate value -5.72266
+finished depth 18 best value so far -5.72266
+Cost evaluated this many times: 131341
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -5.72266
+Cost evaluated this many times: 131341
+best intermediate value -6.23349
+finished depth 20 best value so far -5.72266
+Cost evaluated this many times: 156139
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -5.72266
+Cost evaluated this many times: 156139
+best intermediate value -1.11111e+11
+finished depth 22 best value so far -5.72266
+Cost evaluated this many times: 156139
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -5.72266
+Cost evaluated this many times: 156139
+best intermediate value -5.94993
+finished depth 24 best value so far -5.72266
+Cost evaluated this many times: 183152
+best intermediate value -6.04243
+finished depth 25 best value so far -5.72266
+Cost evaluated this many times: 210894
+best intermediate value -5.73722
+finished depth 26 best value so far -5.72266
+Cost evaluated this many times: 236111
+best intermediate value -1.11111e+11
+finished depth 27 best value so far -5.72266
+Cost evaluated this many times: 236111
+best intermediate value -6.00194
+finished depth 28 best value so far -5.72266
+Cost evaluated this many times: 263835
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -5.72266
+Cost evaluated this many times: 263835
+best intermediate value -5.93282
+finished depth 30 best value so far -5.72266
+Cost evaluated this many times: 286425
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -5.72266
+Cost evaluated this many times: 286425
+best intermediate value -6.1279
+finished depth 32 best value so far -5.72266
+Cost evaluated this many times: 306657
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -5.72266
+Cost evaluated this many times: 306657
+best intermediate value -5.1561
+finished depth 34 best value so far -5.1561
+Cost evaluated this many times: 325246
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -5.1561
+Cost evaluated this many times: 325246
+best intermediate value -1.11111e+11
+finished depth 36 best value so far -5.1561
+Cost evaluated this many times: 325246
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -5.1561
+Cost evaluated this many times: 325246
+best intermediate value -5.25514
+finished depth 38 best value so far -5.1561
+Cost evaluated this many times: 341246
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -5.1561
+Cost evaluated this many times: 341246
+best intermediate value -5.1561
+finished depth 40 best value so far -5.1561
+Cost evaluated this many times: 348286
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -5.1561
+Cost evaluated this many times: 348286
+best intermediate value -5.1561
+finished depth 42 best value so far -5.1561
+Cost evaluated this many times: 354468
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -5.1561
+Cost evaluated this many times: 354468
+best intermediate value -1.11111e+11
+finished depth 44 best value so far -5.1561
+Cost evaluated this many times: 354468
+best intermediate value -1.11111e+11
+finished depth 45 best value so far -5.1561
+Cost evaluated this many times: 354468
+best intermediate value -5.1561
+finished depth 46 best value so far -5.1561
+Cost evaluated this many times: 554339
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -5.1561
+Cost evaluated this many times: 554339
+best intermediate value -1.11111e+11
+finished depth 48 best value so far -5.1561
+Cost evaluated this many times: 554339
+global best cost: 5.1561
+Cost evaluated this many times: 554339
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule14 target=host auto_schedule=true block_id=14 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 52
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -5.93804
+finished depth 1 best value so far -5.93804
+Cost evaluated this many times: 10933
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -5.93804
+Cost evaluated this many times: 10933
+best intermediate value -5.77304
+finished depth 3 best value so far -5.77304
+Cost evaluated this many times: 21419
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -5.77304
+Cost evaluated this many times: 21419
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -5.77304
+Cost evaluated this many times: 21419
+best intermediate value -5.89253
+finished depth 6 best value so far -5.77304
+Cost evaluated this many times: 32469
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -5.77304
+Cost evaluated this many times: 32469
+best intermediate value -5.62768
+finished depth 8 best value so far -5.62768
+Cost evaluated this many times: 44273
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -5.62768
+Cost evaluated this many times: 44273
+best intermediate value -5.2723
+finished depth 10 best value so far -5.2723
+Cost evaluated this many times: 57275
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -5.2723
+Cost evaluated this many times: 57275
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -5.2723
+Cost evaluated this many times: 57275
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -5.2723
+Cost evaluated this many times: 57275
+best intermediate value -4.67136
+finished depth 14 best value so far -4.67136
+Cost evaluated this many times: 72658
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -4.67136
+Cost evaluated this many times: 72658
+best intermediate value -5.40945
+finished depth 16 best value so far -4.67136
+Cost evaluated this many times: 87825
+best intermediate value -4.5462
+finished depth 17 best value so far -4.5462
+Cost evaluated this many times: 103247
+best intermediate value -4.48995
+finished depth 18 best value so far -4.48995
+Cost evaluated this many times: 120353
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -4.48995
+Cost evaluated this many times: 120353
+best intermediate value -4.93432
+finished depth 20 best value so far -4.48995
+Cost evaluated this many times: 136357
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -4.48995
+Cost evaluated this many times: 136357
+best intermediate value -4.65339
+finished depth 22 best value so far -4.48995
+Cost evaluated this many times: 153839
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -4.48995
+Cost evaluated this many times: 153839
+best intermediate value -4.50484
+finished depth 24 best value so far -4.48995
+Cost evaluated this many times: 170948
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -4.48995
+Cost evaluated this many times: 170948
+best intermediate value -4.10428
+finished depth 26 best value so far -4.10428
+Cost evaluated this many times: 181163
+best intermediate value -4.16555
+finished depth 27 best value so far -4.10428
+Cost evaluated this many times: 189388
+best intermediate value -3.97732
+finished depth 28 best value so far -3.97732
+Cost evaluated this many times: 200800
+best intermediate value -3.86588
+finished depth 29 best value so far -3.86588
+Cost evaluated this many times: 214399
+best intermediate value -3.94301
+finished depth 30 best value so far -3.86588
+Cost evaluated this many times: 228223
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -3.86588
+Cost evaluated this many times: 228223
+best intermediate value -3.87659
+finished depth 32 best value so far -3.86588
+Cost evaluated this many times: 239591
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -3.86588
+Cost evaluated this many times: 239591
+best intermediate value -3.98281
+finished depth 34 best value so far -3.86588
+Cost evaluated this many times: 246760
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -3.86588
+Cost evaluated this many times: 246760
+best intermediate value -3.83224
+finished depth 36 best value so far -3.83224
+Cost evaluated this many times: 252669
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -3.83224
+Cost evaluated this many times: 252669
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -3.83224
+Cost evaluated this many times: 252669
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -3.83224
+Cost evaluated this many times: 252669
+best intermediate value -3.85484
+finished depth 40 best value so far -3.83224
+Cost evaluated this many times: 265916
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -3.83224
+Cost evaluated this many times: 265916
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -3.83224
+Cost evaluated this many times: 265916
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -3.83224
+Cost evaluated this many times: 265916
+best intermediate value -3.82895
+finished depth 44 best value so far -3.82895
+Cost evaluated this many times: 269669
+best intermediate value -1.11111e+11
+finished depth 45 best value so far -3.82895
+Cost evaluated this many times: 269669
+best intermediate value -3.82303
+finished depth 46 best value so far -3.82303
+Cost evaluated this many times: 273207
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -3.82303
+Cost evaluated this many times: 273207
+best intermediate value -3.79023
+finished depth 48 best value so far -3.79023
+Cost evaluated this many times: 472948
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -3.79023
+Cost evaluated this many times: 472948
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -3.79023
+Cost evaluated this many times: 472948
+global best cost: 3.79023
+Cost evaluated this many times: 472948
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule15 target=host auto_schedule=true block_id=15 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-f16c-sse41
+Seed = 13
+mcts_depth 64
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -6.70328
+finished depth 1 best value so far -6.70328
+Cost evaluated this many times: 11605
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -6.70328
+Cost evaluated this many times: 11605
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -6.70328
+Cost evaluated this many times: 11605
+best intermediate value -6.38774
+finished depth 4 best value so far -6.38774
+Cost evaluated this many times: 22364
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -6.38774
+Cost evaluated this many times: 22364
+best intermediate value -1.11111e+11
+finished depth 6 best value so far -6.38774
+Cost evaluated this many times: 22364
+best intermediate value -6.02264
+finished depth 7 best value so far -6.02264
+Cost evaluated this many times: 32820
+best intermediate value -1.11111e+11
+finished depth 8 best value so far -6.02264
+Cost evaluated this many times: 32820
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -6.02264
+Cost evaluated this many times: 32820
+best intermediate value -1.11111e+11
+finished depth 10 best value so far -6.02264
+Cost evaluated this many times: 32820
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -6.02264
+Cost evaluated this many times: 32820
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -6.02264
+Cost evaluated this many times: 32820
+best intermediate value -5.92075
+finished depth 13 best value so far -5.92075
+Cost evaluated this many times: 43711
+best intermediate value -6.51342
+finished depth 14 best value so far -5.92075
+Cost evaluated this many times: 54156
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -5.92075
+Cost evaluated this many times: 54156
+best intermediate value -6.50625
+finished depth 16 best value so far -5.92075
+Cost evaluated this many times: 66055
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -5.92075
+Cost evaluated this many times: 66055
+best intermediate value -5.81036
+finished depth 18 best value so far -5.81036
+Cost evaluated this many times: 77302
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -5.81036
+Cost evaluated this many times: 77302
+best intermediate value -5.87462
+finished depth 20 best value so far -5.81036
+Cost evaluated this many times: 90971
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -5.81036
+Cost evaluated this many times: 90971
+best intermediate value -1.11111e+11
+finished depth 22 best value so far -5.81036
+Cost evaluated this many times: 90971
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -5.81036
+Cost evaluated this many times: 90971
+best intermediate value -5.55234
+finished depth 24 best value so far -5.55234
+Cost evaluated this many times: 105089
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -5.55234
+Cost evaluated this many times: 105089
+best intermediate value -5.72271
+finished depth 26 best value so far -5.55234
+Cost evaluated this many times: 119183
+best intermediate value -5.27492
+finished depth 27 best value so far -5.27492
+Cost evaluated this many times: 132561
+best intermediate value -5.58051
+finished depth 28 best value so far -5.27492
+Cost evaluated this many times: 144951
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -5.27492
+Cost evaluated this many times: 144951
+best intermediate value -5.00237
+finished depth 30 best value so far -5.00237
+Cost evaluated this many times: 157697
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -5.00237
+Cost evaluated this many times: 157697
+best intermediate value -5.71052
+finished depth 32 best value so far -5.00237
+Cost evaluated this many times: 170772
+best intermediate value -4.73346
+finished depth 33 best value so far -4.73346
+Cost evaluated this many times: 184976
+best intermediate value -4.81393
+finished depth 34 best value so far -4.73346
+Cost evaluated this many times: 195902
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -4.73346
+Cost evaluated this many times: 195902
+best intermediate value -4.03107
+finished depth 36 best value so far -4.03107
+Cost evaluated this many times: 220456
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -4.03107
+Cost evaluated this many times: 220456
+best intermediate value -4.34153
+finished depth 38 best value so far -4.03107
+Cost evaluated this many times: 252288
+best intermediate value -4.12453
+finished depth 39 best value so far -4.03107
+Cost evaluated this many times: 283253
+best intermediate value -4.36495
+finished depth 40 best value so far -4.03107
+Cost evaluated this many times: 309347
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -4.03107
+Cost evaluated this many times: 309347
+best intermediate value -4.09396
+finished depth 42 best value so far -4.03107
+Cost evaluated this many times: 322990
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -4.03107
+Cost evaluated this many times: 322990
+best intermediate value -4.25525
+finished depth 44 best value so far -4.03107
+Cost evaluated this many times: 330563
+best intermediate value -1.11111e+11
+finished depth 45 best value so far -4.03107
+Cost evaluated this many times: 330563
+best intermediate value -4.16054
+finished depth 46 best value so far -4.03107
+Cost evaluated this many times: 351514
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -4.03107
+Cost evaluated this many times: 351514
+best intermediate value -1.11111e+11
+finished depth 48 best value so far -4.03107
+Cost evaluated this many times: 351514
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -4.03107
+Cost evaluated this many times: 351514
+best intermediate value -4.05609
+finished depth 50 best value so far -4.03107
+Cost evaluated this many times: 391058
+best intermediate value -1.11111e+11
+finished depth 51 best value so far -4.03107
+Cost evaluated this many times: 391058
+best intermediate value -1.11111e+11
+finished depth 52 best value so far -4.03107
+Cost evaluated this many times: 391058
+best intermediate value -1.11111e+11
+finished depth 53 best value so far -4.03107
+Cost evaluated this many times: 391058
+best intermediate value -4.06221
+finished depth 54 best value so far -4.03107
+Cost evaluated this many times: 433014
+best intermediate value -1.11111e+11
+finished depth 55 best value so far -4.03107
+Cost evaluated this many times: 433014
+best intermediate value -4.05936
+finished depth 56 best value so far -4.03107
+Cost evaluated this many times: 472809
+best intermediate value -1.11111e+11
+finished depth 57 best value so far -4.03107
+Cost evaluated this many times: 472809
+best intermediate value -4.04564
+finished depth 58 best value so far -4.03107
+Cost evaluated this many times: 618247
+best intermediate value -1.11111e+11
+finished depth 59 best value so far -4.03107
+Cost evaluated this many times: 618247
+best intermediate value -1.11111e+11
+finished depth 60 best value so far -4.03107
+Cost evaluated this many times: 618247
+best intermediate value -1.11111e+11
+finished depth 61 best value so far -4.03107
+Cost evaluated this many times: 618247
+best intermediate value -1.11111e+11
+finished depth 62 best value so far -4.03107
+Cost evaluated this many times: 618247
+global best cost: 4.03107
+Cost evaluated this many times: 618247
+c++ -O3 -std=c++11 -I /scratch/ameerh/Halide/distrib/include/ -I /scratch/ameerh/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -g -I bin -Wall process.cpp bin/resnet50block_manual0.a bin/resnet50block_manual1.a bin/resnet50block_manual2.a bin/resnet50block_manual3.a bin/resnet50block_manual4.a bin/resnet50block_manual5.a bin/resnet50block_manual6.a bin/resnet50block_manual7.a bin/resnet50block_manual8.a bin/resnet50block_manual9.a bin/resnet50block_manual10.a bin/resnet50block_manual11.a bin/resnet50block_manual12.a bin/resnet50block_manual13.a bin/resnet50block_manual14.a bin/resnet50block_manual15.a bin/resnet50block_classic_auto_schedule0.a bin/resnet50block_classic_auto_schedule1.a bin/resnet50block_classic_auto_schedule2.a bin/resnet50block_classic_auto_schedule3.a bin/resnet50block_classic_auto_schedule4.a bin/resnet50block_classic_auto_schedule5.a bin/resnet50block_classic_auto_schedule6.a bin/resnet50block_classic_auto_schedule7.a bin/resnet50block_classic_auto_schedule8.a bin/resnet50block_classic_auto_schedule9.a bin/resnet50block_classic_auto_schedule10.a bin/resnet50block_classic_auto_schedule11.a bin/resnet50block_classic_auto_schedule12.a bin/resnet50block_classic_auto_schedule13.a bin/resnet50block_classic_auto_schedule14.a bin/resnet50block_classic_auto_schedule15.a bin/resnet50block_auto_schedule0.a bin/resnet50block_auto_schedule1.a bin/resnet50block_auto_schedule2.a bin/resnet50block_auto_schedule3.a bin/resnet50block_auto_schedule4.a bin/resnet50block_auto_schedule5.a bin/resnet50block_auto_schedule6.a bin/resnet50block_auto_schedule7.a bin/resnet50block_auto_schedule8.a bin/resnet50block_auto_schedule9.a bin/resnet50block_auto_schedule10.a bin/resnet50block_auto_schedule11.a bin/resnet50block_auto_schedule12.a bin/resnet50block_auto_schedule13.a bin/resnet50block_auto_schedule14.a bin/resnet50block_auto_schedule15.a -o bin/process  -ldl -lpthread -lz -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..   
+python3 load_weights.py bin/pytorch_weights
+-----------loading weights------------
+odict_keys(['conv1.weight', 'bn1.running_mean', 'bn1.running_var', 'bn1.weight', 'bn1.bias', 'layer1.0.conv1.weight', 'layer1.0.bn1.running_mean', 'layer1.0.bn1.running_var', 'layer1.0.bn1.weight', 'layer1.0.bn1.bias', 'layer1.0.conv2.weight', 'layer1.0.bn2.running_mean', 'layer1.0.bn2.running_var', 'layer1.0.bn2.weight', 'layer1.0.bn2.bias', 'layer1.0.conv3.weight', 'layer1.0.bn3.running_mean', 'layer1.0.bn3.running_var', 'layer1.0.bn3.weight', 'layer1.0.bn3.bias', 'layer1.0.downsample.0.weight', 'layer1.0.downsample.1.running_mean', 'layer1.0.downsample.1.running_var', 'layer1.0.downsample.1.weight', 'layer1.0.downsample.1.bias', 'layer1.1.conv1.weight', 'layer1.1.bn1.running_mean', 'layer1.1.bn1.running_var', 'layer1.1.bn1.weight', 'layer1.1.bn1.bias', 'layer1.1.conv2.weight', 'layer1.1.bn2.running_mean', 'layer1.1.bn2.running_var', 'layer1.1.bn2.weight', 'layer1.1.bn2.bias', 'layer1.1.conv3.weight', 'layer1.1.bn3.running_mean', 'layer1.1.bn3.running_var', 'layer1.1.bn3.weight', 'layer1.1.bn3.bias', 'layer1.2.conv1.weight', 'layer1.2.bn1.running_mean', 'layer1.2.bn1.running_var', 'layer1.2.bn1.weight', 'layer1.2.bn1.bias', 'layer1.2.conv2.weight', 'layer1.2.bn2.running_mean', 'layer1.2.bn2.running_var', 'layer1.2.bn2.weight', 'layer1.2.bn2.bias', 'layer1.2.conv3.weight', 'layer1.2.bn3.running_mean', 'layer1.2.bn3.running_var', 'layer1.2.bn3.weight', 'layer1.2.bn3.bias', 'layer2.0.conv1.weight', 'layer2.0.bn1.running_mean', 'layer2.0.bn1.running_var', 'layer2.0.bn1.weight', 'layer2.0.bn1.bias', 'layer2.0.conv2.weight', 'layer2.0.bn2.running_mean', 'layer2.0.bn2.running_var', 'layer2.0.bn2.weight', 'layer2.0.bn2.bias', 'layer2.0.conv3.weight', 'layer2.0.bn3.running_mean', 'layer2.0.bn3.running_var', 'layer2.0.bn3.weight', 'layer2.0.bn3.bias', 'layer2.0.downsample.0.weight', 'layer2.0.downsample.1.running_mean', 'layer2.0.downsample.1.running_var', 'layer2.0.downsample.1.weight', 'layer2.0.downsample.1.bias', 'layer2.1.conv1.weight', 'layer2.1.bn1.running_mean', 'layer2.1.bn1.running_var', 'layer2.1.bn1.weight', 'layer2.1.bn1.bias', 'layer2.1.conv2.weight', 'layer2.1.bn2.running_mean', 'layer2.1.bn2.running_var', 'layer2.1.bn2.weight', 'layer2.1.bn2.bias', 'layer2.1.conv3.weight', 'layer2.1.bn3.running_mean', 'layer2.1.bn3.running_var', 'layer2.1.bn3.weight', 'layer2.1.bn3.bias', 'layer2.2.conv1.weight', 'layer2.2.bn1.running_mean', 'layer2.2.bn1.running_var', 'layer2.2.bn1.weight', 'layer2.2.bn1.bias', 'layer2.2.conv2.weight', 'layer2.2.bn2.running_mean', 'layer2.2.bn2.running_var', 'layer2.2.bn2.weight', 'layer2.2.bn2.bias', 'layer2.2.conv3.weight', 'layer2.2.bn3.running_mean', 'layer2.2.bn3.running_var', 'layer2.2.bn3.weight', 'layer2.2.bn3.bias', 'layer2.3.conv1.weight', 'layer2.3.bn1.running_mean', 'layer2.3.bn1.running_var', 'layer2.3.bn1.weight', 'layer2.3.bn1.bias', 'layer2.3.conv2.weight', 'layer2.3.bn2.running_mean', 'layer2.3.bn2.running_var', 'layer2.3.bn2.weight', 'layer2.3.bn2.bias', 'layer2.3.conv3.weight', 'layer2.3.bn3.running_mean', 'layer2.3.bn3.running_var', 'layer2.3.bn3.weight', 'layer2.3.bn3.bias', 'layer3.0.conv1.weight', 'layer3.0.bn1.running_mean', 'layer3.0.bn1.running_var', 'layer3.0.bn1.weight', 'layer3.0.bn1.bias', 'layer3.0.conv2.weight', 'layer3.0.bn2.running_mean', 'layer3.0.bn2.running_var', 'layer3.0.bn2.weight', 'layer3.0.bn2.bias', 'layer3.0.conv3.weight', 'layer3.0.bn3.running_mean', 'layer3.0.bn3.running_var', 'layer3.0.bn3.weight', 'layer3.0.bn3.bias', 'layer3.0.downsample.0.weight', 'layer3.0.downsample.1.running_mean', 'layer3.0.downsample.1.running_var', 'layer3.0.downsample.1.weight', 'layer3.0.downsample.1.bias', 'layer3.1.conv1.weight', 'layer3.1.bn1.running_mean', 'layer3.1.bn1.running_var', 'layer3.1.bn1.weight', 'layer3.1.bn1.bias', 'layer3.1.conv2.weight', 'layer3.1.bn2.running_mean', 'layer3.1.bn2.running_var', 'layer3.1.bn2.weight', 'layer3.1.bn2.bias', 'layer3.1.conv3.weight', 'layer3.1.bn3.running_mean', 'layer3.1.bn3.running_var', 'layer3.1.bn3.weight', 'layer3.1.bn3.bias', 'layer3.2.conv1.weight', 'layer3.2.bn1.running_mean', 'layer3.2.bn1.running_var', 'layer3.2.bn1.weight', 'layer3.2.bn1.bias', 'layer3.2.conv2.weight', 'layer3.2.bn2.running_mean', 'layer3.2.bn2.running_var', 'layer3.2.bn2.weight', 'layer3.2.bn2.bias', 'layer3.2.conv3.weight', 'layer3.2.bn3.running_mean', 'layer3.2.bn3.running_var', 'layer3.2.bn3.weight', 'layer3.2.bn3.bias', 'layer3.3.conv1.weight', 'layer3.3.bn1.running_mean', 'layer3.3.bn1.running_var', 'layer3.3.bn1.weight', 'layer3.3.bn1.bias', 'layer3.3.conv2.weight', 'layer3.3.bn2.running_mean', 'layer3.3.bn2.running_var', 'layer3.3.bn2.weight', 'layer3.3.bn2.bias', 'layer3.3.conv3.weight', 'layer3.3.bn3.running_mean', 'layer3.3.bn3.running_var', 'layer3.3.bn3.weight', 'layer3.3.bn3.bias', 'layer3.4.conv1.weight', 'layer3.4.bn1.running_mean', 'layer3.4.bn1.running_var', 'layer3.4.bn1.weight', 'layer3.4.bn1.bias', 'layer3.4.conv2.weight', 'layer3.4.bn2.running_mean', 'layer3.4.bn2.running_var', 'layer3.4.bn2.weight', 'layer3.4.bn2.bias', 'layer3.4.conv3.weight', 'layer3.4.bn3.running_mean', 'layer3.4.bn3.running_var', 'layer3.4.bn3.weight', 'layer3.4.bn3.bias', 'layer3.5.conv1.weight', 'layer3.5.bn1.running_mean', 'layer3.5.bn1.running_var', 'layer3.5.bn1.weight', 'layer3.5.bn1.bias', 'layer3.5.conv2.weight', 'layer3.5.bn2.running_mean', 'layer3.5.bn2.running_var', 'layer3.5.bn2.weight', 'layer3.5.bn2.bias', 'layer3.5.conv3.weight', 'layer3.5.bn3.running_mean', 'layer3.5.bn3.running_var', 'layer3.5.bn3.weight', 'layer3.5.bn3.bias', 'layer4.0.conv1.weight', 'layer4.0.bn1.running_mean', 'layer4.0.bn1.running_var', 'layer4.0.bn1.weight', 'layer4.0.bn1.bias', 'layer4.0.conv2.weight', 'layer4.0.bn2.running_mean', 'layer4.0.bn2.running_var', 'layer4.0.bn2.weight', 'layer4.0.bn2.bias', 'layer4.0.conv3.weight', 'layer4.0.bn3.running_mean', 'layer4.0.bn3.running_var', 'layer4.0.bn3.weight', 'layer4.0.bn3.bias', 'layer4.0.downsample.0.weight', 'layer4.0.downsample.1.running_mean', 'layer4.0.downsample.1.running_var', 'layer4.0.downsample.1.weight', 'layer4.0.downsample.1.bias', 'layer4.1.conv1.weight', 'layer4.1.bn1.running_mean', 'layer4.1.bn1.running_var', 'layer4.1.bn1.weight', 'layer4.1.bn1.bias', 'layer4.1.conv2.weight', 'layer4.1.bn2.running_mean', 'layer4.1.bn2.running_var', 'layer4.1.bn2.weight', 'layer4.1.bn2.bias', 'layer4.1.conv3.weight', 'layer4.1.bn3.running_mean', 'layer4.1.bn3.running_var', 'layer4.1.bn3.weight', 'layer4.1.bn3.bias', 'layer4.2.conv1.weight', 'layer4.2.bn1.running_mean', 'layer4.2.bn1.running_var', 'layer4.2.bn1.weight', 'layer4.2.bn1.bias', 'layer4.2.conv2.weight', 'layer4.2.bn2.running_mean', 'layer4.2.bn2.running_var', 'layer4.2.bn2.weight', 'layer4.2.bn2.bias', 'layer4.2.conv3.weight', 'layer4.2.bn3.running_mean', 'layer4.2.bn3.running_var', 'layer4.2.bn3.weight', 'layer4.2.bn3.bias', 'fc.weight', 'fc.bias'])
+weight shape before transpose
+conv1.weight,(64, 3, 7, 7),4
+weight shape after transpose
+conv1.weight,(3, 7, 7, 64),4
+weight shape before transpose
+bn1.running_mean,(64,),1
+weight shape after transpose
+bn1.running_mean,(64,),1
+weight shape before transpose
+bn1.running_var,(64,),1
+weight shape after transpose
+bn1.running_var,(64,),1
+weight shape before transpose
+bn1.weight,(64,),1
+weight shape after transpose
+bn1.weight,(64,),1
+weight shape before transpose
+bn1.bias,(64,),1
+weight shape after transpose
+bn1.bias,(64,),1
+weight shape before transpose
+layer1.0.conv1.weight,(64, 64, 1, 1),4
+weight shape after transpose
+layer1.0.conv1.weight,(64, 1, 1, 64),4
+weight shape before transpose
+layer1.0.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.0.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.0.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.0.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.0.bn1.weight,(64,),1
+weight shape after transpose
+layer1.0.bn1.weight,(64,),1
+weight shape before transpose
+layer1.0.bn1.bias,(64,),1
+weight shape after transpose
+layer1.0.bn1.bias,(64,),1
+weight shape before transpose
+layer1.0.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.0.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.0.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.0.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.0.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.0.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.0.bn2.weight,(64,),1
+weight shape after transpose
+layer1.0.bn2.weight,(64,),1
+weight shape before transpose
+layer1.0.bn2.bias,(64,),1
+weight shape after transpose
+layer1.0.bn2.bias,(64,),1
+weight shape before transpose
+layer1.0.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.0.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.0.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.0.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.0.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.0.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.0.bn3.weight,(256,),1
+weight shape after transpose
+layer1.0.bn3.weight,(256,),1
+weight shape before transpose
+layer1.0.bn3.bias,(256,),1
+weight shape after transpose
+layer1.0.bn3.bias,(256,),1
+weight shape before transpose
+layer1.0.downsample.0.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.0.downsample.0.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.0.downsample.1.running_mean,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.running_mean,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.running_var,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.running_var,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.weight,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.weight,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.bias,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.bias,(256,),1
+weight shape before transpose
+layer1.1.conv1.weight,(64, 256, 1, 1),4
+weight shape after transpose
+layer1.1.conv1.weight,(256, 1, 1, 64),4
+weight shape before transpose
+layer1.1.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.1.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.1.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.1.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.1.bn1.weight,(64,),1
+weight shape after transpose
+layer1.1.bn1.weight,(64,),1
+weight shape before transpose
+layer1.1.bn1.bias,(64,),1
+weight shape after transpose
+layer1.1.bn1.bias,(64,),1
+weight shape before transpose
+layer1.1.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.1.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.1.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.1.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.1.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.1.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.1.bn2.weight,(64,),1
+weight shape after transpose
+layer1.1.bn2.weight,(64,),1
+weight shape before transpose
+layer1.1.bn2.bias,(64,),1
+weight shape after transpose
+layer1.1.bn2.bias,(64,),1
+weight shape before transpose
+layer1.1.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.1.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.1.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.1.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.1.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.1.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.1.bn3.weight,(256,),1
+weight shape after transpose
+layer1.1.bn3.weight,(256,),1
+weight shape before transpose
+layer1.1.bn3.bias,(256,),1
+weight shape after transpose
+layer1.1.bn3.bias,(256,),1
+weight shape before transpose
+layer1.2.conv1.weight,(64, 256, 1, 1),4
+weight shape after transpose
+layer1.2.conv1.weight,(256, 1, 1, 64),4
+weight shape before transpose
+layer1.2.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.2.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.2.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.2.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.2.bn1.weight,(64,),1
+weight shape after transpose
+layer1.2.bn1.weight,(64,),1
+weight shape before transpose
+layer1.2.bn1.bias,(64,),1
+weight shape after transpose
+layer1.2.bn1.bias,(64,),1
+weight shape before transpose
+layer1.2.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.2.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.2.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.2.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.2.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.2.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.2.bn2.weight,(64,),1
+weight shape after transpose
+layer1.2.bn2.weight,(64,),1
+weight shape before transpose
+layer1.2.bn2.bias,(64,),1
+weight shape after transpose
+layer1.2.bn2.bias,(64,),1
+weight shape before transpose
+layer1.2.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.2.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.2.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.2.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.2.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.2.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.2.bn3.weight,(256,),1
+weight shape after transpose
+layer1.2.bn3.weight,(256,),1
+weight shape before transpose
+layer1.2.bn3.bias,(256,),1
+weight shape after transpose
+layer1.2.bn3.bias,(256,),1
+weight shape before transpose
+layer2.0.conv1.weight,(128, 256, 1, 1),4
+weight shape after transpose
+layer2.0.conv1.weight,(256, 1, 1, 128),4
+weight shape before transpose
+layer2.0.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.0.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.0.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.0.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.0.bn1.weight,(128,),1
+weight shape after transpose
+layer2.0.bn1.weight,(128,),1
+weight shape before transpose
+layer2.0.bn1.bias,(128,),1
+weight shape after transpose
+layer2.0.bn1.bias,(128,),1
+weight shape before transpose
+layer2.0.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.0.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.0.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.0.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.0.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.0.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.0.bn2.weight,(128,),1
+weight shape after transpose
+layer2.0.bn2.weight,(128,),1
+weight shape before transpose
+layer2.0.bn2.bias,(128,),1
+weight shape after transpose
+layer2.0.bn2.bias,(128,),1
+weight shape before transpose
+layer2.0.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.0.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.0.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.0.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.0.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.0.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.0.bn3.weight,(512,),1
+weight shape after transpose
+layer2.0.bn3.weight,(512,),1
+weight shape before transpose
+layer2.0.bn3.bias,(512,),1
+weight shape after transpose
+layer2.0.bn3.bias,(512,),1
+weight shape before transpose
+layer2.0.downsample.0.weight,(512, 256, 1, 1),4
+weight shape after transpose
+layer2.0.downsample.0.weight,(256, 1, 1, 512),4
+weight shape before transpose
+layer2.0.downsample.1.running_mean,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.running_mean,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.running_var,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.running_var,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.weight,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.weight,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.bias,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.bias,(512,),1
+weight shape before transpose
+layer2.1.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.1.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.1.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.1.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.1.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.1.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.1.bn1.weight,(128,),1
+weight shape after transpose
+layer2.1.bn1.weight,(128,),1
+weight shape before transpose
+layer2.1.bn1.bias,(128,),1
+weight shape after transpose
+layer2.1.bn1.bias,(128,),1
+weight shape before transpose
+layer2.1.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.1.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.1.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.1.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.1.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.1.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.1.bn2.weight,(128,),1
+weight shape after transpose
+layer2.1.bn2.weight,(128,),1
+weight shape before transpose
+layer2.1.bn2.bias,(128,),1
+weight shape after transpose
+layer2.1.bn2.bias,(128,),1
+weight shape before transpose
+layer2.1.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.1.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.1.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.1.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.1.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.1.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.1.bn3.weight,(512,),1
+weight shape after transpose
+layer2.1.bn3.weight,(512,),1
+weight shape before transpose
+layer2.1.bn3.bias,(512,),1
+weight shape after transpose
+layer2.1.bn3.bias,(512,),1
+weight shape before transpose
+layer2.2.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.2.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.2.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.2.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.2.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.2.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.2.bn1.weight,(128,),1
+weight shape after transpose
+layer2.2.bn1.weight,(128,),1
+weight shape before transpose
+layer2.2.bn1.bias,(128,),1
+weight shape after transpose
+layer2.2.bn1.bias,(128,),1
+weight shape before transpose
+layer2.2.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.2.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.2.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.2.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.2.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.2.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.2.bn2.weight,(128,),1
+weight shape after transpose
+layer2.2.bn2.weight,(128,),1
+weight shape before transpose
+layer2.2.bn2.bias,(128,),1
+weight shape after transpose
+layer2.2.bn2.bias,(128,),1
+weight shape before transpose
+layer2.2.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.2.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.2.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.2.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.2.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.2.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.2.bn3.weight,(512,),1
+weight shape after transpose
+layer2.2.bn3.weight,(512,),1
+weight shape before transpose
+layer2.2.bn3.bias,(512,),1
+weight shape after transpose
+layer2.2.bn3.bias,(512,),1
+weight shape before transpose
+layer2.3.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.3.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.3.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.3.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.3.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.3.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.3.bn1.weight,(128,),1
+weight shape after transpose
+layer2.3.bn1.weight,(128,),1
+weight shape before transpose
+layer2.3.bn1.bias,(128,),1
+weight shape after transpose
+layer2.3.bn1.bias,(128,),1
+weight shape before transpose
+layer2.3.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.3.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.3.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.3.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.3.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.3.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.3.bn2.weight,(128,),1
+weight shape after transpose
+layer2.3.bn2.weight,(128,),1
+weight shape before transpose
+layer2.3.bn2.bias,(128,),1
+weight shape after transpose
+layer2.3.bn2.bias,(128,),1
+weight shape before transpose
+layer2.3.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.3.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.3.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.3.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.3.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.3.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.3.bn3.weight,(512,),1
+weight shape after transpose
+layer2.3.bn3.weight,(512,),1
+weight shape before transpose
+layer2.3.bn3.bias,(512,),1
+weight shape after transpose
+layer2.3.bn3.bias,(512,),1
+weight shape before transpose
+layer3.0.conv1.weight,(256, 512, 1, 1),4
+weight shape after transpose
+layer3.0.conv1.weight,(512, 1, 1, 256),4
+weight shape before transpose
+layer3.0.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.0.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.0.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.0.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.0.bn1.weight,(256,),1
+weight shape after transpose
+layer3.0.bn1.weight,(256,),1
+weight shape before transpose
+layer3.0.bn1.bias,(256,),1
+weight shape after transpose
+layer3.0.bn1.bias,(256,),1
+weight shape before transpose
+layer3.0.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.0.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.0.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.0.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.0.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.0.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.0.bn2.weight,(256,),1
+weight shape after transpose
+layer3.0.bn2.weight,(256,),1
+weight shape before transpose
+layer3.0.bn2.bias,(256,),1
+weight shape after transpose
+layer3.0.bn2.bias,(256,),1
+weight shape before transpose
+layer3.0.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.0.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.0.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.0.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.0.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.0.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.0.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.0.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.0.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.0.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.0.downsample.0.weight,(1024, 512, 1, 1),4
+weight shape after transpose
+layer3.0.downsample.0.weight,(512, 1, 1, 1024),4
+weight shape before transpose
+layer3.0.downsample.1.running_mean,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.running_mean,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.running_var,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.running_var,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.weight,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.weight,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.bias,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.bias,(1024,),1
+weight shape before transpose
+layer3.1.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.1.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.1.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.1.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.1.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.1.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.1.bn1.weight,(256,),1
+weight shape after transpose
+layer3.1.bn1.weight,(256,),1
+weight shape before transpose
+layer3.1.bn1.bias,(256,),1
+weight shape after transpose
+layer3.1.bn1.bias,(256,),1
+weight shape before transpose
+layer3.1.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.1.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.1.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.1.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.1.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.1.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.1.bn2.weight,(256,),1
+weight shape after transpose
+layer3.1.bn2.weight,(256,),1
+weight shape before transpose
+layer3.1.bn2.bias,(256,),1
+weight shape after transpose
+layer3.1.bn2.bias,(256,),1
+weight shape before transpose
+layer3.1.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.1.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.1.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.1.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.1.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.1.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.1.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.1.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.1.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.1.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.2.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.2.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.2.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.2.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.2.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.2.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.2.bn1.weight,(256,),1
+weight shape after transpose
+layer3.2.bn1.weight,(256,),1
+weight shape before transpose
+layer3.2.bn1.bias,(256,),1
+weight shape after transpose
+layer3.2.bn1.bias,(256,),1
+weight shape before transpose
+layer3.2.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.2.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.2.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.2.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.2.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.2.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.2.bn2.weight,(256,),1
+weight shape after transpose
+layer3.2.bn2.weight,(256,),1
+weight shape before transpose
+layer3.2.bn2.bias,(256,),1
+weight shape after transpose
+layer3.2.bn2.bias,(256,),1
+weight shape before transpose
+layer3.2.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.2.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.2.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.2.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.2.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.2.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.2.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.2.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.2.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.2.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.3.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.3.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.3.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.3.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.3.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.3.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.3.bn1.weight,(256,),1
+weight shape after transpose
+layer3.3.bn1.weight,(256,),1
+weight shape before transpose
+layer3.3.bn1.bias,(256,),1
+weight shape after transpose
+layer3.3.bn1.bias,(256,),1
+weight shape before transpose
+layer3.3.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.3.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.3.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.3.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.3.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.3.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.3.bn2.weight,(256,),1
+weight shape after transpose
+layer3.3.bn2.weight,(256,),1
+weight shape before transpose
+layer3.3.bn2.bias,(256,),1
+weight shape after transpose
+layer3.3.bn2.bias,(256,),1
+weight shape before transpose
+layer3.3.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.3.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.3.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.3.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.3.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.3.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.3.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.3.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.3.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.3.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.4.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.4.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.4.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.4.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.4.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.4.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.4.bn1.weight,(256,),1
+weight shape after transpose
+layer3.4.bn1.weight,(256,),1
+weight shape before transpose
+layer3.4.bn1.bias,(256,),1
+weight shape after transpose
+layer3.4.bn1.bias,(256,),1
+weight shape before transpose
+layer3.4.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.4.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.4.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.4.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.4.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.4.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.4.bn2.weight,(256,),1
+weight shape after transpose
+layer3.4.bn2.weight,(256,),1
+weight shape before transpose
+layer3.4.bn2.bias,(256,),1
+weight shape after transpose
+layer3.4.bn2.bias,(256,),1
+weight shape before transpose
+layer3.4.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.4.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.4.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.4.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.4.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.4.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.4.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.4.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.4.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.4.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.5.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.5.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.5.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.5.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.5.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.5.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.5.bn1.weight,(256,),1
+weight shape after transpose
+layer3.5.bn1.weight,(256,),1
+weight shape before transpose
+layer3.5.bn1.bias,(256,),1
+weight shape after transpose
+layer3.5.bn1.bias,(256,),1
+weight shape before transpose
+layer3.5.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.5.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.5.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.5.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.5.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.5.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.5.bn2.weight,(256,),1
+weight shape after transpose
+layer3.5.bn2.weight,(256,),1
+weight shape before transpose
+layer3.5.bn2.bias,(256,),1
+weight shape after transpose
+layer3.5.bn2.bias,(256,),1
+weight shape before transpose
+layer3.5.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.5.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.5.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.5.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.5.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.5.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.5.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.5.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.5.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.5.bn3.bias,(1024,),1
+weight shape before transpose
+layer4.0.conv1.weight,(512, 1024, 1, 1),4
+weight shape after transpose
+layer4.0.conv1.weight,(1024, 1, 1, 512),4
+weight shape before transpose
+layer4.0.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.0.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.0.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.0.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.0.bn1.weight,(512,),1
+weight shape after transpose
+layer4.0.bn1.weight,(512,),1
+weight shape before transpose
+layer4.0.bn1.bias,(512,),1
+weight shape after transpose
+layer4.0.bn1.bias,(512,),1
+weight shape before transpose
+layer4.0.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.0.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.0.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.0.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.0.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.0.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.0.bn2.weight,(512,),1
+weight shape after transpose
+layer4.0.bn2.weight,(512,),1
+weight shape before transpose
+layer4.0.bn2.bias,(512,),1
+weight shape after transpose
+layer4.0.bn2.bias,(512,),1
+weight shape before transpose
+layer4.0.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.0.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.0.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.0.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.0.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.0.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.0.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.0.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.0.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.0.bn3.bias,(2048,),1
+weight shape before transpose
+layer4.0.downsample.0.weight,(2048, 1024, 1, 1),4
+weight shape after transpose
+layer4.0.downsample.0.weight,(1024, 1, 1, 2048),4
+weight shape before transpose
+layer4.0.downsample.1.running_mean,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.running_mean,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.running_var,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.running_var,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.weight,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.weight,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.bias,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.bias,(2048,),1
+weight shape before transpose
+layer4.1.conv1.weight,(512, 2048, 1, 1),4
+weight shape after transpose
+layer4.1.conv1.weight,(2048, 1, 1, 512),4
+weight shape before transpose
+layer4.1.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.1.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.1.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.1.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.1.bn1.weight,(512,),1
+weight shape after transpose
+layer4.1.bn1.weight,(512,),1
+weight shape before transpose
+layer4.1.bn1.bias,(512,),1
+weight shape after transpose
+layer4.1.bn1.bias,(512,),1
+weight shape before transpose
+layer4.1.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.1.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.1.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.1.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.1.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.1.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.1.bn2.weight,(512,),1
+weight shape after transpose
+layer4.1.bn2.weight,(512,),1
+weight shape before transpose
+layer4.1.bn2.bias,(512,),1
+weight shape after transpose
+layer4.1.bn2.bias,(512,),1
+weight shape before transpose
+layer4.1.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.1.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.1.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.1.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.1.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.1.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.1.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.1.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.1.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.1.bn3.bias,(2048,),1
+weight shape before transpose
+layer4.2.conv1.weight,(512, 2048, 1, 1),4
+weight shape after transpose
+layer4.2.conv1.weight,(2048, 1, 1, 512),4
+weight shape before transpose
+layer4.2.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.2.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.2.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.2.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.2.bn1.weight,(512,),1
+weight shape after transpose
+layer4.2.bn1.weight,(512,),1
+weight shape before transpose
+layer4.2.bn1.bias,(512,),1
+weight shape after transpose
+layer4.2.bn1.bias,(512,),1
+weight shape before transpose
+layer4.2.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.2.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.2.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.2.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.2.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.2.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.2.bn2.weight,(512,),1
+weight shape after transpose
+layer4.2.bn2.weight,(512,),1
+weight shape before transpose
+layer4.2.bn2.bias,(512,),1
+weight shape after transpose
+layer4.2.bn2.bias,(512,),1
+weight shape before transpose
+layer4.2.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.2.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.2.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.2.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.2.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.2.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.2.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.2.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.2.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.2.bn3.bias,(2048,),1
+weight shape before transpose
+fc.weight,(1000, 2048),2
+weight shape after transpose
+fc.weight,(2048, 1000),2
+weight shape before transpose
+fc.bias,(1000,),1
+weight shape after transpose
+fc.bias,(1000,),1
+echo "ok" > bin/pytorch_weights/ok
+bin/process 10 auto_schedule bin/pytorch_weights cropped_panda.jpg bin/res50gen_output.bin
+Loading image from cropped_panda.jpg
+conv1_weight_shape.data num_dims : 4 shape: 64 7 7 3 
+weight shape for bin/pytorch_weights/conv1_weight.data
+64 7 7 3
+bn1_running_mean_shape.data num_dims : 1 shape: 64 
+bn1_running_var_shape.data num_dims : 1 shape: 64 
+bn1_weight_shape.data num_dims : 1 shape: 64 
+bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_downsample_0_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_downsample_0_weight.data
+256 1 1 64
+layer1_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_downsample_0_weight_shape.data num_dims : 4 shape: 512 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_downsample_0_weight.data
+512 1 1 256
+layer2_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_downsample_0_weight_shape.data num_dims : 4 shape: 1024 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_downsample_0_weight.data
+1024 1 1 512
+layer3_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_downsample_0_weight_shape.data num_dims : 4 shape: 2048 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_downsample_0_weight.data
+2048 1 1 1024
+layer4_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_bias_shape.data num_dims : 1 shape: 2048 
+layer1_0_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv1_weight.data
+64 1 1 64
+layer1_0_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_0_conv2_weight.data
+64 3 3 64
+layer1_0_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv3_weight.data
+256 1 1 64
+layer1_0_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_1_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_1_conv1_weight.data
+64 1 1 256
+layer1_1_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_1_conv2_weight.data
+64 3 3 64
+layer1_1_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_1_conv3_weight.data
+256 1 1 64
+layer1_1_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_2_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_2_conv1_weight.data
+64 1 1 256
+layer1_2_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_2_conv2_weight.data
+64 3 3 64
+layer1_2_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_2_conv3_weight.data
+256 1 1 64
+layer1_2_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_conv1_weight.data
+128 1 1 256
+layer2_0_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_0_conv2_weight.data
+128 3 3 128
+layer2_0_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_0_conv3_weight.data
+512 1 1 128
+layer2_0_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_1_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_1_conv1_weight.data
+128 1 1 512
+layer2_1_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_1_conv2_weight.data
+128 3 3 128
+layer2_1_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_1_conv3_weight.data
+512 1 1 128
+layer2_1_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_2_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_2_conv1_weight.data
+128 1 1 512
+layer2_2_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_2_conv2_weight.data
+128 3 3 128
+layer2_2_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_2_conv3_weight.data
+512 1 1 128
+layer2_2_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_3_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_3_conv1_weight.data
+128 1 1 512
+layer2_3_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_3_conv2_weight.data
+128 3 3 128
+layer2_3_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_3_conv3_weight.data
+512 1 1 128
+layer2_3_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_conv1_weight.data
+256 1 1 512
+layer3_0_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_0_conv2_weight.data
+256 3 3 256
+layer3_0_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_0_conv3_weight.data
+1024 1 1 256
+layer3_0_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_1_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_1_conv1_weight.data
+256 1 1 1024
+layer3_1_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_1_conv2_weight.data
+256 3 3 256
+layer3_1_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_1_conv3_weight.data
+1024 1 1 256
+layer3_1_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_2_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_2_conv1_weight.data
+256 1 1 1024
+layer3_2_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_2_conv2_weight.data
+256 3 3 256
+layer3_2_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_2_conv3_weight.data
+1024 1 1 256
+layer3_2_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_3_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_3_conv1_weight.data
+256 1 1 1024
+layer3_3_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_3_conv2_weight.data
+256 3 3 256
+layer3_3_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_3_conv3_weight.data
+1024 1 1 256
+layer3_3_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_4_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_4_conv1_weight.data
+256 1 1 1024
+layer3_4_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_4_conv2_weight.data
+256 3 3 256
+layer3_4_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_4_conv3_weight.data
+1024 1 1 256
+layer3_4_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_5_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_5_conv1_weight.data
+256 1 1 1024
+layer3_5_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_5_conv2_weight.data
+256 3 3 256
+layer3_5_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_5_conv3_weight.data
+1024 1 1 256
+layer3_5_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_conv1_weight.data
+512 1 1 1024
+layer4_0_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_0_conv2_weight.data
+512 3 3 512
+layer4_0_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_0_conv3_weight.data
+2048 1 1 512
+layer4_0_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_1_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_1_conv1_weight.data
+512 1 1 2048
+layer4_1_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_1_conv2_weight.data
+512 3 3 512
+layer4_1_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_1_conv3_weight.data
+2048 1 1 512
+layer4_1_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_2_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_2_conv1_weight.data
+512 1 1 2048
+layer4_2_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_2_conv2_weight.data
+512 3 3 512
+layer4_2_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_2_conv3_weight.data
+2048 1 1 512
+layer4_2_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_bias_shape.data num_dims : 1 shape: 2048 
+fc_weight_shape.data num_dims : 2 shape: 1000 2048 
+fc_bias_shape.data num_dims : 1 shape: 1000 
+Auto-scheduled time: 74.4556ms
+ class: 836
+make: Leaving directory '/scratch/ameerh/Halide/apps/resnet_50_blockwise'

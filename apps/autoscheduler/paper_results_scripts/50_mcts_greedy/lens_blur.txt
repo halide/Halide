@@ -1,0 +1,6 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/lens_blur'
+bin/host/process ../images/rgb_small.png 32 13 0.5 32 5 bin/host/out.png
+output width: 192; output height: 320
+Manually-tuned time: 5.36165ms
+Auto-scheduled time: 8.44801ms
+make: Leaving directory '/scratch/ameerh/Halide/apps/lens_blur'
