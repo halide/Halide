@@ -269,7 +269,7 @@ int main(int argc, char **argv) {
 
         std::cout << "IR nodes: " << nodes << "\n";
         std::cout << "simplify time:  " << simp_time_usec << " usec, " << simp_time_usec / nodes << " usec/node\n";
-        std::cout << "serialize time: " << print_time_usec << " usec, " << print_time_usec / nodes << " usec/node\n";
+        std::cout << "printing time: " << print_time_usec << " usec, " << print_time_usec / nodes << " usec/node\n";
     }
 
     simplify_time_total *= 1000000.0;
@@ -278,7 +278,7 @@ int main(int argc, char **argv) {
     std::cout << "\n\ntotal IR nodes seen:  " << nodes_total << "\n";
     std::cout << "avg nodes/Expr:  " << (double)nodes_total / (double)exprs.size() << "\n";
     std::cout << "avg simplify time:  " << simplify_time_total << " usec, avg per node " << simplify_time_total / nodes_total << " usec\n";
-    std::cout << "avg simplify time:  " << print_time_total << " usec, avg per node " << print_time_total / nodes_total << " usec\n";
+    std::cout << "avg printing time:  " << print_time_total << " usec, avg per node " << print_time_total / nodes_total << " usec\n";
 
     std::cout << "\n(Ignore: " << tracker << ")\n";
     return 0;
