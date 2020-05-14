@@ -296,9 +296,11 @@ int main(int argc, char **argv) {
 
     std::cout << "\n\nCSV:\n";
     std::cout << "----\n";
-    std::cout << "expr,nodes,simplify_time_usec,print_time_usec\n";
+    std::cout << "expr,nodes,simplify_time_usec,print_time_usec,simplify_time_avg_usec,print_time_avg_usec\n";
     for (const auto &info : infos) {
-        std::cout << "\"" << info.expr << "\"" << "," << info.nodes << "," << info.simplify_time_usec << "," << info.print_time_usec << "\n";
+        std::cout << "\"" << info.expr << "\"" << "," << info.nodes << ","
+                  << info.simplify_time_usec  << "," << info.print_time_usec << ","
+                  << info.simplify_time_usec / info.nodes << "," << info.print_time_usec / info.nodes << "\n";
     }
     std::cout << "----\n";
 
