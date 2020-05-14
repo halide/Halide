@@ -132,6 +132,21 @@ void JSONCompilerLogger::obfuscate() {
         matched_simplifier_rules = n;
     }
     {
+        std::map<std::string, std::vector<Expr>> n;
+        int i = 0;
+        for (const auto &it : non_monotonic_loop_vars) {
+            std::string loop_name = "loop" + std::to_string(i++);
+            for (const auto &e : it.second) {
+                // Create a new obfuscater for every Expr, but take pains to ensure
+                // that the loop var has a distinct name. (Note that for nested loops,
+                // loop vars of enclosing loops will be treated like any other var.)
+                ObfuscateNames obfuscater({{it.first, loop_name}});
+                n[loop_name].emplace_back(obfuscater.mutate(e));
+            }
+        }
+        non_monotonic_loop_vars = n;
+    }
+    {
         std::vector<std::pair<Expr, Expr>> n;
         for (const auto &it : failed_to_prove_exprs) {
             // Note that use a separate obfuscater for each pair, so each
