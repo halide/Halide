@@ -1,5 +1,5 @@
 make: Entering directory '/scratch/ameerh/Halide/apps/conv_layer'
 bin/host/process
-Manually-tuned time: 36.0288ms
-Auto-scheduled time: 57.1976ms
+Manually-tuned time: 35.4859ms
+Auto-scheduled time: 66.4075ms
 make: Leaving directory '/scratch/ameerh/Halide/apps/conv_layer'
