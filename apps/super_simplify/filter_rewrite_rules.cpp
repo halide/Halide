@@ -294,6 +294,42 @@ class ToDNF : public IRMutator {
         }
         return pack_binary_op<Or>(result);
     }
+
+    Expr visit(const EQ *op) override {
+        if (op->a.type().is_bool()) {
+            return mutate((op->a && op->b) || (!op->a && !op->b));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Expr visit(const LE *op) override {
+        if (const Min *min_a = op->a.as<Min>()) {
+            return mutate(min_a->a <= op->b || min_a->b <= op->b);
+        } else if (const Max *max_a = op->a.as<Max>()) {
+            return mutate(max_a->a <= op->b && max_a->b <= op->b);
+        } else if (const Min *min_b = op->b.as<Min>()) {
+            return mutate(op->a <= min_b->a && op->a <= min_b->b);
+        } else if (const Max *max_b = op->b.as<Max>()) {
+            return mutate(op->a <= max_b->a || op->a <= max_b->b);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Expr visit(const LT *op) override {
+        if (const Min *min_a = op->a.as<Min>()) {
+            return mutate(min_a->a < op->b || min_a->b < op->b);
+        } else if (const Max *max_a = op->a.as<Max>()) {
+            return mutate(max_a->a < op->b && max_a->b < op->b);
+        } else if (const Min *min_b = op->b.as<Min>()) {
+            return mutate(op->a < min_b->a && op->a < min_b->b);
+        } else if (const Max *max_b = op->b.as<Max>()) {
+            return mutate(op->a < max_b->a || op->a < max_b->b);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
 };
 
 // Make the first wildcard found x, the second y, etc.
