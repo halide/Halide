@@ -844,7 +844,7 @@ struct State {
     }    
     bool apply_best_action(double& bestReward){//, std::vector<Action>& backup_actions) {
         std::vector<Action> actions;
-        const bool in_simulation = true; // adds greediness when false
+        const bool in_simulation = true;
         get_actions(actions, in_simulation); 
         //std::cout << "action size: " <<actions.size() << std::endl;
         unsigned rand_idx = 0;
@@ -857,7 +857,7 @@ struct State {
             return true;
         }
         // with 50% probabality pick best
-        if(!in_simulation && rand()%2 ==0) {
+        if(rand()%2 ==0) {
                 for(auto& act : actions) {
                     act.state->calculate_cost(dag, params, cost_model, false, true);
                 }
