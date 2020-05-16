@@ -30,13 +30,15 @@ namespace msa {
            ///* unsigned*/ int simulation_depth;	// how many ticks (frames) to run simulation for
             double father_value;
             bool use_father_value;
+	    bool randomize;
             //--------------------------------------------------------------
             UCT() :
                 uct_k( sqrt(2) ),
                 max_iterations( 100 ),
                 max_millis( 0 ),
                 father_value(0),// zero is optimal
-                use_father_value(false)
+                use_father_value(false),
+		randomize(false)
                 //simulation_depth( 10 )
             {}
 
@@ -66,13 +68,14 @@ namespace msa {
                 else {*/
                     for(int i = 0; i < num_children; i++) {
                         TreeNode* child = node->get_child(i);
-                        float uct_exploitation;
+                        double uct_exploitation;
                         if(use_father_value)
                             uct_exploitation = (float)child->get_num_wins() / (child->get_num_visits() + FLT_EPSILON);
                         else
-                            uct_exploitation = (float)child->get_average_value() / (child->get_num_visits() + FLT_EPSILON);
-                        float uct_exploration = sqrt( log((float)node->get_num_visits() + 1) / (child->get_num_visits() + FLT_EPSILON) );
-                        float uct_score = uct_exploitation + uct_k * uct_exploration;
+                            //uct_exploitation = -1*(float)child->get_average_value() / (child->get_num_visits() + FLT_EPSILON);
+                            uct_exploitation = (double)-1*child->get_num_visits()/child->get_average_value();
+                        double uct_exploration = sqrt( log((float)node->get_num_visits() + 1) / (child->get_num_visits() + FLT_EPSILON) );
+                        double uct_score = uct_exploitation*(1 + uct_exploration);
 
                         if(uct_score > best_uct_score) {
                             best_uct_score = uct_score;
@@ -96,6 +99,7 @@ namespace msa {
                         best_node = child;
                     }
                     //std::cout << "child "<<i<<" best "<<child->get_best_value() << " average " << child->get_average_value()/(child->get_num_visits()+FLT_EPSILON) <<"num_wins " << child->get_num_wins()<<" /"<<child->get_num_visits()<<std::endl;
+		    //std::cout << "child "<<i<<" best "<<child->get_best_value() << " average " << child->get_average_value()/(child->get_num_visits()+FLT_EPSILON) <<"num_visits "<<child->get_num_visits()<<std::endl;
                 }
                 /*if (best_node->get_action() == ){
                     std::cout << "null most visited "<<num_children << std::endl;
@@ -179,7 +183,7 @@ namespace msa {
   //                      std::vector<Action> backup_actions; 
   //                      backup_actions.clear(); 
                         while(true) {
-                            bool finished = state.apply_best_action(bestReward);
+                            bool finished = state.apply_best_action(bestReward,randomize);
   //                          depth++;
                             if (finished) break;
                         }
@@ -194,12 +198,12 @@ namespace msa {
                         }
 
                         // find most visited child
-                        best_node = get_best_value_child(&root_node);
+                        
 
                         // indicate end of loop for timer
                         timer.loop_end();
                     }
-
+	            best_node = get_best_value_child(&root_node);
                     // return best node's action
                     if(best_node) return best_node->get_action();
                     
