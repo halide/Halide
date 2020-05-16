@@ -34,6 +34,10 @@ class Features(Enum):
   GLOBAL_LOAD_EFFICIENCY = "global load efficiency"
   GLOBAL_STORE_EFFICIENCY = "global store efficiency"
 
+class Info(Enum):
+  REGISTERS_64 = "registers_64"
+  REGISTERS_256 = "registers_256"
+
 class Sample:
   def __init__(self, path, metrics_path, features_path):
     self.path = path
@@ -129,11 +133,12 @@ class Sample:
 
       width = max([len(k.value) for k in self.comparisons.keys()])
 
+      stage_str = "{} (Registers = {}; {})".format(stage, self.metrics[stage][Info.REGISTERS_64.value], self.metrics[stage][Info.REGISTERS_256.value])
       if first:
         first = False
-        out += "{:{width}} {:>14} {:>14} {:>7}\n".format(stage, "Actual", "Predicted", "Ratio", width=width + 2)
+        out += "{:{width}} {:>14} {:>14} {:>7}\n".format(stage_str, "Actual", "Predicted", "Ratio", width=width + 2)
       else:
-        out += "{:{width}}\n".format(stage, width=width + 2)
+        out += "{:{width}}\n".format(stage_str, width=width + 2)
 
       for label in self.results[stage]:
         result = self.results[stage][label]

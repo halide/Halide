@@ -3,18 +3,22 @@
 # Find pairs of schedules with equal/similar predicted run times but different
 # actual run times
 
-if [[ ! ((($# == 4 || $# == 5) && ${4} == 0) || ($# == 5 && ${4} == 1)) ]]; then
-  echo "Usage: $0 predictions_file limit equal_mode profile_mode output_dir"
+if [[ ! ((($# == 5 || $# == 6) && ${5} == 0) || ($# == 6 && ${5} == 1)) ]]; then
+  echo "Usage: $0 app timestamp limit equal_mode profile_mode output_dir"
   exit
 fi
 
 source $(dirname $0)/utils.sh
 
-predictions_file=${1}
-limit=${2}
-exact_mode=${3}
-profile_mode=${4}
-output_dir=${5}
+find_halide HALIDE_ROOT
+
+app=${1}
+timestamp=${2}
+limit=${3}
+exact_mode=${4}
+profile_mode=${5}
+output_dir=${6}
+predictions_file="${HALIDE_ROOT}/apps/${app}/autotuned_samples-${timestamp}/predictions_with_filenames"
 
 if [ ${exact_mode} == 1 ]; then
     echo "Pairs with equal predicted run times (predicted, actual_1, actual_2, abs_diff_of_actual_1_and_2):"
