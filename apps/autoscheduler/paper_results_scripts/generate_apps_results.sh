@@ -120,7 +120,7 @@ APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chai
 
 
 benchmark_resnet="true"
-RANDOM_DUR=6
+RANDOM_DUR=600
 
 if [ "$APPS" != "" ]; then
     # Uncomment when there's a change that wouldn't be picked up by the Makefiles (e.g. new weights)
