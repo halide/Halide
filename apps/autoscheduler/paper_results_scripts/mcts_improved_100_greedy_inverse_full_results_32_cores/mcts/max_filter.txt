@@ -1,0 +1,10 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/max_filter'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 37.9047ms
+Auto-scheduled time: 84.3562ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/max_filter'
+
+
+RL_END_OF_RUN 0
+
