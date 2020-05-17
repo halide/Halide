@@ -36,7 +36,21 @@ export HL_TARGET="host" # x86-64-avx2
 # no random dropout
 export HL_RANDOM_DROPOUT=100
 
-if [ "$autoscheduler" == "greedy" ]; then
+
+unset HL_RANDOM
+if [ "$autoscheduler" == "random" ]; then
+    if diff ../AutoSchedule-master.cpp ../AutoSchedule.cpp > /dev/null ; then
+        echo "No need to copy AutoSchedule-master.cpp"
+    else
+        cp ../AutoSchedule-master.cpp ../AutoSchedule.cpp
+    fi
+
+    export HL_RANDOM=1
+    # random
+    export HL_BEAM_SIZE=1
+    export HL_NUM_PASSES=1
+    results="random"
+elif [ "$autoscheduler" == "greedy" ]; then
     if diff ../AutoSchedule-master.cpp ../AutoSchedule.cpp > /dev/null ; then
         echo "No need to copy AutoSchedule-master.cpp"
     else
@@ -104,19 +118,64 @@ fi
  
 APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer mat_mul iir_blur bgu" # resnet_50_blockwise is handled by a special case at the end
 
+
 benchmark_resnet="true"
+RANDOM_DUR=6
 
 if [ "$APPS" != "" ]; then
     # Uncomment when there's a change that wouldn't be picked up by the Makefiles (e.g. new weights)
     for app in ${APPS}; do make -C ${HALIDE}/apps/${app} clean; done
 
+
+    mkdir $results 2>/dev/null
     for app in ${APPS}; do
         echo "building $app (autoscheduler == $autoscheduler)" >> progress
+        if [ "$autoscheduler" == "random" ]; then
+            echo > $results/$app.randtime.txt
+            start=$SECONDS
+            if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
+                make -C ${HALIDE}/apps/${app} build > $results/$app.log
+            else
+                make -C ${HALIDE}/apps/${app} all > $results/$app.log
+            fi
 
-        if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
-            make -C ${HALIDE}/apps/${app} build
+            grep 'JENNY_EVALTIME' $results/$app.log > $results/$app.evaltime.txt 
+            grep 'JENNY_MINCOST' $results/$app.log > $results/$app.mincost.txt 
+            duration=$(( SECONDS - start ))
+            total_duration=$duration
+            make -C ${HALIDE}/apps/${app} test &>> $results/$app.randtime.txt
+            while [ $total_duration -lt $RANDOM_DUR ]; do
+                make -C ${HALIDE}/apps/${app} clean
+                start=$SECONDS
+                if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
+                    make -C ${HALIDE}/apps/${app} build > $results/$app.log
+                else
+                    make -C ${HALIDE}/apps/${app} all > $results/$app.log
+                fi
+
+                grep 'JENNY_EVALTIME' $results/$app.log >> $results/$app.evaltime.txt 
+                grep 'JENNY_MINCOST' $results/$app.log >> $results/$app.mincost.txt 
+               
+                duration=$(( SECONDS - start ))
+                total_duration=$((total_duration + duration))
+                echo "TOTAL_DUR: $total_duration"
+                echo "$app $total_duration" > $results/$app.runtime.txt
+
+                make -C ${HALIDE}/apps/${app} test &>> $results/$app.randtime.txt
+            done
         else
-            make -C ${HALIDE}/apps/${app} all
+            start=$SECONDS
+            if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
+                make -C ${HALIDE}/apps/${app} build > $results/$app.log
+            else
+                make -C ${HALIDE}/apps/${app} all > $results/$app.log
+            fi
+
+            grep 'JENNY_EVALTIME' $results/$app.log > $results/$app.evaltime.txt 
+            grep 'JENNY_MINCOST' $results/$app.log > $results/$app.mincost.txt 
+
+            duration=$(( SECONDS - start ))
+            echo "$app $duration" > $results/$app.runtime.txt
         fi
 
         if [ $? -ne 0 ]; then
@@ -126,7 +185,6 @@ if [ "$APPS" != "" ]; then
         fi
     done
 
-    mkdir $results 2>/dev/null
 
     # benchmark everything
     for app in ${APPS}; do
@@ -162,7 +220,45 @@ if [ "$benchmark_resnet" == "true" ]; then
         cores=2
     fi
 
-    make -C ${HALIDE}/apps/${app} all -j${cores}
+    if [ "$autoscheduler" == "random" ]; then
+        echo > $results/$app.randtime.txt
+        start=$SECONDS
+        make -C ${HALIDE}/apps/${app} all > $results/$app.log
+
+        grep 'JENNY_EVALTIME' $results/$app.log > $results/$app.evaltime.txt 
+        grep 'JENNY_MINCOST' $results/$app.log > $results/$app.mincost.txt 
+
+        duration=$(( SECONDS - start ))
+        total_duration=$duration
+        #make -C ${HALIDE}/apps/${app} test_manual &>> $results/$app.randtime.txt
+        make -C ${HALIDE}/apps/${app} test_auto_schedule &>> $results/$app.randtime.txt
+
+        while [ $total_duration -lt $RANDOM_DUR ]; do
+            make -C ${HALIDE}/apps/${app} clean
+            start=$SECONDS
+            make -C ${HALIDE}/apps/${app} all > $results/$app.log
+
+            grep 'JENNY_EVALTIME' $results/$app.log >> $results/$app.evaltime.txt 
+            grep 'JENNY_MINCOST' $results/$app.log >> $results/$app.mincost.txt 
+           
+            duration=$(( SECONDS - start ))
+            total_duration=$((total_duration + duration))
+            echo "TOTAL_DUR: $total_duration"
+            echo "$app $total_duration" > $results/$app.runtime.txt
+
+            #make -C ${HALIDE}/apps/${app} test_manual &>> $results/$app.randtime.txt
+            make -C ${HALIDE}/apps/${app} test_auto_schedule &>> $results/$app.randtime.txt
+        done
+    else 
+        start=$SECONDS
+        make -C ${HALIDE}/apps/${app} all -j${cores} > $results/$app.log
+
+        grep 'JENNY_EVALTIME' $results/$app.log > $results/$app.evaltime.txt 
+        grep 'JENNY_MINCOST' $results/$app.log > $results/$app.mincost.txt 
+
+        duration=$(( SECONDS - start ))
+        echo "$app $duration" > $results/$app.runtime.txt
+    fi
 
     echo "running $app (autoscheduler == $autoscheduler)" >> progress
 
@@ -181,4 +277,3 @@ if [ "$benchmark_resnet" == "true" ]; then
 
     printf "\n\nRL_END_OF_RUN %d\n\n" $HL_SEED >> $results/$app.txt
 fi
-

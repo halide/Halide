@@ -916,6 +916,68 @@ public:
         std::make_heap(storage.begin(), storage.begin() + sz, CompareStates{});
     }
 
+    // Resort the queue based on a probabilistic model
+    void prob_resort() {
+        // get prob of each     
+        // instead of using current cost model, we should use Q(s,a) model or V(s) model
+        // store the cost model somewhere else
+        vector<double> inv_cost_vec;
+        vector<int> idx;
+        //std::cout << "cost/inv_cost: ";
+        for (size_t i = 0; i < sz; i++) {
+            IntrusivePtr<State> s_ptr = storage[i];
+            //std::cout << s_ptr->cost;
+            //internal_assert(s_ptr->cost > 0);
+            //double inv_cost = 1 / s_ptr-> cost;
+            inv_cost_vec.push_back(1);
+            //std::cout << "/" << inv_cost
+            //     << ", ";
+            idx.push_back(i);
+        }
+        //std::cout << std::endl;
+
+        // draw without resample from the state 
+        std::random_device rd;
+        std::mt19937 g(rd());
+        //std::shuffle(storage.begin(), storage.end(), g);
+        
+        vector<int> sort_idx;
+        while(!idx.empty()) {
+
+            double total_inv_cost = accumulate(inv_cost_vec.begin(), inv_cost_vec.end(), 0);  
+
+            // construct prob vec based on the inverse cost model
+            vector<double> prob_vec;
+            for (auto it= inv_cost_vec.begin(); it != inv_cost_vec.end(); ++it){
+                prob_vec.push_back((*it / total_inv_cost) * 100);
+            }
+
+            // construct discrete_distribution
+            std::discrete_distribution<int> dist(prob_vec.begin(), prob_vec.end());
+            int drawn_idx = dist(g);
+            
+
+            // add drawn idx to sort_idx 
+            int idx_val = idx[drawn_idx];   
+            idx.erase(idx.begin() + drawn_idx);
+            inv_cost_vec.erase(inv_cost_vec.begin() + drawn_idx);
+            sort_idx.push_back(idx_val);
+        }
+        // dist(g) should sample from the prob but
+        //std::sample(in.begin(), in.end(), std::back_inserter(out),
+        //                      5, std::mt19937{std::random_device{}()});   
+        std::vector<IntrusivePtr<State>> storage_copy(storage);
+
+        //std::cout << "cost/idx: ";
+        for (size_t i = 0; i < sz; i++) {
+            //std::cout << storage_copy[sort_idx[i]] -> cost;
+            storage[i] = storage_copy[sort_idx[i]];
+            //std::cout << "/" << sort_idx[i]
+            //     << ", ";
+        }
+        ///std::cout << std::endl;
+    }
+
     void clear() {
         for (size_t i = 0; i < sz; i++) {
             storage[i] = IntrusivePtr<State>{};
@@ -1093,10 +1155,19 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         // Drop the other states unconsidered.
         pending.clear();
 
-        if (cost_model) {
-            // Now evaluate all the costs and re-sort them in the priority queue
-            cost_model->evaluate_costs();
-            q.resort();
+        string random = get_env_variable("HL_RANDOM");
+        if (random == "1") {
+            // random run
+            if (cost_model) {
+                cost_model->evaluate_costs();
+                q.prob_resort();
+            }
+        } else {
+            if (cost_model) {
+                // Now evaluate all the costs and re-sort them in the priority queue
+                cost_model->evaluate_costs();
+                q.resort();
+            }
         }
 
         if (cyos_str == "1") {
@@ -1239,15 +1310,18 @@ void generate_schedule(const std::vector<Function> &outputs,
     HALIDE_TOC;
 
     aslog(1) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
-
     // Dump the schedule found
     aslog(1) << "** Optimal schedule:\n";
+
+    std::cout << "JENNY_MINCOST: " << optimal->cost << "\n";
+    std::cout << "JENNY_EVALTIME: " << State::cost_calculations << '\n';
 
     // Just to get the debugging prints to fire
     optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
+
 
     // Print out the schedule
     if (aslog::aslog_level() > 0) {
