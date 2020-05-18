@@ -60,6 +60,8 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 										$(AUTOSCHED_SRC)/CostModel.h \
 										$(AUTOSCHED_SRC)/PerfectHashMap.h \
 										$(AUTOSCHED_WEIGHT_OBJECTS) \
+										$(AUTOSCHED_SRC)/mcts/ofxMSAmcts.h \
+										$(AUTOSCHED_SRC)/mcts/TreeNodeT.h \
 										$(AUTOSCHED_COST_MODEL_LIBS) \
 										$(GENERATOR_DEPS) \
 										$(AUTOSCHED_BIN)/auto_schedule_runtime.a
