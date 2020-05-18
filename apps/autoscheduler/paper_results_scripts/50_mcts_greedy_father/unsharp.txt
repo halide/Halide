@@ -1,0 +1,5 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/unsharp'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 2.97012ms
+Auto-scheduled time: 2.9586ms
+make: Leaving directory '/scratch/ameerh/Halide/apps/unsharp'

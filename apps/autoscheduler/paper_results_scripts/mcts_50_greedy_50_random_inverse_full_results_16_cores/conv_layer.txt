@@ -1,0 +1,10 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 5.62575ms
+Auto-scheduled time: 17.1377ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+
+
+RL_END_OF_RUN 0
+
