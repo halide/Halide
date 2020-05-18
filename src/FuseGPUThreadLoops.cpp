@@ -765,9 +765,7 @@ public:
                         const string &group_name;
 
                     public:
-                        // Because we're passed in a temporary to construct this, don't capture
-                        // alloc_name by reference
-                        RewriteGroupAccess(const string alloc_name, const string &group_name)
+                        RewriteGroupAccess(const string &alloc_name, const string &group_name)
                             : alloc_name(alloc_name), group_name(group_name) {
                         }
                     } rewriter{heap_name + "_" + alloc.name, group_name};
