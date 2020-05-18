@@ -190,6 +190,45 @@ void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pa
     }
 }
 
+// Check that stages are scheduled in the correct order with no compute_with
+// edge going back across other compute_with edge.
+// For example, some illegal cases include:
+//   f.compute_with(g.update(0), var)
+//   f.update(0).compute_with(g, var)
+// or
+//   f.compute_with(g, var)
+//   f.update(1).compute_with(g, var)
+// where f.update(0) will have to be computed after g, which means
+// that order of f will be f, f.update(1), f.update(0).
+void check_fused_stages_are_scheduled_in_order(const Function &f) {
+    map<string, pair<int, int>> max_stage_for_parent;
+    bool are_stages_consecutive = false;
+    for (size_t i = 0; i < f.updates().size() + 1; i++) {
+        const auto &def = (i == 0) ? f.definition() : f.update(i - 1);
+        const auto &fuse_level = def.schedule().fuse_level().level;
+        if (!fuse_level.is_inlined() && !fuse_level.is_root()) {
+            if (max_stage_for_parent.count(fuse_level.func()) == 0) {
+                max_stage_for_parent[fuse_level.func()] = {-1, -1};
+            }
+            const auto &max_stage = max_stage_for_parent[fuse_level.func()];
+            bool is_correct = (fuse_level.stage_index() > max_stage.second) ||
+                              (fuse_level.stage_index() == max_stage.second && are_stages_consecutive);
+
+            user_assert(is_correct)
+                << "Invalid compute_with: impossible to establish correct stage order between "
+                << f.name() << ".s" << max_stage.first << " with "
+                << fuse_level.func() << ".s" << max_stage.second << " and "
+                << f.name() << ".s" << i << " with "
+                << fuse_level.func() << ".s" << fuse_level.stage_index() << "\n";
+
+            max_stage_for_parent[fuse_level.func()] = {i, fuse_level.stage_index()};
+            are_stages_consecutive = true;
+        } else {
+            are_stages_consecutive = false;
+        }
+    }
+}
+
 }  // anonymous namespace
 
 pair<vector<string>, vector<vector<string>>> realization_order(
@@ -202,6 +241,9 @@ pair<vector<string>, vector<vector<string>>> realization_order(
             // Extern function should not be fused.
             continue;
         }
+
+        check_fused_stages_are_scheduled_in_order(iter.second);
+
         populate_fused_pairs_list(iter.first, iter.second.definition(), 0, env);
         for (size_t i = 0; i < iter.second.updates().size(); ++i) {
             populate_fused_pairs_list(iter.first, iter.second.updates()[i], i + 1, env);

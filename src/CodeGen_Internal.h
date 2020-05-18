@@ -9,10 +9,10 @@
  */
 
 #include <memory>
+#include <string>
 
 #include "Closure.h"
-#include "IR.h"
-#include "IRVisitor.h"
+#include "Expr.h"
 #include "Scope.h"
 #include "Target.h"
 
@@ -60,6 +60,14 @@ void unpack_closure(const Closure &closure,
 
 /** Get the llvm type equivalent to a given halide type */
 llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
+
+/** Get the number of elements in an llvm vector type, or return 1 if
+ * it's not a vector type. */
+int get_vector_num_elements(llvm::Type *);
+
+/** Get the scalar type of an llvm vector type. Returns the argument
+ * if it's not a vector type. */
+llvm::Type *get_vector_element_type(llvm::Type *);
 
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);

@@ -32,6 +32,8 @@ public:
     // We can infer the tupled-output-type from the Stub
     Output<Buffer<>> tupled_output{"tupled_output", 3};
     Output<Buffer<int>> int_output{"int_output", 3};
+    Output<Buffer<Halide::float16_t>> float16_output{"float16_output", 3};
+    Output<Buffer<Halide::bfloat16_t>> bfloat16_output{"bfloat16_output", 3};
 
     void generate() {
         Var x{"x"}, y{"y"}, c{"c"};
@@ -66,6 +68,8 @@ public:
         int32_buffer_output = out.untyped_buffer_output;
         array_test_output = out.array_buffer_output[1];
         tupled_output = out.tupled_output;
+        float16_output = out.float16_output;
+        bfloat16_output = out.bfloat16_output;
 
         const float kOffset = 2.f;
         calculated_output(x, y, c) = cast<uint8_t>(out.tuple_output(x, y, c)[1] + kOffset);

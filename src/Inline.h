@@ -5,10 +5,12 @@
  * Methods for replacing calls to functions with their definitions.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Inline a single named function, which must be pure. For a pure function to
  * be inlined, it must not have any specializations (i.e. it can only have one

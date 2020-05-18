@@ -1,6 +1,7 @@
 #include "SlidingWindow.h"
 
 #include "Bounds.h"
+#include "CompilerLogger.h"
 #include "Debug.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -196,11 +197,19 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             if (monotonic_min == Monotonic::Increasing ||
                 monotonic_min == Monotonic::Constant) {
                 can_slide_up = true;
+            } else if (monotonic_min == Monotonic::Unknown) {
+                if (get_compiler_logger()) {
+                    get_compiler_logger()->record_non_monotonic_loop_var(loop_var, min_required);
+                }
             }
 
             if (monotonic_max == Monotonic::Decreasing ||
                 monotonic_max == Monotonic::Constant) {
                 can_slide_down = true;
+            } else if (monotonic_max == Monotonic::Unknown) {
+                if (get_compiler_logger()) {
+                    get_compiler_logger()->record_non_monotonic_loop_var(loop_var, max_required);
+                }
             }
 
             if (!can_slide_up && !can_slide_down) {

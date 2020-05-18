@@ -117,7 +117,6 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              rewrite(max(max(y, x), max(z, x)), max(max(y, z), x)) ||
              rewrite(max(max(x, y), max(z, w)), max(max(max(x, y), z), w)) ||
              rewrite(max(broadcast(x), broadcast(y)), broadcast(max(x, y), lanes)) ||
-             rewrite(max(broadcast(x), ramp(y, z)), max(b, a)) ||
              rewrite(max(max(x, broadcast(y)), broadcast(z)), max(x, broadcast(max(y, z), lanes))) ||
              rewrite(max(min(x, y), min(x, z)), min(x, max(y, z))) ||
              rewrite(max(min(x, y), min(z, x)), min(x, max(y, z))) ||
@@ -183,14 +182,14 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
                rewrite(max(y - x, z - x), max(y, z) - x) ||
                rewrite(max(x - y, x - z), x - min(y, z)) ||
 
-               rewrite(max(x, x - y), x - min(0, y)) ||
-               rewrite(max(x - y, x), x - min(0, y)) ||
-               rewrite(max(x, (x - y) + z), x + max(0, z - y)) ||
-               rewrite(max(x, z + (x - y)), x + max(0, z - y)) ||
-               rewrite(max(x, (x - y) - z), x - min(0, y + z)) ||
-               rewrite(max((x - y) + z, x), max(0, z - y) + x) ||
-               rewrite(max(z + (x - y), x), max(0, z - y) + x) ||
-               rewrite(max((x - y) - z, x), x - min(0, y + z)) ||
+               rewrite(max(x, x - y), x - min(y, 0)) ||
+               rewrite(max(x - y, x), x - min(y, 0)) ||
+               rewrite(max(x, (x - y) + z), x + max(z - y, 0)) ||
+               rewrite(max(x, z + (x - y)), x + max(z - y, 0)) ||
+               rewrite(max(x, (x - y) - z), x - min(y + z, 0)) ||
+               rewrite(max((x - y) + z, x), max(z - y, 0) + x) ||
+               rewrite(max(z + (x - y), x), max(z - y, 0) + x) ||
+               rewrite(max((x - y) - z, x), x - min(y + z, 0)) ||
 
                rewrite(max(x * c0, c1), max(x, fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
                rewrite(max(x * c0, c1), min(x, fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||

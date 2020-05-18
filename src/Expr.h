@@ -8,14 +8,14 @@
 #include <string>
 #include <vector>
 
-#include "Debug.h"
-#include "Error.h"
-#include "Float16.h"
 #include "IntrusivePtr.h"
 #include "Type.h"
-#include "Util.h"
 
 namespace Halide {
+
+struct bfloat16_t;
+struct float16_t;
+
 namespace Internal {
 
 class IRMutator;
@@ -23,7 +23,10 @@ class IRVisitor;
 
 /** All our IR node types get unique IDs for the purposes of RTTI */
 enum class IRNodeType {
-    // Exprs, in order of strength
+    // Exprs, in order of strength. Code in IRMatch.h and the
+    // simplifier relies on this order for canonicalization of
+    // expressions, so you may need to update those modules if you
+    // change this list.
     IntImm,
     UIntImm,
     FloatImm,
@@ -71,6 +74,8 @@ enum class IRNodeType {
     Prefetch,
     Atomic
 };
+
+constexpr IRNodeType StrongestExprNodeType = IRNodeType::Shuffle;
 
 /** The abstract base classes for a node in the Halide IR. */
 struct IRNode {
@@ -210,25 +215,7 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
 struct IntImm : public ExprNode<IntImm> {
     int64_t value;
 
-    static const IntImm *make(Type t, int64_t value) {
-        internal_assert(t.is_int() && t.is_scalar())
-            << "IntImm must be a scalar Int\n";
-        internal_assert(t.bits() == 8 || t.bits() == 16 || t.bits() == 32 || t.bits() == 64)
-            << "IntImm must be 8, 16, 32, or 64-bit\n";
-
-        // Normalize the value by dropping the high bits.
-        // Since left-shift of negative value is UB in C++, cast to uint64 first;
-        // it's unlikely any compilers we care about will misbehave, but UBSan will complain.
-        value = (int64_t)(((uint64_t)value) << (64 - t.bits()));
-
-        // Then sign-extending to get them back
-        value >>= (64 - t.bits());
-
-        IntImm *node = new IntImm;
-        node->type = t;
-        node->value = value;
-        return node;
-    }
+    static const IntImm *make(Type t, int64_t value);
 
     static const IRNodeType _node_type = IRNodeType::IntImm;
 };
@@ -237,21 +224,7 @@ struct IntImm : public ExprNode<IntImm> {
 struct UIntImm : public ExprNode<UIntImm> {
     uint64_t value;
 
-    static const UIntImm *make(Type t, uint64_t value) {
-        internal_assert(t.is_uint() && t.is_scalar())
-            << "UIntImm must be a scalar UInt\n";
-        internal_assert(t.bits() == 1 || t.bits() == 8 || t.bits() == 16 || t.bits() == 32 || t.bits() == 64)
-            << "UIntImm must be 1, 8, 16, 32, or 64-bit\n";
-
-        // Normalize the value by dropping the high bits
-        value <<= (64 - t.bits());
-        value >>= (64 - t.bits());
-
-        UIntImm *node = new UIntImm;
-        node->type = t;
-        node->value = value;
-        return node;
-    }
+    static const UIntImm *make(Type t, uint64_t value);
 
     static const IRNodeType _node_type = IRNodeType::UIntImm;
 };
@@ -260,31 +233,7 @@ struct UIntImm : public ExprNode<UIntImm> {
 struct FloatImm : public ExprNode<FloatImm> {
     double value;
 
-    static const FloatImm *make(Type t, double value) {
-        internal_assert(t.is_float() && t.is_scalar())
-            << "FloatImm must be a scalar Float\n";
-        FloatImm *node = new FloatImm;
-        node->type = t;
-        switch (t.bits()) {
-        case 16:
-            if (t.is_bfloat()) {
-                node->value = (double)((bfloat16_t)value);
-            } else {
-                node->value = (double)((float16_t)value);
-            }
-            break;
-        case 32:
-            node->value = (float)value;
-            break;
-        case 64:
-            node->value = value;
-            break;
-        default:
-            internal_error << "FloatImm must be 16, 32, or 64-bit\n";
-        }
-
-        return node;
-    }
+    static const FloatImm *make(Type t, double value);
 
     static const IRNodeType _node_type = IRNodeType::FloatImm;
 };
@@ -293,12 +242,7 @@ struct FloatImm : public ExprNode<FloatImm> {
 struct StringImm : public ExprNode<StringImm> {
     std::string value;
 
-    static const StringImm *make(const std::string &val) {
-        StringImm *node = new StringImm;
-        node->type = type_of<const char *>();
-        node->value = val;
-        return node;
-    }
+    static const StringImm *make(const std::string &val);
 
     static const IRNodeType _node_type = IRNodeType::StringImm;
 };
@@ -397,36 +341,6 @@ struct Range {
 /** A multi-dimensional box. The outer product of the elements */
 typedef std::vector<Range> Region;
 
-/** An enum describing a type of device API. Used by schedules, and in
- * the For loop IR node. */
-enum class DeviceAPI {
-    None,  /// Used to denote for loops that run on the same device as the containing code.
-    Host,
-    Default_GPU,
-    CUDA,
-    OpenCL,
-    GLSL,
-    OpenGLCompute,
-    Metal,
-    Hexagon,
-    HexagonDma,
-    D3D12Compute,
-};
-
-/** An array containing all the device apis. Useful for iterating
- * through them. */
-const DeviceAPI all_device_apis[] = {DeviceAPI::None,
-                                     DeviceAPI::Host,
-                                     DeviceAPI::Default_GPU,
-                                     DeviceAPI::CUDA,
-                                     DeviceAPI::OpenCL,
-                                     DeviceAPI::GLSL,
-                                     DeviceAPI::OpenGLCompute,
-                                     DeviceAPI::Metal,
-                                     DeviceAPI::Hexagon,
-                                     DeviceAPI::HexagonDma,
-                                     DeviceAPI::D3D12Compute};
-
 /** An enum describing different address spaces to be used with Func::store_in. */
 enum class MemoryType {
     /** Let Halide select a storage type automatically */
@@ -485,18 +399,10 @@ enum class ForType {
 };
 
 /** Check if for_type executes for loop iterations in parallel and unordered. */
-inline bool is_unordered_parallel(ForType for_type) {
-    return (for_type == ForType::Parallel ||
-            for_type == ForType::GPUBlock ||
-            for_type == ForType::GPUThread);
-}
+bool is_unordered_parallel(ForType for_type);
 
 /** Returns true if for_type executes for loop iterations in parallel. */
-inline bool is_parallel(ForType for_type) {
-    return (is_unordered_parallel(for_type) ||
-            for_type == ForType::Vectorized ||
-            for_type == ForType::GPULane);
-}
+bool is_parallel(ForType for_type);
 
 /** A reference-counted handle to a statement node. */
 struct Stmt : public IRHandle {

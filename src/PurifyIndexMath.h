@@ -5,7 +5,7 @@
  * Removes side-effects in integer math.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

@@ -1411,11 +1411,11 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty, int id,
 Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
     const bool is_128B = target.has_feature(Halide::Target::HVX_128);
     llvm::Type *v_ty = v[0]->getType();
-    llvm::Type *element_ty = v_ty->getVectorElementType();
+    llvm::Type *element_ty = get_vector_element_type(v_ty);
     int element_bits = element_ty->getScalarSizeInBits();
     int native_elements =
         native_vector_bits() / element_ty->getScalarSizeInBits();
-    int result_elements = v_ty->getVectorNumElements() * v.size();
+    int result_elements = get_vector_num_elements(v_ty) * v.size();
     if (v.size() == 2) {
         // Interleaving two vectors.
         Value *a = v[0];
@@ -1459,9 +1459,9 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
         Value *lut = concat_vectors(v);
 
         std::vector<int> indices;
-        for (unsigned i = 0; i < v_ty->getVectorNumElements(); i++) {
+        for (int i = 0; i < get_vector_num_elements(v_ty); i++) {
             for (size_t j = 0; j < v.size(); j++) {
-                indices.push_back(j * v_ty->getVectorNumElements() + i);
+                indices.push_back(j * get_vector_num_elements(v_ty) + i);
             }
         }
 
@@ -1543,9 +1543,9 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     internal_assert(a_ty == b_ty);
 
     const bool is_128B = target.has_feature(Halide::Target::HVX_128);
-    int a_elements = static_cast<int>(a_ty->getVectorNumElements());
+    int a_elements = static_cast<int>(get_vector_num_elements(a_ty));
 
-    llvm::Type *element_ty = a->getType()->getVectorElementType();
+    llvm::Type *element_ty = get_vector_element_type(a->getType());
     internal_assert(element_ty);
     int element_bits = element_ty->getScalarSizeInBits();
     int native_elements = native_vector_bits() / element_bits;
@@ -1625,7 +1625,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 native_ty, MAKE_ID_PAIR(Intrinsic::hexagon_V6_lo).get(is_128B), {a});
             a_ty = a->getType();
             b_ty = b->getType();
-            a_elements = a_ty->getVectorNumElements();
+            a_elements = get_vector_num_elements(a_ty);
         }
         if (start == 0 && result_ty == a_ty) {
             return a;
@@ -1736,7 +1736,7 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
     // Split up the LUT into native vectors, using the max_index to
     // indicate how many we need.
     max_index =
-        std::min(max_index, static_cast<int>(lut_ty->getVectorNumElements()) - 1);
+        std::min(max_index, get_vector_num_elements(lut_ty) - 1);
     int native_idx_elements = native_vector_bits() / 8;
     int native_lut_elements =
         native_vector_bits() / lut_ty->getScalarSizeInBits();
@@ -1754,10 +1754,10 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
     internal_assert(!lut_slices.empty());
 
     llvm::Type *native_result_ty = llvm::VectorType::get(
-        lut_ty->getVectorElementType(), native_idx_elements);
+        get_vector_element_type(lut_ty), native_idx_elements);
 
     // The result will have the same number of elements as idx.
-    int idx_elements = idx_ty->getVectorNumElements();
+    int idx_elements = get_vector_num_elements(idx_ty);
 
     // Each LUT has 1 pair of even/odd mask values for HVX 64, 2 for
     // HVX 128.  We may not need all of the passes, if the LUT has
@@ -1900,8 +1900,8 @@ bool generate_vdelta(const std::vector<int> &indices, bool reverse,
 Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     bool is_128B = target.has_feature(Halide::Target::HVX_128);
     llvm::Type *lut_ty = lut->getType();
-    int lut_elements = lut_ty->getVectorNumElements();
-    llvm::Type *element_ty = lut_ty->getVectorElementType();
+    int lut_elements = get_vector_num_elements(lut_ty);
+    llvm::Type *element_ty = get_vector_element_type(lut_ty);
     int element_bits = element_ty->getScalarSizeInBits();
     int native_elements =
         native_vector_bits() / element_ty->getScalarSizeInBits();
@@ -2015,10 +2015,11 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
 static Value *create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
     Constant *value = ConstantInt::get(scalar_ty, val);
+    const int e = get_vector_num_elements(ty);
 #if LLVM_VERSION >= 110
-    const llvm::ElementCount elem_count(ty->getVectorNumElements(), /*scalable*/ false);
+    const llvm::ElementCount elem_count(e, /*scalable*/ false);
 #else
-    const int elem_count = ty->getVectorNumElements();
+    const int elem_count = e;
 #endif
     return ConstantVector::getSplat(elem_count, value);
 }
@@ -2028,9 +2029,9 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     internal_assert(idx_elem_size <= 16)
         << "Index element for lookup tables must be <= 16 bits in size.\n";
     llvm::Type *lut_ty = lut->getType();
-    llvm::Type *result_ty = VectorType::get(lut_ty->getVectorElementType(),
-                                            idx->getType()->getVectorNumElements());
-    const unsigned idx_elems = idx->getType()->getVectorNumElements();
+    llvm::Type *result_ty = VectorType::get(get_vector_element_type(lut_ty),
+                                            get_vector_num_elements(idx->getType()));
+    const unsigned idx_elems = get_vector_num_elements(idx->getType());
 
     // Construct a new index with 16-bit elements.
     unsigned idx16_elems = idx_elems;
@@ -2062,7 +2063,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         internal_assert(max_index <= 32676)
             << "Index range for lookup table must be <= 32676\n";
         lut_ty = VectorType::get(i16_t,
-                                 lut_ty->getVectorNumElements() * replicate);
+                                 get_vector_num_elements(lut_ty) * replicate);
         lut = builder->CreateBitCast(lut, lut_ty);
     }
 
@@ -2128,7 +2129,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
     // at compile time.
     vector<Constant *> llvm_indices;
     llvm_indices.reserve(indices.size());
-    int min_index = lut->getType()->getVectorNumElements();
+    int min_index = get_vector_num_elements(lut->getType());
     int max_index = 0;
     for (int i : indices) {
         if (i != -1) {
@@ -2200,8 +2201,8 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
     llvm::Function *fn = module->getFunction(name);
     if (maybe && !fn) return nullptr;
     internal_assert(fn) << "Function '" << name << "' not found\n";
-    if (fn->getReturnType()->getVectorNumElements() * 2 <=
-        static_cast<unsigned>(result_type.lanes())) {
+    if (get_vector_num_elements(fn->getReturnType()) * 2 <=
+        result_type.lanes()) {
         // We have fewer than half as many lanes in our intrinsic as
         // we have in the call. Check to see if a double vector
         // version of this intrinsic exists.
@@ -2210,7 +2211,7 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
             fn = fn2;
         }
     }
-    return call_intrin(result_type, fn->getReturnType()->getVectorNumElements(),
+    return call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
                        get_llvm_function_name(fn), std::move(args));
 }
 
@@ -2219,8 +2220,8 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
     llvm::Function *fn = module->getFunction(name);
     if (maybe && !fn) return nullptr;
     internal_assert(fn) << "Function '" << name << "' not found\n";
-    if (fn->getReturnType()->getVectorNumElements() * 2 <=
-        result_type->getVectorNumElements()) {
+    if (get_vector_num_elements(fn->getReturnType()) * 2 <=
+        get_vector_num_elements(result_type)) {
         // We have fewer than half as many lanes in our intrinsic as
         // we have in the call. Check to see if a double vector
         // version of this intrinsic exists.
@@ -2229,7 +2230,7 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
             fn = fn2;
         }
     }
-    return call_intrin(result_type, fn->getReturnType()->getVectorNumElements(),
+    return call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
                        get_llvm_function_name(fn), std::move(args));
 }
 

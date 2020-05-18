@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -15,6 +16,7 @@
 #include "BoundsInference.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
+#include "CompilerLogger.h"
 #include "Debug.h"
 #include "DebugArguments.h"
 #include "DebugToFile.h"
@@ -85,6 +87,8 @@ Module lower(const vector<Function> &output_funcs,
              const vector<Stmt> &requirements,
              bool trace_pipeline,
              const vector<IRMutator *> &custom_passes) {
+    auto time_start = std::chrono::high_resolution_clock::now();
+
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
 
@@ -156,20 +160,6 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Computing bounds of each function's value\n";
     FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
 
-    bool will_inject_host_copies =
-        (t.has_gpu_feature() ||
-         t.has_feature(Target::OpenGLCompute) ||
-         t.has_feature(Target::OpenGL) ||
-         t.has_feature(Target::HexagonDma) ||
-         (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))));
-
-    // The checks will be in terms of the symbols defined by bounds
-    // inference.
-    debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
-    debug(2) << "Lowering after injecting image checks:\n"
-             << s << "\n";
-
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
@@ -188,6 +178,19 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after sliding window:\n"
              << s << "\n";
 
+    // This uniquifies the variable names, so we're good to simplify
+    // after this point. This lets later passes assume syntactic
+    // equivalence means semantic equivalence.
+    debug(1) << "Uniquifying variable names...\n";
+    s = uniquify_variable_names(s);
+    debug(2) << "Lowering after uniquifying variable names:\n"
+             << s << "\n\n";
+
+    debug(1) << "Simplifying...\n";
+    s = simplify(s, false);  // Storage folding and allocation bounds inference needs .loop_max symbols
+    debug(2) << "Lowering after first simplification:\n"
+             << s << "\n\n";
+
     debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
     debug(2) << "Lowering after simplifying correlated differences:\n"
@@ -198,22 +201,21 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after allocation bounds inference:\n"
              << s << "\n";
 
+    bool will_inject_host_copies =
+        (t.has_gpu_feature() ||
+         t.has_feature(Target::OpenGLCompute) ||
+         t.has_feature(Target::OpenGL) ||
+         t.has_feature(Target::HexagonDma) ||
+         (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))));
+
+    debug(1) << "Adding checks for images\n";
+    s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
+    debug(2) << "Lowering after injecting image checks:\n"
+             << s << '\n';
+
     debug(1) << "Removing code that depends on undef values...\n";
     s = remove_undef(s);
     debug(2) << "Lowering after removing code that depends on undef values:\n"
-             << s << "\n\n";
-
-    // This uniquifies the variable names, so we're good to simplify
-    // after this point. This lets later passes assume syntactic
-    // equivalence means semantic equivalence.
-    debug(1) << "Uniquifying variable names...\n";
-    s = uniquify_variable_names(s);
-    debug(2) << "Lowering after uniquifying variable names:\n"
-             << s << "\n\n";
-
-    debug(1) << "Simplifying...\n";
-    s = simplify(s, false);  // Storage folding needs .loop_max symbols
-    debug(2) << "Lowering after first simplification:\n"
              << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
@@ -525,6 +527,13 @@ Module lower(const vector<Function> &output_funcs,
     }
 
     result_module.append(main_func);
+
+    auto *logger = get_compiler_logger();
+    if (logger) {
+        auto time_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = time_end - time_start;
+        logger->record_compilation_time(CompilerLogger::Phase::HalideLowering, diff.count());
+    }
 
     return result_module;
 }

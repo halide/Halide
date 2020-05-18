@@ -127,6 +127,7 @@ WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGL ?= not-empty
 WITH_D3D12 ?= not-empty
+WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 
@@ -475,6 +476,7 @@ SOURCE_FILES = \
   CodeGen_RISCV.cpp \
   CodeGen_WebAssembly.cpp \
   CodeGen_X86.cpp \
+  CompilerLogger.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
   Debug.cpp \
@@ -492,6 +494,7 @@ SOURCE_FILES = \
   EliminateBoolVectors.cpp \
   EmulateFloat16Math.cpp \
   Error.cpp \
+  Expr.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   Float16.cpp \
@@ -546,6 +549,7 @@ SOURCE_FILES = \
   Qualify.cpp \
   Random.cpp \
   RDom.cpp \
+  Realization.cpp \
   RealizationOrder.cpp \
   Reduction.cpp \
   RegionCosts.cpp \
@@ -645,6 +649,7 @@ HEADER_FILES = \
   CodeGen_RISCV.h \
   CodeGen_WebAssembly.h \
   CodeGen_X86.h \
+  CompilerLogger.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
   CSE.h \
@@ -655,6 +660,7 @@ HEADER_FILES = \
   Deinterleave.h \
   Derivative.h \
   DerivativeUtils.h \
+  DeviceAPI.h \
   DeviceArgument.h \
   DeviceInterface.h \
   Dimension.h \
@@ -666,6 +672,7 @@ HEADER_FILES = \
   Expr.h \
   ExprUsesVar.h \
   Extern.h \
+  ExternFuncArgument.h \
   FastIntegerDivide.h \
   FindCalls.h \
   Float16.h \
@@ -1197,6 +1204,10 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCP
 
 # https://github.com/halide/Halide/issues/2093
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_parallel,$(GENERATOR_AOTCPP_TESTS))
+
+# https://github.com/halide/Halide/issues/4916
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
 
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
 

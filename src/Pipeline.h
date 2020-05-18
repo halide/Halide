@@ -126,7 +126,7 @@ public:
         }
         RealizationArg(RealizationArg &&from) = default;
 
-        size_t size() {
+        size_t size() const {
             if (r != nullptr) {
                 return r->size();
             } else if (buffer_list) {
@@ -136,9 +136,8 @@ public:
         }
     };
 
+private:
     Internal::IntrusivePtr<PipelineContents> contents;
-
-    std::vector<Argument> infer_arguments(const Internal::Stmt &body);
 
     struct JITCallArgs;  // Opaque structure to optimize away dynamic allocation in this path.
 
@@ -171,6 +170,8 @@ public:
     /** Make a pipeline that computes the givens Funcs as
      * outputs. Schedules the Funcs compute_root(). */
     Pipeline(const std::vector<Func> &outputs);
+
+    std::vector<Argument> infer_arguments(const Internal::Stmt &body);
 
     /** Get the Funcs this pipeline outputs. */
     std::vector<Func> outputs() const;

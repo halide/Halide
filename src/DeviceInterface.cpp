@@ -1,7 +1,9 @@
 #include "DeviceInterface.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "JITModule.h"
 #include "Target.h"
+#include "runtime/HalideBuffer.h"
 
 using namespace Halide;
 using namespace Halide::Internal;

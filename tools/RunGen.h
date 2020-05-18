@@ -13,6 +13,8 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <utility>
+
 #include <vector>
 
 namespace Halide {
@@ -78,7 +80,7 @@ struct Logger {
         : out(log_out), info(log_cerr), warn(log_cerr), fail(log_fail) {
     }
     Logger(LogFn o, LogFn i, LogFn w, LogFn f)
-        : out(o), info(i), warn(w), fail(f) {
+        : out(std::move(o)), info(std::move(i)), warn(std::move(w)), fail(std::move(f)) {
     }
 
 private:
@@ -116,7 +118,7 @@ struct LogEmitter {
 
 protected:
     explicit LogEmitter(Logger::LogFn f)
-        : f(f) {
+        : f(std::move(f)) {
     }
 
 private:
@@ -772,7 +774,7 @@ struct ArgData {
         }
     }
 
-    Buffer<> load_buffer(Shape shape, const halide_filter_argument_t *argument_metadata) {
+    Buffer<> load_buffer(const Shape &shape, const halide_filter_argument_t *argument_metadata) {
         ShapePromise promise = [shape]() -> Shape { return shape; };
         return load_buffer(promise, argument_metadata);
     }
@@ -992,15 +994,15 @@ public:
                 // If this gets any more complex, smarten it up, but for now,
                 // simpleminded code is fine.
                 if (arg.raw_string == "default") {
-                    values.push_back({arg.metadata->scalar_def, "default"});
+                    values.emplace_back(arg.metadata->scalar_def, "default");
                 } else if (arg.raw_string == "estimate") {
-                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
+                    values.emplace_back(arg.metadata->scalar_estimate, "estimate");
                 } else if (arg.raw_string == "default,estimate") {
-                    values.push_back({arg.metadata->scalar_def, "default"});
-                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
+                    values.emplace_back(arg.metadata->scalar_def, "default");
+                    values.emplace_back(arg.metadata->scalar_estimate, "estimate");
                 } else if (arg.raw_string == "estimate,default") {
-                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
-                    values.push_back({arg.metadata->scalar_def, "default"});
+                    values.emplace_back(arg.metadata->scalar_estimate, "estimate");
+                    values.emplace_back(arg.metadata->scalar_def, "default");
                 }
                 if (!values.empty()) {
                     bool set = false;

@@ -5,7 +5,7 @@
  * Defines the lowering pass that vectorizes loops marked as such
  */
 
-#include "IR.h"
+#include "Expr.h"
 #include "Target.h"
 
 namespace Halide {

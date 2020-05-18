@@ -116,7 +116,9 @@ endif()
 
 string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-stdlib=libc++" LLVM_LIBCXX)
 if (LLVM_LIBCXX GREATER -1)
-  add_compile_options(-stdlib=libc++)
+  # Plain C tests must not try to link libc++ with the "clang" driver...
+  add_compile_options($<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
+  # ...only using the linker command.
   if(COMMAND add_link_options)
     add_link_options(-stdlib=libc++)
   else()

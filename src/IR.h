@@ -6,22 +6,21 @@
  */
 
 #include <string>
-#include <utility>
 #include <vector>
 
-#include "Debug.h"
-#include "Error.h"
+#include "Buffer.h"
 #include "Expr.h"
-#include "Function.h"
-#include "IntrusivePtr.h"
+#include "FunctionPtr.h"
 #include "ModulusRemainder.h"
 #include "Parameter.h"
+#include "PrefetchDirective.h"
+#include "Reduction.h"
 #include "Type.h"
-#include "Util.h"
-#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */
@@ -494,12 +493,14 @@ struct Call : public ExprNode<Call> {
     enum IntrinsicOp {
         abs,
         absd,
+        add_image_checks_marker,
         alloca,
         bitwise_and,
         bitwise_not,
         bitwise_or,
         bitwise_xor,
         bool_to_mask,
+        bundle,  // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
         call_cached_indirect_function,
         cast_mask,
         count_leading_zeros,

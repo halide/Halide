@@ -205,12 +205,6 @@ void check_algebra() {
     check(x * y - z * x, (y - z) * x);
     check(y * x - x * z, (y - z) * x);
     check(y * x - z * x, (y - z) * x);
-    check(x - y * -2, y * 2 + x);
-    check(x + y * -2, x - y * 2);
-    check(x * -2 + y, y - x * 2);
-    check(xf - yf * -2.0f, y * 2.0f + xf);
-    check(xf + yf * -2.0f, xf - y * 2.0f);
-    check(xf * -2.0f + yf, yf - x * 2.0f);
 
     check((x * 8) - (y * 4), (x * 2 - y) * 4);
     check((x * 4) - (y * 8), (x - y * 2) * 4);
@@ -261,7 +255,8 @@ void check_algebra() {
     check((x * (-4)) / 2, x * (-2));
     check((x * 4 + y) / 2, y / 2 + x * 2);
     check((y + x * 4) / 2, y / 2 + x * 2);
-    check((x * 4 - y) / 2, (0 - y) / 2 + x * 2);
+    check((x * 2 - y) / 2, (0 - y) / 2 + x);
+    check((x * -2 - y) / 2, (0 - y) / 2 - x);
     check((y - x * 4) / 2, y / 2 - x * 2);
     check((x + 3) / 2 + 7, (x + 17) / 2);
     check((x / 2 + 3) / 5, (x + 6) / 10);
@@ -277,11 +272,12 @@ void check_algebra() {
     check(((x * 4 + y) + z) / 2, (y + z) / 2 + x * 2);
     check(((x * 4 - y) + z) / 2, (z - y) / 2 + x * 2);
     check(((x * 4 + y) - z) / 2, (y - z) / 2 + x * 2);
-    check(((x * 4 - y) - z) / 2, (0 - y - z) / 2 + x * 2);
+    check(((x * 2 - y) - z) / 2, (0 - y - z) / 2 + x);
+    check(((x * -2 - y) - z) / 2, (0 - y - z) / 2 - x);
     check((x + (y * 4 + z)) / 2, (x + z) / 2 + y * 2);
     check(((x + y * 4) + z) / 2, (x + z) / 2 + y * 2);
     check((x + (y * 4 - z)) / 2, (x - z) / 2 + y * 2);
-    check((x - (y * 4 + z)) / 2, (x - z) / 2 - y * 2);
+    check((x - (y * 4 + z)) / 2, (x - z) / 2 + y * -2);
     check((x - (y * 4 - z)) / 2, (x + z) / 2 - y * 2);
 
     // Pull out the gcd of the numerator and divisor
@@ -415,9 +411,9 @@ void check_algebra() {
     check((w + x) - ((w + x) - y * z) / -3, (w + x) - ((w + x) - y * z) / -3);
     check(x - (y + x) / -2, x - (x + y) / -2);
     check(x - (y - x) / -6, x - (y - x) / -6);
-    check((x + y) / 3 - x, (y - x * 2) / 3);
+    check((x + y) / 3 - x, (x * -2 + y) / 3);
     check((x * y - w) / 4 - x * y, (x * y * (-3) - w) / 4);
-    check((y + x) / 5 - x, (y - x * 4) / 5);
+    check((y + x) / 5 - x, (x * -4 + y) / 5);
     check((y - x) / 6 - x, (y - x * 7) / 6);
     check(1 - (1 + y) / 2 - 1, (0 - y) / 2);
     check(1 - (-y + 1) / 2 - 1, y / 2);
@@ -747,16 +743,6 @@ void check_bounds() {
 
     check((x + 3) / 4 - (x + 2) / 4, ((x + 2) % 4 + 1) / 4);
 
-    check(x - min(x + y, z), max(-y, x - z));
-    check(x - min(y + x, z), max(-y, x - z));
-    check(x - min(z, x + y), max(-y, x - z));
-    check(x - min(z, y + x), max(-y, x - z));
-
-    check(min(x + y, z) - x, min(z - x, y));
-    check(min(y + x, z) - x, min(z - x, y));
-    check(min(z, x + y) - x, min(z - x, y));
-    check(min(z, y + x) - x, min(z - x, y));
-
     check(min(x + y, y + z), min(x, z) + y);
     check(min(y + x, y + z), min(x, z) + y);
     check(min(x + y, y + z), min(x, z) + y);
@@ -925,6 +911,77 @@ void check_bounds() {
     check(max((x * 32 + y) * 4, x * 128 + 4), (max(y, 1) + x * 32) * 4);
     check(max((y + x * 32) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
     check(max((y + x * 32) * 4, x * 128 + 4), (max(y, 1) + x * 32) * 4);
+
+    check((min(x + y, z) + w) - x, min(z - x, y) + w);
+    check(min((x + y) + w, z) - x, min(z - x, w + y));
+
+    check(min(min(x + z, y), w) - x, min(min(w, y) - x, z));
+    check(min(min(y, x + z), w) - x, min(min(w, y) - x, z));
+
+    // Two- and three-deep cancellations into min/max nodes
+    check((x - min(z, (x + y))), (0 - min(z - x, y)));
+    check((x - min(z, (y + x))), (0 - min(z - x, y)));
+    check((x - min((x + y), z)), (0 - min(z - x, y)));
+    check((x - min((y + x), z)), (0 - min(z - x, y)));
+    check((x - min(y, (w + (x + z)))), (0 - min((y - x), (w + z))));
+    check((x - min(y, (w + (z + x)))), (0 - min((y - x), (w + z))));
+    check((x - min(y, ((x + z) + w))), (0 - min((y - x), (w + z))));
+    check((x - min(y, ((z + x) + w))), (0 - min((y - x), (w + z))));
+    check((x - min((w + (x + z)), y)), (0 - min((y - x), (w + z))));
+    check((x - min((w + (z + x)), y)), (0 - min((y - x), (w + z))));
+    check((x - min(((x + z) + w), y)), (0 - min((y - x), (w + z))));
+    check((x - min(((z + x) + w), y)), (0 - min((y - x), (w + z))));
+
+    check(min(x + y, z) - x, min(z - x, y));
+    check(min(y + x, z) - x, min(z - x, y));
+    check(min(z, x + y) - x, min(z - x, y));
+    check(min(z, y + x) - x, min(z - x, y));
+    check((min(x, (w + (y + z))) - z), min(x - z, w + y));
+    check((min(x, (w + (z + y))) - z), min(x - z, w + y));
+    check((min(x, ((y + z) + w)) - z), min(x - z, w + y));
+    check((min(x, ((z + y) + w)) - z), min(x - z, w + y));
+    check((min((w + (y + z)), x) - z), min(x - z, w + y));
+    check((min((w + (z + y)), x) - z), min(x - z, w + y));
+    check((min(((y + z) + w), x) - z), min(x - z, w + y));
+    check((min(((z + y) + w), x) - z), min(x - z, w + y));
+
+    check((x - max(z, (x + y))), (0 - max(z - x, y)));
+    check((x - max(z, (y + x))), (0 - max(z - x, y)));
+    check((x - max((x + y), z)), (0 - max(z - x, y)));
+    check((x - max((y + x), z)), (0 - max(z - x, y)));
+    check((x - max(y, (w + (x + z)))), (0 - max((y - x), (w + z))));
+    check((x - max(y, (w + (z + x)))), (0 - max((y - x), (w + z))));
+    check((x - max(y, ((x + z) + w))), (0 - max((y - x), (w + z))));
+    check((x - max(y, ((z + x) + w))), (0 - max((y - x), (w + z))));
+    check((x - max((w + (x + z)), y)), (0 - max((y - x), (w + z))));
+    check((x - max((w + (z + x)), y)), (0 - max((y - x), (w + z))));
+    check((x - max(((x + z) + w), y)), (0 - max((y - x), (w + z))));
+    check((x - max(((z + x) + w), y)), (0 - max((y - x), (w + z))));
+
+    check(max(x + y, z) - x, max(z - x, y));
+    check(max(y + x, z) - x, max(z - x, y));
+    check(max(z, x + y) - x, max(z - x, y));
+    check(max(z, y + x) - x, max(z - x, y));
+    check((max(x, (w + (y + z))) - z), max(x - z, w + y));
+    check((max(x, (w + (z + y))) - z), max(x - z, w + y));
+    check((max(x, ((y + z) + w)) - z), max(x - z, w + y));
+    check((max(x, ((z + y) + w)) - z), max(x - z, w + y));
+    check((max((w + (y + z)), x) - z), max(x - z, w + y));
+    check((max((w + (z + y)), x) - z), max(x - z, w + y));
+    check((max(((y + z) + w), x) - z), max(x - z, w + y));
+    check((max(((z + y) + w), x) - z), max(x - z, w + y));
+
+    check(min((x + y) * 7 + z, w) - x * 7, min(w - x * 7, y * 7 + z));
+    check(min((y + x) * 7 + z, w) - x * 7, min(w - x * 7, y * 7 + z));
+
+    check(min(x * 12 + y, z) / 4 - x * 3, min(z - x * 12, y) / 4);
+    check(min(z, x * 12 + y) / 4 - x * 3, min(z - x * 12, y) / 4);
+
+    check((min(x * 12 + y, z) + w) / 4 - x * 3, (min(z - x * 12, y) + w) / 4);
+    check((min(z, x * 12 + y) + w) / 4 - x * 3, (min(z - x * 12, y) + w) / 4);
+
+    check(min((min(((y + 5) / 2), x) * 2), y + 3), min(x * 2, y + 3));
+    check(min((min(((y + 1) / 3), x) * 3) + 1, y), min(x * 3 + 1, y));
 
     {
         Expr one = 1;
@@ -1462,8 +1519,47 @@ void check_boolean() {
     check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
 
     // A for loop where the extent is at most one can just be an if statement
-    check(IfThenElse::make(x == y % 2, loop), IfThenElse::make(x == y % 2, IfThenElse::make(0 < x, body)));
+    check(IfThenElse::make(y % 2 == x, loop), IfThenElse::make(y % 2 == x, IfThenElse::make(0 < x, body)));
 
+    // Check we can learn from bounds on variables
+    check(IfThenElse::make(x < 5, Evaluate::make(min(x, 17))),
+          IfThenElse::make(x < 5, Evaluate::make(x)));
+
+    check(IfThenElse::make(x < min(y, 5), Evaluate::make(min(x, 17))),
+          IfThenElse::make(x < min(y, 5), Evaluate::make(x)));
+
+    check(IfThenElse::make(5 < x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(5 < x, Evaluate::make(x)));
+
+    check(IfThenElse::make(max(y, 5) < x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(max(y, 5) < x, Evaluate::make(x)));
+
+    check(IfThenElse::make(x <= 5, Evaluate::make(min(x, 17))),
+          IfThenElse::make(x <= 5, Evaluate::make(x)));
+
+    check(IfThenElse::make(x <= min(y, 5), Evaluate::make(min(x, 17))),
+          IfThenElse::make(x <= min(y, 5), Evaluate::make(x)));
+
+    check(IfThenElse::make(5 <= x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(5 <= x, Evaluate::make(x)));
+
+    check(IfThenElse::make(max(y, 5) <= x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(max(y, 5) <= x, Evaluate::make(x)));
+
+    // Concretely, this lets us skip some redundant assertions
+    check(Block::make(AssertStmt::make(max(y, 3) < x, x),
+                      AssertStmt::make(0 < x, x)),
+          Block::make(AssertStmt::make(max(y, 3) < x, x),
+                      Evaluate::make(0)));
+
+    // Check it works transitively
+    check(IfThenElse::make(0 < x,
+                           IfThenElse::make(x < y,
+                                            IfThenElse::make(y < z,
+                                                             Evaluate::make(z == 2)))),
+          // z can't possibly be two, because x is at least one, so y
+          // is at least two, so z must be at least three.
+          Evaluate::make(const_false()));
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
     check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
@@ -1506,7 +1602,6 @@ void check_boolean() {
     check(select(cond, x % y, z % y), select(cond, x, z) % y);
 
     {
-
         Expr b[12];
         for (int i = 0; i < 12; i++) {
             b[i] = Variable::make(Bool(), unique_name('b'));
@@ -1706,13 +1801,13 @@ void check_bitwise() {
     check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);
     check(cast(Int(16), x) >> 10, cast(Int(16), x) / 1024);
 
-    // Correctly triggers an error (shift by negative amount).
-    // check(cast(Int(16), x) << -10, 0);
-    // check(cast(Int(16), x) >> -10, 0);
+    // Shift by negative amount is a shift in the opposite direction
+    check(cast(Int(16), x) << -10, cast(Int(16), x) / 1024);
+    check(cast(Int(16), x) >> -10, cast(Int(16), x) * 1024);
 
-    // Correctly triggers an error (shift by >= type size).
-    // check(cast(Int(16), x) << 20, 0);
-    // check(cast(Int(16), x) >> 20, 0);
+    // Shift by >= type size is an overflow
+    check_is_sio(cast(Int(16), x) << 20);
+    check_is_sio(cast(Int(16), x) >> 20);
 
     // Check bitwise_and. (Added as result of a bug.)
     // TODO: more coverage of bitwise_and and bitwise_or.

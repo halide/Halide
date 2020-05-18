@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 
+#include "ExternFuncArgument.h"
+#include "Function.h"
 #include "IRVisitor.h"
 #include "InferArguments.h"
 

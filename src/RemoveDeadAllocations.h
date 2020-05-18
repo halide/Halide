@@ -6,7 +6,7 @@
  * are not used.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

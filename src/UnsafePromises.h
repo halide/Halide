@@ -5,7 +5,7 @@
  * Defines the lowering pass that removes unsafe promises
  */
 
-#include "IR.h"
+#include "Expr.h"
 #include "Target.h"
 
 namespace Halide {

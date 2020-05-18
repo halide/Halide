@@ -12,7 +12,6 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Introspection.h"
 #include "ParallelRVar.h"
 #include "Random.h"
 #include "Scope.h"
@@ -901,6 +900,10 @@ const std::string &Function::debug_file() const {
 
 std::string &Function::debug_file() {
     return contents->debug_file;
+}
+
+Function::operator ExternFuncArgument() const {
+    return ExternFuncArgument(contents);
 }
 
 void Function::trace_loads() {
