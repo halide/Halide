@@ -455,7 +455,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             idx += Variable::make(Int(32), thread_id_var_name);
         }
         Expr base = 0;
-        if (device_api == DeviceAPI::OpenGLCompute) {
+        if (device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) {
             if (alloc->memory_type == MemoryType::Heap) {
                 base = Variable::make(Int(32), alloc->name + ".base");
             }
@@ -476,7 +476,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             Expr predicate = mutate(op->predicate);
             Expr index = mutate_index(alloc, op->index);
             const string &prefix = name_for_memory_type(alloc->memory_type);
-            if (device_api == DeviceAPI::OpenGLCompute) {
+            if (device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) {
                 return Load::make(op->type, prefix + "_" + alloc->name,
                                   index, op->image, op->param, predicate, op->alignment);
             } else {
@@ -498,7 +498,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             Expr index = mutate_index(alloc, op->index);
             Expr value = mutate(op->value);
             const string &prefix = name_for_memory_type(alloc->memory_type);
-            if (device_api == DeviceAPI::OpenGLCompute) {
+            if (device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) {
                 return Store::make(prefix + "_" + alloc->name, value, index,
                                    op->param, predicate, op->alignment);
             } else {
@@ -568,7 +568,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
                     continue;
                 }
 
-                if (device_api == DeviceAPI::OpenGLCompute &&
+                if ((device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) &&
                     mem_allocs[free_spaces[i]].group[0].type != alloc.type) {
                     // Types must also match for OpenGLCompute
                     continue;
@@ -590,7 +590,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
                     continue;
                 }
 
-                if (device_api == DeviceAPI::OpenGLCompute &&
+                if ((device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) &&
                     mem_allocs[free_spaces[i]].group[0].type != alloc.type) {
                     // Types must also match for OpenGLCompute
                     continue;
@@ -706,7 +706,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
 public:
     Stmt rewrap_block(Stmt s, const ExtractBlockSize &bs) {
 
-        if (device_api == DeviceAPI::OpenGLCompute) {
+        if (device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) {
 
             vector<SharedAllocation> heap_allocs;
 

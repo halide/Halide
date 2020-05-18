@@ -48,8 +48,8 @@ int main(int argc, char **argv) {
                 float correct = 64 * x + 64 * y + 64 * i + 320;
                 float actual = result(x, y);
                 if (correct != actual) {
-                    printf("result(%d, %d) = %f instead of %f\n",
-                           x, y, actual, correct);
+                    printf("result[%d](%d, %d) = %f instead of %f\n",
+                           i, x, y, actual, correct);
                     return -1;
                 }
             }
