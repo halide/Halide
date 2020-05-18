@@ -296,6 +296,19 @@ struct Dim {
                 ImpureRVar };
     Type dim_type;
 
+    std::string dim_type_name() const {
+        switch(dim_type) {
+            case PureVar:
+            return "PureVar";
+            case PureRVar:
+            return "PureRVar";
+            case ImpureRVar:
+            return "ImpureRVar";
+            default:
+            return "unknown value " + std::to_string(dim_type);
+        }
+    }
+
     bool is_pure() const {
         return (dim_type == PureVar) || (dim_type == PureRVar);
     }
