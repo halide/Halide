@@ -1,0 +1,5 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 26.5946ms
+Auto-scheduled time: 46.8785ms
+make: Leaving directory '/scratch/ameerh/Halide/apps/mat_mul'

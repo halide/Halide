@@ -1,0 +1,30 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
+bin/host/lens_blur.generator -g lens_blur -e static_library,h,registration,stmt,assembly -o bin/host -f lens_blur target=host auto_schedule=false
+bin/host/lens_blur.generator -g lens_blur -e static_library,h,registration,stmt,assembly -o bin/host -f lens_blur_auto_schedule target=host-no_runtime auto_schedule=true -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-no_runtime-sse41
+Seed = 1589677095
+mcts_depth 152
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -6.82392
+finished depth 1 best value so far -6.82392
+Cost evaluated this many times: 1135913
+best intermediate value -6.81453
+finished depth 2 best value so far -6.81453
+Cost evaluated this many times: 2257120
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -6.81453
+Cost evaluated this many times: 2257120
+best intermediate value -6.75845
+finished depth 4 best value so far -6.75845
+Cost evaluated this many times: 3335976
+Makefile:19: recipe for target 'bin/host/lens_blur_auto_schedule.a' failed
+make: *** [bin/host/lens_blur_auto_schedule.a] Segmentation fault (core dumped)
+rm bin/host/lens_blur.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
+
+
+RL_END_OF_RUN 0
+
