@@ -1,0 +1,116 @@
+#!/usr/bin/env python3.6
+
+from statistics import median
+
+#apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul resnet_50_blockwise".split(" ")
+apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul".split(" ")
+autoschedulers="random greedy beam mcts".split(" ")
+
+def strip_non_digits(s):
+    return "".join([c for c in s if c.isdigit() or c == "."])
+
+
+END_OF_RUN = "RL_END_OF_RUN"
+
+def get_min(fname, scale, linestart="Auto-scheduled time:"):
+    value = 0
+    values = []
+
+    try:
+        with open(fname) as f:
+            for line in f:
+                if line.startswith(linestart):
+                    value += float(strip_non_digits(line)) / scale
+                elif line.startswith(END_OF_RUN):
+                    values.append(value)
+                    value = 0
+    except FileNotFoundError:
+        pass
+
+    if len(values) == 0:
+        values.append(value)
+
+    return min(values)
+
+
+def get_result(fname, scale, linestart="Auto-scheduled time:"):
+    value = 0
+    values = []
+
+    try:
+        with open(fname) as f:
+            for line in f:
+                if line.startswith(linestart):
+                    value = float(strip_non_digits(line)) / scale
+                    values.append(value)
+                elif line.startswith(END_OF_RUN):
+                    raise
+    except FileNotFoundError:
+        pass
+
+    return values
+
+with open('bm_runtime.csv','w') as f: 
+    print("random,greedy,beam,mcts")
+    f.write("random,greedy,beam,mcts\n")
+    all_results = []
+    for app in apps:
+        #scale = 1000 if app != "camera_pipe" else 1000000
+        scale = 1 
+        results = []
+        for autoscheduler in autoschedulers: 
+            if autoscheduler == 'random':
+                result = get_min(f"../{autoscheduler}/{app}.randtime.txt", scale)
+            else:
+                result = get_min(f"../{autoscheduler}/{app}.txt", scale)
+            results.append(str(result))
+        print("{},{}".format(app, (',').join(results)))
+        f.write("{},{}\n".format(app, (',').join(results)))
+    print("\n")
+
+with open('mincost.csv','w') as f: 
+    print("random,greedy,beam,mcts")
+    f.write("random,greedy,beam,mcts\n")
+    all_results = []
+    for app in apps:
+        #scale = 1000 if app != "camera_pipe" else 1000000
+        scale = 1 
+        results = []
+        for autoscheduler in autoschedulers: 
+            result = get_result(f"../{autoscheduler}/{app}.mincost.txt", scale, "JENNY_MINCOST: ")
+            result = min(result)
+            results.append(str(result))
+        print("{},{}".format(app, (',').join(results)))
+        f.write("{},{}\n".format(app, (',').join(results)))
+    print("\n")
+
+with open('evaltime.csv','w') as f: 
+    print("random,greedy,beam,mcts")
+    f.write("random,greedy,beam,mcts\n")
+    for app in apps:
+        #scale = 1000 if app != "camera_pipe" else 1000000
+        scale = 1 
+        results = []
+        for autoscheduler in autoschedulers: 
+            result = get_result(f"../{autoscheduler}/{app}.evaltime.txt", scale, "JENNY_EVALTIME: ")
+            result = sum(result)
+            results.append(str(result))
+
+        print("{},{}".format(app, (',').join(results)))
+        f.write("{},{}\n".format(app, (',').join(results)))
+print("\n")
+
+with open('algo_runtime.csv','w') as f: 
+    print("random,greedy,beam,mcts")
+    f.write("random,greedy,beam,mcts\n")
+    for app in apps:
+        #scale = 1000 if app != "camera_pipe" else 1000000
+        scale = 1 
+        results = []
+        for autoscheduler in autoschedulers: 
+            result = get_result(f"../{autoscheduler}/{app}.runtime.txt", scale, f"{app} ")
+            result = sum(result)
+            results.append(str(result))
+        print("{},{}".format(app, (',').join(results)))
+        f.write("{},{}\n".format(app, (',').join(results)))
+

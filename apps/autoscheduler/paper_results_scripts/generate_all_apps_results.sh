@@ -1,4 +1,5 @@
-autoschedulers="master greedy beam mcts"
+autoschedulers="random greedy beam mcts"
+#autoschedulers="master greedy beam mcts"
 
 if [ $# -lt 1 ]; then
     weights=""
@@ -32,4 +33,4 @@ done
 
 cd plots
 ./extract > results.csv
-
+./extract_run
