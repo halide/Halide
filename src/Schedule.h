@@ -297,14 +297,14 @@ struct Dim {
     Type dim_type;
 
     std::string dim_type_name() const {
-        switch(dim_type) {
-            case PureVar:
+        switch (dim_type) {
+        case PureVar:
             return "PureVar";
-            case PureRVar:
+        case PureRVar:
             return "PureRVar";
-            case ImpureRVar:
+        case ImpureRVar:
             return "ImpureRVar";
-            default:
+        default:
             return "unknown value " + std::to_string(dim_type);
         }
     }
