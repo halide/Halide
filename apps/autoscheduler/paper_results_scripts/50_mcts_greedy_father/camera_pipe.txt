@@ -1,0 +1,9 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/camera_pipe'
+bin/host/process ../images/bayer_raw.png 3700 2.0 50 1.0 5 bin/host/out.png bin/host/h_auto.png
+input: ../images/bayer_raw.png
+       2592 1968
+Manually-tuned time:	3424.47us
+Auto-scheduled time:	5903.86us
+output: bin/host/out.png
+        2560 1920
+make: Leaving directory '/scratch/ameerh/Halide/apps/camera_pipe'
