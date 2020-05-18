@@ -72,7 +72,7 @@ function ctrl_c() {
 trap ctrl_c INT
 
 if [ -z $APP ]; then
-    APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator"
+    APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator depthwise_separable_conv"
 else
     APPS=$APP
 fi
@@ -132,11 +132,11 @@ for app in $APPS; do
     bash $(dirname $0)/../scripts/average_times.sh ${SAMPLES_DIR} >> ${OUTPUT_FILE}
 
     SCRIPTS_DIR="$(dirname $0)/../scripts"
-    r_squared=$(python3 ${SCRIPTS_DIR}/rsquared.py --predictions ${PREDICTIONS_FILE})
-    echo "r-squared = ${r_squared}" >> ${OUTPUT_FILE}
+    python3 ${SCRIPTS_DIR}/rsquared.py --predictions ${PREDICTIONS_FILE} >> ${OUTPUT_FILE}
     echo "Total autotune time (s): ${SECONDS}" >> ${OUTPUT_FILE}
 
     save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
+    python3 ${SCRIPTS_DIR}/scatter.py --predictions ${PREDICTIONS_FILE} --app ${app} --output ${SAMPLES_DIR}
 done
 
 print_best_schedule_times $(dirname $0)/best
