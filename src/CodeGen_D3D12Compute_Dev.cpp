@@ -291,7 +291,7 @@ string hex_literal(T value) {
 }  // namespace
 
 template<typename IRNodeT>
-static bool is_shared_allocation(IRNodeT* op)
+static bool is_shared_allocation(const IRNodeT* op)
 {
     return starts_with(op->name, "__shared");
 }
@@ -606,7 +606,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
         op->body.accept(this);
 
         // Should have been freed internally
-        //internal_assert(!allocations.contains(op->name));
+        internal_assert(!allocations.contains(op->name));
 
         close_scope("alloc " + print_name(op->name));
     }
@@ -875,8 +875,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             size_t bytesize = elements * sizeof(uint32_t);
             // SM 5.1: 32KB limit for shared memory...
             if (bytesize > 32 * 1024) {
-                internal_assert(bytesize <= 32 * 1024);
-                // try to compact things for smaller types:
+#if 0
+                // we could try to compact things for smaller types:
                 size_t packing_factor = 1;
                 while (bytesize > 32 * 1024) {
                     // must pack/unpack elements to/from shared memory...
@@ -886,6 +886,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 }
                 // smallest possible pack type is a byte (no nibbles)
                 internal_assert(packing_factor <= 4);
+#else
+                internal_assert(bytesize <= 32 * 1024);
+#endif
             }
             total_shared_bytes += bytesize;
             stream << " [" << elements << "];\n";
