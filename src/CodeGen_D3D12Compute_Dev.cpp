@@ -1119,7 +1119,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         //<< "#define pow_f32(x,y)  (sign(x)*pow(abs(x), y))   \n"
         //<< "#define pow_f32 pow \n"
         //<< "#define pow_f32(x, y) (x >= 0.0 ? pow(x, y) : (trunc(y) == y ? -(pow(abs(x), y)) : nan_f32()) \n"
-        << "float pow_f32(float x, float y) { if (x >= 0.0) { return pow(x, y); } else if (trunc(y) == y) { if (fmod(y, 2) == 0) { return pow(abs(x), y); } else { return -pow(abs(x), y); }  } else { return nan_f32(); }} \n" 
+        << "float pow_f32(float x, float y) { if (x > 0.0) { return pow(x, y); } else if (y == 0.0) { return 1.0f; } else if (trunc(y) == y) { if (fmod(y, 2) == 0) { return pow(abs(x), y); } else { return -pow(abs(x), y); }  } else { return nan_f32(); }} \n" 
         << "#define asin_f32    asin   \n"
         << "#define acos_f32    acos   \n"
         << "#define tan_f32     tan    \n"
