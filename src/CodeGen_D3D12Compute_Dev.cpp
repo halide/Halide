@@ -852,16 +852,19 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     };
     FindSharedAllocations fsa;
     s.accept(&fsa);
+    uint32_t total_shared_bytes = 0;
     for (const Allocate *op : fsa.allocs) {
         internal_assert(op->extents.size() == 1);
-        // The 'op->type' of shared memory allocations is always uint8 in Halide
-        // since shared storaged is considered a "byte buffer"... In D3D12 there
-        // is no uint8 type, so we'll have to emulate it with some 32bit type...
+        internal_assert(op->type.lanes() == 1);
+        // In D3D12/HLSL, only 32bit types (int/uint/float) are suppoerted (even
+        // though things are changing with newer shader models). Since there is
+        // no uint8 type, we'll have to emulate it with 32bit types...
         // This will also require pack/unpack logic with bit-masking and aliased
         // type reinterpretation via asfloat()/asuint() in the shader code... :(
-        internal_assert(op->type == UInt(8));
+        Type smem_type = op->type;
+        smem_type.with_bits(32);
         stream << "groupshared"
-               << " " << print_type(op->type)  // print_type(uint8) -> uint32
+               << " " << print_type(smem_type)
                << " " << print_name(op->name);
         if (is_const(op->extents[0])) {
             std::stringstream ss;
@@ -870,22 +873,28 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             ss >> elements;
             size_t bytesize = elements * sizeof(uint32_t);
             // SM 5.1: 32KB limit for shared memory...
-            size_t packing_factor = 1;
-            while (bytesize > 32 * 1024) {
-                // must pack/unpack elements to/from shared memory...
-                elements /= 2;
-                bytesize /= 2;
-                packing_factor *= 2;
+            if (bytesize > 32 * 1024) {
+                internal_assert(bytesize <= 32 * 1024);
+                // try to compact things for smaller types:
+                size_t packing_factor = 1;
+                while (bytesize > 32 * 1024) {
+                    // must pack/unpack elements to/from shared memory...
+                    elements /= 2;
+                    bytesize /= 2;
+                    packing_factor *= 2;
+                }
+                // smallest possible pack type is a byte (no nibbles)
+                internal_assert(packing_factor <= 4);
             }
+            total_shared_bytes += bytesize;
             stream << " [" << elements << "];\n";
-            // smallest possible pack type is a byte (no nibbles)
-            internal_assert(packing_factor <= 4);
         } else {
             // fill-in __GROUPSHARED_SIZE_IN_BYTES later on when D3DCompile()
             // is invoked in halide_d3d12compute_run(); must get divided by 4
             // since groupshared memory elements have 32bit granularity:
             stream << " [ ( __GROUPSHARED_SIZE_IN_BYTES + 3 ) / 4 ];\n";
         }
+        internal_assert(total_shared_bytes <= 32 * 1024);
         Allocation alloc;
         alloc.type = op->type;
         allocations.push(op->name, alloc);
