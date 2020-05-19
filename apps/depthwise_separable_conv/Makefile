@@ -16,7 +16,7 @@ all: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/depthwise_separable_conv.generator: depthwise_separable_conv_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/depthwise_separable_conv.a: $(GENERATOR_BIN)/depthwise_separable_conv.generator
 	@mkdir -p $(@D)

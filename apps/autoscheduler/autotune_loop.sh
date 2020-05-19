@@ -260,7 +260,7 @@ benchmark_sample() {
 
     METRICS_CMD="HL_NUM_THREADS=${NUM_CORES} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
-        nvprof --metrics all
+        nvprof --metrics all \
         --log-file ${D}/metrics.log \
         ${D}/bench \
         --output_extents=estimate \
@@ -269,6 +269,31 @@ benchmark_sample() {
         --benchmarks=all"
 
     record_command $BATCH $SAMPLE_ID "$METRICS_CMD" "metrics_command" $FAILED
+
+    TRACE_CMD="HL_NUM_THREADS=${NUM_CORES} \
+        ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
+        nvprof --print-gpu-trace \
+        --log-file ${D}/trace_64.log \
+        ${D}/bench \
+        --output_extents=estimate \
+        --default_input_buffers=random:0:estimate_then_auto \
+        --default_input_scalars=estimate \
+        --benchmarks=all"
+
+    record_command $BATCH $SAMPLE_ID "$TRACE_CMD" "trace_64_command" $FAILED
+
+    TRACE_CMD="HL_NUM_THREADS=${NUM_CORES} \
+        HL_CUDA_JIT_MAX_REGISTERS=256 \
+        ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
+        nvprof --print-gpu-trace \
+        --log-file ${D}/trace_256.log \
+        ${D}/bench \
+        --output_extents=estimate \
+        --default_input_buffers=random:0:estimate_then_auto \
+        --default_input_scalars=estimate \
+        --benchmarks=all"
+
+    record_command $BATCH $SAMPLE_ID "$TRACE_CMD" "trace_256_command" $FAILED
 
     if [[ ${FAILED} == 1 ]]; then
         return

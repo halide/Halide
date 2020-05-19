@@ -376,10 +376,14 @@ function format_metrics() {
     local -r stages=$(grep "features" ${dir}/compile_err.txt | cut -d" " -f 4)
 
     local -r metrics_file="${dir}/metrics.log"
+    local -r trace_64_file="${dir}/trace_64.log"
+    local -r trace_256_file="${dir}/trace_256.log"
     local -r formatted_metrics_file="${dir}/formatted_metrics.txt"
 
     if [ ! -f ${metrics_file} ]; then
         echo "Collecting metrics for ${dir}..."
+        bash "${dir}/trace_64_command.txt"
+        bash "${dir}/trace_256_command.txt"
         bash "${dir}/metrics_command.txt"
     fi
 
@@ -390,6 +394,8 @@ function format_metrics() {
 
     for stage in ${stages}; do
         grep -A 158 "kernel_${stage}" "${metrics_file}" | tail -n +2 | awk -v s="${stage}" '{printf("%s %s %f\n", s, $2, $NF);}' >> "${formatted_metrics_file}"
+        grep "kernel_${stage}" "${trace_64_file}" | tail -n 1 | awk -v s="${stage}" '{printf("%s registers_64 %d\n", s, $9);}' >> "${formatted_metrics_file}"
+        grep "kernel_${stage}" "${trace_256_file}" | tail -n 1 | awk -v s="${stage}" '{printf("%s registers_256 %d\n", s, $9);}' >> "${formatted_metrics_file}"
     done
 
     echo "Formatted metrics saved to ${formatted_metrics_file}"
