@@ -2205,8 +2205,8 @@ void validate_fused_group_schedule_helper(const string &fn,
                                                         << ") do not match.\n";
             user_assert(d1.dim_type == d2.dim_type) << "Invalid compute_with: types of dim "
                                                     << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
-                                                    << d1.var << " is " << d1.dim_type_name() << ") and " << p.func_2
-                                                    << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.dim_type_name()
+                                                    << d1.var << " is " << d1.dim_type << ") and " << p.func_2
+                                                    << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.dim_type
                                                     << ") do not match.\n";
         }
     }
