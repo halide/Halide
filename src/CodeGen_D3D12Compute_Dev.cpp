@@ -290,11 +290,10 @@ string hex_literal(T value) {
 
 }  // namespace
 
-template<typename IRNodeT>
-static bool is_shared_allocation(const IRNodeT* op)
-{
-    return starts_with(op->name, "__shared");
-}
+static bool is_shared_allocation(const Allocate* op) { return op->memory_type == MemoryType::GPUShared; }
+static bool is_shared_allocation(const Free* op)     { return starts_with(op->name, "__shared"); }
+static bool is_shared_allocation(const Load* op)     { return starts_with(op->name, "__shared"); }
+static bool is_shared_allocation(const Store* op)    { return starts_with(op->name, "__shared"); }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";

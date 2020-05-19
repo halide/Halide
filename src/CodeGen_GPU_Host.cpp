@@ -86,8 +86,7 @@ private:
         user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n"
                                                    << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-        if (starts_with(allocate->name, "__shared")) {
-            //internal_assert(allocate->type == UInt(8));
+        if (allocate->memory_type == MemoryType::GPUShared) {
             internal_assert(allocate->extents.size() == 1);
             shared_mem_size = allocate->extents[0];
             found_shared = true;
