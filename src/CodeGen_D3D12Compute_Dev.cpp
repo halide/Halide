@@ -290,21 +290,22 @@ string hex_literal(T value) {
 
 }  // namespace
 
+template<typename IRNodeT>
+static bool is_shared_allocation(IRNodeT* op)
+{
+    return starts_with(op->name, "__shared");
+}
+
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
     // __shared[x] is always uint(32): must reinterpret/unpack bits...
-    if (op->name == "__shared") {
+    if (is_shared_allocation(op)) {
         ostringstream rhs;
         internal_assert(allocations.contains(op->name));
         // no ramps when accessing shared memory...
         Expr ramp_base = is_ramp_one(op->index);
         internal_assert(!ramp_base.defined());
-        // shared memory in Halide is represented as a byte buffer
-        // but the 'op->index' is actually in terms of elements...
-        // to complicate things, HLSL (SM 5.1) only supports 32bit
-        // words (int/uint/float) as groupshared types...
-        internal_assert(allocations.get(op->name).type == UInt(8));
         internal_assert(op->type.lanes() == 1);
 
         string id_index = print_expr(op->index);
@@ -455,7 +456,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
     Type value_type = op->value.type();
 
     // __shared[x] is always uint(32): must reinterpret/pack bits...
-    if (op->name == "__shared") {
+    if (is_shared_allocation(op)) {
         internal_assert(value_type.bits() <= 32);
         ostringstream rhs;
         rhs << print_name(op->name)
@@ -576,7 +577,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Select *op) {
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op) {
 
-    if (op->name == "__shared") {
+    if (is_shared_allocation(op)) {
         // Already handled
         op->body.accept(this);
     } else {
@@ -605,14 +606,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
         op->body.accept(this);
 
         // Should have been freed internally
-        internal_assert(!allocations.contains(op->name));
+        //internal_assert(!allocations.contains(op->name));
 
         close_scope("alloc " + print_name(op->name));
     }
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
-    if (op->name == "__shared") {
+    if (is_shared_allocation(op)) {
         return;
     } else {
         // Should have been freed internally
@@ -843,7 +844,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         using IRVisitor::visit;
         void visit(const Allocate *op) override {
             op->body.accept(this);
-            if (starts_with(op->name, "__shared")) {
+            if (is_shared_allocation(op)) {
                 allocs.push_back(op);
             }
         }
@@ -910,7 +911,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         using IRMutator::mutate;
         using IRMutator::visit;
         Expr visit(const Load *op) override {
-            if (op->name == "__shared") {
+            if (is_shared_allocation(op)) {
                 if (!latest_store) {
                     // attempting to read from __shared before anything has been
                     // written to it yet!
@@ -921,7 +922,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         }
         Stmt visit(const Store *op) override {
             Stmt store = IRMutator::visit(op);
-            if (op->name == "__shared") {
+            if (is_shared_allocation(op)) {
                 latest_store = op;
             }
             return store;
