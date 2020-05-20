@@ -946,7 +946,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         }
         Expr visit(const Load *op) override {
             if (groupshared_allocations.contains(op->name)) {
-                if (!latest_store) {
+                if (!latest_store.defined()) {
                     // attempting to read from __shared before anything has been
                     // written to it yet!
                     bad_load_expr = op;
@@ -962,36 +962,36 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             return store;
         }
         Stmt mutate(const Stmt &stmt) override {
-            if (!bad_load_expr) {
-                current_stmt = &stmt;
+            if (!bad_load_expr.defined()) {
+                current_stmt = stmt;
             }
             return IRMutator::mutate(stmt);
         }
-        const Stmt *current_stmt = nullptr;
-        const Load *bad_load_expr = nullptr;
-        const Store *latest_store = nullptr;
+        Stmt current_stmt;
+        Expr bad_load_expr;
+        Stmt latest_store;
         Scope<> groupshared_allocations;
     };
     FindUninitializedSharedLoads fusl;
     s = fusl.mutate(s);
-    if (fusl.bad_load_expr) {
+    if (fusl.bad_load_expr.defined()) {
         debug(1) << "Found a potential load-before-initialization on __shared buffer!\n";
         // use IRMutator to inject a zero-initialization before the load
         struct ZeroInitializeSharedMemory : public IRMutator {
             using IRMutator::mutate;
             Stmt mutate(const Stmt &op) override {
-                if (&op != uninitialized_load_stmt) {
+                if (!op.same_as(uninitialized_load_stmt)) {
                     return IRMutator::mutate(op);
                 }
 
                 debug(1) << "Patching __shared buffer with zero-intialization...\n";
 
-                const Load *lop = uninitialized_load_expr;
+                const Load *lop = uninitialized_load_expr.as<Load>();
                 Stmt initialization = Store::make(lop->name, Expr(0), lop->index, Parameter(), lop->predicate, ModulusRemainder());
                 return Block::make({initialization, op});
             }
-            const Stmt *uninitialized_load_stmt = nullptr;
-            const Load *uninitialized_load_expr = nullptr;
+            Stmt uninitialized_load_stmt;
+            Expr uninitialized_load_expr;
         };
         ZeroInitializeSharedMemory zism;
         zism.uninitialized_load_stmt = fusl.current_stmt;
