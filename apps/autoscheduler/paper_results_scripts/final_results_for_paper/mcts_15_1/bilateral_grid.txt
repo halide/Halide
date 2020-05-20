@@ -1,0 +1,13 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+bin/host/filter ../images/gray.png bin/host/out.png 0.1 10
+Manually-tuned time: 5.32306ms
+Auto-scheduled time: 5.76477ms
+bin/host/filter ../images/gray.png bin/host/out.tiff 0.1 10
+Manually-tuned time: 5.31835ms
+Auto-scheduled time: 5.77351ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+
+
+RL_END_OF_RUN 0
+

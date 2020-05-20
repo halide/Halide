@@ -1,0 +1,259 @@
+Using Halide in  ./../../..
+c++ -shared -rdynamic -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -O3 -I bin/cost_model /home/ubuntu/llvm-project/Halide/apps/autoscheduler/AutoSchedule.cpp /home/ubuntu/llvm-project/Halide/apps/autoscheduler/ASLog.cpp /home/ubuntu/llvm-project/Halide/apps/autoscheduler/DefaultCostModel.cpp /home/ubuntu/llvm-project/Halide/apps/autoscheduler/Weights.cpp /home/ubuntu/llvm-project/Halide/apps/autoscheduler/FunctionDAG.cpp /home/ubuntu/llvm-project/Halide/apps/autoscheduler/LoopNest.cpp bin/baseline_weights.o bin/cost_model/cost_model.a bin/cost_model/train_cost_model.a /home/ubuntu/llvm-project/Halide/distrib/bin/libHalide.so /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp bin/auto_schedule_runtime.a -o bin/libauto_schedule.so -lz -lrt -ldl -lpthread -lm
+/home/ubuntu/llvm-project/Halide/apps/autoscheduler/paper_results_scripts
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+rm -rf bin
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+rm -rf bin
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+rm -rf bin
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/iir_blur'
+rm -rf bin
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/iir_blur'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/max_filter'
+rm -rf bin
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/max_filter'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp bilateral_grid_generator.cpp /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp -o bin/host/bilateral_grid.generator -Wl,-rpath,/home/ubuntu/llvm-project/Halide/distrib/bin/ -L /home/ubuntu/llvm-project/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/bilateral_grid.generator -g bilateral_grid -e static_library,h,registration,stmt,assembly -o bin/host -f bilateral_grid target=host auto_schedule=false
+bin/host/bilateral_grid.generator -g bilateral_grid -e static_library,h,registration,stmt,assembly -o bin/host -f bilateral_grid_auto_schedule target=host-no_runtime auto_schedule=true -e static_library,c_header,schedule -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-no_runtime-sse41
+Seed = 1589786045
+mcts_depth 18
+num_random_trees 12
+num_greedy_trees 4
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -5.14992
+finished depth 1 best value so far -5.14992
+Cost evaluated this many times: 251965
+best intermediate value -5.13399
+finished depth 2 best value so far -5.13399
+Cost evaluated this many times: 548567
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -5.13399
+Cost evaluated this many times: 548567
+best intermediate value -5.00235
+finished depth 4 best value so far -5.00235
+Cost evaluated this many times: 796480
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -5.00235
+Cost evaluated this many times: 796480
+best intermediate value -5.00235
+finished depth 6 best value so far -5.00235
+Cost evaluated this many times: 1011829
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -5.00235
+Cost evaluated this many times: 1011829
+best intermediate value -4.8181
+finished depth 8 best value so far -4.8181
+Cost evaluated this many times: 1214372
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -4.8181
+Cost evaluated this many times: 1214372
+best intermediate value -4.8181
+finished depth 10 best value so far -4.8181
+Cost evaluated this many times: 1284740
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -4.8181
+Cost evaluated this many times: 1284740
+best intermediate value -4.8181
+finished depth 12 best value so far -4.8181
+Cost evaluated this many times: 1624110
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -4.8181
+Cost evaluated this many times: 1624110
+best intermediate value -1.11111e+11
+finished depth 14 best value so far -4.8181
+Cost evaluated this many times: 1624110
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -4.8181
+Cost evaluated this many times: 1624110
+best intermediate value -1.11111e+11
+finished depth 16 best value so far -4.8181
+Cost evaluated this many times: 1624110
+global best cost: 4.8181
+num_best_decisions: 5num_random_decisions: 2
+Cost evaluated this many times: 1624110
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host filter.cpp bin/host/bilateral_grid.a bin/host/bilateral_grid_auto_schedule.a -o bin/host/filter -L/home/ubuntu/anaconda3/envs/halide/lib -lpng16  -ljpeg -I/home/ubuntu/anaconda3/envs/halide/include/libpng16 -I/home/ubuntu/anaconda3/envs/halide/include/libpng16/..  -ldl -lpthread -lz
+rm bin/host/bilateral_grid_auto_schedule.a bin/host/bilateral_grid.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp nl_means_generator.cpp /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp -o bin/host/nl_means.generator -Wl,-rpath,/home/ubuntu/llvm-project/Halide/distrib/bin/ -L /home/ubuntu/llvm-project/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/nl_means.generator -g nl_means -e static_library,h,registration,stmt,assembly -o bin/host -f nl_means target=host auto_schedule=false
+bin/host/nl_means.generator -g nl_means -e static_library,h,registration,stmt,assembly -o bin/host -f nl_means_auto_schedule target=host-no_runtime auto_schedule=true -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-no_runtime-sse41
+Seed = 1589786223
+mcts_depth 28
+num_random_trees 12
+num_greedy_trees 4
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -8.17584
+finished depth 1 best value so far -8.17584
+Cost evaluated this many times: 692411
+best intermediate value -7.88055
+finished depth 2 best value so far -7.88055
+Cost evaluated this many times: 1431810
+Makefile:19: recipe for target 'bin/host/nl_means_auto_schedule.a' failed
+make: *** [bin/host/nl_means_auto_schedule.a] Segmentation fault (core dumped)
+rm bin/host/nl_means.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+Failed to build nl_means
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp conv_layer_generator.cpp /home/ubuntu/llvm-project/Halide/distrib/bin/libHalide.so /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp -o bin/host/conv_layer.generator -Wl,-rpath,/home/ubuntu/llvm-project/Halide/distrib/bin/ -L /home/ubuntu/llvm-project/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/conv_layer.generator -g conv_layer -e static_library,h,registration,stmt,assembly -o bin/host -f conv_layer target=host auto_schedule=false
+bin/host/conv_layer.generator -g conv_layer -e static_library,h,registration,stmt,assembly -o bin/host -f conv_layer_auto_schedule target=host-no_runtime auto_schedule=true -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-no_runtime-sse41
+Seed = 1589786279
+mcts_depth 10
+num_random_trees 12
+num_greedy_trees 4
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -23.36
+finished depth 1 best value so far -23.36
+Cost evaluated this many times: 189222
+best intermediate value -23.36
+finished depth 2 best value so far -23.36
+Cost evaluated this many times: 989356
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -23.36
+Cost evaluated this many times: 989356
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -23.36
+Cost evaluated this many times: 989356
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -23.36
+Cost evaluated this many times: 989356
+best intermediate value -1.11111e+11
+finished depth 6 best value so far -23.36
+Cost evaluated this many times: 989356
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -23.36
+Cost evaluated this many times: 989356
+best intermediate value -1.11111e+11
+finished depth 8 best value so far -23.36
+Cost evaluated this many times: 989356
+global best cost: 23.36
+num_best_decisions: 1num_random_decisions: 1
+Cost evaluated this many times: 989356
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host -Wall process.cpp bin/host/conv_layer.a bin/host/conv_layer_auto_schedule.a -o bin/host/process  -ldl -lpthread -lz
+rm bin/host/conv_layer_auto_schedule.a bin/host/conv_layer.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/iir_blur'
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -g iir_blur_generator.cpp /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp -o bin/host/iir_blur.generator -Wl,-rpath,/home/ubuntu/llvm-project/Halide/distrib/bin/ -L /home/ubuntu/llvm-project/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/iir_blur.generator -g iir_blur -f iir_blur -o bin/host target=host-no_runtime auto_schedule=false
+bin/host/iir_blur.generator -g iir_blur -f iir_blur_auto_schedule -o bin/host target=host-no_runtime auto_schedule=true -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-no_runtime-sse41
+Seed = 1589786315
+mcts_depth 10
+num_random_trees 12
+num_greedy_trees 4
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -9.84822
+finished depth 1 best value so far -9.84822
+Cost evaluated this many times: 560573
+best intermediate value -9.7799
+finished depth 2 best value so far -9.7799
+Cost evaluated this many times: 897490
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -9.7799
+Cost evaluated this many times: 897490
+best intermediate value -9.57533
+finished depth 4 best value so far -9.57533
+Cost evaluated this many times: 1227906
+best intermediate value -9.57533
+finished depth 5 best value so far -9.57533
+Cost evaluated this many times: 1547220
+best intermediate value -9.57533
+finished depth 6 best value so far -9.57533
+Cost evaluated this many times: 1877204
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -9.57533
+Cost evaluated this many times: 1877204
+best intermediate value -1.11111e+11
+finished depth 8 best value so far -9.57533
+Cost evaluated this many times: 1877204
+global best cost: 9.57533
+num_best_decisions: 1num_random_decisions: 4
+Cost evaluated this many times: 1877204
+bin/host/iir_blur.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host -Wall -O3 filter.cpp bin/host/iir_blur.a bin/host/iir_blur_auto_schedule.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/home/ubuntu/anaconda3/envs/halide/lib -lpng16  -ljpeg -I/home/ubuntu/anaconda3/envs/halide/include/libpng16 -I/home/ubuntu/anaconda3/envs/halide/include/libpng16/..   
+rm bin/host/iir_blur.a bin/host/runtime.a bin/host/iir_blur_auto_schedule.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/iir_blur'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/max_filter'
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -g max_filter_generator.cpp /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp -o bin/host/max_filter.generator -Wl,-rpath,/home/ubuntu/llvm-project/Halide/distrib/bin/ -L /home/ubuntu/llvm-project/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/max_filter.generator -g max_filter -f max_filter -o bin/host target=host-no_runtime auto_schedule=false
+bin/host/max_filter.generator -g max_filter -f max_filter_auto_schedule -o bin/host target=host-no_runtime auto_schedule=true -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-no_runtime-sse41
+Seed = 1589786402
+mcts_depth 18
+num_random_trees 12
+num_greedy_trees 4
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -71.9594
+finished depth 1 best value so far -71.9594
+Cost evaluated this many times: 498924
+best intermediate value -61.9694
+finished depth 2 best value so far -61.9694
+Cost evaluated this many times: 843740
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -61.9694
+Cost evaluated this many times: 843740
+best intermediate value -61.4453
+finished depth 4 best value so far -61.4453
+Cost evaluated this many times: 1203166
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -61.4453
+Cost evaluated this many times: 1203166
+best intermediate value -61.4453
+finished depth 6 best value so far -61.4453
+Cost evaluated this many times: 1365364
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -61.4453
+Cost evaluated this many times: 1365364
+best intermediate value -61.4453
+finished depth 8 best value so far -61.4453
+Cost evaluated this many times: 1567343
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -61.4453
+Cost evaluated this many times: 1567343
+best intermediate value -1.11111e+11
+finished depth 10 best value so far -61.4453
+Cost evaluated this many times: 1567343
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -61.4453
+Cost evaluated this many times: 1567343
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -61.4453
+Cost evaluated this many times: 1567343
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -61.4453
+Cost evaluated this many times: 1567343
+best intermediate value -61.4453
+finished depth 14 best value so far -61.4453
+Cost evaluated this many times: 1869033
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -61.4453
+Cost evaluated this many times: 1869033
+best intermediate value -1.11111e+11
+finished depth 16 best value so far -61.4453
+Cost evaluated this many times: 1869033
+global best cost: 61.4453
+num_best_decisions: 0num_random_decisions: 6
+Cost evaluated this many times: 1869033
+bin/host/max_filter.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host -Wall -O3 filter.cpp bin/host/max_filter.a bin/host/max_filter_auto_schedule.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/home/ubuntu/anaconda3/envs/halide/lib -lpng16  -ljpeg -I/home/ubuntu/anaconda3/envs/halide/include/libpng16 -I/home/ubuntu/anaconda3/envs/halide/include/libpng16/..   
+rm bin/host/runtime.a bin/host/max_filter_auto_schedule.a bin/host/max_filter.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/max_filter'
