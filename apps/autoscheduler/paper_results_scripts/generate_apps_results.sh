@@ -237,7 +237,7 @@ if [ "$benchmark_resnet" == "true" ]; then
     if [ "$autoscheduler" != "mcts" ]; then
         cores=$(nproc)
     else
-        cores=2
+        cores=1
     fi
     if [ "$RL_FIRST" != "false" ]; then
         echo > $results/$app.evaltime.txt

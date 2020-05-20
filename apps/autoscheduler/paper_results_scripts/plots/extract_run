@@ -2,9 +2,10 @@
 
 from statistics import median
 
-#apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul resnet_50_blockwise".split(" ")
-apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul".split(" ")
-autoschedulers="random greedy beam mcts".split(" ")
+apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul resnet_50_blockwise".split(" ")
+#apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul".split(" ")
+#autoschedulers="random greedy beam mcts".split(" ")
+autoschedulers="master random greedy beam manual mcts".split(" ")
 
 def strip_non_digits(s):
     return "".join([c for c in s if c.isdigit() or c == "."])
@@ -91,8 +92,8 @@ for i, app in enumerate(apps):
 
 with open('algo_runtime.csv','w') as f: 
     print("algo_runtime")
-    print("random,greedy,beam,mcts")
-    f.write("random,greedy,beam,mcts\n")
+    print(",".join(autoschedulers))
+    f.write(",".join(autoschedulers)+"\n") 
     for i, app in enumerate(apps):
         #scale = 1000 if app != "camera_pipe" else 1000000
         scale = 1 
@@ -119,8 +120,9 @@ with open('algo_runtime.csv','w') as f:
 
 with open('mincost.csv','w') as f: 
     print("mincost")
-    print("random,greedy,beam,mcts")
-    f.write("random,greedy,beam,mcts\n")
+    print(",".join(autoschedulers))
+    f.write(",".join(autoschedulers)+"\n") 
+
     all_results = []
     for i, app in enumerate(apps):
         #scale = 1000 if app != "camera_pipe" else 1000000
@@ -148,9 +150,9 @@ with open('mincost.csv','w') as f:
 
 with open('evaltime.csv','w') as f: 
     print("evaltime")
-    print("random,greedy,beam,mcts")
+    print(",".join(autoschedulers))
+    f.write(",".join(autoschedulers)+"\n") 
 
-    f.write("random,greedy,beam,mcts\n")
     for i, app in enumerate(apps):
         #scale = 1000 if app != "camera_pipe" else 1000000
         scale = 1 
@@ -178,8 +180,9 @@ with open('evaltime.csv','w') as f:
 
 with open('bm_min_runtime.csv','w') as f: 
     print("bm_min_runtime")
-    print("random,greedy,beam,mcts")
-    f.write("random,greedy,beam,mcts\n")
+    print(",".join(autoschedulers))
+    f.write(",".join(autoschedulers)+"\n") 
+
     all_results = []
     for i, app in enumerate(apps):
         #scale = 1000 if app != "camera_pipe" else 1000000
@@ -188,6 +191,8 @@ with open('bm_min_runtime.csv','w') as f:
         for autoscheduler in autoschedulers: 
             if autoscheduler == 'random':
                 values = get_rand_result(f"../{autoscheduler}/{app}.randtime.txt", scale, num_rand_runs[i])
+            elif autoscheduler == 'manual':
+                values = get_result(f"../greedy/{app}.txt", scale, "Manually-tuned time:")
             else:
                 values = get_result(f"../{autoscheduler}/{app}.txt", scale)
             sum_results = [] 
@@ -205,8 +210,9 @@ with open('bm_min_runtime.csv','w') as f:
 
 with open('bm_median_runtime.csv','w') as f: 
     print("bm_median_runtime")
-    print("random,greedy,beam,mcts")
-    f.write("random,greedy,beam,mcts\n")
+    print(",".join(autoschedulers))
+    f.write(",".join(autoschedulers)+"\n") 
+
     all_results = []
     for i, app in enumerate(apps):
         #scale = 1000 if app != "camera_pipe" else 1000000
@@ -215,6 +221,8 @@ with open('bm_median_runtime.csv','w') as f:
         for autoscheduler in autoschedulers: 
             if autoscheduler == 'random':
                 values = get_rand_result(f"../{autoscheduler}/{app}.randtime.txt", scale, num_rand_runs[i])
+            elif autoscheduler == 'manual':
+                values = get_result(f"../greedy/{app}.txt", scale, "Manually-tuned time:")
             else:
                 values = get_result(f"../{autoscheduler}/{app}.txt", scale)
             sum_results = [] 
