@@ -43,6 +43,8 @@ public:
     }
 
 protected:
+    friend struct StoragePackUnpack;
+
     class CodeGen_D3D12Compute_C : public CodeGen_C {
     public:
         CodeGen_D3D12Compute_C(std::ostream &s, Target t)
@@ -53,7 +55,8 @@ protected:
                         const std::vector<DeviceArgument> &args);
 
     protected:
-        using CodeGen_C::visit;
+        friend struct StoragePackUnpack;
+
         std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
         std::string print_storage_type(Type type);
         std::string print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space);
@@ -67,6 +70,7 @@ protected:
 
         std::string print_assignment(Type t, const std::string &rhs) override;
 
+        using CodeGen_C::visit;
         void visit(const Evaluate *op) override;
         void visit(const Min *) override;
         void visit(const Max *) override;
@@ -83,6 +87,8 @@ protected:
         void visit(const Free *op) override;
         void visit(const Cast *op) override;
         void visit(const Atomic *op) override;
+
+        Scope<> groupshared_allocations;
     };
 
     std::ostringstream src_stream;

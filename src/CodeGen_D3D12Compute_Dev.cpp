@@ -290,41 +290,85 @@ string hex_literal(T value) {
 
 }  // namespace
 
-static bool is_shared_allocation(const Allocate* op) { return op->memory_type == MemoryType::GPUShared; }
-static bool is_shared_allocation(const Free* op)     { return starts_with(op->name, "__shared"); }
-static bool is_shared_allocation(const Load* op)     { return starts_with(op->name, "__shared"); }
-static bool is_shared_allocation(const Store* op)    { return starts_with(op->name, "__shared"); }
+struct StoragePackUnpack
+{
+    using CodeGen = CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
+    static const size_t ThreadGroupSharedStorageLimit = 32 * 1024;
 
-    // __shared[x] is always uint(32): must reinterpret/unpack bits...
-    if (is_shared_allocation(op)) {
-        ostringstream rhs;
-        internal_assert(allocations.contains(op->name));
-        // no ramps when accessing shared memory...
-        Expr ramp_base = is_ramp_one(op->index);
-        internal_assert(!ramp_base.defined());
-        internal_assert(op->type.lanes() == 1);
+    void pack_storage(const Allocate *op, size_t elements, size_t size_in_bytes)
+    {
+        // we could try to compact things for smaller types:
+        size_t packing_factor = 1;
+        while (size_in_bytes > ThreadGroupSharedStorageLimit) {
+            // must pack/unpack elements to/from shared memory...
+            elements /= 2;
+            size_in_bytes /= 2;
+            packing_factor *= 2;
+        }
+        // smallest possible pack type is a byte (no nibbles)
+        internal_assert(packing_factor <= 4);
+    }
 
-        string id_index = print_expr(op->index);
-        internal_assert(op->type.bits() <= 32);
-        Type promoted = op->type.with_bits(32);
-        rhs << "as" << print_type(promoted)
-            << "("
-            << print_name(op->name)
-            << "[" << id_index << "]"
-            << ")";
-#if 0
+    std::ostringstream pack_store(CodeGen& cg, const Store *op) {
+        std::ostringstream lhs;
+        // NOTE(marcos): 8bit and 16bit word packing -- the smallest integer
+        // type granularity available in HLSL SM 5.1 is 32bit (int/uint):
+        Type value_type = op->value.type();
+        if (value_type.bits() == 32) {
+            // storing a 32bit word? great! just reinterpret value to uint32:
+            lhs << cg.print_name(op->name)
+                << "[" << cg.print_expr(op->index) << "]"
+                << " = "
+                << cg.print_reinterpret(UInt(32), op->value)
+                << ";\n";
+        } else {
+            // nightmare:
+            internal_assert(value_type.bits() < 32);
+            // must map element index to uint word array index:
+            ostringstream index;
+            auto bits = value_type.bits();
+            auto divisor = (32 / bits);
+            auto i = cg.print_expr(op->index);
+            index << i << " / " << divisor;
+            ostringstream word;
+            word << cg.print_name(op->name)
+                 << "[" + index.str() + "]";
+            // now mask the appropriate bits:
+            ostringstream mask;
+            mask << "("
+                 << hex_literal((1 << bits) - 1)
+                 << " << "
+                 << "(" << bits << "*(" << i << " % " << divisor << " ))"
+                 << ")";
+            // apply the mask to the rhs value:
+            ostringstream value;
+            value << "("
+                  << mask.str()
+                  << " & "
+                  << "(" << cg.print_expr(op->value) << ")"
+                  << ")";
+
+            // the performance impact of atomic operations on shared memory is
+            // not well documented... here is something:
+            // https://stackoverflow.com/a/19548723
+            lhs << cg.get_indent() << "InterlockedAnd(" << word.str() << ", " << "~" << mask.str() << ");\n";
+            lhs << cg.get_indent() << "InterlockedXor(" << word.str() << ", " << value.str() << ");\n";
+        }
+        return lhs;
+    }
+
+    std::ostringstream unpack_load(CodeGen& cg, const Load *op) {
+        std::ostringstream rhs;
         // NOTE(marcos): let's keep this block of code here (disabled) in case
         // we need to "emulate" byte/short packing in shared memory (recall that
         // the smallest type granularity in HLSL SM 5.1 allows is 32bit types):
         if (op->type.bits() == 32) {
             // loading a 32bit word? great! just reinterpret as float/int/uint
-            rhs << "as" << print_type(op->type.element_of())
+            rhs << "as" << cg.print_type(op->type.element_of())
                 << "("
-                << print_name(op->name)
-                << "[" << print_expr(op->index) << "]"
+                << cg.print_name(op->name)
+                << "[" << cg.print_expr(op->index) << "]"
                 << ")";
         } else {
             // not a 32bit word? hell ensues:
@@ -333,10 +377,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
             ostringstream index;
             auto bits = op->type.bits();
             auto divisor = (32 / bits);
-            auto i = print_expr(op->index);
+            auto i = cg.print_expr(op->index);
             index << i << " / " << divisor;
             ostringstream word;
-            word << print_name(op->name)
+            word << cg.print_name(op->name)
                  << "[" + index.str() + "]";
             // now mask the appropriate bits:
             ostringstream mask;
@@ -368,7 +412,31 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
                 rhs << cut.str();
             }
         }
-#endif
+        return rhs;
+    }
+};
+
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
+    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
+
+    // __shared[x] is always 32bits: must reinterpret (and maybe unpack) bits...
+    if (groupshared_allocations.contains(op->name)) {
+        ostringstream rhs;
+        internal_assert(allocations.contains(op->name));
+        // no ramps when accessing shared memory...
+        Expr ramp_base = is_ramp_one(op->index);
+        internal_assert(!ramp_base.defined());
+        internal_assert(op->type.lanes() == 1);
+
+        string id_index = print_expr(op->index);
+        internal_assert(op->type.bits() <= 32);
+        Type promoted = op->type.with_bits(32);
+        rhs << "as" << print_type(promoted)
+            << "("
+            << print_name(op->name)
+            << "[" << id_index << "]"
+            << ")";
+        // NOTE(marcos): might need to resort to StoragePackUnpack::unpack_load() here...
         print_assignment(op->type, rhs.str());
         return;
     }
@@ -454,8 +522,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
 
     Type value_type = op->value.type();
 
-    // __shared[x] is always uint(32): must reinterpret/pack bits...
-    if (is_shared_allocation(op)) {
+    // __shared[x] is always 32bits: must reinterpret (and maybe pack) bits...
+    if (groupshared_allocations.contains(op->name)) {
         internal_assert(value_type.bits() <= 32);
         ostringstream rhs;
         rhs << print_name(op->name)
@@ -463,52 +531,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
             << " = "
             << print_reinterpret(UInt(32), op->value)
             << ";\n";
+        // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here...
         stream << get_indent() << rhs.str();
-#if 0
-        // NOTE(marcos): let's keep this block of code here (disabled) in case
-        // we need to "emulate" byte/short packing in shared memory (recall that
-        // the smallest type granularity in HLSL SM 5.1 allows is 32bit types):
-        if (value_type.bits() == 32) {
-            // storing a 32bit word? great! just reinterpret value to uint32:
-            stream << print_name(op->name)
-                    << "[" << print_expr(op->index) << "]"
-                    << " = "
-                    << print_reinterpret(UInt(32), op->value)
-                    << ";\n";
-        } else {
-            // nightmare:
-            internal_assert(value_type.bits() < 32);
-            // must map element index to uint word array index:
-            ostringstream index;
-            auto bits = value_type.bits();
-            auto divisor = (32 / bits);
-            auto i = print_expr(op->index);
-            index << i << " / " << divisor;
-            ostringstream word;
-            word << print_name(op->name)
-                 << "[" + index.str() + "]";
-            // now mask the appropriate bits:
-            ostringstream mask;
-            mask << "("
-                 << hex_literal((1 << bits) - 1)
-                 << " << "
-                 << "(" << bits << "*(" << i << " % " << divisor << " ))"
-                 << ")";
-            // apply the mask to the rhs value:
-            ostringstream value;
-            value << "("
-                  << mask.str()
-                  << " & "
-                  << "(" << print_expr(op->value) << ")"
-                  << ")";
-
-            // the performance impact of atomic operations on shared memory is
-            // not well documented... here is something:
-            // https://stackoverflow.com/a/19548723
-            stream << get_indent() << "InterlockedAnd(" << word.str() << ", " << "~" << mask.str() << ");\n";
-            stream << get_indent() << "InterlockedXor(" << word.str() << ", " << value.str() << ");\n";
-        }
-#endif
         return;
     }
 
@@ -574,10 +598,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Select *op) {
     print_assignment(op->type, rhs.str());
 }
 
+static bool is_shared_allocation(const Allocate* op) { return op->memory_type == MemoryType::GPUShared; }
+
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op) {
 
     if (is_shared_allocation(op)) {
         // Already handled
+        internal_assert(!groupshared_allocations.contains(op->name));
+        groupshared_allocations.push(op->name);
         op->body.accept(this);
     } else {
         open_scope();
@@ -612,7 +640,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
-    if (is_shared_allocation(op)) {
+    if (groupshared_allocations.contains(op->name)) {
+        groupshared_allocations.pop(op->name);
         return;
     } else {
         // Should have been freed internally
@@ -873,22 +902,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             ss >> elements;
             size_t bytesize = elements * sizeof(uint32_t);
             // SM 5.1: 32KB limit for shared memory...
-            if (bytesize > 32 * 1024) {
-#if 0
-                // we could try to compact things for smaller types:
-                size_t packing_factor = 1;
-                while (bytesize > 32 * 1024) {
-                    // must pack/unpack elements to/from shared memory...
-                    elements /= 2;
-                    bytesize /= 2;
-                    packing_factor *= 2;
-                }
-                // smallest possible pack type is a byte (no nibbles)
-                internal_assert(packing_factor <= 4);
-#else
-                internal_assert(bytesize <= 32 * 1024);
-#endif
-            }
+            // NOTE(marcos): might need to resort to StoragePackUnpack::pack_storage() here...
+            internal_assert(bytesize <= StoragePackUnpack::ThreadGroupSharedStorageLimit);
             total_shared_bytes += bytesize;
             stream << " [" << elements << "];\n";
         } else {
@@ -897,7 +912,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             // since groupshared memory elements have 32bit granularity:
             stream << " [ ( __GROUPSHARED_SIZE_IN_BYTES + 3 ) / 4 ];\n";
         }
-        internal_assert(total_shared_bytes <= 32 * 1024);
+        if (total_shared_bytes > StoragePackUnpack::ThreadGroupSharedStorageLimit)
+        {
+            debug(1) << "D3D12 CodeGen ERROR: Total thread group shared memory required for kernel '" << name
+                     << "' exceeds the SM 5.1 limit of 32KB: " << total_shared_bytes << " bytes required.\n";
+            internal_assert(total_shared_bytes <= StoragePackUnpack::ThreadGroupSharedStorageLimit);
+        }
         Allocation alloc;
         alloc.type = op->type;
         allocations.push(op->name, alloc);
@@ -912,8 +932,21 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     struct FindUninitializedSharedLoads : public IRMutator {
         using IRMutator::mutate;
         using IRMutator::visit;
-        Expr visit(const Load *op) override {
+        Stmt visit(const Allocate *op) override {
             if (is_shared_allocation(op)) {
+                internal_assert(!groupshared_allocations.contains(op->name));
+                groupshared_allocations.push(op->name);
+            }
+            return IRMutator::visit(op);
+        }
+        Stmt visit(const Free *op) override {
+            if (groupshared_allocations.contains(op->name)) {
+                groupshared_allocations.pop(op->name);
+            }
+            return IRMutator::visit(op);
+        }
+        Expr visit(const Load *op) override {
+            if (groupshared_allocations.contains(op->name)) {
                 if (!latest_store) {
                     // attempting to read from __shared before anything has been
                     // written to it yet!
@@ -924,7 +957,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         }
         Stmt visit(const Store *op) override {
             Stmt store = IRMutator::visit(op);
-            if (is_shared_allocation(op)) {
+            if (groupshared_allocations.contains(op->name)) {
                 latest_store = op;
             }
             return store;
@@ -938,6 +971,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         const Stmt *current_stmt = nullptr;
         const Load *bad_load_expr = nullptr;
         const Store *latest_store = nullptr;
+        Scope<> groupshared_allocations;
     };
     FindUninitializedSharedLoads fusl;
     s = fusl.mutate(s);
