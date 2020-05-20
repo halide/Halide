@@ -3,8 +3,6 @@
 from statistics import median
 
 apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul resnet_50_blockwise".split(" ")
-#apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul".split(" ")
-#autoschedulers="random greedy beam mcts".split(" ")
 autoschedulers="master random greedy beam manual mcts".split(" ")
 
 def strip_non_digits(s):

@@ -115,10 +115,7 @@ if [ "$autoscheduler" != "master" ]; then
     cd -
 fi
 
-#APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50_blockwise bgu"
- 
 APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer mat_mul iir_blur bgu" # resnet_50_blockwise is handled by a special case at the end
-#APPS="bilateral_grid iir_blur conv_layer nl_means"
 
 benchmark_resnet="true"
 RANDOM_DUR=600
