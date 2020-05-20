@@ -1,0 +1,10 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/bgu'
+bin/host/filter ../images/rgb.png bin/host/out.png
+Manually-tuned time: 10.4009ms
+Auto-scheduled time: 22.2241ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/bgu'
+
+
+RL_END_OF_RUN 0
+

@@ -1,0 +1,37 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
+bin/host/lens_blur.generator -g lens_blur -e static_library,h,registration,stmt,assembly -o bin/host -f lens_blur target=host auto_schedule=false
+bin/host/lens_blur.generator -g lens_blur -e static_library,h,registration,stmt,assembly -o bin/host -f lens_blur_auto_schedule target=host-no_runtime auto_schedule=true -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-no_runtime-sse41
+Seed = 1589678157
+mcts_depth 152
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -6.81488
+finished depth 1 best value so far -6.81488
+Cost evaluated this many times: 2034657
+best intermediate value -6.81453
+finished depth 2 best value so far -6.81453
+Cost evaluated this many times: 4045980
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -6.81453
+Cost evaluated this many times: 4045980
+best intermediate value -6.73784
+finished depth 4 best value so far -6.73784
+Cost evaluated this many times: 6005230
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -6.73784
+Cost evaluated this many times: 6005230
+best intermediate value -6.71433
+finished depth 6 best value so far -6.71433
+Cost evaluated this many times: 7876809
+corrupted size vs. prev_size
+Makefile:19: recipe for target 'bin/host/lens_blur_auto_schedule.a' failed
+make: *** [bin/host/lens_blur_auto_schedule.a] Aborted (core dumped)
+rm bin/host/lens_blur.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
+
+
+RL_END_OF_RUN 0
+

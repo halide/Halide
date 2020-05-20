@@ -1,0 +1,28 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/hist'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 1.32766ms
+Auto-scheduled time: 1.9553ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/hist'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/hist'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 1.44317ms
+Auto-scheduled time: 1.91715ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/hist'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/hist'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 1.26953ms
+Auto-scheduled time: 1.95384ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/hist'
+
+
+RL_END_OF_RUN 3
+

@@ -1,0 +1,10 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 18.8765ms
+Auto-scheduled time: 16.1469ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+
+
+RL_END_OF_RUN 0
+

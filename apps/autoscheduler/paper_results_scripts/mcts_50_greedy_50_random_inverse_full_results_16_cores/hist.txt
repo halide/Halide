@@ -1,0 +1,10 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/hist'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 1.19038ms
+Auto-scheduled time: 2.31014ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/hist'
+
+
+RL_END_OF_RUN 0
+

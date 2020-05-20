@@ -1,0 +1,14 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/camera_pipe'
+bin/host/process ../images/bayer_raw.png 3700 2.0 50 1.0 5 bin/host/out.png bin/host/h_auto.png
+input: ../images/bayer_raw.png
+       2592 1968
+Manually-tuned time:	2772.38us
+Auto-scheduled time:	12396.5us
+output: bin/host/out.png
+        2560 1920
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/camera_pipe'
+
+
+RL_END_OF_RUN 0
+
