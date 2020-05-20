@@ -437,8 +437,6 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             }
         }
 
-        debug(1) << "== Changing allocation " << op->name << " to " << alloc.name <<"\n";
-
         // Updates the liveness by checking for all uses
         shared.emplace(op->name, &alloc);
         Stmt stmt = IRMutator::visit(op);
@@ -479,7 +477,6 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             Expr index = mutate_index(alloc, op->index);
             const string &prefix = name_for_memory_type(alloc->memory_type);
             if (device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) {
-                debug(1) << "== Changing Load from " << op->name << " to " << alloc->name << "\n";
                 return Load::make(op->type, prefix + "_" + alloc->name,
                                   index, op->image, op->param, predicate, op->alignment);
             } else {
@@ -502,7 +499,6 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             Expr value = mutate(op->value);
             const string &prefix = name_for_memory_type(alloc->memory_type);
             if (device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) {
-                debug(1) << "== Changing Load from " << op->name << " to " << alloc->name << "\n";
                 return Store::make(prefix + "_" + alloc->name, value, index,
                                    op->param, predicate, op->alignment);
             } else {
@@ -743,15 +739,11 @@ public:
                 for (const auto &alloc : g.group) {
                     group_name += "_" + alloc.name;
                 }
-                debug(1) << "====  heap name: " << heap_name << "  group name: " << group_name << "\n";
                 Expr group_base = Variable::make(Int(32), group_name + ".base");
                 for (const auto &alloc : g.group) {
-                    debug(1) << "==== before calling RewriteGroupAccess, alloc.name is " << alloc.name << "\n";
                     class RewriteGroupAccess : public IRMutator {
                         using IRMutator::visit;
                         Expr visit(const Load *op) override {
-                            debug(1) << "==== In Load visitor found " << op->name << "  looking for " << alloc_name 
-                                << " to replace it with " << group_name << "\n";
                             if (op->name == alloc_name) {
                                 return Load::make(op->type, group_name, mutate(op->index),
                                                   op->image, op->param, mutate(op->predicate),
@@ -762,8 +754,6 @@ public:
                         }
 
                         Stmt visit(const Store *op) override {
-                            debug(1) << "==== In Store visitor found " << op->name << "  looking for " << alloc_name 
-                                << " to replace it with " << group_name << "\n";
                             if (op->name == alloc_name) {
                                 return Store::make(group_name, mutate(op->value), mutate(op->index),
                                                    op->param, mutate(op->predicate), op->alignment);
@@ -932,8 +922,6 @@ public:
             builder.dimensions = 1;
             Expr buffer = builder.build();
 
-            debug(1) << "== In rewrap_kernel_launch, buffer_name is " << buffer_name << "\n";
-
             Expr allocate_heap_call = Call::make(Int(32), "halide_device_malloc",
                                                  {buffer_var, device_interface}, Call::Extern);
             string allocate_heap_result_var_name = unique_name('t');
@@ -947,7 +935,6 @@ public:
             s = Allocate::make(buffer_name, alloc.type,
                                MemoryType::Auto, {}, const_true(), s,
                                buffer, "halide_device_free_as_destructor");
-            debug(1) << "== Allocate node has name " << s.as<Allocate>()->name << "\n";
         }
 
         return s;
