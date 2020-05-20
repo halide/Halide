@@ -93,7 +93,6 @@ with open('algo_runtime.csv','w') as f:
     print(",".join(autoschedulers))
     f.write(",".join(autoschedulers)+"\n") 
     for i, app in enumerate(apps):
-        #scale = 1000 if app != "camera_pipe" else 1000000
         scale = 1 
         results = []
         for autoscheduler in autoschedulers: 
@@ -123,7 +122,6 @@ with open('mincost.csv','w') as f:
 
     all_results = []
     for i, app in enumerate(apps):
-        #scale = 1000 if app != "camera_pipe" else 1000000
         scale = 1 
         results = []
         for autoscheduler in autoschedulers: 
@@ -152,7 +150,6 @@ with open('evaltime.csv','w') as f:
     f.write(",".join(autoschedulers)+"\n") 
 
     for i, app in enumerate(apps):
-        #scale = 1000 if app != "camera_pipe" else 1000000
         scale = 1 
         results = []
         for autoscheduler in autoschedulers: 
@@ -183,8 +180,7 @@ with open('bm_min_runtime.csv','w') as f:
 
     all_results = []
     for i, app in enumerate(apps):
-        #scale = 1000 if app != "camera_pipe" else 1000000
-        scale = 1 
+        scale = 1000 if app != "camera_pipe" else 1000000
         results = []
         for autoscheduler in autoschedulers: 
             if autoscheduler == 'random':
@@ -213,8 +209,7 @@ with open('bm_median_runtime.csv','w') as f:
 
     all_results = []
     for i, app in enumerate(apps):
-        #scale = 1000 if app != "camera_pipe" else 1000000
-        scale = 1 
+        scale = 1000 if app != "camera_pipe" else 1000000
         results = []
         for autoscheduler in autoschedulers: 
             if autoscheduler == 'random':
