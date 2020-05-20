@@ -529,7 +529,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
         rhs << print_name(op->name)
             << "[" << print_expr(op->index) << "]"
             << " = "
-            << print_reinterpret(UInt(32), op->value)
+            << print_reinterpret(allocations.get(op->name).type, op->value)
             << ";\n";
         // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here...
         stream << get_indent() << rhs.str();
