@@ -120,7 +120,10 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_storage_type(Type
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, const Expr &e) {
-    return print_reinterpret_cast(type, print_expr(e));
+    if (type == e.type())
+        return print_expr(e);
+    else
+        return print_reinterpret_cast(type, print_expr(e));
 }
 
 namespace {
@@ -431,11 +434,20 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
         string id_index = print_expr(op->index);
         internal_assert(op->type.bits() <= 32);
         Type promoted = op->type.with_bits(32);
-        rhs << "as" << print_type(promoted)
-            << "("
-            << print_name(op->name)
-            << "[" << id_index << "]"
-            << ")";
+        if (promoted == op->type)
+        {
+            rhs << print_name(op->name)
+                << "[" << id_index << "]";
+        }
+        else
+        {
+            rhs << "as" << print_type(promoted)
+                << "("
+                << print_name(op->name)
+                << "[" << id_index << "]"
+                << ")";
+        }
+        
         // NOTE(marcos): might need to resort to StoragePackUnpack::unpack_load() here...
         print_assignment(op->type, rhs.str());
         return;
