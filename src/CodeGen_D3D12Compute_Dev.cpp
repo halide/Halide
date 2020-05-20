@@ -916,7 +916,6 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         {
             debug(1) << "D3D12 CodeGen ERROR: Total thread group shared memory required for kernel '" << name
                      << "' exceeds the SM 5.1 limit of 32KB: " << total_shared_bytes << " bytes required.\n";
-            internal_assert(total_shared_bytes <= StoragePackUnpack::ThreadGroupSharedStorageLimit);
         }
         Allocation alloc;
         alloc.type = op->type;
