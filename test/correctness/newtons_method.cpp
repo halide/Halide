@@ -55,12 +55,22 @@ int find_pi() {
 
     T secant_result = evaluate_may_gpu<T>(g()[0]);
 
+    T tolerance = 0;
+    if (target.has_feature(Target::D3D12Compute)) {
+        tolerance = (T)0.0000003;
+    }
+
     T correct = (T)M_PI;
     if (newton_result != correct ||
         secant_result != correct) {
-        printf("Incorrect results: %10.20f %10.20f %10.20f\n",
-               newton_result, secant_result, correct);
-        return -1;
+        // it's not exactly correct, bit is the error tolerable?
+        if (abs(newton_result - correct) > tolerance ||
+            abs(secant_result - correct) > tolerance)
+        {
+            printf("Incorrect results: %10.20f %10.20f %10.20f\n",
+                   newton_result, secant_result, correct);
+            return -1;
+        }
     }
     return 0;
 }
@@ -70,13 +80,17 @@ int main(int argc, char **argv) {
 
     // Test in float.
     result = find_pi<float>();
-    if (result != 0)
+    if (result != 0) {
+        printf("Failed (float): returned %d\n", result);
         return result;
+    }
 
     if (get_jit_target_from_environment().supports_type(type_of<double>())) {
         result = find_pi<double>();
-        if (result != 0)
+        if (result != 0) {
+            printf("Failed (double): returned %d\n", result);
             return result;
+        }
     }
 
     printf("Success!\n");
