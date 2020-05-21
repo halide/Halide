@@ -1146,6 +1146,9 @@ test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
 test_opengl: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=opengl_%)
 test_auto_schedule: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=auto_schedule_%)
 
+.PHONY: test_correctness_multi_gpu
+test_correctness_multi_gpu: correctness_gpu_multi_device
+
 # There are 4 types of tests for generators:
 # 1) Externally-written aot-based tests
 # 2) Externally-written aot-based tests (compiled using C++ backend)

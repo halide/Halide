@@ -444,6 +444,9 @@ void CodeGen_GLSL::visit(const Let *op) {
 }
 
 void CodeGen_GLSL::visit(const For *loop) {
+    user_assert(loop->for_type != ForType::GPULane)
+        << "The GLSL backend does not support the gpu_lanes() scheduling directive.";
+
     if (ends_with(loop->name, ".__block_id_x") ||
         ends_with(loop->name, ".__block_id_y")) {
         internal_assert(loop->for_type == ForType::GPUBlock)

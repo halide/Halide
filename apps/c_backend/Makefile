@@ -1,5 +1,9 @@
 include ../support/Makefile.inc
 
+# Some older arm64 compilers will choke on our C backend code at -O3;
+# we'll just use -O2 for this app since performance here isn't critical
+OPTIMIZE = -O2
+
 .PHONY: build clean test
 build: $(BIN)/$(HL_TARGET)/run $(BIN)/$(HL_TARGET)/run_cpp
 test: build

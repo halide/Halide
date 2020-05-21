@@ -43,14 +43,6 @@ Buffer<double> test(bool with_vectorize) {
 }
 
 int main(int argc, char const *argv[]) {
-
-    if (sizeof(void *) == 4) {
-        printf("Skipping this test. It triggers a bug in llvm 3.6.2 when run in 32-bit mode.\n");
-        return 0;
-        // The specific bug is:
-        // void {anonymous}::SelectionDAGLegalize::LegalizeOp(llvm::SDNode*): Assertion `(TLI.getTypeAction(*DAG.getContext(), Node->getOperand(i).getValueType()) == TargetLowering::TypeLegal || Node->getOperand(i).getOpcode() == ISD::TargetConstant) && "Unexpected illegal type!"' failed.
-    }
-
     Buffer<double> im1 = test(true);
     Buffer<double> im2 = test(false);
 

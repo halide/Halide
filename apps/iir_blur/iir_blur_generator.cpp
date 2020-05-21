@@ -57,8 +57,8 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
             blur.update(2)
                 .reorder(x, ry)
                 .vectorize(x);
-        } else {
-            // GPU schedule
+        } else if (target.has_feature(Target::CUDA)) {
+            // CUDA-specific GPU schedule (using gpu_lanes)
 
             // Really for an IIR on the GPU you should use a more
             // specialized DSL like RecFilter, but we can schedule it
@@ -107,6 +107,22 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
                 .align_storage(x, warp_size + 1)
                 .compute_at(transpose, x)
                 .gpu_lanes(x);
+        } else {
+            // Generic GPU schedule (for gpus without gpu_lanes() support)
+            Var xi, yi;
+            blur.compute_root();
+            blur.update(0)
+                .split(x, x, xi, 32)
+                .gpu_blocks(x, c)
+                .gpu_threads(xi);
+            blur.update(1)
+                .split(x, x, xi, 32)
+                .gpu_blocks(x, c)
+                .gpu_threads(xi);
+            blur.update(2)
+                .split(x, x, xi, 32)
+                .gpu_blocks(x, c)
+                .gpu_threads(xi);
         }
     }
 
