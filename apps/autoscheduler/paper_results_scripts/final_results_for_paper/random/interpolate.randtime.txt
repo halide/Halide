@@ -1,0 +1,428 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.17127ms
+Auto-scheduled time: 47.3193ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16631ms
+Auto-scheduled time: 32.8006ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.1465ms
+Auto-scheduled time: 74.4439ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.1577ms
+Auto-scheduled time: 28.2186ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16766ms
+Auto-scheduled time: 29.6199ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16583ms
+Auto-scheduled time: 37.6393ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.14478ms
+Auto-scheduled time: 40.3621ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.15276ms
+Auto-scheduled time: 39.6252ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.13999ms
+Auto-scheduled time: 26.3065ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.26828ms
+Auto-scheduled time: 43.3038ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.10705ms
+Auto-scheduled time: 33.7817ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.10115ms
+Auto-scheduled time: 26.2546ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.09305ms
+Auto-scheduled time: 31.6995ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.10714ms
+Auto-scheduled time: 27.6115ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.08305ms
+Auto-scheduled time: 41.7002ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.14413ms
+Auto-scheduled time: 35.0473ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.1174ms
+Auto-scheduled time: 26.878ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.11505ms
+Auto-scheduled time: 31.9391ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.08421ms
+Auto-scheduled time: 41.244ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.10919ms
+Auto-scheduled time: 31.3839ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.09841ms
+Auto-scheduled time: 33.7433ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.09033ms
+Auto-scheduled time: 41.7734ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.11036ms
+Auto-scheduled time: 29.3458ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.11941ms
+Auto-scheduled time: 38.7782ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.10084ms
+Auto-scheduled time: 38.9501ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.11578ms
+Auto-scheduled time: 31.6326ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.05571ms
+Auto-scheduled time: 44.2666ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.08886ms
+Auto-scheduled time: 31.1498ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.13837ms
+Auto-scheduled time: 42.6274ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16065ms
+Auto-scheduled time: 26.5355ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.15672ms
+Auto-scheduled time: 31.6945ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16314ms
+Auto-scheduled time: 31.3635ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16854ms
+Auto-scheduled time: 87.8512ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.15444ms
+Auto-scheduled time: 36.5915ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.15899ms
+Auto-scheduled time: 59.112ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.20091ms
+Auto-scheduled time: 61.2192ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16248ms
+Auto-scheduled time: 31.2629ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16391ms
+Auto-scheduled time: 16.9265ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.15063ms
+Auto-scheduled time: 76.9891ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.18629ms
+Auto-scheduled time: 49.3716ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16879ms
+Auto-scheduled time: 50.4407ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16579ms
+Auto-scheduled time: 18.2847ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.1787ms
+Auto-scheduled time: 26.8486ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.18884ms
+Auto-scheduled time: 39.5329ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16359ms
+Auto-scheduled time: 40.8053ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.17977ms
+Auto-scheduled time: 73.6138ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16211ms
+Auto-scheduled time: 52.0252ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.15588ms
+Auto-scheduled time: 34.0419ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.17083ms
+Auto-scheduled time: 43.2634ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.17512ms
+Auto-scheduled time: 32.5453ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.1591ms
+Auto-scheduled time: 29.7894ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.18486ms
+Auto-scheduled time: 60.6012ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.18873ms
+Auto-scheduled time: 34.0025ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16734ms
+Auto-scheduled time: 40.257ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.16257ms
+Auto-scheduled time: 20.0423ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.14805ms
+Auto-scheduled time: 21.6824ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.17798ms
+Auto-scheduled time: 26.3497ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.12621ms
+Auto-scheduled time: 17.3536ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.13027ms
+Auto-scheduled time: 58.3075ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.14295ms
+Auto-scheduled time: 8.77445ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.12836ms
+Auto-scheduled time: 29.7853ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.08677ms
+Auto-scheduled time: 21.2334ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.11545ms
+Auto-scheduled time: 30.2455ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.10785ms
+Auto-scheduled time: 31.0453ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.07893ms
+Auto-scheduled time: 46.0106ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.09126ms
+Auto-scheduled time: 24.5089ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.09741ms
+Auto-scheduled time: 34.1172ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.14767ms
+Auto-scheduled time: 42.6576ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.17655ms
+Auto-scheduled time: 47.3413ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.13682ms
+Auto-scheduled time: 37.6352ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.13274ms
+Auto-scheduled time: 43.5607ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.13121ms
+Auto-scheduled time: 49.3483ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.14552ms
+Auto-scheduled time: 25.7222ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.11461ms
+Auto-scheduled time: 46.3567ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.14687ms
+Auto-scheduled time: 37.4667ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.11817ms
+Auto-scheduled time: 37.6944ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.14065ms
+Auto-scheduled time: 34.4805ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.13801ms
+Auto-scheduled time: 59.6686ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.12767ms
+Auto-scheduled time: 32.176ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.15663ms
+Auto-scheduled time: 33.0127ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.10247ms
+Auto-scheduled time: 31.0148ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.14808ms
+Auto-scheduled time: 25.1377ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 3.13573ms
+Auto-scheduled time: 30.4121ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/interpolate'
+
+
+RL_END_OF_RUN 3
+

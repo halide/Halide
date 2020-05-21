@@ -1,0 +1,9 @@
+
+resnet_50_blockwise 303
+resnet_50_blockwise 610
+resnet_50_blockwise 300
+resnet_50_blockwise 599
+resnet_50_blockwise 904
+resnet_50_blockwise 291
+resnet_50_blockwise 583
+resnet_50_blockwise 882

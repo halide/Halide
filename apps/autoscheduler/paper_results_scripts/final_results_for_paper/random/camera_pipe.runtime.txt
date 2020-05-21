@@ -1,0 +1,75 @@
+
+camera_pipe 28
+camera_pipe 61
+camera_pipe 110
+camera_pipe 150
+camera_pipe 178
+camera_pipe 219
+camera_pipe 250
+camera_pipe 272
+camera_pipe 304
+camera_pipe 339
+camera_pipe 368
+camera_pipe 403
+camera_pipe 426
+camera_pipe 456
+camera_pipe 479
+camera_pipe 507
+camera_pipe 542
+camera_pipe 565
+camera_pipe 596
+camera_pipe 621
+
+
+RL_END_OF_RUN 1
+
+camera_pipe 42
+camera_pipe 69
+camera_pipe 96
+camera_pipe 123
+camera_pipe 154
+camera_pipe 182
+camera_pipe 224
+camera_pipe 248
+camera_pipe 275
+camera_pipe 310
+camera_pipe 345
+camera_pipe 371
+camera_pipe 399
+camera_pipe 426
+camera_pipe 460
+camera_pipe 487
+camera_pipe 516
+camera_pipe 542
+camera_pipe 569
+camera_pipe 619
+
+
+RL_END_OF_RUN 2
+
+camera_pipe 26
+camera_pipe 55
+camera_pipe 90
+camera_pipe 130
+camera_pipe 156
+camera_pipe 181
+camera_pipe 209
+camera_pipe 241
+camera_pipe 267
+camera_pipe 293
+camera_pipe 319
+camera_pipe 343
+camera_pipe 370
+camera_pipe 395
+camera_pipe 419
+camera_pipe 449
+camera_pipe 471
+camera_pipe 496
+camera_pipe 522
+camera_pipe 550
+camera_pipe 584
+camera_pipe 612
+
+
+RL_END_OF_RUN 3
+

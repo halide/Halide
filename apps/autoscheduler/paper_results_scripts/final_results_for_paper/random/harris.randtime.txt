@@ -1,0 +1,683 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.706413ms
+Auto-scheduled time: 22.2462ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.70336ms
+Auto-scheduled time: 6.09963ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.704081ms
+Auto-scheduled time: 16.2354ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.704323ms
+Auto-scheduled time: 10.7118ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.703474ms
+Auto-scheduled time: 8.30025ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.706129ms
+Auto-scheduled time: 14.5347ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.706545ms
+Auto-scheduled time: 23.7842ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.702063ms
+Auto-scheduled time: 7.63968ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.701888ms
+Auto-scheduled time: 21.4024ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.704946ms
+Auto-scheduled time: 18.7258ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.702364ms
+Auto-scheduled time: 5.14871ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.705592ms
+Auto-scheduled time: 25.7378ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.705381ms
+Auto-scheduled time: 12.4834ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.700472ms
+Auto-scheduled time: 10.0431ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.704195ms
+Auto-scheduled time: 19.5347ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.703529ms
+Auto-scheduled time: 33.294ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.703348ms
+Auto-scheduled time: 17.3709ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.70351ms
+Auto-scheduled time: 10.9532ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.70419ms
+Auto-scheduled time: 35.742ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.703238ms
+Auto-scheduled time: 36.5143ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.702306ms
+Auto-scheduled time: 30.8249ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.699824ms
+Auto-scheduled time: 3.92626ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.705462ms
+Auto-scheduled time: 32.2453ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.704733ms
+Auto-scheduled time: 5.46577ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.705515ms
+Auto-scheduled time: 17.1528ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.702037ms
+Auto-scheduled time: 40.5779ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.705484ms
+Auto-scheduled time: 4.95702ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.711946ms
+Auto-scheduled time: 20.0589ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.703672ms
+Auto-scheduled time: 17.1651ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.704377ms
+Auto-scheduled time: 3.0861ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.702574ms
+Auto-scheduled time: 33.7048ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.703961ms
+Auto-scheduled time: 4.18558ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.702924ms
+Auto-scheduled time: 13.0562ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.70298ms
+Auto-scheduled time: 24.5362ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.704102ms
+Auto-scheduled time: 46.2835ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.702481ms
+Auto-scheduled time: 19.5995ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.751118ms
+Auto-scheduled time: 17.566ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.756629ms
+Auto-scheduled time: 22.5514ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.752014ms
+Auto-scheduled time: 31.0926ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754534ms
+Auto-scheduled time: 14.2132ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.753519ms
+Auto-scheduled time: 23.4784ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755041ms
+Auto-scheduled time: 13.2179ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755942ms
+Auto-scheduled time: 12.3202ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757273ms
+Auto-scheduled time: 11.3417ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754025ms
+Auto-scheduled time: 9.35075ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754549ms
+Auto-scheduled time: 13.4335ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75607ms
+Auto-scheduled time: 18.4848ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755822ms
+Auto-scheduled time: 17.5226ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755208ms
+Auto-scheduled time: 13.7297ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754879ms
+Auto-scheduled time: 25.1122ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.758616ms
+Auto-scheduled time: 22.3928ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757812ms
+Auto-scheduled time: 19.1662ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.759649ms
+Auto-scheduled time: 5.1461ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.756855ms
+Auto-scheduled time: 36.1499ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.758227ms
+Auto-scheduled time: 13.2061ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757112ms
+Auto-scheduled time: 20.3273ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.758025ms
+Auto-scheduled time: 15.0512ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754339ms
+Auto-scheduled time: 10.7743ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75931ms
+Auto-scheduled time: 18.1092ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757371ms
+Auto-scheduled time: 8.42488ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757486ms
+Auto-scheduled time: 2.82101ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.753781ms
+Auto-scheduled time: 23.7219ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757882ms
+Auto-scheduled time: 15.5158ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.758563ms
+Auto-scheduled time: 6.85773ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757247ms
+Auto-scheduled time: 38.9506ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.759386ms
+Auto-scheduled time: 7.07023ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.758185ms
+Auto-scheduled time: 11.2291ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.760135ms
+Auto-scheduled time: 31.3456ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757232ms
+Auto-scheduled time: 34.9972ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757629ms
+Auto-scheduled time: 28.6271ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.758412ms
+Auto-scheduled time: 26.6691ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75803ms
+Auto-scheduled time: 7.96361ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754776ms
+Auto-scheduled time: 9.64665ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.759937ms
+Auto-scheduled time: 6.9915ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.756233ms
+Auto-scheduled time: 9.20928ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755656ms
+Auto-scheduled time: 20.0873ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.760838ms
+Auto-scheduled time: 34.5225ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75857ms
+Auto-scheduled time: 16.5945ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.761509ms
+Auto-scheduled time: 10.9241ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757654ms
+Auto-scheduled time: 2.06694ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.756146ms
+Auto-scheduled time: 11.2872ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75893ms
+Auto-scheduled time: 31.887ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.758164ms
+Auto-scheduled time: 14.9527ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.759045ms
+Auto-scheduled time: 16.0869ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755503ms
+Auto-scheduled time: 18.2688ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75872ms
+Auto-scheduled time: 15.8619ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.756634ms
+Auto-scheduled time: 25.0747ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.758631ms
+Auto-scheduled time: 1.3581ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.760119ms
+Auto-scheduled time: 17.3946ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754742ms
+Auto-scheduled time: 13.9929ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.756573ms
+Auto-scheduled time: 21.5056ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755797ms
+Auto-scheduled time: 18.8827ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754183ms
+Auto-scheduled time: 29.2871ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754197ms
+Auto-scheduled time: 15.3322ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.753649ms
+Auto-scheduled time: 13.7837ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757662ms
+Auto-scheduled time: 23.4196ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755659ms
+Auto-scheduled time: 22.3779ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75764ms
+Auto-scheduled time: 9.55017ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754876ms
+Auto-scheduled time: 28.0408ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755737ms
+Auto-scheduled time: 10.4541ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.756609ms
+Auto-scheduled time: 5.20464ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.753966ms
+Auto-scheduled time: 4.23327ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75353ms
+Auto-scheduled time: 19.6337ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75791ms
+Auto-scheduled time: 22.6267ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755778ms
+Auto-scheduled time: 28.1816ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754223ms
+Auto-scheduled time: 14.3551ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754163ms
+Auto-scheduled time: 4.24449ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754136ms
+Auto-scheduled time: 17.0677ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755596ms
+Auto-scheduled time: 26.2647ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754309ms
+Auto-scheduled time: 26.4396ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754135ms
+Auto-scheduled time: 30.2006ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.753317ms
+Auto-scheduled time: 16.0097ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.756948ms
+Auto-scheduled time: 9.74592ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75485ms
+Auto-scheduled time: 20.8296ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.758704ms
+Auto-scheduled time: 25.9523ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75831ms
+Auto-scheduled time: 38.6569ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754939ms
+Auto-scheduled time: 17.7405ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754554ms
+Auto-scheduled time: 32.0689ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.755797ms
+Auto-scheduled time: 20.4792ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.7569ms
+Auto-scheduled time: 16.0611ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75615ms
+Auto-scheduled time: 5.67649ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75668ms
+Auto-scheduled time: 9.5543ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757867ms
+Auto-scheduled time: 5.51555ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754308ms
+Auto-scheduled time: 14.8525ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.756762ms
+Auto-scheduled time: 2.08438ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75471ms
+Auto-scheduled time: 17.7527ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754813ms
+Auto-scheduled time: 30.277ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.754504ms
+Auto-scheduled time: 29.7617ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.756832ms
+Auto-scheduled time: 16.1737ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.75709ms
+Auto-scheduled time: 20.8975ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.760409ms
+Auto-scheduled time: 6.9474ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.759829ms
+Auto-scheduled time: 38.7464ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.757276ms
+Auto-scheduled time: 23.8256ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 0.760375ms
+Auto-scheduled time: 11.7856ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/harris'
+
+
+RL_END_OF_RUN 3
+

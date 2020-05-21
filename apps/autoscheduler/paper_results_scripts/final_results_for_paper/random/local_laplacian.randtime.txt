@@ -1,0 +1,397 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 24.3428ms
+Auto-scheduled time: 92.2146ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 24.1758ms
+Auto-scheduled time: 91.9883ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 24.2412ms
+Auto-scheduled time: 131.754ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 24.1698ms
+Auto-scheduled time: 131.077ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 24.319ms
+Auto-scheduled time: 111.483ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 24.1751ms
+Auto-scheduled time: 111.067ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6699ms
+Auto-scheduled time: 179.923ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5549ms
+Auto-scheduled time: 177.223ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7076ms
+Auto-scheduled time: 201.124ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.7567ms
+Auto-scheduled time: 201.805ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7619ms
+Auto-scheduled time: 87.8485ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6254ms
+Auto-scheduled time: 86.4525ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6591ms
+Auto-scheduled time: 88.3024ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6239ms
+Auto-scheduled time: 88.5914ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6756ms
+Auto-scheduled time: 219.912ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6064ms
+Auto-scheduled time: 220.672ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6722ms
+Auto-scheduled time: 129.891ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5435ms
+Auto-scheduled time: 129.502ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6701ms
+Auto-scheduled time: 160.466ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5994ms
+Auto-scheduled time: 158.906ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 24.3663ms
+Auto-scheduled time: 120.394ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 24.1929ms
+Auto-scheduled time: 120.113ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 24.3105ms
+Auto-scheduled time: 123.323ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 24.2629ms
+Auto-scheduled time: 123.441ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 24.3176ms
+Auto-scheduled time: 97.4795ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 24.2459ms
+Auto-scheduled time: 97.4734ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 24.2932ms
+Auto-scheduled time: 55.2585ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 24.2551ms
+Auto-scheduled time: 55.0727ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 24.3345ms
+Auto-scheduled time: 249.997ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 24.2379ms
+Auto-scheduled time: 250.763ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 24.2981ms
+Auto-scheduled time: 77.5402ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 24.2229ms
+Auto-scheduled time: 77.4968ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.8372ms
+Auto-scheduled time: 203.239ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.7257ms
+Auto-scheduled time: 201.881ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.8072ms
+Auto-scheduled time: 186.807ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6838ms
+Auto-scheduled time: 186.054ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7956ms
+Auto-scheduled time: 191.091ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6712ms
+Auto-scheduled time: 189.5ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.8156ms
+Auto-scheduled time: 172.572ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6933ms
+Auto-scheduled time: 173.371ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7288ms
+Auto-scheduled time: 72.296ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6837ms
+Auto-scheduled time: 71.7853ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7302ms
+Auto-scheduled time: 139.913ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6706ms
+Auto-scheduled time: 139.688ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.8107ms
+Auto-scheduled time: 229.801ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6468ms
+Auto-scheduled time: 230.284ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7988ms
+Auto-scheduled time: 60.4204ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6943ms
+Auto-scheduled time: 60.5395ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7333ms
+Auto-scheduled time: 188.065ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.7456ms
+Auto-scheduled time: 188.472ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7794ms
+Auto-scheduled time: 146.632ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6788ms
+Auto-scheduled time: 145.693ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7536ms
+Auto-scheduled time: 159.48ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6876ms
+Auto-scheduled time: 159.666ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.8456ms
+Auto-scheduled time: 95.7885ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6238ms
+Auto-scheduled time: 96.0095ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7404ms
+Auto-scheduled time: 88.8436ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5963ms
+Auto-scheduled time: 88.5924ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.747ms
+Auto-scheduled time: 173.24ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6417ms
+Auto-scheduled time: 173.763ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7651ms
+Auto-scheduled time: 148.058ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6725ms
+Auto-scheduled time: 147.725ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.8058ms
+Auto-scheduled time: 102.031ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6929ms
+Auto-scheduled time: 102.435ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7394ms
+Auto-scheduled time: 214.8ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6817ms
+Auto-scheduled time: 215.525ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.8592ms
+Auto-scheduled time: 137.25ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.7099ms
+Auto-scheduled time: 137.764ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.9298ms
+Auto-scheduled time: 107.344ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.7544ms
+Auto-scheduled time: 107.194ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7194ms
+Auto-scheduled time: 68.3126ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6722ms
+Auto-scheduled time: 67.7653ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.8087ms
+Auto-scheduled time: 100.625ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6951ms
+Auto-scheduled time: 100.453ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6423ms
+Auto-scheduled time: 73.7088ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5918ms
+Auto-scheduled time: 73.2972ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6523ms
+Auto-scheduled time: 132.355ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5451ms
+Auto-scheduled time: 131.516ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6046ms
+Auto-scheduled time: 127.16ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.764ms
+Auto-scheduled time: 127.872ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7154ms
+Auto-scheduled time: 87.1525ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5468ms
+Auto-scheduled time: 87.089ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6328ms
+Auto-scheduled time: 204.368ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.625ms
+Auto-scheduled time: 204.974ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6364ms
+Auto-scheduled time: 238.652ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5817ms
+Auto-scheduled time: 238.191ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7291ms
+Auto-scheduled time: 177.422ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5637ms
+Auto-scheduled time: 177.751ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.5742ms
+Auto-scheduled time: 197.593ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5774ms
+Auto-scheduled time: 198.042ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6349ms
+Auto-scheduled time: 128.119ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5631ms
+Auto-scheduled time: 128.765ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.7021ms
+Auto-scheduled time: 118.31ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.5691ms
+Auto-scheduled time: 118.792ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 25.6877ms
+Auto-scheduled time: 127.187ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 25.6161ms
+Auto-scheduled time: 126.965ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/local_laplacian'
+
+
+RL_END_OF_RUN 3
+

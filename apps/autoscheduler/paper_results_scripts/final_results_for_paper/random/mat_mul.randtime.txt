@@ -1,0 +1,1428 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.492ms
+Auto-scheduled time: 58.751ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4394ms
+Auto-scheduled time: 59.6987ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4015ms
+Auto-scheduled time: 57.8398ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4889ms
+Auto-scheduled time: 60.2736ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4189ms
+Auto-scheduled time: 59.2879ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5492ms
+Auto-scheduled time: 159.191ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4736ms
+Auto-scheduled time: 58.1023ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5164ms
+Auto-scheduled time: 65.0075ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 19.9966ms
+Auto-scheduled time: 20.4478ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3381ms
+Auto-scheduled time: 19.1585ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5451ms
+Auto-scheduled time: 61.4822ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4129ms
+Auto-scheduled time: 58.629ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4132ms
+Auto-scheduled time: 58.3368ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4757ms
+Auto-scheduled time: 58.9563ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4376ms
+Auto-scheduled time: 62.0549ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4611ms
+Auto-scheduled time: 198.574ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4869ms
+Auto-scheduled time: 65.26ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4746ms
+Auto-scheduled time: 59.0313ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5067ms
+Auto-scheduled time: 56.9045ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.2931ms
+Auto-scheduled time: 59.619ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5317ms
+Auto-scheduled time: 68.1875ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4593ms
+Auto-scheduled time: 59.832ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3482ms
+Auto-scheduled time: 31.3311ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4781ms
+Auto-scheduled time: 14.1154ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4535ms
+Auto-scheduled time: 58.6516ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4021ms
+Auto-scheduled time: 153.027ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.321ms
+Auto-scheduled time: 37.1557ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4569ms
+Auto-scheduled time: 59.1398ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3558ms
+Auto-scheduled time: 15.2095ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5472ms
+Auto-scheduled time: 59.7777ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4781ms
+Auto-scheduled time: 162.431ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5146ms
+Auto-scheduled time: 57.8349ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5128ms
+Auto-scheduled time: 62.5125ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4418ms
+Auto-scheduled time: 58.7885ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5691ms
+Auto-scheduled time: 61.3561ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.446ms
+Auto-scheduled time: 56.4254ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.415ms
+Auto-scheduled time: 13.6742ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.117ms
+Auto-scheduled time: 51.9992ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.484ms
+Auto-scheduled time: 62.5202ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5295ms
+Auto-scheduled time: 63.807ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4029ms
+Auto-scheduled time: 56.2373ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4171ms
+Auto-scheduled time: 20.4782ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4627ms
+Auto-scheduled time: 19.6466ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4408ms
+Auto-scheduled time: 58.1087ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4311ms
+Auto-scheduled time: 60.8734ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3402ms
+Auto-scheduled time: 21.8325ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3399ms
+Auto-scheduled time: 52.8386ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4855ms
+Auto-scheduled time: 17.5748ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4259ms
+Auto-scheduled time: 57.083ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4041ms
+Auto-scheduled time: 26.5386ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4486ms
+Auto-scheduled time: 163.679ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5168ms
+Auto-scheduled time: 38.2344ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3515ms
+Auto-scheduled time: 55.1212ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4906ms
+Auto-scheduled time: 22.4892ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4063ms
+Auto-scheduled time: 178.423ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4565ms
+Auto-scheduled time: 45.386ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4229ms
+Auto-scheduled time: 55.8292ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4851ms
+Auto-scheduled time: 60.1148ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4909ms
+Auto-scheduled time: 62.4903ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5413ms
+Auto-scheduled time: 56.786ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.352ms
+Auto-scheduled time: 54.5399ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4787ms
+Auto-scheduled time: 22.7406ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.445ms
+Auto-scheduled time: 57.1605ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 19.9923ms
+Auto-scheduled time: 15.1961ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4079ms
+Auto-scheduled time: 57.1186ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5336ms
+Auto-scheduled time: 159.076ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4939ms
+Auto-scheduled time: 58.5632ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.306ms
+Auto-scheduled time: 59.3628ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4889ms
+Auto-scheduled time: 159.778ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.373ms
+Auto-scheduled time: 26.4779ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4649ms
+Auto-scheduled time: 19.0665ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4528ms
+Auto-scheduled time: 56.5611ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4273ms
+Auto-scheduled time: 60.0495ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4252ms
+Auto-scheduled time: 18.001ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.501ms
+Auto-scheduled time: 165.737ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.6133ms
+Auto-scheduled time: 13.5802ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4656ms
+Auto-scheduled time: 65.2718ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4578ms
+Auto-scheduled time: 56.5191ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4609ms
+Auto-scheduled time: 62.4169ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4173ms
+Auto-scheduled time: 12.8417ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5257ms
+Auto-scheduled time: 59.8461ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.2944ms
+Auto-scheduled time: 38.1001ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4457ms
+Auto-scheduled time: 65.0724ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.514ms
+Auto-scheduled time: 58.2051ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.37ms
+Auto-scheduled time: 57.7291ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4518ms
+Auto-scheduled time: 39.8603ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4815ms
+Auto-scheduled time: 61.3218ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3595ms
+Auto-scheduled time: 60.3923ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4775ms
+Auto-scheduled time: 58.901ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4696ms
+Auto-scheduled time: 57.778ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.435ms
+Auto-scheduled time: 59.8571ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5104ms
+Auto-scheduled time: 164.195ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4616ms
+Auto-scheduled time: 58.5936ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5358ms
+Auto-scheduled time: 65.2425ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4948ms
+Auto-scheduled time: 66.5162ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5061ms
+Auto-scheduled time: 60.4082ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3249ms
+Auto-scheduled time: 14.8848ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.421ms
+Auto-scheduled time: 57.8361ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4492ms
+Auto-scheduled time: 163.306ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5156ms
+Auto-scheduled time: 64.6848ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4353ms
+Auto-scheduled time: 38.1612ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4618ms
+Auto-scheduled time: 62.7325ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4166ms
+Auto-scheduled time: 64.0693ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4816ms
+Auto-scheduled time: 59.8376ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5108ms
+Auto-scheduled time: 63.9843ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4892ms
+Auto-scheduled time: 58.8928ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4865ms
+Auto-scheduled time: 59.8518ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4778ms
+Auto-scheduled time: 59.161ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4699ms
+Auto-scheduled time: 191.791ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4893ms
+Auto-scheduled time: 165.269ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.403ms
+Auto-scheduled time: 38.5768ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4747ms
+Auto-scheduled time: 60.3335ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.571ms
+Auto-scheduled time: 54.2359ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5643ms
+Auto-scheduled time: 57.5554ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.2978ms
+Auto-scheduled time: 59.3238ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5581ms
+Auto-scheduled time: 59.0226ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4663ms
+Auto-scheduled time: 13.7374ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4548ms
+Auto-scheduled time: 53.8763ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4095ms
+Auto-scheduled time: 53.9043ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5141ms
+Auto-scheduled time: 59.4624ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4857ms
+Auto-scheduled time: 64.7532ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.477ms
+Auto-scheduled time: 155.475ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4454ms
+Auto-scheduled time: 17.4038ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4199ms
+Auto-scheduled time: 56.784ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4259ms
+Auto-scheduled time: 56.0689ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5607ms
+Auto-scheduled time: 61.9816ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4904ms
+Auto-scheduled time: 15.3995ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5577ms
+Auto-scheduled time: 68.5443ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4593ms
+Auto-scheduled time: 13.8074ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4799ms
+Auto-scheduled time: 175.378ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3226ms
+Auto-scheduled time: 53.5203ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4788ms
+Auto-scheduled time: 62.7771ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5058ms
+Auto-scheduled time: 64.9984ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.514ms
+Auto-scheduled time: 58.0893ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4425ms
+Auto-scheduled time: 60.8078ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5655ms
+Auto-scheduled time: 165.732ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5141ms
+Auto-scheduled time: 156.335ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5952ms
+Auto-scheduled time: 15.2761ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5462ms
+Auto-scheduled time: 36.7818ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5347ms
+Auto-scheduled time: 57.8428ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4245ms
+Auto-scheduled time: 61.8117ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5702ms
+Auto-scheduled time: 61.603ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.2785ms
+Auto-scheduled time: 53.3791ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3326ms
+Auto-scheduled time: 166.16ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5172ms
+Auto-scheduled time: 64.8769ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4634ms
+Auto-scheduled time: 21.6559ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5508ms
+Auto-scheduled time: 14.0171ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3903ms
+Auto-scheduled time: 54.5603ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5127ms
+Auto-scheduled time: 163.244ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4052ms
+Auto-scheduled time: 12.8754ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5365ms
+Auto-scheduled time: 58.827ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5107ms
+Auto-scheduled time: 56.3589ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4778ms
+Auto-scheduled time: 57.1702ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5304ms
+Auto-scheduled time: 65.3289ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3122ms
+Auto-scheduled time: 51.2123ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3253ms
+Auto-scheduled time: 58.1768ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4737ms
+Auto-scheduled time: 36.7957ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4519ms
+Auto-scheduled time: 62.3636ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4606ms
+Auto-scheduled time: 31.43ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5026ms
+Auto-scheduled time: 65.4091ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4783ms
+Auto-scheduled time: 58.412ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.487ms
+Auto-scheduled time: 65.6297ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.491ms
+Auto-scheduled time: 167.497ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.55ms
+Auto-scheduled time: 58.432ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4437ms
+Auto-scheduled time: 13.0053ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5045ms
+Auto-scheduled time: 60.8452ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4583ms
+Auto-scheduled time: 58.8158ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4756ms
+Auto-scheduled time: 58.2464ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4563ms
+Auto-scheduled time: 15.241ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4664ms
+Auto-scheduled time: 12.7869ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4143ms
+Auto-scheduled time: 65.258ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.379ms
+Auto-scheduled time: 24.1897ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.454ms
+Auto-scheduled time: 57.9915ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5232ms
+Auto-scheduled time: 64.3127ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5306ms
+Auto-scheduled time: 66.6413ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4812ms
+Auto-scheduled time: 61.8484ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.406ms
+Auto-scheduled time: 55.487ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4663ms
+Auto-scheduled time: 159.952ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5336ms
+Auto-scheduled time: 162.26ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5429ms
+Auto-scheduled time: 58.4918ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5521ms
+Auto-scheduled time: 20.4685ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5564ms
+Auto-scheduled time: 19.8683ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5151ms
+Auto-scheduled time: 37.8967ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3203ms
+Auto-scheduled time: 162.354ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5569ms
+Auto-scheduled time: 58.3711ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5478ms
+Auto-scheduled time: 59.5018ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3282ms
+Auto-scheduled time: 53.8004ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4178ms
+Auto-scheduled time: 58.2488ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5562ms
+Auto-scheduled time: 58.975ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5759ms
+Auto-scheduled time: 59.7941ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.6044ms
+Auto-scheduled time: 174.389ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.6298ms
+Auto-scheduled time: 158.327ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5738ms
+Auto-scheduled time: 179.53ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.6109ms
+Auto-scheduled time: 60.2687ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4135ms
+Auto-scheduled time: 52.542ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4912ms
+Auto-scheduled time: 55.1509ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5198ms
+Auto-scheduled time: 67.9297ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4722ms
+Auto-scheduled time: 19.7085ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.6083ms
+Auto-scheduled time: 59.9204ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.341ms
+Auto-scheduled time: 50.2245ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5959ms
+Auto-scheduled time: 63.8139ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.514ms
+Auto-scheduled time: 56.618ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3696ms
+Auto-scheduled time: 38.2461ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5835ms
+Auto-scheduled time: 37.6789ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5699ms
+Auto-scheduled time: 53.1775ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5116ms
+Auto-scheduled time: 55.7757ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5181ms
+Auto-scheduled time: 66.9919ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5451ms
+Auto-scheduled time: 59.1433ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4082ms
+Auto-scheduled time: 53.4331ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5246ms
+Auto-scheduled time: 59.239ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5087ms
+Auto-scheduled time: 56.7108ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5807ms
+Auto-scheduled time: 58.3625ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5415ms
+Auto-scheduled time: 57.0238ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5569ms
+Auto-scheduled time: 58.6164ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5764ms
+Auto-scheduled time: 60.2929ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5356ms
+Auto-scheduled time: 160.34ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.473ms
+Auto-scheduled time: 59.6499ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.343ms
+Auto-scheduled time: 12.7688ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5016ms
+Auto-scheduled time: 159.137ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4617ms
+Auto-scheduled time: 54.484ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.329ms
+Auto-scheduled time: 59.1498ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.462ms
+Auto-scheduled time: 57.6258ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5178ms
+Auto-scheduled time: 21.16ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5774ms
+Auto-scheduled time: 56.9893ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4556ms
+Auto-scheduled time: 56.1357ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4415ms
+Auto-scheduled time: 54.6023ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4545ms
+Auto-scheduled time: 62.6331ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5506ms
+Auto-scheduled time: 57.9513ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5784ms
+Auto-scheduled time: 58.8537ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5132ms
+Auto-scheduled time: 57.6266ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3803ms
+Auto-scheduled time: 171.85ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4503ms
+Auto-scheduled time: 58.7279ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3789ms
+Auto-scheduled time: 20.8771ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4835ms
+Auto-scheduled time: 58.3871ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4624ms
+Auto-scheduled time: 38.3636ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4389ms
+Auto-scheduled time: 19.6518ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4885ms
+Auto-scheduled time: 17.5921ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.2679ms
+Auto-scheduled time: 56.3298ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3046ms
+Auto-scheduled time: 162.059ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4004ms
+Auto-scheduled time: 60.2996ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4429ms
+Auto-scheduled time: 61.3405ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4775ms
+Auto-scheduled time: 63.27ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5338ms
+Auto-scheduled time: 20.1342ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4149ms
+Auto-scheduled time: 60.2036ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.2515ms
+Auto-scheduled time: 54.224ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5053ms
+Auto-scheduled time: 25.3391ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4626ms
+Auto-scheduled time: 59.06ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4945ms
+Auto-scheduled time: 72.7589ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4866ms
+Auto-scheduled time: 58.9014ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.488ms
+Auto-scheduled time: 57.6539ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3819ms
+Auto-scheduled time: 55.9277ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5053ms
+Auto-scheduled time: 59.571ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3939ms
+Auto-scheduled time: 55.7293ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4736ms
+Auto-scheduled time: 59.6129ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.505ms
+Auto-scheduled time: 62.4015ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5374ms
+Auto-scheduled time: 62.6226ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.448ms
+Auto-scheduled time: 57.2498ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.402ms
+Auto-scheduled time: 58.8379ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3849ms
+Auto-scheduled time: 60.7514ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3833ms
+Auto-scheduled time: 53.4927ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5516ms
+Auto-scheduled time: 60.9837ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5194ms
+Auto-scheduled time: 58.5207ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5066ms
+Auto-scheduled time: 38.5009ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.6223ms
+Auto-scheduled time: 25.8663ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4883ms
+Auto-scheduled time: 66.2693ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5613ms
+Auto-scheduled time: 59.6205ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5369ms
+Auto-scheduled time: 58.3092ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5283ms
+Auto-scheduled time: 160.794ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5348ms
+Auto-scheduled time: 20.7833ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3625ms
+Auto-scheduled time: 60.9332ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.507ms
+Auto-scheduled time: 58.6314ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.3917ms
+Auto-scheduled time: 22.0346ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5169ms
+Auto-scheduled time: 55.7396ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5017ms
+Auto-scheduled time: 18.4137ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4754ms
+Auto-scheduled time: 54.6662ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4989ms
+Auto-scheduled time: 182.745ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.577ms
+Auto-scheduled time: 59.3671ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4944ms
+Auto-scheduled time: 57.2963ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5426ms
+Auto-scheduled time: 61.2186ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.5816ms
+Auto-scheduled time: 59.1178ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4831ms
+Auto-scheduled time: 20.3688ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.4753ms
+Auto-scheduled time: 17.7766ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+bin/host/filter
+Manually-tuned time: 20.389ms
+Auto-scheduled time: 148.705ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/mat_mul'
+
+
+RL_END_OF_RUN 3
+
