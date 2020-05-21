@@ -1,0 +1,52 @@
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/unsharp'
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -g unsharp_generator.cpp /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp -o bin/host/unsharp.generator -Wl,-rpath,/home/ubuntu/llvm-project/Halide/distrib/bin/ -L /home/ubuntu/llvm-project/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/unsharp.generator -g unsharp -f unsharp -o bin/host target=host-no_runtime auto_schedule=false
+bin/host/unsharp.generator -g unsharp -f unsharp_auto_schedule -o bin/host target=host-no_runtime auto_schedule=true -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+mcts_depth 20
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+best intermediate value -4.37916
+finished depth 1 best value so far -4.37916
+best intermediate value -4.37916
+finished depth 2 best value so far -4.37916
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -4.37916
+best intermediate value -4.37916
+finished depth 4 best value so far -4.37916
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -4.37916
+best intermediate value -4.37916
+finished depth 6 best value so far -4.37916
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -4.37916
+best intermediate value -4.37916
+finished depth 8 best value so far -4.37916
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -4.37916
+best intermediate value -1.11111e+11
+finished depth 10 best value so far -4.37916
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -4.37916
+best intermediate value -4.37916
+finished depth 12 best value so far -4.37916
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -4.37916
+best intermediate value -4.37916
+finished depth 14 best value so far -4.37916
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -4.37916
+best intermediate value -1.11111e+11
+finished depth 16 best value so far -4.37916
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -4.37916
+best intermediate value -1.11111e+11
+finished depth 18 best value so far -4.37916
+JENNY_MINCOST: 4.37916
+JENNY_EVALTIME: 6202865
+num_best_decisions: 4num_random_decisions: 3
+bin/host/unsharp.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host -Wall -O3 filter.cpp bin/host/unsharp.a bin/host/unsharp_auto_schedule.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/home/ubuntu/anaconda3/envs/halide/lib -lpng16  -ljpeg -I/home/ubuntu/anaconda3/envs/halide/include/libpng16 -I/home/ubuntu/anaconda3/envs/halide/include/libpng16/..   
+rm bin/host/unsharp_auto_schedule.a bin/host/unsharp.a bin/host/runtime.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/unsharp'

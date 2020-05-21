@@ -1,9 +1,0 @@
-make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/camera_pipe'
-c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp camera_pipe_generator.cpp /home/ubuntu/llvm-project/Halide/distrib/bin/libHalide.so /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp -o bin/host/camera_pipe.generator -Wl,-rpath,/home/ubuntu/llvm-project/Halide/distrib/bin/ -L /home/ubuntu/llvm-project/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz -lz -lrt -ldl -lpthread -lm
-bin/host/camera_pipe.generator -g camera_pipe -e static_library,h,registration,stmt,assembly -o bin/host -f camera_pipe target=host auto_schedule=false
-bin/host/camera_pipe.generator -g camera_pipe -e static_library,h,registration,stmt,assembly -o bin/host -f camera_pipe_auto_schedule target=host-no_runtime auto_schedule=true -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
-JENNY_MINCOST: 57.3255
-JENNY_EVALTIME: 1477
-c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Wall -Ibin/host process.cpp bin/host/camera_pipe.a bin/host/camera_pipe_auto_schedule.a -o bin/host/process -L/home/ubuntu/anaconda3/envs/halide/lib -lpng16  -ljpeg -I/home/ubuntu/anaconda3/envs/halide/include/libpng16 -I/home/ubuntu/anaconda3/envs/halide/include/libpng16/..  -ldl -lpthread -lz
-rm bin/host/camera_pipe_auto_schedule.a bin/host/camera_pipe.a
-make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/camera_pipe'

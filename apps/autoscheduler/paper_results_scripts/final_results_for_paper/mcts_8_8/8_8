@@ -1,0 +1,54 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+bin/host/filter ../images/gray.png bin/host/out.png 0.1 10
+Manually-tuned time: 5.3283ms
+Auto-scheduled time: 5.76246ms
+bin/host/filter ../images/gray.png bin/host/out.tiff 0.1 10
+Manually-tuned time: 5.32312ms
+Auto-scheduled time: 5.76329ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+
+
+RL_END_OF_RUN 0
+
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.51454ms
+Auto-scheduled time: 19.8638ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+
+
+RL_END_OF_RUN 0
+
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/iir_blur'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 10.5576ms
+Auto-scheduled time: 47.2111ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/iir_blur'
+
+
+RL_END_OF_RUN 0
+
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/max_filter'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 40.7809ms
+Auto-scheduled time: 71.1537ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/max_filter'
+
+
+RL_END_OF_RUN 0
+
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.9334ms
+Auto-scheduled time: 32.5523ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+
+
+RL_END_OF_RUN 0
+
