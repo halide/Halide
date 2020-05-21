@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.6
 
 from statistics import median
+import glob
 
 apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul resnet_50_blockwise".split(" ")
 autoschedulers="master random greedy beam manual mcts".split(" ")
@@ -49,12 +50,6 @@ def get_rand_result(fname, scale, num_rand, linestart="Auto-scheduled time:"):
     except FileNotFoundError:
         pass
 
-    #if len(sub_values) == 0:
-    #    sub_values.append(0)
-
-    #values.append(sub_values)
-
-    #return median(values)
     return values
 
 
@@ -74,10 +69,31 @@ def get_result(fname, scale, linestart="Auto-scheduled time:"):
     except FileNotFoundError:
         pass
 
-    #if len(sub_values) == 0:
-    #    sub_values.append(0)
+    return values
 
-    #values.append(sub_values)
+
+def get_mcts_result(fname, scale, linestart="Auto-scheduled time:"):
+    values = []
+    sub_values = []
+    fnames = glob.glob(fname+".*")
+    try:
+        for fname in fnames:
+            sub_sub_values = []
+            with open(fname) as f:
+                delimiter = 0
+                for line in f:
+                    if line.startswith(linestart):
+                        value = float(strip_non_digits(line)) / scale
+                        sub_sub_values.append(value)
+                    elif line.startswith('mcts_depth'):
+                        if delimiter != 0:
+                            sub_values.append(sub_sub_values[-1])
+                            sub_sub_values = []
+                        delimiter += 1
+                sub_values.append(sub_sub_values[-1])
+            values.append(sub_values)
+    except FileNotFoundError:
+        pass
 
     return values
 
@@ -127,6 +143,8 @@ with open('mincost.csv','w') as f:
         for autoscheduler in autoschedulers: 
             if autoscheduler == 'random':
                 values = get_rand_result(f"../{autoscheduler}/{app}.mincost.txt", scale, num_rand_runs[i], "JENNY_MINCOST: ")
+            if autoscheduler == 'mcts':
+                values = get_mcts_result(f"../{autoscheduler}/{app}.log", scale, "JENNY_MINCOST: ")
             else: 
                 values = get_result(f"../{autoscheduler}/{app}.mincost.txt", scale, "JENNY_MINCOST: ")
 
@@ -155,6 +173,8 @@ with open('evaltime.csv','w') as f:
         for autoscheduler in autoschedulers: 
             if autoscheduler == 'random':
                 values = get_rand_result(f"../{autoscheduler}/{app}.evaltime.txt", scale, num_rand_runs[i], "JENNY_EVALTIME: ")
+            if autoscheduler == 'mcts':
+                values = get_mcts_result(f"../{autoscheduler}/{app}.log", scale, "JENNY_EVALTIME: ")
             else: 
                 values = get_result(f"../{autoscheduler}/{app}.evaltime.txt", scale, "JENNY_EVALTIME: ")
 
