@@ -1,0 +1,28 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.14484ms
+Auto-scheduled time: 25.4857ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07751ms
+Auto-scheduled time: 18.262ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.14885ms
+Auto-scheduled time: 24.9994ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+
+
+RL_END_OF_RUN 3
+

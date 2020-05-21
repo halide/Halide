@@ -1,0 +1,1198 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06952ms
+Auto-scheduled time: 59.333ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08287ms
+Auto-scheduled time: 38.6463ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.20123ms
+Auto-scheduled time: 61.6358ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.79291ms
+Auto-scheduled time: 66.6401ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.18579ms
+Auto-scheduled time: 13.2097ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06574ms
+Auto-scheduled time: 43.7586ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08798ms
+Auto-scheduled time: 7.65035ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06752ms
+Auto-scheduled time: 73.3349ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.09114ms
+Auto-scheduled time: 18.3255ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.05911ms
+Auto-scheduled time: 202.608ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04719ms
+Auto-scheduled time: 75.5064ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08213ms
+Auto-scheduled time: 70.977ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.12458ms
+Auto-scheduled time: 144.392ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.44354ms
+Auto-scheduled time: 217.476ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.05929ms
+Auto-scheduled time: 35.5191ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.03923ms
+Auto-scheduled time: 257.892ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07457ms
+Auto-scheduled time: 52.96ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.05927ms
+Auto-scheduled time: 41.5955ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.03861ms
+Auto-scheduled time: 38.5273ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.19796ms
+Auto-scheduled time: 165.129ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.13771ms
+Auto-scheduled time: 161.107ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.98743ms
+Auto-scheduled time: 144.488ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04461ms
+Auto-scheduled time: 161.454ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.03053ms
+Auto-scheduled time: 41.6725ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.16916ms
+Auto-scheduled time: 61.5801ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.0259ms
+Auto-scheduled time: 12.2504ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.10441ms
+Auto-scheduled time: 47.2658ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.19768ms
+Auto-scheduled time: 18.1645ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.0468ms
+Auto-scheduled time: 37.9396ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04575ms
+Auto-scheduled time: 40.3779ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.12514ms
+Auto-scheduled time: 46.1349ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.52372ms
+Auto-scheduled time: 13.7586ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08113ms
+Auto-scheduled time: 163.465ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.05205ms
+Auto-scheduled time: 26.3285ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07066ms
+Auto-scheduled time: 34.2225ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.0256ms
+Auto-scheduled time: 19.5402ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04069ms
+Auto-scheduled time: 42.6182ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.23159ms
+Auto-scheduled time: 96.9588ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07425ms
+Auto-scheduled time: 38.7657ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04835ms
+Auto-scheduled time: 66.0975ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.05015ms
+Auto-scheduled time: 53.2709ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.03498ms
+Auto-scheduled time: 158.151ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.79749ms
+Auto-scheduled time: 145.104ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.0837ms
+Auto-scheduled time: 190.954ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04628ms
+Auto-scheduled time: 23.8046ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.46336ms
+Auto-scheduled time: 14.2909ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04684ms
+Auto-scheduled time: 48.4784ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.05877ms
+Auto-scheduled time: 55.2468ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04706ms
+Auto-scheduled time: 44.5256ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.11638ms
+Auto-scheduled time: 42.0022ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.51917ms
+Auto-scheduled time: 156.623ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07625ms
+Auto-scheduled time: 34.3137ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04046ms
+Auto-scheduled time: 56.6923ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04539ms
+Auto-scheduled time: 41.4366ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.03717ms
+Auto-scheduled time: 37.1725ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04669ms
+Auto-scheduled time: 64.5243ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.82501ms
+Auto-scheduled time: 41.8316ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07807ms
+Auto-scheduled time: 44.6459ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.03824ms
+Auto-scheduled time: 29.4153ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.05394ms
+Auto-scheduled time: 219.327ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.51278ms
+Auto-scheduled time: 58.9827ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.10726ms
+Auto-scheduled time: 41.5327ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08973ms
+Auto-scheduled time: 8.09709ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.5457ms
+Auto-scheduled time: 26.6895ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04728ms
+Auto-scheduled time: 76.4074ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04893ms
+Auto-scheduled time: 46.1315ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07343ms
+Auto-scheduled time: 46.3396ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.05322ms
+Auto-scheduled time: 49.9044ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.03244ms
+Auto-scheduled time: 13.529ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.03844ms
+Auto-scheduled time: 56.749ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.03802ms
+Auto-scheduled time: 47.342ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.83872ms
+Auto-scheduled time: 47.7747ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06579ms
+Auto-scheduled time: 61.7578ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.18983ms
+Auto-scheduled time: 128.659ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04707ms
+Auto-scheduled time: 167.786ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04628ms
+Auto-scheduled time: 19.1172ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.16334ms
+Auto-scheduled time: 41.4066ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04932ms
+Auto-scheduled time: 49.6305ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04649ms
+Auto-scheduled time: 19.6365ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.13979ms
+Auto-scheduled time: 161.579ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.11272ms
+Auto-scheduled time: 70.9625ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.14913ms
+Auto-scheduled time: 72.3297ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.12167ms
+Auto-scheduled time: 63.5214ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.12721ms
+Auto-scheduled time: 37.1952ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.1822ms
+Auto-scheduled time: 55.0134ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06648ms
+Auto-scheduled time: 59.3501ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.13648ms
+Auto-scheduled time: 21.9762ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.04331ms
+Auto-scheduled time: 17.1586ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.05486ms
+Auto-scheduled time: 39.3763ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.91807ms
+Auto-scheduled time: 41.8052ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.12449ms
+Auto-scheduled time: 47.3949ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.49351ms
+Auto-scheduled time: 209.01ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.10943ms
+Auto-scheduled time: 52.1328ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.0691ms
+Auto-scheduled time: 135.999ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.0486ms
+Auto-scheduled time: 47.3703ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06285ms
+Auto-scheduled time: 47.1547ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.11615ms
+Auto-scheduled time: 12.9403ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.75411ms
+Auto-scheduled time: 48.2272ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.57682ms
+Auto-scheduled time: 57.7581ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.46372ms
+Auto-scheduled time: 224.391ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.17851ms
+Auto-scheduled time: 42.2172ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08532ms
+Auto-scheduled time: 53.136ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.16562ms
+Auto-scheduled time: 150.501ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07114ms
+Auto-scheduled time: 43.2379ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.70987ms
+Auto-scheduled time: 62.2928ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07559ms
+Auto-scheduled time: 46.3557ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.0759ms
+Auto-scheduled time: 58.7014ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.12035ms
+Auto-scheduled time: 60.9309ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.17305ms
+Auto-scheduled time: 47.5762ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.15989ms
+Auto-scheduled time: 47.4998ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07636ms
+Auto-scheduled time: 60.3785ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08022ms
+Auto-scheduled time: 126.517ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09509ms
+Auto-scheduled time: 14.7127ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.15624ms
+Auto-scheduled time: 97.7724ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.18339ms
+Auto-scheduled time: 53.4602ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06995ms
+Auto-scheduled time: 202.428ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.43336ms
+Auto-scheduled time: 43.572ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.14555ms
+Auto-scheduled time: 36.2285ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09407ms
+Auto-scheduled time: 9.66409ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.52119ms
+Auto-scheduled time: 34.3762ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08815ms
+Auto-scheduled time: 14.785ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.15491ms
+Auto-scheduled time: 203.946ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06015ms
+Auto-scheduled time: 162.084ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07927ms
+Auto-scheduled time: 64.5935ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08223ms
+Auto-scheduled time: 159.853ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.97288ms
+Auto-scheduled time: 156.949ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.15046ms
+Auto-scheduled time: 50.2433ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.25859ms
+Auto-scheduled time: 37.0131ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09618ms
+Auto-scheduled time: 43.941ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07444ms
+Auto-scheduled time: 68.8357ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.49605ms
+Auto-scheduled time: 48.4153ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08548ms
+Auto-scheduled time: 56.8038ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07234ms
+Auto-scheduled time: 42.2429ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08862ms
+Auto-scheduled time: 87.7298ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06775ms
+Auto-scheduled time: 96.5923ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09121ms
+Auto-scheduled time: 44.538ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.58514ms
+Auto-scheduled time: 69.4659ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.47931ms
+Auto-scheduled time: 49.2344ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.11575ms
+Auto-scheduled time: 65.3975ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.91059ms
+Auto-scheduled time: 47.7469ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.0859ms
+Auto-scheduled time: 162.701ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.49366ms
+Auto-scheduled time: 47.6043ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.04728ms
+Auto-scheduled time: 55.6827ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.36434ms
+Auto-scheduled time: 35.2676ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07873ms
+Auto-scheduled time: 46.6691ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08719ms
+Auto-scheduled time: 51.0666ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.0916ms
+Auto-scheduled time: 85.1085ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07989ms
+Auto-scheduled time: 38.6779ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09287ms
+Auto-scheduled time: 42.4641ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.92435ms
+Auto-scheduled time: 351.526ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.10729ms
+Auto-scheduled time: 39.8771ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.5859ms
+Auto-scheduled time: 62.1557ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07547ms
+Auto-scheduled time: 193.724ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08252ms
+Auto-scheduled time: 11.1543ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.77572ms
+Auto-scheduled time: 47.9452ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.54815ms
+Auto-scheduled time: 137.894ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.45125ms
+Auto-scheduled time: 38.5506ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.61465ms
+Auto-scheduled time: 37.5934ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06578ms
+Auto-scheduled time: 61.6437ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.22968ms
+Auto-scheduled time: 204.77ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.28447ms
+Auto-scheduled time: 98.0766ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09984ms
+Auto-scheduled time: 38.8709ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.59115ms
+Auto-scheduled time: 41.4772ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.0674ms
+Auto-scheduled time: 48.6831ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07247ms
+Auto-scheduled time: 64.1794ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08195ms
+Auto-scheduled time: 323.091ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.98743ms
+Auto-scheduled time: 42.51ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.13027ms
+Auto-scheduled time: 42.7002ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.02098ms
+Auto-scheduled time: 62.2244ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.11321ms
+Auto-scheduled time: 10.4894ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.11557ms
+Auto-scheduled time: 38.613ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.22448ms
+Auto-scheduled time: 62.2396ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.27761ms
+Auto-scheduled time: 124.361ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09332ms
+Auto-scheduled time: 148.11ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.28447ms
+Auto-scheduled time: 140.561ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.19286ms
+Auto-scheduled time: 71.2182ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.85548ms
+Auto-scheduled time: 54.9355ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08476ms
+Auto-scheduled time: 242.397ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09888ms
+Auto-scheduled time: 242.359ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.9272ms
+Auto-scheduled time: 45.5795ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.0716ms
+Auto-scheduled time: 65.1584ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07504ms
+Auto-scheduled time: 11.2648ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09639ms
+Auto-scheduled time: 42.8796ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.12364ms
+Auto-scheduled time: 47.6017ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.12669ms
+Auto-scheduled time: 37.3217ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.13086ms
+Auto-scheduled time: 203.873ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.10833ms
+Auto-scheduled time: 47.5624ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.61286ms
+Auto-scheduled time: 153.932ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08062ms
+Auto-scheduled time: 71.2487ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09861ms
+Auto-scheduled time: 131.34ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09178ms
+Auto-scheduled time: 43.5368ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.1046ms
+Auto-scheduled time: 64.1845ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.14433ms
+Auto-scheduled time: 38.6236ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09974ms
+Auto-scheduled time: 11.5361ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.11942ms
+Auto-scheduled time: 47.67ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.88584ms
+Auto-scheduled time: 41.9025ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.21031ms
+Auto-scheduled time: 40.4936ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.61396ms
+Auto-scheduled time: 76.2378ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.15663ms
+Auto-scheduled time: 59.1572ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.1021ms
+Auto-scheduled time: 49.9102ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.65503ms
+Auto-scheduled time: 63.5742ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.12958ms
+Auto-scheduled time: 40.1503ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.10518ms
+Auto-scheduled time: 41.57ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.56367ms
+Auto-scheduled time: 47.7342ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.56236ms
+Auto-scheduled time: 38.738ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.12236ms
+Auto-scheduled time: 259.213ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.14614ms
+Auto-scheduled time: 151.404ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.12174ms
+Auto-scheduled time: 419.593ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.70854ms
+Auto-scheduled time: 46.7673ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09611ms
+Auto-scheduled time: 164.063ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.88489ms
+Auto-scheduled time: 57.0052ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.21715ms
+Auto-scheduled time: 148.386ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.08781ms
+Auto-scheduled time: 38.6085ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.15205ms
+Auto-scheduled time: 182.631ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.12563ms
+Auto-scheduled time: 35.8556ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06352ms
+Auto-scheduled time: 47.6773ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.06592ms
+Auto-scheduled time: 56.6925ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.94913ms
+Auto-scheduled time: 43.1873ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07305ms
+Auto-scheduled time: 162.08ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.10116ms
+Auto-scheduled time: 44.205ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.60235ms
+Auto-scheduled time: 21.9056ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.3338ms
+Auto-scheduled time: 45.0751ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09266ms
+Auto-scheduled time: 94.8877ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09321ms
+Auto-scheduled time: 14.4301ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07678ms
+Auto-scheduled time: 183.644ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.18477ms
+Auto-scheduled time: 48.3404ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.07835ms
+Auto-scheduled time: 53.4911ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.10817ms
+Auto-scheduled time: 170.245ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.10055ms
+Auto-scheduled time: 41.4261ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.09404ms
+Auto-scheduled time: 126.485ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.23563ms
+Auto-scheduled time: 9.95348ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.13087ms
+Auto-scheduled time: 163.317ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.61304ms
+Auto-scheduled time: 163.509ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.11011ms
+Auto-scheduled time: 47.6648ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 7.99442ms
+Auto-scheduled time: 17.1218ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 8.59556ms
+Auto-scheduled time: 43.4228ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+bin/host/process
+Manually-tuned time: 6.10198ms
+Auto-scheduled time: 163.148ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/conv_layer'
+
+
+RL_END_OF_RUN 3
+

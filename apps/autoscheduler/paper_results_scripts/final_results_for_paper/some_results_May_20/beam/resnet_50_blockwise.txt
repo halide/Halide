@@ -1,0 +1,4366 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+python3 load_weights.py bin/pytorch_weights
+-----------loading weights------------
+odict_keys(['conv1.weight', 'bn1.running_mean', 'bn1.running_var', 'bn1.weight', 'bn1.bias', 'layer1.0.conv1.weight', 'layer1.0.bn1.running_mean', 'layer1.0.bn1.running_var', 'layer1.0.bn1.weight', 'layer1.0.bn1.bias', 'layer1.0.conv2.weight', 'layer1.0.bn2.running_mean', 'layer1.0.bn2.running_var', 'layer1.0.bn2.weight', 'layer1.0.bn2.bias', 'layer1.0.conv3.weight', 'layer1.0.bn3.running_mean', 'layer1.0.bn3.running_var', 'layer1.0.bn3.weight', 'layer1.0.bn3.bias', 'layer1.0.downsample.0.weight', 'layer1.0.downsample.1.running_mean', 'layer1.0.downsample.1.running_var', 'layer1.0.downsample.1.weight', 'layer1.0.downsample.1.bias', 'layer1.1.conv1.weight', 'layer1.1.bn1.running_mean', 'layer1.1.bn1.running_var', 'layer1.1.bn1.weight', 'layer1.1.bn1.bias', 'layer1.1.conv2.weight', 'layer1.1.bn2.running_mean', 'layer1.1.bn2.running_var', 'layer1.1.bn2.weight', 'layer1.1.bn2.bias', 'layer1.1.conv3.weight', 'layer1.1.bn3.running_mean', 'layer1.1.bn3.running_var', 'layer1.1.bn3.weight', 'layer1.1.bn3.bias', 'layer1.2.conv1.weight', 'layer1.2.bn1.running_mean', 'layer1.2.bn1.running_var', 'layer1.2.bn1.weight', 'layer1.2.bn1.bias', 'layer1.2.conv2.weight', 'layer1.2.bn2.running_mean', 'layer1.2.bn2.running_var', 'layer1.2.bn2.weight', 'layer1.2.bn2.bias', 'layer1.2.conv3.weight', 'layer1.2.bn3.running_mean', 'layer1.2.bn3.running_var', 'layer1.2.bn3.weight', 'layer1.2.bn3.bias', 'layer2.0.conv1.weight', 'layer2.0.bn1.running_mean', 'layer2.0.bn1.running_var', 'layer2.0.bn1.weight', 'layer2.0.bn1.bias', 'layer2.0.conv2.weight', 'layer2.0.bn2.running_mean', 'layer2.0.bn2.running_var', 'layer2.0.bn2.weight', 'layer2.0.bn2.bias', 'layer2.0.conv3.weight', 'layer2.0.bn3.running_mean', 'layer2.0.bn3.running_var', 'layer2.0.bn3.weight', 'layer2.0.bn3.bias', 'layer2.0.downsample.0.weight', 'layer2.0.downsample.1.running_mean', 'layer2.0.downsample.1.running_var', 'layer2.0.downsample.1.weight', 'layer2.0.downsample.1.bias', 'layer2.1.conv1.weight', 'layer2.1.bn1.running_mean', 'layer2.1.bn1.running_var', 'layer2.1.bn1.weight', 'layer2.1.bn1.bias', 'layer2.1.conv2.weight', 'layer2.1.bn2.running_mean', 'layer2.1.bn2.running_var', 'layer2.1.bn2.weight', 'layer2.1.bn2.bias', 'layer2.1.conv3.weight', 'layer2.1.bn3.running_mean', 'layer2.1.bn3.running_var', 'layer2.1.bn3.weight', 'layer2.1.bn3.bias', 'layer2.2.conv1.weight', 'layer2.2.bn1.running_mean', 'layer2.2.bn1.running_var', 'layer2.2.bn1.weight', 'layer2.2.bn1.bias', 'layer2.2.conv2.weight', 'layer2.2.bn2.running_mean', 'layer2.2.bn2.running_var', 'layer2.2.bn2.weight', 'layer2.2.bn2.bias', 'layer2.2.conv3.weight', 'layer2.2.bn3.running_mean', 'layer2.2.bn3.running_var', 'layer2.2.bn3.weight', 'layer2.2.bn3.bias', 'layer2.3.conv1.weight', 'layer2.3.bn1.running_mean', 'layer2.3.bn1.running_var', 'layer2.3.bn1.weight', 'layer2.3.bn1.bias', 'layer2.3.conv2.weight', 'layer2.3.bn2.running_mean', 'layer2.3.bn2.running_var', 'layer2.3.bn2.weight', 'layer2.3.bn2.bias', 'layer2.3.conv3.weight', 'layer2.3.bn3.running_mean', 'layer2.3.bn3.running_var', 'layer2.3.bn3.weight', 'layer2.3.bn3.bias', 'layer3.0.conv1.weight', 'layer3.0.bn1.running_mean', 'layer3.0.bn1.running_var', 'layer3.0.bn1.weight', 'layer3.0.bn1.bias', 'layer3.0.conv2.weight', 'layer3.0.bn2.running_mean', 'layer3.0.bn2.running_var', 'layer3.0.bn2.weight', 'layer3.0.bn2.bias', 'layer3.0.conv3.weight', 'layer3.0.bn3.running_mean', 'layer3.0.bn3.running_var', 'layer3.0.bn3.weight', 'layer3.0.bn3.bias', 'layer3.0.downsample.0.weight', 'layer3.0.downsample.1.running_mean', 'layer3.0.downsample.1.running_var', 'layer3.0.downsample.1.weight', 'layer3.0.downsample.1.bias', 'layer3.1.conv1.weight', 'layer3.1.bn1.running_mean', 'layer3.1.bn1.running_var', 'layer3.1.bn1.weight', 'layer3.1.bn1.bias', 'layer3.1.conv2.weight', 'layer3.1.bn2.running_mean', 'layer3.1.bn2.running_var', 'layer3.1.bn2.weight', 'layer3.1.bn2.bias', 'layer3.1.conv3.weight', 'layer3.1.bn3.running_mean', 'layer3.1.bn3.running_var', 'layer3.1.bn3.weight', 'layer3.1.bn3.bias', 'layer3.2.conv1.weight', 'layer3.2.bn1.running_mean', 'layer3.2.bn1.running_var', 'layer3.2.bn1.weight', 'layer3.2.bn1.bias', 'layer3.2.conv2.weight', 'layer3.2.bn2.running_mean', 'layer3.2.bn2.running_var', 'layer3.2.bn2.weight', 'layer3.2.bn2.bias', 'layer3.2.conv3.weight', 'layer3.2.bn3.running_mean', 'layer3.2.bn3.running_var', 'layer3.2.bn3.weight', 'layer3.2.bn3.bias', 'layer3.3.conv1.weight', 'layer3.3.bn1.running_mean', 'layer3.3.bn1.running_var', 'layer3.3.bn1.weight', 'layer3.3.bn1.bias', 'layer3.3.conv2.weight', 'layer3.3.bn2.running_mean', 'layer3.3.bn2.running_var', 'layer3.3.bn2.weight', 'layer3.3.bn2.bias', 'layer3.3.conv3.weight', 'layer3.3.bn3.running_mean', 'layer3.3.bn3.running_var', 'layer3.3.bn3.weight', 'layer3.3.bn3.bias', 'layer3.4.conv1.weight', 'layer3.4.bn1.running_mean', 'layer3.4.bn1.running_var', 'layer3.4.bn1.weight', 'layer3.4.bn1.bias', 'layer3.4.conv2.weight', 'layer3.4.bn2.running_mean', 'layer3.4.bn2.running_var', 'layer3.4.bn2.weight', 'layer3.4.bn2.bias', 'layer3.4.conv3.weight', 'layer3.4.bn3.running_mean', 'layer3.4.bn3.running_var', 'layer3.4.bn3.weight', 'layer3.4.bn3.bias', 'layer3.5.conv1.weight', 'layer3.5.bn1.running_mean', 'layer3.5.bn1.running_var', 'layer3.5.bn1.weight', 'layer3.5.bn1.bias', 'layer3.5.conv2.weight', 'layer3.5.bn2.running_mean', 'layer3.5.bn2.running_var', 'layer3.5.bn2.weight', 'layer3.5.bn2.bias', 'layer3.5.conv3.weight', 'layer3.5.bn3.running_mean', 'layer3.5.bn3.running_var', 'layer3.5.bn3.weight', 'layer3.5.bn3.bias', 'layer4.0.conv1.weight', 'layer4.0.bn1.running_mean', 'layer4.0.bn1.running_var', 'layer4.0.bn1.weight', 'layer4.0.bn1.bias', 'layer4.0.conv2.weight', 'layer4.0.bn2.running_mean', 'layer4.0.bn2.running_var', 'layer4.0.bn2.weight', 'layer4.0.bn2.bias', 'layer4.0.conv3.weight', 'layer4.0.bn3.running_mean', 'layer4.0.bn3.running_var', 'layer4.0.bn3.weight', 'layer4.0.bn3.bias', 'layer4.0.downsample.0.weight', 'layer4.0.downsample.1.running_mean', 'layer4.0.downsample.1.running_var', 'layer4.0.downsample.1.weight', 'layer4.0.downsample.1.bias', 'layer4.1.conv1.weight', 'layer4.1.bn1.running_mean', 'layer4.1.bn1.running_var', 'layer4.1.bn1.weight', 'layer4.1.bn1.bias', 'layer4.1.conv2.weight', 'layer4.1.bn2.running_mean', 'layer4.1.bn2.running_var', 'layer4.1.bn2.weight', 'layer4.1.bn2.bias', 'layer4.1.conv3.weight', 'layer4.1.bn3.running_mean', 'layer4.1.bn3.running_var', 'layer4.1.bn3.weight', 'layer4.1.bn3.bias', 'layer4.2.conv1.weight', 'layer4.2.bn1.running_mean', 'layer4.2.bn1.running_var', 'layer4.2.bn1.weight', 'layer4.2.bn1.bias', 'layer4.2.conv2.weight', 'layer4.2.bn2.running_mean', 'layer4.2.bn2.running_var', 'layer4.2.bn2.weight', 'layer4.2.bn2.bias', 'layer4.2.conv3.weight', 'layer4.2.bn3.running_mean', 'layer4.2.bn3.running_var', 'layer4.2.bn3.weight', 'layer4.2.bn3.bias', 'fc.weight', 'fc.bias'])
+weight shape before transpose
+conv1.weight,(64, 3, 7, 7),4
+weight shape after transpose
+conv1.weight,(3, 7, 7, 64),4
+weight shape before transpose
+bn1.running_mean,(64,),1
+weight shape after transpose
+bn1.running_mean,(64,),1
+weight shape before transpose
+bn1.running_var,(64,),1
+weight shape after transpose
+bn1.running_var,(64,),1
+weight shape before transpose
+bn1.weight,(64,),1
+weight shape after transpose
+bn1.weight,(64,),1
+weight shape before transpose
+bn1.bias,(64,),1
+weight shape after transpose
+bn1.bias,(64,),1
+weight shape before transpose
+layer1.0.conv1.weight,(64, 64, 1, 1),4
+weight shape after transpose
+layer1.0.conv1.weight,(64, 1, 1, 64),4
+weight shape before transpose
+layer1.0.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.0.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.0.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.0.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.0.bn1.weight,(64,),1
+weight shape after transpose
+layer1.0.bn1.weight,(64,),1
+weight shape before transpose
+layer1.0.bn1.bias,(64,),1
+weight shape after transpose
+layer1.0.bn1.bias,(64,),1
+weight shape before transpose
+layer1.0.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.0.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.0.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.0.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.0.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.0.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.0.bn2.weight,(64,),1
+weight shape after transpose
+layer1.0.bn2.weight,(64,),1
+weight shape before transpose
+layer1.0.bn2.bias,(64,),1
+weight shape after transpose
+layer1.0.bn2.bias,(64,),1
+weight shape before transpose
+layer1.0.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.0.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.0.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.0.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.0.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.0.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.0.bn3.weight,(256,),1
+weight shape after transpose
+layer1.0.bn3.weight,(256,),1
+weight shape before transpose
+layer1.0.bn3.bias,(256,),1
+weight shape after transpose
+layer1.0.bn3.bias,(256,),1
+weight shape before transpose
+layer1.0.downsample.0.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.0.downsample.0.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.0.downsample.1.running_mean,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.running_mean,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.running_var,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.running_var,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.weight,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.weight,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.bias,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.bias,(256,),1
+weight shape before transpose
+layer1.1.conv1.weight,(64, 256, 1, 1),4
+weight shape after transpose
+layer1.1.conv1.weight,(256, 1, 1, 64),4
+weight shape before transpose
+layer1.1.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.1.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.1.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.1.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.1.bn1.weight,(64,),1
+weight shape after transpose
+layer1.1.bn1.weight,(64,),1
+weight shape before transpose
+layer1.1.bn1.bias,(64,),1
+weight shape after transpose
+layer1.1.bn1.bias,(64,),1
+weight shape before transpose
+layer1.1.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.1.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.1.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.1.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.1.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.1.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.1.bn2.weight,(64,),1
+weight shape after transpose
+layer1.1.bn2.weight,(64,),1
+weight shape before transpose
+layer1.1.bn2.bias,(64,),1
+weight shape after transpose
+layer1.1.bn2.bias,(64,),1
+weight shape before transpose
+layer1.1.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.1.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.1.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.1.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.1.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.1.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.1.bn3.weight,(256,),1
+weight shape after transpose
+layer1.1.bn3.weight,(256,),1
+weight shape before transpose
+layer1.1.bn3.bias,(256,),1
+weight shape after transpose
+layer1.1.bn3.bias,(256,),1
+weight shape before transpose
+layer1.2.conv1.weight,(64, 256, 1, 1),4
+weight shape after transpose
+layer1.2.conv1.weight,(256, 1, 1, 64),4
+weight shape before transpose
+layer1.2.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.2.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.2.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.2.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.2.bn1.weight,(64,),1
+weight shape after transpose
+layer1.2.bn1.weight,(64,),1
+weight shape before transpose
+layer1.2.bn1.bias,(64,),1
+weight shape after transpose
+layer1.2.bn1.bias,(64,),1
+weight shape before transpose
+layer1.2.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.2.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.2.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.2.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.2.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.2.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.2.bn2.weight,(64,),1
+weight shape after transpose
+layer1.2.bn2.weight,(64,),1
+weight shape before transpose
+layer1.2.bn2.bias,(64,),1
+weight shape after transpose
+layer1.2.bn2.bias,(64,),1
+weight shape before transpose
+layer1.2.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.2.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.2.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.2.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.2.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.2.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.2.bn3.weight,(256,),1
+weight shape after transpose
+layer1.2.bn3.weight,(256,),1
+weight shape before transpose
+layer1.2.bn3.bias,(256,),1
+weight shape after transpose
+layer1.2.bn3.bias,(256,),1
+weight shape before transpose
+layer2.0.conv1.weight,(128, 256, 1, 1),4
+weight shape after transpose
+layer2.0.conv1.weight,(256, 1, 1, 128),4
+weight shape before transpose
+layer2.0.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.0.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.0.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.0.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.0.bn1.weight,(128,),1
+weight shape after transpose
+layer2.0.bn1.weight,(128,),1
+weight shape before transpose
+layer2.0.bn1.bias,(128,),1
+weight shape after transpose
+layer2.0.bn1.bias,(128,),1
+weight shape before transpose
+layer2.0.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.0.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.0.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.0.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.0.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.0.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.0.bn2.weight,(128,),1
+weight shape after transpose
+layer2.0.bn2.weight,(128,),1
+weight shape before transpose
+layer2.0.bn2.bias,(128,),1
+weight shape after transpose
+layer2.0.bn2.bias,(128,),1
+weight shape before transpose
+layer2.0.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.0.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.0.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.0.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.0.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.0.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.0.bn3.weight,(512,),1
+weight shape after transpose
+layer2.0.bn3.weight,(512,),1
+weight shape before transpose
+layer2.0.bn3.bias,(512,),1
+weight shape after transpose
+layer2.0.bn3.bias,(512,),1
+weight shape before transpose
+layer2.0.downsample.0.weight,(512, 256, 1, 1),4
+weight shape after transpose
+layer2.0.downsample.0.weight,(256, 1, 1, 512),4
+weight shape before transpose
+layer2.0.downsample.1.running_mean,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.running_mean,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.running_var,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.running_var,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.weight,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.weight,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.bias,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.bias,(512,),1
+weight shape before transpose
+layer2.1.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.1.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.1.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.1.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.1.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.1.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.1.bn1.weight,(128,),1
+weight shape after transpose
+layer2.1.bn1.weight,(128,),1
+weight shape before transpose
+layer2.1.bn1.bias,(128,),1
+weight shape after transpose
+layer2.1.bn1.bias,(128,),1
+weight shape before transpose
+layer2.1.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.1.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.1.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.1.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.1.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.1.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.1.bn2.weight,(128,),1
+weight shape after transpose
+layer2.1.bn2.weight,(128,),1
+weight shape before transpose
+layer2.1.bn2.bias,(128,),1
+weight shape after transpose
+layer2.1.bn2.bias,(128,),1
+weight shape before transpose
+layer2.1.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.1.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.1.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.1.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.1.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.1.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.1.bn3.weight,(512,),1
+weight shape after transpose
+layer2.1.bn3.weight,(512,),1
+weight shape before transpose
+layer2.1.bn3.bias,(512,),1
+weight shape after transpose
+layer2.1.bn3.bias,(512,),1
+weight shape before transpose
+layer2.2.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.2.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.2.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.2.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.2.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.2.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.2.bn1.weight,(128,),1
+weight shape after transpose
+layer2.2.bn1.weight,(128,),1
+weight shape before transpose
+layer2.2.bn1.bias,(128,),1
+weight shape after transpose
+layer2.2.bn1.bias,(128,),1
+weight shape before transpose
+layer2.2.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.2.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.2.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.2.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.2.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.2.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.2.bn2.weight,(128,),1
+weight shape after transpose
+layer2.2.bn2.weight,(128,),1
+weight shape before transpose
+layer2.2.bn2.bias,(128,),1
+weight shape after transpose
+layer2.2.bn2.bias,(128,),1
+weight shape before transpose
+layer2.2.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.2.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.2.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.2.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.2.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.2.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.2.bn3.weight,(512,),1
+weight shape after transpose
+layer2.2.bn3.weight,(512,),1
+weight shape before transpose
+layer2.2.bn3.bias,(512,),1
+weight shape after transpose
+layer2.2.bn3.bias,(512,),1
+weight shape before transpose
+layer2.3.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.3.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.3.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.3.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.3.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.3.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.3.bn1.weight,(128,),1
+weight shape after transpose
+layer2.3.bn1.weight,(128,),1
+weight shape before transpose
+layer2.3.bn1.bias,(128,),1
+weight shape after transpose
+layer2.3.bn1.bias,(128,),1
+weight shape before transpose
+layer2.3.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.3.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.3.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.3.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.3.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.3.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.3.bn2.weight,(128,),1
+weight shape after transpose
+layer2.3.bn2.weight,(128,),1
+weight shape before transpose
+layer2.3.bn2.bias,(128,),1
+weight shape after transpose
+layer2.3.bn2.bias,(128,),1
+weight shape before transpose
+layer2.3.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.3.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.3.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.3.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.3.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.3.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.3.bn3.weight,(512,),1
+weight shape after transpose
+layer2.3.bn3.weight,(512,),1
+weight shape before transpose
+layer2.3.bn3.bias,(512,),1
+weight shape after transpose
+layer2.3.bn3.bias,(512,),1
+weight shape before transpose
+layer3.0.conv1.weight,(256, 512, 1, 1),4
+weight shape after transpose
+layer3.0.conv1.weight,(512, 1, 1, 256),4
+weight shape before transpose
+layer3.0.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.0.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.0.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.0.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.0.bn1.weight,(256,),1
+weight shape after transpose
+layer3.0.bn1.weight,(256,),1
+weight shape before transpose
+layer3.0.bn1.bias,(256,),1
+weight shape after transpose
+layer3.0.bn1.bias,(256,),1
+weight shape before transpose
+layer3.0.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.0.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.0.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.0.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.0.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.0.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.0.bn2.weight,(256,),1
+weight shape after transpose
+layer3.0.bn2.weight,(256,),1
+weight shape before transpose
+layer3.0.bn2.bias,(256,),1
+weight shape after transpose
+layer3.0.bn2.bias,(256,),1
+weight shape before transpose
+layer3.0.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.0.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.0.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.0.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.0.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.0.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.0.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.0.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.0.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.0.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.0.downsample.0.weight,(1024, 512, 1, 1),4
+weight shape after transpose
+layer3.0.downsample.0.weight,(512, 1, 1, 1024),4
+weight shape before transpose
+layer3.0.downsample.1.running_mean,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.running_mean,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.running_var,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.running_var,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.weight,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.weight,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.bias,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.bias,(1024,),1
+weight shape before transpose
+layer3.1.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.1.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.1.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.1.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.1.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.1.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.1.bn1.weight,(256,),1
+weight shape after transpose
+layer3.1.bn1.weight,(256,),1
+weight shape before transpose
+layer3.1.bn1.bias,(256,),1
+weight shape after transpose
+layer3.1.bn1.bias,(256,),1
+weight shape before transpose
+layer3.1.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.1.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.1.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.1.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.1.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.1.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.1.bn2.weight,(256,),1
+weight shape after transpose
+layer3.1.bn2.weight,(256,),1
+weight shape before transpose
+layer3.1.bn2.bias,(256,),1
+weight shape after transpose
+layer3.1.bn2.bias,(256,),1
+weight shape before transpose
+layer3.1.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.1.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.1.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.1.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.1.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.1.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.1.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.1.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.1.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.1.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.2.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.2.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.2.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.2.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.2.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.2.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.2.bn1.weight,(256,),1
+weight shape after transpose
+layer3.2.bn1.weight,(256,),1
+weight shape before transpose
+layer3.2.bn1.bias,(256,),1
+weight shape after transpose
+layer3.2.bn1.bias,(256,),1
+weight shape before transpose
+layer3.2.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.2.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.2.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.2.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.2.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.2.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.2.bn2.weight,(256,),1
+weight shape after transpose
+layer3.2.bn2.weight,(256,),1
+weight shape before transpose
+layer3.2.bn2.bias,(256,),1
+weight shape after transpose
+layer3.2.bn2.bias,(256,),1
+weight shape before transpose
+layer3.2.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.2.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.2.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.2.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.2.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.2.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.2.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.2.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.2.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.2.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.3.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.3.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.3.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.3.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.3.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.3.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.3.bn1.weight,(256,),1
+weight shape after transpose
+layer3.3.bn1.weight,(256,),1
+weight shape before transpose
+layer3.3.bn1.bias,(256,),1
+weight shape after transpose
+layer3.3.bn1.bias,(256,),1
+weight shape before transpose
+layer3.3.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.3.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.3.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.3.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.3.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.3.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.3.bn2.weight,(256,),1
+weight shape after transpose
+layer3.3.bn2.weight,(256,),1
+weight shape before transpose
+layer3.3.bn2.bias,(256,),1
+weight shape after transpose
+layer3.3.bn2.bias,(256,),1
+weight shape before transpose
+layer3.3.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.3.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.3.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.3.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.3.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.3.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.3.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.3.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.3.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.3.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.4.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.4.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.4.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.4.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.4.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.4.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.4.bn1.weight,(256,),1
+weight shape after transpose
+layer3.4.bn1.weight,(256,),1
+weight shape before transpose
+layer3.4.bn1.bias,(256,),1
+weight shape after transpose
+layer3.4.bn1.bias,(256,),1
+weight shape before transpose
+layer3.4.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.4.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.4.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.4.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.4.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.4.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.4.bn2.weight,(256,),1
+weight shape after transpose
+layer3.4.bn2.weight,(256,),1
+weight shape before transpose
+layer3.4.bn2.bias,(256,),1
+weight shape after transpose
+layer3.4.bn2.bias,(256,),1
+weight shape before transpose
+layer3.4.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.4.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.4.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.4.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.4.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.4.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.4.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.4.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.4.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.4.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.5.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.5.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.5.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.5.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.5.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.5.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.5.bn1.weight,(256,),1
+weight shape after transpose
+layer3.5.bn1.weight,(256,),1
+weight shape before transpose
+layer3.5.bn1.bias,(256,),1
+weight shape after transpose
+layer3.5.bn1.bias,(256,),1
+weight shape before transpose
+layer3.5.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.5.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.5.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.5.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.5.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.5.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.5.bn2.weight,(256,),1
+weight shape after transpose
+layer3.5.bn2.weight,(256,),1
+weight shape before transpose
+layer3.5.bn2.bias,(256,),1
+weight shape after transpose
+layer3.5.bn2.bias,(256,),1
+weight shape before transpose
+layer3.5.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.5.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.5.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.5.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.5.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.5.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.5.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.5.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.5.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.5.bn3.bias,(1024,),1
+weight shape before transpose
+layer4.0.conv1.weight,(512, 1024, 1, 1),4
+weight shape after transpose
+layer4.0.conv1.weight,(1024, 1, 1, 512),4
+weight shape before transpose
+layer4.0.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.0.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.0.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.0.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.0.bn1.weight,(512,),1
+weight shape after transpose
+layer4.0.bn1.weight,(512,),1
+weight shape before transpose
+layer4.0.bn1.bias,(512,),1
+weight shape after transpose
+layer4.0.bn1.bias,(512,),1
+weight shape before transpose
+layer4.0.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.0.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.0.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.0.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.0.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.0.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.0.bn2.weight,(512,),1
+weight shape after transpose
+layer4.0.bn2.weight,(512,),1
+weight shape before transpose
+layer4.0.bn2.bias,(512,),1
+weight shape after transpose
+layer4.0.bn2.bias,(512,),1
+weight shape before transpose
+layer4.0.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.0.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.0.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.0.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.0.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.0.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.0.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.0.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.0.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.0.bn3.bias,(2048,),1
+weight shape before transpose
+layer4.0.downsample.0.weight,(2048, 1024, 1, 1),4
+weight shape after transpose
+layer4.0.downsample.0.weight,(1024, 1, 1, 2048),4
+weight shape before transpose
+layer4.0.downsample.1.running_mean,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.running_mean,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.running_var,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.running_var,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.weight,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.weight,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.bias,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.bias,(2048,),1
+weight shape before transpose
+layer4.1.conv1.weight,(512, 2048, 1, 1),4
+weight shape after transpose
+layer4.1.conv1.weight,(2048, 1, 1, 512),4
+weight shape before transpose
+layer4.1.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.1.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.1.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.1.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.1.bn1.weight,(512,),1
+weight shape after transpose
+layer4.1.bn1.weight,(512,),1
+weight shape before transpose
+layer4.1.bn1.bias,(512,),1
+weight shape after transpose
+layer4.1.bn1.bias,(512,),1
+weight shape before transpose
+layer4.1.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.1.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.1.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.1.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.1.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.1.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.1.bn2.weight,(512,),1
+weight shape after transpose
+layer4.1.bn2.weight,(512,),1
+weight shape before transpose
+layer4.1.bn2.bias,(512,),1
+weight shape after transpose
+layer4.1.bn2.bias,(512,),1
+weight shape before transpose
+layer4.1.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.1.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.1.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.1.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.1.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.1.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.1.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.1.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.1.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.1.bn3.bias,(2048,),1
+weight shape before transpose
+layer4.2.conv1.weight,(512, 2048, 1, 1),4
+weight shape after transpose
+layer4.2.conv1.weight,(2048, 1, 1, 512),4
+weight shape before transpose
+layer4.2.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.2.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.2.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.2.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.2.bn1.weight,(512,),1
+weight shape after transpose
+layer4.2.bn1.weight,(512,),1
+weight shape before transpose
+layer4.2.bn1.bias,(512,),1
+weight shape after transpose
+layer4.2.bn1.bias,(512,),1
+weight shape before transpose
+layer4.2.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.2.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.2.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.2.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.2.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.2.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.2.bn2.weight,(512,),1
+weight shape after transpose
+layer4.2.bn2.weight,(512,),1
+weight shape before transpose
+layer4.2.bn2.bias,(512,),1
+weight shape after transpose
+layer4.2.bn2.bias,(512,),1
+weight shape before transpose
+layer4.2.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.2.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.2.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.2.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.2.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.2.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.2.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.2.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.2.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.2.bn3.bias,(2048,),1
+weight shape before transpose
+fc.weight,(1000, 2048),2
+weight shape after transpose
+fc.weight,(2048, 1000),2
+weight shape before transpose
+fc.bias,(1000,),1
+weight shape after transpose
+fc.bias,(1000,),1
+echo "ok" > bin/pytorch_weights/ok
+bin/process 10 auto_schedule bin/pytorch_weights cropped_panda.jpg bin/res50gen_output.bin
+Loading image from cropped_panda.jpg
+conv1_weight_shape.data num_dims : 4 shape: 64 7 7 3 
+weight shape for bin/pytorch_weights/conv1_weight.data
+64 7 7 3
+bn1_running_mean_shape.data num_dims : 1 shape: 64 
+bn1_running_var_shape.data num_dims : 1 shape: 64 
+bn1_weight_shape.data num_dims : 1 shape: 64 
+bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_downsample_0_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_downsample_0_weight.data
+256 1 1 64
+layer1_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_downsample_0_weight_shape.data num_dims : 4 shape: 512 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_downsample_0_weight.data
+512 1 1 256
+layer2_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_downsample_0_weight_shape.data num_dims : 4 shape: 1024 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_downsample_0_weight.data
+1024 1 1 512
+layer3_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_downsample_0_weight_shape.data num_dims : 4 shape: 2048 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_downsample_0_weight.data
+2048 1 1 1024
+layer4_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_bias_shape.data num_dims : 1 shape: 2048 
+layer1_0_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv1_weight.data
+64 1 1 64
+layer1_0_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_0_conv2_weight.data
+64 3 3 64
+layer1_0_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv3_weight.data
+256 1 1 64
+layer1_0_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_1_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_1_conv1_weight.data
+64 1 1 256
+layer1_1_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_1_conv2_weight.data
+64 3 3 64
+layer1_1_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_1_conv3_weight.data
+256 1 1 64
+layer1_1_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_2_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_2_conv1_weight.data
+64 1 1 256
+layer1_2_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_2_conv2_weight.data
+64 3 3 64
+layer1_2_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_2_conv3_weight.data
+256 1 1 64
+layer1_2_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_conv1_weight.data
+128 1 1 256
+layer2_0_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_0_conv2_weight.data
+128 3 3 128
+layer2_0_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_0_conv3_weight.data
+512 1 1 128
+layer2_0_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_1_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_1_conv1_weight.data
+128 1 1 512
+layer2_1_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_1_conv2_weight.data
+128 3 3 128
+layer2_1_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_1_conv3_weight.data
+512 1 1 128
+layer2_1_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_2_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_2_conv1_weight.data
+128 1 1 512
+layer2_2_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_2_conv2_weight.data
+128 3 3 128
+layer2_2_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_2_conv3_weight.data
+512 1 1 128
+layer2_2_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_3_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_3_conv1_weight.data
+128 1 1 512
+layer2_3_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_3_conv2_weight.data
+128 3 3 128
+layer2_3_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_3_conv3_weight.data
+512 1 1 128
+layer2_3_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_conv1_weight.data
+256 1 1 512
+layer3_0_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_0_conv2_weight.data
+256 3 3 256
+layer3_0_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_0_conv3_weight.data
+1024 1 1 256
+layer3_0_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_1_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_1_conv1_weight.data
+256 1 1 1024
+layer3_1_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_1_conv2_weight.data
+256 3 3 256
+layer3_1_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_1_conv3_weight.data
+1024 1 1 256
+layer3_1_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_2_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_2_conv1_weight.data
+256 1 1 1024
+layer3_2_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_2_conv2_weight.data
+256 3 3 256
+layer3_2_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_2_conv3_weight.data
+1024 1 1 256
+layer3_2_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_3_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_3_conv1_weight.data
+256 1 1 1024
+layer3_3_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_3_conv2_weight.data
+256 3 3 256
+layer3_3_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_3_conv3_weight.data
+1024 1 1 256
+layer3_3_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_4_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_4_conv1_weight.data
+256 1 1 1024
+layer3_4_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_4_conv2_weight.data
+256 3 3 256
+layer3_4_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_4_conv3_weight.data
+1024 1 1 256
+layer3_4_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_5_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_5_conv1_weight.data
+256 1 1 1024
+layer3_5_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_5_conv2_weight.data
+256 3 3 256
+layer3_5_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_5_conv3_weight.data
+1024 1 1 256
+layer3_5_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_conv1_weight.data
+512 1 1 1024
+layer4_0_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_0_conv2_weight.data
+512 3 3 512
+layer4_0_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_0_conv3_weight.data
+2048 1 1 512
+layer4_0_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_1_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_1_conv1_weight.data
+512 1 1 2048
+layer4_1_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_1_conv2_weight.data
+512 3 3 512
+layer4_1_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_1_conv3_weight.data
+2048 1 1 512
+layer4_1_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_2_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_2_conv1_weight.data
+512 1 1 2048
+layer4_2_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_2_conv2_weight.data
+512 3 3 512
+layer4_2_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_2_conv3_weight.data
+2048 1 1 512
+layer4_2_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_bias_shape.data num_dims : 1 shape: 2048 
+fc_weight_shape.data num_dims : 2 shape: 1000 2048 
+fc_bias_shape.data num_dims : 1 shape: 1000 
+Auto-scheduled time: 35.6283ms
+ class: 836
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+python3 load_weights.py bin/pytorch_weights
+-----------loading weights------------
+odict_keys(['conv1.weight', 'bn1.running_mean', 'bn1.running_var', 'bn1.weight', 'bn1.bias', 'layer1.0.conv1.weight', 'layer1.0.bn1.running_mean', 'layer1.0.bn1.running_var', 'layer1.0.bn1.weight', 'layer1.0.bn1.bias', 'layer1.0.conv2.weight', 'layer1.0.bn2.running_mean', 'layer1.0.bn2.running_var', 'layer1.0.bn2.weight', 'layer1.0.bn2.bias', 'layer1.0.conv3.weight', 'layer1.0.bn3.running_mean', 'layer1.0.bn3.running_var', 'layer1.0.bn3.weight', 'layer1.0.bn3.bias', 'layer1.0.downsample.0.weight', 'layer1.0.downsample.1.running_mean', 'layer1.0.downsample.1.running_var', 'layer1.0.downsample.1.weight', 'layer1.0.downsample.1.bias', 'layer1.1.conv1.weight', 'layer1.1.bn1.running_mean', 'layer1.1.bn1.running_var', 'layer1.1.bn1.weight', 'layer1.1.bn1.bias', 'layer1.1.conv2.weight', 'layer1.1.bn2.running_mean', 'layer1.1.bn2.running_var', 'layer1.1.bn2.weight', 'layer1.1.bn2.bias', 'layer1.1.conv3.weight', 'layer1.1.bn3.running_mean', 'layer1.1.bn3.running_var', 'layer1.1.bn3.weight', 'layer1.1.bn3.bias', 'layer1.2.conv1.weight', 'layer1.2.bn1.running_mean', 'layer1.2.bn1.running_var', 'layer1.2.bn1.weight', 'layer1.2.bn1.bias', 'layer1.2.conv2.weight', 'layer1.2.bn2.running_mean', 'layer1.2.bn2.running_var', 'layer1.2.bn2.weight', 'layer1.2.bn2.bias', 'layer1.2.conv3.weight', 'layer1.2.bn3.running_mean', 'layer1.2.bn3.running_var', 'layer1.2.bn3.weight', 'layer1.2.bn3.bias', 'layer2.0.conv1.weight', 'layer2.0.bn1.running_mean', 'layer2.0.bn1.running_var', 'layer2.0.bn1.weight', 'layer2.0.bn1.bias', 'layer2.0.conv2.weight', 'layer2.0.bn2.running_mean', 'layer2.0.bn2.running_var', 'layer2.0.bn2.weight', 'layer2.0.bn2.bias', 'layer2.0.conv3.weight', 'layer2.0.bn3.running_mean', 'layer2.0.bn3.running_var', 'layer2.0.bn3.weight', 'layer2.0.bn3.bias', 'layer2.0.downsample.0.weight', 'layer2.0.downsample.1.running_mean', 'layer2.0.downsample.1.running_var', 'layer2.0.downsample.1.weight', 'layer2.0.downsample.1.bias', 'layer2.1.conv1.weight', 'layer2.1.bn1.running_mean', 'layer2.1.bn1.running_var', 'layer2.1.bn1.weight', 'layer2.1.bn1.bias', 'layer2.1.conv2.weight', 'layer2.1.bn2.running_mean', 'layer2.1.bn2.running_var', 'layer2.1.bn2.weight', 'layer2.1.bn2.bias', 'layer2.1.conv3.weight', 'layer2.1.bn3.running_mean', 'layer2.1.bn3.running_var', 'layer2.1.bn3.weight', 'layer2.1.bn3.bias', 'layer2.2.conv1.weight', 'layer2.2.bn1.running_mean', 'layer2.2.bn1.running_var', 'layer2.2.bn1.weight', 'layer2.2.bn1.bias', 'layer2.2.conv2.weight', 'layer2.2.bn2.running_mean', 'layer2.2.bn2.running_var', 'layer2.2.bn2.weight', 'layer2.2.bn2.bias', 'layer2.2.conv3.weight', 'layer2.2.bn3.running_mean', 'layer2.2.bn3.running_var', 'layer2.2.bn3.weight', 'layer2.2.bn3.bias', 'layer2.3.conv1.weight', 'layer2.3.bn1.running_mean', 'layer2.3.bn1.running_var', 'layer2.3.bn1.weight', 'layer2.3.bn1.bias', 'layer2.3.conv2.weight', 'layer2.3.bn2.running_mean', 'layer2.3.bn2.running_var', 'layer2.3.bn2.weight', 'layer2.3.bn2.bias', 'layer2.3.conv3.weight', 'layer2.3.bn3.running_mean', 'layer2.3.bn3.running_var', 'layer2.3.bn3.weight', 'layer2.3.bn3.bias', 'layer3.0.conv1.weight', 'layer3.0.bn1.running_mean', 'layer3.0.bn1.running_var', 'layer3.0.bn1.weight', 'layer3.0.bn1.bias', 'layer3.0.conv2.weight', 'layer3.0.bn2.running_mean', 'layer3.0.bn2.running_var', 'layer3.0.bn2.weight', 'layer3.0.bn2.bias', 'layer3.0.conv3.weight', 'layer3.0.bn3.running_mean', 'layer3.0.bn3.running_var', 'layer3.0.bn3.weight', 'layer3.0.bn3.bias', 'layer3.0.downsample.0.weight', 'layer3.0.downsample.1.running_mean', 'layer3.0.downsample.1.running_var', 'layer3.0.downsample.1.weight', 'layer3.0.downsample.1.bias', 'layer3.1.conv1.weight', 'layer3.1.bn1.running_mean', 'layer3.1.bn1.running_var', 'layer3.1.bn1.weight', 'layer3.1.bn1.bias', 'layer3.1.conv2.weight', 'layer3.1.bn2.running_mean', 'layer3.1.bn2.running_var', 'layer3.1.bn2.weight', 'layer3.1.bn2.bias', 'layer3.1.conv3.weight', 'layer3.1.bn3.running_mean', 'layer3.1.bn3.running_var', 'layer3.1.bn3.weight', 'layer3.1.bn3.bias', 'layer3.2.conv1.weight', 'layer3.2.bn1.running_mean', 'layer3.2.bn1.running_var', 'layer3.2.bn1.weight', 'layer3.2.bn1.bias', 'layer3.2.conv2.weight', 'layer3.2.bn2.running_mean', 'layer3.2.bn2.running_var', 'layer3.2.bn2.weight', 'layer3.2.bn2.bias', 'layer3.2.conv3.weight', 'layer3.2.bn3.running_mean', 'layer3.2.bn3.running_var', 'layer3.2.bn3.weight', 'layer3.2.bn3.bias', 'layer3.3.conv1.weight', 'layer3.3.bn1.running_mean', 'layer3.3.bn1.running_var', 'layer3.3.bn1.weight', 'layer3.3.bn1.bias', 'layer3.3.conv2.weight', 'layer3.3.bn2.running_mean', 'layer3.3.bn2.running_var', 'layer3.3.bn2.weight', 'layer3.3.bn2.bias', 'layer3.3.conv3.weight', 'layer3.3.bn3.running_mean', 'layer3.3.bn3.running_var', 'layer3.3.bn3.weight', 'layer3.3.bn3.bias', 'layer3.4.conv1.weight', 'layer3.4.bn1.running_mean', 'layer3.4.bn1.running_var', 'layer3.4.bn1.weight', 'layer3.4.bn1.bias', 'layer3.4.conv2.weight', 'layer3.4.bn2.running_mean', 'layer3.4.bn2.running_var', 'layer3.4.bn2.weight', 'layer3.4.bn2.bias', 'layer3.4.conv3.weight', 'layer3.4.bn3.running_mean', 'layer3.4.bn3.running_var', 'layer3.4.bn3.weight', 'layer3.4.bn3.bias', 'layer3.5.conv1.weight', 'layer3.5.bn1.running_mean', 'layer3.5.bn1.running_var', 'layer3.5.bn1.weight', 'layer3.5.bn1.bias', 'layer3.5.conv2.weight', 'layer3.5.bn2.running_mean', 'layer3.5.bn2.running_var', 'layer3.5.bn2.weight', 'layer3.5.bn2.bias', 'layer3.5.conv3.weight', 'layer3.5.bn3.running_mean', 'layer3.5.bn3.running_var', 'layer3.5.bn3.weight', 'layer3.5.bn3.bias', 'layer4.0.conv1.weight', 'layer4.0.bn1.running_mean', 'layer4.0.bn1.running_var', 'layer4.0.bn1.weight', 'layer4.0.bn1.bias', 'layer4.0.conv2.weight', 'layer4.0.bn2.running_mean', 'layer4.0.bn2.running_var', 'layer4.0.bn2.weight', 'layer4.0.bn2.bias', 'layer4.0.conv3.weight', 'layer4.0.bn3.running_mean', 'layer4.0.bn3.running_var', 'layer4.0.bn3.weight', 'layer4.0.bn3.bias', 'layer4.0.downsample.0.weight', 'layer4.0.downsample.1.running_mean', 'layer4.0.downsample.1.running_var', 'layer4.0.downsample.1.weight', 'layer4.0.downsample.1.bias', 'layer4.1.conv1.weight', 'layer4.1.bn1.running_mean', 'layer4.1.bn1.running_var', 'layer4.1.bn1.weight', 'layer4.1.bn1.bias', 'layer4.1.conv2.weight', 'layer4.1.bn2.running_mean', 'layer4.1.bn2.running_var', 'layer4.1.bn2.weight', 'layer4.1.bn2.bias', 'layer4.1.conv3.weight', 'layer4.1.bn3.running_mean', 'layer4.1.bn3.running_var', 'layer4.1.bn3.weight', 'layer4.1.bn3.bias', 'layer4.2.conv1.weight', 'layer4.2.bn1.running_mean', 'layer4.2.bn1.running_var', 'layer4.2.bn1.weight', 'layer4.2.bn1.bias', 'layer4.2.conv2.weight', 'layer4.2.bn2.running_mean', 'layer4.2.bn2.running_var', 'layer4.2.bn2.weight', 'layer4.2.bn2.bias', 'layer4.2.conv3.weight', 'layer4.2.bn3.running_mean', 'layer4.2.bn3.running_var', 'layer4.2.bn3.weight', 'layer4.2.bn3.bias', 'fc.weight', 'fc.bias'])
+weight shape before transpose
+conv1.weight,(64, 3, 7, 7),4
+weight shape after transpose
+conv1.weight,(3, 7, 7, 64),4
+weight shape before transpose
+bn1.running_mean,(64,),1
+weight shape after transpose
+bn1.running_mean,(64,),1
+weight shape before transpose
+bn1.running_var,(64,),1
+weight shape after transpose
+bn1.running_var,(64,),1
+weight shape before transpose
+bn1.weight,(64,),1
+weight shape after transpose
+bn1.weight,(64,),1
+weight shape before transpose
+bn1.bias,(64,),1
+weight shape after transpose
+bn1.bias,(64,),1
+weight shape before transpose
+layer1.0.conv1.weight,(64, 64, 1, 1),4
+weight shape after transpose
+layer1.0.conv1.weight,(64, 1, 1, 64),4
+weight shape before transpose
+layer1.0.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.0.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.0.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.0.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.0.bn1.weight,(64,),1
+weight shape after transpose
+layer1.0.bn1.weight,(64,),1
+weight shape before transpose
+layer1.0.bn1.bias,(64,),1
+weight shape after transpose
+layer1.0.bn1.bias,(64,),1
+weight shape before transpose
+layer1.0.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.0.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.0.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.0.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.0.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.0.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.0.bn2.weight,(64,),1
+weight shape after transpose
+layer1.0.bn2.weight,(64,),1
+weight shape before transpose
+layer1.0.bn2.bias,(64,),1
+weight shape after transpose
+layer1.0.bn2.bias,(64,),1
+weight shape before transpose
+layer1.0.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.0.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.0.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.0.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.0.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.0.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.0.bn3.weight,(256,),1
+weight shape after transpose
+layer1.0.bn3.weight,(256,),1
+weight shape before transpose
+layer1.0.bn3.bias,(256,),1
+weight shape after transpose
+layer1.0.bn3.bias,(256,),1
+weight shape before transpose
+layer1.0.downsample.0.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.0.downsample.0.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.0.downsample.1.running_mean,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.running_mean,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.running_var,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.running_var,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.weight,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.weight,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.bias,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.bias,(256,),1
+weight shape before transpose
+layer1.1.conv1.weight,(64, 256, 1, 1),4
+weight shape after transpose
+layer1.1.conv1.weight,(256, 1, 1, 64),4
+weight shape before transpose
+layer1.1.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.1.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.1.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.1.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.1.bn1.weight,(64,),1
+weight shape after transpose
+layer1.1.bn1.weight,(64,),1
+weight shape before transpose
+layer1.1.bn1.bias,(64,),1
+weight shape after transpose
+layer1.1.bn1.bias,(64,),1
+weight shape before transpose
+layer1.1.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.1.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.1.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.1.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.1.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.1.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.1.bn2.weight,(64,),1
+weight shape after transpose
+layer1.1.bn2.weight,(64,),1
+weight shape before transpose
+layer1.1.bn2.bias,(64,),1
+weight shape after transpose
+layer1.1.bn2.bias,(64,),1
+weight shape before transpose
+layer1.1.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.1.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.1.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.1.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.1.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.1.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.1.bn3.weight,(256,),1
+weight shape after transpose
+layer1.1.bn3.weight,(256,),1
+weight shape before transpose
+layer1.1.bn3.bias,(256,),1
+weight shape after transpose
+layer1.1.bn3.bias,(256,),1
+weight shape before transpose
+layer1.2.conv1.weight,(64, 256, 1, 1),4
+weight shape after transpose
+layer1.2.conv1.weight,(256, 1, 1, 64),4
+weight shape before transpose
+layer1.2.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.2.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.2.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.2.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.2.bn1.weight,(64,),1
+weight shape after transpose
+layer1.2.bn1.weight,(64,),1
+weight shape before transpose
+layer1.2.bn1.bias,(64,),1
+weight shape after transpose
+layer1.2.bn1.bias,(64,),1
+weight shape before transpose
+layer1.2.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.2.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.2.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.2.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.2.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.2.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.2.bn2.weight,(64,),1
+weight shape after transpose
+layer1.2.bn2.weight,(64,),1
+weight shape before transpose
+layer1.2.bn2.bias,(64,),1
+weight shape after transpose
+layer1.2.bn2.bias,(64,),1
+weight shape before transpose
+layer1.2.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.2.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.2.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.2.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.2.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.2.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.2.bn3.weight,(256,),1
+weight shape after transpose
+layer1.2.bn3.weight,(256,),1
+weight shape before transpose
+layer1.2.bn3.bias,(256,),1
+weight shape after transpose
+layer1.2.bn3.bias,(256,),1
+weight shape before transpose
+layer2.0.conv1.weight,(128, 256, 1, 1),4
+weight shape after transpose
+layer2.0.conv1.weight,(256, 1, 1, 128),4
+weight shape before transpose
+layer2.0.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.0.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.0.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.0.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.0.bn1.weight,(128,),1
+weight shape after transpose
+layer2.0.bn1.weight,(128,),1
+weight shape before transpose
+layer2.0.bn1.bias,(128,),1
+weight shape after transpose
+layer2.0.bn1.bias,(128,),1
+weight shape before transpose
+layer2.0.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.0.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.0.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.0.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.0.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.0.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.0.bn2.weight,(128,),1
+weight shape after transpose
+layer2.0.bn2.weight,(128,),1
+weight shape before transpose
+layer2.0.bn2.bias,(128,),1
+weight shape after transpose
+layer2.0.bn2.bias,(128,),1
+weight shape before transpose
+layer2.0.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.0.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.0.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.0.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.0.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.0.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.0.bn3.weight,(512,),1
+weight shape after transpose
+layer2.0.bn3.weight,(512,),1
+weight shape before transpose
+layer2.0.bn3.bias,(512,),1
+weight shape after transpose
+layer2.0.bn3.bias,(512,),1
+weight shape before transpose
+layer2.0.downsample.0.weight,(512, 256, 1, 1),4
+weight shape after transpose
+layer2.0.downsample.0.weight,(256, 1, 1, 512),4
+weight shape before transpose
+layer2.0.downsample.1.running_mean,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.running_mean,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.running_var,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.running_var,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.weight,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.weight,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.bias,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.bias,(512,),1
+weight shape before transpose
+layer2.1.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.1.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.1.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.1.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.1.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.1.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.1.bn1.weight,(128,),1
+weight shape after transpose
+layer2.1.bn1.weight,(128,),1
+weight shape before transpose
+layer2.1.bn1.bias,(128,),1
+weight shape after transpose
+layer2.1.bn1.bias,(128,),1
+weight shape before transpose
+layer2.1.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.1.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.1.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.1.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.1.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.1.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.1.bn2.weight,(128,),1
+weight shape after transpose
+layer2.1.bn2.weight,(128,),1
+weight shape before transpose
+layer2.1.bn2.bias,(128,),1
+weight shape after transpose
+layer2.1.bn2.bias,(128,),1
+weight shape before transpose
+layer2.1.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.1.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.1.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.1.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.1.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.1.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.1.bn3.weight,(512,),1
+weight shape after transpose
+layer2.1.bn3.weight,(512,),1
+weight shape before transpose
+layer2.1.bn3.bias,(512,),1
+weight shape after transpose
+layer2.1.bn3.bias,(512,),1
+weight shape before transpose
+layer2.2.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.2.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.2.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.2.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.2.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.2.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.2.bn1.weight,(128,),1
+weight shape after transpose
+layer2.2.bn1.weight,(128,),1
+weight shape before transpose
+layer2.2.bn1.bias,(128,),1
+weight shape after transpose
+layer2.2.bn1.bias,(128,),1
+weight shape before transpose
+layer2.2.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.2.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.2.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.2.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.2.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.2.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.2.bn2.weight,(128,),1
+weight shape after transpose
+layer2.2.bn2.weight,(128,),1
+weight shape before transpose
+layer2.2.bn2.bias,(128,),1
+weight shape after transpose
+layer2.2.bn2.bias,(128,),1
+weight shape before transpose
+layer2.2.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.2.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.2.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.2.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.2.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.2.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.2.bn3.weight,(512,),1
+weight shape after transpose
+layer2.2.bn3.weight,(512,),1
+weight shape before transpose
+layer2.2.bn3.bias,(512,),1
+weight shape after transpose
+layer2.2.bn3.bias,(512,),1
+weight shape before transpose
+layer2.3.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.3.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.3.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.3.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.3.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.3.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.3.bn1.weight,(128,),1
+weight shape after transpose
+layer2.3.bn1.weight,(128,),1
+weight shape before transpose
+layer2.3.bn1.bias,(128,),1
+weight shape after transpose
+layer2.3.bn1.bias,(128,),1
+weight shape before transpose
+layer2.3.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.3.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.3.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.3.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.3.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.3.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.3.bn2.weight,(128,),1
+weight shape after transpose
+layer2.3.bn2.weight,(128,),1
+weight shape before transpose
+layer2.3.bn2.bias,(128,),1
+weight shape after transpose
+layer2.3.bn2.bias,(128,),1
+weight shape before transpose
+layer2.3.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.3.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.3.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.3.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.3.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.3.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.3.bn3.weight,(512,),1
+weight shape after transpose
+layer2.3.bn3.weight,(512,),1
+weight shape before transpose
+layer2.3.bn3.bias,(512,),1
+weight shape after transpose
+layer2.3.bn3.bias,(512,),1
+weight shape before transpose
+layer3.0.conv1.weight,(256, 512, 1, 1),4
+weight shape after transpose
+layer3.0.conv1.weight,(512, 1, 1, 256),4
+weight shape before transpose
+layer3.0.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.0.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.0.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.0.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.0.bn1.weight,(256,),1
+weight shape after transpose
+layer3.0.bn1.weight,(256,),1
+weight shape before transpose
+layer3.0.bn1.bias,(256,),1
+weight shape after transpose
+layer3.0.bn1.bias,(256,),1
+weight shape before transpose
+layer3.0.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.0.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.0.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.0.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.0.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.0.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.0.bn2.weight,(256,),1
+weight shape after transpose
+layer3.0.bn2.weight,(256,),1
+weight shape before transpose
+layer3.0.bn2.bias,(256,),1
+weight shape after transpose
+layer3.0.bn2.bias,(256,),1
+weight shape before transpose
+layer3.0.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.0.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.0.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.0.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.0.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.0.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.0.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.0.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.0.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.0.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.0.downsample.0.weight,(1024, 512, 1, 1),4
+weight shape after transpose
+layer3.0.downsample.0.weight,(512, 1, 1, 1024),4
+weight shape before transpose
+layer3.0.downsample.1.running_mean,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.running_mean,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.running_var,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.running_var,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.weight,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.weight,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.bias,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.bias,(1024,),1
+weight shape before transpose
+layer3.1.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.1.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.1.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.1.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.1.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.1.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.1.bn1.weight,(256,),1
+weight shape after transpose
+layer3.1.bn1.weight,(256,),1
+weight shape before transpose
+layer3.1.bn1.bias,(256,),1
+weight shape after transpose
+layer3.1.bn1.bias,(256,),1
+weight shape before transpose
+layer3.1.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.1.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.1.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.1.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.1.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.1.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.1.bn2.weight,(256,),1
+weight shape after transpose
+layer3.1.bn2.weight,(256,),1
+weight shape before transpose
+layer3.1.bn2.bias,(256,),1
+weight shape after transpose
+layer3.1.bn2.bias,(256,),1
+weight shape before transpose
+layer3.1.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.1.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.1.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.1.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.1.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.1.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.1.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.1.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.1.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.1.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.2.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.2.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.2.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.2.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.2.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.2.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.2.bn1.weight,(256,),1
+weight shape after transpose
+layer3.2.bn1.weight,(256,),1
+weight shape before transpose
+layer3.2.bn1.bias,(256,),1
+weight shape after transpose
+layer3.2.bn1.bias,(256,),1
+weight shape before transpose
+layer3.2.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.2.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.2.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.2.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.2.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.2.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.2.bn2.weight,(256,),1
+weight shape after transpose
+layer3.2.bn2.weight,(256,),1
+weight shape before transpose
+layer3.2.bn2.bias,(256,),1
+weight shape after transpose
+layer3.2.bn2.bias,(256,),1
+weight shape before transpose
+layer3.2.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.2.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.2.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.2.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.2.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.2.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.2.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.2.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.2.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.2.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.3.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.3.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.3.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.3.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.3.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.3.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.3.bn1.weight,(256,),1
+weight shape after transpose
+layer3.3.bn1.weight,(256,),1
+weight shape before transpose
+layer3.3.bn1.bias,(256,),1
+weight shape after transpose
+layer3.3.bn1.bias,(256,),1
+weight shape before transpose
+layer3.3.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.3.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.3.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.3.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.3.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.3.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.3.bn2.weight,(256,),1
+weight shape after transpose
+layer3.3.bn2.weight,(256,),1
+weight shape before transpose
+layer3.3.bn2.bias,(256,),1
+weight shape after transpose
+layer3.3.bn2.bias,(256,),1
+weight shape before transpose
+layer3.3.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.3.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.3.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.3.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.3.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.3.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.3.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.3.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.3.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.3.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.4.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.4.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.4.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.4.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.4.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.4.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.4.bn1.weight,(256,),1
+weight shape after transpose
+layer3.4.bn1.weight,(256,),1
+weight shape before transpose
+layer3.4.bn1.bias,(256,),1
+weight shape after transpose
+layer3.4.bn1.bias,(256,),1
+weight shape before transpose
+layer3.4.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.4.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.4.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.4.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.4.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.4.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.4.bn2.weight,(256,),1
+weight shape after transpose
+layer3.4.bn2.weight,(256,),1
+weight shape before transpose
+layer3.4.bn2.bias,(256,),1
+weight shape after transpose
+layer3.4.bn2.bias,(256,),1
+weight shape before transpose
+layer3.4.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.4.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.4.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.4.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.4.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.4.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.4.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.4.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.4.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.4.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.5.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.5.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.5.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.5.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.5.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.5.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.5.bn1.weight,(256,),1
+weight shape after transpose
+layer3.5.bn1.weight,(256,),1
+weight shape before transpose
+layer3.5.bn1.bias,(256,),1
+weight shape after transpose
+layer3.5.bn1.bias,(256,),1
+weight shape before transpose
+layer3.5.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.5.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.5.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.5.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.5.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.5.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.5.bn2.weight,(256,),1
+weight shape after transpose
+layer3.5.bn2.weight,(256,),1
+weight shape before transpose
+layer3.5.bn2.bias,(256,),1
+weight shape after transpose
+layer3.5.bn2.bias,(256,),1
+weight shape before transpose
+layer3.5.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.5.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.5.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.5.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.5.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.5.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.5.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.5.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.5.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.5.bn3.bias,(1024,),1
+weight shape before transpose
+layer4.0.conv1.weight,(512, 1024, 1, 1),4
+weight shape after transpose
+layer4.0.conv1.weight,(1024, 1, 1, 512),4
+weight shape before transpose
+layer4.0.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.0.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.0.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.0.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.0.bn1.weight,(512,),1
+weight shape after transpose
+layer4.0.bn1.weight,(512,),1
+weight shape before transpose
+layer4.0.bn1.bias,(512,),1
+weight shape after transpose
+layer4.0.bn1.bias,(512,),1
+weight shape before transpose
+layer4.0.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.0.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.0.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.0.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.0.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.0.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.0.bn2.weight,(512,),1
+weight shape after transpose
+layer4.0.bn2.weight,(512,),1
+weight shape before transpose
+layer4.0.bn2.bias,(512,),1
+weight shape after transpose
+layer4.0.bn2.bias,(512,),1
+weight shape before transpose
+layer4.0.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.0.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.0.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.0.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.0.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.0.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.0.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.0.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.0.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.0.bn3.bias,(2048,),1
+weight shape before transpose
+layer4.0.downsample.0.weight,(2048, 1024, 1, 1),4
+weight shape after transpose
+layer4.0.downsample.0.weight,(1024, 1, 1, 2048),4
+weight shape before transpose
+layer4.0.downsample.1.running_mean,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.running_mean,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.running_var,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.running_var,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.weight,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.weight,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.bias,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.bias,(2048,),1
+weight shape before transpose
+layer4.1.conv1.weight,(512, 2048, 1, 1),4
+weight shape after transpose
+layer4.1.conv1.weight,(2048, 1, 1, 512),4
+weight shape before transpose
+layer4.1.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.1.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.1.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.1.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.1.bn1.weight,(512,),1
+weight shape after transpose
+layer4.1.bn1.weight,(512,),1
+weight shape before transpose
+layer4.1.bn1.bias,(512,),1
+weight shape after transpose
+layer4.1.bn1.bias,(512,),1
+weight shape before transpose
+layer4.1.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.1.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.1.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.1.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.1.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.1.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.1.bn2.weight,(512,),1
+weight shape after transpose
+layer4.1.bn2.weight,(512,),1
+weight shape before transpose
+layer4.1.bn2.bias,(512,),1
+weight shape after transpose
+layer4.1.bn2.bias,(512,),1
+weight shape before transpose
+layer4.1.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.1.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.1.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.1.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.1.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.1.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.1.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.1.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.1.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.1.bn3.bias,(2048,),1
+weight shape before transpose
+layer4.2.conv1.weight,(512, 2048, 1, 1),4
+weight shape after transpose
+layer4.2.conv1.weight,(2048, 1, 1, 512),4
+weight shape before transpose
+layer4.2.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.2.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.2.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.2.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.2.bn1.weight,(512,),1
+weight shape after transpose
+layer4.2.bn1.weight,(512,),1
+weight shape before transpose
+layer4.2.bn1.bias,(512,),1
+weight shape after transpose
+layer4.2.bn1.bias,(512,),1
+weight shape before transpose
+layer4.2.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.2.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.2.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.2.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.2.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.2.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.2.bn2.weight,(512,),1
+weight shape after transpose
+layer4.2.bn2.weight,(512,),1
+weight shape before transpose
+layer4.2.bn2.bias,(512,),1
+weight shape after transpose
+layer4.2.bn2.bias,(512,),1
+weight shape before transpose
+layer4.2.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.2.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.2.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.2.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.2.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.2.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.2.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.2.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.2.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.2.bn3.bias,(2048,),1
+weight shape before transpose
+fc.weight,(1000, 2048),2
+weight shape after transpose
+fc.weight,(2048, 1000),2
+weight shape before transpose
+fc.bias,(1000,),1
+weight shape after transpose
+fc.bias,(1000,),1
+echo "ok" > bin/pytorch_weights/ok
+bin/process 10 auto_schedule bin/pytorch_weights cropped_panda.jpg bin/res50gen_output.bin
+Loading image from cropped_panda.jpg
+conv1_weight_shape.data num_dims : 4 shape: 64 7 7 3 
+weight shape for bin/pytorch_weights/conv1_weight.data
+64 7 7 3
+bn1_running_mean_shape.data num_dims : 1 shape: 64 
+bn1_running_var_shape.data num_dims : 1 shape: 64 
+bn1_weight_shape.data num_dims : 1 shape: 64 
+bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_downsample_0_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_downsample_0_weight.data
+256 1 1 64
+layer1_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_downsample_0_weight_shape.data num_dims : 4 shape: 512 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_downsample_0_weight.data
+512 1 1 256
+layer2_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_downsample_0_weight_shape.data num_dims : 4 shape: 1024 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_downsample_0_weight.data
+1024 1 1 512
+layer3_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_downsample_0_weight_shape.data num_dims : 4 shape: 2048 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_downsample_0_weight.data
+2048 1 1 1024
+layer4_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_bias_shape.data num_dims : 1 shape: 2048 
+layer1_0_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv1_weight.data
+64 1 1 64
+layer1_0_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_0_conv2_weight.data
+64 3 3 64
+layer1_0_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv3_weight.data
+256 1 1 64
+layer1_0_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_1_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_1_conv1_weight.data
+64 1 1 256
+layer1_1_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_1_conv2_weight.data
+64 3 3 64
+layer1_1_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_1_conv3_weight.data
+256 1 1 64
+layer1_1_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_2_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_2_conv1_weight.data
+64 1 1 256
+layer1_2_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_2_conv2_weight.data
+64 3 3 64
+layer1_2_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_2_conv3_weight.data
+256 1 1 64
+layer1_2_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_conv1_weight.data
+128 1 1 256
+layer2_0_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_0_conv2_weight.data
+128 3 3 128
+layer2_0_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_0_conv3_weight.data
+512 1 1 128
+layer2_0_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_1_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_1_conv1_weight.data
+128 1 1 512
+layer2_1_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_1_conv2_weight.data
+128 3 3 128
+layer2_1_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_1_conv3_weight.data
+512 1 1 128
+layer2_1_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_2_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_2_conv1_weight.data
+128 1 1 512
+layer2_2_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_2_conv2_weight.data
+128 3 3 128
+layer2_2_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_2_conv3_weight.data
+512 1 1 128
+layer2_2_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_3_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_3_conv1_weight.data
+128 1 1 512
+layer2_3_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_3_conv2_weight.data
+128 3 3 128
+layer2_3_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_3_conv3_weight.data
+512 1 1 128
+layer2_3_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_conv1_weight.data
+256 1 1 512
+layer3_0_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_0_conv2_weight.data
+256 3 3 256
+layer3_0_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_0_conv3_weight.data
+1024 1 1 256
+layer3_0_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_1_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_1_conv1_weight.data
+256 1 1 1024
+layer3_1_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_1_conv2_weight.data
+256 3 3 256
+layer3_1_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_1_conv3_weight.data
+1024 1 1 256
+layer3_1_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_2_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_2_conv1_weight.data
+256 1 1 1024
+layer3_2_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_2_conv2_weight.data
+256 3 3 256
+layer3_2_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_2_conv3_weight.data
+1024 1 1 256
+layer3_2_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_3_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_3_conv1_weight.data
+256 1 1 1024
+layer3_3_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_3_conv2_weight.data
+256 3 3 256
+layer3_3_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_3_conv3_weight.data
+1024 1 1 256
+layer3_3_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_4_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_4_conv1_weight.data
+256 1 1 1024
+layer3_4_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_4_conv2_weight.data
+256 3 3 256
+layer3_4_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_4_conv3_weight.data
+1024 1 1 256
+layer3_4_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_5_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_5_conv1_weight.data
+256 1 1 1024
+layer3_5_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_5_conv2_weight.data
+256 3 3 256
+layer3_5_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_5_conv3_weight.data
+1024 1 1 256
+layer3_5_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_conv1_weight.data
+512 1 1 1024
+layer4_0_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_0_conv2_weight.data
+512 3 3 512
+layer4_0_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_0_conv3_weight.data
+2048 1 1 512
+layer4_0_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_1_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_1_conv1_weight.data
+512 1 1 2048
+layer4_1_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_1_conv2_weight.data
+512 3 3 512
+layer4_1_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_1_conv3_weight.data
+2048 1 1 512
+layer4_1_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_2_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_2_conv1_weight.data
+512 1 1 2048
+layer4_2_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_2_conv2_weight.data
+512 3 3 512
+layer4_2_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_2_conv3_weight.data
+2048 1 1 512
+layer4_2_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_bias_shape.data num_dims : 1 shape: 2048 
+fc_weight_shape.data num_dims : 2 shape: 1000 2048 
+fc_bias_shape.data num_dims : 1 shape: 1000 
+Auto-scheduled time: 35.4234ms
+ class: 836
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+python3 load_weights.py bin/pytorch_weights
+-----------loading weights------------
+odict_keys(['conv1.weight', 'bn1.running_mean', 'bn1.running_var', 'bn1.weight', 'bn1.bias', 'layer1.0.conv1.weight', 'layer1.0.bn1.running_mean', 'layer1.0.bn1.running_var', 'layer1.0.bn1.weight', 'layer1.0.bn1.bias', 'layer1.0.conv2.weight', 'layer1.0.bn2.running_mean', 'layer1.0.bn2.running_var', 'layer1.0.bn2.weight', 'layer1.0.bn2.bias', 'layer1.0.conv3.weight', 'layer1.0.bn3.running_mean', 'layer1.0.bn3.running_var', 'layer1.0.bn3.weight', 'layer1.0.bn3.bias', 'layer1.0.downsample.0.weight', 'layer1.0.downsample.1.running_mean', 'layer1.0.downsample.1.running_var', 'layer1.0.downsample.1.weight', 'layer1.0.downsample.1.bias', 'layer1.1.conv1.weight', 'layer1.1.bn1.running_mean', 'layer1.1.bn1.running_var', 'layer1.1.bn1.weight', 'layer1.1.bn1.bias', 'layer1.1.conv2.weight', 'layer1.1.bn2.running_mean', 'layer1.1.bn2.running_var', 'layer1.1.bn2.weight', 'layer1.1.bn2.bias', 'layer1.1.conv3.weight', 'layer1.1.bn3.running_mean', 'layer1.1.bn3.running_var', 'layer1.1.bn3.weight', 'layer1.1.bn3.bias', 'layer1.2.conv1.weight', 'layer1.2.bn1.running_mean', 'layer1.2.bn1.running_var', 'layer1.2.bn1.weight', 'layer1.2.bn1.bias', 'layer1.2.conv2.weight', 'layer1.2.bn2.running_mean', 'layer1.2.bn2.running_var', 'layer1.2.bn2.weight', 'layer1.2.bn2.bias', 'layer1.2.conv3.weight', 'layer1.2.bn3.running_mean', 'layer1.2.bn3.running_var', 'layer1.2.bn3.weight', 'layer1.2.bn3.bias', 'layer2.0.conv1.weight', 'layer2.0.bn1.running_mean', 'layer2.0.bn1.running_var', 'layer2.0.bn1.weight', 'layer2.0.bn1.bias', 'layer2.0.conv2.weight', 'layer2.0.bn2.running_mean', 'layer2.0.bn2.running_var', 'layer2.0.bn2.weight', 'layer2.0.bn2.bias', 'layer2.0.conv3.weight', 'layer2.0.bn3.running_mean', 'layer2.0.bn3.running_var', 'layer2.0.bn3.weight', 'layer2.0.bn3.bias', 'layer2.0.downsample.0.weight', 'layer2.0.downsample.1.running_mean', 'layer2.0.downsample.1.running_var', 'layer2.0.downsample.1.weight', 'layer2.0.downsample.1.bias', 'layer2.1.conv1.weight', 'layer2.1.bn1.running_mean', 'layer2.1.bn1.running_var', 'layer2.1.bn1.weight', 'layer2.1.bn1.bias', 'layer2.1.conv2.weight', 'layer2.1.bn2.running_mean', 'layer2.1.bn2.running_var', 'layer2.1.bn2.weight', 'layer2.1.bn2.bias', 'layer2.1.conv3.weight', 'layer2.1.bn3.running_mean', 'layer2.1.bn3.running_var', 'layer2.1.bn3.weight', 'layer2.1.bn3.bias', 'layer2.2.conv1.weight', 'layer2.2.bn1.running_mean', 'layer2.2.bn1.running_var', 'layer2.2.bn1.weight', 'layer2.2.bn1.bias', 'layer2.2.conv2.weight', 'layer2.2.bn2.running_mean', 'layer2.2.bn2.running_var', 'layer2.2.bn2.weight', 'layer2.2.bn2.bias', 'layer2.2.conv3.weight', 'layer2.2.bn3.running_mean', 'layer2.2.bn3.running_var', 'layer2.2.bn3.weight', 'layer2.2.bn3.bias', 'layer2.3.conv1.weight', 'layer2.3.bn1.running_mean', 'layer2.3.bn1.running_var', 'layer2.3.bn1.weight', 'layer2.3.bn1.bias', 'layer2.3.conv2.weight', 'layer2.3.bn2.running_mean', 'layer2.3.bn2.running_var', 'layer2.3.bn2.weight', 'layer2.3.bn2.bias', 'layer2.3.conv3.weight', 'layer2.3.bn3.running_mean', 'layer2.3.bn3.running_var', 'layer2.3.bn3.weight', 'layer2.3.bn3.bias', 'layer3.0.conv1.weight', 'layer3.0.bn1.running_mean', 'layer3.0.bn1.running_var', 'layer3.0.bn1.weight', 'layer3.0.bn1.bias', 'layer3.0.conv2.weight', 'layer3.0.bn2.running_mean', 'layer3.0.bn2.running_var', 'layer3.0.bn2.weight', 'layer3.0.bn2.bias', 'layer3.0.conv3.weight', 'layer3.0.bn3.running_mean', 'layer3.0.bn3.running_var', 'layer3.0.bn3.weight', 'layer3.0.bn3.bias', 'layer3.0.downsample.0.weight', 'layer3.0.downsample.1.running_mean', 'layer3.0.downsample.1.running_var', 'layer3.0.downsample.1.weight', 'layer3.0.downsample.1.bias', 'layer3.1.conv1.weight', 'layer3.1.bn1.running_mean', 'layer3.1.bn1.running_var', 'layer3.1.bn1.weight', 'layer3.1.bn1.bias', 'layer3.1.conv2.weight', 'layer3.1.bn2.running_mean', 'layer3.1.bn2.running_var', 'layer3.1.bn2.weight', 'layer3.1.bn2.bias', 'layer3.1.conv3.weight', 'layer3.1.bn3.running_mean', 'layer3.1.bn3.running_var', 'layer3.1.bn3.weight', 'layer3.1.bn3.bias', 'layer3.2.conv1.weight', 'layer3.2.bn1.running_mean', 'layer3.2.bn1.running_var', 'layer3.2.bn1.weight', 'layer3.2.bn1.bias', 'layer3.2.conv2.weight', 'layer3.2.bn2.running_mean', 'layer3.2.bn2.running_var', 'layer3.2.bn2.weight', 'layer3.2.bn2.bias', 'layer3.2.conv3.weight', 'layer3.2.bn3.running_mean', 'layer3.2.bn3.running_var', 'layer3.2.bn3.weight', 'layer3.2.bn3.bias', 'layer3.3.conv1.weight', 'layer3.3.bn1.running_mean', 'layer3.3.bn1.running_var', 'layer3.3.bn1.weight', 'layer3.3.bn1.bias', 'layer3.3.conv2.weight', 'layer3.3.bn2.running_mean', 'layer3.3.bn2.running_var', 'layer3.3.bn2.weight', 'layer3.3.bn2.bias', 'layer3.3.conv3.weight', 'layer3.3.bn3.running_mean', 'layer3.3.bn3.running_var', 'layer3.3.bn3.weight', 'layer3.3.bn3.bias', 'layer3.4.conv1.weight', 'layer3.4.bn1.running_mean', 'layer3.4.bn1.running_var', 'layer3.4.bn1.weight', 'layer3.4.bn1.bias', 'layer3.4.conv2.weight', 'layer3.4.bn2.running_mean', 'layer3.4.bn2.running_var', 'layer3.4.bn2.weight', 'layer3.4.bn2.bias', 'layer3.4.conv3.weight', 'layer3.4.bn3.running_mean', 'layer3.4.bn3.running_var', 'layer3.4.bn3.weight', 'layer3.4.bn3.bias', 'layer3.5.conv1.weight', 'layer3.5.bn1.running_mean', 'layer3.5.bn1.running_var', 'layer3.5.bn1.weight', 'layer3.5.bn1.bias', 'layer3.5.conv2.weight', 'layer3.5.bn2.running_mean', 'layer3.5.bn2.running_var', 'layer3.5.bn2.weight', 'layer3.5.bn2.bias', 'layer3.5.conv3.weight', 'layer3.5.bn3.running_mean', 'layer3.5.bn3.running_var', 'layer3.5.bn3.weight', 'layer3.5.bn3.bias', 'layer4.0.conv1.weight', 'layer4.0.bn1.running_mean', 'layer4.0.bn1.running_var', 'layer4.0.bn1.weight', 'layer4.0.bn1.bias', 'layer4.0.conv2.weight', 'layer4.0.bn2.running_mean', 'layer4.0.bn2.running_var', 'layer4.0.bn2.weight', 'layer4.0.bn2.bias', 'layer4.0.conv3.weight', 'layer4.0.bn3.running_mean', 'layer4.0.bn3.running_var', 'layer4.0.bn3.weight', 'layer4.0.bn3.bias', 'layer4.0.downsample.0.weight', 'layer4.0.downsample.1.running_mean', 'layer4.0.downsample.1.running_var', 'layer4.0.downsample.1.weight', 'layer4.0.downsample.1.bias', 'layer4.1.conv1.weight', 'layer4.1.bn1.running_mean', 'layer4.1.bn1.running_var', 'layer4.1.bn1.weight', 'layer4.1.bn1.bias', 'layer4.1.conv2.weight', 'layer4.1.bn2.running_mean', 'layer4.1.bn2.running_var', 'layer4.1.bn2.weight', 'layer4.1.bn2.bias', 'layer4.1.conv3.weight', 'layer4.1.bn3.running_mean', 'layer4.1.bn3.running_var', 'layer4.1.bn3.weight', 'layer4.1.bn3.bias', 'layer4.2.conv1.weight', 'layer4.2.bn1.running_mean', 'layer4.2.bn1.running_var', 'layer4.2.bn1.weight', 'layer4.2.bn1.bias', 'layer4.2.conv2.weight', 'layer4.2.bn2.running_mean', 'layer4.2.bn2.running_var', 'layer4.2.bn2.weight', 'layer4.2.bn2.bias', 'layer4.2.conv3.weight', 'layer4.2.bn3.running_mean', 'layer4.2.bn3.running_var', 'layer4.2.bn3.weight', 'layer4.2.bn3.bias', 'fc.weight', 'fc.bias'])
+weight shape before transpose
+conv1.weight,(64, 3, 7, 7),4
+weight shape after transpose
+conv1.weight,(3, 7, 7, 64),4
+weight shape before transpose
+bn1.running_mean,(64,),1
+weight shape after transpose
+bn1.running_mean,(64,),1
+weight shape before transpose
+bn1.running_var,(64,),1
+weight shape after transpose
+bn1.running_var,(64,),1
+weight shape before transpose
+bn1.weight,(64,),1
+weight shape after transpose
+bn1.weight,(64,),1
+weight shape before transpose
+bn1.bias,(64,),1
+weight shape after transpose
+bn1.bias,(64,),1
+weight shape before transpose
+layer1.0.conv1.weight,(64, 64, 1, 1),4
+weight shape after transpose
+layer1.0.conv1.weight,(64, 1, 1, 64),4
+weight shape before transpose
+layer1.0.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.0.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.0.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.0.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.0.bn1.weight,(64,),1
+weight shape after transpose
+layer1.0.bn1.weight,(64,),1
+weight shape before transpose
+layer1.0.bn1.bias,(64,),1
+weight shape after transpose
+layer1.0.bn1.bias,(64,),1
+weight shape before transpose
+layer1.0.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.0.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.0.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.0.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.0.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.0.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.0.bn2.weight,(64,),1
+weight shape after transpose
+layer1.0.bn2.weight,(64,),1
+weight shape before transpose
+layer1.0.bn2.bias,(64,),1
+weight shape after transpose
+layer1.0.bn2.bias,(64,),1
+weight shape before transpose
+layer1.0.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.0.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.0.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.0.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.0.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.0.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.0.bn3.weight,(256,),1
+weight shape after transpose
+layer1.0.bn3.weight,(256,),1
+weight shape before transpose
+layer1.0.bn3.bias,(256,),1
+weight shape after transpose
+layer1.0.bn3.bias,(256,),1
+weight shape before transpose
+layer1.0.downsample.0.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.0.downsample.0.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.0.downsample.1.running_mean,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.running_mean,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.running_var,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.running_var,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.weight,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.weight,(256,),1
+weight shape before transpose
+layer1.0.downsample.1.bias,(256,),1
+weight shape after transpose
+layer1.0.downsample.1.bias,(256,),1
+weight shape before transpose
+layer1.1.conv1.weight,(64, 256, 1, 1),4
+weight shape after transpose
+layer1.1.conv1.weight,(256, 1, 1, 64),4
+weight shape before transpose
+layer1.1.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.1.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.1.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.1.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.1.bn1.weight,(64,),1
+weight shape after transpose
+layer1.1.bn1.weight,(64,),1
+weight shape before transpose
+layer1.1.bn1.bias,(64,),1
+weight shape after transpose
+layer1.1.bn1.bias,(64,),1
+weight shape before transpose
+layer1.1.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.1.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.1.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.1.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.1.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.1.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.1.bn2.weight,(64,),1
+weight shape after transpose
+layer1.1.bn2.weight,(64,),1
+weight shape before transpose
+layer1.1.bn2.bias,(64,),1
+weight shape after transpose
+layer1.1.bn2.bias,(64,),1
+weight shape before transpose
+layer1.1.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.1.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.1.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.1.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.1.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.1.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.1.bn3.weight,(256,),1
+weight shape after transpose
+layer1.1.bn3.weight,(256,),1
+weight shape before transpose
+layer1.1.bn3.bias,(256,),1
+weight shape after transpose
+layer1.1.bn3.bias,(256,),1
+weight shape before transpose
+layer1.2.conv1.weight,(64, 256, 1, 1),4
+weight shape after transpose
+layer1.2.conv1.weight,(256, 1, 1, 64),4
+weight shape before transpose
+layer1.2.bn1.running_mean,(64,),1
+weight shape after transpose
+layer1.2.bn1.running_mean,(64,),1
+weight shape before transpose
+layer1.2.bn1.running_var,(64,),1
+weight shape after transpose
+layer1.2.bn1.running_var,(64,),1
+weight shape before transpose
+layer1.2.bn1.weight,(64,),1
+weight shape after transpose
+layer1.2.bn1.weight,(64,),1
+weight shape before transpose
+layer1.2.bn1.bias,(64,),1
+weight shape after transpose
+layer1.2.bn1.bias,(64,),1
+weight shape before transpose
+layer1.2.conv2.weight,(64, 64, 3, 3),4
+weight shape after transpose
+layer1.2.conv2.weight,(64, 3, 3, 64),4
+weight shape before transpose
+layer1.2.bn2.running_mean,(64,),1
+weight shape after transpose
+layer1.2.bn2.running_mean,(64,),1
+weight shape before transpose
+layer1.2.bn2.running_var,(64,),1
+weight shape after transpose
+layer1.2.bn2.running_var,(64,),1
+weight shape before transpose
+layer1.2.bn2.weight,(64,),1
+weight shape after transpose
+layer1.2.bn2.weight,(64,),1
+weight shape before transpose
+layer1.2.bn2.bias,(64,),1
+weight shape after transpose
+layer1.2.bn2.bias,(64,),1
+weight shape before transpose
+layer1.2.conv3.weight,(256, 64, 1, 1),4
+weight shape after transpose
+layer1.2.conv3.weight,(64, 1, 1, 256),4
+weight shape before transpose
+layer1.2.bn3.running_mean,(256,),1
+weight shape after transpose
+layer1.2.bn3.running_mean,(256,),1
+weight shape before transpose
+layer1.2.bn3.running_var,(256,),1
+weight shape after transpose
+layer1.2.bn3.running_var,(256,),1
+weight shape before transpose
+layer1.2.bn3.weight,(256,),1
+weight shape after transpose
+layer1.2.bn3.weight,(256,),1
+weight shape before transpose
+layer1.2.bn3.bias,(256,),1
+weight shape after transpose
+layer1.2.bn3.bias,(256,),1
+weight shape before transpose
+layer2.0.conv1.weight,(128, 256, 1, 1),4
+weight shape after transpose
+layer2.0.conv1.weight,(256, 1, 1, 128),4
+weight shape before transpose
+layer2.0.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.0.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.0.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.0.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.0.bn1.weight,(128,),1
+weight shape after transpose
+layer2.0.bn1.weight,(128,),1
+weight shape before transpose
+layer2.0.bn1.bias,(128,),1
+weight shape after transpose
+layer2.0.bn1.bias,(128,),1
+weight shape before transpose
+layer2.0.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.0.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.0.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.0.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.0.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.0.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.0.bn2.weight,(128,),1
+weight shape after transpose
+layer2.0.bn2.weight,(128,),1
+weight shape before transpose
+layer2.0.bn2.bias,(128,),1
+weight shape after transpose
+layer2.0.bn2.bias,(128,),1
+weight shape before transpose
+layer2.0.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.0.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.0.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.0.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.0.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.0.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.0.bn3.weight,(512,),1
+weight shape after transpose
+layer2.0.bn3.weight,(512,),1
+weight shape before transpose
+layer2.0.bn3.bias,(512,),1
+weight shape after transpose
+layer2.0.bn3.bias,(512,),1
+weight shape before transpose
+layer2.0.downsample.0.weight,(512, 256, 1, 1),4
+weight shape after transpose
+layer2.0.downsample.0.weight,(256, 1, 1, 512),4
+weight shape before transpose
+layer2.0.downsample.1.running_mean,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.running_mean,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.running_var,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.running_var,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.weight,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.weight,(512,),1
+weight shape before transpose
+layer2.0.downsample.1.bias,(512,),1
+weight shape after transpose
+layer2.0.downsample.1.bias,(512,),1
+weight shape before transpose
+layer2.1.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.1.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.1.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.1.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.1.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.1.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.1.bn1.weight,(128,),1
+weight shape after transpose
+layer2.1.bn1.weight,(128,),1
+weight shape before transpose
+layer2.1.bn1.bias,(128,),1
+weight shape after transpose
+layer2.1.bn1.bias,(128,),1
+weight shape before transpose
+layer2.1.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.1.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.1.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.1.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.1.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.1.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.1.bn2.weight,(128,),1
+weight shape after transpose
+layer2.1.bn2.weight,(128,),1
+weight shape before transpose
+layer2.1.bn2.bias,(128,),1
+weight shape after transpose
+layer2.1.bn2.bias,(128,),1
+weight shape before transpose
+layer2.1.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.1.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.1.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.1.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.1.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.1.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.1.bn3.weight,(512,),1
+weight shape after transpose
+layer2.1.bn3.weight,(512,),1
+weight shape before transpose
+layer2.1.bn3.bias,(512,),1
+weight shape after transpose
+layer2.1.bn3.bias,(512,),1
+weight shape before transpose
+layer2.2.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.2.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.2.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.2.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.2.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.2.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.2.bn1.weight,(128,),1
+weight shape after transpose
+layer2.2.bn1.weight,(128,),1
+weight shape before transpose
+layer2.2.bn1.bias,(128,),1
+weight shape after transpose
+layer2.2.bn1.bias,(128,),1
+weight shape before transpose
+layer2.2.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.2.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.2.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.2.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.2.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.2.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.2.bn2.weight,(128,),1
+weight shape after transpose
+layer2.2.bn2.weight,(128,),1
+weight shape before transpose
+layer2.2.bn2.bias,(128,),1
+weight shape after transpose
+layer2.2.bn2.bias,(128,),1
+weight shape before transpose
+layer2.2.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.2.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.2.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.2.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.2.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.2.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.2.bn3.weight,(512,),1
+weight shape after transpose
+layer2.2.bn3.weight,(512,),1
+weight shape before transpose
+layer2.2.bn3.bias,(512,),1
+weight shape after transpose
+layer2.2.bn3.bias,(512,),1
+weight shape before transpose
+layer2.3.conv1.weight,(128, 512, 1, 1),4
+weight shape after transpose
+layer2.3.conv1.weight,(512, 1, 1, 128),4
+weight shape before transpose
+layer2.3.bn1.running_mean,(128,),1
+weight shape after transpose
+layer2.3.bn1.running_mean,(128,),1
+weight shape before transpose
+layer2.3.bn1.running_var,(128,),1
+weight shape after transpose
+layer2.3.bn1.running_var,(128,),1
+weight shape before transpose
+layer2.3.bn1.weight,(128,),1
+weight shape after transpose
+layer2.3.bn1.weight,(128,),1
+weight shape before transpose
+layer2.3.bn1.bias,(128,),1
+weight shape after transpose
+layer2.3.bn1.bias,(128,),1
+weight shape before transpose
+layer2.3.conv2.weight,(128, 128, 3, 3),4
+weight shape after transpose
+layer2.3.conv2.weight,(128, 3, 3, 128),4
+weight shape before transpose
+layer2.3.bn2.running_mean,(128,),1
+weight shape after transpose
+layer2.3.bn2.running_mean,(128,),1
+weight shape before transpose
+layer2.3.bn2.running_var,(128,),1
+weight shape after transpose
+layer2.3.bn2.running_var,(128,),1
+weight shape before transpose
+layer2.3.bn2.weight,(128,),1
+weight shape after transpose
+layer2.3.bn2.weight,(128,),1
+weight shape before transpose
+layer2.3.bn2.bias,(128,),1
+weight shape after transpose
+layer2.3.bn2.bias,(128,),1
+weight shape before transpose
+layer2.3.conv3.weight,(512, 128, 1, 1),4
+weight shape after transpose
+layer2.3.conv3.weight,(128, 1, 1, 512),4
+weight shape before transpose
+layer2.3.bn3.running_mean,(512,),1
+weight shape after transpose
+layer2.3.bn3.running_mean,(512,),1
+weight shape before transpose
+layer2.3.bn3.running_var,(512,),1
+weight shape after transpose
+layer2.3.bn3.running_var,(512,),1
+weight shape before transpose
+layer2.3.bn3.weight,(512,),1
+weight shape after transpose
+layer2.3.bn3.weight,(512,),1
+weight shape before transpose
+layer2.3.bn3.bias,(512,),1
+weight shape after transpose
+layer2.3.bn3.bias,(512,),1
+weight shape before transpose
+layer3.0.conv1.weight,(256, 512, 1, 1),4
+weight shape after transpose
+layer3.0.conv1.weight,(512, 1, 1, 256),4
+weight shape before transpose
+layer3.0.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.0.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.0.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.0.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.0.bn1.weight,(256,),1
+weight shape after transpose
+layer3.0.bn1.weight,(256,),1
+weight shape before transpose
+layer3.0.bn1.bias,(256,),1
+weight shape after transpose
+layer3.0.bn1.bias,(256,),1
+weight shape before transpose
+layer3.0.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.0.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.0.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.0.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.0.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.0.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.0.bn2.weight,(256,),1
+weight shape after transpose
+layer3.0.bn2.weight,(256,),1
+weight shape before transpose
+layer3.0.bn2.bias,(256,),1
+weight shape after transpose
+layer3.0.bn2.bias,(256,),1
+weight shape before transpose
+layer3.0.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.0.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.0.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.0.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.0.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.0.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.0.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.0.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.0.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.0.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.0.downsample.0.weight,(1024, 512, 1, 1),4
+weight shape after transpose
+layer3.0.downsample.0.weight,(512, 1, 1, 1024),4
+weight shape before transpose
+layer3.0.downsample.1.running_mean,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.running_mean,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.running_var,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.running_var,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.weight,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.weight,(1024,),1
+weight shape before transpose
+layer3.0.downsample.1.bias,(1024,),1
+weight shape after transpose
+layer3.0.downsample.1.bias,(1024,),1
+weight shape before transpose
+layer3.1.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.1.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.1.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.1.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.1.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.1.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.1.bn1.weight,(256,),1
+weight shape after transpose
+layer3.1.bn1.weight,(256,),1
+weight shape before transpose
+layer3.1.bn1.bias,(256,),1
+weight shape after transpose
+layer3.1.bn1.bias,(256,),1
+weight shape before transpose
+layer3.1.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.1.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.1.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.1.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.1.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.1.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.1.bn2.weight,(256,),1
+weight shape after transpose
+layer3.1.bn2.weight,(256,),1
+weight shape before transpose
+layer3.1.bn2.bias,(256,),1
+weight shape after transpose
+layer3.1.bn2.bias,(256,),1
+weight shape before transpose
+layer3.1.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.1.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.1.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.1.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.1.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.1.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.1.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.1.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.1.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.1.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.2.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.2.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.2.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.2.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.2.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.2.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.2.bn1.weight,(256,),1
+weight shape after transpose
+layer3.2.bn1.weight,(256,),1
+weight shape before transpose
+layer3.2.bn1.bias,(256,),1
+weight shape after transpose
+layer3.2.bn1.bias,(256,),1
+weight shape before transpose
+layer3.2.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.2.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.2.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.2.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.2.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.2.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.2.bn2.weight,(256,),1
+weight shape after transpose
+layer3.2.bn2.weight,(256,),1
+weight shape before transpose
+layer3.2.bn2.bias,(256,),1
+weight shape after transpose
+layer3.2.bn2.bias,(256,),1
+weight shape before transpose
+layer3.2.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.2.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.2.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.2.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.2.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.2.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.2.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.2.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.2.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.2.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.3.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.3.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.3.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.3.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.3.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.3.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.3.bn1.weight,(256,),1
+weight shape after transpose
+layer3.3.bn1.weight,(256,),1
+weight shape before transpose
+layer3.3.bn1.bias,(256,),1
+weight shape after transpose
+layer3.3.bn1.bias,(256,),1
+weight shape before transpose
+layer3.3.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.3.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.3.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.3.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.3.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.3.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.3.bn2.weight,(256,),1
+weight shape after transpose
+layer3.3.bn2.weight,(256,),1
+weight shape before transpose
+layer3.3.bn2.bias,(256,),1
+weight shape after transpose
+layer3.3.bn2.bias,(256,),1
+weight shape before transpose
+layer3.3.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.3.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.3.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.3.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.3.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.3.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.3.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.3.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.3.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.3.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.4.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.4.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.4.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.4.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.4.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.4.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.4.bn1.weight,(256,),1
+weight shape after transpose
+layer3.4.bn1.weight,(256,),1
+weight shape before transpose
+layer3.4.bn1.bias,(256,),1
+weight shape after transpose
+layer3.4.bn1.bias,(256,),1
+weight shape before transpose
+layer3.4.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.4.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.4.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.4.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.4.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.4.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.4.bn2.weight,(256,),1
+weight shape after transpose
+layer3.4.bn2.weight,(256,),1
+weight shape before transpose
+layer3.4.bn2.bias,(256,),1
+weight shape after transpose
+layer3.4.bn2.bias,(256,),1
+weight shape before transpose
+layer3.4.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.4.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.4.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.4.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.4.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.4.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.4.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.4.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.4.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.4.bn3.bias,(1024,),1
+weight shape before transpose
+layer3.5.conv1.weight,(256, 1024, 1, 1),4
+weight shape after transpose
+layer3.5.conv1.weight,(1024, 1, 1, 256),4
+weight shape before transpose
+layer3.5.bn1.running_mean,(256,),1
+weight shape after transpose
+layer3.5.bn1.running_mean,(256,),1
+weight shape before transpose
+layer3.5.bn1.running_var,(256,),1
+weight shape after transpose
+layer3.5.bn1.running_var,(256,),1
+weight shape before transpose
+layer3.5.bn1.weight,(256,),1
+weight shape after transpose
+layer3.5.bn1.weight,(256,),1
+weight shape before transpose
+layer3.5.bn1.bias,(256,),1
+weight shape after transpose
+layer3.5.bn1.bias,(256,),1
+weight shape before transpose
+layer3.5.conv2.weight,(256, 256, 3, 3),4
+weight shape after transpose
+layer3.5.conv2.weight,(256, 3, 3, 256),4
+weight shape before transpose
+layer3.5.bn2.running_mean,(256,),1
+weight shape after transpose
+layer3.5.bn2.running_mean,(256,),1
+weight shape before transpose
+layer3.5.bn2.running_var,(256,),1
+weight shape after transpose
+layer3.5.bn2.running_var,(256,),1
+weight shape before transpose
+layer3.5.bn2.weight,(256,),1
+weight shape after transpose
+layer3.5.bn2.weight,(256,),1
+weight shape before transpose
+layer3.5.bn2.bias,(256,),1
+weight shape after transpose
+layer3.5.bn2.bias,(256,),1
+weight shape before transpose
+layer3.5.conv3.weight,(1024, 256, 1, 1),4
+weight shape after transpose
+layer3.5.conv3.weight,(256, 1, 1, 1024),4
+weight shape before transpose
+layer3.5.bn3.running_mean,(1024,),1
+weight shape after transpose
+layer3.5.bn3.running_mean,(1024,),1
+weight shape before transpose
+layer3.5.bn3.running_var,(1024,),1
+weight shape after transpose
+layer3.5.bn3.running_var,(1024,),1
+weight shape before transpose
+layer3.5.bn3.weight,(1024,),1
+weight shape after transpose
+layer3.5.bn3.weight,(1024,),1
+weight shape before transpose
+layer3.5.bn3.bias,(1024,),1
+weight shape after transpose
+layer3.5.bn3.bias,(1024,),1
+weight shape before transpose
+layer4.0.conv1.weight,(512, 1024, 1, 1),4
+weight shape after transpose
+layer4.0.conv1.weight,(1024, 1, 1, 512),4
+weight shape before transpose
+layer4.0.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.0.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.0.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.0.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.0.bn1.weight,(512,),1
+weight shape after transpose
+layer4.0.bn1.weight,(512,),1
+weight shape before transpose
+layer4.0.bn1.bias,(512,),1
+weight shape after transpose
+layer4.0.bn1.bias,(512,),1
+weight shape before transpose
+layer4.0.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.0.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.0.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.0.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.0.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.0.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.0.bn2.weight,(512,),1
+weight shape after transpose
+layer4.0.bn2.weight,(512,),1
+weight shape before transpose
+layer4.0.bn2.bias,(512,),1
+weight shape after transpose
+layer4.0.bn2.bias,(512,),1
+weight shape before transpose
+layer4.0.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.0.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.0.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.0.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.0.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.0.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.0.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.0.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.0.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.0.bn3.bias,(2048,),1
+weight shape before transpose
+layer4.0.downsample.0.weight,(2048, 1024, 1, 1),4
+weight shape after transpose
+layer4.0.downsample.0.weight,(1024, 1, 1, 2048),4
+weight shape before transpose
+layer4.0.downsample.1.running_mean,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.running_mean,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.running_var,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.running_var,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.weight,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.weight,(2048,),1
+weight shape before transpose
+layer4.0.downsample.1.bias,(2048,),1
+weight shape after transpose
+layer4.0.downsample.1.bias,(2048,),1
+weight shape before transpose
+layer4.1.conv1.weight,(512, 2048, 1, 1),4
+weight shape after transpose
+layer4.1.conv1.weight,(2048, 1, 1, 512),4
+weight shape before transpose
+layer4.1.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.1.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.1.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.1.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.1.bn1.weight,(512,),1
+weight shape after transpose
+layer4.1.bn1.weight,(512,),1
+weight shape before transpose
+layer4.1.bn1.bias,(512,),1
+weight shape after transpose
+layer4.1.bn1.bias,(512,),1
+weight shape before transpose
+layer4.1.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.1.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.1.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.1.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.1.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.1.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.1.bn2.weight,(512,),1
+weight shape after transpose
+layer4.1.bn2.weight,(512,),1
+weight shape before transpose
+layer4.1.bn2.bias,(512,),1
+weight shape after transpose
+layer4.1.bn2.bias,(512,),1
+weight shape before transpose
+layer4.1.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.1.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.1.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.1.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.1.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.1.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.1.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.1.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.1.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.1.bn3.bias,(2048,),1
+weight shape before transpose
+layer4.2.conv1.weight,(512, 2048, 1, 1),4
+weight shape after transpose
+layer4.2.conv1.weight,(2048, 1, 1, 512),4
+weight shape before transpose
+layer4.2.bn1.running_mean,(512,),1
+weight shape after transpose
+layer4.2.bn1.running_mean,(512,),1
+weight shape before transpose
+layer4.2.bn1.running_var,(512,),1
+weight shape after transpose
+layer4.2.bn1.running_var,(512,),1
+weight shape before transpose
+layer4.2.bn1.weight,(512,),1
+weight shape after transpose
+layer4.2.bn1.weight,(512,),1
+weight shape before transpose
+layer4.2.bn1.bias,(512,),1
+weight shape after transpose
+layer4.2.bn1.bias,(512,),1
+weight shape before transpose
+layer4.2.conv2.weight,(512, 512, 3, 3),4
+weight shape after transpose
+layer4.2.conv2.weight,(512, 3, 3, 512),4
+weight shape before transpose
+layer4.2.bn2.running_mean,(512,),1
+weight shape after transpose
+layer4.2.bn2.running_mean,(512,),1
+weight shape before transpose
+layer4.2.bn2.running_var,(512,),1
+weight shape after transpose
+layer4.2.bn2.running_var,(512,),1
+weight shape before transpose
+layer4.2.bn2.weight,(512,),1
+weight shape after transpose
+layer4.2.bn2.weight,(512,),1
+weight shape before transpose
+layer4.2.bn2.bias,(512,),1
+weight shape after transpose
+layer4.2.bn2.bias,(512,),1
+weight shape before transpose
+layer4.2.conv3.weight,(2048, 512, 1, 1),4
+weight shape after transpose
+layer4.2.conv3.weight,(512, 1, 1, 2048),4
+weight shape before transpose
+layer4.2.bn3.running_mean,(2048,),1
+weight shape after transpose
+layer4.2.bn3.running_mean,(2048,),1
+weight shape before transpose
+layer4.2.bn3.running_var,(2048,),1
+weight shape after transpose
+layer4.2.bn3.running_var,(2048,),1
+weight shape before transpose
+layer4.2.bn3.weight,(2048,),1
+weight shape after transpose
+layer4.2.bn3.weight,(2048,),1
+weight shape before transpose
+layer4.2.bn3.bias,(2048,),1
+weight shape after transpose
+layer4.2.bn3.bias,(2048,),1
+weight shape before transpose
+fc.weight,(1000, 2048),2
+weight shape after transpose
+fc.weight,(2048, 1000),2
+weight shape before transpose
+fc.bias,(1000,),1
+weight shape after transpose
+fc.bias,(1000,),1
+echo "ok" > bin/pytorch_weights/ok
+bin/process 10 auto_schedule bin/pytorch_weights cropped_panda.jpg bin/res50gen_output.bin
+Loading image from cropped_panda.jpg
+conv1_weight_shape.data num_dims : 4 shape: 64 7 7 3 
+weight shape for bin/pytorch_weights/conv1_weight.data
+64 7 7 3
+bn1_running_mean_shape.data num_dims : 1 shape: 64 
+bn1_running_var_shape.data num_dims : 1 shape: 64 
+bn1_weight_shape.data num_dims : 1 shape: 64 
+bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_downsample_0_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_downsample_0_weight.data
+256 1 1 64
+layer1_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_downsample_0_weight_shape.data num_dims : 4 shape: 512 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_downsample_0_weight.data
+512 1 1 256
+layer2_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_downsample_0_weight_shape.data num_dims : 4 shape: 1024 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_downsample_0_weight.data
+1024 1 1 512
+layer3_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_downsample_0_weight_shape.data num_dims : 4 shape: 2048 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_downsample_0_weight.data
+2048 1 1 1024
+layer4_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_bias_shape.data num_dims : 1 shape: 2048 
+layer1_0_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv1_weight.data
+64 1 1 64
+layer1_0_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_0_conv2_weight.data
+64 3 3 64
+layer1_0_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv3_weight.data
+256 1 1 64
+layer1_0_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_1_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_1_conv1_weight.data
+64 1 1 256
+layer1_1_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_1_conv2_weight.data
+64 3 3 64
+layer1_1_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_1_conv3_weight.data
+256 1 1 64
+layer1_1_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_2_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_2_conv1_weight.data
+64 1 1 256
+layer1_2_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_2_conv2_weight.data
+64 3 3 64
+layer1_2_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_2_conv3_weight.data
+256 1 1 64
+layer1_2_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_conv1_weight.data
+128 1 1 256
+layer2_0_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_0_conv2_weight.data
+128 3 3 128
+layer2_0_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_0_conv3_weight.data
+512 1 1 128
+layer2_0_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_1_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_1_conv1_weight.data
+128 1 1 512
+layer2_1_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_1_conv2_weight.data
+128 3 3 128
+layer2_1_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_1_conv3_weight.data
+512 1 1 128
+layer2_1_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_2_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_2_conv1_weight.data
+128 1 1 512
+layer2_2_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_2_conv2_weight.data
+128 3 3 128
+layer2_2_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_2_conv3_weight.data
+512 1 1 128
+layer2_2_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_3_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_3_conv1_weight.data
+128 1 1 512
+layer2_3_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_3_conv2_weight.data
+128 3 3 128
+layer2_3_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_3_conv3_weight.data
+512 1 1 128
+layer2_3_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_conv1_weight.data
+256 1 1 512
+layer3_0_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_0_conv2_weight.data
+256 3 3 256
+layer3_0_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_0_conv3_weight.data
+1024 1 1 256
+layer3_0_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_1_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_1_conv1_weight.data
+256 1 1 1024
+layer3_1_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_1_conv2_weight.data
+256 3 3 256
+layer3_1_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_1_conv3_weight.data
+1024 1 1 256
+layer3_1_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_2_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_2_conv1_weight.data
+256 1 1 1024
+layer3_2_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_2_conv2_weight.data
+256 3 3 256
+layer3_2_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_2_conv3_weight.data
+1024 1 1 256
+layer3_2_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_3_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_3_conv1_weight.data
+256 1 1 1024
+layer3_3_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_3_conv2_weight.data
+256 3 3 256
+layer3_3_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_3_conv3_weight.data
+1024 1 1 256
+layer3_3_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_4_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_4_conv1_weight.data
+256 1 1 1024
+layer3_4_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_4_conv2_weight.data
+256 3 3 256
+layer3_4_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_4_conv3_weight.data
+1024 1 1 256
+layer3_4_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_5_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_5_conv1_weight.data
+256 1 1 1024
+layer3_5_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_5_conv2_weight.data
+256 3 3 256
+layer3_5_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_5_conv3_weight.data
+1024 1 1 256
+layer3_5_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_conv1_weight.data
+512 1 1 1024
+layer4_0_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_0_conv2_weight.data
+512 3 3 512
+layer4_0_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_0_conv3_weight.data
+2048 1 1 512
+layer4_0_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_1_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_1_conv1_weight.data
+512 1 1 2048
+layer4_1_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_1_conv2_weight.data
+512 3 3 512
+layer4_1_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_1_conv3_weight.data
+2048 1 1 512
+layer4_1_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_2_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_2_conv1_weight.data
+512 1 1 2048
+layer4_2_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_2_conv2_weight.data
+512 3 3 512
+layer4_2_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_2_conv3_weight.data
+2048 1 1 512
+layer4_2_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_bias_shape.data num_dims : 1 shape: 2048 
+fc_weight_shape.data num_dims : 2 shape: 1000 2048 
+fc_bias_shape.data num_dims : 1 shape: 1000 
+Auto-scheduled time: 36.0296ms
+ class: 836
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+
+
+RL_END_OF_RUN 3
+

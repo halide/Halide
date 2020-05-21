@@ -1,0 +1,8 @@
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/unsharp'
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -g unsharp_generator.cpp /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp -o bin/host/unsharp.generator -Wl,-rpath,/home/ubuntu/llvm-project/Halide/distrib/bin/ -L /home/ubuntu/llvm-project/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/unsharp.generator -g unsharp -f unsharp -o bin/host target=host-no_runtime auto_schedule=false
+bin/host/unsharp.generator -g unsharp -f unsharp_auto_schedule -o bin/host target=host-no_runtime auto_schedule=true 
+bin/host/unsharp.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host -Wall -O3 filter.cpp bin/host/unsharp.a bin/host/unsharp_auto_schedule.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/home/ubuntu/anaconda3/envs/halide/lib -lpng16  -ljpeg -I/home/ubuntu/anaconda3/envs/halide/include/libpng16 -I/home/ubuntu/anaconda3/envs/halide/include/libpng16/..   
+rm bin/host/unsharp_auto_schedule.a bin/host/unsharp.a bin/host/runtime.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/unsharp'

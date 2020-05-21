@@ -1876,6 +1876,10 @@ IntrusivePtr<State> optimal_mcts_schedule(
     //we are supposed to get to the same final result
     best = global_best_state;
     aslog(0) << "global best cost: " << -1*global_best_value << "\n";
+    std::cout << "JENNY_MINCOST: " << -1*global_best_value << "\n";
+    std::cout << "JENNY_EVALTIME: " << State::cost_calculations << '\n';
+
+    
     std::cout << "num_best_decisions: " << cnt_best_decisions << "num_random_decisions: " << cnt_random_decisions <<std::endl;
     if (states[0].inner->num_decisions_made == 2 * (int)dags[0]->nodes.size() &&
         global_best_value<-1*best->cost){

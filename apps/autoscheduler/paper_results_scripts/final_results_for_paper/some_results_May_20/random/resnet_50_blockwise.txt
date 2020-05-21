@@ -1,0 +1,1150 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+bin/process 10 auto_schedule bin/pytorch_weights cropped_panda.jpg bin/res50gen_output.bin
+Loading image from cropped_panda.jpg
+conv1_weight_shape.data num_dims : 4 shape: 64 7 7 3 
+weight shape for bin/pytorch_weights/conv1_weight.data
+64 7 7 3
+bn1_running_mean_shape.data num_dims : 1 shape: 64 
+bn1_running_var_shape.data num_dims : 1 shape: 64 
+bn1_weight_shape.data num_dims : 1 shape: 64 
+bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_downsample_0_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_downsample_0_weight.data
+256 1 1 64
+layer1_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_downsample_0_weight_shape.data num_dims : 4 shape: 512 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_downsample_0_weight.data
+512 1 1 256
+layer2_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_downsample_0_weight_shape.data num_dims : 4 shape: 1024 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_downsample_0_weight.data
+1024 1 1 512
+layer3_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_downsample_0_weight_shape.data num_dims : 4 shape: 2048 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_downsample_0_weight.data
+2048 1 1 1024
+layer4_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_bias_shape.data num_dims : 1 shape: 2048 
+layer1_0_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv1_weight.data
+64 1 1 64
+layer1_0_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_0_conv2_weight.data
+64 3 3 64
+layer1_0_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv3_weight.data
+256 1 1 64
+layer1_0_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_1_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_1_conv1_weight.data
+64 1 1 256
+layer1_1_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_1_conv2_weight.data
+64 3 3 64
+layer1_1_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_1_conv3_weight.data
+256 1 1 64
+layer1_1_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_2_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_2_conv1_weight.data
+64 1 1 256
+layer1_2_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_2_conv2_weight.data
+64 3 3 64
+layer1_2_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_2_conv3_weight.data
+256 1 1 64
+layer1_2_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_conv1_weight.data
+128 1 1 256
+layer2_0_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_0_conv2_weight.data
+128 3 3 128
+layer2_0_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_0_conv3_weight.data
+512 1 1 128
+layer2_0_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_1_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_1_conv1_weight.data
+128 1 1 512
+layer2_1_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_1_conv2_weight.data
+128 3 3 128
+layer2_1_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_1_conv3_weight.data
+512 1 1 128
+layer2_1_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_2_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_2_conv1_weight.data
+128 1 1 512
+layer2_2_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_2_conv2_weight.data
+128 3 3 128
+layer2_2_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_2_conv3_weight.data
+512 1 1 128
+layer2_2_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_3_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_3_conv1_weight.data
+128 1 1 512
+layer2_3_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_3_conv2_weight.data
+128 3 3 128
+layer2_3_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_3_conv3_weight.data
+512 1 1 128
+layer2_3_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_conv1_weight.data
+256 1 1 512
+layer3_0_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_0_conv2_weight.data
+256 3 3 256
+layer3_0_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_0_conv3_weight.data
+1024 1 1 256
+layer3_0_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_1_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_1_conv1_weight.data
+256 1 1 1024
+layer3_1_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_1_conv2_weight.data
+256 3 3 256
+layer3_1_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_1_conv3_weight.data
+1024 1 1 256
+layer3_1_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_2_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_2_conv1_weight.data
+256 1 1 1024
+layer3_2_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_2_conv2_weight.data
+256 3 3 256
+layer3_2_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_2_conv3_weight.data
+1024 1 1 256
+layer3_2_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_3_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_3_conv1_weight.data
+256 1 1 1024
+layer3_3_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_3_conv2_weight.data
+256 3 3 256
+layer3_3_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_3_conv3_weight.data
+1024 1 1 256
+layer3_3_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_4_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_4_conv1_weight.data
+256 1 1 1024
+layer3_4_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_4_conv2_weight.data
+256 3 3 256
+layer3_4_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_4_conv3_weight.data
+1024 1 1 256
+layer3_4_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_5_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_5_conv1_weight.data
+256 1 1 1024
+layer3_5_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_5_conv2_weight.data
+256 3 3 256
+layer3_5_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_5_conv3_weight.data
+1024 1 1 256
+layer3_5_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_conv1_weight.data
+512 1 1 1024
+layer4_0_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_0_conv2_weight.data
+512 3 3 512
+layer4_0_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_0_conv3_weight.data
+2048 1 1 512
+layer4_0_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_1_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_1_conv1_weight.data
+512 1 1 2048
+layer4_1_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_1_conv2_weight.data
+512 3 3 512
+layer4_1_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_1_conv3_weight.data
+2048 1 1 512
+layer4_1_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_2_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_2_conv1_weight.data
+512 1 1 2048
+layer4_2_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_2_conv2_weight.data
+512 3 3 512
+layer4_2_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_2_conv3_weight.data
+2048 1 1 512
+layer4_2_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_bias_shape.data num_dims : 1 shape: 2048 
+fc_weight_shape.data num_dims : 2 shape: 1000 2048 
+fc_bias_shape.data num_dims : 1 shape: 1000 
+Auto-scheduled time: 141.51ms
+ class: 836
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+bin/process 10 auto_schedule bin/pytorch_weights cropped_panda.jpg bin/res50gen_output.bin
+Loading image from cropped_panda.jpg
+conv1_weight_shape.data num_dims : 4 shape: 64 7 7 3 
+weight shape for bin/pytorch_weights/conv1_weight.data
+64 7 7 3
+bn1_running_mean_shape.data num_dims : 1 shape: 64 
+bn1_running_var_shape.data num_dims : 1 shape: 64 
+bn1_weight_shape.data num_dims : 1 shape: 64 
+bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_downsample_0_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_downsample_0_weight.data
+256 1 1 64
+layer1_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_downsample_0_weight_shape.data num_dims : 4 shape: 512 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_downsample_0_weight.data
+512 1 1 256
+layer2_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_downsample_0_weight_shape.data num_dims : 4 shape: 1024 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_downsample_0_weight.data
+1024 1 1 512
+layer3_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_downsample_0_weight_shape.data num_dims : 4 shape: 2048 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_downsample_0_weight.data
+2048 1 1 1024
+layer4_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_bias_shape.data num_dims : 1 shape: 2048 
+layer1_0_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv1_weight.data
+64 1 1 64
+layer1_0_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_0_conv2_weight.data
+64 3 3 64
+layer1_0_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv3_weight.data
+256 1 1 64
+layer1_0_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_1_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_1_conv1_weight.data
+64 1 1 256
+layer1_1_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_1_conv2_weight.data
+64 3 3 64
+layer1_1_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_1_conv3_weight.data
+256 1 1 64
+layer1_1_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_2_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_2_conv1_weight.data
+64 1 1 256
+layer1_2_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_2_conv2_weight.data
+64 3 3 64
+layer1_2_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_2_conv3_weight.data
+256 1 1 64
+layer1_2_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_conv1_weight.data
+128 1 1 256
+layer2_0_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_0_conv2_weight.data
+128 3 3 128
+layer2_0_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_0_conv3_weight.data
+512 1 1 128
+layer2_0_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_1_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_1_conv1_weight.data
+128 1 1 512
+layer2_1_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_1_conv2_weight.data
+128 3 3 128
+layer2_1_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_1_conv3_weight.data
+512 1 1 128
+layer2_1_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_2_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_2_conv1_weight.data
+128 1 1 512
+layer2_2_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_2_conv2_weight.data
+128 3 3 128
+layer2_2_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_2_conv3_weight.data
+512 1 1 128
+layer2_2_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_3_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_3_conv1_weight.data
+128 1 1 512
+layer2_3_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_3_conv2_weight.data
+128 3 3 128
+layer2_3_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_3_conv3_weight.data
+512 1 1 128
+layer2_3_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_conv1_weight.data
+256 1 1 512
+layer3_0_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_0_conv2_weight.data
+256 3 3 256
+layer3_0_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_0_conv3_weight.data
+1024 1 1 256
+layer3_0_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_1_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_1_conv1_weight.data
+256 1 1 1024
+layer3_1_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_1_conv2_weight.data
+256 3 3 256
+layer3_1_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_1_conv3_weight.data
+1024 1 1 256
+layer3_1_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_2_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_2_conv1_weight.data
+256 1 1 1024
+layer3_2_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_2_conv2_weight.data
+256 3 3 256
+layer3_2_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_2_conv3_weight.data
+1024 1 1 256
+layer3_2_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_3_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_3_conv1_weight.data
+256 1 1 1024
+layer3_3_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_3_conv2_weight.data
+256 3 3 256
+layer3_3_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_3_conv3_weight.data
+1024 1 1 256
+layer3_3_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_4_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_4_conv1_weight.data
+256 1 1 1024
+layer3_4_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_4_conv2_weight.data
+256 3 3 256
+layer3_4_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_4_conv3_weight.data
+1024 1 1 256
+layer3_4_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_5_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_5_conv1_weight.data
+256 1 1 1024
+layer3_5_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_5_conv2_weight.data
+256 3 3 256
+layer3_5_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_5_conv3_weight.data
+1024 1 1 256
+layer3_5_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_conv1_weight.data
+512 1 1 1024
+layer4_0_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_0_conv2_weight.data
+512 3 3 512
+layer4_0_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_0_conv3_weight.data
+2048 1 1 512
+layer4_0_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_1_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_1_conv1_weight.data
+512 1 1 2048
+layer4_1_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_1_conv2_weight.data
+512 3 3 512
+layer4_1_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_1_conv3_weight.data
+2048 1 1 512
+layer4_1_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_2_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_2_conv1_weight.data
+512 1 1 2048
+layer4_2_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_2_conv2_weight.data
+512 3 3 512
+layer4_2_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_2_conv3_weight.data
+2048 1 1 512
+layer4_2_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_bias_shape.data num_dims : 1 shape: 2048 
+fc_weight_shape.data num_dims : 2 shape: 1000 2048 
+fc_bias_shape.data num_dims : 1 shape: 1000 
+Auto-scheduled time: 136.273ms
+ class: 836
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+bin/process 10 auto_schedule bin/pytorch_weights cropped_panda.jpg bin/res50gen_output.bin
+Loading image from cropped_panda.jpg
+conv1_weight_shape.data num_dims : 4 shape: 64 7 7 3 
+weight shape for bin/pytorch_weights/conv1_weight.data
+64 7 7 3
+bn1_running_mean_shape.data num_dims : 1 shape: 64 
+bn1_running_var_shape.data num_dims : 1 shape: 64 
+bn1_weight_shape.data num_dims : 1 shape: 64 
+bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_downsample_0_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_downsample_0_weight.data
+256 1 1 64
+layer1_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_downsample_1_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_downsample_0_weight_shape.data num_dims : 4 shape: 512 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_downsample_0_weight.data
+512 1 1 256
+layer2_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_downsample_1_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_downsample_0_weight_shape.data num_dims : 4 shape: 1024 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_downsample_0_weight.data
+1024 1 1 512
+layer3_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_downsample_1_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_downsample_0_weight_shape.data num_dims : 4 shape: 2048 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_downsample_0_weight.data
+2048 1 1 1024
+layer4_0_downsample_1_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_downsample_1_bias_shape.data num_dims : 1 shape: 2048 
+layer1_0_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv1_weight.data
+64 1 1 64
+layer1_0_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_0_conv2_weight.data
+64 3 3 64
+layer1_0_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_0_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_0_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_0_conv3_weight.data
+256 1 1 64
+layer1_0_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_0_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_1_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_1_conv1_weight.data
+64 1 1 256
+layer1_1_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_1_conv2_weight.data
+64 3 3 64
+layer1_1_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_1_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_1_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_1_conv3_weight.data
+256 1 1 64
+layer1_1_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_1_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer1_2_conv1_weight_shape.data num_dims : 4 shape: 64 1 1 256 
+weight shape for bin/pytorch_weights/layer1_2_conv1_weight.data
+64 1 1 256
+layer1_2_bn1_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn1_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv2_weight_shape.data num_dims : 4 shape: 64 3 3 64 
+weight shape for bin/pytorch_weights/layer1_2_conv2_weight.data
+64 3 3 64
+layer1_2_bn2_running_mean_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_running_var_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_weight_shape.data num_dims : 1 shape: 64 
+layer1_2_bn2_bias_shape.data num_dims : 1 shape: 64 
+layer1_2_conv3_weight_shape.data num_dims : 4 shape: 256 1 1 64 
+weight shape for bin/pytorch_weights/layer1_2_conv3_weight.data
+256 1 1 64
+layer1_2_bn3_running_mean_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_running_var_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_weight_shape.data num_dims : 1 shape: 256 
+layer1_2_bn3_bias_shape.data num_dims : 1 shape: 256 
+layer2_0_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 256 
+weight shape for bin/pytorch_weights/layer2_0_conv1_weight.data
+128 1 1 256
+layer2_0_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_0_conv2_weight.data
+128 3 3 128
+layer2_0_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_0_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_0_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_0_conv3_weight.data
+512 1 1 128
+layer2_0_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_0_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_1_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_1_conv1_weight.data
+128 1 1 512
+layer2_1_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_1_conv2_weight.data
+128 3 3 128
+layer2_1_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_1_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_1_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_1_conv3_weight.data
+512 1 1 128
+layer2_1_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_1_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_2_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_2_conv1_weight.data
+128 1 1 512
+layer2_2_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_2_conv2_weight.data
+128 3 3 128
+layer2_2_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_2_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_2_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_2_conv3_weight.data
+512 1 1 128
+layer2_2_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_2_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer2_3_conv1_weight_shape.data num_dims : 4 shape: 128 1 1 512 
+weight shape for bin/pytorch_weights/layer2_3_conv1_weight.data
+128 1 1 512
+layer2_3_bn1_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn1_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv2_weight_shape.data num_dims : 4 shape: 128 3 3 128 
+weight shape for bin/pytorch_weights/layer2_3_conv2_weight.data
+128 3 3 128
+layer2_3_bn2_running_mean_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_running_var_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_weight_shape.data num_dims : 1 shape: 128 
+layer2_3_bn2_bias_shape.data num_dims : 1 shape: 128 
+layer2_3_conv3_weight_shape.data num_dims : 4 shape: 512 1 1 128 
+weight shape for bin/pytorch_weights/layer2_3_conv3_weight.data
+512 1 1 128
+layer2_3_bn3_running_mean_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_running_var_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_weight_shape.data num_dims : 1 shape: 512 
+layer2_3_bn3_bias_shape.data num_dims : 1 shape: 512 
+layer3_0_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 512 
+weight shape for bin/pytorch_weights/layer3_0_conv1_weight.data
+256 1 1 512
+layer3_0_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_0_conv2_weight.data
+256 3 3 256
+layer3_0_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_0_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_0_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_0_conv3_weight.data
+1024 1 1 256
+layer3_0_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_0_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_1_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_1_conv1_weight.data
+256 1 1 1024
+layer3_1_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_1_conv2_weight.data
+256 3 3 256
+layer3_1_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_1_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_1_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_1_conv3_weight.data
+1024 1 1 256
+layer3_1_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_1_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_2_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_2_conv1_weight.data
+256 1 1 1024
+layer3_2_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_2_conv2_weight.data
+256 3 3 256
+layer3_2_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_2_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_2_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_2_conv3_weight.data
+1024 1 1 256
+layer3_2_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_2_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_3_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_3_conv1_weight.data
+256 1 1 1024
+layer3_3_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_3_conv2_weight.data
+256 3 3 256
+layer3_3_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_3_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_3_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_3_conv3_weight.data
+1024 1 1 256
+layer3_3_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_3_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_4_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_4_conv1_weight.data
+256 1 1 1024
+layer3_4_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_4_conv2_weight.data
+256 3 3 256
+layer3_4_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_4_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_4_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_4_conv3_weight.data
+1024 1 1 256
+layer3_4_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_4_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer3_5_conv1_weight_shape.data num_dims : 4 shape: 256 1 1 1024 
+weight shape for bin/pytorch_weights/layer3_5_conv1_weight.data
+256 1 1 1024
+layer3_5_bn1_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn1_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv2_weight_shape.data num_dims : 4 shape: 256 3 3 256 
+weight shape for bin/pytorch_weights/layer3_5_conv2_weight.data
+256 3 3 256
+layer3_5_bn2_running_mean_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_running_var_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_weight_shape.data num_dims : 1 shape: 256 
+layer3_5_bn2_bias_shape.data num_dims : 1 shape: 256 
+layer3_5_conv3_weight_shape.data num_dims : 4 shape: 1024 1 1 256 
+weight shape for bin/pytorch_weights/layer3_5_conv3_weight.data
+1024 1 1 256
+layer3_5_bn3_running_mean_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_running_var_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_weight_shape.data num_dims : 1 shape: 1024 
+layer3_5_bn3_bias_shape.data num_dims : 1 shape: 1024 
+layer4_0_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 1024 
+weight shape for bin/pytorch_weights/layer4_0_conv1_weight.data
+512 1 1 1024
+layer4_0_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_0_conv2_weight.data
+512 3 3 512
+layer4_0_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_0_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_0_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_0_conv3_weight.data
+2048 1 1 512
+layer4_0_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_0_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_1_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_1_conv1_weight.data
+512 1 1 2048
+layer4_1_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_1_conv2_weight.data
+512 3 3 512
+layer4_1_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_1_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_1_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_1_conv3_weight.data
+2048 1 1 512
+layer4_1_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_1_bn3_bias_shape.data num_dims : 1 shape: 2048 
+layer4_2_conv1_weight_shape.data num_dims : 4 shape: 512 1 1 2048 
+weight shape for bin/pytorch_weights/layer4_2_conv1_weight.data
+512 1 1 2048
+layer4_2_bn1_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn1_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv2_weight_shape.data num_dims : 4 shape: 512 3 3 512 
+weight shape for bin/pytorch_weights/layer4_2_conv2_weight.data
+512 3 3 512
+layer4_2_bn2_running_mean_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_running_var_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_weight_shape.data num_dims : 1 shape: 512 
+layer4_2_bn2_bias_shape.data num_dims : 1 shape: 512 
+layer4_2_conv3_weight_shape.data num_dims : 4 shape: 2048 1 1 512 
+weight shape for bin/pytorch_weights/layer4_2_conv3_weight.data
+2048 1 1 512
+layer4_2_bn3_running_mean_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_running_var_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_weight_shape.data num_dims : 1 shape: 2048 
+layer4_2_bn3_bias_shape.data num_dims : 1 shape: 2048 
+fc_weight_shape.data num_dims : 2 shape: 1000 2048 
+fc_bias_shape.data num_dims : 1 shape: 1000 
+Auto-scheduled time: 190.468ms
+ class: 836
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+
+
+RL_END_OF_RUN 3
+

@@ -1,0 +1,571 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8196ms
+Auto-scheduled time: 381.615ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9442ms
+Auto-scheduled time: 195.081ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8341ms
+Auto-scheduled time: 233.125ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Error: Total allocation for buffer sum is 14189552640, which exceeds the maximum size of 2147483647
+Makefile:27: recipe for target 'bin/host/out.png' failed
+make: *** [bin/host/out.png] Aborted (core dumped)
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8395ms
+Auto-scheduled time: 157.348ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.7025ms
+Auto-scheduled time: 282.103ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8441ms
+Auto-scheduled time: 1165.66ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Error: Total allocation for buffer sum$1 is 19460381696, which exceeds the maximum size of 2147483647
+Makefile:27: recipe for target 'bin/host/out.png' failed
+make: *** [bin/host/out.png] Aborted (core dumped)
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.7737ms
+Auto-scheduled time: 593.855ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8519ms
+Auto-scheduled time: 342.882ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.7815ms
+Auto-scheduled time: 323.628ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9634ms
+Auto-scheduled time: 293.431ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8894ms
+Auto-scheduled time: 432.306ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9976ms
+Auto-scheduled time: 1169.73ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9509ms
+Auto-scheduled time: 122.2ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9364ms
+Auto-scheduled time: 436.175ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.6722ms
+Auto-scheduled time: 642.915ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9409ms
+Auto-scheduled time: 293.293ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.842ms
+Auto-scheduled time: 419.122ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9726ms
+Auto-scheduled time: 178.911ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8882ms
+Auto-scheduled time: 198.467ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8263ms
+Auto-scheduled time: 323.734ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9361ms
+Auto-scheduled time: 389.69ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.7551ms
+Auto-scheduled time: 476.811ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.897ms
+Auto-scheduled time: 405.461ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9179ms
+Auto-scheduled time: 184.926ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.725ms
+Auto-scheduled time: 552.387ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8691ms
+Auto-scheduled time: 131.663ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9727ms
+Auto-scheduled time: 396.212ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8668ms
+Auto-scheduled time: 834.231ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 76.026ms
+Auto-scheduled time: 331.57ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9423ms
+Auto-scheduled time: 1347.45ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7503ms
+Auto-scheduled time: 395.257ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Error: Total allocation for buffer d$1 is 6762522624, which exceeds the maximum size of 2147483647
+Makefile:27: recipe for target 'bin/host/out.png' failed
+make: *** [bin/host/out.png] Aborted (core dumped)
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.8442ms
+Auto-scheduled time: 220.118ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.8122ms
+Auto-scheduled time: 514.182ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.74ms
+Auto-scheduled time: 783.768ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7912ms
+Auto-scheduled time: 1502.61ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7953ms
+Auto-scheduled time: 1912.42ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 84.0442ms
+Auto-scheduled time: 473.512ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7708ms
+Auto-scheduled time: 288.517ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Error: Total allocation for buffer d$1 is 2958950400, which exceeds the maximum size of 2147483647
+Makefile:27: recipe for target 'bin/host/out.png' failed
+make: *** [bin/host/out.png] Aborted (core dumped)
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7482ms
+Auto-scheduled time: 375.341ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.9093ms
+Auto-scheduled time: 505.084ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.8465ms
+Auto-scheduled time: 224.503ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.863ms
+Auto-scheduled time: 1783.69ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7158ms
+Auto-scheduled time: 328.338ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7228ms
+Auto-scheduled time: 388.615ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.8282ms
+Auto-scheduled time: 229.05ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.9189ms
+Auto-scheduled time: 487.928ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.8771ms
+Auto-scheduled time: 299.404ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Error: Total allocation for buffer sum is 3917078528, which exceeds the maximum size of 2147483647
+Makefile:27: recipe for target 'bin/host/out.png' failed
+make: *** [bin/host/out.png] Aborted (core dumped)
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7448ms
+Auto-scheduled time: 1479.57ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.6956ms
+Auto-scheduled time: 159.74ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7326ms
+Auto-scheduled time: 845.201ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7084ms
+Auto-scheduled time: 150.27ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Error: Total allocation for buffer sum$1 is 9275437184, which exceeds the maximum size of 2147483647
+Makefile:27: recipe for target 'bin/host/out.png' failed
+make: *** [bin/host/out.png] Aborted (core dumped)
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.8921ms
+Auto-scheduled time: 316.91ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7138ms
+Auto-scheduled time: 823.976ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7143ms
+Auto-scheduled time: 396.677ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7517ms
+Auto-scheduled time: 267.998ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7814ms
+Auto-scheduled time: 413.69ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.9548ms
+Auto-scheduled time: 98.4245ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7281ms
+Auto-scheduled time: 536.628ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.8494ms
+Auto-scheduled time: 460.84ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7498ms
+Auto-scheduled time: 85.1095ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.884ms
+Auto-scheduled time: 635.475ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.7796ms
+Auto-scheduled time: 1934.04ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 83.8538ms
+Auto-scheduled time: 352.709ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 76.0129ms
+Auto-scheduled time: 1082.23ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.6888ms
+Auto-scheduled time: 429.432ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8126ms
+Auto-scheduled time: 795.41ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9021ms
+Auto-scheduled time: 157.236ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 76.0119ms
+Auto-scheduled time: 167.855ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.7331ms
+Auto-scheduled time: 560.079ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8364ms
+Auto-scheduled time: 296.526ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9248ms
+Auto-scheduled time: 202.307ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.83ms
+Auto-scheduled time: 508.976ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8039ms
+Auto-scheduled time: 266.405ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.6666ms
+Auto-scheduled time: 218.328ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.7713ms
+Auto-scheduled time: 89.1885ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8776ms
+Auto-scheduled time: 538.308ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8391ms
+Auto-scheduled time: 329.996ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 76.1105ms
+Auto-scheduled time: 161.841ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 76.0829ms
+Auto-scheduled time: 333.052ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.7862ms
+Auto-scheduled time: 924.119ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9879ms
+Auto-scheduled time: 149.677ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.7957ms
+Auto-scheduled time: 787.174ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8594ms
+Auto-scheduled time: 1141.61ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.83ms
+Auto-scheduled time: 442.216ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.7623ms
+Auto-scheduled time: 1420.44ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.9975ms
+Auto-scheduled time: 334.322ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 75.8191ms
+Auto-scheduled time: 1138.92ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/nl_means'
+
+
+RL_END_OF_RUN 3
+

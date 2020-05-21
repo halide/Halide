@@ -1,0 +1,37 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+bin/host/filter ../images/gray.png bin/host/out.png 0.1 10
+Manually-tuned time: 5.33991ms
+Auto-scheduled time: 6.0078ms
+bin/host/filter ../images/gray.png bin/host/out.tiff 0.1 10
+Manually-tuned time: 5.34722ms
+Auto-scheduled time: 6.01987ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+bin/host/filter ../images/gray.png bin/host/out.png 0.1 10
+Manually-tuned time: 5.3247ms
+Auto-scheduled time: 5.9958ms
+bin/host/filter ../images/gray.png bin/host/out.tiff 0.1 10
+Manually-tuned time: 5.32608ms
+Auto-scheduled time: 6.01228ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+bin/host/filter ../images/gray.png bin/host/out.png 0.1 10
+Manually-tuned time: 5.3329ms
+Auto-scheduled time: 6.0091ms
+bin/host/filter ../images/gray.png bin/host/out.tiff 0.1 10
+Manually-tuned time: 5.33705ms
+Auto-scheduled time: 6.01811ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+
+
+RL_END_OF_RUN 3
+

@@ -1,0 +1,106 @@
+
+nl_means 18
+nl_means 34
+nl_means 53
+nl_means 70
+nl_means 88
+nl_means 113
+nl_means 132
+nl_means 148
+nl_means 168
+nl_means 189
+nl_means 205
+nl_means 226
+nl_means 242
+nl_means 259
+nl_means 280
+nl_means 296
+nl_means 312
+nl_means 332
+nl_means 351
+nl_means 370
+nl_means 388
+nl_means 405
+nl_means 430
+nl_means 455
+nl_means 474
+nl_means 489
+nl_means 510
+nl_means 524
+nl_means 558
+nl_means 572
+nl_means 588
+nl_means 606
+
+
+RL_END_OF_RUN 1
+
+nl_means 31
+nl_means 47
+nl_means 63
+nl_means 81
+nl_means 104
+nl_means 127
+nl_means 147
+nl_means 164
+nl_means 193
+nl_means 213
+nl_means 232
+nl_means 246
+nl_means 267
+nl_means 288
+nl_means 304
+nl_means 330
+nl_means 351
+nl_means 373
+nl_means 394
+nl_means 413
+nl_means 435
+nl_means 451
+nl_means 470
+nl_means 492
+nl_means 509
+nl_means 529
+nl_means 548
+nl_means 568
+nl_means 586
+nl_means 608
+
+
+RL_END_OF_RUN 2
+
+nl_means 17
+nl_means 35
+nl_means 54
+nl_means 69
+nl_means 85
+nl_means 102
+nl_means 118
+nl_means 135
+nl_means 153
+nl_means 170
+nl_means 189
+nl_means 211
+nl_means 232
+nl_means 249
+nl_means 268
+nl_means 286
+nl_means 309
+nl_means 332
+nl_means 357
+nl_means 378
+nl_means 405
+nl_means 426
+nl_means 452
+nl_means 473
+nl_means 492
+nl_means 521
+nl_means 539
+nl_means 557
+nl_means 573
+nl_means 595
+nl_means 619
+
+
+RL_END_OF_RUN 3
+
