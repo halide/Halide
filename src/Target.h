@@ -22,6 +22,7 @@ struct Target {
      * Corresponds to os_name_map in Target.cpp. */
     enum OS {
         OSUnknown = 0,
+        FreeBSD,
         Linux,
         Windows,
         OSX,

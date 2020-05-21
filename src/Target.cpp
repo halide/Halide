@@ -60,6 +60,9 @@ static void cpuid(int info[4], int infoType, int extra) {
 
 Target calculate_host_target() {
     Target::OS os = Target::OSUnknown;
+#if defined(__FreeBSD__)
+    os = Target::FreeBSD;
+#endif
 #ifdef __linux__
     os = Target::Linux;
 #endif
@@ -256,6 +259,7 @@ Target::Feature get_host_cuda_capability(Target t) {
 
 const std::map<std::string, Target::OS> os_name_map = {
     {"os_unknown", Target::OSUnknown},
+    {"freebsd", Target::FreeBSD},
     {"linux", Target::Linux},
     {"windows", Target::Windows},
     {"osx", Target::OSX},

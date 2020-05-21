@@ -401,6 +401,9 @@ llvm::Triple get_triple_for_target(const Target &target) {
         if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
             triple.setEnvironment(llvm::Triple::GNU);
+        } else if (target.os == Target::FreeBSD) {
+            triple.setOS(llvm::Triple::FreeBSD);
+            triple.setEnvironment(llvm::Triple::GNU);
         } else if (target.os == Target::OSX) {
             triple.setVendor(llvm::Triple::Apple);
             triple.setOS(llvm::Triple::MacOSX);
@@ -446,6 +449,9 @@ llvm::Triple get_triple_for_target(const Target &target) {
             triple.setVendor(llvm::Triple::Apple);
         } else if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
+            triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else if (target.os == Target::FreeBSD) {
+            triple.setOS(llvm::Triple::FreeBSD);
             triple.setEnvironment(llvm::Triple::GNUEABIHF);
         } else if (target.os == Target::Fuchsia) {
             triple.setOS(llvm::Triple::Fuchsia);
@@ -506,6 +512,10 @@ llvm::Triple get_triple_for_target(const Target &target) {
 
         if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
+            // TODO: Check what options there are here.
+            triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else if (target.os == Target::FreeBSD) {
+            triple.setOS(llvm::Triple::FreeBSD);
             // TODO: Check what options there are here.
             triple.setEnvironment(llvm::Triple::GNUEABIHF);
         } else if (target.os == Target::NoOS) {
@@ -772,7 +782,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
     if (module_type != ModuleGPU) {
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // OS-dependent modules
-            if (t.os == Target::Linux) {
+            if (t.os == Target::Linux || t.os == Target::FreeBSD) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
@@ -1085,7 +1095,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         }
         if (t.has_feature(Target::OpenGL)) {
             modules.push_back(get_initmod_opengl(c, bits_64, debug));
-            if (t.os == Target::Linux) {
+            if (t.os == Target::Linux || t.os == Target::FreeBSD) {
                 if (t.has_feature(Target::EGL)) {
                     modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
                 } else {
@@ -1104,7 +1114,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.os == Target::Android) {
                 // Only platform that supports OpenGL Compute for now.
                 modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
-            } else if (t.os == Target::Linux) {
+            } else if (t.os == Target::Linux || t.os == Target::FreeBSD) {
                 if (t.has_feature(Target::EGL)) {
                     modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
                 } else {
