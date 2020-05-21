@@ -310,6 +310,14 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
         compare_src(src.str(), correct_src);
     }
 
+    // TODO: host_supports_target_device('cuda') crashes on arm32 inside MCJIT
+    // (at least on our buildbots). Skip there pending investigation.
+    // https://github.com/halide/Halide/issues/4940
+    if (get_host_target().arch == Target::ARM && get_target().bits == 32) {
+        std::cout << "CodeGen_PyTorch test partially skipped on arm32\n";
+        return;
+    }
+
     Target host_cuda("host-cuda-user_context");
     if (host_supports_target_device(host_cuda)) {
         Module m("", host_cuda);
