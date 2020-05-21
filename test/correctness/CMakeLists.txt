@@ -1,3 +1,8 @@
+tests(GROUPS correctness_multi_gpu
+      SOURCES
+      gpu_multi_device.cpp
+      )
+
 tests(GROUPS correctness travis
         SOURCES
         align_bounds.cpp
@@ -130,7 +135,6 @@ tests(GROUPS correctness travis
         gpu_large_alloc.cpp
         gpu_mixed_dimensionality.cpp
         gpu_mixed_shared_mem_types.cpp
-        gpu_multi_device.cpp
         gpu_multi_kernel.cpp
         gpu_non_contiguous_copy.cpp
         gpu_object_lifetime_1.cpp
