@@ -1,4 +1,4 @@
-autoschedulers="mcts"
+autoschedulers="random greedy beam mcts"
 #autoschedulers="master greedy beam mcts"
 
 if [ $# -lt 1 ]; then
