@@ -1,0 +1,434 @@
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp bilateral_grid_generator.cpp /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp -o bin/host/bilateral_grid.generator -Wl,-rpath,/home/ubuntu/llvm-project/Halide/distrib/bin/ -L /home/ubuntu/llvm-project/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/bilateral_grid.generator -g bilateral_grid -e static_library,h,registration,stmt,assembly -o bin/host -f bilateral_grid target=host auto_schedule=false
+bin/host/bilateral_grid.generator -g bilateral_grid -e static_library,h,registration,stmt,assembly -o bin/host -f bilateral_grid_auto_schedule target=host-no_runtime auto_schedule=true -e static_library,c_header,schedule -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+mcts_depth 18
+num_random_trees 1
+num_greedy_trees 0
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+child 1 best -17.8552 average -119.506num_visits 7
+child 2 best -12.1419 average -29.0408num_visits 88
+child 3 best -8.0513 average -29.8924num_visits 96
+child 4 best -11.1092 average -53.2706num_visits 32
+child 5 best -8.11866 average -22.3099num_visits 189
+child 6 best -10.131 average -34.7211num_visits 79
+child 7 best -481.856 average -481.856num_visits 1
+child 8 best -8.51127 average -29.9519num_visits 81
+child 9 best -8.51836 average -50.5308num_visits 51
+child 10 best -7.26816 average -124.932num_visits 6
+child 11 best -7.70616 average -28.159num_visits 141
+child 12 best -7.64774 average -28.0117num_visits 97
+child 13 best -10.7187 average -70.8409num_visits 16
+child 14 best -8.18297 average -33.8454num_visits 62
+child 15 best -9.3289 average -53.3307num_visits 23
+child 16 best -11.3254 average -33.2673num_visits 62
+child 17 best -6.13589 average -25.2821num_visits 130
+child 18 best -7.04284 average -25.1821num_visits 137
+child 19 best -6.9475 average -30.101num_visits 137
+child 20 best -9.56301 average -44.1667num_visits 49
+child 21 best -14.738 average -39.3164num_visits 45
+child 22 best -9.90975 average -27.2355num_visits 132
+child 23 best -11.5766 average -26.9018num_visits 108
+child 24 best -11.8838 average -34.9833num_visits 62
+child 25 best -7.5373 average -25.9714num_visits 119
+child 26 best -8.80403 average -29.8918num_visits 86
+child 27 best -8.77338 average -25.2862num_visits 142
+child 28 best -6.75598 average -20.4018num_visits 241
+child 29 best -11.2391 average -30.0714num_visits 97
+child 30 best -11.4135 average -29.5588num_visits 88
+child 31 best -9.98949 average -35.2642num_visits 61
+child 32 best -9.78997 average -57.5858num_visits 17
+child 33 best -36.8629 average -300.219num_visits 2
+child 34 best -10.7511 average -31.5197num_visits 74
+child 35 best -10.0679 average -33.3812num_visits 62
+best intermediate value -6.13589
+finished depth 1 best value so far -6.13589
+child 1 best -16.1555 average -56.7589num_visits 20
+child 2 best -13.6507 average -41.6159num_visits 37
+child 3 best -6.25128 average -21.9269num_visits 109
+child 4 best -7.56747 average -37.6214num_visits 66
+child 5 best -12.5894 average -27.8207num_visits 62
+child 6 best -10.6189 average -23.4293num_visits 92
+child 7 best -6.08118 average -23.2015num_visits 94
+child 8 best -10.2354 average -62.5777num_visits 12
+child 9 best -5.69387 average -46.0632num_visits 25
+child 10 best -13.3295 average -47.6581num_visits 34
+child 11 best -32.1005 average -155.299num_visits 3
+child 12 best -10.96 average -149.721num_visits 3
+child 13 best -12.4631 average -68.1089num_visits 8
+child 14 best -10.5831 average -39.2833num_visits 27
+child 15 best -6.02199 average -21.8063num_visits 130
+child 16 best -17.8208 average -32.2749num_visits 49
+child 17 best -6.51412 average -42.6906num_visits 22
+child 18 best -9.88314 average -27.1849num_visits 97
+child 19 best -11.9679 average -28.168num_visits 86
+child 20 best -12.7838 average -28.3196num_visits 73
+child 21 best -8.97071 average -25.792num_visits 72
+child 22 best -12.6041 average -59.658num_visits 10
+child 23 best -8.11211 average -20.2247num_visits 141
+child 24 best -7.26825 average -25.8179num_visits 71
+child 25 best -10.0651 average -24.5128num_visits 82
+child 26 best -8.95354 average -24.2551num_visits 106
+child 27 best -189.583 average -189.583num_visits 1
+child 28 best -12.0782 average -27.7842num_visits 64
+child 29 best -8.65185 average -33.8597num_visits 51
+child 30 best -10.5285 average -36.4858num_visits 32
+child 31 best -10.5996 average -24.1176num_visits 89
+child 32 best -9.29476 average -22.6371num_visits 101
+child 33 best -8.20802 average -23.8952num_visits 116
+child 34 best -8.82463 average -24.3187num_visits 83
+child 35 best -8.85437 average -33.2558num_visits 55
+child 36 best -18.0788 average -33.2573num_visits 38
+child 37 best -9.17898 average -22.8778num_visits 100
+child 38 best -11.7843 average -37.8556num_visits 48
+child 39 best -16.7908 average -35.0996num_visits 33
+child 40 best -6.1992 average -24.1282num_visits 112
+child 41 best -10.7913 average -50.8059num_visits 18
+child 42 best -7.54823 average -28.7764num_visits 71
+child 43 best -10.4225 average -27.8085num_visits 66
+child 44 best -8.75946 average -23.5459num_visits 90
+child 45 best -7.08265 average -31.8933num_visits 42
+child 46 best -6.49755 average -54.0674num_visits 13
+child 47 best -14.4617 average -105.517num_visits 12
+child 48 best -10.402 average -44.64num_visits 33
+child 49 best -17.4046 average -81.6759num_visits 15
+child 50 best -41.9518 average -86.9896num_visits 10
+child 51 best -10.8647 average -60.3954num_visits 13
+child 52 best -7.84476 average -20.3685num_visits 141
+child 53 best -8.32134 average -34.103num_visits 53
+child 54 best -6.59773 average -34.1138num_visits 36
+child 55 best -13.4139 average -38.3402num_visits 30
+child 56 best -6.55014 average -81.3854num_visits 12
+child 57 best -10.4812 average -48.4614num_visits 46
+child 58 best -8.17004 average -44.7425num_visits 46
+child 59 best -7.08241 average -21.436num_visits 122
+child 60 best -11.5963 average -22.6575num_visits 100
+child 61 best -6.78842 average -18.0302num_visits 190
+child 62 best -13.9377 average -36.4942num_visits 31
+child 63 best -16.4135 average -83.9676num_visits 6
+child 64 best -8.52211 average -20.6171num_visits 139
+child 65 best -11.9701 average -50.3584num_visits 33
+best intermediate value -5.69387
+finished depth 2 best value so far -5.69387
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -5.69387
+child 1 best -5.41365 average -21.9722num_visits 684
+child 2 best -9.55359 average -34.3727num_visits 171
+child 3 best -7.78514 average -30.1278num_visits 234
+child 4 best -5.37715 average -22.9733num_visits 604
+child 5 best -5.29098 average -20.9664num_visits 844
+child 6 best -5.48298 average -21.9897num_visits 726
+child 7 best -9.44104 average -44.6847num_visits 103
+child 8 best -5.67409 average -29.1909num_visits 228
+child 9 best -5.687 average -25.0944num_visits 497
+child 10 best -6.29068 average -29.2657num_visits 279
+best intermediate value -5.29098
+finished depth 4 best value so far -5.29098
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -5.29098
+child 1 best -6.61889 average -20.0095num_visits 94
+child 2 best -6.01681 average -18.8365num_visits 106
+child 3 best -5.84507 average -20.1528num_visits 90
+child 4 best -6.54317 average -24.9434num_visits 54
+child 5 best -5.53216 average -35.9853num_visits 48
+child 6 best -6.76754 average -30.8386num_visits 38
+child 7 best -5.90316 average -22.5365num_visits 63
+child 8 best -6.27144 average -22.1067num_visits 118
+child 9 best -6.06151 average -18.76num_visits 101
+child 10 best -5.58392 average -17.2959num_visits 125
+child 11 best -6.27746 average -26.8205num_visits 58
+child 12 best -6.02176 average -17.6142num_visits 130
+child 13 best -5.93618 average -17.3522num_visits 182
+child 14 best -6.50626 average -24.011num_visits 87
+child 15 best -5.63526 average -15.1078num_visits 190
+child 16 best -8.01338 average -20.1613num_visits 83
+child 17 best -5.97278 average -24.0505num_visits 105
+child 18 best -6.57073 average -20.517num_visits 83
+child 19 best -6.36491 average -46.5137num_visits 14
+child 20 best -6.91007 average -58.9398num_visits 21
+child 21 best -7.25145 average -62.1484num_visits 19
+child 22 best -5.37184 average -20.0398num_visits 85
+child 23 best -5.54648 average -20.8774num_visits 77
+child 24 best -6.25623 average -29.3622num_visits 45
+child 25 best -6.0806 average -28.0182num_visits 57
+child 26 best -7.02419 average -23.9685num_visits 65
+child 27 best -6.23817 average -141.846num_visits 4
+child 28 best -8.34732 average -17.0206num_visits 132
+child 29 best -6.11101 average -16.2269num_visits 151
+child 30 best -6.11536 average -39.1876num_visits 33
+child 31 best -5.53098 average -19.1824num_visits 101
+child 32 best -6.44566 average -25.9196num_visits 89
+child 33 best -5.50016 average -36.0174num_visits 43
+child 34 best -7.03239 average -23.1337num_visits 72
+child 35 best -6.7972 average -19.8264num_visits 88
+child 36 best -5.95268 average -18.7407num_visits 121
+child 37 best -5.60344 average -18.2924num_visits 123
+child 38 best -6.457 average -38.3249num_visits 23
+child 39 best -5.49198 average -19.5842num_visits 106
+child 40 best -5.97949 average -27.2755num_visits 83
+child 41 best -7.47576 average -89.1443num_visits 5
+child 42 best -5.88147 average -29.3345num_visits 46
+child 43 best -5.8457 average -16.8091num_visits 136
+child 44 best -8.80492 average -58.7526num_visits 14
+child 45 best -6.0701 average -17.4838num_visits 121
+child 46 best -6.01536 average -32.5375num_visits 48
+best intermediate value -5.37184
+finished depth 6 best value so far -5.29098
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -5.29098
+child 1 best -5.48283 average -11.827num_visits 55
+child 2 best -6.61531 average -41.5786num_visits 19
+child 3 best -6.8357 average -57.1448num_visits 3
+child 4 best -6.88822 average -44.9116num_visits 15
+child 5 best -5.34291 average -12.1183num_visits 49
+child 6 best -5.42204 average -29.6013num_visits 49
+child 7 best -5.66703 average -13.2176num_visits 44
+child 8 best -5.46594 average -14.8898num_visits 31
+child 9 best -7.0002 average -45.6905num_visits 16
+child 10 best -54.0374 average -57.3665num_visits 2
+child 11 best -9.007 average -31.7159num_visits 8
+child 12 best -5.48885 average -15.008num_visits 30
+child 13 best -8.43488 average -29.2852num_visits 7
+child 14 best -6.39907 average -14.5094num_visits 33
+child 15 best -6.0344 average -38.8256num_visits 12
+child 16 best -5.55868 average -41.47num_visits 11
+child 17 best -12.4205 average -43.2373num_visits 3
+child 18 best -7.20502 average -15.3074num_visits 39
+child 19 best -11.5631 average -161.208num_visits 4
+child 20 best -6.92667 average -24.6287num_visits 10
+child 21 best -5.63382 average -20.5335num_visits 31
+child 22 best -9.841 average -54.7131num_visits 2
+child 23 best -6.67329 average -46.961num_visits 11
+child 24 best -5.68535 average -16.7764num_visits 38
+child 25 best -7.02796 average -19.5836num_visits 16
+child 26 best -5.50766 average -11.6583num_visits 54
+child 27 best -5.43079 average -13.5437num_visits 43
+child 28 best -6.79938 average -78.7386num_visits 8
+child 29 best -6.13055 average -20.9439num_visits 30
+child 30 best -7.67498 average -31.2319num_visits 8
+child 31 best -7.26023 average -26.0985num_visits 9
+child 32 best -121.443 average -121.443num_visits 1
+child 33 best -5.8718 average -12.6793num_visits 52
+child 34 best -5.60366 average -12.3192num_visits 50
+child 35 best -5.50369 average -10.5548num_visits 70
+child 36 best -5.69102 average -11.4633num_visits 57
+child 37 best -6.15911 average -13.8515num_visits 36
+child 38 best -11.3329 average -56.2374num_visits 2
+child 39 best -5.40606 average -18.8073num_visits 60
+child 40 best -6.01995 average -12.2887num_visits 47
+child 41 best -5.38833 average -14.4336num_visits 33
+child 42 best -5.44478 average -18.6456num_visits 23
+child 43 best -6.39536 average -60.6299num_visits 9
+child 44 best -6.04603 average -20.4753num_visits 15
+child 45 best -5.4659 average -11.4977num_visits 56
+child 46 best -6.53968 average -38.0622num_visits 8
+child 47 best -5.60393 average -14.6901num_visits 34
+child 48 best -105.306 average -105.306num_visits 1
+child 49 best -12.2927 average -50.9111num_visits 3
+child 50 best -14.2197 average -256.565num_visits 2
+child 51 best -6.51345 average -22.127num_visits 13
+child 52 best -5.81542 average -17.1643num_visits 22
+child 53 best -6.14631 average -22.9885num_visits 11
+child 54 best -6.03454 average -27.5095num_visits 19
+child 55 best -5.53162 average -16.018num_visits 31
+child 56 best -83.3341 average -83.3341num_visits 1
+child 57 best -5.53273 average -39.8num_visits 31
+child 58 best -6.5321 average -20.6771num_visits 21
+child 59 best -6.67899 average -127.797num_visits 7
+child 60 best -5.64418 average -14.6528num_visits 35
+child 61 best -7.10025 average -144.077num_visits 7
+child 62 best -7.28208 average -140.712num_visits 2
+child 63 best -5.52146 average -19.4017num_visits 25
+child 64 best -5.32332 average -38.8157num_visits 6
+child 65 best -5.39088 average -10.9909num_visits 70
+child 66 best -8.04569 average -18.0228num_visits 21
+child 67 best -6.11977 average -45.478num_visits 3
+child 68 best -6.05219 average -49.7079num_visits 6
+child 69 best -5.60424 average -13.0073num_visits 49
+child 70 best -8.02451 average -34.6315num_visits 5
+child 71 best -6.33342 average -55.5258num_visits 7
+child 72 best -6.03134 average -19.566num_visits 34
+child 73 best -16.6723 average -72.1234num_visits 2
+child 74 best -5.47765 average -14.8622num_visits 34
+child 75 best -5.71374 average -13.2511num_visits 40
+child 76 best -6.6544 average -22.181num_visits 12
+child 77 best -5.42202 average -27.7101num_visits 35
+child 78 best -5.38432 average -13.0909num_visits 43
+child 79 best -176.074 average -176.074num_visits 1
+child 80 best -9.1398 average -50.4885num_visits 4
+child 81 best -5.35964 average -27.4856num_visits 36
+child 82 best -5.43252 average -28.2241num_visits 13
+child 83 best -5.35865 average -17.8593num_visits 51
+child 84 best -9.19631 average -15.5003num_visits 27
+child 85 best -10.8958 average -260.248num_visits 4
+child 86 best -6.59143 average -23.7812num_visits 16
+child 87 best -6.09699 average -22.3472num_visits 42
+child 88 best -6.17623 average -18.9541num_visits 17
+child 89 best -12.4305 average -104.798num_visits 2
+child 90 best -5.57696 average -10.8655num_visits 68
+child 91 best -7.30799 average -35.396num_visits 6
+child 92 best -7.5691 average -33.4478num_visits 9
+child 93 best -5.50354 average -16.2236num_visits 28
+child 94 best -8.11041 average -46.3177num_visits 8
+child 95 best -7.40118 average -49.1266num_visits 3
+child 96 best -6.26629 average -16.5938num_visits 27
+child 97 best -6.37322 average -25.9898num_visits 11
+child 98 best -6.09776 average -24.5284num_visits 20
+child 99 best -75.8245 average -75.8245num_visits 1
+child 100 best -5.50153 average -14.3223num_visits 33
+child 101 best -5.95994 average -25.7692num_visits 18
+child 102 best -10.0511 average -35.0935num_visits 5
+child 103 best -5.63389 average -11.7604num_visits 53
+child 104 best -77.9934 average -77.9934num_visits 1
+child 105 best -5.98628 average -14.7844num_visits 32
+child 106 best -5.7557 average -30.2273num_visits 44
+child 107 best -5.92158 average -36.8986num_visits 6
+child 108 best -6.00219 average -42.7296num_visits 31
+child 109 best -5.99303 average -16.8765num_visits 31
+child 110 best -9.42877 average -122.2num_visits 5
+child 111 best -5.47616 average -11.5407num_visits 56
+child 112 best -8.75272 average -55.49num_visits 11
+child 113 best -99.2244 average -99.2244num_visits 1
+child 114 best -5.91904 average -14.9263num_visits 43
+child 115 best -5.81168 average -15.9945num_visits 31
+child 116 best -5.77567 average -20.2062num_visits 25
+child 117 best -7.40732 average -25.2987num_visits 11
+child 118 best -5.61466 average -14.8993num_visits 31
+child 119 best -6.85977 average -37.4877num_visits 10
+child 120 best -5.56912 average -50.0055num_visits 16
+child 121 best -5.46931 average -11.6737num_visits 54
+child 122 best -7.09485 average -31.5396num_visits 24
+child 123 best -5.74535 average -10.59num_visits 69
+child 124 best -5.76117 average -13.4115num_visits 39
+child 125 best -5.66267 average -13.911num_visits 48
+best intermediate value -5.32332
+finished depth 8 best value so far -5.29098
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -5.29098
+child 1 best -9.78859 average -12.934num_visits 62
+child 2 best -5.34563 average -6.45239num_visits 472
+child 3 best -9.07479 average -14.8347num_visits 44
+child 4 best -9.46936 average -86.8123num_visits 5
+child 5 best -7.98167 average -9.92383num_visits 125
+child 6 best -7.64235 average -9.79674num_visits 130
+child 7 best -6.01088 average -8.57589num_visits 190
+child 8 best -9.6529 average -26.9569num_visits 12
+child 9 best -8.77366 average -11.5703num_visits 83
+child 10 best -7.21065 average -8.64797num_visits 186
+child 11 best -5.50131 average -11.7857num_visits 111
+child 12 best -5.43561 average -7.44638num_visits 293
+child 13 best -5.26769 average -6.44434num_visits 474
+child 14 best -92.9336 average -92.9336num_visits 1
+child 15 best -5.20105 average -6.27021num_visits 522
+child 16 best -8.92952 average -11.0783num_visits 93
+child 17 best -8.69095 average -11.4623num_visits 85
+child 18 best -13.1112 average -31.1054num_visits 9
+child 19 best -7.55698 average -9.05847num_visits 162
+child 20 best -8.24563 average -9.95981num_visits 124
+child 21 best -10.0364 average -75.9156num_visits 9
+child 22 best -5.34256 average -7.10315num_visits 341
+child 23 best -9.4457 average -34.6242num_visits 37
+child 24 best -9.16158 average -31.6752num_visits 21
+child 25 best -74.2844 average -78.7623num_visits 2
+child 26 best -15.3903 average -57.4873num_visits 7
+child 27 best -11.3051 average -20.2956num_visits 25
+child 28 best -5.40919 average -6.66403num_visits 423
+child 29 best -11.9304 average -15.4808num_visits 40
+best intermediate value -5.20105
+finished depth 10 best value so far -5.20105
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -5.20105
+child 1 best -6.36862 average -6.36862num_visits 815
+child 2 best -6.94381 average -6.94381num_visits 598
+child 3 best -11.4732 average -11.4732num_visits 132
+child 4 best -23.3488 average -53.9797num_visits 5
+child 5 best -5.74285 average -5.74285num_visits 1217
+child 6 best -5.82441 average -5.82441num_visits 1149
+child 7 best -6.26145 average -6.26145num_visits 868
+child 8 best -6.88673 average -6.88673num_visits 615
+child 9 best -6.90957 average -6.90957num_visits 608
+child 10 best -6.82981 average -6.82981num_visits 633
+child 11 best -9.04686 average -9.04686num_visits 258
+child 12 best -7.13087 average -7.13087num_visits 546
+child 13 best -5.57727 average -5.57727num_visits 1374
+child 14 best -5.27767 average -5.27767num_visits 1747
+child 15 best -5.78835 average -5.78835num_visits 1179
+child 16 best -5.68334 average -5.68334num_visits 1270
+child 17 best -6.35794 average -6.35794num_visits 820
+child 18 best -7.01778 average -7.01778num_visits 576
+child 19 best -5.90774 average -5.90774num_visits 1086
+child 20 best -7.23659 average -7.23659num_visits 519
+child 21 best -40.8361 average -78.0619num_visits 4
+child 22 best -5.36802 average -5.36802num_visits 1620
+child 23 best -5.83201 average -5.83201num_visits 1143
+child 24 best -5.50913 average -5.50913num_visits 1448
+child 25 best -5.94295 average -5.94295num_visits 1061
+child 26 best -6.93235 average -6.93235num_visits 601
+child 27 best -5.83079 average -5.83079num_visits 1144
+child 28 best -6.79425 average -6.79425num_visits 645
+child 29 best -5.29378 average -5.29378num_visits 1723
+child 30 best -5.72309 average -5.72309num_visits 1234
+child 31 best -8.58035 average -8.58035num_visits 302
+child 32 best -5.85773 average -5.85773num_visits 1123
+child 33 best -6.97276 average -6.97276num_visits 589
+child 34 best -5.73052 average -5.73052num_visits 1228
+child 35 best -6.90091 average -6.90091num_visits 611
+child 36 best -6.48498 average -6.48498num_visits 762
+child 37 best -5.79893 average -5.79893num_visits 1170
+child 38 best -5.82704 average -5.82704num_visits 1147
+child 39 best -6.96323 average -6.96323num_visits 592
+child 40 best -5.20105 average -5.20105num_visits 1867
+child 41 best -6.92306 average -6.92306num_visits 604
+child 42 best -6.43106 average -6.43106num_visits 786
+child 43 best -7.42917 average -7.42917num_visits 476
+child 44 best -5.25013 average -5.25013num_visits 1789
+child 45 best -5.9444 average -5.9444num_visits 1060
+child 46 best -5.95098 average -5.95098num_visits 1055
+child 47 best -7.14069 average -7.14069num_visits 543
+child 48 best -5.34063 average -5.34063num_visits 1657
+child 49 best -5.78123 average -5.78123num_visits 1185
+child 50 best -5.95599 average -5.95599num_visits 1052
+child 51 best -5.84548 average -5.84548num_visits 1133
+child 52 best -7.19139 average -7.19139num_visits 530
+child 53 best -5.23025 average -5.23025num_visits 1820
+child 54 best -6.89927 average -6.89927num_visits 611
+child 55 best -5.33723 average -5.33723num_visits 1662
+child 56 best -5.96105 average -5.96105num_visits 1048
+child 57 best -6.38105 average -6.38105num_visits 809
+child 58 best -6.34621 average -6.34621num_visits 825
+child 59 best -5.50174 average -5.50174num_visits 1456
+child 60 best -7.00672 average -7.00672num_visits 580
+child 61 best -5.87426 average -5.87426num_visits 1111
+child 62 best -7.02937 average -7.02937num_visits 573
+child 63 best -6.30199 average -6.30199num_visits 847
+child 64 best -5.32229 average -5.32229num_visits 1683
+child 65 best -5.7673 average -5.7673num_visits 1196
+child 66 best -5.93591 average -5.93591num_visits 1066
+child 67 best -7.02481 average -7.02481num_visits 575
+child 68 best -12.9432 average -12.9432num_visits 96
+child 69 best -5.41998 average -5.41998num_visits 1553
+child 70 best -6.58079 average -6.58079num_visits 723
+child 71 best -5.50913 average -5.50913num_visits 1448
+child 72 best -6.83916 average -6.83916num_visits 630
+child 73 best -6.53716 average -6.53716num_visits 740
+child 74 best -5.2357 average -5.2357num_visits 1811
+child 75 best -10.5013 average -10.5013num_visits 168
+child 76 best -6.4897 average -6.4897num_visits 760
+child 77 best -6.78574 average -6.78574num_visits 648
+best intermediate value -5.20105
+finished depth 12 best value so far -5.20105
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -5.20105
+best intermediate value -1.11111e+11
+finished depth 14 best value so far -5.20105
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -5.20105
+best intermediate value -1.11111e+11
+finished depth 16 best value so far -5.20105
+JENNY_MINCOST: 5.20105
+JENNY_EVALTIME: 95934
+num_best_decisions: 0num_random_decisions: 7
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host filter.cpp bin/host/bilateral_grid.a bin/host/bilateral_grid_auto_schedule.a -o bin/host/filter -L/home/ubuntu/anaconda3/envs/halide/lib -lpng16  -ljpeg -I/home/ubuntu/anaconda3/envs/halide/include/libpng16 -I/home/ubuntu/anaconda3/envs/halide/include/libpng16/..  -ldl -lpthread -lz
+rm bin/host/bilateral_grid_auto_schedule.a bin/host/bilateral_grid.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/bilateral_grid'
