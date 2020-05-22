@@ -133,7 +133,13 @@ class Sample:
 
       width = max([len(k.value) for k in self.comparisons.keys()])
 
-      stage_str = "{} (Registers = {}; {})".format(stage, self.metrics[stage][Info.REGISTERS_64.value], self.metrics[stage][Info.REGISTERS_256.value])
+      registers_64 = self.metrics[stage][Info.REGISTERS_64.value]
+      registers_256 = "?"
+      if Info.REGISTERS_64.value in self.metrics[stage]:
+        registers_256 = self.metrics[stage][Info.REGISTERS_64.value]
+
+      stage_str = "{} (Registers = {}; {})".format(stage, registers_64, registers_256)
+
       if first:
         first = False
         out += "{:{width}} {:>14} {:>14} {:>7}\n".format(stage_str, "Actual", "Predicted", "Ratio", width=width + 2)
