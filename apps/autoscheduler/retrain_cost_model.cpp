@@ -617,7 +617,11 @@ int main(int argc, char **argv) {
             float best_rate = 0;
             for (int model = 0; model < kModels; model++) {
                 float rate = correct_ordering_rate_sum[model] / correct_ordering_rate_count[model];
-                std::cout << rate << " ";
+                if (correct_ordering_rate_count[model] == 0) {
+                    std::cout << "? ";
+                } else {
+                    std::cout << rate << " ";
+                }
                 correct_ordering_rate_sum[model] *= 0.9f;
                 correct_ordering_rate_count[model] *= 0.9f;
 
@@ -626,7 +630,11 @@ int main(int argc, char **argv) {
                     best_model = model;
                     best_rate = rate;
                 }
-                std::cout << rate << " ";
+                if (v_correct_ordering_rate_count[model] == 0) {
+                    std::cout << "? ";
+                } else {
+                    std::cout << rate << " ";
+                }
                 v_correct_ordering_rate_sum[model] *= 0.9f;
                 v_correct_ordering_rate_count[model] *= 0.9f;
             }
