@@ -1,0 +1,404 @@
+make: Entering directory '/home/ubuntu/Halide/apps/bilateral_grid'
+c++ -O3 -std=c++11 -I /home/ubuntu/Halide/distrib/include/ -I /home/ubuntu/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp bilateral_grid_generator.cpp /home/ubuntu/Halide/distrib/tools/GenGen.cpp -o bin/host/bilateral_grid.generator -Wl,-rpath,/home/ubuntu/Halide/distrib/bin/ -L /home/ubuntu/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/bilateral_grid.generator -g bilateral_grid -e static_library,h,registration,stmt,assembly -o bin/host -f bilateral_grid target=host auto_schedule=false
+bin/host/bilateral_grid.generator -g bilateral_grid -e static_library,h,registration,stmt,assembly -o bin/host -f bilateral_grid_auto_schedule target=host-no_runtime auto_schedule=true -p /home/ubuntu/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+mcts_depth 18
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+JENNY_MINCOST: 6.6015
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.60757
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.69931
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.68829
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.25307
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.29122
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.93178
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.68427
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 5.64742
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.51232
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 7.51536
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.42333
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.96818
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.07929
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 6.34899
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 5.14992
+JENNY_EVALTIME: 200614
+num_best_decisions: 0num_random_decisions: 0
+best intermediate value -6.29122
+finished depth 1 best value so far 0
+JENNY_MINCOST: 6.42548
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 5.55672
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 5.99642
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 5.6489
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 5.95669
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 6.16506
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 5.6445
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 5.8891
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 6.17339
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 5.65185
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 6.40492
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 5.60852
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 6.22288
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 6.61335
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 6.12455
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 5.33273
+JENNY_EVALTIME: 442741
+num_best_decisions: 0num_random_decisions: 1
+best intermediate value -5.6489
+finished depth 2 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 3 best value so far 0
+JENNY_MINCOST: 5.64219
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.49737
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.45334
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.53556
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.44509
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.51063
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.52828
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.55081
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.39712
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.16556
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.63513
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.70155
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.28156
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.71171
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.48517
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 5.1231
+JENNY_EVALTIME: 629027
+num_best_decisions: 0num_random_decisions: 2
+best intermediate value -5.52828
+finished depth 4 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 5 best value so far 0
+JENNY_MINCOST: 5.32029
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.51279
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.42032
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.55951
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.33866
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.32089
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.47446
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.39069
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.49107
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.36679
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.44279
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.50766
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.4093
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.44147
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.50228
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+JENNY_MINCOST: 5.19253
+JENNY_EVALTIME: 803467
+num_best_decisions: 0num_random_decisions: 3
+best intermediate value -5.49107
+finished depth 6 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 7 best value so far 0
+JENNY_MINCOST: 6.03047
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.60834
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.32037
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.361
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.34512
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.26771
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.85358
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.85729
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.26336
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.34339
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.34512
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 6.17373
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+JENNY_MINCOST: 5.26771
+JENNY_EVALTIME: 892888
+num_best_decisions: 0num_random_decisions: 4
+best intermediate value -5.60834
+finished depth 8 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 9 best value so far 0
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.29532
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.27673
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.26336
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.26336
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 1205905
+num_best_decisions: 0num_random_decisions: 5
+best intermediate value -5.29532
+finished depth 10 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 11 best value so far 0
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 6
+best intermediate value -5.25724
+finished depth 12 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 13 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 14 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 15 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 16 best value so far 0
+JENNY_MINCOST: 6.29122
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 7
+JENNY_MINCOST: 5.6489
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 7
+JENNY_MINCOST: 5.52828
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 7
+JENNY_MINCOST: 5.49107
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 7
+JENNY_MINCOST: 5.60834
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 7
+JENNY_MINCOST: 5.29532
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 7
+JENNY_MINCOST: 5.25724
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 7
+JENNY_MINCOST: 5.49107
+JENNY_EVALTIME: 2230336
+num_best_decisions: 0num_random_decisions: 7
+c++ -O3 -std=c++11 -I /home/ubuntu/Halide/distrib/include/ -I /home/ubuntu/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host filter.cpp bin/host/bilateral_grid.a bin/host/bilateral_grid_auto_schedule.a -o bin/host/filter -L/home/ubuntu/anaconda3/envs/halide/lib -lpng16  -ljpeg -I/home/ubuntu/anaconda3/envs/halide/include/libpng16 -I/home/ubuntu/anaconda3/envs/halide/include/libpng16/..  -ldl -lpthread -lz
+rm bin/host/bilateral_grid_auto_schedule.a bin/host/bilateral_grid.a
+make: Leaving directory '/home/ubuntu/Halide/apps/bilateral_grid'
