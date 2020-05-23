@@ -400,7 +400,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
     # retrain model weights on all samples seen so far
     echo Retraining model...
 
-    retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE}
+    retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
 
     if [[ $TRAIN_ONLY == 1 ]]; then
         echo Batch ${BATCH_ID} took ${SECONDS} seconds to retrain

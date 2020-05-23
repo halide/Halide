@@ -5,6 +5,7 @@ import sh
 import os
 import math
 from enum import Enum
+import re
 
 class Result:
   def __init__(self, actual, predicted):
@@ -47,13 +48,22 @@ class Sample:
 
     self.comparisons = {}
     self.comparisons[Features.GLOBAL_LOAD_TRANSACTIONS] = self.global_load_transactions
-    #self.comparisons["global load transactions (pure licm)"] = self.global_load_transactions_with_pure_licm
     self.comparisons[Features.GLOBAL_STORE_TRANSACTIONS] = self.global_store_transactions
-    #self.comparisons["global store transactions (pure licm)"] = self.global_store_transactions_with_pure_licm
     self.comparisons[Features.GLOBAL_LOAD_EFFICIENCY] = self.global_load_efficiency
     self.comparisons[Features.GLOBAL_STORE_EFFICIENCY] = self.global_store_efficiency
 
+    self.ignore_list = [
+      "^repeat_edge",
+      "^lambda",
+    ]
+
     self.success = self.compare_metrics_and_features()
+
+  def should_ignore(self, stage):
+    for ignore in self.ignore_list:
+      if re.match(ignore, stage):
+        return True
+    return False
 
   def parse_formatted(self, filename):
     result = {}
@@ -98,16 +108,6 @@ class Sample:
     predicted = features["num_global_mem_stores_per_block"] * features["num_blocks"]
     return IntResult(actual, predicted)
 
-  def global_store_transactions_with_pure_licm(self, metrics, features):
-    actual = metrics["gst_transactions"]
-    predicted = features["num_global_mem_stores_with_pure_licm_per_block"] * features["num_blocks"]
-    return IntResult(actual, predicted)
-
-  def global_load_transactions_with_pure_licm(self, metrics, features):
-    actual = metrics["gld_transactions"]
-    predicted = features["num_global_mem_loads_with_pure_licm_per_block"] * features["num_blocks"]
-    return IntResult(actual, predicted)
-
   def compare_metrics_and_features(self):
     for stage in self.features:
       self.results[stage] = {}
@@ -117,6 +117,18 @@ class Sample:
 
         self.results[stage][label] = self.comparisons[label](self.metrics[stage], self.features[stage])
     return True
+
+  def stages_sorted_by_ratio(self):
+    stages_and_ratios = []
+    for stage in self.results:
+      ratios = []
+      for label in self.results[stage]:
+        ratios.append(abs(self.results[stage][label].ratio))
+
+      stages_and_ratios.append((stage, max(ratios)))
+      stages_and_ratios.sort(key=lambda s: s[1])
+
+    return [s[0] for s in stages_and_ratios]
 
   def max_ratio(self):
     ratios = []
@@ -129,7 +141,9 @@ class Sample:
   def __str__(self):
     out = "{}/autoschedule_command.txt\n".format(self.path.parent)
     first = True
-    for stage in self.results:
+    for stage in self.stages_sorted_by_ratio():
+      if self.should_ignore(stage):
+        continue
 
       width = max([len(k.value) for k in self.comparisons.keys()])
 
