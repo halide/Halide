@@ -1,0 +1,28 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/unsharp'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 1.25489ms
+Auto-scheduled time: 1.93771ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/unsharp'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/unsharp'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 1.28056ms
+Auto-scheduled time: 1.53648ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/unsharp'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/unsharp'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 1.23934ms
+Auto-scheduled time: 1.53087ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/unsharp'
+
+
+RL_END_OF_RUN 3
+

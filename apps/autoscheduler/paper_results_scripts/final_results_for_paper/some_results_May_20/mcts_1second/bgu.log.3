@@ -1,0 +1,96 @@
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/bgu'
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -g bgu_generator.cpp /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp -o bin/host/bgu.generator -Wl,-rpath,/home/ubuntu/llvm-project/Halide/distrib/bin/ -L /home/ubuntu/llvm-project/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/bgu.generator -g bgu -f bgu -o bin/host target=host-no_runtime auto_schedule=false
+bin/host/bgu.generator -g bgu -f bgu_auto_schedule -o bin/host target=host-no_runtime auto_schedule=true -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+mcts_depth 42
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+best intermediate value -29.7204
+finished depth 1 best value so far -29.7204
+best intermediate value -25.4242
+finished depth 2 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -25.4242
+best intermediate value -25.4528
+finished depth 4 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -25.4242
+best intermediate value -25.9514
+finished depth 6 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -25.4242
+best intermediate value -26.0732
+finished depth 8 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 10 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -25.4242
+best intermediate value -31.7061
+finished depth 12 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -25.4242
+best intermediate value -26.0732
+finished depth 14 best value so far -25.4242
+best intermediate value -26.945
+finished depth 15 best value so far -25.4242
+best intermediate value -26.945
+finished depth 16 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -25.4242
+best intermediate value -27.2781
+finished depth 18 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -25.4242
+best intermediate value -26.9662
+finished depth 20 best value so far -25.4242
+best intermediate value -26.9528
+finished depth 21 best value so far -25.4242
+best intermediate value -26.5537
+finished depth 22 best value so far -25.4242
+best intermediate value -26.5475
+finished depth 23 best value so far -25.4242
+best intermediate value -26.5475
+finished depth 24 best value so far -25.4242
+best intermediate value -26.8541
+finished depth 25 best value so far -25.4242
+best intermediate value -26.6198
+finished depth 26 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 27 best value so far -25.4242
+best intermediate value -26.5903
+finished depth 28 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 30 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 32 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -25.4242
+best intermediate value -26.5903
+finished depth 34 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -25.4242
+best intermediate value -26.5903
+finished depth 36 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -25.4242
+best intermediate value -1.11111e+11
+finished depth 40 best value so far -25.4242
+JENNY_MINCOST: 25.4242
+JENNY_EVALTIME: 35382
+num_best_decisions: 14num_random_decisions: 6
+bin/host/bgu.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host -Wall -O3 filter.cpp bin/host/bgu.a bin/host/bgu_auto_schedule.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/home/ubuntu/anaconda3/envs/halide/lib -lpng16  -ljpeg -I/home/ubuntu/anaconda3/envs/halide/include/libpng16 -I/home/ubuntu/anaconda3/envs/halide/include/libpng16/..   
+rm bin/host/bgu_auto_schedule.a bin/host/bgu.a bin/host/runtime.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/bgu'

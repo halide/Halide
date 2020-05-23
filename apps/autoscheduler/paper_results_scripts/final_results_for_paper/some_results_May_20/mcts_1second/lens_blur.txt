@@ -1,0 +1,31 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
+bin/host/process ../images/rgb_small.png 32 13 0.5 32 5 bin/host/out.png
+output width: 192; output height: 320
+Manually-tuned time: 5.29826ms
+Auto-scheduled time: 6.81775ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
+bin/host/process ../images/rgb_small.png 32 13 0.5 32 5 bin/host/out.png
+output width: 192; output height: 320
+Manually-tuned time: 5.35954ms
+Auto-scheduled time: 6.20723ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
+bin/host/process ../images/rgb_small.png 32 13 0.5 32 5 bin/host/out.png
+output width: 192; output height: 320
+Manually-tuned time: 5.27536ms
+Auto-scheduled time: 6.91597ms
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
+
+
+RL_END_OF_RUN 3
+

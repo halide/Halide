@@ -1,0 +1,793 @@
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/home/ubuntu/llvm-project/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule8 target=host auto_schedule=true block_id=8 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-sse41
+Seed = 1
+mcts_depth 52
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -3.10623
+finished depth 1 best value so far -3.10623
+Cost evaluated this many times: 11686
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -3.10623
+Cost evaluated this many times: 11686
+best intermediate value -2.52502
+finished depth 3 best value so far -2.52502
+Cost evaluated this many times: 24427
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -2.52502
+Cost evaluated this many times: 24427
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -2.52502
+Cost evaluated this many times: 24427
+best intermediate value -3.08102
+finished depth 6 best value so far -2.52502
+Cost evaluated this many times: 34609
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -2.52502
+Cost evaluated this many times: 34609
+best intermediate value -2.88078
+finished depth 8 best value so far -2.52502
+Cost evaluated this many times: 46411
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -2.52502
+Cost evaluated this many times: 46411
+best intermediate value -3.13244
+finished depth 10 best value so far -2.52502
+Cost evaluated this many times: 57680
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -2.52502
+Cost evaluated this many times: 57680
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -2.52502
+Cost evaluated this many times: 57680
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -2.52502
+Cost evaluated this many times: 57680
+best intermediate value -2.54948
+finished depth 14 best value so far -2.52502
+Cost evaluated this many times: 69218
+best intermediate value -2.65334
+finished depth 15 best value so far -2.52502
+Cost evaluated this many times: 80061
+best intermediate value -2.5979
+finished depth 16 best value so far -2.52502
+Cost evaluated this many times: 89879
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -2.52502
+Cost evaluated this many times: 89879
+best intermediate value -2.59889
+finished depth 18 best value so far -2.52502
+Cost evaluated this many times: 100765
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -2.52502
+Cost evaluated this many times: 100765
+best intermediate value -2.67407
+finished depth 20 best value so far -2.52502
+Cost evaluated this many times: 112549
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -2.52502
+Cost evaluated this many times: 112549
+best intermediate value -2.42213
+finished depth 22 best value so far -2.42213
+Cost evaluated this many times: 121670
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -2.42213
+Cost evaluated this many times: 121670
+best intermediate value -2.55672
+finished depth 24 best value so far -2.42213
+Cost evaluated this many times: 130959
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -2.42213
+Cost evaluated this many times: 130959
+best intermediate value -2.39483
+finished depth 26 best value so far -2.39483
+Cost evaluated this many times: 138311
+best intermediate value -1.11111e+11
+finished depth 27 best value so far -2.39483
+Cost evaluated this many times: 138311
+best intermediate value -2.66966
+finished depth 28 best value so far -2.39483
+Cost evaluated this many times: 146255
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -2.39483
+Cost evaluated this many times: 146255
+best intermediate value -2.67159
+finished depth 30 best value so far -2.39483
+Cost evaluated this many times: 154084
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -2.39483
+Cost evaluated this many times: 154084
+best intermediate value -1.11111e+11
+finished depth 32 best value so far -2.39483
+Cost evaluated this many times: 154084
+best intermediate value -2.52473
+finished depth 33 best value so far -2.39483
+Cost evaluated this many times: 161046
+best intermediate value -2.41796
+finished depth 34 best value so far -2.39483
+Cost evaluated this many times: 168860
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -2.39483
+Cost evaluated this many times: 168860
+best intermediate value -2.40678
+finished depth 36 best value so far -2.39483
+Cost evaluated this many times: 177286
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -2.39483
+Cost evaluated this many times: 177286
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -2.39483
+Cost evaluated this many times: 177286
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -2.39483
+Cost evaluated this many times: 177286
+best intermediate value -2.41478
+finished depth 40 best value so far -2.39483
+Cost evaluated this many times: 184816
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -2.39483
+Cost evaluated this many times: 184816
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -2.39483
+Cost evaluated this many times: 184816
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -2.39483
+Cost evaluated this many times: 184816
+best intermediate value -1.11111e+11
+finished depth 44 best value so far -2.39483
+Cost evaluated this many times: 184816
+best intermediate value -2.38195
+finished depth 45 best value so far -2.38195
+Cost evaluated this many times: 192595
+best intermediate value -2.37981
+finished depth 46 best value so far -2.37981
+Cost evaluated this many times: 198635
+best intermediate value -2.38533
+finished depth 47 best value so far -2.37981
+Cost evaluated this many times: 204434
+best intermediate value -2.37981
+finished depth 48 best value so far -2.37981
+Cost evaluated this many times: 210902
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -2.37981
+Cost evaluated this many times: 210902
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -2.37981
+Cost evaluated this many times: 210902
+global best cost: 2.37981
+JENNY_MINCOST: 2.37981
+JENNY_EVALTIME: 210902
+num_best_decisions: 7num_random_decisions: 16
+Cost evaluated this many times: 210902
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/home/ubuntu/llvm-project/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule9 target=host auto_schedule=true block_id=9 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-sse41
+Seed = 1
+mcts_depth 52
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -2.55144
+finished depth 1 best value so far -2.55144
+Cost evaluated this many times: 11956
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -2.55144
+Cost evaluated this many times: 11956
+best intermediate value -2.71072
+finished depth 3 best value so far -2.55144
+Cost evaluated this many times: 25515
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -2.55144
+Cost evaluated this many times: 25515
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -2.55144
+Cost evaluated this many times: 25515
+best intermediate value -2.69146
+finished depth 6 best value so far -2.55144
+Cost evaluated this many times: 38336
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -2.55144
+Cost evaluated this many times: 38336
+best intermediate value -3
+finished depth 8 best value so far -2.55144
+Cost evaluated this many times: 53529
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -2.55144
+Cost evaluated this many times: 53529
+best intermediate value -3.02414
+finished depth 10 best value so far -2.55144
+Cost evaluated this many times: 67719
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -2.55144
+Cost evaluated this many times: 67719
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -2.55144
+Cost evaluated this many times: 67719
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -2.55144
+Cost evaluated this many times: 67719
+best intermediate value -3.08808
+finished depth 14 best value so far -2.55144
+Cost evaluated this many times: 81007
+best intermediate value -2.9015
+finished depth 15 best value so far -2.55144
+Cost evaluated this many times: 91413
+best intermediate value -2.78943
+finished depth 16 best value so far -2.55144
+Cost evaluated this many times: 101092
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -2.55144
+Cost evaluated this many times: 101092
+best intermediate value -2.64121
+finished depth 18 best value so far -2.55144
+Cost evaluated this many times: 111737
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -2.55144
+Cost evaluated this many times: 111737
+best intermediate value -2.57126
+finished depth 20 best value so far -2.55144
+Cost evaluated this many times: 123577
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -2.55144
+Cost evaluated this many times: 123577
+best intermediate value -3.01507
+finished depth 22 best value so far -2.55144
+Cost evaluated this many times: 135704
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -2.55144
+Cost evaluated this many times: 135704
+best intermediate value -3.01593
+finished depth 24 best value so far -2.55144
+Cost evaluated this many times: 148099
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -2.55144
+Cost evaluated this many times: 148099
+best intermediate value -1.11111e+11
+finished depth 26 best value so far -2.55144
+Cost evaluated this many times: 148099
+best intermediate value -2.36384
+finished depth 27 best value so far -2.36384
+Cost evaluated this many times: 156382
+best intermediate value -2.25534
+finished depth 28 best value so far -2.25534
+Cost evaluated this many times: 165997
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -2.25534
+Cost evaluated this many times: 165997
+best intermediate value -2.26867
+finished depth 30 best value so far -2.25534
+Cost evaluated this many times: 174407
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -2.25534
+Cost evaluated this many times: 174407
+best intermediate value -2.26867
+finished depth 32 best value so far -2.25534
+Cost evaluated this many times: 183510
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -2.25534
+Cost evaluated this many times: 183510
+best intermediate value -2.29471
+finished depth 34 best value so far -2.25534
+Cost evaluated this many times: 192115
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -2.25534
+Cost evaluated this many times: 192115
+best intermediate value -2.32234
+finished depth 36 best value so far -2.25534
+Cost evaluated this many times: 200639
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -2.25534
+Cost evaluated this many times: 200639
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -2.25534
+Cost evaluated this many times: 200639
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -2.25534
+Cost evaluated this many times: 200639
+best intermediate value -2.29389
+finished depth 40 best value so far -2.25534
+Cost evaluated this many times: 210303
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -2.25534
+Cost evaluated this many times: 210303
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -2.25534
+Cost evaluated this many times: 210303
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -2.25534
+Cost evaluated this many times: 210303
+best intermediate value -2.26887
+finished depth 44 best value so far -2.25534
+Cost evaluated this many times: 216989
+best intermediate value -1.11111e+11
+finished depth 45 best value so far -2.25534
+Cost evaluated this many times: 216989
+best intermediate value -2.27473
+finished depth 46 best value so far -2.25534
+Cost evaluated this many times: 219948
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -2.25534
+Cost evaluated this many times: 219948
+best intermediate value -2.27473
+finished depth 48 best value so far -2.25534
+Cost evaluated this many times: 220544
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -2.25534
+Cost evaluated this many times: 220544
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -2.25534
+Cost evaluated this many times: 220544
+global best cost: 2.25534
+JENNY_MINCOST: 2.25534
+JENNY_EVALTIME: 220544
+num_best_decisions: 11num_random_decisions: 11
+Cost evaluated this many times: 220544
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/home/ubuntu/llvm-project/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule10 target=host auto_schedule=true block_id=10 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-sse41
+Seed = 1
+mcts_depth 52
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -2.59772
+finished depth 1 best value so far -2.59772
+Cost evaluated this many times: 11056
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -2.59772
+Cost evaluated this many times: 11056
+best intermediate value -2.9436
+finished depth 3 best value so far -2.59772
+Cost evaluated this many times: 23617
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -2.59772
+Cost evaluated this many times: 23617
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -2.59772
+Cost evaluated this many times: 23617
+best intermediate value -2.6218
+finished depth 6 best value so far -2.59772
+Cost evaluated this many times: 35883
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -2.59772
+Cost evaluated this many times: 35883
+best intermediate value -2.94073
+finished depth 8 best value so far -2.59772
+Cost evaluated this many times: 49293
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -2.59772
+Cost evaluated this many times: 49293
+best intermediate value -2.77258
+finished depth 10 best value so far -2.59772
+Cost evaluated this many times: 64524
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -2.59772
+Cost evaluated this many times: 64524
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -2.59772
+Cost evaluated this many times: 64524
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -2.59772
+Cost evaluated this many times: 64524
+best intermediate value -2.64886
+finished depth 14 best value so far -2.59772
+Cost evaluated this many times: 81355
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -2.59772
+Cost evaluated this many times: 81355
+best intermediate value -2.8646
+finished depth 16 best value so far -2.59772
+Cost evaluated this many times: 98565
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -2.59772
+Cost evaluated this many times: 98565
+best intermediate value -2.79689
+finished depth 18 best value so far -2.59772
+Cost evaluated this many times: 114806
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -2.59772
+Cost evaluated this many times: 114806
+best intermediate value -2.79689
+finished depth 20 best value so far -2.59772
+Cost evaluated this many times: 131075
+best intermediate value -3.16414
+finished depth 21 best value so far -2.59772
+Cost evaluated this many times: 145890
+best intermediate value -3.04019
+finished depth 22 best value so far -2.59772
+Cost evaluated this many times: 160235
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -2.59772
+Cost evaluated this many times: 160235
+best intermediate value -2.95198
+finished depth 24 best value so far -2.59772
+Cost evaluated this many times: 170418
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -2.59772
+Cost evaluated this many times: 170418
+best intermediate value -1.11111e+11
+finished depth 26 best value so far -2.59772
+Cost evaluated this many times: 170418
+best intermediate value -2.95195
+finished depth 27 best value so far -2.59772
+Cost evaluated this many times: 179033
+best intermediate value -2.97181
+finished depth 28 best value so far -2.59772
+Cost evaluated this many times: 189544
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -2.59772
+Cost evaluated this many times: 189544
+best intermediate value -2.91814
+finished depth 30 best value so far -2.59772
+Cost evaluated this many times: 199254
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -2.59772
+Cost evaluated this many times: 199254
+best intermediate value -3.14281
+finished depth 32 best value so far -2.59772
+Cost evaluated this many times: 208271
+best intermediate value -2.64862
+finished depth 33 best value so far -2.59772
+Cost evaluated this many times: 216948
+best intermediate value -2.56924
+finished depth 34 best value so far -2.56924
+Cost evaluated this many times: 225693
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -2.56924
+Cost evaluated this many times: 225693
+best intermediate value -2.963
+finished depth 36 best value so far -2.56924
+Cost evaluated this many times: 234597
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -2.56924
+Cost evaluated this many times: 234597
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -2.56924
+Cost evaluated this many times: 234597
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -2.56924
+Cost evaluated this many times: 234597
+best intermediate value -2.59564
+finished depth 40 best value so far -2.56924
+Cost evaluated this many times: 242961
+best intermediate value -2.59751
+finished depth 41 best value so far -2.56924
+Cost evaluated this many times: 250054
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -2.56924
+Cost evaluated this many times: 250054
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -2.56924
+Cost evaluated this many times: 250054
+best intermediate value -2.59751
+finished depth 44 best value so far -2.56924
+Cost evaluated this many times: 256304
+best intermediate value -1.11111e+11
+finished depth 45 best value so far -2.56924
+Cost evaluated this many times: 256304
+best intermediate value -2.59346
+finished depth 46 best value so far -2.56924
+Cost evaluated this many times: 258027
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -2.56924
+Cost evaluated this many times: 258027
+best intermediate value -2.59346
+finished depth 48 best value so far -2.56924
+Cost evaluated this many times: 267444
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -2.56924
+Cost evaluated this many times: 267444
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -2.56924
+Cost evaluated this many times: 267444
+global best cost: 2.56924
+JENNY_MINCOST: 2.56924
+JENNY_EVALTIME: 267444
+num_best_decisions: 15num_random_decisions: 9
+Cost evaluated this many times: 267444
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/home/ubuntu/llvm-project/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule11 target=host auto_schedule=true block_id=11 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-sse41
+Seed = 1
+mcts_depth 52
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -2.93841
+finished depth 1 best value so far -2.93841
+Cost evaluated this many times: 10322
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -2.93841
+Cost evaluated this many times: 10322
+best intermediate value -2.98347
+finished depth 3 best value so far -2.93841
+Cost evaluated this many times: 22811
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -2.93841
+Cost evaluated this many times: 22811
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -2.93841
+Cost evaluated this many times: 22811
+best intermediate value -2.73795
+finished depth 6 best value so far -2.73795
+Cost evaluated this many times: 37552
+corrupted size vs. prev_size
+Makefile:23: recipe for target 'bin/resnet50block_auto_schedule11.a' failed
+make: *** [bin/resnet50block_auto_schedule11.a] Aborted (core dumped)
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/home/ubuntu/llvm-project/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule11 target=host auto_schedule=true block_id=11 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-sse41
+Seed = 2
+mcts_depth 52
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -3.4507
+finished depth 1 best value so far -3.4507
+Cost evaluated this many times: 10071
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -3.4507
+Cost evaluated this many times: 10071
+best intermediate value -2.94552
+finished depth 3 best value so far -2.94552
+Cost evaluated this many times: 21965
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -2.94552
+Cost evaluated this many times: 21965
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -2.94552
+Cost evaluated this many times: 21965
+best intermediate value -3.11527
+finished depth 6 best value so far -2.94552
+Cost evaluated this many times: 34659
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -2.94552
+Cost evaluated this many times: 34659
+best intermediate value -2.40562
+finished depth 8 best value so far -2.40562
+Cost evaluated this many times: 47967
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -2.40562
+Cost evaluated this many times: 47967
+best intermediate value -2.72912
+finished depth 10 best value so far -2.40562
+Cost evaluated this many times: 60339
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -2.40562
+Cost evaluated this many times: 60339
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -2.40562
+Cost evaluated this many times: 60339
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -2.40562
+Cost evaluated this many times: 60339
+best intermediate value -2.86172
+finished depth 14 best value so far -2.40562
+Cost evaluated this many times: 74380
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -2.40562
+Cost evaluated this many times: 74380
+best intermediate value -2.88643
+finished depth 16 best value so far -2.40562
+Cost evaluated this many times: 87140
+best intermediate value -2.88986
+finished depth 17 best value so far -2.40562
+Cost evaluated this many times: 97743
+best intermediate value -2.84304
+finished depth 18 best value so far -2.40562
+Cost evaluated this many times: 108549
+best intermediate value -1.11111e+11
+finished depth 19 best value so far -2.40562
+Cost evaluated this many times: 108549
+best intermediate value -2.84304
+finished depth 20 best value so far -2.40562
+Cost evaluated this many times: 120899
+best intermediate value -1.11111e+11
+finished depth 21 best value so far -2.40562
+Cost evaluated this many times: 120899
+best intermediate value -2.89027
+finished depth 22 best value so far -2.40562
+Cost evaluated this many times: 131353
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -2.40562
+Cost evaluated this many times: 131353
+best intermediate value -2.96863
+finished depth 24 best value so far -2.40562
+Cost evaluated this many times: 140298
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -2.40562
+Cost evaluated this many times: 140298
+best intermediate value -2.78813
+finished depth 26 best value so far -2.40562
+Cost evaluated this many times: 149632
+best intermediate value -1.11111e+11
+finished depth 27 best value so far -2.40562
+Cost evaluated this many times: 149632
+best intermediate value -2.62984
+finished depth 28 best value so far -2.40562
+Cost evaluated this many times: 158659
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -2.40562
+Cost evaluated this many times: 158659
+best intermediate value -2.70728
+finished depth 30 best value so far -2.40562
+Cost evaluated this many times: 167987
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -2.40562
+Cost evaluated this many times: 167987
+best intermediate value -1.11111e+11
+finished depth 32 best value so far -2.40562
+Cost evaluated this many times: 167987
+best intermediate value -2.74238
+finished depth 33 best value so far -2.40562
+Cost evaluated this many times: 176381
+best intermediate value -2.5876
+finished depth 34 best value so far -2.40562
+Cost evaluated this many times: 186510
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -2.40562
+Cost evaluated this many times: 186510
+best intermediate value -2.56914
+finished depth 36 best value so far -2.40562
+Cost evaluated this many times: 196517
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -2.40562
+Cost evaluated this many times: 196517
+best intermediate value -1.11111e+11
+finished depth 38 best value so far -2.40562
+Cost evaluated this many times: 196517
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -2.40562
+Cost evaluated this many times: 196517
+best intermediate value -2.56397
+finished depth 40 best value so far -2.40562
+Cost evaluated this many times: 206652
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -2.40562
+Cost evaluated this many times: 206652
+best intermediate value -1.11111e+11
+finished depth 42 best value so far -2.40562
+Cost evaluated this many times: 206652
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -2.40562
+Cost evaluated this many times: 206652
+best intermediate value -1.11111e+11
+finished depth 44 best value so far -2.40562
+Cost evaluated this many times: 206652
+best intermediate value -2.54742
+finished depth 45 best value so far -2.40562
+Cost evaluated this many times: 216408
+best intermediate value -2.54742
+finished depth 46 best value so far -2.40562
+Cost evaluated this many times: 222438
+best intermediate value -2.56177
+finished depth 47 best value so far -2.40562
+Cost evaluated this many times: 227629
+best intermediate value -2.54742
+finished depth 48 best value so far -2.40562
+Cost evaluated this many times: 237699
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -2.40562
+Cost evaluated this many times: 237699
+best intermediate value -1.11111e+11
+finished depth 50 best value so far -2.40562
+Cost evaluated this many times: 237699
+global best cost: 2.40562
+JENNY_MINCOST: 2.40562
+JENNY_EVALTIME: 237699
+num_best_decisions: 7num_random_decisions: 16
+Cost evaluated this many times: 237699
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/home/ubuntu/llvm-project/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule12 target=host auto_schedule=true block_id=12 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-sse41
+Seed = 2
+mcts_depth 52
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -3.05898
+finished depth 1 best value so far -3.05898
+Cost evaluated this many times: 11391
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -3.05898
+Cost evaluated this many times: 11391
+best intermediate value -2.82354
+finished depth 3 best value so far -2.82354
+Cost evaluated this many times: 23745
+double free or corruption (!prev)
+Makefile:23: recipe for target 'bin/resnet50block_auto_schedule12.a' failed
+make: *** [bin/resnet50block_auto_schedule12.a] Aborted (core dumped)
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=/home/ubuntu/llvm-project/Halide/apps/autoscheduler/paper_results_scripts/../baseline.weights \
+bin/resnet50block.generator -g resnet50block -o bin -f resnet50block_auto_schedule2 target=host auto_schedule=true block_id=2 -p bin/libauto_schedule.so -s Adams2019
+generate_rl_schedule for target=x86-64-linux-avx-avx2-avx512-avx512_skylake-f16c-fma-sse41
+Seed = 3
+mcts_depth 52
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -1.71757
+finished depth 1 best value so far -1.71757
+Cost evaluated this many times: 8808
+best intermediate value -1.11111e+11
+finished depth 2 best value so far -1.71757
+Cost evaluated this many times: 8808
+best intermediate value -1.70503
+finished depth 3 best value so far -1.70503
+Cost evaluated this many times: 18610
+best intermediate value -1.11111e+11
+finished depth 4 best value so far -1.70503
+Cost evaluated this many times: 18610
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -1.70503
+Cost evaluated this many times: 18610
+best intermediate value -1.77385
+finished depth 6 best value so far -1.70503
+Cost evaluated this many times: 26607
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -1.70503
+Cost evaluated this many times: 26607
+best intermediate value -1.79878
+finished depth 8 best value so far -1.70503
+Cost evaluated this many times: 36466
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -1.70503
+Cost evaluated this many times: 36466
+best intermediate value -1.51779
+finished depth 10 best value so far -1.51779
+Cost evaluated this many times: 46428
+best intermediate value -1.80743
+finished depth 11 best value so far -1.51779
+Cost evaluated this many times: 56465
+best intermediate value -1.11111e+11
+finished depth 12 best value so far -1.51779
+Cost evaluated this many times: 56465
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -1.51779
+Cost evaluated this many times: 56465
+best intermediate value -1.57178
+finished depth 14 best value so far -1.51779
+Cost evaluated this many times: 67320
+best intermediate value -1.11111e+11
+finished depth 15 best value so far -1.51779
+Cost evaluated this many times: 67320
+best intermediate value -1.42654
+finished depth 16 best value so far -1.42654
+Cost evaluated this many times: 76448
+double free or corruption (!prev)
+Makefile:23: recipe for target 'bin/resnet50block_auto_schedule2.a' failed
+make: *** [bin/resnet50block_auto_schedule2.a] Aborted (core dumped)
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/resnet_50_blockwise'
+
+
+RL_END_OF_RUN 3
+
