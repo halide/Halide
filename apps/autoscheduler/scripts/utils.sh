@@ -113,16 +113,19 @@ function retrain_cost_model() {
     local -r num_cores=$4
     local -r num_epochs=$5
     local -r pipeline_id=$6
-    local -r predictions_file=${7-""}
-    local -r verbose=${8-0}
-    local -r partition_schedules=${9-0}
+    local -r learning_rate=${7-0.001}
+    local -r predictions_file=${8-""}
+    local -r verbose=${9-0}
+    local -r partition_schedules=${10-0}
 
     get_absolute_autoscheduler_bin_dir ${halide_root} autosched_bin
+
+    echo "Using learning rate: ${learning_rate}"
 
     find ${samples_dir} -name "*.sample" | \
         ${autosched_bin}/retrain_cost_model \
             --epochs=${num_epochs} \
-            --rates="0.001" \
+            --rates=${learning_rate} \
             --num_cores=${num_cores} \
             --initial_weights=${weights} \
             --weights_out=${weights} \
@@ -393,7 +396,7 @@ function format_metrics() {
     fi
 
     for stage in ${stages}; do
-        grep -A 158 "kernel_${stage}" "${metrics_file}" | tail -n +2 | awk -v s="${stage}" '{printf("%s %s %f\n", s, $2, $NF);}' >> "${formatted_metrics_file}"
+        grep -A 4 "kernel_${stage}" "${metrics_file}" | tail -n +2 | awk -v s="${stage}" '{printf("%s %s %f\n", s, $2, $NF);}' >> "${formatted_metrics_file}"
         grep "kernel_${stage}" "${trace_64_file}" | tail -n 1 | awk -v s="${stage}" '{printf("%s registers_64 %d\n", s, $9);}' >> "${formatted_metrics_file}"
         grep "kernel_${stage}" "${trace_256_file}" | tail -n 1 | awk -v s="${stage}" '{printf("%s registers_256 %d\n", s, $9);}' >> "${formatted_metrics_file}"
     done

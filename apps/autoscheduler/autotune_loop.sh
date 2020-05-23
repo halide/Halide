@@ -24,6 +24,8 @@ AUTOSCHED_BIN=${5}
 BATCH_ID=${6}
 TRAIN_ONLY=${7}
 
+LEARNING_RATE=${LEARNING_RATE:-0.001}
+
 # Read the generator-arg sets into an array. Each set is delimited
 # by space; multiple values within each set are are delimited with ;
 # e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
@@ -260,7 +262,7 @@ benchmark_sample() {
 
     METRICS_CMD="HL_NUM_THREADS=${NUM_CORES} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
-        nvprof --metrics all \
+        nvprof --metrics gld_transactions,gst_transactions,gld_efficiency,gst_efficiency \
         --log-file ${D}/metrics.log \
         ${D}/bench \
         --output_extents=estimate \

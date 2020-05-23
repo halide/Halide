@@ -24,7 +24,7 @@ build_retrain_cost_model ${HALIDE_ROOT}
 NUM_CORES=80
 NUM_EPOCHS=1
 
-retrain_cost_model ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${NUM_CORES} ${NUM_EPOCHS} 0 ${PREDICTIONS_FILE}
+retrain_cost_model ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${NUM_CORES} ${NUM_EPOCHS} 0 0.001 ${PREDICTIONS_FILE}
 
 if [[ $INCLUDE_FILENAMES == 1 ]]; then
   exit
