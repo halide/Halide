@@ -493,6 +493,15 @@ FunctionDAG::Edge::BoundInfo::BoundInfo(const Expr &e, const Node::Stage &consum
     }
 }
 
+bool FunctionDAG::Edge::all_load_jacobian_coeffs_exist() const {
+    for (const auto& jac : load_jacobians) {
+        if (!jac.all_coeffs_exist()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void FunctionDAG::Edge::add_load_jacobian(LoadJacobian j1) {
     for (auto &j2 : load_jacobians) {
         if (j2.merge(j1)) return;

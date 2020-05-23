@@ -711,10 +711,12 @@ void State::mark_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, c
     }
 }
 
-bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, std::unordered_set<std::string>& new_serial_vars) const {
+bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, std::unordered_set<std::string>& new_serial_vars, std::ostringstream& staged_funcs_schedule_source) const {
     uint8_t num_loops_tagged_gpu_thread = 0;
     int64_t total_threads = 1;
     int max_threads[3] = {1024, 1024, 64};
+
+    bool first = true;
 
     for (const auto& v : state->vars) {
         if (!v.exists || !v.gpu_threads || v.extent == 1)  {
@@ -732,6 +734,27 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, 
         state->schedule_source << "\n    .split(" << v.var.name() << ", " << new_outer.name() << ", " << v.var.name() << ", " << v.extent << ", TailStrategy::GuardWithIf)";
         state->schedule_source << "\n    .gpu_threads(" << v.var.name() << ")";
         num_loops_tagged_gpu_thread++;
+
+        if (first) {
+            first = false;
+
+            Func func(state->node->func);
+
+            for (const auto *e : state->stage->incoming_edges) {
+                if (!state->constant_region_producers.contains(e->producer)) {
+                    continue;
+                }
+
+                Func producer(e->producer->func);
+                staged_funcs_schedule_source << producer.name() << ".in(" << func.name() << ").compute_at(" << func.name() << ", " << v.var.var.name() << ")";
+                for (const auto& l : e->producer->stages[0].loop) {
+                    Var unrolled_var(l.var);
+                    producer.in(func).compute_at(func, v.var.var).unroll(unrolled_var);
+                    staged_funcs_schedule_source << "\n    .unroll(" << unrolled_var.name() << ")";
+                }
+                staged_funcs_schedule_source << ";\n";
+            }
+        }
     }
 
     return num_loops_tagged_gpu_thread > 0;
@@ -881,6 +904,8 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
         }
     }
 
+    std::ostringstream staged_funcs_schedule_source;
+
     if (target.has_gpu_feature()) {
         std::set<const FunctionDAG::Node*> invalid;
         // Iterate from output backwards
@@ -908,7 +933,7 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
                     }
                 }
 
-                bool thread_loop_exists = mark_gpu_threads(p.second.get(), stage, new_serial_vars);
+                bool thread_loop_exists = mark_gpu_threads(p.second.get(), stage, new_serial_vars, staged_funcs_schedule_source);
                 // The stage has no threads and no blocks. This is likely an update
                 // stage where the reduction is a serial loop
                 if (!thread_loop_exists && !has_enclosing_parallel) {
@@ -982,6 +1007,9 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
             << p.second->schedule_source.str()
             << ";\n";
     }
+
+    src << staged_funcs_schedule_source.str();
+
     // Sanitize the names of things to make them legal source code.
     schedule_source = src.str();
     bool in_quotes = false;

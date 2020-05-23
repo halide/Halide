@@ -161,7 +161,7 @@ struct State {
 
     void mark_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents) const;
 
-    bool mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, std::unordered_set<std::string>& new_serial_vars) const;
+    bool mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, std::unordered_set<std::string>& new_serial_vars, std::ostringstream& staged_funcs_schedule_source) const;
 
     bool can_fuse_gpu(const vector<int64_t>& parallel_extents) const;
 

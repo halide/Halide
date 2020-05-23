@@ -3738,6 +3738,69 @@ int64_t LoopNest::product_of_descendants(int loop_index) const {
     return prod;
 }
 
+bool LoopNest::has_constant_region_required(const FunctionDAG::Node* node) const {
+    const auto& bounds = get_bounds(node);
+    for (int i = 0; i < node->dimensions; i++) {
+        if (!bounds->region_required(i).constant_extent()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool LoopNest::other_stage_has_same_producer(const FunctionDAG::Node* producer) const {
+    for (const auto& other_stage : node->stages) {
+        if (stage->index == other_stage.index) {
+            continue;
+        }
+
+        for (const auto *e : other_stage.incoming_edges) {
+            if (producer == e->producer) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+int LoopNest::num_serial_loops(const FunctionDAG::Node::Stage* stage) const {
+    int num_serial_loops = 0;
+    for (const auto &child : children) {
+        if (child->stage == stage) {
+            continue;
+        }
+
+        for (auto s : child->size) {
+            if (s > 1) {
+                ++num_serial_loops;
+                break;
+            }
+        }
+
+        num_serial_loops += child->num_serial_loops(stage);
+    }
+
+    return num_serial_loops;
+}
+
+int LoopNest::num_serial_loops() const {
+    return num_serial_loops(stage);
+}
+
+bool LoopNest::producer_computed_here_or_further_in(const FunctionDAG::Node* producer) const {
+    for (const auto &child : children) {
+        if (child->node == producer) {
+            return true;
+        }
+
+        if (child->producer_computed_here_or_further_in(producer)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // Apply the schedule represented by this loop nest to a Halide pipeline.
 void LoopNest::apply(LoopLevel here,
                      StageMap<std::unique_ptr<StageScheduleState>> &state_map,
@@ -3770,6 +3833,7 @@ void LoopNest::apply(LoopLevel here,
         if (!state_map.contains(stage)) {
             StageScheduleState *state = new StageScheduleState;
             state->node = node;
+            state->stage = stage;
             state->num_cores = num_cores;
             state->vector_dim = vector_dim;
             state->vectorized_loop_index = vectorized_loop_index;
@@ -3965,14 +4029,18 @@ void LoopNest::apply(LoopLevel here,
 
                     int64_t product_of_pure_loops = 1;
                     bool all_pure_loops_constant_size = true;
+                    bool all_loops_are_pure = true;
                     for (size_t i = 0; i < symbolic_loop.size(); i++) {
                         if (state.vars[i].pure) {
                             product_of_pure_loops *= state.vars[i].extent;
                             all_pure_loops_constant_size &= state.vars[i].constant_extent;
+                        } else {
+                            all_loops_are_pure = false;
                         }
                     }
 
                     if (product_of_pure_loops <= get_unroll_limit(target) && all_pure_loops_constant_size) {
+                        state.all_innermost_unrolled = all_loops_are_pure;
                         // There's a hope we can fit anything compute-at this level into registers if we fully unroll
                         // TODO: 16 should be the number of vector registers in the architecture
                         std::stable_sort(state.vars.begin(), state.vars.begin() + symbolic_loop.size(),
@@ -4022,6 +4090,7 @@ void LoopNest::apply(LoopLevel here,
         } else {
             loop_level = "_at(" + here.func() + ", " + here.var().name() + ")";
         }
+
         for (auto &c : children) {
             if (c->node != node) {
                 Func(c->node->func).compute_at(here);
@@ -4034,6 +4103,21 @@ void LoopNest::apply(LoopLevel here,
                 state.schedule_source << "\n    .compute" << loop_level;
             }
         }
+
+        if (gpu_label == thread) {
+            for (const auto *e : stage->incoming_edges) {
+                if (e->producer->is_input || !has_constant_region_required(e->producer) || !state.all_innermost_unrolled || num_serial_loops() > 1) {
+                    continue;
+                }
+
+                if (other_stage_has_same_producer(e->producer) || producer_computed_here_or_further_in(e->producer) || !e->all_load_jacobian_coeffs_exist()) {
+                    continue;
+                }
+
+                state.constant_region_producers.insert(e->producer, true);
+            }
+        }
+
         for (auto f : store_at) {
             bool computed_here = false;
             for (auto &c : children) {

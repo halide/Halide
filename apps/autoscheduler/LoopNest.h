@@ -506,8 +506,10 @@ struct LoopNest {
             FuncVar() : orig(Var()), var(Var()) {}
         };
         const FunctionDAG::Node* node;
+        const FunctionDAG::Node::Stage* stage;
         bool parallel = false;
         bool vectorized = false;
+        bool all_innermost_unrolled = false;
         FuncVar vectorized_var;
 
         // In order from innermost to outermost. Each group of d is one tiling level.
@@ -517,11 +519,19 @@ struct LoopNest {
         vector<FuncVar> ordered_vars;
         vector<int64_t> gpu_thread_extents;
 
+        NodeMap<bool> constant_region_producers;
+
         // From outermost in
         vector<StageScheduleState*> ancestors;
 
         std::ostringstream schedule_source;
     };
+
+    bool has_constant_region_required(const FunctionDAG::Node* node) const;
+    bool other_stage_has_same_producer(const FunctionDAG::Node* producer) const;
+    int num_serial_loops(const FunctionDAG::Node::Stage* stage) const;
+    int num_serial_loops() const;
+    bool producer_computed_here_or_further_in(const FunctionDAG::Node* producer) const;
 
     // Apply the schedule represented by this loop nest to a Halide pipeline.
     void apply(LoopLevel here,

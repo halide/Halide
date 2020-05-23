@@ -135,6 +135,15 @@ public:
         coeffs.resize(rows * cols);
     }
 
+    bool all_coeffs_exist() const {
+        for (const auto& coeff : coeffs) {
+            if (!coeff.exists()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool empty() const {
         return rows == 0;
     }
@@ -558,6 +567,8 @@ struct FunctionDAG {
         bool all_bounds_affine;
 
         vector<LoadJacobian> load_jacobians;
+
+        bool all_load_jacobian_coeffs_exist() const;
 
         void add_load_jacobian(LoadJacobian j1);
 
