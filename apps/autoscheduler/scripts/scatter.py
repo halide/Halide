@@ -16,7 +16,7 @@ def plot(predictions_file, app, output_dir):
   data = pd.read_csv(predictions_file, names=[predicted_label, actual_label])
 
   r2 = rsquared(data, predicted_label, actual_label)
-  title = "{}: Run Time Predictions ($R^2$ = {:.2f}; MSE = {:.2f})".format(app, r2, relative_loss(data, predicted_label, actual_label))
+  title = "{}: Run Time Predictions ($R^2$ = {:.2f}; Loss = {:.2f})".format(app, r2, relative_loss(data, predicted_label, actual_label))
   fig, ax = plt.subplots()
   plt.scatter(x=predicted_label, y=actual_label, data=data, s=5, linewidth=0.05, alpha=0.5)
 
