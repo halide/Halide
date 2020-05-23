@@ -1,0 +1,233 @@
+#!/usr/bin/env python3.6
+
+from statistics import median
+
+apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul resnet_50_blockwise".split(" ")
+autoschedulers="master random greedy beam manual mcts".split(" ")
+
+def strip_non_digits(s):
+    return "".join([c for c in s if c.isdigit() or c == "."])
+
+
+END_OF_RUN = "RL_END_OF_RUN"
+
+def get_rand_result(fname, scale, num_rand, linestart="Auto-scheduled time:"):
+    values = []
+
+    sub_values = []
+    try:
+        with open(fname) as f:
+            rand_vals = []
+            i = 0
+            for line in f:
+                if line.startswith(linestart):
+                    val = float(strip_non_digits(line)) / scale
+                    rand_vals.append(val)
+                    i += 1
+                # process
+                elif line.startswith(END_OF_RUN):
+                    # num of parts 
+                    num_part = int(len(rand_vals) / num_rand)
+                    
+                    rand_vals_parts = []
+                    for j in range(num_part):
+                        rand_vals_k = []
+                        for k in range(num_rand):
+                            idx = k * num_part + j
+                            rand_vals_k.append(rand_vals[idx])
+                        rand_vals_parts.append(rand_vals_k)
+
+                    rand_min_parts = []
+                    for j in range(num_part):
+                        value = min(rand_vals_parts[j])
+                        rand_min_parts.append(value)
+
+                    sub_values = rand_min_parts
+                    values.append(sub_values)
+                    rand_vals = []
+
+    except FileNotFoundError:
+        pass
+
+    #if len(sub_values) == 0:
+    #    sub_values.append(0)
+
+    #values.append(sub_values)
+
+    #return median(values)
+    return values
+
+
+def get_result(fname, scale, linestart="Auto-scheduled time:"):
+    values = []
+
+    sub_values = []
+    try:
+        with open(fname) as f:
+            for line in f:
+                if line.startswith(linestart):
+                    value = float(strip_non_digits(line)) / scale
+                    sub_values.append(value)
+                elif line.startswith(END_OF_RUN):
+                    values.append(sub_values)
+                    sub_values = []
+    except FileNotFoundError:
+        pass
+
+    #if len(sub_values) == 0:
+    #    sub_values.append(0)
+
+    #values.append(sub_values)
+
+    return values
+
+
+#num_rand is the # of random runs
+num_rand_runs = [] 
+for i, app in enumerate(apps):
+    num_rand_runs.append(1)
+
+
+with open('algo_runtime.csv','w') as f: 
+    print("algo_runtime")
+    print(",".join(autoschedulers))
+    f.write(",".join(autoschedulers)+"\n") 
+    for i, app in enumerate(apps):
+        scale = 1 
+        results = []
+        for autoscheduler in autoschedulers: 
+            values = get_result(f"../{autoscheduler}/{app}.runtime.txt", scale, f"{app} ")
+            if autoscheduler == 'random':
+                if len(values) > 0:
+                    # of random runs 
+                    num_rand_run = len(values[0])
+                    num_rand_runs[i] = num_rand_run
+            max_results = [] 
+            for sub_values in values:
+                max_results.append(max(sub_values))
+            if len(max_results) > 0:
+                result = sum(max_results) / len(max_results)
+            else:
+                result = -1
+            results.append(str(result))
+        print("{},{}".format(app, (',').join(results)))
+        f.write("{},{}\n".format(app, (',').join(results)))
+    print("\n")
+
+
+with open('mincost.csv','w') as f: 
+    print("mincost")
+    print(",".join(autoschedulers))
+    f.write(",".join(autoschedulers)+"\n") 
+
+    all_results = []
+    for i, app in enumerate(apps):
+        scale = 1 
+        results = []
+        for autoscheduler in autoschedulers: 
+            if autoscheduler == 'random':
+                values = get_rand_result(f"../{autoscheduler}/{app}.mincost.txt", scale, num_rand_runs[i], "JENNY_MINCOST: ")
+            else: 
+                values = get_result(f"../{autoscheduler}/{app}.mincost.txt", scale, "JENNY_MINCOST: ")
+
+            sum_results = [] 
+            for sub_values in values:
+                sum_results.append(sum(sub_values))
+
+            if len(sum_results) > 0:
+                result = min(sum_results)
+            else:
+                result = -1
+            results.append(str(result))
+        print("{},{}".format(app, (',').join(results)))
+        f.write("{},{}\n".format(app, (',').join(results)))
+    print("\n")
+
+
+with open('evaltime.csv','w') as f: 
+    print("evaltime")
+    print(",".join(autoschedulers))
+    f.write(",".join(autoschedulers)+"\n") 
+
+    for i, app in enumerate(apps):
+        scale = 1 
+        results = []
+        for autoscheduler in autoschedulers: 
+            if autoscheduler == 'random':
+                values = get_rand_result(f"../{autoscheduler}/{app}.evaltime.txt", scale, num_rand_runs[i], "JENNY_EVALTIME: ")
+            else: 
+                values = get_result(f"../{autoscheduler}/{app}.evaltime.txt", scale, "JENNY_EVALTIME: ")
+
+            sum_results = [] 
+            for sub_values in values:
+                sum_results.append(sum(sub_values))
+            if len(sum_results) > 0:
+                result = sum(sum_results) / len(sum_results)
+            else:
+                result = -1
+
+            results.append(str(result))
+
+        print("{},{}".format(app, (',').join(results)))
+        f.write("{},{}\n".format(app, (',').join(results)))
+    print("\n")
+
+
+with open('bm_min_runtime.csv','w') as f: 
+    print("bm_min_runtime")
+    print(",".join(autoschedulers))
+    f.write(",".join(autoschedulers)+"\n") 
+
+    all_results = []
+    for i, app in enumerate(apps):
+        scale = 1000 if app != "camera_pipe" else 1000000
+        results = []
+        for autoscheduler in autoschedulers: 
+            if autoscheduler == 'random':
+                values = get_rand_result(f"../{autoscheduler}/{app}.randtime.txt", scale, num_rand_runs[i])
+            elif autoscheduler == 'manual':
+                values = get_result(f"../greedy/{app}.txt", scale, "Manually-tuned time:")
+            else:
+                values = get_result(f"../{autoscheduler}/{app}.txt", scale)
+            sum_results = [] 
+            for sub_values in values:
+                sum_results.append(sum(sub_values))
+            if len(sum_results) > 0:
+                result = min(sum_results)
+            else:
+                result = -1
+            results.append(str(result))
+        print("{},{}".format(app, (',').join(results)))
+        f.write("{},{}\n".format(app, (',').join(results)))
+    print("\n")
+
+
+with open('bm_median_runtime.csv','w') as f: 
+    print("bm_median_runtime")
+    print(",".join(autoschedulers))
+    f.write(",".join(autoschedulers)+"\n") 
+
+    all_results = []
+    for i, app in enumerate(apps):
+        scale = 1000 if app != "camera_pipe" else 1000000
+        results = []
+        for autoscheduler in autoschedulers: 
+            if autoscheduler == 'random':
+                values = get_rand_result(f"../{autoscheduler}/{app}.randtime.txt", scale, num_rand_runs[i])
+            elif autoscheduler == 'manual':
+                values = get_result(f"../greedy/{app}.txt", scale, "Manually-tuned time:")
+            else:
+                values = get_result(f"../{autoscheduler}/{app}.txt", scale)
+            sum_results = [] 
+            for sub_values in values:
+                sum_results.append(sum(sub_values))
+            if len(sum_results) > 0:
+                result = median(sum_results)
+            else:
+                result = -1
+
+            results.append(str(result))
+        print("{},{}".format(app, (',').join(results)))
+        f.write("{},{}\n".format(app, (',').join(results)))
+    print("\n")
+

@@ -1,0 +1,44 @@
+#!/usr/bin/env python3.6
+
+from statistics import median
+
+apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul resnet_50_blockwise".split(" ")
+
+def strip_non_digits(s):
+    return "".join([c for c in s if c.isdigit() or c == "."])
+
+print("test,master,greedy,beam,manual,mcts")
+
+END_OF_RUN = "RL_END_OF_RUN"
+
+def get_median(fname, scale, linestart="Auto-scheduled time:"):
+    value = 0
+    values = []
+
+    try:
+        with open(fname) as f:
+            for line in f:
+                if line.startswith(linestart):
+                    value += float(strip_non_digits(line)) / scale
+                elif line.startswith(END_OF_RUN):
+                    values.append(value)
+                    value = 0
+    except FileNotFoundError:
+        pass
+
+    if len(values) == 0:
+        values.append(value)
+
+    return median(values)
+
+for app in apps:
+    scale = 1000 if app != "camera_pipe" else 1000000
+
+    manual = get_median(f"../greedy/{app}.txt", scale, "Manually-tuned time:")
+    greedy = get_median(f"../greedy/{app}.txt", scale)
+    beam = get_median(f"../beam/{app}.txt", scale)
+    mcts = get_median(f"../mcts/{app}.txt", scale)
+    master = get_median(f"../master/{app}.txt", scale)
+
+    print(f"{app},{master},{greedy},{beam},{manual},{mcts}")
+

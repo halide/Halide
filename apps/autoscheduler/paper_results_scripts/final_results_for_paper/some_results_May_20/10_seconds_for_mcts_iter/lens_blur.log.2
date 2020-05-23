@@ -1,0 +1,315 @@
+make: Entering directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp lens_blur_generator.cpp /home/ubuntu/llvm-project/Halide/distrib/tools/GenGen.cpp -o bin/host/lens_blur.generator -Wl,-rpath,/home/ubuntu/llvm-project/Halide/distrib/bin/ -L /home/ubuntu/llvm-project/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/lens_blur.generator -g lens_blur -e static_library,h,registration,stmt,assembly -o bin/host -f lens_blur target=host auto_schedule=false
+bin/host/lens_blur.generator -g lens_blur -e static_library,h,registration,stmt,assembly -o bin/host -f lens_blur_auto_schedule target=host-no_runtime auto_schedule=true -p /home/ubuntu/llvm-project/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+mcts_depth 152
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+best intermediate value -10.3368
+finished depth 1 best value so far -10.3368
+best intermediate value -12.2601
+finished depth 2 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 3 best value so far -10.3368
+best intermediate value -12.0243
+finished depth 4 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 5 best value so far -10.3368
+best intermediate value -12.0777
+finished depth 6 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 7 best value so far -10.3368
+best intermediate value -11.9918
+finished depth 8 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 9 best value so far -10.3368
+best intermediate value -11.4461
+finished depth 10 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 11 best value so far -10.3368
+best intermediate value -11.7158
+finished depth 12 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 13 best value so far -10.3368
+best intermediate value -11.9317
+finished depth 14 best value so far -10.3368
+best intermediate value -11.9027
+finished depth 15 best value so far -10.3368
+best intermediate value -12.0927
+finished depth 16 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 17 best value so far -10.3368
+best intermediate value -12.2223
+finished depth 18 best value so far -10.3368
+best intermediate value -12.0093
+finished depth 19 best value so far -10.3368
+best intermediate value -10.8995
+finished depth 20 best value so far -10.3368
+best intermediate value -11.2161
+finished depth 21 best value so far -10.3368
+best intermediate value -11.0664
+finished depth 22 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 23 best value so far -10.3368
+best intermediate value -11.3803
+finished depth 24 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 25 best value so far -10.3368
+best intermediate value -11.2428
+finished depth 26 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 27 best value so far -10.3368
+best intermediate value -12.0073
+finished depth 28 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 29 best value so far -10.3368
+best intermediate value -10.488
+finished depth 30 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 31 best value so far -10.3368
+best intermediate value -10.3404
+finished depth 32 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 33 best value so far -10.3368
+best intermediate value -10.4437
+finished depth 34 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 35 best value so far -10.3368
+best intermediate value -10.3875
+finished depth 36 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 37 best value so far -10.3368
+best intermediate value -10.6541
+finished depth 38 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 39 best value so far -10.3368
+best intermediate value -10.3977
+finished depth 40 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 41 best value so far -10.3368
+best intermediate value -10.5284
+finished depth 42 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 43 best value so far -10.3368
+best intermediate value -10.5431
+finished depth 44 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 45 best value so far -10.3368
+best intermediate value -10.4782
+finished depth 46 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 47 best value so far -10.3368
+best intermediate value -10.5554
+finished depth 48 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 49 best value so far -10.3368
+best intermediate value -10.4417
+finished depth 50 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 51 best value so far -10.3368
+best intermediate value -10.5047
+finished depth 52 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 53 best value so far -10.3368
+best intermediate value -10.4136
+finished depth 54 best value so far -10.3368
+best intermediate value -10.4236
+finished depth 55 best value so far -10.3368
+best intermediate value -10.4788
+finished depth 56 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 57 best value so far -10.3368
+best intermediate value -10.4091
+finished depth 58 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 59 best value so far -10.3368
+best intermediate value -10.4293
+finished depth 60 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 61 best value so far -10.3368
+best intermediate value -10.4238
+finished depth 62 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 63 best value so far -10.3368
+best intermediate value -10.4215
+finished depth 64 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 65 best value so far -10.3368
+best intermediate value -10.4989
+finished depth 66 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 67 best value so far -10.3368
+best intermediate value -10.4232
+finished depth 68 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 69 best value so far -10.3368
+best intermediate value -10.436
+finished depth 70 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 71 best value so far -10.3368
+best intermediate value -10.4158
+finished depth 72 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 73 best value so far -10.3368
+best intermediate value -10.4197
+finished depth 74 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 75 best value so far -10.3368
+best intermediate value -10.4325
+finished depth 76 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 77 best value so far -10.3368
+best intermediate value -10.4224
+finished depth 78 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 79 best value so far -10.3368
+best intermediate value -10.4236
+finished depth 80 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 81 best value so far -10.3368
+best intermediate value -10.4245
+finished depth 82 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 83 best value so far -10.3368
+best intermediate value -10.4251
+finished depth 84 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 85 best value so far -10.3368
+best intermediate value -10.5043
+finished depth 86 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 87 best value so far -10.3368
+best intermediate value -10.4289
+finished depth 88 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 89 best value so far -10.3368
+best intermediate value -10.4396
+finished depth 90 best value so far -10.3368
+best intermediate value -10.4341
+finished depth 91 best value so far -10.3368
+best intermediate value -10.4281
+finished depth 92 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 93 best value so far -10.3368
+best intermediate value -10.5118
+finished depth 94 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 95 best value so far -10.3368
+best intermediate value -10.4288
+finished depth 96 best value so far -10.3368
+best intermediate value -10.4315
+finished depth 97 best value so far -10.3368
+best intermediate value -10.4128
+finished depth 98 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 99 best value so far -10.3368
+best intermediate value -10.4166
+finished depth 100 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 101 best value so far -10.3368
+best intermediate value -10.4996
+finished depth 102 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 103 best value so far -10.3368
+best intermediate value -10.3763
+finished depth 104 best value so far -10.3368
+best intermediate value -10.374
+finished depth 105 best value so far -10.3368
+best intermediate value -10.3718
+finished depth 106 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 107 best value so far -10.3368
+best intermediate value -10.3757
+finished depth 108 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 109 best value so far -10.3368
+best intermediate value -10.3824
+finished depth 110 best value so far -10.3368
+best intermediate value -1.11111e+11
+finished depth 111 best value so far -10.3368
+best intermediate value -10.3154
+finished depth 112 best value so far -10.3154
+best intermediate value -10.1672
+finished depth 113 best value so far -10.1672
+best intermediate value -10.2429
+finished depth 114 best value so far -10.1672
+best intermediate value -1.11111e+11
+finished depth 115 best value so far -10.1672
+best intermediate value -10.2122
+finished depth 116 best value so far -10.1672
+best intermediate value -1.11111e+11
+finished depth 117 best value so far -10.1672
+best intermediate value -10.1286
+finished depth 118 best value so far -10.1286
+best intermediate value -1.11111e+11
+finished depth 119 best value so far -10.1286
+best intermediate value -9.54933
+finished depth 120 best value so far -9.54933
+best intermediate value -9.56972
+finished depth 121 best value so far -9.54933
+best intermediate value -9.51822
+finished depth 122 best value so far -9.51822
+best intermediate value -1.11111e+11
+finished depth 123 best value so far -9.51822
+best intermediate value -9.50535
+finished depth 124 best value so far -9.50535
+best intermediate value -1.11111e+11
+finished depth 125 best value so far -9.50535
+best intermediate value -9.11629
+finished depth 126 best value so far -9.11629
+best intermediate value -1.11111e+11
+finished depth 127 best value so far -9.11629
+best intermediate value -9.00911
+finished depth 128 best value so far -9.00911
+best intermediate value -8.96208
+finished depth 129 best value so far -8.96208
+best intermediate value -8.96208
+finished depth 130 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 131 best value so far -8.96208
+best intermediate value -8.96208
+finished depth 132 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 133 best value so far -8.96208
+best intermediate value -8.96208
+finished depth 134 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 135 best value so far -8.96208
+best intermediate value -8.96208
+finished depth 136 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 137 best value so far -8.96208
+best intermediate value -8.96208
+finished depth 138 best value so far -8.96208
+best intermediate value -8.96208
+finished depth 139 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 140 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 141 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 142 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 143 best value so far -8.96208
+best intermediate value -8.96208
+finished depth 144 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 145 best value so far -8.96208
+best intermediate value -8.96208
+finished depth 146 best value so far -8.96208
+best intermediate value -8.96208
+finished depth 147 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 148 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 149 best value so far -8.96208
+best intermediate value -1.11111e+11
+finished depth 150 best value so far -8.96208
+JENNY_MINCOST: 8.96208
+JENNY_EVALTIME: 2546900
+num_best_decisions: 78num_random_decisions: 6
+c++ -O3 -std=c++11 -I /home/ubuntu/llvm-project/Halide/distrib/include/ -I /home/ubuntu/llvm-project/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host -Wall process.cpp bin/host/lens_blur.a bin/host/lens_blur_auto_schedule.a -o bin/host/process  -ldl -lpthread -lz -L/home/ubuntu/anaconda3/envs/halide/lib -lpng16  -ljpeg -I/home/ubuntu/anaconda3/envs/halide/include/libpng16 -I/home/ubuntu/anaconda3/envs/halide/include/libpng16/..   
+rm bin/host/lens_blur.a bin/host/lens_blur_auto_schedule.a
+make: Leaving directory '/home/ubuntu/llvm-project/Halide/apps/lens_blur'
