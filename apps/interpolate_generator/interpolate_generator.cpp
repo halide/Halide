@@ -23,6 +23,14 @@ public:
         Func upsampled[levels];
         Func upsampledx[levels];
 
+        for (int i = 0; i < levels; ++i) {
+            downsampled[i] = Func("downsampled_" + std::to_string(i));
+            downx[i] = Func("downx_" + std::to_string(i));
+            interpolated[i] = Func("interpolated_" + std::to_string(i));
+            upsampled[i] = Func("upsampled_" + std::to_string(i));
+            upsampledx[i] = Func("upsampledx_" + std::to_string(i));
+        }
+
         Func clamped = Halide::BoundaryConditions::repeat_edge(input_);
 
         downsampled[0](x, y, c) = select(c < 3, clamped(x, y, c) * clamped(x, y, 3), clamped(x, y, 3));
