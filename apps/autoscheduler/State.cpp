@@ -741,7 +741,7 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, 
             Func func(state->node->func);
 
             for (const auto *e : state->stage->incoming_edges) {
-                if (!state->constant_region_producers.contains(e->producer)) {
+                if (!state->producers_to_be_staged.contains(e->producer)) {
                     continue;
                 }
 

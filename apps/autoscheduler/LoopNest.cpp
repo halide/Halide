@@ -4034,7 +4034,7 @@ void LoopNest::apply(LoopLevel here,
                         if (state.vars[i].pure) {
                             product_of_pure_loops *= state.vars[i].extent;
                             all_pure_loops_constant_size &= state.vars[i].constant_extent;
-                        } else {
+                        } else if (state.vars[i].exists) {
                             all_loops_are_pure = false;
                         }
                     }
@@ -4104,9 +4104,9 @@ void LoopNest::apply(LoopLevel here,
             }
         }
 
-        if (gpu_label == thread) {
+        if (gpu_label == thread && state.all_innermost_unrolled && num_serial_loops() <= 1) {
             for (const auto *e : stage->incoming_edges) {
-                if (e->producer->is_input || !has_constant_region_required(e->producer) || !state.all_innermost_unrolled || num_serial_loops() > 1) {
+                if (e->producer->is_input || !has_constant_region_required(e->producer)) {
                     continue;
                 }
 
@@ -4114,7 +4114,7 @@ void LoopNest::apply(LoopLevel here,
                     continue;
                 }
 
-                state.constant_region_producers.insert(e->producer, true);
+                state.producers_to_be_staged.insert(e->producer, true);
             }
         }
 

@@ -519,7 +519,7 @@ struct LoopNest {
         vector<FuncVar> ordered_vars;
         vector<int64_t> gpu_thread_extents;
 
-        NodeMap<bool> constant_region_producers;
+        NodeMap<bool> producers_to_be_staged;
 
         // From outermost in
         vector<StageScheduleState*> ancestors;
