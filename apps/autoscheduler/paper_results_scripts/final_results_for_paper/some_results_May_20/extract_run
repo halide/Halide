@@ -3,7 +3,7 @@
 from statistics import median
 
 apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul resnet_50_blockwise".split(" ")
-autoschedulers="master random greedy beam manual mcts".split(" ")
+autoschedulers="master random greedy beam manual mcts mcts_Cp10 mcts_10seconds mcts_1second mcts_cost+real".split(" ")
 
 def strip_non_digits(s):
     return "".join([c for c in s if c.isdigit() or c == "."])
