@@ -2,10 +2,9 @@
 
 from statistics import median
 import glob
-import os
 
 apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu mat_mul resnet_50_blockwise".split(" ")
-autoschedulers="master random greedy beam mcts mcts_Cp_10 manual".split(" ")
+autoschedulers="master random greedy beam mcts mcts_Cp10 mcts_cost+real manual".split(" ")
 
 def strip_non_digits(s):
     return "".join([c for c in s if c.isdigit() or c == "."])
@@ -160,13 +159,8 @@ with open('mincost.csv','w') as f:
         for autoscheduler in autoschedulers: 
             if autoscheduler == 'random':
                 values = get_rand_result(f"../{autoscheduler}/{app}.mincost.txt", scale, num_rand_runs[i], "JENNY_MINCOST: ")
-            # if autoscheduler.startswith('mcts'):
-            #     tmp_log = f"../{autoscheduler}/{app}.tmp.log"
-            #     os.system(f"echo > {tmp_log}")
-            #     for log in glob.glob(f"../{autoscheduler}/{app}.log.*"):
-            #         os.system(f"cat {log} >> {tmp_log}")
-            #     values = get_mcts_result(f"tmp_log", scale, "JENNY_MINCOST: ")
-                #values = get_mcts_result(f"../{autoscheduler}/{app}.log", scale, "JENNY_MINCOST: ")
+            if autoscheduler == 'mcts_cost+real':
+                values = get_mcts_result(f"../{autoscheduler}/{app}.log", scale, "JENNY_MINCOST: ")
             else: 
                 values = get_result(f"../{autoscheduler}/{app}.mincost.txt", scale, "JENNY_MINCOST: ")
 
@@ -183,7 +177,6 @@ with open('mincost.csv','w') as f:
         f.write("{},{}\n".format(app, (',').join(results)))
     print("\n")
 
-
 with open('evaltime.csv','w') as f: 
     print("evaltime")
     print(",".join(autoschedulers))
@@ -195,14 +188,8 @@ with open('evaltime.csv','w') as f:
         for autoscheduler in autoschedulers: 
             if autoscheduler == 'random':
                 values = get_rand_result(f"../{autoscheduler}/{app}.evaltime.txt", scale, num_rand_runs[i], "JENNY_EVALTIME: ")
-            #if autoscheduler.startswith('mcts'):
-            #    tmp_log = f"../{autoscheduler}/{app}.tmp.log"
-            #    os.system(f"echo > {tmp_log}")
-            #    for log in glob.glob(f"../{autoscheduler}/{app}.log.*"):
-            #        os.system(f"cat {log} >> {tmp_log}")
-            #    tmp_log = f"../{autoscheduler}/{app}.tmp.log"
-            #    values = get_mcts_result(f"tmp_log", scale, "JENNY_EVALTIME: ")
-                #values = get_mcts_result(f"../{autoscheduler}/{app}.log", scale, "JENNY_EVALTIME: ")
+            if autoscheduler == 'mcts_cost+real':
+                values = get_mcts_result(f"../{autoscheduler}/{app}.log", scale, "JENNY_EVALTIME: ")
             else: 
                 values = get_result(f"../{autoscheduler}/{app}.evaltime.txt", scale, "JENNY_EVALTIME: ")
 
