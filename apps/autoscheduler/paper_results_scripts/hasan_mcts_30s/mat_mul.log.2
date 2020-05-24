@@ -1,0 +1,129 @@
+make: Entering directory '/home/ubuntu/Halide/apps/mat_mul'
+c++ -O3 -std=c++11 -I /home/ubuntu/Halide/distrib/include/ -I /home/ubuntu/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp mat_mul_generator.cpp /home/ubuntu/Halide/distrib/bin/libHalide.so /home/ubuntu/Halide/distrib/tools/GenGen.cpp -o bin/host/mat_mul.generator -Wl,-rpath,/home/ubuntu/Halide/distrib/bin/ -L /home/ubuntu/Halide/distrib/bin/ -lHalide  -ldl -lpthread -lz
+bin/host/mat_mul.generator -g mat_mul -e static_library,h,registration,stmt,assembly -o bin/host -f mat_mul target=host auto_schedule=false
+bin/host/mat_mul.generator -g mat_mul -e static_library,h,registration,stmt,assembly -o bin/host -f mat_mul_auto_schedule target=host-no_runtime auto_schedule=true -p /home/ubuntu/Halide/apps/autoscheduler/bin/libauto_schedule.so -s Adams2019
+mcts_depth 8
+num_random_trees 15
+num_greedy_trees 1
+best intermediate value -1.11111e+11
+finished depth 0 best value so far 0
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.5766
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.5766
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.5766
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.5766
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.5766
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.5766
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.5766
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.5766
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+JENNY_MINCOST: 11.5766
+JENNY_EVALTIME: 3052370
+num_best_decisions: 0num_random_decisions: 0
+best intermediate value -11.6818
+finished depth 1 best value so far 0
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 1
+best intermediate value -11.6818
+finished depth 2 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 3 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 4 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 5 best value so far 0
+best intermediate value -1.11111e+11
+finished depth 6 best value so far 0
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 2
+JENNY_MINCOST: 11.6818
+JENNY_EVALTIME: 6164559
+num_best_decisions: 0num_random_decisions: 2
+c++ -O3 -std=c++11 -I /home/ubuntu/Halide/distrib/include/ -I /home/ubuntu/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -fopenmp -Ibin/host -Wall filter.cpp bin/host/mat_mul.a bin/host/mat_mul_auto_schedule.a -o bin/host/filter  -ldl -lpthread -lz
+rm bin/host/mat_mul_auto_schedule.a bin/host/mat_mul.a
+make: Leaving directory '/home/ubuntu/Halide/apps/mat_mul'

@@ -1,0 +1,28 @@
+
+make: Entering directory '/home/ubuntu/Halide/apps/iir_blur'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 11.1264ms
+Auto-scheduled time: 21.1739ms
+make: Leaving directory '/home/ubuntu/Halide/apps/iir_blur'
+
+
+RL_END_OF_RUN 1
+
+make: Entering directory '/home/ubuntu/Halide/apps/iir_blur'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 11.2744ms
+Auto-scheduled time: 22.0494ms
+make: Leaving directory '/home/ubuntu/Halide/apps/iir_blur'
+
+
+RL_END_OF_RUN 2
+
+make: Entering directory '/home/ubuntu/Halide/apps/iir_blur'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 11.256ms
+Auto-scheduled time: 19.0318ms
+make: Leaving directory '/home/ubuntu/Halide/apps/iir_blur'
+
+
+RL_END_OF_RUN 3
+

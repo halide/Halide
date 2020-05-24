@@ -1,0 +1,5 @@
+#!/bin/bash
+
+for test in bilateral_grid nl_means camera_pipe stencil_chain harris hist max_filter unsharp conv_layer mat_mul iir_blur local_laplacian; do
+    cp ../large_server_mcts/$test.* .
+done

@@ -1,0 +1,5 @@
+#!/bin/bash
+
+for test in bgu interpolate; do
+    cp ../small_server_mcts/$test.* .
+done
