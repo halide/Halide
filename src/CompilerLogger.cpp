@@ -100,8 +100,8 @@ JSONCompilerLogger::JSONCompilerLogger(
       obfuscate_exprs(obfuscate_exprs) {
 }
 
-void JSONCompilerLogger::record_matched_simplifier_rule(const std::string &rulename) {
-    matched_simplifier_rules[rulename] += 1;
+void JSONCompilerLogger::record_matched_simplifier_rule(const std::string &rulename, Expr expr) {
+    matched_simplifier_rules[rulename].emplace_back(std::move(expr));
 }
 
 void JSONCompilerLogger::record_non_monotonic_loop_var(const std::string &loop_var, Expr expr) {
@@ -122,18 +122,14 @@ void JSONCompilerLogger::record_compilation_time(Phase phase, double duration) {
 void JSONCompilerLogger::obfuscate() {
     {
         std::map<std::string, std::vector<Expr>> n;
-        int i = 0;
-        for (const auto &it : non_monotonic_loop_vars) {
-            std::string loop_name = "loop" + std::to_string(i++);
+        for (const auto &it : matched_simplifier_rules) {
+            std::string rule = it.first;
             for (const auto &e : it.second) {
-                // Create a new obfuscater for every Expr, but take pains to ensure
-                // that the loop var has a distinct name. (Note that for nested loops,
-                // loop vars of enclosing loops will be treated like any other var.)
-                ObfuscateNames obfuscater({{it.first, loop_name}});
-                n[loop_name].emplace_back(obfuscater.mutate(e));
+                ObfuscateNames obfuscater;
+                n[rule].emplace_back(obfuscater.mutate(e));
             }
         }
-        non_monotonic_loop_vars = n;
+        matched_simplifier_rules = n;
     }
     {
         std::vector<std::pair<Expr, Expr>> n;
@@ -185,7 +181,10 @@ std::ostream &emit_value(std::ostream &o, const VALUE &value) {
 
 template<>
 std::ostream &emit_value<std::string>(std::ostream &o, const std::string &value) {
-    o << "\"" << value << "\"";
+    std::string v = value;
+    v = replace_all(v, "\\", "\\\\");
+    v = replace_all(v, "\"", "\\\"");
+    o << "\"" << v << "\"";
     return o;
 }
 
@@ -283,21 +282,17 @@ std::ostream &JSONCompilerLogger::emit_to_stream(std::ostream &o) {
     }
 
     if (!matched_simplifier_rules.empty()) {
-        using P = std::pair<std::string, int64_t>;
+        emit_object_key_open(o, indent, "matched_simplifier_rules");
 
-        // Sort these in descending order by usage,
-        // just to make casual reading of the output easier
-        struct Compare {
-            bool operator()(const P &a, const P &b) const {
-                return a.second > b.second;
-            }
-        };
-
-        std::set<P, Compare> sorted;
+        int commas_to_emit = (int)matched_simplifier_rules.size() - 1;
         for (const auto &it : matched_simplifier_rules) {
-            sorted.emplace(it.first, it.second);
+            const auto &loop_var = it.first;
+            emit_key(o, indent + 1, loop_var);
+            emit_eol(o, false);
+            emit_list(o, indent + 1, exprs_to_strings(it.second), (commas_to_emit-- > 0));
         }
-        emit_pairs(o, indent, "matched_simplifier_rules", sorted);
+
+        emit_object_key_close(o, indent);
     }
 
     if (!non_monotonic_loop_vars.empty()) {

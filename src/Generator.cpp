@@ -736,6 +736,8 @@ std::string halide_type_to_c_type(const Type &t) {
         {encode(UInt(16)), "uint16_t"},
         {encode(UInt(32)), "uint32_t"},
         {encode(UInt(64)), "uint64_t"},
+        {encode(BFloat(16)), "uint16_t"},  // TODO: see Issues #3709, #3967
+        {encode(Float(16)), "uint16_t"},   // TODO: see Issues #3709, #3967
         {encode(Float(32)), "float"},
         {encode(Float(64)), "double"},
         {encode(Handle(64)), "void*"}};

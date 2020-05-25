@@ -47,9 +47,13 @@ public:
     Output<Buffer<>> tupled_output{"tupled_output", {Float(32), Int(32)}, 3};
     Output<Buffer<uint8_t>> static_compiled_buffer_output{"static_compiled_buffer_output", 3};
     Output<Buffer<uint8_t>[2]> array_buffer_output { "array_buffer_output", 3 };
+    Output<Buffer<Halide::float16_t>> float16_output{"float16_output", 3};
+    Output<Buffer<Halide::bfloat16_t>> bfloat16_output{"bfloat16_output", 3};
 
     void generate() {
         simple_output(x, y, c) = cast<float>(simple_input(x, y, c));
+        float16_output(x, y, c) = cast<Halide::float16_t>(simple_input(x, y, c));
+        bfloat16_output(x, y, c) = cast<Halide::bfloat16_t>(simple_input(x, y, c));
 
         typed_buffer_output(x, y, c) = cast<float>(typed_buffer_input(x, y, c));
         // Note that if we are being invoked via a Stub, "untyped_buffer_output.type()" will

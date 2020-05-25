@@ -78,37 +78,40 @@ public:
                 .compute_at(prod, ty)
                 .split(Bx, xo, xi, warp_size)
                 .gpu_lanes(xi)
-                .unroll(xo).unroll(By);
+                .unroll(xo)
+                .unroll(By);
 
             A.in()
                 .compute_at(prod, rxo)
                 .vectorize(Ax, vec_size)
                 .split(Ax, xo, xi, warp_size)
                 .gpu_lanes(xi)
-                .unroll(xo).split(Ay, yo, yi, y_tile)
-                .gpu_threads(yi).unroll(yo);
+                .unroll(xo)
+                .split(Ay, yo, yi, y_tile)
+                .gpu_threads(yi)
+                .unroll(yo);
 
-            A.in().in().compute_at(prod, rxi)
+            A.in()
+                .in()
+                .compute_at(prod, rxi)
                 .vectorize(Ax, vec_size)
                 .split(Ax, xo, xi, warp_size)
                 .gpu_lanes(xi)
-                .unroll(xo).unroll(Ay);
+                .unroll(xo)
+                .unroll(Ay);
 
             set_alignment_and_bounds(A, size);
             set_alignment_and_bounds(B, size);
             set_alignment_and_bounds(out, size);
         } else {
-            A.dim(0).set_estimate(0, size)
-                .dim(1).set_estimate(0, size);
-            B.dim(0).set_estimate(0, size)
-                .dim(1).set_estimate(0, size);
+            A.dim(0).set_estimate(0, size).dim(1).set_estimate(0, size);
+            B.dim(0).set_estimate(0, size).dim(1).set_estimate(0, size);
         }
 
         // Always specify bounds for outputs, whether autoscheduled or not
         out
             .bound(x, 0, size)
             .bound(y, 0, size);
-
     }
 };
 
