@@ -384,8 +384,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Allocate target machine
 
     std::string err_str;
-    const llvm::Target *target = TargetRegistry::lookupTarget(triple.str(), err_str);
-    internal_assert(target) << err_str << "\n";
+    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(triple.str(), err_str);
+    internal_assert(llvm_target) << err_str << "\n";
 
     TargetOptions options;
     options.PrintMachineCode = false;
@@ -399,11 +399,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.StackAlignmentOverride = 0;
 
     std::unique_ptr<TargetMachine>
-        target_machine(target->createTargetMachine(triple.str(),
-                                                   mcpu(), mattrs(), options,
-                                                   llvm::Reloc::PIC_,
-                                                   llvm::CodeModel::Small,
-                                                   CodeGenOpt::Aggressive));
+        target_machine(llvm_target->createTargetMachine(triple.str(),
+                                                        mcpu(), mattrs(), options,
+                                                        llvm::Reloc::PIC_,
+                                                        llvm::CodeModel::Small,
+                                                        CodeGenOpt::Aggressive));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
 
@@ -449,8 +449,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     PassManagerBuilder b;
     b.OptLevel = 3;
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = true;
+    b.LoopVectorize = !target.has_feature(Target::DisableLLVMLoopOpt);
     b.SLPVectorize = true;
+    b.DisableUnrollLoops = target.has_feature(Target::DisableLLVMLoopOpt);
 
     target_machine->adjustPassManager(b);
 
