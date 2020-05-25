@@ -1167,6 +1167,9 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
 
     {
         int num_requests = thread_info.num_regular_active_warps_per_block * serial_loop_extents;
+        if (verbose) {
+            aslog(0) << "num regular warps: " << thread_info.num_regular_active_warps_per_block << "\n";
+        }
 
         GlobalAccessAccumulator accumulator(bytes_per_access, dimensions, strides, verbose);
         thread_info.for_each_thread_id_in_first_warp(accumulator);
@@ -1466,7 +1469,7 @@ double LoopNest::points_accessed_per_thread(const MachineParams& params, const T
     for (int i = 0; i < producer->dimensions; i++) {
         num_points *= bounds->region_required(i).extent();
         if (verbose) {
-            aslog(0) << "region_required(i) = " << bounds->region_required(i).extent() << "; ";
+            aslog(0) << "region_required(" << i << ") = " << bounds->region_required(i).extent() << "; ";
         }
     }
 
@@ -1474,11 +1477,11 @@ double LoopNest::points_accessed_per_thread(const MachineParams& params, const T
 
     if (verbose) {
         aslog(0) << "\n";
-        aslog(0) << "original points_accessed_per_thread = " << num_points;
-        aslog(0) << "; total_inner_serial_extents = " << gpu_loop_info.total_inner_serial_extents;
-        aslog(0) << "; total_outer_serial_extents = " << gpu_loop_info.total_outer_serial_extents;
-        aslog(0) << "; final points_accessed_per_thread = " << points_accessed;
-        aslog(0) << "; n = " << n << "\n";
+        aslog(0) << "original points_accessed_per_thread = " << num_points << "\n";
+        aslog(0) << "total_inner_serial_extents = " << gpu_loop_info.total_inner_serial_extents << "\n";
+        aslog(0) << "total_outer_serial_extents = " << gpu_loop_info.total_outer_serial_extents << "\n";
+        aslog(0) << "n = " << n << "\n";
+        aslog(0) << "final points_accessed_per_thread = " << points_accessed << "\n";
     }
 
     return points_accessed;
@@ -2480,6 +2483,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                                 if (verbose) {
                                     aslog(0) << "BEGIN global_mem_load. consumer: " << node->func.name() <<  "; producer: " << e->producer->func.name() <<"\n";
+                                    aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
                                 }
 
                                 double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, e->producer, parent, grandparent, n, feat, verbose);
@@ -3305,7 +3309,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
         // Pick a better representative loop iteration for the
         // inner loops.
         min += (outer_extent / 2) * extent;
-        bool compile_time_constant_bounds = p.constant_extent() || ((outer_extent > 1) && stage->loop[i].pure);
+        bool compile_time_constant_bounds = p.constant_extent() || stage->loop[i].pure;
         b->loops(stage->index, i) = Span(min, min + extent - 1, compile_time_constant_bounds);
     }
     outer->set_bounds(node, b);
@@ -3534,10 +3538,8 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                     int64_t inner_extent = (original_extent + outer_extent - 1) / outer_extent;
                     // Pick a more representative loop iteration
                     min += (outer_extent / 2) * inner_extent;
-                    bool compile_time_constant_extent =
-                        (p.constant_extent() || outer_extent > 1) &&
-                        (inner_extent == 1 || outer_extent == 1 || stage->index == 0);
-                    b->loops(stage->index, i) = Span(min, min + inner_extent - 1, compile_time_constant_extent);
+                    bool compile_time_constant_bounds = p.constant_extent() || stage->loop[i].pure;
+                    b->loops(stage->index, i) = Span(min, min + inner_extent - 1, compile_time_constant_bounds);
                 }
 
                 // Region_{computed/required} on outer is now
@@ -3971,10 +3973,7 @@ void LoopNest::apply(LoopLevel here,
                     if (!parent.exists || factor == 1) {
                         v.exists = false;
                         v.extent = 1;
-                    } else if (size[parent.index] == 1 && !(child &&
-                                                            child->innermost &&
-                                                            parent.innermost_pure_dim &&
-                                                            parent.var.name() == parent.orig.name())) {
+                    } else if (size[parent.index] == 1 && parent.var.is_rvar) {
                         // Not split in this dimension
                         v = parent;
                         v.parallel = false;
