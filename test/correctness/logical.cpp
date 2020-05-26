@@ -30,7 +30,10 @@ int main(int argc, char **argv) {
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
+            f.gpu_tile(x, y, xi, yi, 16, 16);
+            if (!target.has_feature(Target::OpenGLCompute)) {
+                f.vectorize(xi, 4);
+            }
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -63,7 +66,10 @@ int main(int argc, char **argv) {
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
+            f.gpu_tile(x, y, xi, yi, 16, 16);
+            if (!target.has_feature(Target::OpenGLCompute)) {
+                f.vectorize(xi, 4);
+            }
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -94,7 +100,10 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
 
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
+            f.gpu_tile(x, y, xi, yi, 16, 16);
+            if (!target.has_feature(Target::OpenGLCompute)) {
+                f.vectorize(xi, 4);
+            }
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -123,7 +132,10 @@ int main(int argc, char **argv) {
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
+            f.gpu_tile(x, y, xi, yi, 16, 16);
+            if (!target.has_feature(Target::OpenGLCompute)) {
+                f.vectorize(xi, 4);
+            }
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -180,7 +192,10 @@ int main(int argc, char **argv) {
                 continue;
             }
             if (target.has_gpu_feature()) {
-                gpu.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
+                gpu.gpu_tile(x, y, xi, yi, 16, 16);
+                if (!target.has_feature(Target::OpenGLCompute)) {
+                    gpu.vectorize(xi, 4);
+                }
             } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
                 gpu.hexagon().vectorize(x, 128);
             } else {

@@ -15,8 +15,7 @@ int main(int argc, char **argv) {
         .reorder(x, z, yi, yo)
         .gpu_blocks(yo)
         .gpu_blocks(yi)
-        .gpu_blocks(z)
-        .gpu_threads(x);
+        .gpu_blocks(z);
 
     Buffer<int> imf = f.realize(10, 10, 10, target);
     return 0;

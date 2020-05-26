@@ -142,7 +142,6 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target)
     builtin["abs_f32"] = "abs";
     builtin["floor_f32"] = "floor";
     builtin["ceil_f32"] = "ceil";
-    builtin["pow_f32"] = "pow";
     builtin["asin_f32"] = "asin";
     builtin["acos_f32"] = "acos";
     builtin["tan_f32"] = "tan";
@@ -161,6 +160,7 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target)
     builtin["abs"] = "abs";
     builtin["isnan"] = "isnan";
     builtin["round_f32"] = "roundEven";
+    builtin["fast_inverse_sqrt_f32"] = "inversesqrt";
 
     // functions that produce bvecs
     builtin["equal"] = "equal";
@@ -207,20 +207,54 @@ void CodeGen_GLSLBase::visit(const Min *op) {
 }
 
 void CodeGen_GLSLBase::visit(const Div *op) {
-    if (op->type.is_int()) {
-        // Halide's integer division is defined to round down. Since the
-        // rounding behavior of GLSL's integer division is undefined, emulate
-        // the correct behavior using floating point arithmetic.
+    if (op->type.is_int() || op->type.is_uint()) {
+        // Halide's integer division is defined to round according to
+        // the sign of the denominator. Since the rounding behavior of
+        // GLSL's integer division is undefined, emulate the correct
+        // behavior using floating point arithmetic.
         Type float_type = Float(32, op->type.lanes());
-        Expr val = Div::make(Cast::make(float_type, op->a), Cast::make(float_type, op->b));
-        print_expr(call_builtin(op->type, "floor_f32", {val}));
+        // To avoid rounding woes, aim for a floating point value that
+        // should not be close to an integer. If we divide the range
+        // [0, 1, 2, 3] by 4, we want to get floating point values
+        // [1/8, 3/8, 5/8, 7/8]. This can be achieved by adding 0.5 to
+        // the numerator.
+        Expr val = Div::make(Cast::make(float_type, op->a) + 0.5f, Cast::make(float_type, op->b));
+        string float_result = print_expr(val);
+        val = Variable::make(float_type, float_result);
+        Expr zero = make_zero(op->type);
+        string a = print_expr(op->a);
+        string b = print_expr(op->b);
+        Expr a_var = Variable::make(op->type, a);
+        Expr b_var = Variable::make(op->type, b);
+        Expr equiv = select(b_var == zero, zero,
+                            b_var > zero, call_builtin(op->type, "floor_f32", {val}),
+                            call_builtin(op->type, "ceil_f32", {val}));
+        if (op->type.bits() >= 32) {
+            // A float isn't precise enough to produce the correct int
+            // in the case where the denominator is one.
+            equiv = select(b_var == make_one(op->type), a_var, equiv);
+        }
+        print_expr(equiv);
+
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
 }
 
 void CodeGen_GLSLBase::visit(const Mod *op) {
-    print_expr(call_builtin(op->type, "mod", {op->a, op->b}));
+    if (op->type.is_int() || op->type.is_uint()) {
+        // Just exploit the Euclidean identity
+        Expr zero = make_zero(op->type);
+        string a = print_expr(op->a);
+        string b = print_expr(op->b);
+        Expr a_var = Variable::make(op->type, a);
+        Expr b_var = Variable::make(op->type, b);
+        print_expr(select(b_var == zero, zero,
+                          a_var - (a_var / b_var) * b_var));
+
+    } else {
+        print_expr(call_builtin(op->type, "mod", {op->a, op->b}));
+    }
 }
 
 void CodeGen_GLSLBase::visit(const Call *op) {
@@ -267,6 +301,35 @@ void CodeGen_GLSLBase::visit(const Call *op) {
         // 'halide_printf'.
         print_expr(op->args[1]);
         return;
+    } else if (op->name == "fast_inverse_f32") {
+        print_expr(make_one(op->type) / op->args[0]);
+        return;
+    } else if (op->name == "fast_inverse_sqrt_f32") {
+        print_expr(make_one(op->type) / op->args[0]);
+        return;
+    } else if (op->name == "pow_f32") {
+        if (can_prove(op->args[0] > 0)) {
+            ostringstream rhs;
+            rhs << "pow(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
+            print_assignment(op->type, rhs.str());
+            return;
+        } else {
+            ostringstream base;
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            base << "pow(abs(" << a << "), " << b << ")";
+            string c = print_assignment(op->type, base.str());
+            Expr a_var = Variable::make(op->type, a);
+            Expr b_var = Variable::make(op->type, b);
+            Expr c_var = Variable::make(op->type, c);
+            // OpenGL isn't required to produce NaNs, so we return
+            // zero in the undefined case.
+            Expr equiv = select(a_var > 0 || b_var % 2 == 0, c_var,
+                                b_var % 2 == 1, -c_var,
+                                0.0f);
+            print_expr(equiv);
+            return;
+        }
     } else {
         ostringstream rhs;
         if (builtin.count(op->name) == 0) {

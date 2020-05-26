@@ -40,7 +40,6 @@ int multi_thread_type_test(MemoryType memory_type) {
         }
     }
 
-    printf("Success!\n");
     return 0;
 }
 
@@ -82,7 +81,6 @@ int pyramid_test(MemoryType memory_type) {
         }
     }
 
-    printf("Success!\n");
     return 0;
 }
 
@@ -131,15 +129,10 @@ int inverted_pyramid_test(MemoryType memory_type) {
         }
     }
 
-    printf("Success!\n");
     return 0;
 }
 
 int dynamic_shared_test(MemoryType memory_type) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("Not running test because no gpu target enabled\n");
-        return 0;
-    }
 
     Func f1, f2, f3, f4;
     Var x, xo, xi, thread_xo;
@@ -166,12 +159,12 @@ int dynamic_shared_test(MemoryType memory_type) {
         }
     }
 
-    printf("Success!\n");
     return 0;
 }
 
 int main(int argc, char **argv) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
+    Target t = get_jit_target_from_environment();
+    if (t.has_gpu_feature()) {
         printf("Not running test because no gpu target enabled\n");
         return 0;
     }
@@ -193,10 +186,15 @@ int main(int argc, char **argv) {
         }
 
         printf("Running dynamic shared test\n");
-        if (dynamic_shared_test(memory_type) != 0) {
-            return -1;
+        if (t.has_feature(Target::OpenGLCompute) && memory_type == MemoryType::GPUShared) {
+            printf("Skipping test because GL doesn't support dynamic sizes for shared memory\n");
+        } else {
+            if (dynamic_shared_test(memory_type) != 0) {
+                return -1;
+            }
         }
     }
 
+    printf("Success!\n");
     return 0;
 }

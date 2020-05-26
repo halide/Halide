@@ -134,10 +134,6 @@ struct TestArgs {
         test_##name(x) = name(in(x));                                                        \
         if (target.has_gpu_feature()) {                                                      \
             test_##name.gpu_tile(x, xi, 8);                                                  \
-        }                                                                                    \
-        if (target.has_feature(Target::OpenGLCompute)) {                                     \
-            test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,                               \
-                                 DeviceAPI::OpenGLCompute);                                  \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {              \
             test_##name.hexagon();                                                           \
         }                                                                                    \
@@ -165,10 +161,6 @@ struct TestArgs {
         test_##name(x) = name(in(0, x), in(1, x));                                                  \
         if (target.has_gpu_feature()) {                                                             \
             test_##name.gpu_tile(x, xi, 8);                                                         \
-        }                                                                                           \
-        if (target.has_feature(Target::OpenGLCompute)) {                                            \
-            test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,                                      \
-                                 DeviceAPI::OpenGLCompute);                                         \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {                     \
             test_##name.hexagon();                                                                  \
         }                                                                                           \
@@ -276,7 +268,7 @@ int main(int argc, char **argv) {
 
     call_1_float_types(sin, 256, 5 * -3.1415f, 5 * 3.1415f);
     call_1_float_types(cos, 256, 5 * -3.1415f, 5 * 3.1415f);
-    call_1_float_types(tan, 256, 5 * -3.1415f, 5 * 3.1415f);
+    call_1_float_types(tan, 256, 0.49 * -3.1415f, 0.49 * 3.1415f);
 
     call_1_float_types(asin, 256, -1.0, 1.0);
     call_1_float_types(acos, 256, -1.0, 1.0);
@@ -297,7 +289,13 @@ int main(int argc, char **argv) {
     call_1_float_types(floor, 256, -25, 25);
     call_1_float_types(ceil, 256, -25, 25);
     call_1_float_types(trunc, 256, -25, 25);
-    call_2_float_types(pow, 256, -10.0, 10.0, -4.0f, 4.0f);
+
+    if (get_jit_target_from_environment().has_feature(Target::OpenGLCompute)) {
+        // GLSL isn't required to support NaN, so keep things real
+        call_2_float_types(pow, 256, 0.0, 10.0, -4.0f, 4.0f);
+    } else {
+        call_2_float_types(pow, 256, -10.0, 10.0, -4.0f, 4.0f);
+    }
 
     const int8_t int8_min = std::numeric_limits<int8_t>::min();
     const int16_t int16_min = std::numeric_limits<int16_t>::min();

@@ -41,8 +41,8 @@ int main(int argc, char **argv) {
     consumer.compute_root()
         .bound(x, 0, width)
         .bound(y, 0, height)
-        .vectorize(x, 4, TailStrategy::ShiftInwards)
-        .tile(x, y, bx, by, tx, ty, 16, 16, TailStrategy::ShiftInwards)
+        .tile(x, y, bx, by, tx, ty, 64, 16, TailStrategy::ShiftInwards)
+        .vectorize(tx, 4, TailStrategy::ShiftInwards)
         .gpu_blocks(bx, by)
         .gpu_threads(tx, ty);
 
