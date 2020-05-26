@@ -22,9 +22,9 @@
 
 #if defined(__FreeBSD__)
 #define CAN_GET_RUNNING_PROGRAM_NAME
-#include <sys/types.h>
 #include <sys/sysctl.h>
-#include <sys/syslimits.h> // For PATH_MAX
+#include <sys/syslimits.h>  // For PATH_MAX
+#include <sys/types.h>
 #endif
 #ifdef __linux__
 #define CAN_GET_RUNNING_PROGRAM_NAME
