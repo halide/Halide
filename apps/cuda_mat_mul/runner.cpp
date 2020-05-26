@@ -1,4 +1,5 @@
 #include "HalideBuffer.h"
+#include "HalideRuntimeCuda.h"
 #include "halide_benchmark.h"
 #include "mat_mul.h"
 #include <cublas_v2.h>
@@ -8,6 +9,19 @@ using Halide::Runtime::Buffer;
 using Halide::Tools::benchmark;
 
 int main(int argc, char **argv) {
+    // Our Generator is compiled using cuda_capability_50; if the system running this
+    // test doesn't have at least that, quietly skip the test.
+    const auto *interface = halide_cuda_device_interface();
+    assert(interface->compute_capability != nullptr);
+    int major, minor;
+    int err = interface->compute_capability(nullptr, &major, &minor);
+    assert(err != 0);
+    int ver = major * 10 + minor;
+    if (ver < 50) {
+        printf("[SKIP] This system supports only Cuda version %d.%d, but version 5.0+ is required.\n", major, minor);
+        return 0;
+    }
+
     int size = 1024;
     if (argc > 1) {
         size = atoi(argv[1]);
