@@ -144,6 +144,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) {
+    user_assert(loop->for_type != ForType::GPULane)
+        << "The OpenGLCompute backend does not support the gpu_lanes() scheduling directive.";
+
     if (is_gpu_var(loop->name)) {
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))
@@ -185,8 +188,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
     ostringstream rhs;
     rhs << print_type(op->type) << "(";
 
-    if (op->lanes > 4)
+    if (op->lanes > 4) {
         internal_error << "GLSL: ramp lanes " << op->lanes << " is not supported\n";
+    }
 
     rhs << print_expr(op->base);
 
@@ -268,7 +272,7 @@ class FindSharedAllocations : public IRVisitor {
 
     void visit(const Allocate *op) override {
         op->body.accept(this);
-        if (starts_with(op->name, "__shared_")) {
+        if (op->memory_type == MemoryType::GPUShared) {
             allocs.push_back(op);
         }
     }
@@ -369,7 +373,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     extent = simplify(extent);
     internal_assert(is_const(extent));
 
-    if (!starts_with(op->name, "__shared_")) {
+    if (op->memory_type != MemoryType::GPUShared) {
         stream << "{\n";
         indent += 2;
         stream << get_indent();
@@ -380,7 +384,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     }
     op->body.accept(this);
 
-    if (!starts_with(op->name, "__shared_")) {
+    if (op->memory_type != MemoryType::GPUShared) {
         indent -= 2;
         stream << get_indent() << "}\n";
     }

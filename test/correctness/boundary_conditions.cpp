@@ -20,7 +20,12 @@ bool expect_eq(T actual, T expected) {
 
 void schedule_test(Func f, int vector_width, const Target &t) {
     if (vector_width != 1) {
-        f.vectorize(x, vector_width);
+        if (t.has_feature(Target::OpenGLCompute)) {
+            // Vector stores not yet supported in OpenGLCompute backend
+            f.unroll(x, vector_width);
+        } else {
+            f.vectorize(x, vector_width);
+        }
     }
     if (t.has_gpu_feature() && vector_width <= 16) {
         f.gpu_tile(x, y, xo, yo, xi, yi, 2, 2);
@@ -382,13 +387,19 @@ int main(int argc, char **argv) {
     std::vector<std::future<bool>> futures;
     int vector_width_max = 32;
     if (target.has_feature(Target::Metal) ||
+        target.has_feature(Target::OpenGLCompute) ||
         target.has_feature(Target::D3D12Compute)) {
         // https://github.com/halide/Halide/issues/2148
         vector_width_max = 4;
     }
     for (int vector_width = 1; vector_width <= vector_width_max; vector_width *= 2) {
         std::cout << "Testing vector_width: " << vector_width << "\n";
-        futures.push_back(pool.async(test_all, vector_width, target));
+        if (target.has_feature(Target::OpenGLCompute)) {
+            // GL can't be used from multiple threads at once
+            test_all(vector_width, target);
+        } else {
+            futures.push_back(pool.async(test_all, vector_width, target));
+        }
     }
 
     bool success = true;

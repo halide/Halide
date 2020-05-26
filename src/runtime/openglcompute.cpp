@@ -309,10 +309,12 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) {
         return 1;
     }
-    // OpenGLCompute only supports int32 and float data types, both of which are 4 bytes.
-    size_t size_in_bytes = buf->number_of_elements() * 4;
-    halide_assert(user_context, size_in_bytes != 0);
-    global_state.BufferData(GL_ARRAY_BUFFER, size_in_bytes, NULL, GL_DYNAMIC_COPY);
+
+    // OpenGLCompute only supports int32 and float data types, both of
+    // which are 4 bytes. We'll inflate the size for smaller types.
+    size *= (4 / buf->type.bytes());
+    halide_assert(user_context, size != 0);
+    global_state.BufferData(GL_ARRAY_BUFFER, size, NULL, GL_DYNAMIC_COPY);
     if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) {
         return 1;
     }
@@ -645,7 +647,9 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                 } else if (arg_types[i].bits == 32) {
                     value = *((int32_t *)args[i]);
                 } else {
-                    // error
+                    error(user_context) << "Cannot pass argument of type "
+                                        << arg_types[i]
+                                        << " to GL shader\n";
                     return -1;
                 }
                 if (arg_types[i].bits <= 16) {
@@ -662,14 +666,17 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                 }
             } else if (arg_types[i].code == halide_type_uint) {
                 unsigned value;
-                if (arg_types[i].bits == 8) {
+                if (arg_types[i].bits == 8 ||
+                    arg_types[i].bits == 1) {
                     value = *((uint8_t *)args[i]);
                 } else if (arg_types[i].bits == 16) {
                     value = *((uint16_t *)args[i]);
                 } else if (arg_types[i].bits == 32) {
                     value = *((uint32_t *)args[i]);
                 } else {
-                    // error
+                    error(user_context) << "Cannot pass argument of type "
+                                        << arg_types[i]
+                                        << " to GL shader\n";
                     return -1;
                 }
                 if (arg_types[i].bits <= 16) {
@@ -689,7 +696,9 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                 if (arg_types[i].bits == 32) {
                     value = *((float *)args[i]);
                 } else {
-                    // error
+                    error(user_context) << "Cannot pass argument of type "
+                                        << arg_types[i]
+                                        << " to GL shader\n";
                     return -1;
                 }
                 global_state.Uniform1f(i, value);
@@ -697,7 +706,9 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                     return -1;
                 }
             } else {
-                // error
+                error(user_context) << "Cannot pass argument of type "
+                                    << arg_types[i]
+                                    << " to GL shader\n";
                 return -1;
             }
         } else {

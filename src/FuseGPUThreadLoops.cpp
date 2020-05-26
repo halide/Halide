@@ -19,6 +19,7 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
+using std::pair;
 using std::sort;
 using std::string;
 using std::vector;
@@ -26,7 +27,6 @@ using std::vector;
 namespace {
 string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
 string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w"};
-string shared_mem_name = "__shared";
 }  // namespace
 
 class InjectThreadBarriers : public IRMutator {
@@ -294,17 +294,28 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
     struct AllocGroup {
         AllocGroup() = default;
         AllocGroup(const SharedAllocation &alloc)
-            : max_type_bytes(alloc.type.bytes()),
-              max_size_bytes(simplify(alloc.type.bytes() * alloc.size)),
+            : name(alloc.name),
+              widest_type(alloc.type),
+              max_size(alloc.size),
               memory_type(alloc.memory_type) {
             group.push_back(alloc);
         }
 
         void insert(const SharedAllocation &alloc) {
             internal_assert(alloc.memory_type == memory_type);
-            max_type_bytes = std::max(max_type_bytes, alloc.type.bytes());
-            max_size_bytes = simplify(max(max_size_bytes, simplify(alloc.size * alloc.type.bytes())));
+            if (alloc.type.bytes() == widest_type.bytes()) {
+                max_size = max(max_size, alloc.size);
+            } else if (alloc.type.bytes() > widest_type.bytes()) {
+                // Change units of max_size
+                int size_ratio = alloc.type.bytes() / widest_type.bytes();
+                max_size = max(max_size / size_ratio, alloc.size);
+                widest_type = alloc.type;
+            } else {
+                int size_ratio = widest_type.bytes() / alloc.type.bytes();
+                max_size = max(max_size, alloc.size / size_ratio);
+            }
             group.push_back(alloc);
+            name += "_" + alloc.name;
         }
 
         // Only need to check the back of the vector since we always insert
@@ -313,8 +324,9 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             return group.back().liveness.max < stage;
         }
 
-        int max_type_bytes;
-        Expr max_size_bytes;             // In bytes
+        string name;
+        Type widest_type;
+        Expr max_size;                   // In units of the widest type
         vector<SharedAllocation> group;  // Groups of allocs that should be coalesced together
         MemoryType memory_type;          // All allocations in the group have this memory type
     };
@@ -326,11 +338,11 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
 
     int barrier_stage;
 
-    Expr heap_bytes_per_block;
-
     const DeviceAPI device_api;
 
-    string thread_id_var_name, num_threads_var_name, heap_name;
+    string thread_id_var_name, num_threads_var_name;
+
+    bool may_merge_allocs_of_different_type;
 
     Stmt visit(const For *op) override {
         bool is_thread_loop = CodeGen_GPU_Dev::is_gpu_thread_var(op->name);
@@ -454,18 +466,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             idx *= Variable::make(Int(32), num_threads_var_name);
             idx += Variable::make(Int(32), thread_id_var_name);
         }
-        Expr base = 0;
-        if (device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) {
-            if (alloc->memory_type == MemoryType::Heap) {
-                base = Variable::make(Int(32), alloc->name + ".base");
-            }
-        } else {
-            base = Variable::make(Int(32), alloc->name + ".offset");
-            if (alloc->memory_type == MemoryType::Heap) {
-                base += Variable::make(Int(32), heap_name + ".base") / alloc->type.bytes();
-            }
-        }
-        return base + idx;
+        return idx;
     }
 
     Expr visit(const Load *op) override {
@@ -475,15 +476,8 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             alloc->liveness.max = barrier_stage;
             Expr predicate = mutate(op->predicate);
             Expr index = mutate_index(alloc, op->index);
-            const string &prefix = name_for_memory_type(alloc->memory_type);
-            if (device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) {
-                return Load::make(op->type, prefix + "_" + alloc->name,
-                                  index, op->image, op->param, predicate, op->alignment);
-            } else {
-                return Load::make(op->type, prefix, index,
-                                  op->image, op->param, predicate, ModulusRemainder());
-            }
-
+            return Load::make(op->type, alloc->name,
+                              index, op->image, op->param, predicate, op->alignment);
         } else {
             return IRMutator::visit(op);
         }
@@ -497,13 +491,8 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             Expr predicate = mutate(op->predicate);
             Expr index = mutate_index(alloc, op->index);
             Expr value = mutate(op->value);
-            const string &prefix = name_for_memory_type(alloc->memory_type);
-            if (device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) {
-                return Store::make(prefix + "_" + alloc->name, value, index,
-                                   op->param, predicate, op->alignment);
-            } else {
-                return Store::make(prefix, value, index, op->param, predicate, ModulusRemainder());
-            }
+            return Store::make(alloc->name, value, index,
+                               op->param, predicate, op->alignment);
         } else {
             return IRMutator::visit(op);
         }
@@ -568,13 +557,13 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
                     continue;
                 }
 
-                if ((device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) &&
+                if (!may_merge_allocs_of_different_type &&
                     mem_allocs[free_spaces[i]].group[0].type != alloc.type) {
                     // Types must also match for OpenGLCompute
                     continue;
                 }
 
-                if (!is_const(mem_allocs[free_spaces[i]].max_size_bytes)) {
+                if (!is_const(mem_allocs[free_spaces[i]].max_size)) {
                     return i;
                 } else if (free_idx == -1) {
                     free_idx = i;
@@ -590,15 +579,16 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
                     continue;
                 }
 
-                if ((device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) &&
+                if (!may_merge_allocs_of_different_type &&
                     mem_allocs[free_spaces[i]].group[0].type != alloc.type) {
                     // Types must also match for OpenGLCompute
                     continue;
                 }
 
-                if (is_const(mem_allocs[free_spaces[i]].max_size_bytes)) {
+                if (is_const(mem_allocs[free_spaces[i]].max_size)) {
+                    const auto &candidate_group = mem_allocs[free_spaces[i]];
                     Expr size = alloc_size * alloc.type.bytes();
-                    Expr dist = mem_allocs[free_spaces[i]].max_size_bytes - size;
+                    Expr dist = candidate_group.max_size * candidate_group.widest_type.bytes() - size;
                     const int64_t *current_diff = as_const_int(simplify(dist));
                     internal_assert(current_diff != nullptr);
                     int64_t abs_diff = std::abs(*current_diff);
@@ -665,14 +655,6 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
         return mem_allocs;
     }
 
-    const string &name_for_memory_type(MemoryType t) {
-        if (t == MemoryType::GPUShared) {
-            return shared_mem_name;
-        } else {
-            return heap_name;
-        }
-    }
-
     Expr get_block_id(const ExtractBlockSize &bs) const {
         Expr block_id = 0;
         for (int d = bs.blocks_dimensions() - 1; d >= 0; d--) {
@@ -706,79 +688,15 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
 public:
     Stmt rewrap_block(Stmt s, const ExtractBlockSize &bs) {
 
-        if (device_api == DeviceAPI::OpenGLCompute || device_api == DeviceAPI::D3D12Compute) {
+        // Combine the allocations into groups that have disjoint
+        // lifetimes, and then cluster the groups according to which
+        // ones can share a single allocation. For cuda, opencl, and
+        // similar we get one big combined allocation per memory
+        // type. For openglcompute and direct3d, we also separate by
+        // element type.
+        map<pair<MemoryType, Type>, vector<AllocGroup>> clustered_allocs;
 
-            vector<SharedAllocation> heap_allocs;
-
-            // Individual allocations.
-            for (const SharedAllocation &alloc : allocations) {
-                if (alloc.memory_type == MemoryType::GPUShared) {
-                    // If it's shared it's just a local allocate node in the kernel
-                    const string &prefix = name_for_memory_type(alloc.memory_type);
-                    s = Allocate::make(prefix + "_" + alloc.name,
-                                       alloc.type, alloc.memory_type,
-                                       {alloc.size}, const_true(), s);
-                } else {
-                    // Remove any dependence on the block vars by taking a max
-                    Expr size = max_over_blocks(alloc.size, bs);
-                    internal_assert(size.defined())
-                        << alloc.memory_type
-                        << " memory used by GPU kernel for allocation of " << alloc.name
-                        << " varies with the block index in an unbounded way: "
-                        << alloc.size << "\n";
-                    heap_allocs.push_back(alloc);
-                    heap_allocs.back().size = size;
-                }
-            }
-
-            vector<AllocGroup> grouped_heap_allocs = allocate_funcs(heap_allocs);
-            for (AllocGroup g : grouped_heap_allocs) {
-                Expr group_elems_per_block = simplify(g.max_size_bytes / g.max_type_bytes);
-                Expr base = get_block_id(bs) * group_elems_per_block;
-                string group_name = heap_name;
-                for (const auto &alloc : g.group) {
-                    group_name += "_" + alloc.name;
-                }
-                Expr group_base = Variable::make(Int(32), group_name + ".base");
-                for (const auto &alloc : g.group) {
-                    class RewriteGroupAccess : public IRMutator {
-                        using IRMutator::visit;
-                        Expr visit(const Load *op) override {
-                            if (op->name == alloc_name) {
-                                return Load::make(op->type, group_name, mutate(op->index),
-                                                  op->image, op->param, mutate(op->predicate),
-                                                  op->alignment);
-                            } else {
-                                return IRMutator::visit(op);
-                            }
-                        }
-
-                        Stmt visit(const Store *op) override {
-                            if (op->name == alloc_name) {
-                                return Store::make(group_name, mutate(op->value), mutate(op->index),
-                                                   op->param, mutate(op->predicate), op->alignment);
-                            } else {
-                                return IRMutator::visit(op);
-                            }
-                        }
-                        const string alloc_name;                       
-                        const string &group_name;
-
-                    public:
-                        RewriteGroupAccess(const string &alloc_name, const string &group_name)
-                            : alloc_name(alloc_name), group_name(group_name) {
-                        }
-                    } rewriter{heap_name + "_" + alloc.name, group_name};
-                    s = rewriter.mutate(s);
-                    // Also rewrite the .base symbols
-                    s = substitute(alloc.name + ".base", group_base, s);
-                }
-                s = LetStmt::make(group_name + ".base", simplify(base), s);
-                global_allocations.push_back(GlobalAllocation{group_name, group_elems_per_block, g.group[0].type});
-            }
-        } else {
-            // One big combined allocation per memory type
-
+        {
             vector<AllocGroup> mem_allocs = allocate_funcs(allocations);
 
             // Every allocation must belong to one group
@@ -791,95 +709,155 @@ public:
             // to the widest type.
             sort(mem_allocs.begin(), mem_allocs.end(),
                  [](const AllocGroup &lhs, const AllocGroup &rhs) {
-                     return lhs.max_type_bytes > rhs.max_type_bytes;
+                     return lhs.widest_type.bytes() > rhs.widest_type.bytes();
                  });
 
-            for (MemoryType memory_type : {MemoryType::GPUShared, MemoryType::Heap}) {
-
-                Expr total_size_bytes = 0;
-                int max_type_bytes = 0;
-                for (int i = 0; i < (int)(mem_allocs.size()); i++) {
-                    if (mem_allocs[i].memory_type == memory_type) {
-                        total_size_bytes += mem_allocs[i].max_size_bytes;
-                        max_type_bytes = std::max(max_type_bytes, mem_allocs[i].max_type_bytes);
-                    }
-                }
-
-                if (is_zero(total_size_bytes)) {
-                    // No allocations of this type.
-                    continue;
-                }
-
-                // Align-up the total size in bytes according to the
-                // max byte width of all types involved.
-                total_size_bytes += max_type_bytes - 1;
-                total_size_bytes /= max_type_bytes;
-                total_size_bytes *= max_type_bytes;
-
-                // Remove any dependence on the block vars by taking a max
-                {
-                    Expr size = max_over_blocks(total_size_bytes, bs);
-                    internal_assert(size.defined())
-                        << memory_type
-                        << " memory used by GPU kernel varies with the block index in an unbounded way: "
-                        << total_size_bytes << "\n";
-                    total_size_bytes = size;
-                }
-
-                const string &prefix = name_for_memory_type(memory_type);
-                const string total_size_bytes_name = prefix + ".size";
-                Expr total_size_bytes_var = Variable::make(Int(32), total_size_bytes_name);
-
-                if (memory_type == MemoryType::Heap) {
-                    // The base offset for shared memory is zero. For
-                    // heap memory it's one slice of a global
-                    // allocation.
-                    Expr base = get_block_id(bs) * total_size_bytes_var;
-                    s = LetStmt::make(heap_name + ".base", simplify(base), s);
-                    heap_bytes_per_block = total_size_bytes;
-
-                    // We'll need to make that global allocation
-                    global_allocations.push_back(GlobalAllocation{heap_name, heap_bytes_per_block, UInt(8)});
-                } else {
-                    s = Allocate::make(prefix, UInt(8), memory_type,
-                                       {total_size_bytes_var}, const_true(), s);
-                }
-                s = LetStmt::make(total_size_bytes_name, total_size_bytes, s);
-
-                // Define an offset for each allocation. The offsets are in
-                // elements, not bytes, so that the stores and loads can use
-                // them directly.
-                for (int i = (int)(mem_allocs.size()) - 1; i >= 0; i--) {
-                    if (mem_allocs[i].memory_type != memory_type) {
-                        continue;
-                    }
-                    Expr group_offset = Variable::make(Int(32), "group_" + std::to_string(i) + ".offset");
-
-                    for (const SharedAllocation &alloc : mem_allocs[i].group) {
-                        int new_elem_size = alloc.type.bytes();
-                        Expr offset = (group_offset / new_elem_size);
-                        s = LetStmt::make(alloc.name + ".offset", simplify(offset), s);
-                    }
-
-                    // Find the previous allocation of the same memory type
-                    int j = i - 1;
-                    while (j >= 0) {
-                        if (mem_allocs[j].memory_type == memory_type) {
-                            break;
-                        }
-                        j--;
-                    }
-                    Expr offset = 0;
-                    if (j >= 0) {
-                        // Build off the last offset
-                        offset = Variable::make(Int(32), "group_" + std::to_string(j) + ".offset");
-                        int new_elem_size = mem_allocs[i].max_type_bytes;
-                        offset += (((mem_allocs[j].max_size_bytes + new_elem_size - 1) / new_elem_size) * new_elem_size);
-                    }
-
-                    s = LetStmt::make("group_" + std::to_string(i) + ".offset", simplify(offset), s);
-                }
+            for (const auto &alloc : mem_allocs) {
+                Type t = may_merge_allocs_of_different_type ? UInt(8) : alloc.widest_type;
+                pair<MemoryType, Type> key{alloc.memory_type, t};
+                clustered_allocs[key].push_back(alloc);
             }
+        }
+
+        for (auto &p : clustered_allocs) {
+            vector<AllocGroup> &cluster = p.second;
+            // Heap or shared?
+            MemoryType memory_type = p.first.first;
+            // Type of the combined Allocate node
+            Type alloc_type = p.first.second;
+
+            // Figure out a name for the cluster, the total size of
+            // the cluster (in terms of the alloc_type), and the
+            // widest type in the cluster (which may be wider than the
+            // alloc_type).
+            string name;
+            Expr total_size = 0;
+            Type widest_type;
+            for (const auto &alloc : cluster) {
+                if (name.empty()) {
+                    name = alloc.name;
+                    widest_type = alloc.widest_type;
+                } else {
+                    name += "__" + alloc.name;
+                    if (alloc.widest_type.bytes() > widest_type.bytes()) {
+                        widest_type = alloc.widest_type;
+                    }
+                }
+                int ratio = alloc.widest_type.bytes() / alloc_type.bytes();
+                internal_assert(ratio != 0)
+                    << "alloc_type should have been at most as wide as the widest type in group\n";
+                total_size += alloc.max_size * ratio;
+            }
+
+            // Align-up the size according to the ratio between
+            // the widest type involved and the type of the actual
+            // allocation.
+            int ratio = widest_type.bytes() / alloc_type.bytes();
+            internal_assert(ratio != 0)
+                << "alloc_type should have been at most as wide as the widest type in cluster\n";
+            if (ratio != 1) {
+                total_size += ratio - 1;
+                total_size /= ratio;
+                total_size *= ratio;
+            }
+
+            // Remove any dependence on the block vars by taking a max
+            {
+                Expr size = max_over_blocks(total_size, bs);
+                internal_assert(size.defined())
+                    << memory_type
+                    << " memory used by GPU kernel varies with the block index in an unbounded way: "
+                    << total_size << "\n";
+                total_size = size;
+            }
+
+            const string total_size_name = name + ".size";
+            Expr total_size_var = Variable::make(Int(32), total_size_name);
+
+            // Make the allocation
+            if (memory_type == MemoryType::Heap) {
+                global_allocations.push_back(GlobalAllocation{name, total_size, alloc_type});
+            } else {
+                s = Allocate::make(name, alloc_type, memory_type,
+                                   {total_size_var}, const_true(), s);
+            }
+
+            // Define a group offset for each group in the
+            // cluster. The group offsets are in elements of
+            // widest_type across the entire cluster. Using that,
+            // define an individual offset for each allocation in the
+            // group, using units of that allocation's type.
+            for (int i = (int)(cluster.size()) - 1; i >= 0; i--) {
+                Expr group_offset = Variable::make(Int(32), name + "." + std::to_string(i) + ".offset");
+
+                for (const SharedAllocation &alloc : cluster[i].group) {
+                    // Change units, as described above.
+                    Expr offset = group_offset;
+                    internal_assert(alloc.type.bytes() <= widest_type.bytes());
+                    if (alloc.type.bytes() < widest_type.bytes()) {
+                        offset *= (widest_type.bytes() / alloc.type.bytes());
+                    }
+                    offset = simplify(offset);
+
+                    // Rewrite all loads and stores to point to the allocation
+                    // cluster they belong to with the appropriate offset into it.
+                    class RewriteGroupAccess : public IRMutator {
+                        using IRMutator::visit;
+                        Expr visit(const Load *op) override {
+                            if (op->name == alloc_name) {
+                                return Load::make(op->type, cluster_name, mutate(op->index) + offset,
+                                                  op->image, op->param, mutate(op->predicate),
+                                                  op->alignment);
+                            } else {
+                                return IRMutator::visit(op);
+                            }
+                        }
+
+                        Stmt visit(const Store *op) override {
+                            if (op->name == alloc_name) {
+                                return Store::make(cluster_name, mutate(op->value), mutate(op->index) + offset,
+                                                   op->param, mutate(op->predicate), op->alignment);
+                            } else {
+                                return IRMutator::visit(op);
+                            }
+                        }
+                        const string &alloc_name;
+                        const string &cluster_name;
+                        const Expr &offset;
+
+                    public:
+                        RewriteGroupAccess(const string &alloc_name,
+                                           const string &cluster_name,
+                                           const Expr &offset)
+                            : alloc_name(alloc_name), cluster_name(cluster_name), offset(offset) {
+                        }
+                    } rewriter{alloc.name, name, offset};
+                    s = rewriter.mutate(s);
+                }
+
+                // Define the group offset in terms of the previous group in the cluster
+                Expr offset;
+                if (i > 0) {
+                    // Build off the last offset
+                    offset = Variable::make(Int(32), name + "." + std::to_string(i - 1) + ".offset");
+                    int ratio = (widest_type.bytes() / cluster[i - 1].widest_type.bytes());
+                    internal_assert(ratio != 0);
+                    offset += simplify((cluster[i - 1].max_size + ratio - 1) / ratio);
+                } else {
+                    if (memory_type == MemoryType::Heap) {
+                        // One slice of a larger global allocation
+                        int ratio = (widest_type.bytes() / alloc_type.bytes());
+                        internal_assert(ratio != 0);
+                        offset = (get_block_id(bs) * total_size_var) / ratio;
+                    } else {
+                        // Base address for shared memory is zero
+                        offset = 0;
+                    }
+                }
+
+                s = LetStmt::make(group_offset.as<Variable>()->name, simplify(offset), s);
+            }
+            s = LetStmt::make(total_size_name, total_size, s);
         }
 
         // Resolve thread_id and threads_per_block variables, uses of
@@ -901,8 +879,7 @@ public:
         return s;
     }
 
-    Stmt
-    rewrap_kernel_launch(Stmt s, const ExtractBlockSize &bs, DeviceAPI device_api) {
+    Stmt rewrap_kernel_launch(Stmt s, const ExtractBlockSize &bs, DeviceAPI device_api) {
 
         for (const auto &alloc : global_allocations) {
             Expr total_size = alloc.size;
@@ -946,7 +923,8 @@ public:
           device_api(d),
           thread_id_var_name(unique_name('t')),
           num_threads_var_name(unique_name('t')),
-          heap_name(unique_name("__heap")) {
+          may_merge_allocs_of_different_type(device_api != DeviceAPI::OpenGLCompute &&
+                                             device_api != DeviceAPI::D3D12Compute) {
     }
 };  // namespace Internal
 

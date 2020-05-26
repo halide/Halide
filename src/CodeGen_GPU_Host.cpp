@@ -88,7 +88,7 @@ private:
 
         if (allocate->memory_type == MemoryType::GPUShared) {
             internal_assert(allocate->extents.size() == 1);
-            shared_mem_size = allocate->extents[0];
+            shared_mem_size += allocate->extents[0] * allocate->type.bytes();
             found_shared = true;
         }
         allocate->body.accept(this);

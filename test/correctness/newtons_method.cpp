@@ -11,9 +11,7 @@ template<typename T>
 int find_pi() {
     // Skip test if data type is not supported by the target.
     Target target = get_jit_target_from_environment();
-    if (target.has_feature(Target::OpenCL) &&
-        !target.has_feature(Target::CLDoubles) &&
-        type_of<T>() == type_of<double>()) {
+    if (!target.supports_type(type_of<T>())) {
         return 0;
     }
 
@@ -55,22 +53,16 @@ int find_pi() {
 
     T secant_result = evaluate_may_gpu<T>(g()[0]);
 
-    T tolerance = 0;
-    if (target.has_feature(Target::D3D12Compute)) {
-        tolerance = (T)0.0000003;
-    }
+    // Trig in openglcompute/d3d12 is approximate
+    float tolerance = target.has_feature(Target::OpenGLCompute) ||
+                      target.has_feature(Target::D3D12Compute) ? 1e-5f : 1e-20f;
 
     T correct = (T)M_PI;
-    if (newton_result != correct ||
-        secant_result != correct) {
-        // it's not exactly correct, bit is the error tolerable?
-        if (abs(newton_result - correct) > tolerance ||
-            abs(secant_result - correct) > tolerance)
-        {
-            printf("Incorrect results: %10.20f %10.20f %10.20f\n",
-                   newton_result, secant_result, correct);
-            return -1;
-        }
+    if (fabs(newton_result - correct) > tolerance ||
+        fabs(secant_result - correct) > tolerance) {
+        printf("Incorrect results: %10.20f %10.20f %10.20f\n",
+               newton_result, secant_result, correct);
+        return -1;
     }
     return 0;
 }
