@@ -678,16 +678,23 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(Type type, const string &value_expr) {
+    // TODO(marcos): cleanup uneccesary/redundant/excessive vanilla casts and
+    // reinterpret casts here... most of these reinforced casts are coming from
+    // print_assignment() calls, and these three special conditions at the top
+    // might no longer be necessary (but need some careful investigation)
     if (type.is_float()) {
-        return print_vanilla_cast(type, value_expr);
+        return value_expr;
+        //return print_vanilla_cast(type, value_expr);
     }
 
     if (type.is_bool()) {
-        return print_vanilla_cast(type, value_expr);
+        return value_expr;
+        //return print_vanilla_cast(type, value_expr);
     }
 
     if (type.bits() == 32) {
-        return print_reinterpret_cast(type, value_expr);
+        return value_expr;
+        //return print_reinterpret_cast(type, value_expr);
     }
 
     // HLSL SM 5.1 only supports 32bit integer types; smaller integer types have
