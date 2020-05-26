@@ -259,11 +259,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        // Halide only ever needs threadgroup memory fences:
-        // NOTE(marcos): using "WithGroupSync" here just to be safe, as a
-        // simple "GroupMemoryBarrier" is probably too relaxed for Halide
-        // (also note we need to return an integer)
+        // NOTE(marcos): adding both types of thread-group barriers here
+        // because Halide at the moment only has the concept of a general
+        // GPU sync point (gpu_thread_barrier); ideally, some distinction
+        // between shared memory and device memory is needed, and we could
+        // even go one step further and issue barriers that only affect
+        // memory loads/stores without synchronizing the threads...
         stream << get_indent() << "GroupMemoryBarrierWithGroupSync();\n";
+        stream << get_indent() << "DeviceMemoryBarrierWithGroupSync();\n";
         print_assignment(op->type, "0");
     } else {
         CodeGen_C::visit(op);
