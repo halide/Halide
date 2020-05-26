@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     assert(err != 0);
     int ver = major * 10 + minor;
     if (ver < 50) {
-        printf("[SKIP] This system supports only Cuda version %d.%d, but version 5.0+ is required.\n", major, minor);
+        printf("[SKIP] This system supports only Cuda compute capability %d.%d, but compute capability 5.0+ is required.\n", major, minor);
         return 0;
     }
 
