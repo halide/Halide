@@ -828,6 +828,16 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Atomic *op) {
     user_assert(false) << "Atomics operations are not supported inside D3D12Compute kernel.\n";
 }
 
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const FloatImm *op) {
+    // TODO(marcos): just a pass-through for now, but we might consider doing
+    // something different, such as adding the suffic 'u' to the integer that
+    // gets passed to float_from_bits() to eliminate HLSL shader warnings; we
+    // have seen division-by-zero shader warnings, and we postulated that it
+    // could be indirectly related to compiler assumptions on signed integer
+    // overflow when float_from_bits() is called, but we don't know for sure
+    return CodeGen_C::visit(op);
+}
+
 void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
                                           const string &name,
                                           const vector<DeviceArgument> &args) {
