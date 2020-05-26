@@ -27,7 +27,7 @@ namespace Cuda {
 // The default implementation of halide_cuda_get_symbol attempts to load
 // the CUDA shared library/DLL, and then get the symbol from it.
 WEAK void *lib_cuda = NULL;
-volatile int WEAK lib_cuda_lock = 0;
+volatile ScopedSpinLock::AtomicFlag WEAK lib_cuda_lock = 0;
 
 extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *name) {
     // Only try to load the library if we can't already get the symbol
