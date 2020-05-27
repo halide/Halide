@@ -360,8 +360,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"wasm_signext", Target::WasmSignExt},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
-    // NOTE: When adding features to this map, be sure to update
-    // PyEnums.cpp and halide.cmake as well.
+    // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {

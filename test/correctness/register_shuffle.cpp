@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
 
     if (!t.features_any_of({Target::CUDACapability50,
                             Target::CUDACapability61})) {
-        printf("This test requires cuda enabled with cuda capability 5.0 or greater\n");
+        printf("[SKIP] CUDA with capability 5.0 or greater required\n");
         return 0;
     }
 

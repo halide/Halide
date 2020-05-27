@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("Success: Saw %x for no_bounds_query=%d\n", output(0, 0), use_noboundsquery_feature());
-
+    printf("Saw %x for no_bounds_query=%d\n", output(0, 0), use_noboundsquery_feature());
+    printf("Success!\n");
     return 0;
 }

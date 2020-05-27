@@ -17,5 +17,6 @@ int main(int argc, char **argv) {
     f.output_buffer().dim(0).set_min(0);
     auto result = f.realize(4);
 
+    printf("Success!\n");
     return 0;
 }

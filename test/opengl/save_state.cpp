@@ -1,53 +1,26 @@
-// Test doesn't build on windows, because OpenGL on windows is a nightmare.
 #ifdef _WIN32
 #include <stdio.h>
 int main() {
-    printf("Skipping test on Windows\n");
+    printf("[SKIP] OpenGL on Windows is broken.\n");
     return 0;
 }
 #else
 
-#include <cstring>
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-
 #include "Halide.h"
 
-#include "runtime/mini_opengl.h"
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
-extern "C" void glGenTextures(GLsizei, GLuint *);
-extern "C" void glTexParameteri(GLenum, GLenum, GLint);
-extern "C" void glBindTexture(GLenum, GLuint);
-extern "C" void glTexImage2D(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const GLvoid *);
-extern "C" GLuint glCreateProgram();
-extern "C" void glAttachShader(GLuint, GLuint);
-extern "C" void glLinkProgram(GLuint);
-extern "C" void glGetProgramiv(GLuint, GLenum, GLint *);
-extern "C" void glGetProgramInfoLog(GLuint, GLsizei, GLsizei *, GLchar *);
-extern "C" GLuint glCreateShader(GLenum);
-extern "C" void glShaderSource(GLuint, GLsizei, const GLchar **, const GLint *);
-extern "C" void glCompileShader(GLuint);
-extern "C" void glGetShaderiv(GLuint, GLenum, GLint *);
-extern "C" void glGetShaderInfoLog(GLuint, GLsizei, GLsizei *, GLchar *);
-extern "C" void glEnable(GLenum);
-extern "C" void glDisable(GLenum);
-extern "C" void glGetIntegerv(GLenum, GLint *);
-extern "C" void glGetBooleanv(GLenum, GLboolean *);
-extern "C" GLenum glGetError();
-extern "C" void glActiveTexture(GLenum);
-extern "C" void glEnableVertexAttribArray(GLuint);
-extern "C" void glDisableVertexAttribArray(GLuint);
-extern "C" void glUseProgram(GLuint);
-extern "C" void glGenBuffers(GLsizei, GLuint *);
-extern "C" void glViewport(GLint, GLint, GLsizei, GLsizei);
-extern "C" void glGenFramebuffers(GLsizei, GLuint *);
-extern "C" void glBindBuffer(GLenum, GLuint);
-extern "C" void glBindFramebuffer(GLenum, GLuint);
-extern "C" void glGenVertexArrays(GLsizei, GLuint *);
-extern "C" void glBindVertexArray(GLuint);
-extern "C" void glGetVertexAttribiv(GLuint, GLenum, GLint *);
-extern "C" const GLubyte *glGetString(GLenum name);
+#if __APPLE__
+// TODO: why are these deprecated? Can we update this test?
+#define GL_SILENCE_DEPRECATION
+#include <OpenGL/gl3.h>
+#else
+#define GL_GLEXT_PROTOTYPES
+#include <GL/gl.h>
+#endif
 
 // Generates an arbitrary program.
 class Program {

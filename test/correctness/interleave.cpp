@@ -74,6 +74,7 @@ Expr element(FuncRef f, int i) {
 int main(int argc, char **argv) {
     Var x, y, c;
 
+    // TODO: Is this still true?
     // As of May 26 2016, this test causes a segfault due to
     // permissions failure on ARM-32 trying to execute a
     // non-executable page when jitting. Started happening between
@@ -82,7 +83,7 @@ int main(int argc, char **argv) {
     {
         Target t = get_host_target();
         if (t.arch == Target::ARM && t.bits == 32) {
-            printf("Skipping test on arm-32 (see the source for why)\n");
+            printf("[SKIP] Test is known to segfault on ARM-32 (see the source for more detail) .\n");
             return 0;
         }
     }

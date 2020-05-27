@@ -43,5 +43,6 @@ int main(int argc, const char **argv) {
     propagate_estimate_test();
     uniquify_variable_names_test();
 
+    printf("Success!\n");
     return 0;
 }

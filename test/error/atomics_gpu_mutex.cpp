@@ -29,5 +29,7 @@ int main(int argc, char **argv) {
     // it leads to deadlocks.
     // This should throw an error
     Realization out = hist.realize(hist_size);
+
+    printf("Success!\n");
     return 0;
 }
