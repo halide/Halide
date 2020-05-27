@@ -44,7 +44,8 @@ extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc fa
 
 static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");
 
-#define HALIDE_PLUGIN_IMPL(name) extern "C" HALIDE_EXPORT PyObject *PyInit_##name()
+#define _HALIDE_PLUGIN_IMPL(name) extern "C" HALIDE_EXPORT PyObject *PyInit_##name()
+#define HALIDE_PLUGIN_IMPL(name) _HALIDE_PLUGIN_IMPL(name)
 
 // clang-format off
 

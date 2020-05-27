@@ -16,5 +16,7 @@ int main(int argc, char **argv) {
     // {g1, g2, g3}
     Func wrapper1 = f.in({g1, g4, g3});
     Func wrapper2 = f.in(g3);
+
+    printf("Success!\n");
     return 0;
 }

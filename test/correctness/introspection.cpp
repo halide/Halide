@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
     if (result) {
         printf("Halide C++ introspection claims to be working with this build config\n");
     } else {
-        printf("Halide C++ introspection doesn't claim to work with this build config. Not continuing.\n");
+        printf("[SKIP] Halide C++ introspection doesn't claim to work with this build config.\n");
         return 0;
     }
 
