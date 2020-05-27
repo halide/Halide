@@ -1,15 +1,40 @@
-add_executable(interpolate_filter filter.cpp)
-target_link_libraries(interpolate_filter PRIVATE Halide::ImageIO)
+cmake_minimum_required(VERSION 3.16)
+project(interpolate)
 
-halide_generator(interpolate.generator SRCS interpolate_generator.cpp)
-foreach(AUTO_SCHEDULE false true)
-    if(${AUTO_SCHEDULE})
-        set(LIB interpolate_auto_schedule)
-    else()
-        set(LIB interpolate)
-    endif()
-    halide_library_from_generator(${LIB}
-                                  GENERATOR interpolate.generator
-                                  GENERATOR_ARGS auto_schedule=${AUTO_SCHEDULE})
-    target_link_libraries(interpolate_filter PRIVATE ${LIB})
-endforeach()
+enable_testing()
+
+# Set up language settings
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_CXX_EXTENSIONS NO)
+
+# Find Halide
+find_package(Halide REQUIRED)
+
+# Generator
+add_executable(interpolate.generator interpolate_generator.cpp)
+target_link_libraries(interpolate.generator PRIVATE Halide::Generator Halide::Tools)
+
+# Filters
+add_halide_library(interpolate FROM interpolate.generator)
+add_halide_library(interpolate_auto_schedule FROM interpolate.generator
+                   GENERATOR interpolate
+                   PARAMS auto_schedule=true)
+
+# Main executable
+add_executable(interpolate_filter filter.cpp)
+target_link_libraries(interpolate_filter
+                      PRIVATE
+                      Halide::ImageIO
+                      interpolate
+                      interpolate_auto_schedule)
+
+# Test that the app actually works!
+set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
+if (EXISTS ${IMAGE})
+    configure_file(${IMAGE} rgba.png COPYONLY)
+    add_test(NAME interpolate_filter COMMAND interpolate_filter rgba.png out.png)
+    set_tests_properties(interpolate_filter PROPERTIES
+                         LABELS internal_app_tests
+                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+endif ()

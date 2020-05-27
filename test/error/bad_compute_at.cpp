@@ -26,6 +26,6 @@ int main(int argc, char **argv) {
 
     h.realize(10);
 
-    printf("I should not have reached here\n");
+    printf("Success!\n");
     return 0;
 }

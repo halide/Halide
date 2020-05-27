@@ -14,6 +14,6 @@ int main(int argc, char **argv) {
 
     Buffer<int> im = g.realize(100, 1000);
 
-    printf("Should have gotten a bad fold!\n");
-    return -1;
+    printf("Success!\n");
+    return 0;
 }

@@ -8,8 +8,8 @@ int main(int argc, char **argv) {
     // Move this test to correctness once we can support >4d buffer_ts on the gpu
 
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("No gpu target enabled. Skipping test.\n");
-        // This test is currently expected to error out.
+        printf("[SKIP] No GPU target enabled.\n");
+        // This test is currently expected to error out. This is for the Makefile's benefit.
         printf("Error: pretending that there was an error\n");
         return -1;
     }

@@ -7,9 +7,17 @@ int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
     if (!(t.has_feature(Target::CUDA) ||
           t.has_feature(Target::Metal))) {
-        printf("No half-supporting GPU API enabled. Skipping test\n");
+        printf("[SKIP] No GPU target enabled supporting half-precision.\n");
         return 0;
     }
+
+    std::vector<Target::Feature> cuda_capabilities{Target::CUDACapability30, Target::CUDACapability32, Target::CUDACapability35, Target::CUDACapability50, Target::CUDACapability61};
+    if (t.has_feature(Target::CUDA) && !(t.features_any_of(cuda_capabilities))) {
+        printf("[SKIP] Need CUDA Capability 30 or greater.\n");
+        return 0;
+    }
+
+    std::cout << t.to_string() << "\n";
 
     // Test three variants, in increasing order of speed.
     // 1) Store as float, math as float
@@ -66,4 +74,5 @@ int main(int argc, char **argv) {
     }
 
     printf("Success!\n");
+    return 0;
 }

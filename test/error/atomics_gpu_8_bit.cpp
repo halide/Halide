@@ -26,5 +26,7 @@ int main(int argc, char **argv) {
 
     // GPU doesn't support 8/16-bit atomics
     Realization out = hist.realize(hist_size);
+
+    printf("Success!\n");
     return 0;
 }

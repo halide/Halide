@@ -1,11 +1,8 @@
 #include "Halide.h"
-#include <assert.h>
-#include <functional>
-#include <map>
-#include <numeric>
-#include <stdio.h>
+#include "check_call_graphs.h"
 
-#include "test/common/check_call_graphs.h"
+#include <cstdio>
+#include <functional>
 
 namespace {
 

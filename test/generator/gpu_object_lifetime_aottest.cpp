@@ -14,7 +14,7 @@
 
 #include "gpu_object_lifetime.h"
 
-#include "test/common/gpu_object_lifetime_tracker.h"
+#include "gpu_object_lifetime_tracker.h"
 
 using namespace Halide::Runtime;
 
@@ -35,7 +35,8 @@ int main(int argc, char **argv) {
 #elif defined(TEST_METAL)
     printf("TEST_METAL enabled for gpu_object_lifetime testing...\n");
 #else
-    printf("No GPU features enabled for gpu_object_lifetime testing!\n");
+    printf("[SKIP] No GPU features enabled for gpu_object_lifetime testing!\n");
+    return 0;
 #endif
 
     halide_set_custom_print(&my_halide_print);
@@ -119,14 +120,12 @@ int main(int argc, char **argv) {
                 native_handle = output.raw_buffer()->device;
                 can_rewrap = true;
             }
-#endif
-#if defined(TEST_OPENCL)
+#elif defined(TEST_OPENCL)
             if (output.raw_buffer()->device_interface == halide_opencl_device_interface()) {
                 native_handle = halide_opencl_get_cl_mem(nullptr, output.raw_buffer());
                 can_rewrap = true;
             }
-#endif
-#if defined(TEST_METAL)
+#elif defined(TEST_METAL)
             if (output.raw_buffer()->device_interface == halide_metal_device_interface()) {
                 native_handle = halide_metal_get_buffer(nullptr, output.raw_buffer());
                 can_rewrap = true;
