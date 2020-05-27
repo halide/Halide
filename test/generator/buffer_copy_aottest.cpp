@@ -107,6 +107,7 @@ int main(int argc, char **argv) {
     }
 
 #else
+    // TODO: split the upper part of this test so that we can mark the rest of it as skipped appropriately
     printf("Skipping tests that require cuda or opencl in target.\n");
 #endif
 

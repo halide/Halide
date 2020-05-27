@@ -92,7 +92,7 @@ static void *const user_context = NULL;
 // a halide_malloc failure, and user code should not affect debug-tracing
 #define trace(x) StackPrinter<4096, BasicPrinter>(x)
 
-static volatile int indent_lock = 0;
+static volatile ScopedSpinLock::AtomicFlag indent_lock = 0;
 static const char indent_pattern[] = "   ";
 static char indent[2048] = {};
 static int indent_end = 0;
@@ -100,21 +100,21 @@ static int indent_end = 0;
 #define TRACEPRINT(msg) trace(user_context) << TRACEINDENT << msg;
 struct TraceLogScope {
     TraceLogScope() {
-        while (__sync_lock_test_and_set(&indent_lock, 1)) {
+        while (__atomic_test_and_set(&indent_lock, __ATOMIC_ACQUIRE)) {
         }
         for (const char *p = indent_pattern; *p; ++p) {
             indent[indent_end++] = *p;
         }
-        __sync_lock_release(&indent_lock);
+        __atomic_clear(&indent_lock, __ATOMIC_RELEASE);
     }
     ~TraceLogScope() {
-        while (__sync_lock_test_and_set(&indent_lock, 1)) {
+        while (__atomic_test_and_set(&indent_lock, __ATOMIC_ACQUIRE)) {
         }
         for (const char *p = indent_pattern; *p; ++p) {
             indent[--indent_end] = '\0';
         }
         TRACEPRINT("^^^\n");
-        __sync_lock_release(&indent_lock);
+        __atomic_clear(&indent_lock, __ATOMIC_RELEASE);
     }
 };
 #define TRACELOG                               \
@@ -2142,7 +2142,7 @@ static void *buffer_contents(d3d12_buffer *buffer) {
     return pData;
 }
 
-volatile int WEAK thread_lock = 0;
+volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
@@ -2178,7 +2178,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
     TRACELOG;
 
     halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) {
+    while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {
     }
 
 #ifdef DEBUG_RUNTIME
@@ -2188,7 +2188,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
     if (create && (device == NULL)) {
         device = D3D12CreateSystemDefaultDevice(user_context);
         if (device == NULL) {
-            __sync_lock_release(&thread_lock);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return halide_error_code_generic_error;
         }
 
@@ -2197,7 +2197,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
         if (rootSignature == NULL) {
             release_object(device);
             device = NULL;
-            __sync_lock_release(&thread_lock);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return halide_error_code_generic_error;
         }
 
@@ -2207,7 +2207,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
             Release_ID3D12Object(rootSignature);
             release_object(device);
             device = NULL;
-            __sync_lock_release(&thread_lock);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return halide_error_code_generic_error;
         }
 
@@ -2229,7 +2229,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
 
 WEAK int halide_d3d12compute_release_context(void *user_context) {
     TRACELOG;
-    __sync_lock_release(&thread_lock);
+    __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
     return 0;
 }
 

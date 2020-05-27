@@ -1,9 +1,7 @@
 #include "Halide.h"
+#include "halide_test_dirs.h"
 
-#include <iostream>
-#include <stdio.h>
-
-#include "test/common/halide_test_dirs.h"
+#include <cstdio>
 
 using namespace Halide;
 

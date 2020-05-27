@@ -1,8 +1,7 @@
 #ifdef _WIN32
 #include <stdio.h>
-// MSAN isn't supported for any Windows variant
 int main(int argc, char **argv) {
-    printf("Skipping test on Windows\n");
+    printf("[SKIP] MSAN isn't supported for any Windows variant.\n");
     return 0;
 }
 #else

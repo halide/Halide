@@ -22,5 +22,6 @@ int main(int argc, char **argv) {
     // entirely. This test ensures things compile anyway.
     result.compile_jit();
 
+    printf("Success!\n");
     return 0;
 }

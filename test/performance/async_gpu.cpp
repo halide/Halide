@@ -16,14 +16,14 @@ Expr expensive(Expr x, int c) {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
-        printf("Not running test because no gpu target enabled\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 
     // Issue https://github.com/halide/Halide/issues/3586 -- failing
     // on Windows; disabling pending a fix
     if (target.has_feature(Target::D3D12Compute)) {
-        printf("Skipping performance_async_gpu on D3D12Compute; see https://github.com/halide/Halide/issues/3586\n");
+        printf("[SKIP] D3D12Compute broken; see https://github.com/halide/Halide/issues/3586\n");
         return 0;
     }
 
@@ -77,5 +77,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    printf("Success!\n");
     return 0;
 }

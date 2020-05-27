@@ -19,7 +19,7 @@ int check_result(Buffer<T> output, int n_types, int offset) {
 int main(int argc, char **argv) {
     Target t(get_jit_target_from_environment());
     if (!t.has_gpu_feature()) {
-        printf("Not running test because no gpu target enabled\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 

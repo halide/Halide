@@ -1,13 +1,13 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_dirs.h"
 
-#include "test/common/halide_test_dirs.h"
+#include <cstdio>
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as the wasm JIT does not yet support debug_to_file().\n");
+        printf("[SKIP] WebAssembly JIT does not support debug_to_file() yet.\n");
         return 0;
     }
 
