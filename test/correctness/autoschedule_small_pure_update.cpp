@@ -26,5 +26,6 @@ int main(int argc, char **argv) {
     // in g's update definition.
     p.realize(13, 17);
 
+    printf("Success!\n");
     return 0;
 }

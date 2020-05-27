@@ -106,7 +106,10 @@ int main(int argc, char **argv) {
     ok = ok && test<uint32_t>();
     ok = ok && test<int32_t>();
 
-    if (!ok) return -1;
+    if (!ok) {
+        return -1;
+    }
+
     printf("Success!\n");
     return 0;
 }

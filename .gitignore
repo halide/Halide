@@ -12,7 +12,6 @@ build-osx/*
 cmake_build*/*
 */build/*
 tmp/*
-doc/*
 include/*
 distrib/*
 testing/*
@@ -89,3 +88,5 @@ src/.tags_sorted_by_file
 
 /.vs
 /CMakeSettings.json
+/venv/
+/cmake-build-*/

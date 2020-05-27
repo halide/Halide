@@ -18,5 +18,6 @@ int main(int argc, char **argv) {
 
     Buffer<int> result = f.realize(10, 10);
 
+    printf("Success!\n");
     return 0;
 }

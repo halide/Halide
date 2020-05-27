@@ -20,7 +20,7 @@ void check_error(bool error) {
 int main(int argc, char **argv) {
 
     if (!Halide::exceptions_enabled()) {
-        std::cout << "Not performing exceptions test because Halide was compiled without exceptions.\n";
+        std::cout << "[SKIP] Halide was compiled without exceptions.\n";
         return 0;
     }
 
@@ -150,6 +150,5 @@ int main(int argc, char **argv) {
     check_error(error);
 
     std::cout << "Success!\n";
-
     return 0;
 }

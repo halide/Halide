@@ -22,5 +22,6 @@ int main(int argc, char **argv) {
     Pipeline p({f, g});
     p.realize(200, 200);
 
+    printf("Success!\n");
     return 0;
 }

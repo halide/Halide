@@ -229,6 +229,8 @@ public:
             result = (uint64_t)&__udivdi3;
         }
 #endif
+        internal_assert(result != 0)
+            << "HalideJITMemoryManager: unable to find address for " << name << "\n";
         return result;
     }
 

@@ -66,5 +66,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    printf("Success!\n");
     return 0;
 }
