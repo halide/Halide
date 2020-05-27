@@ -1213,7 +1213,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "    }                             \n"
         << "  } else {                        \n"
         << "    return nan_f32();             \n"
-        <<   "}                               \n"
+        << "  }                               \n"
         << "}                                 \n"
         << "#define asin_f32    asin   \n"
         << "#define acos_f32    acos   \n"
