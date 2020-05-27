@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
                 int correct = 3 * x;
                 if (out(x) != correct) {
                     printf("out[%d|%d](%d) = %d instead of %d\n",
-                           per_thread, memory_type, x, out(x), correct);
+                           per_thread, (int)memory_type, x, out(x), correct);
                     return -1;
                 }
             }
