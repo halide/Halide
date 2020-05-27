@@ -40,6 +40,7 @@ int multi_thread_type_test(MemoryType memory_type) {
         }
     }
 
+    printf("OK\n");
     return 0;
 }
 
@@ -81,6 +82,7 @@ int pyramid_test(MemoryType memory_type) {
         }
     }
 
+    printf("OK\n");
     return 0;
 }
 
@@ -129,10 +131,15 @@ int inverted_pyramid_test(MemoryType memory_type) {
         }
     }
 
+    printf("OK\n");
     return 0;
 }
 
 int dynamic_shared_test(MemoryType memory_type) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
 
     Func f1, f2, f3, f4;
     Var x, xo, xi, thread_xo;
@@ -159,13 +166,13 @@ int dynamic_shared_test(MemoryType memory_type) {
         }
     }
 
+    printf("OK\n");
     return 0;
 }
 
 int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
-    if (t.has_gpu_feature()) {
-        printf("Not running test because no gpu target enabled\n");
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 

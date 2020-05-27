@@ -15,11 +15,11 @@ int fib(int N, int a, int b) {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
-        printf("Not running test because no gpu target enabled\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
     if (target.has_feature(Target::D3D12Compute)) {
-        printf("Not running test because allocation cache has not yet been implemented on the D3D12 backend\n");
+        printf("[SKIP] Not running test because allocation cache has not yet been implemented on the D3D12 backend\n");
         return 0;
     }
 

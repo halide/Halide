@@ -22,14 +22,14 @@ int main(int argc, char **argv) {
     if (target.has_feature(Target::Profile)) {
         // The profiler adds lots of extra prints, so counting the
         // number of prints is not useful.
-        printf("Skipping test because profiler is active\n");
+        printf("[SKIP] Test incompatible with profiler.\n");
         return 0;
     }
 
     if (target.has_feature(Target::Debug)) {
         // Same thing here: the runtime debug adds lots of extra prints,
         // so counting the number of prints is not useful.
-        printf("Skipping test because runtime debug is active\n");
+        printf("[SKIP] Test incompatible with debug runtime.\n");
         return 0;
     }
 
