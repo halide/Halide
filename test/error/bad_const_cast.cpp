@@ -11,6 +11,6 @@ int main(int argc, char **argv) {
     // zero. That's bad. So we check for that inside IROperator.cpp.
     f(x) = cast<uint8_t>(x) % 256;
 
-    printf("How did I get here?\n");
+    printf("Success!\n");
     return 0;
 }

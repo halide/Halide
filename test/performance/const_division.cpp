@@ -128,10 +128,10 @@ int main(int argc, char **argv) {
         success = success && test<uint8_t>(32, i == 0);
     }
 
-    if (success) {
-        printf("Success!\n");
-        return 0;
-    } else {
+    if (!success) {
         return -1;
     }
+
+    printf("Success!\n");
+    return 0;
 }
