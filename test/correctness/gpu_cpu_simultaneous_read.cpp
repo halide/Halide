@@ -6,7 +6,7 @@ int main() {
 
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
-        printf("No GPU feature enabled in target. Skipping test\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 

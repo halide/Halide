@@ -151,7 +151,7 @@ public:
 
 WEAK TraceBuffer *halide_trace_buffer = NULL;
 WEAK int halide_trace_file = -1;  // -1 indicates uninitialized
-WEAK int halide_trace_file_lock = 0;
+WEAK ScopedSpinLock::AtomicFlag halide_trace_file_lock = 0;
 WEAK bool halide_trace_file_initialized = false;
 WEAK void *halide_trace_file_internally_opened = NULL;
 

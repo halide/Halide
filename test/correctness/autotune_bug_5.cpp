@@ -29,5 +29,6 @@ int main(int argc, char **argv) {
 
     upsampled.realize(100, 100);
 
+    printf("Success!\n");
     return 0;
 }

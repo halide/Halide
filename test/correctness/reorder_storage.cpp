@@ -19,7 +19,7 @@ void my_free(void *user_context, void *ptr) {
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
         return 0;
     }
 
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     if (target.has_feature(Target::Debug)) {
         // the runtime debug adds some debug payload to each allocation,
         // so the 'expected_allocation' is unlikely to be a match.
-        printf("Skipping test because runtime debug is active\n");
+        printf("[SKIP] Test incompatible with debug runtime.\n");
         return 0;
     }
     Var x, y, c;

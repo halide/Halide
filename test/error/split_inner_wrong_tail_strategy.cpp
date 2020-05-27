@@ -16,5 +16,6 @@ int main(int argc, char **argv) {
     g(x) = f(x);
     g.realize(10);
 
+    printf("Success!\n");
     return 0;
 }

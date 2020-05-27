@@ -21,5 +21,6 @@ int main(int argc, char **argv) {
     g.compute_with(f, x);
     h.realize(200, 200);
 
+    printf("Success!\n");
     return 0;
 }

@@ -44,6 +44,5 @@ int main(int argc, char **argv) {
     output.realize(obuf);
 
     printf("Success!\n");
-
     return 0;
 }

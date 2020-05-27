@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as the wasm JIT cannot support Param<> for pointer types.\n");
+        printf("[SKIP] WebAssembly JIT does not support Param<> for pointer types.\n");
         return 0;
     }
 
