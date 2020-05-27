@@ -589,6 +589,7 @@ const char *const intrinsic_op_names[] = {
     "bitwise_or",
     "bitwise_xor",
     "bool_to_mask",
+    "bundle",
     "call_cached_indirect_function",
     "cast_mask",
     "count_leading_zeros",

@@ -168,6 +168,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
+    user_assert(loop->for_type != ForType::GPULane)
+        << "The Metal backend does not support the gpu_lanes() scheduling directive.";
+
     if (is_gpu_var(loop->name)) {
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))

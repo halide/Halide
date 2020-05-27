@@ -1,8 +1,8 @@
-#include <fstream>
-
 #include "Halide.h"
 #include "halide_image_io.h"
-#include "test/common/halide_test_dirs.h"
+#include "halide_test_dirs.h"
+
+#include <fstream>
 
 using namespace Halide;
 
@@ -259,5 +259,6 @@ int main(int argc, char **argv) {
     do_test<uint8_t>();
     do_test<uint16_t>();
     test_mat_header();
+    printf("Success!\n");
     return 0;
 }

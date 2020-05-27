@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     if (!target.has_gpu_feature()) {
-        printf("This is a gpu-specific test. Skipping it\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
     DeviceAPI device_api = get_default_device_api_for_target(target);

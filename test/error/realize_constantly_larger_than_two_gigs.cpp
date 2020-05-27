@@ -25,5 +25,7 @@ int main(int argc, char **argv) {
     Buffer<uint8_t> result = grand_total.realize();
 
     assert(error_occurred);
+
     printf("Success!\n");
+    return 0;
 }

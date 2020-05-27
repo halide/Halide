@@ -1,9 +1,8 @@
 #include <stdio.h>
 
 #ifdef _WIN32
-// This test requires weak linkage
 int main(int argc, char **argv) {
-    printf("Skipping test on windows\n");
+    printf("[SKIP] Test requires weak linkage, which is not available on Windows.\n");
     return 0;
 }
 #else

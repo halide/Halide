@@ -1068,6 +1068,7 @@ public:
         // because e.g. B could be double-resolution (as happens when fusing yuv computations), so this
         // is not just a matter of giving A's box B's name as an alias.
         map<string, Box> boxes_for_fused_group;
+        map<string, Function> stage_name_to_func;
         if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
             Scope<Interval> empty_scope;
             size_t last_dot = op->name.rfind('.');
@@ -1089,13 +1090,22 @@ public:
 
             if (fused_with_f.empty()) {
                 boxes_for_fused_group[stage_name] = box_provided(body, stages[producing].name, empty_scope, func_bounds);
+                stage_name_to_func[stage_name] = f;
                 internal_assert((int)boxes_for_fused_group[stage_name].size() == f.dimensions());
             } else {
                 auto boxes = boxes_provided(body, empty_scope, func_bounds);
                 boxes_for_fused_group[stage_name] = boxes[stages[producing].name];
-
+                stage_name_to_func[stage_name] = f;
+                internal_assert((int)boxes_for_fused_group[stage_name].size() == f.dimensions());
                 for (const auto &fused : fused_with_f) {
-                    boxes_for_fused_group[fused.first + ".s" + std::to_string(fused.second)] = boxes[fused.first];
+                    string fused_stage_name = fused.first + ".s" + std::to_string(fused.second);
+                    boxes_for_fused_group[fused_stage_name] = boxes[fused.first];
+                    for (const auto &fn : funcs) {
+                        if (fn.name() == fused.first) {
+                            stage_name_to_func[fused_stage_name] = fn;
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -1132,9 +1142,10 @@ public:
             // Finally, define the production bounds for the thing
             // we're producing.
             if (producing >= 0 && !inner_productions.empty()) {
-                const vector<string> &f_args = f.args();
                 for (const auto &b : boxes_for_fused_group) {
+                    const vector<string> &f_args = stage_name_to_func[b.first].args();
                     const auto &box = b.second;
+                    internal_assert(f_args.size() == box.size());
                     for (size_t i = 0; i < box.size(); i++) {
                         internal_assert(box[i].is_bounded());
                         string var = b.first + "." + f_args[i];
