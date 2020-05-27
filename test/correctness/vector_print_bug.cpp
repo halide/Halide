@@ -8,5 +8,7 @@ int main(int argc, char **argv) {
     f(x) = print(x);
     f.vectorize(x, 4);
     f.realize(8);
+
+    printf("Success!\n");
     return 0;
 }

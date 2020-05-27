@@ -1,7 +1,5 @@
 #include "Halide.h"
-#include "test/common/check_call_graphs.h"
-
-#include <stdio.h>
+#include "check_call_graphs.h"
 
 using namespace Halide;
 
@@ -29,5 +27,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    printf("Success!\n");
     return 0;
 }

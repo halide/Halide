@@ -24,5 +24,7 @@ int main(int argc, char **argv) {
     Buffer<int32_t> result = f.realize(100, 5, 3);
 
     assert(error_occurred);
+
     printf("Success!\n");
+    return 0;
 }

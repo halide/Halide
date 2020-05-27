@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
                        target.features_any_of({Target::HVX_64, Target::HVX_128});
 
     if (!hexagon_rpc && !target.has_gpu_feature()) {
-        printf("This is a gpu-specific test. Skipping it.\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 

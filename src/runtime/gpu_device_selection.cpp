@@ -7,7 +7,7 @@ namespace Runtime {
 namespace Internal {
 
 WEAK int halide_gpu_device = 0;
-WEAK int halide_gpu_device_lock = 0;
+WEAK ScopedSpinLock::AtomicFlag halide_gpu_device_lock = 0;
 WEAK bool halide_gpu_device_initialized = false;
 
 }  // namespace Internal

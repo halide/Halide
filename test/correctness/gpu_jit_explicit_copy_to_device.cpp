@@ -6,7 +6,7 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     if (!target.has_gpu_feature() && !target.has_feature(Target::OpenGLCompute)) {
-        printf("This is a gpu-specific test. Skipping it\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 

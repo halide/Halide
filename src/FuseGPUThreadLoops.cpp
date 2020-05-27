@@ -761,7 +761,7 @@ public:
                                 return IRMutator::visit(op);
                             }
                         }
-                        const string &alloc_name;
+                        const string alloc_name;
                         const string &group_name;
 
                     public:

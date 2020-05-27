@@ -2,7 +2,8 @@
 #define SIMD_OP_CHECK_H
 
 #include "Halide.h"
-#include "test/common/halide_test_dirs.h"
+#include "halide_test_dirs.h"
+
 #include <fstream>
 
 namespace Halide {
