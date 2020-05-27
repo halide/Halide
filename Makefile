@@ -382,6 +382,7 @@ endif
 
 ifneq ($(TEST_CUDA), )
 TEST_CXX_FLAGS += -DTEST_CUDA
+TEST_CXX_FLAGS += -I/usr/local/cuda/include
 endif
 
 # Compiling the tutorials requires libpng
