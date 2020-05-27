@@ -9,6 +9,7 @@
 #include "DeviceArgument.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Simplify.h"
 
 #define DEBUG_TYPES (0)
 
@@ -268,6 +269,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         stream << get_indent() << "GroupMemoryBarrierWithGroupSync();\n";
         stream << get_indent() << "DeviceMemoryBarrierWithGroupSync();\n";
         print_assignment(op->type, "0");
+    } else if (op->name == "pow_f32" && can_prove(op->args[0] > 0)) {
+        // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
+        // directly.
+        stream << "pow(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
     } else {
         CodeGen_C::visit(op);
     }
@@ -1199,7 +1204,6 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         // x > 0.  Otherwise, we need to emulate C
         // behavior.
         // TODO(shoaibkamil): Can we simplify this?
-        << "float pow_f32(float x, float y) { if (x > 0.0) { return pow(x, y); } else if (y == 0.0) { return 1.0f; } else if (trunc(y) == y) { if (fmod(y, 2) == 0) { return pow(abs(x), y); } else { return -pow(abs(x), y); }  } else { return nan_f32(); }} \n"
         << "float pow_f32(float x, float y) { \n"
         << "  if (x > 0.0) {                  \n"
         << "    return pow(x, y);             \n"
