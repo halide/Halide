@@ -427,7 +427,8 @@ struct StoragePackUnpack {
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
-    // __shared[x] is always 32bits: must reinterpret (and maybe unpack) bits...
+    // elements in a threadgroup shared buffer are always 32bits:
+    // must reinterpret (and maybe unpack) bits...
     if (groupshared_allocations.contains(op->name)) {
         ostringstream rhs;
         internal_assert(allocations.contains(op->name));
@@ -449,7 +450,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
                 << "[" << id_index << "]"
                 << ")";
         }
-        
+
         // NOTE(marcos): might need to resort to StoragePackUnpack::unpack_load() here...
         print_assignment(op->type, rhs.str());
         return;
@@ -536,7 +537,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
 
     Type value_type = op->value.type();
 
-    // __shared[x] is always 32bits: must reinterpret (and maybe pack) bits...
+    // elements in a threadgroup shared buffer are always 32bits:
+    // must reinterpret (and maybe pack) bits...
     if (groupshared_allocations.contains(op->name)) {
         internal_assert(value_type.bits() <= 32);
         ostringstream rhs;
@@ -612,7 +614,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Select *op) {
     print_assignment(op->type, rhs.str());
 }
 
-static bool is_shared_allocation(const Allocate* op) { return op->memory_type == MemoryType::GPUShared; }
+static bool is_shared_allocation(const Allocate* op) {
+     return op->memory_type == MemoryType::GPUShared;
+}
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op) {
 
@@ -943,8 +947,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             // since groupshared memory elements have 32bit granularity:
             stream << " [ ( __GROUPSHARED_SIZE_IN_BYTES + 3 ) / 4 ];\n";
         }
-        if (total_shared_bytes > StoragePackUnpack::ThreadGroupSharedStorageLimit)
-        {
+        if (total_shared_bytes > StoragePackUnpack::ThreadGroupSharedStorageLimit) {
             debug(1) << "D3D12 CodeGen ERROR: Total thread group shared memory required for kernel '" << name
                      << "' exceeds the SM 5.1 limit of 32KB: " << total_shared_bytes << " bytes required.\n";
         }
@@ -953,8 +956,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         allocations.push(op->name, alloc);
     }
 
-    // Find and patch situations where the __shared buffer is read before having
-    // ever being initialized:
+    // Find and patch situations where threadgroup shared buffers are read before
+    // having ever being initialized:
 
     // NOTE(marcos): it would be cleaner if we could just use an IRVisitor here
     // but in order to find the enclosing Stmt of a Load expression we need to
@@ -978,8 +981,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         Expr visit(const Load *op) override {
             if (groupshared_allocations.contains(op->name)) {
                 if (!latest_store.defined()) {
-                    // attempting to read from __shared before anything has been
-                    // written to it yet!
+                    // attempting to read from threadgroup shared buffer before
+                    // anything has been written to it yet!
                     bad_load_expr = op;
                 }
             }
@@ -1006,7 +1009,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     FindUninitializedSharedLoads fusl;
     s = fusl.mutate(s);
     if (fusl.bad_load_expr.defined()) {
-        debug(1) << "Found a potential load-before-initialization on __shared buffer!\n";
+        debug(1) << "Found a potential load-before-initialization on a threadgroup shared buffer!\n";
         // use IRMutator to inject a zero-initialization before the load
         struct ZeroInitializeSharedMemory : public IRMutator {
             using IRMutator::mutate;
@@ -1015,7 +1018,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                     return IRMutator::mutate(op);
                 }
 
-                debug(1) << "Patching __shared buffer with zero-intialization...\n";
+                debug(1) << "Patching threadgroup shared buffer with zero-intialization...\n";
 
                 const Load *lop = uninitialized_load_expr.as<Load>();
                 Stmt initialization = Store::make(lop->name, Expr(0), lop->index, Parameter(), lop->predicate, ModulusRemainder());
@@ -1196,7 +1199,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         // x > 0.  Otherwise, we need to emulate C
         // behavior.
         // TODO(shoaibkamil): Can we simplify this?
-        << "float pow_f32(float x, float y) { if (x > 0.0) { return pow(x, y); } else if (y == 0.0) { return 1.0f; } else if (trunc(y) == y) { if (fmod(y, 2) == 0) { return pow(abs(x), y); } else { return -pow(abs(x), y); }  } else { return nan_f32(); }} \n" 
+        << "float pow_f32(float x, float y) { if (x > 0.0) { return pow(x, y); } else if (y == 0.0) { return 1.0f; } else if (trunc(y) == y) { if (fmod(y, 2) == 0) { return pow(abs(x), y); } else { return -pow(abs(x), y); }  } else { return nan_f32(); }} \n"
         << "#define asin_f32    asin   \n"
         << "#define acos_f32    acos   \n"
         << "#define tan_f32     tan    \n"
