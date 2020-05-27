@@ -299,14 +299,12 @@ string hex_literal(T value) {
 
 }  // namespace
 
-struct StoragePackUnpack
-{
+struct StoragePackUnpack {
     using CodeGen = CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
 
     static const size_t ThreadGroupSharedStorageLimit = 32 * 1024;
 
-    void pack_storage(const Allocate *op, size_t elements, size_t size_in_bytes)
-    {
+    void pack_storage(const Allocate *op, size_t elements, size_t size_in_bytes) {
         // we could try to compact things for smaller types:
         size_t packing_factor = 1;
         while (size_in_bytes > ThreadGroupSharedStorageLimit) {
@@ -319,7 +317,7 @@ struct StoragePackUnpack
         internal_assert(packing_factor <= 4);
     }
 
-    std::ostringstream pack_store(CodeGen& cg, const Store *op) {
+    std::ostringstream pack_store(CodeGen &cg, const Store *op) {
         std::ostringstream lhs;
         // NOTE(marcos): 8bit and 16bit word packing -- the smallest integer
         // type granularity available in HLSL SM 5.1 is 32bit (int/uint):
@@ -361,13 +359,14 @@ struct StoragePackUnpack
             // the performance impact of atomic operations on shared memory is
             // not well documented... here is something:
             // https://stackoverflow.com/a/19548723
-            lhs << cg.get_indent() << "InterlockedAnd(" << word.str() << ", " << "~" << mask.str() << ");\n";
+            lhs << cg.get_indent() << "InterlockedAnd(" << word.str() << ", "
+                << "~" << mask.str() << ");\n";
             lhs << cg.get_indent() << "InterlockedXor(" << word.str() << ", " << value.str() << ");\n";
         }
         return lhs;
     }
 
-    std::ostringstream unpack_load(CodeGen& cg, const Load *op) {
+    std::ostringstream unpack_load(CodeGen &cg, const Load *op) {
         std::ostringstream rhs;
         // NOTE(marcos): let's keep this block of code here (disabled) in case
         // we need to "emulate" byte/short packing in shared memory (recall that
@@ -440,13 +439,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
         string id_index = print_expr(op->index);
         internal_assert(op->type.bits() <= 32);
         Type promoted = op->type.with_bits(32);
-        if (promoted == op->type)
-        {
+        if (promoted == op->type) {
             rhs << print_name(op->name)
                 << "[" << id_index << "]";
-        }
-        else
-        {
+        } else {
             rhs << "as" << print_type(promoted)
                 << "("
                 << print_name(op->name)
