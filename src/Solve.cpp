@@ -491,6 +491,12 @@ private:
             } else if (sub_a && sub_b && equal(sub_a->a, sub_b->a)) {
                 // min(f(x) - a, f(x) - b) -> f(x) - max(a, b)
                 expr = mutate(sub_a->a - Other::make(sub_a->b, sub_b->b));
+            } else if (sub_a && add_b && equal(sub_a->a, add_b->a)) {
+                // min(f(x) - a, f(x) + b) -> f(x) + min(0 - a, b)
+                expr = mutate(sub_a->a + T::make(make_zero(op->type) - sub_a->b, add_b->b));
+            } else if (add_a && sub_b && equal(add_a->a, sub_b->a)) {
+                // min(f(x) + a, f(x) - b) -> f(x) + min(a, 0 - b)
+                expr = mutate(add_a->a + T::make(add_a->b, make_zero(op->type) - sub_b->b));
             } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b)) {
                 // op(f(x) - a, g(x) - a) -> op(f(x), g(x)) - a
                 expr = mutate(T::make(sub_a->a, sub_b->a)) - sub_a->b;
@@ -1679,6 +1685,12 @@ void solve_test() {
     check_solve(max(x - y, x - z), x - min(y, z));
     check_solve(max(x - y, x), x - min(y, 0));
     check_solve(max(x, x - y), x - min(y, 0));
+
+    // Check mixed add/sub
+    check_solve(min(x - y, x + z), x + min(0 - y, z));
+    check_solve(max(x - y, x + z), x + max(0 - y, z));
+    check_solve(min(x + y, x - z), x + min(y, 0 - z));
+    check_solve(max(x + y, x - z), x + max(y, 0 - z));
 
     debug(0) << "Solve test passed\n";
 }
