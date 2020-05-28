@@ -18,10 +18,6 @@ int main(int argc, char **argv) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
-    if (target.has_feature(Target::D3D12Compute)) {
-        printf("[SKIP] Not running test because allocation cache has not yet been implemented on the D3D12 backend\n");
-        return 0;
-    }
 
     const int N = 30;
     Var x, y, xi, yi;

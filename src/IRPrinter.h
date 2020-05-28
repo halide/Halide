@@ -80,6 +80,9 @@ std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
 /** Emit a halide linkage value in a human readable format */
 std::ostream &operator<<(std::ostream &stream, const LinkageType &);
 
+/** Emit a halide dimension type in human-readable format */
+std::ostream &operator<<(std::ostream &stream, const DimType &);
+
 struct Indentation {
     int indent;
 };

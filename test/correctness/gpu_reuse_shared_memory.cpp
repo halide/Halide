@@ -136,11 +136,6 @@ int inverted_pyramid_test(MemoryType memory_type) {
 }
 
 int dynamic_shared_test(MemoryType memory_type) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
-    }
-
     Func f1, f2, f3, f4;
     Var x, xo, xi, thread_xo;
 
@@ -172,7 +167,7 @@ int dynamic_shared_test(MemoryType memory_type) {
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
-    if (!t.has_gpu_feature()) {
+    if (t.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
