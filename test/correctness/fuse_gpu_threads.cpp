@@ -21,6 +21,7 @@ class CheckThreadExtent : public IRVisitor {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 
@@ -55,5 +56,6 @@ int main(int argc, char **argv) {
     CheckThreadExtent c;
     m.functions().front().body.accept(&c);
 
+    printf("Success!\n");
     return 0;
 }

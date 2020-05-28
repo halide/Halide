@@ -335,6 +335,21 @@ std::ostream &operator<<(std::ostream &stream, const Indentation &indentation) {
     return stream;
 }
 
+std::ostream &operator<<(std::ostream &out, const DimType &t) {
+    switch (t) {
+    case DimType::PureVar:
+        out << "PureVar";
+        break;
+    case DimType::PureRVar:
+        out << "PureRVar";
+        break;
+    case DimType::ImpureRVar:
+        out << "ImpureRVar";
+        break;
+    }
+    return out;
+}
+
 IRPrinter::IRPrinter(ostream &s)
     : stream(s), indent(0) {
     s.setf(std::ios::fixed, std::ios::floatfield);

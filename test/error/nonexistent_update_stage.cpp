@@ -9,5 +9,6 @@ int main(int argc, char **argv) {
     f(x) = x;
     f.update().vectorize(x, 4);
 
+    printf("Success!\n");
     return 0;
 }

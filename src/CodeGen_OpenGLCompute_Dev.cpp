@@ -270,6 +270,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(const Stmt &
     }
     add_common_macros(stream);
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
+    stream << "#define halide_unused(x) (void)(x)\n";
 
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {

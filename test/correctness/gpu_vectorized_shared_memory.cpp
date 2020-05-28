@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
         }
 
     } else {
-        printf("This test is only relevant for OpenCL targets\n");
+        printf("[SKIP] OpenCL not enabled.\n");
         return 0;
     }
 

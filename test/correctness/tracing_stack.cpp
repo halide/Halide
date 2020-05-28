@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
 #include <stdio.h>
 
 int main(int argc, char **argv) {
-    printf("Test skipped because we're not on a system with UNIX signal handling\n");
+    printf("[SKIP] Test requires UNIX signal handling\n");
     return 0;
 }
 

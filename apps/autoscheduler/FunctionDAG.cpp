@@ -458,9 +458,11 @@ FunctionDAG::Edge::BoundInfo::BoundInfo(const Expr &e, const Node::Stage &consum
     const Mul *mul = add ? add->a.as<Mul>() : expr.as<Mul>();
     const IntImm *coeff_imm = mul ? mul->b.as<IntImm>() : nullptr;
     const IntImm *constant_imm = add ? add->b.as<IntImm>() : nullptr;
+    // clang-format off
     Expr v = (mul ? mul->a :
-                    add ? add->a :
-                          expr);
+              add ? add->a :
+                    expr);
+    // clang-format on
     const Variable *var = v.as<Variable>();
 
     if (const IntImm *c = e.as<IntImm>()) {

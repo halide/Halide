@@ -116,13 +116,13 @@ bool test_all(int vec_width, const Target &target) {
 }
 
 int main(int argc, char **argv) {
-
+// TODO: is this still relevant?
 // We don't test this on windows, because float-to-int conversions
 // on windows use _ftol2, which has its own unique calling
 // convention, and older LLVMs (e.g. pnacl) don't do it right so
 // you get clobbered registers.
 #ifdef WIN32
-    printf("Not testing on windows\n");
+    printf("[SKIP] float-to-int conversions don't work with older LLVMs on Windows\n");
     return 0;
 #endif
 

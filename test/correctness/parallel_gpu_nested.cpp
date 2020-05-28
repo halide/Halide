@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     } else if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.hexagon(y);
     } else {
-        printf("No gpu or hexagon target enabled. Skipping test.\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
     f.parallel(z);

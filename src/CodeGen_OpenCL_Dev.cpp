@@ -884,6 +884,10 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define fast_inverse_f32 native_recip \n"
                << "#define fast_inverse_sqrt_f32 native_rsqrt \n";
 
+    // There does not appear to be a reliable way to safely ignore unused
+    // variables in OpenCL C. See https://github.com/halide/Halide/issues/4918.
+    src_stream << "#define halide_unused(x)";
+
     if (target.has_feature(Target::CLDoubles)) {
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"
                    << "inline bool is_nan_f64(double x) {return isnan(x); }\n"
