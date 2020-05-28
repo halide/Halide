@@ -36,11 +36,6 @@ target_compile_definitions(Halide_LLVM INTERFACE
                            "LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}"
                            ${LLVM_DEFINITIONS})
 
-option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
-if (HALIDE_ENABLE_EXCEPTIONS)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_EXCEPTIONS)
-endif ()
-
 ##
 # Detect supported llvm targets
 ##
@@ -149,6 +144,17 @@ if (NOT LLVM_ENABLE_RTTI)
     target_compile_options(Halide_LLVM INTERFACE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
                            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fno-rtti>)
+endif ()
+
+option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
+if (HALIDE_ENABLE_EXCEPTIONS)
+    message(STATUS "Compiling Halide WITH exceptions...")
+    target_compile_definitions(Halide_LLVM INTERFACE WITH_EXCEPTIONS)
+else ()
+    message(STATUS "Compiling Halide WITHOUT exceptions...")
+    target_compile_options(Halide_LLVM INTERFACE
+                           $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/EHs-c->
+                           $<$<COMPILE_LANG_AND_ID:CXX,GCC,Clang,AppleClang>:-fno-exceptions>)
 endif ()
 
 if (LLVM_LIBCXX GREATER -1)
