@@ -1082,6 +1082,8 @@ void CodeGen_D3D12Compute_Dev::init_module() {
            "\n"
         << "\n";
 
+    src_stream << "#define halide_unused(x) (void)(x)\n";
+
     // Write out the Halide math functions.
     src_stream
     //<< "namespace {\n"   // HLSL does not support unnamed namespaces...
