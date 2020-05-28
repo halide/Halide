@@ -82,13 +82,13 @@ using add_const_if_T_is_const = typename std::conditional<std::is_const<T>::valu
 // scalar type, or void, possibly with const). Useful for an error
 // messages.
 template<typename T>
-void buffer_type_name_non_const(std::ostringstream &oss) {
-    oss << type_to_c_type(type_of<T>(), false);
+void buffer_type_name_non_const(std::ostream &s) {
+    s << type_to_c_type(type_of<T>(), false);
 }
 
 template<>
-inline void buffer_type_name_non_const<void>(std::ostringstream &oss) {
-    oss << "void";
+inline void buffer_type_name_non_const<void>(std::ostream &s) {
+    s << "void";
 }
 
 template<typename T>
@@ -130,6 +130,13 @@ class Buffer {
                               std::is_void<T2>::value,
                           "type mismatch constructing Buffer");
         } else {
+            // Don't delegate to
+            // Runtime::Buffer<T>::assert_can_convert_from. It might
+            // not assert is NDEBUG is defined. user_assert is
+            // friendlier anyway because it reports line numbers when
+            // debugging symbols are found, it throws an exception
+            // when exceptions are enabled, and we can print the
+            // actual types in question.
             user_assert(Runtime::Buffer<T>::can_convert_from(*(other.get())))
                 << "Type mismatch constructing Buffer. Can't construct Buffer<"
                 << Internal::buffer_type_name<T>() << "> from Buffer<"
