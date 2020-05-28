@@ -841,7 +841,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         const auto &iter = std::find_if(dims.begin(), dims.end(),
                                         [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
         if (iter == dims.end()) {
-            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
             dims.insert(dims.end() - 1, d);
         }
     }
@@ -1087,7 +1087,7 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
     string inner_name, outer_name, fused_name;
     vector<Dim> &dims = definition.schedule().dims();
 
-    Dim::Type outer_type = Dim::Type::PureRVar;
+    DimType outer_type = DimType::PureRVar;
     for (size_t i = 0; (!found_outer) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, outer.name())) {
             found_outer = true;
@@ -1112,12 +1112,12 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
             dims[i].var = fused_name;
 
             internal_assert(
-                (dims[i].is_rvar() && ((outer_type == Dim::Type::PureRVar) ||
-                                       (outer_type == Dim::Type::ImpureRVar))) ||
-                (!dims[i].is_rvar() && (outer_type == Dim::Type::PureVar)));
+                (dims[i].is_rvar() && ((outer_type == DimType::PureRVar) ||
+                                       (outer_type == DimType::ImpureRVar))) ||
+                (!dims[i].is_rvar() && (outer_type == DimType::PureVar)));
 
             if (dims[i].is_rvar()) {
-                dims[i].dim_type = (dims[i].dim_type == Dim::Type::PureRVar) && (outer_type == Dim::Type::PureRVar) ? Dim::Type::PureRVar : Dim::Type::ImpureRVar;
+                dims[i].dim_type = (dims[i].dim_type == DimType::PureRVar) && (outer_type == DimType::PureRVar) ? DimType::PureRVar : DimType::ImpureRVar;
             }
         }
     }
@@ -1212,7 +1212,7 @@ Stage &Stage::purify(const VarOrRVar &old_var, const VarOrRVar &new_var) {
             found = true;
             old_name = dims[i].var;
             dims[i].var = new_name;
-            dims[i].dim_type = Dim::Type::PureVar;
+            dims[i].dim_type = DimType::PureVar;
         }
     }
 
