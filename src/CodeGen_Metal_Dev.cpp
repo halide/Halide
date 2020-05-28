@@ -643,6 +643,7 @@ void CodeGen_Metal_Dev::init_module() {
 
     // __shared always has address space threadgroup.
     src_stream << "#define __address_space___shared threadgroup\n";
+    src_stream << "#define halide_unused(x) (void)(x)\n";
 
     src_stream << "\n";
 
