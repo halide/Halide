@@ -463,7 +463,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     contents->init_def = Definition(init_def_args, values, rdom, true);
 
     for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+        Dim d = {args[i], ForType::Serial, DeviceAPI::None, DimType::PureVar};
         contents->init_def.schedule().dims().push_back(d);
         StorageDim sd = {args[i]};
         contents->func_schedule.storage_dims().push_back(sd);
@@ -471,7 +471,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     // Add the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
         contents->init_def.schedule().dims().push_back(d);
     }
 
@@ -657,7 +657,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
             bool pure = can_parallelize_rvar(v, name(), r);
             Dim d = {v, ForType::Serial, DeviceAPI::None,
-                     pure ? Dim::Type::PureRVar : Dim::Type::ImpureRVar};
+                     pure ? DimType::PureRVar : DimType::ImpureRVar};
             r.schedule().dims().push_back(d);
         }
     }
@@ -665,14 +665,14 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // Then add the pure args outside of that
     for (const auto &pure_arg : pure_args) {
         if (!pure_arg.empty()) {
-            Dim d = {pure_arg, ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+            Dim d = {pure_arg, ForType::Serial, DeviceAPI::None, DimType::PureVar};
             r.schedule().dims().push_back(d);
         }
     }
 
     // Then the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
         r.schedule().dims().push_back(d);
     }
 
@@ -742,11 +742,11 @@ void Function::define_extern(const std::string &function_name,
     for (size_t i = 0; i < args.size(); i++) {
         contents->func_schedule.storage_dims().push_back(StorageDim{arg_names[i]});
         contents->init_def.schedule().dims().push_back(
-            Dim{arg_names[i], ForType::Extern, DeviceAPI::None, Dim::Type::PureVar});
+            Dim{arg_names[i], ForType::Extern, DeviceAPI::None, DimType::PureVar});
     }
     // Add the dummy outermost dim
     contents->init_def.schedule().dims().push_back(
-        Dim{Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar});
+        Dim{Var::outermost().name(), ForType::Serial, DeviceAPI::None, DimType::PureVar});
 }
 
 void Function::accept(IRVisitor *visitor) const {
