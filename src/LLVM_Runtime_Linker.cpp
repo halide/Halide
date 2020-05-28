@@ -449,6 +449,8 @@ llvm::Triple get_triple_for_target(const Target &target) {
             triple.setEnvironment(llvm::Triple::GNUEABIHF);
         } else if (target.os == Target::Fuchsia) {
             triple.setOS(llvm::Triple::Fuchsia);
+        } else if (target.os == Target::NoOS) {
+            // For bare-metal environments
         } else {
             user_error << "No arm support for this OS\n";
         }
