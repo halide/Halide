@@ -430,7 +430,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
                     success = false;
                 } else if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
                     std::cerr << "Compiled a%b != simplified a%b: " << (int64_t)ai
-                              << "/" << (int64_t)bi
+                              << "%" << (int64_t)bi
                               << " = " << (int64_t)ri
                               << " != " << re << "\n";
                     success = false;
@@ -539,6 +539,8 @@ bool test_div_mod(int vector_width, ScheduleVariant scheduling, Target target) {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
+    bool can_parallelize = !target.has_feature(Target::OpenGLCompute);
+
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {
         scheduling = TiledGPU;
@@ -575,21 +577,23 @@ int main(int argc, char **argv) {
 
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
-    /*
+
     for (int vector_width : mul_vector_widths) {
         std::cout << "Testing mul vector_width: " << vector_width << "\n";
-        auto f = pool.async(test_mul, vector_width, scheduling, target);
-        futures.push_back(std::move(f));
+        if (can_parallelize) {
+            auto f = pool.async(test_mul, vector_width, scheduling, target);
+            futures.push_back(std::move(f));
+        } else if (!test_mul(vector_width, scheduling, target)) {
+            return -1;
+        }
     }
-    */
 
     for (int vector_width : div_vector_widths) {
         std::cout << "Testing div_mod vector_width: " << vector_width << "\n";
-        /*
-          auto f = pool.async(test_div_mod, vector_width, scheduling, target);
-          futures.push_back(std::move(f));
-        */
-        if (!test_div_mod(vector_width, scheduling, target)) {
+        if (can_parallelize) {
+            auto f = pool.async(test_div_mod, vector_width, scheduling, target);
+            futures.push_back(std::move(f));
+        } else if (!test_div_mod(vector_width, scheduling, target)) {
             return -1;
         }
     }

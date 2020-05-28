@@ -21,39 +21,6 @@ CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(Target target)
     : glc(src_stream, target) {
 }
 
-namespace {
-// Maps Halide types to appropriate GLSL types or emit error if no equivalent
-// type is available.
-Type map_type(const Type &type) {
-    Type result = type;
-    if (type.is_scalar()) {
-        if (type.is_float()) {
-            user_assert(type.bits() <= 32)
-                << "GLSL: Can't represent a float with " << type.bits() << " bits.\n";
-            result = Float(32);
-        } else if (type.bits() == 1) {
-            result = Bool();
-        } else if (type == Int(32) || type == UInt(32)) {
-            // Keep unchanged
-        } else if (type.bits() <= 16) {
-            // Embed all other ints in a GLSL float. Probably not actually
-            // valid for uint16 on systems with low float precision.
-            result = Float(32);
-        } else {
-            user_error << "GLSL: Can't represent type '" << type << "'.\n";
-        }
-    } else {
-        user_assert(type.lanes() <= 4)
-            << "GLSL: vector types wider than 4 aren't supported\n";
-        user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
-            << "GLSL: Can't represent vector type '" << type << "'.\n";
-        Type scalar_type = type.element_of();
-        result = map_type(scalar_type).with_lanes(type.lanes());
-    }
-    return result;
-}
-}  // namespace
-
 CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::CodeGen_OpenGLCompute_C(std::ostream &s, Target t)
     : CodeGen_GLSLBase(s, t) {
     builtin["trunc_f32"] = "trunc";
@@ -126,6 +93,8 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
                 value = simplify(trunc(value));
             }
         }
+        // FIXME: Overflow is not UB for most Halide types
+        // https://github.com/halide/Halide/issues/4975
         value.accept(this);
         return;
     } else {
@@ -212,6 +181,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
     user_assert(is_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
     // TODO: support vectors
+    // https://github.com/halide/Halide/issues/4975
     internal_assert(op->type.is_scalar());
     string id_index = print_expr(op->index);
 
@@ -227,6 +197,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
     // TODO: support vectors
+    // https://github.com/halide/Halide/issues/4975
     internal_assert(op->value.type().is_scalar());
     string id_index = print_expr(op->index);
 
@@ -349,6 +320,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(const Stmt &
         stream << ", local_size_z = " << workgroup_size[2];
     }
     stream << ") in;\n// end of kernel " << name << "\n";
+    indent -= 2;
 }
 
 void CodeGen_OpenGLCompute_Dev::init_module() {

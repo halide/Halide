@@ -749,17 +749,16 @@ public:
                 total_size += alloc.max_size * ratio;
             }
 
-            // Align-up the size according to the ratio between
-            // the widest type involved and the type of the actual
-            // allocation.
+            // Upgrade the alloc type to the widest type found, and
+            // downgrade total_size accordingly.
             int ratio = widest_type.bytes() / alloc_type.bytes();
             internal_assert(ratio != 0)
                 << "alloc_type should have been at most as wide as the widest type in cluster\n";
             if (ratio != 1) {
                 total_size += ratio - 1;
                 total_size /= ratio;
-                total_size *= ratio;
             }
+            alloc_type = widest_type;
 
             // Remove any dependence on the block vars by taking a max
             {
@@ -846,9 +845,7 @@ public:
                 } else {
                     if (memory_type == MemoryType::Heap) {
                         // One slice of a larger global allocation
-                        int ratio = (widest_type.bytes() / alloc_type.bytes());
-                        internal_assert(ratio != 0);
-                        offset = (get_block_id(bs) * total_size_var) / ratio;
+                        offset = get_block_id(bs) * total_size_var;
                     } else {
                         // Base address for shared memory is zero
                         offset = 0;

@@ -757,6 +757,8 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
         // Shader Model 5.x can optionally support double-precision; 64-bit int
         // types are not supported.
         return t.bits() < 64;
+    } else if (device == DeviceAPI::OpenGLCompute) {
+        return t.bits() < 64;
     }
 
     return true;
