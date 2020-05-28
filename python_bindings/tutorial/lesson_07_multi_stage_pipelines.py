@@ -11,6 +11,7 @@
 import halide as hl
 
 import imageio
+import numpy as np
 import os.path
 
 
@@ -82,7 +83,8 @@ def main():
         # parrot, and it should be two pixels narrower and two pixels
         # shorter than the input image.
 
-        imageio.imsave("blurry_parrot_1.png", result)
+        # python3-imageio versions <2.5 expect a numpy array
+        imageio.imsave("blurry_parrot_1.png", np.asanyarray(result))
         print("Created blurry_parrot_1.png")
 
         # This is usually the fastest way to deal with boundaries:
@@ -151,7 +153,9 @@ def main():
         # Save the result. It should look like a slightly blurry
         # parrot, but this time it will be the same size as the
         # input.
-        imageio.imsave("blurry_parrot_2.png", result)
+
+        # python3-imageio versions <2.5 expect a numpy array
+        imageio.imsave("blurry_parrot_2.png", np.asanyarray(result))
         print("Created blurry_parrot_2.png")
 
     print("Success!")

@@ -15,6 +15,7 @@
 #include "CodeGen_RISCV.h"
 #include "CodeGen_WebAssembly.h"
 #include "CodeGen_X86.h"
+#include "CompilerLogger.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "EmulateFloat16Math.h"
@@ -1212,6 +1213,8 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
+    auto time_start = std::chrono::high_resolution_clock::now();
+
     if (debug::debug_level() >= 3) {
         module->print(dbgs(), nullptr, false, true);
     }
@@ -1322,6 +1325,13 @@ void CodeGen_LLVM::optimize_module() {
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
         module->print(dbgs(), nullptr, false, true);
+    }
+
+    auto *logger = get_compiler_logger();
+    if (logger) {
+        auto time_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = time_end - time_start;
+        logger->record_compilation_time(CompilerLogger::Phase::LLVM, diff.count());
     }
 }
 
@@ -1792,6 +1802,17 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     llvm::DataLayout d(module.get());
     if (promote_indices() && d.getPointerSize() == 8) {
         index = promote_64(index);
+    }
+
+    // Peel off a constant offset as a second GEP. This helps LLVM's
+    // aliasing analysis, especially for backends that do address
+    // computation in 32 bits but use 64-bit pointers.
+    if (const Add *add = index.as<Add>()) {
+        if (const int64_t *offset = as_const_int(add->b)) {
+            Value *base = codegen_buffer_pointer(base_address, type, add->a);
+            Value *off = codegen(make_const(Int(8 * d.getPointerSize()), *offset));
+            return builder->CreateInBoundsGEP(base, off);
+        }
     }
 
     return codegen_buffer_pointer(base_address, type, codegen(index));

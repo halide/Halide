@@ -415,24 +415,26 @@ class GroupLoopInvariants : public IRMutator {
         return result;
     }
 
-    Expr visit(const Sub *op) override {
-        if (op->type.is_float()) {
-            // Don't reassociate float exprs.
-            // (If strict_float is off, we're allowed to reassociate,
-            // and we do reassociate elsewhere, but there's no benefit to it
+    Expr visit(const Add *op) override {
+        if (op->type.is_float() || (op->type == Int(32) && is_const(op->b))) {
+            // Don't reassociate float exprs.  (If strict_float is
+            // off, we're allowed to reassociate, and we do
+            // reassociate elsewhere, but there's no benefit to it
             // here and it's friendlier not to.)
+            //
+            // Also don't reassociate trailing integer constants. They're the
+            // ultimate loop invariant, but doing this to stencils
+            // causes inner loops to track N different pointers
+            // instead of one pointer with constant offsets, and that
+            // complicates aliasing analysis.
             return IRMutator::visit(op);
         }
 
         return reassociate_summation(op);
     }
 
-    Expr visit(const Add *op) override {
-        if (op->type.is_float()) {
-            // Don't reassociate float exprs.
-            // (If strict_float is off, we're allowed to reassociate,
-            // and we do reassociate elsewhere, but there's no benefit to it
-            // here and it's friendlier not to.)
+    Expr visit(const Sub *op) override {
+        if (op->type.is_float() || (op->type == Int(32) && is_const(op->b))) {
             return IRMutator::visit(op);
         }
 

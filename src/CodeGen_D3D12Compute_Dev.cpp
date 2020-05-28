@@ -199,6 +199,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Mod *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
+    user_assert(loop->for_type != ForType::GPULane)
+        << "The D3D12Compute backend does not support the gpu_lanes() scheduling directive.";
+
     if (!is_gpu_var(loop->name)) {
         user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside D3D12Compute kernel\n";
         CodeGen_C::visit(loop);
@@ -1078,6 +1081,8 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "#pragma warning( disable : 4714 )"
            "\n"
         << "\n";
+
+    src_stream << "#define halide_unused(x) (void)(x)\n";
 
     // Write out the Halide math functions.
     src_stream

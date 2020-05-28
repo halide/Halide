@@ -500,6 +500,7 @@ struct Call : public ExprNode<Call> {
         bitwise_or,
         bitwise_xor,
         bool_to_mask,
+        bundle,  // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
         call_cached_indirect_function,
         cast_mask,
         count_leading_zeros,

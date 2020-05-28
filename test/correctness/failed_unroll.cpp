@@ -4,7 +4,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 #ifdef _WIN32
-    printf("Test skipped on windows due to use of setenv\n");
+    printf("[SKIP] Windows does not have a working setenv\n");
 #else
 
     // This tests a temporary hack to silence the error when you try
@@ -21,8 +21,8 @@ int main(int argc, char **argv) {
 
     setenv("HL_PERMIT_FAILED_UNROLL", "1", 1);
     f.realize(17);
+    printf("Success!\n");
 #endif
 
-    printf("Success!\n");
     return 0;
 }

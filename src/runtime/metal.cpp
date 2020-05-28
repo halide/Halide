@@ -10,8 +10,9 @@
 
 extern "C" {
 extern objc_id MTLCreateSystemDefaultDevice();
-extern objc_id MTLCopyAllDevices();
 extern struct ObjectiveCClass _NSConcreteGlobalBlock;
+void *dlsym(void *, const char *);
+#define RTLD_DEFAULT ((void *)-2)
 }
 
 namespace Halide {
@@ -228,9 +229,17 @@ WEAK void *nsarray_first_object(objc_id arr) {
 inline mtl_device *get_default_mtl_device() {
     mtl_device *device = (mtl_device *)MTLCreateSystemDefaultDevice();
     if (device == NULL) {
-        objc_id devices = (objc_id)MTLCopyAllDevices();
-        if (devices != NULL) {
-            device = (mtl_device *)nsarray_first_object(devices);
+        // We assume Metal.framework is already loaded
+        // (call dlsym directly, rather than halide_get_symbol, as we
+        // currently don't provide halide_get_symbol for iOS, only OSX)
+        void *handle = dlsym(RTLD_DEFAULT, "MTLCopyAllDevices");
+        if (handle != NULL) {
+            typedef objc_id (*mtl_copy_all_devices_method)(void);
+            mtl_copy_all_devices_method method = (mtl_copy_all_devices_method)handle;
+            objc_id devices = (objc_id)(*method)();
+            if (devices != NULL) {
+                device = (mtl_device *)nsarray_first_object(devices);
+            }
         }
     }
     return device;
@@ -238,7 +247,7 @@ inline mtl_device *get_default_mtl_device() {
 
 extern WEAK halide_device_interface_t metal_device_interface;
 
-volatile int WEAK thread_lock = 0;
+volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 WEAK mtl_device *device;
 WEAK mtl_command_queue *queue;
 
@@ -307,7 +316,7 @@ extern "C" {
 WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_ret,
                                       mtl_command_queue **queue_ret, bool create) {
     halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) {
+    while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {
     }
 
 #ifdef DEBUG_RUNTIME
@@ -319,7 +328,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
         device = get_default_mtl_device();
         if (device == 0) {
             error(user_context) << "Metal: cannot allocate system default device.\n";
-            __sync_lock_release(&thread_lock);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return -1;
         }
         debug(user_context) << "Metal - Allocating: new_command_queue\n";
@@ -328,7 +337,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
             error(user_context) << "Metal: cannot allocate command queue.\n";
             release_ns_object(device);
             device = 0;
-            __sync_lock_release(&thread_lock);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return -1;
         }
     }
@@ -343,7 +352,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
 }
 
 WEAK int halide_metal_release_context(void *user_context) {
-    __sync_lock_release(&thread_lock);
+    __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
     return 0;
 }
 

@@ -119,6 +119,9 @@ string simt_intrinsic(const string &name) {
 }  // namespace
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
+    user_assert(loop->for_type != ForType::GPULane)
+        << "The OpenCL backend does not support the gpu_lanes() scheduling directive.";
+
     if (is_gpu_var(loop->name)) {
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))
@@ -855,6 +858,10 @@ void CodeGen_OpenCL_Dev::init_module() {
 
     // __shared always has address space __local.
     src_stream << "#define __address_space___shared __local\n";
+
+    // There does not appear to be a reliable way to safely ignore unused
+    // variables in OpenCL C. See https://github.com/halide/Halide/issues/4918.
+    src_stream << "#define halide_unused(x)";
 
     if (target.has_feature(Target::CLDoubles)) {
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"

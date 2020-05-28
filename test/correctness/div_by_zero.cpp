@@ -78,5 +78,6 @@ int main(int argc, char **argv) {
     // would fault at runtime if we didn't have defined behavior for
     // division by zero.
 
+    printf("Success!\n");
     return 0;
 }

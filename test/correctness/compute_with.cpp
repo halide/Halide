@@ -1,8 +1,8 @@
 #include "Halide.h"
-#include "test/common/check_call_graphs.h"
+#include "check_call_graphs.h"
 
+#include <cstdio>
 #include <map>
-#include <stdio.h>
 
 namespace {
 
@@ -1893,6 +1893,98 @@ int mismatching_splits_test() {
     return 0;
 }
 
+int different_arg_num_compute_at_test() {
+    const int width = 16;
+    const int height = 16;
+    const int channels = 3;
+
+    Buffer<int> buffer_a_ref(width, height, channels), buffer_b_ref(channels);
+    Buffer<int> buffer_a(width, height, channels), buffer_b(channels);
+    // Reference.
+    {
+        Var x("x"), y("y"), c("c");
+        Func big("big"), output_a("output_a"), reduce_big("reduce_big"), output_b("output_b");
+
+        big(x, y, c) = Halide::count_leading_zeros(x + y + c);
+        RDom r(0, width, 0, height);
+        reduce_big(c) = c;
+        output_a(x, y, c) = 7 * big(x, y, c) / reduce_big(c);
+        output_b(c) = reduce_big(c) * 5;
+
+        Pipeline p({output_a, output_b});
+        p.realize({buffer_a_ref, buffer_b_ref});
+    }
+    // Compute_with.
+    {
+        Var x("x"), y("y"), c("c");
+        Func big("big"), output_a("output_a"), reduce_big("reduce_big"), output_b("output_b");
+
+        big(x, y, c) = Halide::count_leading_zeros(x + y + c);
+        RDom r(0, width, 0, height);
+        reduce_big(c) = c;
+        output_a(x, y, c) = 7 * big(x, y, c) / reduce_big(c);
+        output_b(c) = reduce_big(c) * 5;
+
+        output_b.compute_with(output_a, c);
+        big.compute_at(output_a, c);
+        reduce_big.compute_at(output_a, c);
+
+        output_a.bound(x, 0, width).bound(y, 0, width).bound(c, 0, channels);
+        output_b.bound(c, 0, channels);
+
+        loads_total = 0;
+        stores_total = 0;
+        Pipeline p({output_a, output_b});
+        p.set_custom_trace(&my_trace);
+        p.realize({buffer_a, buffer_b}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
+
+        bool too_many_memops = false;
+        // Store count:
+        // big: width * height * channels
+        // reduce_big: channels
+        // output_a: width * height * channels
+        // output_b: channels
+        // Total: 2 * width * height * channels + 2 * channels
+        // Load count:
+        // big: width * height * channels
+        // reduce_big: width * height * channels + channels
+        // output_a: 0
+        // output_b: 0
+        // Total: 2 * width * height * channels + channels
+        uint64_t expected_store_count = 2 * width * height * channels + 2 * channels;
+        uint64_t expected_load_count = 2 * width * height * channels + channels;
+        if (stores_total != expected_store_count) {
+            printf("Store count for different_arg_num_compute_at_test is not as expected. (Expected: %llu, compute_with: %llu).\n",
+                   (unsigned long long)expected_store_count, (unsigned long long)stores_total);
+            too_many_memops = true;
+        }
+        if (loads_total != expected_load_count) {
+            printf("Load count for different_arg_num_compute_at_test is not as expected. (Expected: %llu, compute_with: %llu).\n",
+                   (unsigned long long)expected_load_count, (unsigned long long)loads_total);
+            too_many_memops = true;
+        }
+        if (too_many_memops) {
+            return -1;
+        }
+    }
+
+    auto buffer_a_func = [buffer_a_ref](int x, int y, int c) {
+        return buffer_a_ref(x, y, c);
+    };
+    if (check_image(buffer_a, buffer_a_func)) {
+        return -1;
+    }
+
+    for (int i = 0; i < buffer_b.width(); i++) {
+        if (buffer_b(i) != buffer_b_ref(i)) {
+            printf("Mismatch %d %d %d\n", i, buffer_b(i), buffer_b_ref(i));
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -2021,6 +2113,11 @@ int main(int argc, char **argv) {
 
     printf("Running mismatching splits test\n");
     if (mismatching_splits_test() != 0) {
+        return -1;
+    }
+
+    printf("Running different arg number compute_at test\n");
+    if (different_arg_num_compute_at_test() != 0) {
         return -1;
     }
 

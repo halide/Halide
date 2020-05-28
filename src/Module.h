@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 
@@ -29,6 +30,7 @@ enum class Output {
     bitcode,
     c_header,
     c_source,
+    compiler_log,
     cpp_stub,
     featurization,
     llvm_assembly,
@@ -109,7 +111,8 @@ struct LoweredFunc {
 
 namespace Internal {
 struct ModuleContents;
-}
+class CompilerLogger;
+}  // namespace Internal
 
 struct AutoSchedulerResults;
 
@@ -200,12 +203,14 @@ void compile_standalone_runtime(const std::string &object_filename, Target t);
  */
 std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, Target t);
 
-typedef std::function<Module(const std::string &, const Target &)> ModuleProducer;
+using ModuleFactory = std::function<Module(const std::string &fn_name, const Target &target)>;
+using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(const std::string &fn_name, const Target &target)>;
 
 void compile_multitarget(const std::string &fn_name,
                          const std::map<Output, std::string> &output_files,
                          const std::vector<Target> &targets,
-                         const ModuleProducer &module_producer);
+                         const ModuleFactory &module_factory,
+                         const CompilerLoggerFactory &compiler_logger_factory = nullptr);
 
 }  // namespace Halide
 

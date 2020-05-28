@@ -1,23 +1,33 @@
+##
+# Load Python dependencies, including external pybind11
+##
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+
+# Adding PyBind11 to the build is the recommended way of integrating with CMake.
+# See: https://pybind11.readthedocs.io/en/stable/compiling.html
+
+# Keep the version in sync with requirements.txt and the Ubuntu 20.04 LTS package (python3-pybind11)
 include(FetchContent)
 FetchContent_Declare(pybind11 GIT_REPOSITORY https://github.com/pybind/pybind11.git GIT_TAG v2.4.3)
+
+# Configure pybind11 to use the same interpreter version as was detected above.
+message(STATUS "Directing pybind11 to Python3 executable ${Python3_EXECUTABLE}")
+set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
+
+# Import PyBind11
 FetchContent_MakeAvailable(pybind11)
 
-if (APPLE)
-  set(HALIDE_PY_LINK_FLAG "-Wl,-undefined,dynamic_lookup")
-elseif (NOT MSVC)
-  set(HALIDE_PY_LINK_FLAG "-rdynamic")
-endif()
-
-if (NOT HALIDE_ENABLE_RTTI)
-  if (NOT MSVC)
-    set(HALIDE_PY_RTTI_FLAG "-fno-rtti")
-  else()
-    set(HALIDE_PY_RTTI_FLAG "/GR-")
-  endif()
-endif()
+##
+# Add our sources to this sub-tree.
+##
 
 add_subdirectory(src)
+include(stub/CMakeLists.txt)
 
-if (WITH_TESTS)
-  include(test.cmake)
-endif()
+option(WITH_TEST_PYTHON "Build Python tests" ON)
+if (WITH_TESTS AND WITH_TEST_PYTHON)
+    add_subdirectory(apps)
+    add_subdirectory(correctness)
+    add_subdirectory(tutorial)
+endif ()

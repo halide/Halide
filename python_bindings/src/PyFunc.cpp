@@ -1,5 +1,7 @@
 #include "PyFunc.h"
 
+#include <utility>
+
 #include "PyBuffer.h"
 #include "PyExpr.h"
 #include "PyFuncRef.h"
@@ -129,7 +131,7 @@ void define_func(py::module &m) {
 
             .def(
                 "realize",
-                [](Func &f, std::vector<int32_t> sizes, const Target &target) -> py::object {
+                [](Func &f, const std::vector<int32_t> &sizes, const Target &target) -> py::object {
                     return realization_to_object(f.realize(sizes, target));
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
@@ -181,7 +183,7 @@ void define_func(py::module &m) {
             .def("bound", &Func::bound, py::arg("var"), py::arg("min"), py::arg("extent"))
 
             .def("reorder_storage", (Func & (Func::*)(const std::vector<Var> &)) & Func::reorder_storage, py::arg("dims"))
-            .def("reorder_storage", [](Func &func, py::args args) -> Func & {
+            .def("reorder_storage", [](Func &func, const py::args &args) -> Func & {
                 return func.reorder_storage(args_to_vector<Var>(args));
             })
 

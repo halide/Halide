@@ -255,7 +255,8 @@ void check_algebra() {
     check((x * (-4)) / 2, x * (-2));
     check((x * 4 + y) / 2, y / 2 + x * 2);
     check((y + x * 4) / 2, y / 2 + x * 2);
-    check((x * 4 - y) / 2, (0 - y) / 2 + x * 2);
+    check((x * 2 - y) / 2, (0 - y) / 2 + x);
+    check((x * -2 - y) / 2, (0 - y) / 2 - x);
     check((y - x * 4) / 2, y / 2 - x * 2);
     check((x + 3) / 2 + 7, (x + 17) / 2);
     check((x / 2 + 3) / 5, (x + 6) / 10);
@@ -271,11 +272,12 @@ void check_algebra() {
     check(((x * 4 + y) + z) / 2, (y + z) / 2 + x * 2);
     check(((x * 4 - y) + z) / 2, (z - y) / 2 + x * 2);
     check(((x * 4 + y) - z) / 2, (y - z) / 2 + x * 2);
-    check(((x * 4 - y) - z) / 2, (0 - y - z) / 2 + x * 2);
+    check(((x * 2 - y) - z) / 2, (0 - y - z) / 2 + x);
+    check(((x * -2 - y) - z) / 2, (0 - y - z) / 2 - x);
     check((x + (y * 4 + z)) / 2, (x + z) / 2 + y * 2);
     check(((x + y * 4) + z) / 2, (x + z) / 2 + y * 2);
     check((x + (y * 4 - z)) / 2, (x - z) / 2 + y * 2);
-    check((x - (y * 4 + z)) / 2, (x - z) / 2 - y * 2);
+    check((x - (y * 4 + z)) / 2, (x - z) / 2 + y * -2);
     check((x - (y * 4 - z)) / 2, (x + z) / 2 - y * 2);
 
     // Pull out the gcd of the numerator and divisor
@@ -1519,6 +1521,45 @@ void check_boolean() {
     // A for loop where the extent is at most one can just be an if statement
     check(IfThenElse::make(y % 2 == x, loop), IfThenElse::make(y % 2 == x, IfThenElse::make(0 < x, body)));
 
+    // Check we can learn from bounds on variables
+    check(IfThenElse::make(x < 5, Evaluate::make(min(x, 17))),
+          IfThenElse::make(x < 5, Evaluate::make(x)));
+
+    check(IfThenElse::make(x < min(y, 5), Evaluate::make(min(x, 17))),
+          IfThenElse::make(x < min(y, 5), Evaluate::make(x)));
+
+    check(IfThenElse::make(5 < x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(5 < x, Evaluate::make(x)));
+
+    check(IfThenElse::make(max(y, 5) < x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(max(y, 5) < x, Evaluate::make(x)));
+
+    check(IfThenElse::make(x <= 5, Evaluate::make(min(x, 17))),
+          IfThenElse::make(x <= 5, Evaluate::make(x)));
+
+    check(IfThenElse::make(x <= min(y, 5), Evaluate::make(min(x, 17))),
+          IfThenElse::make(x <= min(y, 5), Evaluate::make(x)));
+
+    check(IfThenElse::make(5 <= x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(5 <= x, Evaluate::make(x)));
+
+    check(IfThenElse::make(max(y, 5) <= x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(max(y, 5) <= x, Evaluate::make(x)));
+
+    // Concretely, this lets us skip some redundant assertions
+    check(Block::make(AssertStmt::make(max(y, 3) < x, x),
+                      AssertStmt::make(0 < x, x)),
+          Block::make(AssertStmt::make(max(y, 3) < x, x),
+                      Evaluate::make(0)));
+
+    // Check it works transitively
+    check(IfThenElse::make(0 < x,
+                           IfThenElse::make(x < y,
+                                            IfThenElse::make(y < z,
+                                                             Evaluate::make(z == 2)))),
+          // z can't possibly be two, because x is at least one, so y
+          // is at least two, so z must be at least three.
+          Evaluate::make(const_false()));
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
     check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
@@ -1561,7 +1602,6 @@ void check_boolean() {
     check(select(cond, x % y, z % y), select(cond, x, z) % y);
 
     {
-
         Expr b[12];
         for (int i = 0; i < 12; i++) {
             b[i] = Variable::make(Bool(), unique_name('b'));
@@ -1761,13 +1801,13 @@ void check_bitwise() {
     check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);
     check(cast(Int(16), x) >> 10, cast(Int(16), x) / 1024);
 
-    // Correctly triggers an error (shift by negative amount).
-    // check(cast(Int(16), x) << -10, 0);
-    // check(cast(Int(16), x) >> -10, 0);
+    // Shift by negative amount is a shift in the opposite direction
+    check(cast(Int(16), x) << -10, cast(Int(16), x) / 1024);
+    check(cast(Int(16), x) >> -10, cast(Int(16), x) * 1024);
 
-    // Correctly triggers an error (shift by >= type size).
-    // check(cast(Int(16), x) << 20, 0);
-    // check(cast(Int(16), x) >> 20, 0);
+    // Shift by >= type size is an overflow
+    check_is_sio(cast(Int(16), x) << 20);
+    check_is_sio(cast(Int(16), x) >> 20);
 
     // Check bitwise_and. (Added as result of a bug.)
     // TODO: more coverage of bitwise_and and bitwise_or.

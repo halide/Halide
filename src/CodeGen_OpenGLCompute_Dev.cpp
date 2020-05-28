@@ -144,6 +144,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) {
+    user_assert(loop->for_type != ForType::GPULane)
+        << "The OpenGLCompute backend does not support the gpu_lanes() scheduling directive.";
+
     if (is_gpu_var(loop->name)) {
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))
@@ -295,6 +298,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(const Stmt &
     }
     add_common_macros(stream);
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
+    stream << "#define halide_unused(x) (void)(x)\n";
 
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {

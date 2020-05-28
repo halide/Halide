@@ -1,15 +1,41 @@
-add_executable(lens_blur_process process.cpp)
-target_link_libraries(lens_blur_process PRIVATE Halide::ImageIO)
+cmake_minimum_required(VERSION 3.16)
+project(lens_blur)
 
-halide_generator(lens_blur.generator SRCS lens_blur_generator.cpp)
-foreach(AUTO_SCHEDULE false true)
-    if(${AUTO_SCHEDULE})
-        set(LIB lens_blur_auto_schedule)
-    else()
-        set(LIB lens_blur)
-    endif()
-    halide_library_from_generator(${LIB}
-                                  GENERATOR lens_blur.generator
-                                  GENERATOR_ARGS auto_schedule=${AUTO_SCHEDULE})
-    target_link_libraries(lens_blur_process PRIVATE ${LIB})
-endforeach()
+enable_testing()
+
+# Set up language settings
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_CXX_EXTENSIONS NO)
+
+# Find Halide
+find_package(Halide REQUIRED)
+
+# Generator
+add_executable(lens_blur.generator lens_blur_generator.cpp)
+target_link_libraries(lens_blur.generator PRIVATE Halide::Generator Halide::Tools)
+
+# Filters
+add_halide_library(lens_blur FROM lens_blur.generator)
+add_halide_library(lens_blur_auto_schedule FROM lens_blur.generator
+                   GENERATOR lens_blur
+                   PARAMS auto_schedule=true)
+
+# Main executable
+add_executable(lens_blur_filter process.cpp)
+target_link_libraries(lens_blur_filter
+                      PRIVATE
+                      Halide::ImageIO
+                      lens_blur
+                      lens_blur_auto_schedule)
+
+# Test that the app actually works!
+set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
+if (EXISTS ${IMAGE})
+    configure_file(${IMAGE} rgb.png COPYONLY)
+    add_test(NAME lens_blur_filter COMMAND lens_blur_filter rgb.png out.png)
+    set_tests_properties(lens_blur_filter PROPERTIES
+                         LABELS internal_app_tests
+                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+
+endif ()

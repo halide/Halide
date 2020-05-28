@@ -1,6 +1,5 @@
 #include "Halide.h"
-#include "test/common/halide_test_dirs.h"
-#include <stdio.h>
+#include "halide_test_dirs.h"
 
 using namespace Halide;
 
@@ -17,5 +16,6 @@ int main(int argc, char **argv) {
 
     f.compile_to_object(test_object, {input}, "f", mac_target);
 
+    printf("Success!\n");
     return 0;
 }

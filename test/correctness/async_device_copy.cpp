@@ -18,7 +18,7 @@ Expr expensive_zero(Expr x, Expr y, Expr t, int n) {
 int main(int argc, char **argv) {
 
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("No GPU target enabled. Skipping test.\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 

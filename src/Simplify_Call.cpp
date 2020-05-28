@@ -151,7 +151,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
             // LLVM shl and shr instructions produce poison for
             // shifts >= typesize, so we will follow suit in our simplifier.
-            user_assert(ub < (uint64_t)t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
+            if (ub >= (uint64_t)(t.bits())) {
+                return make_signed_integer_overflow(t);
+            }
             if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {
                 b = make_const(t, ((int64_t)1LL) << ub);
                 if (shift_left) {

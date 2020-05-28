@@ -1,5 +1,5 @@
 #include "Halide.h"
-#include "test/common/check_call_graphs.h"
+#include "check_call_graphs.h"
 
 using namespace Halide;
 
