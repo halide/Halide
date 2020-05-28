@@ -34,10 +34,8 @@ int main(int argc, char **argv) {
     for (int i = 0; i < W; i++) {
         for (int j = 0; j < H; j++) {
             int m = std::max(i, j);
-            // printf("img[%d, %d] = %d\n", i, j, img(i, j));
-            if (img(i, j) != (m < 20 ? 20 :
-                                       m > 100 ? 100 :
-                                                 m)) {
+            const int expected = std::min(std::max(m, 20), 100);
+            if (img(i, j) != expected) {
                 printf("img[%d, %d] = %d\n", i, j, img(i, j));
                 return -1;
             }
