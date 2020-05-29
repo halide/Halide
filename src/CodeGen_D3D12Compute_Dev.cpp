@@ -307,6 +307,7 @@ string hex_literal(T value) {
 struct StoragePackUnpack {
     using CodeGen = CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
 
+    // Shader Model 5.1: threadgroup shared memory is limited 32KB
     static const size_t ThreadGroupSharedStorageLimit = 32 * 1024;
 
     void pack_storage(const Allocate *op, size_t elements, size_t size_in_bytes) {
@@ -941,7 +942,6 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             size_t elements = 0;
             ss >> elements;
             size_t bytesize = elements * sizeof(uint32_t);
-            // SM 5.1: 32KB limit for shared memory...
             // NOTE(marcos): might need to resort to StoragePackUnpack::pack_storage() here...
             internal_assert(bytesize <= StoragePackUnpack::ThreadGroupSharedStorageLimit);
             total_shared_bytes += bytesize;

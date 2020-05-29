@@ -20,11 +20,10 @@ endif ()
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 
-#if (MSVC AND NOT CMAKE_CONFIGURATION_TYPES)
-  # LLVM5.x on Windows can include "$(Configuration)" in the path;
-  # fix this so we can use the paths right away.
-  string(REPLACE "$(Configuration)" "${CMAKE_BUILD_TYPE}" LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
-#endif()
+# Build Halide as a shared lib by default, but still honor command-line settings.
+if (NOT DEFINED BUILD_SHARED_LIBS)
+    set(BUILD_SHARED_LIBS YES)
+endif ()
 
 # Warn if the user did not set a build type and is using a single-configuration generator.
 get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
