@@ -35,4 +35,8 @@ if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb.png COPYONLY)
     add_test(NAME harris_filter
              COMMAND harris_filter rgb.png out.png)
+    set_tests_properties(harris_filter PROPERTIES
+                         LABELS internal_app_tests
+                         PASS_REGULAR_EXPRESSION "Success!"
+                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

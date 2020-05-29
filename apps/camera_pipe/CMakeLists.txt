@@ -33,9 +33,13 @@ target_link_libraries(camera_pipe_process
                       camera_pipe_auto_schedule)
 
 # Test that the app actually works!
-set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
+set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/bayer_raw.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb.png COPYONLY)
+    configure_file(${IMAGE} bayer_raw.png COPYONLY)
     add_test(NAME camera_pipe_process
-             COMMAND camera_pipe_process rgb.png 2 50 5 output.png)
+             COMMAND camera_pipe_process bayer_raw.png 3700 2.0 50 1.0 5 out.png)
+    set_tests_properties(camera_pipe_process PROPERTIES
+                         LABELS internal_app_tests
+                         PASS_REGULAR_EXPRESSION "Success!"
+                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()
