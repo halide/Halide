@@ -1,4 +1,4 @@
-if (DEFINED LLVM_DIR)
+if (DEFINED LLVM_DIR AND NOT DEFINED Clang_DIR)
     set(Clang_DIR "${LLVM_DIR}/../clang")
     find_package(Clang ${HALIDE_REQUIRE_LLVM_VERSION} QUIET CONFIG)
 endif ()
