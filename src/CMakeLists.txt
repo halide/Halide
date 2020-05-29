@@ -412,7 +412,7 @@ add_library(Halide::Plugin ALIAS Halide_Plugin)
 # Set compiler options for libHalide
 ##
 
-option(WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
+option(WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
 if (WARNINGS_AS_ERRORS)
     target_compile_options(Halide
                            PRIVATE

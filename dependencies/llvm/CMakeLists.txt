@@ -150,13 +150,15 @@ endif ()
 
 option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
 if (HALIDE_ENABLE_EXCEPTIONS)
-    message(STATUS "Compiling Halide WITH exceptions...")
+    message(STATUS "Compiling Halide WITH exceptions.")
     target_compile_definitions(Halide_LLVM INTERFACE WITH_EXCEPTIONS)
 else ()
-    message(STATUS "Compiling Halide WITHOUT exceptions...")
+    message(STATUS "Compiling Halide WITHOUT exceptions.")
     target_compile_options(Halide_LLVM INTERFACE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/EHs-c->
                            $<$<COMPILE_LANG_AND_ID:CXX,GCC,Clang,AppleClang>:-fno-exceptions>)
+    target_compile_definitions(Halide_LLVM INTERFACE
+                               $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>)
 endif ()
 
 if (LLVM_LIBCXX GREATER -1)
