@@ -136,36 +136,56 @@ endif ()
 llvm_map_components_to_libnames(LLVM_LIBNAMES ${LLVM_COMPONENTS})
 target_link_libraries(Halide_LLVM INTERFACE ${LLVM_LIBNAMES})
 
+##
+# Language options interface library
+##
+
+add_library(Halide_LanguageOptions INTERFACE)
+add_library(Halide::LanguageOptions ALIAS Halide_LanguageOptions)
+
+set_target_properties(Halide_LanguageOptions PROPERTIES EXPORT_NAME LanguageOptions)
+
 option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
 if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
     message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
 endif ()
 
-if (NOT LLVM_ENABLE_RTTI)
-    message(STATUS "LLVM built with RTTI disabled. Adding to interface requirements.")
-    target_compile_options(Halide_LLVM INTERFACE
+if (HALIDE_ENABLE_RTTI)
+    message(STATUS "Compiling Halide WITH RTTI.")
+    target_compile_definitions(Halide_LanguageOptions INTERFACE HALIDE_ENABLE_RTTI)
+else ()
+    message(STATUS "Compiling Halide WITHOUT RTTI.")
+    target_compile_options(Halide_LanguageOptions INTERFACE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
-                           $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fno-rtti>)
+                           $<$<COMPILE_LANG_AND_ID:CXX,GCC,Clang,AppleClang>:-fno-rtti>)
 endif ()
 
-option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
+option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" YES)
 if (HALIDE_ENABLE_EXCEPTIONS)
     message(STATUS "Compiling Halide WITH exceptions.")
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_EXCEPTIONS)
+    target_compile_definitions(Halide_LanguageOptions INTERFACE WITH_EXCEPTIONS)
 else ()
     message(STATUS "Compiling Halide WITHOUT exceptions.")
-    target_compile_options(Halide_LLVM INTERFACE
+    target_compile_options(Halide_LanguageOptions INTERFACE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/EHs-c->
                            $<$<COMPILE_LANG_AND_ID:CXX,GCC,Clang,AppleClang>:-fno-exceptions>)
-    target_compile_definitions(Halide_LLVM INTERFACE
+    target_compile_definitions(Halide_LanguageOptions INTERFACE
                                $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>)
 endif ()
 
 if (LLVM_LIBCXX GREATER -1)
     message(STATUS "LLVM linked to libc++. Adding to interface requirements.")
-    target_compile_options(Halide_LLVM INTERFACE $<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
-    target_link_options(Halide_LLVM INTERFACE $<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
+    target_compile_options(Halide_LanguageOptions INTERFACE
+                           $<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
+    target_link_options(Halide_LanguageOptions INTERFACE
+                        $<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
 endif ()
+
+install(TARGETS Halide_LanguageOptions EXPORT Halide_Targets)
+
+##
+# Install LLVM static object dependencies (not the files!) if needed.
+##
 
 # When building the Halide library as a static library, we have to expose
 # our LLVM dependencies so that CMake has the information it needs for the
