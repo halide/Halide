@@ -176,7 +176,7 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
 
 def get_input_data():
     image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
-    assert os.path.exists(image_path), f"Could not find {image_path}"
+    assert os.path.exists(image_path), "Could not find {}".format(image_path)
 
     rgb_data = imageio.imread(image_path)
 
