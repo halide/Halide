@@ -21,7 +21,7 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
 
     def downsample(f):
         nonlocal n_downsamples
-        downx, downy = hl.Func(f'downx{n_downsamples}'), hl.Func(f'downy{n_downsamples}')
+        downx, downy = hl.Func('downx%i' % n_downsamples), hl.Func('downy%i' % n_downsamples)
         n_downsamples += 1
 
         downx[x, y, c] = (f[2 * x - 1, y, c] + 3.0 * (f[2 * x, y, c] + f[2 * x + 1, y, c]) + f[2 * x + 2, y, c]) / 8.0
@@ -32,7 +32,7 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
 
     def upsample(f):
         nonlocal n_upsamples
-        upx, upy = hl.Func(f'upx{n_upsamples}'), hl.Func(f'upy{n_upsamples}')
+        upx, upy = hl.Func('upx%i' % n_upsamples), hl.Func('upy%i' % n_upsamples)
         n_upsamples += 1
 
         upx[x, y, c] = 0.25 * f[(x // 2) - 1 + 2 * (x % 2), y, c] + 0.75 * f[x // 2, y, c]
@@ -42,7 +42,7 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
 
     def downsample2D(f):
         nonlocal n_downsamples
-        downx, downy = hl.Func(f'downx{n_downsamples}'), hl.Func(f'downy{n_downsamples}')
+        downx, downy = hl.Func('downx%i' % n_downsamples), hl.Func('downy%i' % n_downsamples)
         n_downsamples += 1
 
         downx[x, y] = (f[2 * x - 1, y] + 3.0 * (f[2 * x, y] + f[2 * x + 1, y]) + f[2 * x + 2, y]) / 8.0
@@ -52,7 +52,7 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
 
     def upsample2D(f):
         nonlocal n_upsamples
-        upx, upy = hl.Func(f'upx{n_upsamples}'), hl.Func(f'upy{n_upsamples}')
+        upx, upy = hl.Func('upx%i' % n_upsamples), hl.Func('upy%i' % n_upsamples)
         n_upsamples += 1
 
         upx[x, y] = 0.25 * f[(x // 2) - 1 + 2 * (x % 2), y] + 0.75 * f[x // 2, y]
@@ -88,7 +88,7 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
     gray[x, y] = kR * clamped[x, y, 0] + kG * clamped[x, y, 1] + kB * clamped[x, y, 2]
 
     # Make the processed Gaussian pyramid.
-    gPyramid = [hl.Func(f'gPyramid{i}') for i in range(J)]
+    gPyramid = [hl.Func('gPyramid%i' % i) for i in range(J)]
     # Do a lookup into a lut with 256 entires per intensity level
     level = k / (levels - 1)
     idx = gray[x, y] * hl.cast(float_t, levels - 1) * 256.0
@@ -98,19 +98,19 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
         gPyramid[j][x, y, k] = downsample(gPyramid[j - 1])[x, y, k]
 
     # Get its laplacian pyramid
-    lPyramid = [hl.Func(f'lPyramid{i}') for i in range(J)]
+    lPyramid = [hl.Func('lPyramid%i' % i) for i in range(J)]
     lPyramid[J - 1] = gPyramid[J - 1]
     for j in range(J - 1)[::-1]:
         lPyramid[j][x, y, k] = gPyramid[j][x, y, k] - upsample(gPyramid[j + 1])[x, y, k]
 
     # Make the Gaussian pyramid of the input
-    inGPyramid = [hl.Func(f'inGPyramid{i}') for i in range(J)]
+    inGPyramid = [hl.Func('inGPyramid%i' % i) for i in range(J)]
     inGPyramid[0] = gray
     for j in range(1, J):
         inGPyramid[j][x, y] = downsample2D(inGPyramid[j - 1])[x, y]
 
     # Make the laplacian pyramid of the output
-    outLPyramid = [hl.Func(f'outLPyramid{i}') for i in range(J)]
+    outLPyramid = [hl.Func('outLPyramid%i' % i) for i in range(J)]
     for j in range(J):
         # Split input pyramid value into integer and floating parts
         level = inGPyramid[j][x, y] * hl.cast(float_t, levels - 1)
@@ -120,7 +120,7 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
         outLPyramid[j][x, y] = (1.0 - lf) * lPyramid[j][x, y, li] + lf * lPyramid[j][x, y, li + 1]
 
     # Make the Gaussian pyramid of the output
-    outGPyramid = [hl.Func(f'outGPyramid{i}') for i in range(J)]
+    outGPyramid = [hl.Func('outGPyramid%i' % i) for i in range(J)]
     outGPyramid[J - 1] = outLPyramid[J - 1]
     for j in range(J - 1)[::-1]:
         outGPyramid[j][x, y] = upsample2D(outGPyramid[j + 1])[x, y] + outLPyramid[j][x, y]
@@ -213,7 +213,7 @@ def filter_test_image(local_laplacian, input):
 
     print()
     print("local_laplacian realized on output_image.")
-    print(f'Result saved at {output_path} (input data copy at {input_path}).')
+    print('Result saved at {} (input data copy at {}).'.format(output_path, input_path))
 
 
 def main():

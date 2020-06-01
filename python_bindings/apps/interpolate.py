@@ -178,7 +178,7 @@ def main():
     t1 = datetime.now()
 
     elapsed = (t1 - t0).total_seconds()
-    print(f'Interpolated in {elapsed :.5f} secs')
+    print('Interpolated in {:.5f} secs'.format(elapsed))
 
     output_data = np.asanyarray(output_image)
 
@@ -193,7 +193,7 @@ def main():
     imageio.imsave(output_path, output_data)
 
     print()
-    print(f'blur realized on output image. Result saved at {output_path} (input data copy at {input_path})')
+    print('blur realized on output image. Result saved at {} (input data copy at {})'.format(output_path, input_path))
     print()
     print("End of game. Have a nice day!")
 
