@@ -150,7 +150,7 @@ def get_interpolate(input, levels):
 
 def get_input_data():
     image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgba.png")
-    assert os.path.exists(image_path), f"Could not find {image_path}"
+    assert os.path.exists(image_path), f"Could not find {image_path}" % image_path
 
     rgba_data = imageio.imread(image_path)
 
