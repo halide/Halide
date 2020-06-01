@@ -36,5 +36,6 @@ if (EXISTS ${IMAGE})
     add_test(NAME interpolate_filter COMMAND interpolate_filter rgba.png out.png)
     set_tests_properties(interpolate_filter PROPERTIES
                          LABELS internal_app_tests
+                         PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

@@ -36,11 +36,6 @@ target_compile_definitions(Halide_LLVM INTERFACE
                            "LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}"
                            ${LLVM_DEFINITIONS})
 
-option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
-if (HALIDE_ENABLE_EXCEPTIONS)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_EXCEPTIONS)
-endif ()
-
 ##
 # Detect supported llvm targets
 ##
@@ -53,15 +48,16 @@ function(check_llvm_target TARGET HAS_TARGET)
     endif ()
 endfunction()
 
-check_llvm_target(X86 WITH_X86)
-check_llvm_target(ARM WITH_ARM)
 check_llvm_target(AArch64 WITH_AARCH64)
+check_llvm_target(AMDGPU WITH_AMDGPU)
+check_llvm_target(ARM WITH_ARM)
 check_llvm_target(Hexagon WITH_HEXAGON)
 check_llvm_target(Mips WITH_MIPS)
-check_llvm_target(PowerPC WITH_POWERPC)
 check_llvm_target(NVPTX WITH_NVPTX)
+check_llvm_target(PowerPC WITH_POWERPC)
 check_llvm_target(RISCV WITH_RISCV)
-check_llvm_target(AMDGPU WITH_AMDGPU)
+check_llvm_target(WebAssembly WITH_WEBASSEMBLY)
+check_llvm_target(X86 WITH_X86)
 
 ##
 # Create options that are initialized based on LLVM's config
@@ -69,22 +65,22 @@ check_llvm_target(AMDGPU WITH_AMDGPU)
 
 set(LLVM_COMPONENTS mcjit bitwriter linker passes)
 
-option(TARGET_X86 "Include x86 target" ${WITH_X86})
-if (TARGET_X86)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_X86)
-    list(APPEND LLVM_COMPONENTS X86)
+option(TARGET_AARCH64 "Include AARCH64 (arm64) target" ${WITH_AARCH64})
+if (TARGET_AARCH64)
+    target_compile_definitions(Halide_LLVM INTERFACE WITH_AARCH64)
+    list(APPEND LLVM_COMPONENTS AArch64)
+endif ()
+
+option(TARGET_AMDGPU "Include AMDGPU target" ${WITH_AMDGPU})
+if (TARGET_AMDGPU)
+    target_compile_definitions(Halide_LLVM INTERFACE WITH_AMDGPU)
+    list(APPEND LLVM_COMPONENTS AMDGPU)
 endif ()
 
 option(TARGET_ARM "Include ARM target" ${WITH_ARM})
 if (TARGET_ARM)
     target_compile_definitions(Halide_LLVM INTERFACE WITH_ARM)
     list(APPEND LLVM_COMPONENTS ARM)
-endif ()
-
-option(TARGET_AARCH64 "Include AARCH64 (arm64) target" ${WITH_AARCH64})
-if (TARGET_AARCH64)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_AARCH64)
-    list(APPEND LLVM_COMPONENTS AArch64)
 endif ()
 
 option(TARGET_HEXAGON "Include Hexagon target" ${WITH_HEXAGON})
@@ -99,33 +95,34 @@ if (TARGET_MIPS)
     list(APPEND LLVM_COMPONENTS Mips)
 endif ()
 
-option(TARGET_POWERPC "Include POWERPC target" ${WITH_POWERPC})
-if (TARGET_POWERPC)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_POWERPC)
-    list(APPEND LLVM_COMPONENTS PowerPC)
-endif ()
-
-if (TARGET_WEBASSEMBLY)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_WEBASSEMBLY)
-    list(APPEND LLVM_COMPONENTS WebAssembly)
-endif ()
-
 option(TARGET_PTX "Include PTX target" ${WITH_NVPTX})
 if (TARGET_PTX)
     target_compile_definitions(Halide_LLVM INTERFACE WITH_PTX)
     list(APPEND LLVM_COMPONENTS NVPTX)
 endif ()
 
-option(TARGET_AMDGPU "Include AMDGPU target" ${WITH_AMDGPU})
-if (TARGET_AMDGPU)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_AMDGPU)
-    list(APPEND LLVM_COMPONENTS AMDGPU)
+option(TARGET_POWERPC "Include POWERPC target" ${WITH_POWERPC})
+if (TARGET_POWERPC)
+    target_compile_definitions(Halide_LLVM INTERFACE WITH_POWERPC)
+    list(APPEND LLVM_COMPONENTS PowerPC)
 endif ()
 
 option(TARGET_RISCV "Include RISCV target" ${WITH_RISCV})
 if (TARGET_RISCV)
     target_compile_definitions(Halide_LLVM INTERFACE WITH_RISCV)
     list(APPEND LLVM_COMPONENTS RISCV)
+endif ()
+
+option(TARGET_WEBASSEMBLY "Include WebAssembly target" ${WITH_WEBASSEMBLY})
+if (TARGET_WEBASSEMBLY)
+    target_compile_definitions(Halide_LLVM INTERFACE WITH_WEBASSEMBLY)
+    list(APPEND LLVM_COMPONENTS WebAssembly)
+endif ()
+
+option(TARGET_X86 "Include x86 target" ${WITH_X86})
+if (TARGET_X86)
+    target_compile_definitions(Halide_LLVM INTERFACE WITH_X86)
+    list(APPEND LLVM_COMPONENTS X86)
 endif ()
 
 ##
@@ -139,23 +136,56 @@ endif ()
 llvm_map_components_to_libnames(LLVM_LIBNAMES ${LLVM_COMPONENTS})
 target_link_libraries(Halide_LLVM INTERFACE ${LLVM_LIBNAMES})
 
+##
+# Language options interface library
+##
+
+add_library(Halide_LanguageOptions INTERFACE)
+add_library(Halide::LanguageOptions ALIAS Halide_LanguageOptions)
+
+set_target_properties(Halide_LanguageOptions PROPERTIES EXPORT_NAME LanguageOptions)
+
 option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
 if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
     message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
 endif ()
 
-if (NOT LLVM_ENABLE_RTTI)
-    message(STATUS "LLVM built with RTTI disabled. Adding to interface requirements.")
-    target_compile_options(Halide_LLVM INTERFACE
+if (HALIDE_ENABLE_RTTI)
+    message(STATUS "Compiling Halide WITH RTTI.")
+    target_compile_definitions(Halide_LanguageOptions INTERFACE HALIDE_ENABLE_RTTI)
+else ()
+    message(STATUS "Compiling Halide WITHOUT RTTI.")
+    target_compile_options(Halide_LanguageOptions INTERFACE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
-                           $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fno-rtti>)
+                           $<$<COMPILE_LANG_AND_ID:CXX,GCC,Clang,AppleClang>:-fno-rtti>)
+endif ()
+
+option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" YES)
+if (HALIDE_ENABLE_EXCEPTIONS)
+    message(STATUS "Compiling Halide WITH exceptions.")
+    target_compile_definitions(Halide_LanguageOptions INTERFACE WITH_EXCEPTIONS)
+else ()
+    message(STATUS "Compiling Halide WITHOUT exceptions.")
+    target_compile_options(Halide_LanguageOptions INTERFACE
+                           $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/EHs-c->
+                           $<$<COMPILE_LANG_AND_ID:CXX,GCC,Clang,AppleClang>:-fno-exceptions>)
+    target_compile_definitions(Halide_LanguageOptions INTERFACE
+                               $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>)
 endif ()
 
 if (LLVM_LIBCXX GREATER -1)
     message(STATUS "LLVM linked to libc++. Adding to interface requirements.")
-    target_compile_options(Halide_LLVM INTERFACE $<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
-    target_link_options(Halide_LLVM INTERFACE $<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
+    target_compile_options(Halide_LanguageOptions INTERFACE
+                           $<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
+    target_link_options(Halide_LanguageOptions INTERFACE
+                        $<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
 endif ()
+
+install(TARGETS Halide_LanguageOptions EXPORT Halide_Targets)
+
+##
+# Install LLVM static object dependencies (not the files!) if needed.
+##
 
 # When building the Halide library as a static library, we have to expose
 # our LLVM dependencies so that CMake has the information it needs for the
