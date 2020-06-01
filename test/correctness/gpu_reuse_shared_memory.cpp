@@ -167,7 +167,7 @@ int dynamic_shared_test(MemoryType memory_type) {
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
-    if (t.has_gpu_feature()) {
+    if (!t.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
