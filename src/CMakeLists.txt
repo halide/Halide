@@ -398,6 +398,7 @@ if (NOT BUILD_SHARED_LIBS)
     if (MSVC)
         message(STATUS "Notice: Halide plugins are not available when building statically with MSVC")
     else ()
+        target_link_libraries(Halide_Plugin INTERFACE Halide::LanguageOptions)
         target_link_options(Halide_Plugin INTERFACE
                             $<$<CXX_COMPILER_ID:GNU>:-rdynamic>
                             $<$<CXX_COMPILER_ID:Clang,AppleClang>:-undefined dynamic_lookup>)
