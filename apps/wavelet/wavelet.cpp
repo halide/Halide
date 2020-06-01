@@ -73,6 +73,6 @@ int main(int argc, char **argv) {
     _assert(inverse_daubechies_x(transformed, inverse_transformed) == 0, "inverse_daubechies_x failed");
     save_untransformed(inverse_transformed, dirname + "/inverse_daubechies_x.png");
 
-    printf("Done.\n");
+    printf("Success!\n");
     return 0;
 }

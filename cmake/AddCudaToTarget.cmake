@@ -1,12 +1,12 @@
 function(add_cuda_to_target TARGET VISIBILITY)
-    if (TARGET CUDA::cuda_driver)
-        target_link_libraries(${TARGET} ${VISIBILITY} CUDA::cuda_driver)
+    if (TARGET CUDA::cuda_driver AND TARGET CUDA::cudart)
+        target_link_libraries(${TARGET} ${VISIBILITY} CUDA::cuda_driver CUDA::cudart)
         return()
     endif ()
 
     find_package(CUDAToolkit QUIET)
-    if (TARGET CUDA::cuda_driver)
-        target_link_libraries(${TARGET} ${VISIBILITY} CUDA::cuda_driver)
+    if (TARGET CUDA::cuda_driver AND TARGET CUDA::cudart)
+        target_link_libraries(${TARGET} ${VISIBILITY} CUDA::cuda_driver CUDA::cudart)
         return()
     endif ()
 

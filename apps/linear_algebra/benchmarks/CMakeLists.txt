@@ -27,6 +27,7 @@ endif ()
 foreach (BLAS_TARGET IN LISTS BLAS_TARGETS)
     set(TARGET ${BLAS_TARGET}_benchmarks)
     add_executable(${TARGET} cblas_benchmarks.cpp)
+    target_compile_definitions(${TARGET} PRIVATE "BLAS_NAME=\"${BLAS_TARGET}\"")
     target_link_libraries(${TARGET} PRIVATE ${BLAS_TARGET}::${BLAS_TARGET} Halide::Tools)
     list(APPEND BENCHMARK_TARGETS ${TARGET})
 endforeach ()
@@ -49,6 +50,7 @@ foreach (TARGET IN LISTS BENCHMARK_TARGETS)
                          COMMAND ${TARGET} ${FUNC} ${SIZE})
                 set_tests_properties("${TEST_NAME}" PROPERTIES
                                      LABELS "${BLA_VENDOR};${LEVEL};internal_app_tests"
+                                     PASS_REGULAR_EXPRESSION "${FUNC}[ \t]+${SIZE}"
                                      SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
             endforeach ()
         endforeach ()

@@ -48,5 +48,6 @@ int main(int argc, char **argv) {
 
     convert_and_save_image(output, argv[6]);
 
+    printf("Success!\n");
     return 0;
 }
