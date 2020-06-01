@@ -32,4 +32,5 @@ target_link_libraries(blur_test
 add_test(NAME blur_app COMMAND blur_test)
 set_tests_properties(blur_app PROPERTIES
                      LABELS internal_app_tests
+                     PASS_REGULAR_EXPRESSION "Success!"
                      SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")

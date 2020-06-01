@@ -36,6 +36,6 @@ if (EXISTS ${IMAGE})
     add_test(NAME max_filter_filter COMMAND max_filter_filter rgb.png out.png)
     set_tests_properties(max_filter_filter PROPERTIES
                          LABELS internal_app_tests
+                         PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
-
 endif ()
