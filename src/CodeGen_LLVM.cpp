@@ -1269,6 +1269,16 @@ void CodeGen_LLVM::optimize_module() {
             mpm.addPass(
                 RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
         });
+#if LLVM_VERSION >= 110
+        pb.registerOptimizerLastEPCallback(
+            [](ModulePassManager &mpm, PassBuilder::OptimizationLevel level) {
+                constexpr bool compile_kernel = false;
+                constexpr bool recover = false;
+                constexpr bool use_after_scope = true;
+                mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
+                    compile_kernel, recover, use_after_scope)));
+            });
+#else
         pb.registerOptimizerLastEPCallback(
             [](FunctionPassManager &fpm, PassBuilder::OptimizationLevel level) {
                 constexpr bool compile_kernel = false;
@@ -1277,6 +1287,7 @@ void CodeGen_LLVM::optimize_module() {
                 fpm.addPass(AddressSanitizerPass(
                     compile_kernel, recover, use_after_scope));
             });
+#endif
         pb.registerPipelineStartEPCallback(
             [](ModulePassManager &mpm) {
                 constexpr bool compile_kernel = false;
@@ -1290,10 +1301,17 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     if (get_target().has_feature(Target::TSAN)) {
+#if LLVM_VERSION >= 110
+        pb.registerOptimizerLastEPCallback(
+            [](ModulePassManager &mpm, PassBuilder::OptimizationLevel level) {
+                mpm.addPass(ThreadSanitizerPass());
+            });
+#else
         pb.registerOptimizerLastEPCallback(
             [](FunctionPassManager &fpm, PassBuilder::OptimizationLevel level) {
                 fpm.addPass(ThreadSanitizerPass());
             });
+#endif
     }
 
     for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
