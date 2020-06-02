@@ -4,8 +4,14 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
+    Target t = get_jit_target_from_environment();
+    if (!t.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
+
+    if (t.has_feature(Target::OpenGLCompute)) {
+        printf("[SKIP] Skipping test for OpenGLCompute, as it does not support dynamically-sized shared memory\n");
         return 0;
     }
 
@@ -33,8 +39,8 @@ int main(int argc, char **argv) {
             for (int x = 0; x < 100; x++) {
                 int correct = 3 * x;
                 if (out(x) != correct) {
-                    printf("out(%d) = %d instead of %d\n",
-                           x, out(x), correct);
+                    printf("out[%d|%d](%d) = %d instead of %d\n",
+                           per_thread, (int)memory_type, x, out(x), correct);
                     return -1;
                 }
             }

@@ -70,5 +70,6 @@ int main(int argc, char **argv) {
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
 
+    printf("Success!\n");
     return 0;
 }

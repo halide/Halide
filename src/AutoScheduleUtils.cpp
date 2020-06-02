@@ -116,7 +116,7 @@ Definition get_stage_definition(const Function &f, int stage_num) {
 
 vector<Dim> &get_stage_dims(const Function &f, int stage_num) {
     static vector<Dim> outermost_only =
-        {{Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar}};
+        {{Var::outermost().name(), ForType::Serial, DeviceAPI::None, DimType::PureVar}};
     if (f.has_extern_definition()) {
         return outermost_only;
     }
