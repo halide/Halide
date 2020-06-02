@@ -30,10 +30,6 @@ public:
 
     Output<Buffer<T>> result_ = {"result", 1};
 
-    void Schedule(Func result, Expr width) {
-        Var i("i"), o("o");
-    }
-
     template<class Arg>
     Expr calc(Arg i) {
         if (static_cast<bool>(scale_x_) && static_cast<bool>(add_to_y_)) {
@@ -93,7 +89,7 @@ public:
     Input<Buffer<T>> x_ = {"x", 1};
     Input<Buffer<T>> y_ = {"y", 1};
 
-    Output<Buffer<T>> result_ = {"result", 1};
+    Output<Buffer<T>> result_ = {"result", 0};
 
     void generate() {
         assert(get_target().has_feature(Target::NoBoundsQuery));
@@ -112,19 +108,17 @@ public:
 
             RDom lanes(0, vec_size);
             RDom tail(size_vecs * vec_size, size_tail);
-            result_(i) = undef<T>();
-            result_(0) = sum(dot(lanes));
-            result_(0) += sum(x_(tail) * y_(tail));
+            result_() = sum(dot(lanes));
+            result_() += sum(x_(tail) * y_(tail));
 
             dot.compute_root().vectorize(i);
             dot.update(0).vectorize(i);
         } else {
             RDom k(0, size);
-            result_(i) = undef<T>();
-            result_(0) = sum(x_(k) * y_(k));
+            result_() = sum(x_(k) * y_(k));
         }
 
-        x_.dim(0).set_min(0);
+        x_.dim(0).set_bounds(0, size);
         y_.dim(0).set_bounds(0, size);
     }
 };
@@ -148,7 +142,7 @@ public:
 
     Input<Buffer<T>> x_ = {"x", 1};
 
-    Output<Buffer<T>> result_ = {"result", 1};
+    Output<Buffer<T>> result_ = {"result", 0};
 
     void generate() {
         assert(get_target().has_feature(Target::NoBoundsQuery));
@@ -167,16 +161,14 @@ public:
 
             RDom lanes(0, vec_size);
             RDom tail(size_vecs * vec_size, size_tail);
-            result_(i) = undef<T>();
-            result_(0) = sum(norm(lanes));
-            result_(0) += sum(abs(x_(tail)));
+            result_() = sum(norm(lanes));
+            result_() += sum(abs(x_(tail)));
 
             norm.compute_root().vectorize(i);
             norm.update(0).vectorize(i);
         } else {
             RDom k(0, x_.width());
-            result_(i) = undef<T>();
-            result_(0) = sum(abs(x_(k)));
+            result_() = sum(abs(x_(k)));
         }
 
         x_.dim(0).set_min(0);

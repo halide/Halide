@@ -69,6 +69,8 @@ protected:
 
         std::string get_memory_space(const std::string &);
 
+        std::string shared_name;
+
         void visit(const Min *) override;
         void visit(const Max *) override;
         void visit(const Div *) override;

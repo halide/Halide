@@ -708,7 +708,11 @@ Target Target::without_feature(Feature f) const {
 }
 
 bool Target::has_gpu_feature() const {
-    return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal) || has_feature(D3D12Compute);
+    return (has_feature(CUDA) ||
+            has_feature(OpenCL) ||
+            has_feature(Metal) ||
+            has_feature(D3D12Compute) ||
+            has_feature(OpenGLCompute));
 }
 
 bool Target::supports_type(const Type &t) const {
@@ -720,7 +724,10 @@ bool Target::supports_type(const Type &t) const {
                    !has_feature(D3D12Compute) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
-            return !has_feature(Metal) && !has_feature(D3D12Compute);
+            return (!has_feature(Metal) &&
+                    !has_feature(OpenGLCompute) &&
+                    !has_feature(OpenGL) &&
+                    !has_feature(D3D12Compute));
         }
     }
     return true;
@@ -749,6 +756,8 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
         // Shader Model 5.x can optionally support double-precision; 64-bit int
         // types are not supported.
         return t.bits() < 64;
+    } else if (device == DeviceAPI::OpenGLCompute) {
+        return t.bits() < 64;
     }
 
     return true;
@@ -761,7 +770,7 @@ bool Target::supports_device_api(DeviceAPI api) const {
     case DeviceAPI::Host:
         return true;
     case DeviceAPI::Default_GPU:
-        return has_gpu_feature() || has_feature(Target::OpenGLCompute);
+        return has_gpu_feature();
     case DeviceAPI::Hexagon:
         return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
     case DeviceAPI::HexagonDma:

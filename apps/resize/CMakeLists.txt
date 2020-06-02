@@ -93,7 +93,7 @@ if (EXISTS ${IMAGE})
         set_tests_properties(resize_${VARIANT}
                              PROPERTIES FIXTURES_REQUIRED rgb_small
                              LABELS internal_app_tests
+                             PASS_REGULAR_EXPRESSION "Success!"
                              SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
-
     endforeach ()
 endif ()
