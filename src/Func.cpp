@@ -1627,10 +1627,11 @@ Stage &Stage::gpu_blocks(const VarOrRVar &bx, const VarOrRVar &by, const VarOrRV
 }
 
 Stage &Stage::gpu_single_thread(DeviceAPI device_api) {
-    Var block;
+    Var block, thread;
+    split(Var::outermost(), Var::outermost(), thread, 1);
     split(Var::outermost(), Var::outermost(), block, 1);
-    set_dim_device_api(block, device_api);
-    set_dim_type(block, ForType::GPUBlock);
+    gpu_blocks(block, device_api);
+    gpu_threads(thread, device_api);
     return *this;
 }
 

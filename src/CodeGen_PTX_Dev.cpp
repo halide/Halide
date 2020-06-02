@@ -203,7 +203,7 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
     user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n"
                                             << "(Memoization is not supported inside GPU kernels at present.)\n";
-    if (alloc->name == "__shared") {
+    if (alloc->memory_type == MemoryType::GPUShared) {
         // PTX uses zero in address space 3 as the base address for shared memory
         Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
         sym_push(alloc->name, shared_base);
