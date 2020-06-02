@@ -335,19 +335,6 @@ tests(GROUPS correctness
 # Make sure the test that needs image_io has it
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
 
-# Some tests explicitly need threads.
-foreach (TEST IN ITEMS
-         correctness_boundary_conditions
-         correctness_gpu_allocation_cache
-         correctness_mul_div_mod
-         correctness_simd_op_check
-         correctness_simd_op_check_hvx
-         correctness_thread_safety
-         correctness_vector_cast
-         correctness_vector_math)
-    target_link_libraries(${TEST} PRIVATE Threads::Threads)
-endforeach ()
-
 # Tests which use external funcs need to enable exports.
 foreach (TEST IN ITEMS
          correctness_async
