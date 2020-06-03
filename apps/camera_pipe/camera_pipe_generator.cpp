@@ -459,11 +459,22 @@ void CameraPipe::generate() {
 
         Var xi, yi, xii, xio;
 
-        /* 1391us on a gtx 980. */
+        /* These tile factors obtain 1391us on a gtx 980. */
+        int tile_x = 28; 
+        int tile_y = 12;
+
+        if (get_target().has_feature(Target::D3D12Compute)) {
+            // D3D12 can only utilize a limited amount of
+            // shared memory, so we use a slightly smaller
+            // tile size.
+            tile_x = 20;
+            tile_y = 12;
+        }
+
         processed.compute_root()
             .reorder(c, x, y)
             .unroll(x, 2)
-            .gpu_tile(x, y, xi, yi, 28, 12);
+            .gpu_tile(x, y, xi, yi, tile_x, tile_y);
 
         curved.compute_at(processed, x)
             .unroll(x, 2)
