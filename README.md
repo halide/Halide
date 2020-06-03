@@ -158,6 +158,7 @@ The best way to get compatible dependencies on Windows is to use
 ```
 D:\> git clone https://github.com/Microsoft/vcpkg.git
 D:\> cd vcpkg
+D:\> .\bootstrap-vcpkg.bat
 D:\vcpkg> .\vcpkg integrate install
 ...
 CMake projects should use: "-DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake"
