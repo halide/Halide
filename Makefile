@@ -431,7 +431,8 @@ LIB_DIR     = lib
 BIN_DIR     = bin
 DISTRIB_DIR = distrib
 INCLUDE_DIR = include
-DOC_DIR     = doc
+SHARE_DIR   = share
+DOC_DIR     = $(SHARE_DIR)/doc/Halide
 BUILD_DIR   = $(BIN_DIR)/build
 FILTERS_DIR = $(BIN_DIR)/$(TARGET)/build
 TMP_DIR     = $(BUILD_DIR)/tmp
@@ -1127,9 +1128,10 @@ clean:
 	rm -rf $(TMP_DIR)
 	rm -rf $(FILTERS_DIR)
 	rm -rf $(INCLUDE_DIR)
-	rm -rf $(DOC_DIR)
+	rm -rf $(SHARE_DIR)
 	rm -rf $(DISTRIB_DIR)
 	rm -rf $(ROOT_DIR)/apps/*/bin
+	rm Doxyfile
 
 .SECONDARY:
 
@@ -2390,8 +2392,12 @@ SOURCE_BROWSER         = YES
 STRIP_CODE_COMMENTS    = NO
 
 # Makefile-specific options
+GENERATE_LATEX         = NO
+HAVE_DOT               = NO
+HTML_OUTPUT            = .
 INPUT                  = "${Halide_SOURCE_DIR}/src" "${Halide_SOURCE_DIR}/test"
-OUTPUT_DIRECTORY       = doc
+OUTPUT_DIRECTORY       = ${DOC_DIR}
+PROJECT_NAME           = Halide
 endef
 
 # Make the above Doxyfile variable available to the doc target.
@@ -2400,4 +2406,5 @@ export Doxyfile
 .PHONY: doc
 doc:
 	echo "$$Doxyfile" > Doxyfile
+	mkdir -p ${DOC_DIR}
 	doxygen
