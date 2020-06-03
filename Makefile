@@ -1131,7 +1131,6 @@ clean:
 	rm -rf $(SHARE_DIR)
 	rm -rf $(DISTRIB_DIR)
 	rm -rf $(ROOT_DIR)/apps/*/bin
-	rm -f Doxyfile
 
 .SECONDARY:
 
@@ -2405,6 +2404,7 @@ export Doxyfile
 
 .PHONY: doc
 doc:
-	echo "$$Doxyfile" > Doxyfile
-	mkdir -p ${DOC_DIR}
-	doxygen
+	@-mkdir -p $(TMP_DIR)
+	echo "$$Doxyfile" > $(TMP_DIR)/Doxyfile
+	@-mkdir -p ${DOC_DIR}
+	doxygen $(TMP_DIR)/Doxyfile
