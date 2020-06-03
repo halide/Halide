@@ -1131,7 +1131,7 @@ clean:
 	rm -rf $(SHARE_DIR)
 	rm -rf $(DISTRIB_DIR)
 	rm -rf $(ROOT_DIR)/apps/*/bin
-	rm Doxyfile
+	rm -f Doxyfile
 
 .SECONDARY:
 
