@@ -464,7 +464,7 @@ void CameraPipe::generate() {
         int tile_y = 12;
 
         if (get_target().has_feature(Target::D3D12Compute)) {
-            // D3D12 can only utilize a limited amount of
+            // D3D12 SM 5.1 can only utilize a limited amount of
             // shared memory, so we use a slightly smaller
             // tile size.
             tile_x = 20;
