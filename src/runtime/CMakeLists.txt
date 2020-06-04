@@ -148,12 +148,6 @@ set(RUNTIME_CXX_FLAGS -O3
     # Note: we don't want static locals to get thread synchronization stuff.
     -fno-threadsafe-statics)
 
-if (NOT MSVC)
-    # -g produces dwarf debugging info, which is not useful on windows
-    #  (and fails to compile due to llvm bug 15393)
-    list(APPEND RUNTIME_CXX_FLAGS "-g")
-endif ()
-
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
         if (${j} EQUAL 32)
@@ -169,51 +163,38 @@ foreach (i IN LISTS RUNTIME_CPP)
             set(TARGET "le64-unknown-unknown-unknown")
         endif ()
 
-        set(RUNTIME_DEFINES -DDEBUG_RUNTIME -DCOMPILING_HALIDE_RUNTIME -DLLVM_VERSION=${LLVM_VERSION} -DBITS_${j})
-
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
 
-        set(LL_D "initmod.${i}_${j}_debug.ll")
-        set(LL "initmod.${i}_${j}.ll")
+        set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DLLVM_VERSION=${LLVM_VERSION} -DBITS_${j})
+        set(RUNTIME_DEFINES_debug -g -DDEBUG_RUNTIME ${RUNTIME_DEFINES})
 
-        set(BC_D "initmod.${i}_${j}_debug.bc")
-        set(BC "initmod.${i}_${j}.bc")
+        foreach (SUFFIX IN ITEMS "" "_debug")
+            set(LL "initmod.${i}_${j}${SUFFIX}.ll")
+            set(BC "initmod.${i}_${j}${SUFFIX}.bc")
+            set(INITMOD "_initmod_${i}_${j}${SUFFIX}.cpp")
+            set(SYMBOL "halide_internal_initmod_${i}_${j}${SUFFIX}")
 
-        set(INITMOD_D "_initmod_${i}_${j}_debug.cpp")
-        set(INITMOD "_initmod_${i}_${j}.cpp")
+            set(DEFINES ${RUNTIME_DEFINES${SUFFIX}})
 
-        add_custom_command(OUTPUT "${LL_D}"
-                           DEPENDS "${SOURCE}"
-                           VERBATIM
-                           COMMAND clang ${RUNTIME_CXX_FLAGS} ${RUNTIME_DEFINES} -m${j} -target ${TARGET} -emit-llvm -S "$<SHELL_PATH:${SOURCE}>" -o ${LL_D}
-                           # Make sure that the output of this command also depends
-                           # on the header files that ${SOURCE} uses
-                           IMPLICIT_DEPENDS CXX "${SOURCE}" # Note: Only works for makefile generator
-                           )
-        add_custom_command(OUTPUT "${BC_D}"
-                           DEPENDS "${LL_D}"
-                           COMMAND llvm-as "${LL_D}" -o "${BC_D}"
-                           )
-        add_custom_command(OUTPUT "${INITMOD_D}"
-                           DEPENDS "${BC_D}" binary2cpp
-                           COMMAND binary2cpp "halide_internal_initmod_${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
-                           )
-        target_sources(Halide_initmod PRIVATE ${INITMOD_D})
-
-        add_custom_command(OUTPUT "${LL}"
-                           DEPENDS "${SOURCE}"
-                           VERBATIM
-                           COMMAND clang ${RUNTIME_CXX_FLAGS} -m${j} -target ${TARGET} -DCOMPILING_HALIDE_RUNTIME -DLLVM_VERSION=${LLVM_VERSION} -DBITS_${j} -emit-llvm -S "$<SHELL_PATH:${SOURCE}>" -o ${LL}
-                           )
-        add_custom_command(OUTPUT "${BC}"
-                           DEPENDS "${LL}"
-                           COMMAND llvm-as "${LL}" -o "${BC}"
-                           )
-        add_custom_command(OUTPUT "${INITMOD}"
-                           DEPENDS "${BC}" binary2cpp
-                           COMMAND binary2cpp "halide_internal_initmod_${i}_${j}" < "${BC}" > "${INITMOD}"
-                           )
-        target_sources(Halide_initmod PRIVATE ${INITMOD})
+            add_custom_command(OUTPUT "${LL}"
+                               DEPENDS "${SOURCE}"
+                               VERBATIM
+                               COMMAND clang ${RUNTIME_CXX_FLAGS} ${DEFINES} -m${j} -target ${TARGET} -emit-llvm -S "$<SHELL_PATH:${SOURCE}>" -o ${LL}
+                               # Make sure that the output of this command also depends
+                               # on the header files that ${SOURCE} uses
+                               # Note: Only works for makefile generator
+                               IMPLICIT_DEPENDS CXX "${SOURCE}"
+                               )
+            add_custom_command(OUTPUT "${BC}"
+                               DEPENDS "${LL}"
+                               COMMAND llvm-as "${LL}" -o "${BC}"
+                               )
+            add_custom_command(OUTPUT "${INITMOD}"
+                               DEPENDS "${BC}" binary2cpp
+                               COMMAND binary2cpp ${SYMBOL} < "${BC}" > "${INITMOD}"
+                               )
+            target_sources(Halide_initmod PRIVATE ${INITMOD})
+        endforeach ()
     endforeach ()
 endforeach ()
 

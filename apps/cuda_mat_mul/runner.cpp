@@ -81,5 +81,7 @@ int main(int argc, char **argv) {
         cublasDestroy(handle);
         printf("cublas time: %f\n", t);
     }
+
+    printf("Success!\n");
     return 0;
 }

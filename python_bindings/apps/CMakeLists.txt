@@ -5,10 +5,6 @@ set(SCRIPTS
     interpolate.py
     local_laplacian.py)
 
-if ("${HL_TARGET}" STREQUAL "")
-    set(HL_TARGET host)
-endif ()
-
 foreach (SCRIPT IN LISTS SCRIPTS)
     get_filename_component(BASE ${SCRIPT} NAME_WE)
     add_test(NAME python_apps_${BASE}

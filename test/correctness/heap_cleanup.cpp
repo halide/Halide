@@ -6,8 +6,8 @@ using namespace Halide;
 
 // Check that assertion failures free allocations appropriately
 
-std::atomic<int> malloc_count;
-std::atomic<int> free_count;
+std::atomic<int> malloc_count{0};
+std::atomic<int> free_count{0};
 
 void *my_malloc(void *user_context, size_t x) {
     malloc_count++;

@@ -203,7 +203,7 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
     user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n"
                                             << "(Memoization is not supported inside GPU kernels at present.)\n";
-    if (alloc->name == "__shared") {
+    if (alloc->memory_type == MemoryType::GPUShared) {
         // PTX uses zero in address space 3 as the base address for shared memory
         Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
         sym_push(alloc->name, shared_base);
@@ -384,8 +384,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Allocate target machine
 
     std::string err_str;
-    const llvm::Target *target = TargetRegistry::lookupTarget(triple.str(), err_str);
-    internal_assert(target) << err_str << "\n";
+    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(triple.str(), err_str);
+    internal_assert(llvm_target) << err_str << "\n";
 
     TargetOptions options;
     options.PrintMachineCode = false;
@@ -399,11 +399,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.StackAlignmentOverride = 0;
 
     std::unique_ptr<TargetMachine>
-        target_machine(target->createTargetMachine(triple.str(),
-                                                   mcpu(), mattrs(), options,
-                                                   llvm::Reloc::PIC_,
-                                                   llvm::CodeModel::Small,
-                                                   CodeGenOpt::Aggressive));
+        target_machine(llvm_target->createTargetMachine(triple.str(),
+                                                        mcpu(), mattrs(), options,
+                                                        llvm::Reloc::PIC_,
+                                                        llvm::CodeModel::Small,
+                                                        CodeGenOpt::Aggressive));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
 
@@ -446,11 +446,21 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         }
     }
 
+    // At present, we default to *enabling* LLVM loop optimization,
+    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
+    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
+    // See https://github.com/halide/Halide/issues/4113 for more info.
+    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
+    // of the setting of DisableLLVMLoopOpt.)
+    const bool do_loop_opt = !target.has_feature(Target::DisableLLVMLoopOpt) ||
+                             target.has_feature(Target::EnableLLVMLoopOpt);
+
     PassManagerBuilder b;
     b.OptLevel = 3;
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = true;
+    b.LoopVectorize = do_loop_opt;
     b.SLPVectorize = true;
+    b.DisableUnrollLoops = !do_loop_opt;
 
     target_machine->adjustPassManager(b);
 

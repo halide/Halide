@@ -161,7 +161,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     case 5:
         // When generating boolean expressions, maybe throw in a condition on non-bool types.
         if (T.is_bool()) {
-            return random_condition(T, depth, false);
+            return random_condition(random_type(T.lanes()), depth, false);
         }
         break;
 

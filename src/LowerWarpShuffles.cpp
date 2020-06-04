@@ -638,7 +638,7 @@ class LowerWarpShuffles : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        if (this_lane.defined() || op->name == "__shared") {
+        if (this_lane.defined() || op->memory_type == MemoryType::GPUShared) {
             // Not a warp-level allocation
             return IRMutator::visit(op);
         } else {

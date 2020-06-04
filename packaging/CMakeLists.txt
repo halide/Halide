@@ -21,24 +21,68 @@ foreach (T IN ITEMS Halide_Adams2019 Halide_Li2018 Halide_Python)
     endif ()
 endforeach ()
 
-# Define destinations for all the targets
-install(TARGETS Halide Halide_Plugin Halide_Runtime ${EXTRA_TARGETS}
-        EXPORT Halide_Targets
+if (WIN32)
+    # We build joint debug/release packages on Windows.
+    install(TARGETS Halide Halide_Plugin Halide_Runtime ${EXTRA_TARGETS}
 
-        RUNTIME
-        DESTINATION ${CMAKE_INSTALL_BINDIR}
-        COMPONENT Halide_Runtime
+            RUNTIME
+            DESTINATION ${CMAKE_INSTALL_BINDIR}/Debug
+            COMPONENT Halide_Runtime
+            CONFIGURATIONS Debug
 
-        LIBRARY
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        COMPONENT Halide_Runtime
-        NAMELINK_COMPONENT Halide_Development
+            LIBRARY
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/Debug
+            COMPONENT Halide_Runtime
+            NAMELINK_COMPONENT Halide_Development
+            CONFIGURATIONS Debug
 
-        ARCHIVE
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        COMPONENT Halide_Development
+            ARCHIVE
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/Debug
+            COMPONENT Halide_Development
+            CONFIGURATIONS Debug
 
-        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+    install(TARGETS Halide Halide_Plugin Halide_Runtime ${EXTRA_TARGETS}
+            EXPORT Halide_Targets
+
+            RUNTIME
+            DESTINATION ${CMAKE_INSTALL_BINDIR}/Release
+            COMPONENT Halide_Runtime
+            CONFIGURATIONS Release RelWithDebInfo MinSizeRel
+
+            LIBRARY
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/Release
+            COMPONENT Halide_Runtime
+            NAMELINK_COMPONENT Halide_Development
+            CONFIGURATIONS Release RelWithDebInfo MinSizeRel
+
+            ARCHIVE
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/Release
+            COMPONENT Halide_Development
+            CONFIGURATIONS Release RelWithDebInfo MinSizeRel
+
+            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+else ()
+    # Define destinations for all the targets
+    install(TARGETS Halide Halide_Plugin Halide_Runtime ${EXTRA_TARGETS}
+            EXPORT Halide_Targets
+
+            RUNTIME
+            DESTINATION ${CMAKE_INSTALL_BINDIR}
+            COMPONENT Halide_Runtime
+
+            LIBRARY
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            COMPONENT Halide_Runtime
+            NAMELINK_COMPONENT Halide_Development
+
+            ARCHIVE
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            COMPONENT Halide_Development
+
+            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+endif ()
 
 install(TARGETS Halide_Tools Halide_ImageIO
         EXPORT Halide_Targets

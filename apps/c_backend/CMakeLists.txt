@@ -48,3 +48,8 @@ target_link_libraries(run_c_backend_and_native_cpp
 # Test that the app actually works!
 add_test(NAME c_backend COMMAND run_c_backend_and_native)
 add_test(NAME c_backend_cpp COMMAND run_c_backend_and_native_cpp)
+
+set_tests_properties(c_backend c_backend_cpp PROPERTIES
+                     LABELS internal_app_tests
+                     PASS_REGULAR_EXPRESSION "Success!"
+                     SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
