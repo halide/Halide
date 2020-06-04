@@ -896,22 +896,79 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         constants[i].size += constants[i - 1].size;
     }
 
-    // Find all the shared allocations and declare them at global scope.
-    class FindSharedAllocations : public IRVisitor {
-        using IRVisitor::visit;
-        void visit(const Allocate *op) override {
-            op->body.accept(this);
+    // Find all the shared allocations, uniquify their names,
+    // and declare them at global scope.
+    class FindSharedAllocationsAndUniquify : public IRMutator {
+        using IRMutator::visit;
+        Stmt visit(const Allocate *op) override {
             if (is_shared_allocation(op)) {
-                allocs.push_back(op);
+                // Because these will go in global scope,
+                // we need to ensure they have unique names.
+                std::string new_name = unique_name(op->name);
+                replacements[op->name] = new_name;
+
+                std::vector<Expr> new_extents;
+                for (size_t i = 0; i < op->extents.size(); i++) {
+                    new_extents.push_back(mutate(op->extents[i]));
+                }
+                Stmt new_body = mutate(op->body);
+                Expr new_condition = mutate(op->condition);
+                Expr new_new_expr;
+                if (op->new_expr.defined()) {
+                    new_new_expr = mutate(op->new_expr);
+                }
+
+                Stmt new_alloc = Allocate::make(new_name, op->type, op->memory_type, new_extents,
+                                                std::move(new_condition), std::move(new_body),
+                                                std::move(new_new_expr), op->free_function);
+
+                allocs.push_back(new_alloc);
+                replacements.erase(op->name);
+                return new_alloc;
+            } else {
+                return IRMutator::visit(op);
             }
         }
+
+        Stmt visit(const Free *op) override {
+            if (replacements.count(op->name)) {
+                return Free::make(replacements[op->name]);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        Expr visit(const Load *op) override {
+            if (replacements.count(op->name)) {
+                return Load::make(op->type, replacements[op->name],
+                                  std::move(mutate(op->index)), op->image, op->param,
+                                  std::move(mutate(op->predicate)), op->alignment);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        Stmt visit(const Store *op) override {
+            if (replacements.count(op->name)) {
+                return Store::make(replacements[op->name], std::move(mutate(op->value)),
+                                   std::move(mutate(op->index)), op->param,
+                                   std::move(mutate(op->predicate)), op->alignment);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        std::map<string, string> replacements;
         friend class CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
-        vector<const Allocate *> allocs;
+        vector<Stmt> allocs;
     };
-    FindSharedAllocations fsa;
-    s.accept(&fsa);
+
+    FindSharedAllocationsAndUniquify fsa;
+    s = fsa.mutate(s);
+
     uint32_t total_shared_bytes = 0;
-    for (const Allocate *op : fsa.allocs) {
+    for (Stmt sop : fsa.allocs) {
+        const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);
         // In D3D12/HLSL, only 32bit types (int/uint/float) are suppoerted (even
