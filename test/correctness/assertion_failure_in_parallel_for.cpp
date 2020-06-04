@@ -4,7 +4,7 @@
 
 using namespace Halide;
 
-std::atomic<bool> error_occurred(false);
+std::atomic<bool> error_occurred{false};
 
 void halide_error(void *ctx, const char *msg) {
     printf("Expected: %s\n", msg);

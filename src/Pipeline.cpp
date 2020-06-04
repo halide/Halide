@@ -800,11 +800,7 @@ namespace {
 struct ErrorBuffer {
     enum { MaxBufSize = 4096 };
     char buf[MaxBufSize];
-    std::atomic<size_t> end;
-
-    ErrorBuffer() {
-        end = 0;
-    }
+    std::atomic<size_t> end{0};
 
     void concat(const char *message) {
         size_t len = strlen(message);
