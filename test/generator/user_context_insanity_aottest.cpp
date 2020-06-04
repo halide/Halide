@@ -11,6 +11,7 @@ using namespace Halide::Runtime;
 
 const int num_launcher_tasks = 1000;
 
+// Zero-initialized by virtue of being a global
 static std::atomic<bool> got_context[num_launcher_tasks] = {};
 
 int32_t my_halide_trace(void *context, const halide_trace_event_t *e) {

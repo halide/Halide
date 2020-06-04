@@ -4,7 +4,7 @@ if (DEFINED LLVM_DIR AND NOT DEFINED Clang_DIR)
 endif ()
 
 if (NOT TARGET clang)
-    if (DEFINED LLVM_DIR)
+    if (DEFINED LLVM_DIR AND NOT DEFINED Clang_DIR)
         message(STATUS "Couldn't find Clang from LLVM_DIR. Trying system-wide search.")
     endif ()
     find_package(Clang ${HALIDE_REQUIRE_LLVM_VERSION} REQUIRED)

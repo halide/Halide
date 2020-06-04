@@ -9,7 +9,7 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-std::atomic<int32_t> call_count;
+std::atomic<int32_t> call_count{0};
 
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
