@@ -460,7 +460,7 @@ void CameraPipe::generate() {
         Var xi, yi, xii, xio;
 
         /* These tile factors obtain 1391us on a gtx 980. */
-        int tile_x = 28; 
+        int tile_x = 28;
         int tile_y = 12;
 
         if (get_target().has_feature(Target::D3D12Compute)) {
