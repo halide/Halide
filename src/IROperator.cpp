@@ -368,7 +368,7 @@ Expr make_two(Type t) {
 }
 
 Expr make_signed_integer_overflow(Type type) {
-    static std::atomic<int> counter;
+    static std::atomic<int> counter{0};
     return Call::make(type, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
 }
 
@@ -2158,7 +2158,7 @@ Expr mod_round_to_zero(Expr x, Expr y) {
 
 Expr random_float(Expr seed) {
     // Random floats get even IDs
-    static std::atomic<int> counter;
+    static std::atomic<int> counter{0};
     int id = (counter++) * 2;
 
     std::vector<Expr> args;
@@ -2178,7 +2178,7 @@ Expr random_float(Expr seed) {
 
 Expr random_uint(Expr seed) {
     // Random ints get odd IDs
-    static std::atomic<int> counter;
+    static std::atomic<int> counter{0};
     int id = (counter++) * 2 + 1;
 
     std::vector<Expr> args;

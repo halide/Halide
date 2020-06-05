@@ -147,7 +147,7 @@ struct BLASTestBase {
         return buff;
     }
 
-    bool compareScalars(Scalar x, Scalar y, Scalar epsilon = 4 * std::numeric_limits<Scalar>::epsilon()) {
+    bool compareScalars(Scalar x, Scalar y, Scalar epsilon = 32 * std::numeric_limits<Scalar>::epsilon()) {
         if (x == y) {
             return true;
         } else {
