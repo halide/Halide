@@ -357,6 +357,16 @@ public:
                 const VarOrRVar &xi, const VarOrRVar &yi,
                 const Expr &xfactor, const Expr &yfactor,
                 TailStrategy tail = TailStrategy::Auto);
+    Stage &tile(const std::vector<VarOrRVar> &previous,
+                const std::vector<VarOrRVar> &outers,
+                const std::vector<VarOrRVar> &inners,
+                const std::vector<Expr> &factors,
+                const std::vector<TailStrategy> &tails);
+    Stage &tile(const std::vector<VarOrRVar> &previous,
+                const std::vector<VarOrRVar> &outers,
+                const std::vector<VarOrRVar> &inners,
+                const std::vector<Expr> &factors,
+                TailStrategy tail = TailStrategy::Auto);
     Stage &reorder(const std::vector<VarOrRVar> &vars);
 
     template<typename... Args>
@@ -1525,6 +1535,20 @@ public:
     Func &tile(const VarOrRVar &x, const VarOrRVar &y,
                const VarOrRVar &xi, const VarOrRVar &yi,
                const Expr &xfactor, const Expr &yfactor,
+               TailStrategy tail = TailStrategy::Auto);
+
+    /** A more general form of tile, which defines tiles of any dimensionality. */
+    Func &tile(const std::vector<VarOrRVar> &previous,
+               const std::vector<VarOrRVar> &outers,
+               const std::vector<VarOrRVar> &inners,
+               const std::vector<Expr> &factors,
+               const std::vector<TailStrategy> &tails);
+
+    /** The generalized tile, with a single tail strategy to apply to all vars. */
+    Func &tile(const std::vector<VarOrRVar> &previous,
+               const std::vector<VarOrRVar> &outers,
+               const std::vector<VarOrRVar> &inners,
+               const std::vector<Expr> &factors,
                TailStrategy tail = TailStrategy::Auto);
 
     /** Reorder variables to have the given nesting order, from
