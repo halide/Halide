@@ -134,7 +134,7 @@ class SplitTuples : public IRMutator {
         }
     }
 
-    Stmt visit_provide(const Provide *op, const Atomic *atomic = nullptr) {
+    Stmt visit_provide(const Provide *op, const Atomic *atomic) {
 
         if (op->values.size() == 1) {
             if (atomic) {
@@ -317,6 +317,10 @@ class SplitTuples : public IRMutator {
     }
 
     Stmt visit(const Atomic *op) override {
+        // At this point in lowering, the only child of an atomic node
+        // should be a single provide node. We haven't many any
+        // statement mutations yet that would put things in between
+        // the provide and the atomic.
         if (const Provide *p = op->body.as<Provide>()) {
             return visit_provide(p, op);
         } else {
