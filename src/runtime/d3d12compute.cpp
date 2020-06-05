@@ -2289,7 +2289,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 
     // Check all strides positive
     for (int i = 0; i < buf->dimensions; i++) {
-        halide_assert(user_context, buf->dim[i].stride > 0);
+        halide_assert(user_context, buf->dim[i].stride >= 0);
     }
 
     TRACEPRINT("allocating " << *buf << "\n");
