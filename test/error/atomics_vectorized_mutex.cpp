@@ -4,31 +4,25 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     int img_size = 10000;
-    int hist_size = 7;
 
-    Func im, hist;
+    Func f;
     Var x;
     RDom r(0, img_size);
 
-    im(x) = (x * x) % hist_size;
+    f(x) = Tuple(1, 0);
+    f(r) = Tuple(f(r)[1] + 1, f(r)[0] + 1);
 
-    hist(x) = Tuple(0, 0);
-    hist(im(r)) += Tuple(1, 2);
+    f.compute_root();
 
-    hist.compute_root();
-
-    RVar ro, ri;
-    hist.update()
+    f.update()
         .atomic()
-        .split(r, ro, ri, 8)
-        .parallel(ro)
-        .vectorize(ri);
+        .vectorize(r, 8);
 
-    // hist's update will be lowered to mutex locks,
+    // f's update will be lowered to mutex locks,
     // and we don't allow vectorization on mutex locks since
     // it leads to deadlocks.
     // This should throw an error
-    Realization out = hist.realize(hist_size);
+    Realization out = f.realize(img_size);
 
     printf("Success!\n");
     return 0;
