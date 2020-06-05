@@ -5,6 +5,7 @@ int main(int argc, char **argv) {
     // See https://github.com/halide/Halide/issues/4297
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
     Var x, y, z;
@@ -15,9 +16,10 @@ int main(int argc, char **argv) {
         .reorder(x, z, yi, yo)
         .gpu_blocks(yo)
         .gpu_blocks(yi)
-        .gpu_blocks(z)
-        .gpu_threads(x);
+        .gpu_blocks(z);
 
     Buffer<int> imf = f.realize(10, 10, 10, target);
+
+    printf("Success!\n");
     return 0;
 }

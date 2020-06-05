@@ -173,7 +173,7 @@ Stmt Simplify::visit(const For *op) {
     if (is_no_op(new_body)) {
         return new_body;
     } else if (extent_bounds.max_defined &&
-               extent_bounds.max == 0) {
+               extent_bounds.max <= 0) {
         return Evaluate::make(0);
     } else if (is_one(new_extent) &&
                op->device_api == DeviceAPI::None) {

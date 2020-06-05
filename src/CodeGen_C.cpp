@@ -183,9 +183,12 @@ inline T halide_cpp_max(const T &a, const T &b) {return (a > b) ? a : b;}
 template<typename T>
 inline T halide_cpp_min(const T &a, const T &b) {return (a < b) ? a : b;}
 
+template<typename T>
+inline void halide_unused(const T&) {}
+
 template<typename A, typename B>
 const B &return_second(const A &a, const B &b) {
-    (void) a;
+    halide_unused(a);
     return b;
 }
 
@@ -2803,7 +2806,7 @@ void CodeGen_C::visit(const IfThenElse *op) {
 void CodeGen_C::visit(const Evaluate *op) {
     if (is_const(op->value)) return;
     string id = print_expr(op->value);
-    stream << get_indent() << "(void)" << id << ";\n";
+    stream << get_indent() << "halide_unused(" << id << ");\n";
 }
 
 void CodeGen_C::visit(const Shuffle *op) {

@@ -217,8 +217,31 @@ void CodeGen_PyTorch::test() {
     Expr buf = Variable::make(Handle(), "buf.buffer");
     s = LetStmt::make("buf", Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern), s);
 
-    std::ostringstream source;
-    std::ostringstream source_cuda;
+    const auto compare_src = [&](const std::string &src, const std::string &correct_src) {
+        if (src != correct_src) {
+            int diff = 0;
+            while (src[diff] == correct_src[diff]) {
+                diff++;
+            }
+            int diff_end = diff + 1;
+            while (diff > 0 && src[diff] != '\n') {
+                diff--;
+            }
+            while (diff_end < (int)src.size() && src[diff_end] != '\n') {
+                diff_end++;
+            }
+
+            internal_error
+                << "Correct source code:\n"
+                << correct_src
+                << "Actual source code:\n"
+                << src
+                << "Difference starts at:" << diff << "\n"
+                << "Correct: " << correct_src.substr(diff, diff_end - diff) << "\n"
+                << "Actual: " << src.substr(diff, diff_end - diff) << "\n";
+        }
+    };
+
     {
         // TODO(mgharbi): test that Target("host-cuda") raises an exception since
         // we require the "user_context" feature when using CUDA
@@ -226,19 +249,11 @@ void CodeGen_PyTorch::test() {
         Module m("", Target("host"));
         m.append(LoweredFunc("test1", args, s, LinkageType::External));
 
-        CodeGen_PyTorch(source).compile(m);
-    }
-    {
-        Module m("", Target("host-cuda-user_context"));
-        m.append(LoweredFunc("test1", args, s, LinkageType::External));
+        std::ostringstream src;
+        CodeGen_PyTorch(src).compile(m);
 
-        CodeGen_PyTorch(source_cuda).compile(m);
-    }
-    std::string src = source.str() + "\n" + source_cuda.str();
-
-    // The correct source concatenates CPU and GPU headers
-    std::string correct_src =
-        R"GOLDEN_CODE(#include "HalideBuffer.h"
+        std::string correct_src =
+            R"GOLDEN_CODE(#include "HalideBuffer.h"
 #include "HalidePyTorchHelpers.h"
 #include "torch/extension.h"
 
@@ -290,8 +305,21 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     AT_ASSERTM(err == 0, "Halide call failed");
     return 0;
 }
+)GOLDEN_CODE";
 
-#include "ATen/cuda/CUDAContext.h"
+        compare_src(src.str(), correct_src);
+    }
+
+    Target host_cuda("host-cuda-user_context");
+    if (host_supports_target_device(host_cuda)) {
+        Module m("", host_cuda);
+        m.append(LoweredFunc("test1", args, s, LinkageType::External));
+
+        std::ostringstream src;
+        CodeGen_PyTorch(src).compile(m);
+
+        std::string correct_src =
+            R"GOLDEN_CODE(#include "ATen/cuda/CUDAContext.h"
 #include "HalideBuffer.h"
 #include "HalidePyTorchCudaHelpers.h"
 #include "HalidePyTorchHelpers.h"
@@ -361,27 +389,9 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
 }
 )GOLDEN_CODE";
 
-    if (src != correct_src) {
-        int diff = 0;
-        while (src[diff] == correct_src[diff]) {
-            diff++;
-        }
-        int diff_end = diff + 1;
-        while (diff > 0 && src[diff] != '\n') {
-            diff--;
-        }
-        while (diff_end < (int)src.size() && src[diff_end] != '\n') {
-            diff_end++;
-        }
-
-        internal_error
-            << "Correct source code:\n"
-            << correct_src
-            << "Actual source code:\n"
-            << src
-            << "Difference starts at:" << diff << "\n"
-            << "Correct: " << correct_src.substr(diff, diff_end - diff) << "\n"
-            << "Actual: " << src.substr(diff, diff_end - diff) << "\n";
+        compare_src(src.str(), correct_src);
+    } else {
+        user_warning << "Host does not support " << host_cuda << ", skipping part of test";
     }
 
     std::cout << "CodeGen_PyTorch test passed\n";

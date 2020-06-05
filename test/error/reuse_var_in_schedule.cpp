@@ -11,5 +11,6 @@ int main(int argc, char **argv) {
     Var xo, xi;
     f.split(x, xo, xi, 4).split(xo, xo, xi, 4);
 
+    printf("Success!\n");
     return 0;
 }

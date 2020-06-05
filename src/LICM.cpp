@@ -215,10 +215,6 @@ class LICM : public IRMutator {
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
             return IRMutator::visit(op);
-        } else if (op->device_api == DeviceAPI::GLSL ||
-                   op->device_api == DeviceAPI::OpenGLCompute) {
-            // Don't lift anything out of OpenGL loops
-            return IRMutator::visit(op);
         } else {
 
             // Lift invariants
@@ -244,7 +240,7 @@ class LICM : public IRMutator {
             }
 
             // Jointly CSE the lifted exprs put putting them together into a dummy Expr
-            Expr dummy_call = Call::make(Int(32), "dummy", exprs, Call::Extern);
+            Expr dummy_call = Call::make(Int(32), Call::bundle, exprs, Call::PureIntrinsic);
             dummy_call = common_subexpression_elimination(dummy_call, true);
 
             // Peel off containing lets. These will be lifted.
@@ -268,7 +264,7 @@ class LICM : public IRMutator {
 
             // Now consider substituting back in each use
             const Call *call = dummy_call.as<Call>();
-            internal_assert(call);
+            internal_assert(call->is_intrinsic(Call::bundle));
             bool converged;
             do {
                 converged = true;
@@ -415,24 +411,26 @@ class GroupLoopInvariants : public IRMutator {
         return result;
     }
 
-    Expr visit(const Sub *op) override {
-        if (op->type.is_float()) {
-            // Don't reassociate float exprs.
-            // (If strict_float is off, we're allowed to reassociate,
-            // and we do reassociate elsewhere, but there's no benefit to it
+    Expr visit(const Add *op) override {
+        if (op->type.is_float() || (op->type == Int(32) && is_const(op->b))) {
+            // Don't reassociate float exprs.  (If strict_float is
+            // off, we're allowed to reassociate, and we do
+            // reassociate elsewhere, but there's no benefit to it
             // here and it's friendlier not to.)
+            //
+            // Also don't reassociate trailing integer constants. They're the
+            // ultimate loop invariant, but doing this to stencils
+            // causes inner loops to track N different pointers
+            // instead of one pointer with constant offsets, and that
+            // complicates aliasing analysis.
             return IRMutator::visit(op);
         }
 
         return reassociate_summation(op);
     }
 
-    Expr visit(const Add *op) override {
-        if (op->type.is_float()) {
-            // Don't reassociate float exprs.
-            // (If strict_float is off, we're allowed to reassociate,
-            // and we do reassociate elsewhere, but there's no benefit to it
-            // here and it's friendlier not to.)
+    Expr visit(const Sub *op) override {
+        if (op->type.is_float() || (op->type == Int(32) && is_const(op->b))) {
             return IRMutator::visit(op);
         }
 

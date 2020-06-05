@@ -77,7 +77,7 @@ ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
 // This just initializes the predefined x, y, z, w members of RDom.
 void RDom::init_vars(const string &name) {
     const std::vector<ReductionVariable> &dom_vars = dom.domain();
-    std::array<RVar *, 4> vars = {&x, &y, &z, &w};
+    std::array<RVar *, 4> vars = {{&x, &y, &z, &w}};
 
     for (size_t i = 0; i < vars.size(); i++) {
         if (i < dom_vars.size()) {

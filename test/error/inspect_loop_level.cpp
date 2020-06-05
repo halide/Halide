@@ -8,7 +8,6 @@ int main(int argc, char **argv) {
 
     printf("LoopLevel is %s\n", root.to_string().c_str());  // should fail
 
-    printf("I should not have reached here\n");
-
+    printf("Success!\n");
     return 0;
 }

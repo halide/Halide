@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     if (argc < 7) {
         printf("Usage: ./process input.png levels alpha beta timing_iterations output.png\n"
                "e.g.: ./process input.png 8 1 1 10 output.png\n");
-        return 0;
+        return 1;
     }
 
     // Input may be a PNG8
@@ -50,5 +50,6 @@ int main(int argc, char **argv) {
 
     convert_and_save_image(output, argv[6]);
 
+    printf("Success!\n");
     return 0;
 }

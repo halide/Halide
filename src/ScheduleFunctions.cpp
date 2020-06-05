@@ -1032,21 +1032,37 @@ protected:
             body = p->body;
         }
 
-        // Dig through any let statements
-        vector<pair<string, Expr>> lets;
-        while (const auto *l = body.as<LetStmt>()) {
-            if (!is_pure(l->value)) {
-                // The consumer of the Func we're injecting may be an
-                // extern stage, which shows up in the IR as a let
-                // stmt with a side-effecty RHS. We need to take care
-                // not to blow past it and risk injecting the producer
-                // *after* the consumer. In general it seems unwise to
-                // reorder the computation of a Func past something
-                // side-effecty, so we stop here.
+        // Dig through any let/if statements
+        vector<pair<string, Expr>> containers;
+        while (1) {
+            if (const LetStmt *l = body.as<LetStmt>()) {
+                const Call *call = l->value.as<Call>();
+                if (!(call && call->is_intrinsic(Call::promise_clamped)) &&
+                    !is_pure(l->value)) {
+                    // The consumer of the Func we're injecting may be an
+                    // extern stage, which shows up in the IR as a let
+                    // stmt with a side-effecty RHS. We need to take care
+                    // not to blow past it and risk injecting the producer
+                    // *after* the consumer. In general it seems unwise to
+                    // reorder the computation of a Func past something
+                    // side-effecty, so we stop here.
+                    //
+                    // An exception is that it's good to walk inside a
+                    // promise_clamped intrinsic due to a GuardWithIf
+                    // split. It's safe and produces cleaner IR.
+                    break;
+                }
+                containers.emplace_back(l->name, l->value);
+                body = l->body;
+            } else if (const IfThenElse *i = body.as<IfThenElse>()) {
+                if (!is_pure(i->condition) || i->else_case.defined()) {
+                    break;
+                }
+                containers.emplace_back(std::string{}, i->condition);
+                body = i->then_case;
+            } else {
                 break;
             }
-            lets.emplace_back(l->name, l->value);
-            body = l->body;
         }
 
         // Fused pairs (compute_with) cannot have extern definitions. Thus this condition is only true when funcs
@@ -1079,9 +1095,14 @@ protected:
             _found_store_level = true;
         }
 
-        // Reinstate the let statements
-        for (size_t i = lets.size(); i > 0; i--) {
-            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
+        // Reinstate the let/if statements
+        for (size_t i = containers.size(); i > 0; i--) {
+            auto p = containers[i - 1];
+            if (p.first.empty()) {
+                body = IfThenElse::make(p.second, body);
+            } else {
+                body = LetStmt::make(p.first, p.second, body);
+            }
         }
 
         // Reinstate the placeholder prefetches
@@ -1451,30 +1472,133 @@ private:
 
         user_assert(num_skipped == 0) << "Fused groups must either be entirely used or unused\n";
 
+        // Order of the stages for building produce definitions.
+        vector<pair<Function, int>> stage_order;
+        // Inverse map from function name to the index.
+        map<string, int> func_name_to_index;
+        // Contains a number of dependencies which need to go first for a given stage of the function.
+        vector<vector<int>> stage_dependencies(funcs.size());
+
+        // Holds the index of the function stage.
+        struct FuncStageIndex {
+            int func_index;
+            int stage_index;
+        };
+
+        // Adjacency list of dependencies. The structure is [func_index, stage_index, vector of the edges],
+        // where edge is the index of the other function stage.
+        vector<vector<vector<FuncStageIndex>>> adj_list(funcs.size());
+
+        // Initialize data structures.
+        for (size_t i = 0; i < funcs.size(); i++) {
+            stage_dependencies[i].resize(1 + funcs[i].updates().size(), 0);
+            adj_list[i].resize(1 + funcs[i].updates().size());
+            func_name_to_index[funcs[i].name()] = i;
+        }
+
+        // Figure out dependencies between the stages.
+        for (size_t i = 0; i < funcs.size(); i++) {
+            auto prev_level = funcs[i].definition().schedule().fuse_level().level;
+            {
+                const auto &level = funcs[i].definition().schedule().fuse_level().level;
+                if (!level.is_root() && !level.is_inlined()) {
+                    stage_dependencies[i][0]++;
+                    adj_list[func_name_to_index[level.func()]][level.stage_index()].push_back({(int)i, 0});
+                }
+            }
+            for (size_t j = 0; j < funcs[i].updates().size(); ++j) {
+                const auto &level = funcs[i].updates()[j].schedule().fuse_level().level;
+                if (!level.is_root() && !level.is_inlined()) {
+                    stage_dependencies[i][j + 1]++;
+                    adj_list[func_name_to_index[level.func()]][level.stage_index()].push_back({(int)i, (int)j + 1});
+
+                    // Let say that we have a stage f.update(p), which is scheduled to be computed_with
+                    // another stage g.update(q) (like f.update(p).compute_with(g.update(q), var)).
+                    // This means that the loop for f.update(p) will be injected into the loop for g.update(q).
+                    // Given that, for this to be correct, all stages of f up until (p - 1) must come
+                    // before g.update(q).
+                    // However, there is a special case here when two or more consecutive stages are computed
+                    // with the same stage. In this case, we won't be adding back edge to avoid creating cyclic
+                    // dependency.
+                    if (!(prev_level.func() == level.func() && prev_level.stage_index() == level.stage_index())) {
+                        for (size_t k = 0; k < j + 1; k++) {
+                            stage_dependencies[func_name_to_index[level.func()]][level.stage_index()]++;
+                            adj_list[i][k].push_back({func_name_to_index[level.func()], level.stage_index()});
+                        }
+                    }
+                    prev_level = level;
+                }
+            }
+        }
+
+        size_t complete_count = 0;
+        vector<size_t> stage_index(funcs.size());
+        // This basically computes topological order, but exploits the fact that stages of the function
+        // form linear order. Basically, we have a set of indices that point to the current stages
+        // for each of the functions and should be considered as a next stage in the general order. They
+        // are added to the order, only if all of their dependencies have been added already.
+        while (complete_count < funcs.size()) {
+            bool progress_made = false;
+            for (size_t i = 0; i < funcs.size(); i++) {
+                // We already added all stages of this function, so proceed to the next function.
+                if (stage_index[i] == stage_dependencies[i].size()) {
+                    continue;
+                }
+                // Proceed as far as we can, so stages of the same function are bundled together.
+                while (stage_index[i] < stage_dependencies[i].size()) {
+                    if (stage_dependencies[i][stage_index[i]] > 0) {
+                        break;
+                    }
+                    // Now that we are going to add a stage to the order, go over dependent nodes
+                    // and decrease their dependency count.
+                    for (size_t k = 0; k < adj_list[i][stage_index[i]].size(); k++) {
+                        const auto &edge = adj_list[i][stage_index[i]][k];
+                        internal_assert(stage_dependencies[edge.func_index][edge.stage_index] > 0);
+                        stage_dependencies[edge.func_index][edge.stage_index]--;
+                    }
+                    stage_order.emplace_back(funcs[i], stage_index[i]);
+                    stage_index[i]++;
+                    progress_made = true;
+                }
+                if (stage_index[i] == stage_dependencies[i].size()) {
+                    complete_count++;
+                }
+            }
+            // Make sure that we made some progress, otherwise there is a cyclic dependency.
+            if (!progress_made) {
+                std::stringstream ss;
+                ss << "There is a cycle inside of the fused group: \n";
+                for (size_t i = 0; i < funcs.size(); i++) {
+                    if (stage_index[i] == stage_dependencies[i].size()) {
+                        continue;
+                    }
+                    ss << funcs[i].name() << ".s" << stage_index[i] << "has " << stage_dependencies[i][stage_index[i]]
+                       << "unsatisfied dependencies; \n";
+                }
+                user_assert(progress_made) << ss.str();
+            }
+        }
+
         // Build the loops.
         Stmt producer;
         map<string, Expr> replacements;
         vector<pair<string, Expr>> add_lets;
 
-        for (auto iter = funcs.rbegin(); iter != funcs.rend(); iter++) {
-            const auto &f = *iter;
+        for (const auto &func_stage : stage_order) {
+            const auto &f = func_stage.first;
 
-            if (f.has_extern_definition()) {
+            if (f.has_extern_definition() && (func_stage.second == 0)) {
                 const Stmt &produceDef = Internal::build_extern_produce(env, f, target);
                 producer = inject_stmt(producer, produceDef, LoopLevel::inlined().lock());
-            } else {
-                const Stmt &produceDef = build_produce_definition(f, f.name() + ".s0.", f.definition(), false,
-                                                                  replacements, add_lets);
-                producer = inject_stmt(producer, produceDef, f.definition().schedule().fuse_level().level);
+                continue;
             }
 
-            for (size_t j = 0; j < f.updates().size(); ++j) {
-                string defPrefix = f.name() + ".s" + std::to_string(j + 1) + ".";
-                const Definition &def = f.updates()[j];
-                const Stmt &updateDef = build_produce_definition(f, defPrefix, def, true,
-                                                                 replacements, add_lets);
-                producer = inject_stmt(producer, updateDef, def.schedule().fuse_level().level);
-            }
+            string def_prefix = f.name() + ".s" + std::to_string(func_stage.second) + ".";
+            const auto &def = (func_stage.second == 0) ? f.definition() : f.updates()[func_stage.second - 1];
+
+            const Stmt &produceDef = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
+                                                              replacements, add_lets);
+            producer = inject_stmt(producer, produceDef, def.schedule().fuse_level().level);
         }
 
         internal_assert(producer.defined());

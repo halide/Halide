@@ -184,5 +184,7 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Warning: Auto-scheduler is much much slower than it should be.\n");
         }
     }
+
+    printf("Success!\n");
     return 0;
 }

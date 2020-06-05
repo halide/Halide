@@ -8,9 +8,9 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
     return 0;
 }
 
-// OpenCL headers/libs are not properly setup yet for windows.
 int main(int argc, char **argv) {
-    printf("Skipping test on windows\n");
+    // TODO: is this true?
+    printf("[SKIP] OpenCL headers/libs are not properly setup yet for Windows.\n");
     return 0;
 }
 
@@ -22,7 +22,7 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
 }
 
 int main(int argc, char **argv) {
-    printf("Skipping since TEST_OPENCL is not enabled\n");
+    printf("[SKIP] Test requires OpenCL.\n");
     return 0;
 }
 

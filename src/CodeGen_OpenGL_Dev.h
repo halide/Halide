@@ -67,9 +67,9 @@ protected:
 
     void visit(const Max *op) override;
     void visit(const Min *op) override;
-    void visit(const Div *op) override;
-    void visit(const Mod *op) override;
     void visit(const Call *op) override;
+
+    void visit(const Mod *) override;
 
     // these have specific functions
     // in GLSL that operate on vectors
@@ -81,6 +81,8 @@ protected:
     void visit(const GE *) override;
 
     void visit(const Shuffle *) override;
+
+    Type map_type(const Type &);
 
     std::map<std::string, std::string> builtin;
 };

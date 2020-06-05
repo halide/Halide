@@ -668,7 +668,7 @@ int main(int argc, char **argv) {
         }
     }
     if (t == Target("hexagon-32-noos")) {
-        std::cerr << "Warning: correctness_simd_op_hvx called with an HL_TARGET value that has no HVX related feature. Testing nothing.\n";
+        printf("[SKIP] No HVX target enabled.\n");
         return 0;
     }
 

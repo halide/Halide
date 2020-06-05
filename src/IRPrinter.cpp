@@ -169,9 +169,6 @@ ostream &operator<<(ostream &stream, const Target &target) {
 
 namespace Internal {
 
-IRPrinter::~IRPrinter() {
-}
-
 void IRPrinter::test() {
     Type i32 = Int(32);
     Type f32 = Float(32);
@@ -336,6 +333,21 @@ std::ostream &operator<<(std::ostream &stream, const Indentation &indentation) {
         stream << " ";
     }
     return stream;
+}
+
+std::ostream &operator<<(std::ostream &out, const DimType &t) {
+    switch (t) {
+    case DimType::PureVar:
+        out << "PureVar";
+        break;
+    case DimType::PureRVar:
+        out << "PureRVar";
+        break;
+    case DimType::ImpureRVar:
+        out << "ImpureRVar";
+        break;
+    }
+    return out;
 }
 
 IRPrinter::IRPrinter(ostream &s)
@@ -934,7 +946,7 @@ void IRPrinter::visit(const Shuffle *op) {
 }
 
 void IRPrinter::visit(const Atomic *op) {
-    if (op->mutex_name == "") {
+    if (op->mutex_name.empty()) {
         stream << get_indent() << "atomic {\n";
     } else {
         stream << get_indent() << "atomic (";

@@ -80,6 +80,9 @@ std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
 /** Emit a halide linkage value in a human readable format */
 std::ostream &operator<<(std::ostream &stream, const LinkageType &);
 
+/** Emit a halide dimension type in human-readable format */
+std::ostream &operator<<(std::ostream &stream, const DimType &);
+
 struct Indentation {
     int indent;
 };
@@ -91,11 +94,9 @@ std::ostream &operator<<(std::ostream &stream, const Indentation &);
  */
 class IRPrinter : public IRVisitor {
 public:
-    ~IRPrinter() override;
-
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
-    IRPrinter(std::ostream &);
+    explicit IRPrinter(std::ostream &);
 
     /** emit an expression on the output stream */
     void print(const Expr &);

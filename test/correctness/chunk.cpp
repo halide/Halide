@@ -15,10 +15,10 @@ int main(int argc, char **argv) {
     g(x, y) = f(x + 1, y) + f(x - 1, y);
 
     Target target = get_jit_target_from_environment();
-    if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
+    if (target.has_gpu_feature()) {
         Var xo, yo, xi, yi;
         g.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
-        f.compute_at(g, xo).gpu_threads(x, y);
+        f.compute_at(g, xo).gpu_threads(x, y).store_in(MemoryType::GPUShared);
     }
 
     printf("Realizing function...\n");
