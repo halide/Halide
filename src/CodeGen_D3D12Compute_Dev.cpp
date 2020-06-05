@@ -943,8 +943,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             auto it = replacements.find(op->name);
             if (it != replacements.end()) {
                 return Load::make(op->type, it->second,
-                                  std::move(mutate(op->index)), op->image, op->param,
-                                  std::move(mutate(op->predicate)), op->alignment);
+                                  mutate(op->index), op->image, op->param,
+                                  mutate(op->predicate), op->alignment);
             } else {
                 return IRMutator::visit(op);
             }
@@ -953,9 +953,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         Stmt visit(const Store *op) override {
             auto it = replacements.find(op->name);
             if (it != replacements.end()) {
-                return Store::make(it->second, std::move(mutate(op->value)),
-                                   std::move(mutate(op->index)), op->param,
-                                   std::move(mutate(op->predicate)), op->alignment);
+                return Store::make(it->second, mutate(op->value),
+                                   mutate(op->index), op->param,
+                                   mutate(op->predicate), op->alignment);
             } else {
                 return IRMutator::visit(op);
             }
