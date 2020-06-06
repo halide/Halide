@@ -980,7 +980,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
 	cd $(BUILD_DIR)/llvm_objects; \
-	cat list.all |  grep "libLLVM" | grep ")"  | sed "s/^[^/]*//" | sed 's/).(.*/)/' | egrep "^/|^\(" | sort | uniq > list.new; \
+	cat list.all | LANG=C sed -n 's/^[^\/]*\(\/[^ ()]*libLLVM.*[.]a\)[^a-zA-Z]*\([^ ()]*[.]o\).*$$/\1 \2/p' | sort | uniq > list.new; \
 	rm list.all; \
 	if cmp -s list.new list; \
 	then \
@@ -988,7 +988,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	touch list; \
 	else \
 	rm -f llvm_*.o*; \
-	cat list.new | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" | bash -; \
+	cat list.new | sed = | sed "N;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" | bash - ; \
 	mv list.new list; \
 	fi
 

@@ -322,6 +322,7 @@ tests(GROUPS correctness
       vector_extern.cpp
       vector_math.cpp
       vector_print_bug.cpp
+      vector_tile.cpp
       vectorize_guard_with_if.cpp
       vectorize_mixed_widths.cpp
       vectorize_varying_allocation_size.cpp
