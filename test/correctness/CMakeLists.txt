@@ -11,6 +11,7 @@ tests(GROUPS correctness
       async.cpp
       async_copy_chain.cpp
       async_device_copy.cpp
+      atomic_tuples.cpp
       atomics.cpp
       autodiff.cpp
       autoschedule_small_pure_update.cpp
