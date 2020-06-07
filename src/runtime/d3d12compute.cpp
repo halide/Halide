@@ -87,32 +87,46 @@ static void *const user_context = NULL;
 //
 #if HALIDE_D3D12_TRACE
 static volatile ScopedSpinLock::AtomicFlag trace_indent_lock = 0;
+#define TRACE_BUF_SIZE 4096
 static const char trace_indent_pattern[] = "   ";
-static char trace_indent[4096] = {};
-static char trace_buf[4096] = {};
+static char trace_indent[TRACE_BUF_SIZE] = {};
+static char trace_buf[TRACE_BUF_SIZE] = {};
 static int trace_indent_end = 0;
 #define TRACEINDENT ((const char *)trace_indent)
-#define TRACEPRINT(msg) Printer<BasicPrinter, 4096>(user_context, trace_buf) << TRACEINDENT << msg;
+#define TRACEPRINT(msg) { \
+        trace_scope___.lock();                                          \
+        Printer<BasicPrinter, TRACE_BUF_SIZE>(user_context, trace_buf) << TRACEINDENT << msg; \
+        trace_scope___.unlock();                                        \
+}
 struct TraceLogScope {
     void *user_context;
-    TraceLogScope(void *user_context, const char *function) :
-        user_context(user_context) {
-        Printer<BasicPrinter, 4096>(user_context, trace_buf) << TRACEINDENT << "[@] " << function << "\n";
+
+    void lock() {
         while (__atomic_test_and_set(&trace_indent_lock, __ATOMIC_ACQUIRE)) {
         }
+    }
+
+    void unlock() {
+        __atomic_clear(&trace_indent_lock, __ATOMIC_RELEASE);
+    }
+
+    TraceLogScope(void *user_context, const char *function) :
+        user_context(user_context) {
+        lock();
+        Printer<BasicPrinter, TRACE_BUF_SIZE>(user_context, trace_buf) << TRACEINDENT << "[@] " << function << "\n";
         for (const char *p = trace_indent_pattern; *p; ++p) {
             trace_indent[trace_indent_end++] = *p;
         }
-        __atomic_clear(&trace_indent_lock, __ATOMIC_RELEASE);
+        unlock();
     }
+
     ~TraceLogScope() {
-        while (__atomic_test_and_set(&trace_indent_lock, __ATOMIC_ACQUIRE)) {
-        }
+        lock();
         for (const char *p = trace_indent_pattern; *p; ++p) {
             trace_indent[--trace_indent_end] = '\0';
         }
-        Printer<BasicPrinter, 4096>(user_context, trace_buf) << TRACEINDENT << "^^^\n";
-        __atomic_clear(&trace_indent_lock, __ATOMIC_RELEASE);
+        Printer<BasicPrinter, TRACE_BUF_SIZE>(user_context, trace_buf) << TRACEINDENT << "^^^\n";
+        unlock();
     }
 };
 #define TRACELOG TraceLogScope trace_scope___(user_context, __FUNCTION__); 
