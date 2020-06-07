@@ -93,11 +93,12 @@ static char trace_indent[TRACE_BUF_SIZE] = {};
 static char trace_buf[TRACE_BUF_SIZE] = {};
 static int trace_indent_end = 0;
 #define TRACEINDENT ((const char *)trace_indent)
-#define TRACEPRINT(msg) { \
-        trace_scope___.lock();                                          \
+#define TRACEPRINT(msg)                                                                       \
+    {                                                                                         \
+        trace_scope___.lock();                                                                \
         Printer<BasicPrinter, TRACE_BUF_SIZE>(user_context, trace_buf) << TRACEINDENT << msg; \
-        trace_scope___.unlock();                                        \
-}
+        trace_scope___.unlock();                                                              \
+    }
 struct TraceLogScope {
     void *user_context;
 
@@ -110,8 +111,8 @@ struct TraceLogScope {
         __atomic_clear(&trace_indent_lock, __ATOMIC_RELEASE);
     }
 
-    TraceLogScope(void *user_context, const char *function) :
-        user_context(user_context) {
+    TraceLogScope(void *user_context, const char *function)
+        : user_context(user_context) {
         lock();
         Printer<BasicPrinter, TRACE_BUF_SIZE>(user_context, trace_buf) << TRACEINDENT << "[@] " << function << "\n";
         for (const char *p = trace_indent_pattern; *p; ++p) {
@@ -129,7 +130,7 @@ struct TraceLogScope {
         unlock();
     }
 };
-#define TRACELOG TraceLogScope trace_scope___(user_context, __FUNCTION__); 
+#define TRACELOG TraceLogScope trace_scope___(user_context, __FUNCTION__);
 
 #else
 #define TRACEINDENT ""
@@ -1078,7 +1079,7 @@ WEAK void dispatch_threadgroups(d3d12_compute_command_list *cmdList,
 
 WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12_HEAP_TYPE heaptype) {
     TRACELOG;
-    
+
     D3D12_RESOURCE_DESC desc = {};
     {
         desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -2511,7 +2512,7 @@ namespace {
 static int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
                                     uint64_t src_offset, uint64_t dst_offset, int dimensions) {
     TRACELOG;
-    
+
     if (dimensions == 0) {
         d3d12_buffer *dsrc = reinterpret_cast<d3d12_buffer *>(c.src);
         d3d12_buffer *ddst = reinterpret_cast<d3d12_buffer *>(c.dst);
