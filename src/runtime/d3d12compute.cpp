@@ -86,40 +86,37 @@ private:
 static void *const user_context = NULL;
 //
 #if HALIDE_D3D12_TRACE
-// it's better to use StackPrinter<> instead of Printer<> (debug(ctx)) when
-// tracing calls because Printer<> calls 'halide_malloc()' which can fail;
-// there's even a test for it (generator_aot_cleanup_on_error), simulating
-// a halide_malloc failure, and user code should not affect debug-tracing
-#define trace(x) StackPrinter<4096, BasicPrinter>(x)
-
-static volatile ScopedSpinLock::AtomicFlag indent_lock = 0;
-static const char indent_pattern[] = "   ";
-static char indent[2048] = {};
-static int indent_end = 0;
-#define TRACEINDENT ((const char *)indent)
-#define TRACEPRINT(msg) trace(user_context) << TRACEINDENT << msg;
+static volatile ScopedSpinLock::AtomicFlag trace_indent_lock = 0;
+static const char trace_indent_pattern[] = "   ";
+static char trace_indent[4096] = {};
+static char trace_buf[4096] = {};
+static int trace_indent_end = 0;
+#define TRACEINDENT ((const char *)trace_indent)
+#define TRACEPRINT(msg) Printer<BasicPrinter, 4096>(user_context, trace_buf) << TRACEINDENT << msg;
 struct TraceLogScope {
-    TraceLogScope() {
-        while (__atomic_test_and_set(&indent_lock, __ATOMIC_ACQUIRE)) {
+    void *user_context;
+    TraceLogScope(void *user_context, const char *function) :
+        user_context(user_context) {
+        Printer<BasicPrinter, 4096>(user_context, trace_buf) << TRACEINDENT << "[@] " << function << "\n";
+        while (__atomic_test_and_set(&trace_indent_lock, __ATOMIC_ACQUIRE)) {
         }
-        for (const char *p = indent_pattern; *p; ++p) {
-            indent[indent_end++] = *p;
+        for (const char *p = trace_indent_pattern; *p; ++p) {
+            trace_indent[trace_indent_end++] = *p;
         }
-        __atomic_clear(&indent_lock, __ATOMIC_RELEASE);
+        __atomic_clear(&trace_indent_lock, __ATOMIC_RELEASE);
     }
     ~TraceLogScope() {
-        while (__atomic_test_and_set(&indent_lock, __ATOMIC_ACQUIRE)) {
+        while (__atomic_test_and_set(&trace_indent_lock, __ATOMIC_ACQUIRE)) {
         }
-        for (const char *p = indent_pattern; *p; ++p) {
-            indent[--indent_end] = '\0';
+        for (const char *p = trace_indent_pattern; *p; ++p) {
+            trace_indent[--trace_indent_end] = '\0';
         }
-        TRACEPRINT("^^^\n");
-        __atomic_clear(&indent_lock, __ATOMIC_RELEASE);
+        Printer<BasicPrinter, 4096>(user_context, trace_buf) << TRACEINDENT << "^^^\n";
+        __atomic_clear(&trace_indent_lock, __ATOMIC_RELEASE);
     }
 };
-#define TRACELOG                               \
-    TRACEPRINT("[@]" << __FUNCTION__ << "\n"); \
-    TraceLogScope trace_scope___;
+#define TRACELOG TraceLogScope trace_scope___(user_context, __FUNCTION__); 
+
 #else
 #define TRACEINDENT ""
 #define TRACEPRINT(msg)
@@ -240,6 +237,7 @@ D3D12TYPENAME(IDXGIOutput)
 
 template<typename ID3D12T>
 static bool D3DError(HRESULT result, ID3D12T *object, void *user_context, const char *message) {
+    TRACELOG;
     // HRESULT ERROR CODES:
     // D3D12: https://msdn.microsoft.com/en-us/library/windows/desktop/bb509553(v=vs.85).aspx
     // Win32: https://msdn.microsoft.com/en-us/library/windows/desktop/aa378137(v=vs.85).aspx
@@ -1065,6 +1063,8 @@ WEAK void dispatch_threadgroups(d3d12_compute_command_list *cmdList,
 }
 
 WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12_HEAP_TYPE heaptype) {
+    TRACELOG;
+    
     D3D12_RESOURCE_DESC desc = {};
     {
         desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -1627,10 +1627,11 @@ static void dump_shader(const char *source, ID3DBlob *compiler_msgs = NULL) {
         message = (const char *)compiler_msgs->GetBufferPointer();
     }
 
-    StackPrinter<64 * 1024> dump;
-    dump(user_context) << TRACEINDENT << "D3DCompile(): " << message << "\n";
-    dump(user_context) << TRACEINDENT << ">>> HLSL shader source dump <<<\n"
-                       << source << "\n";
+    char *buf = (char *)malloc(64 * 1024);
+    print(user_context, buf) << TRACEINDENT << "D3DCompile(): " << message << "\n"
+                             << TRACEINDENT << ">>> HLSL shader source dump <<<\n"
+                             << source << "\n";
+    free(buf);
 }
 
 static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_library *library, const char *name, size_t name_len,
@@ -2495,6 +2496,8 @@ namespace {
 
 static int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
                                     uint64_t src_offset, uint64_t dst_offset, int dimensions) {
+    TRACELOG;
+    
     if (dimensions == 0) {
         d3d12_buffer *dsrc = reinterpret_cast<d3d12_buffer *>(c.src);
         d3d12_buffer *ddst = reinterpret_cast<d3d12_buffer *>(c.dst);
