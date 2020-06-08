@@ -32,10 +32,13 @@ public:
     char *buf, *dst, *end;
     void *user_context;
     bool own_mem;
+    char scratch[length <= 256 ? length : 1];
 
     Printer(void *ctx, char *mem = NULL)
         : user_context(ctx), own_mem(mem == NULL) {
-        buf = mem ? mem : (char *)halide_malloc(user_context, length);
+        buf = (mem                       ? mem :
+               length <= sizeof(scratch) ? scratch :
+                                           (char *)malloc(length));
         dst = buf;
         if (dst) {
             end = buf + (length - 1);
@@ -132,6 +135,10 @@ public:
         return (uint64_t)(dst - buf);
     }
 
+    uint64_t capacity() const {
+        return length;
+    }
+
     // Delete the last N characters
     void erase(int n) {
         if (dst) {
@@ -165,8 +172,8 @@ public:
             }
         }
 
-        if (own_mem) {
-            halide_free(user_context, buf);
+        if (own_mem && buf != scratch) {
+            free(buf);
         }
     }
 };
