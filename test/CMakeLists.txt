@@ -3,9 +3,13 @@ include(HalideTestHelpers)
 # Internal tests are a special case.
 # HalideTestHelpers depends on this test being present.
 add_executable(_test_internal internal.cpp)
-target_link_libraries(_test_internal PRIVATE Halide::Test)
-target_include_directories(_test_internal PRIVATE "${Halide_SOURCE_DIR}/src")
-target_precompile_headers(_test_internal PRIVATE <Halide.h>)
+add_executable(_test_internal_threaded internal.cpp) # dummy to share PCH
+foreach(target _test_internal _test_internal_threaded)
+    target_link_libraries(${target} PRIVATE Halide::Test)
+    target_include_directories(${target} PRIVATE "${Halide_SOURCE_DIR}/src")
+    target_precompile_headers(${target} PRIVATE <Halide.h>)
+endforeach()
+target_link_libraries(_test_internal_threaded PRIVATE Threads::Threads)
 
 add_halide_test(_test_internal GROUPS internal)
 

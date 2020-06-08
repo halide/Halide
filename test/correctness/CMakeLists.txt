@@ -347,7 +347,7 @@ foreach (TEST IN ITEMS
          correctness_thread_safety
          correctness_vector_cast
          correctness_vector_math)
-    target_link_libraries(${TEST} PRIVATE Threads::Threads)
+    tests_threaded(${TEST})
 endforeach ()
 
 # Tests which use external funcs need to enable exports.

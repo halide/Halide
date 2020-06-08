@@ -81,6 +81,7 @@ function(tests)
         add_executable("${TARGET}" "${file}")
         target_link_libraries("${TARGET}" PRIVATE Halide::Test)
         if ("${file}" MATCHES ".cpp$")
+            # Note: source for re-use may be overriden by tests_threaded
             target_precompile_headers("${TARGET}" REUSE_FROM _test_internal)
         endif ()
 
@@ -94,3 +95,13 @@ function(tests)
 
     set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)
+
+function(tests_threaded)
+    set(targets ${ARGN})
+    # Override source target from where pre-compiled headers are re-used,
+    # (can't re-use across non/threaded b/c compiler flags must match).
+    set_property(TARGET ${targets} PROPERTY
+        PRECOMPILE_HEADERS_REUSE_FROM _test_internal_threaded)
+
+    target_link_libraries(${targets} PRIVATE Threads::Threads)
+endfunction(tests_threaded)

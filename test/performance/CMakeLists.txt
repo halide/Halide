@@ -31,6 +31,6 @@ tests(GROUPS performance
 
 set_tests_properties(${TEST_NAMES} PROPERTIES RUN_SERIAL TRUE)
 
-target_link_libraries(performance_thread_safe_jit PRIVATE Threads::Threads)
+tests_threaded(performance_thread_safe_jit)
 
 set_target_properties(performance_fast_pow PROPERTIES ENABLE_EXPORTS TRUE)
