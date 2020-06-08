@@ -302,6 +302,10 @@ struct BoundContents {
         return data()[i];
     }
 
+    Span &region_required_single(int i) {
+        return data()[i + layout->region_required_single_offset];
+    }
+
     Span &region_computed(int i) {
         return data()[i + layout->computed_offset];
     }
@@ -312,6 +316,10 @@ struct BoundContents {
 
     const Span &region_required(int i) const {
         return data()[i];
+    }
+
+    const Span &region_required_single(int i) const {
+        return data()[i + layout->region_required_single_offset];
     }
 
     const Span &region_computed(int i) const {
@@ -352,6 +360,7 @@ struct BoundContents {
         int total_size;
 
         // region_required has size func->dimensions() and comes first in the memory layout
+        int region_required_single_offset;
 
         // region_computed comes next at the following index
         int computed_offset;

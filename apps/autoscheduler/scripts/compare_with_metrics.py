@@ -7,6 +7,20 @@ import math
 from enum import Enum
 import re
 
+class DataResult:
+  def __init__(self, value):
+    self.value = value
+
+  def __str__(self):
+    return "{:>14.2f}".format(self.value)
+
+class IntDataResult(DataResult):
+  def __init__(self, value):
+    super().__init__(value)
+
+  def __str__(self):
+    return "{:>14d}".format(int(self.value))
+
 class Result:
   def __init__(self, actual, predicted):
     self.actual = actual
@@ -35,7 +49,11 @@ class Features(Enum):
   GLOBAL_LOAD_EFFICIENCY = "global load efficiency"
   GLOBAL_STORE_EFFICIENCY = "global store efficiency"
 
-class Info(Enum):
+class Data(Enum):
+  GLOBAL_LOAD_REQUESTS = "global load requests"
+  GLOBAL_STORE_REQUESTS = "global store requests"
+  GLOBAL_LOAD_TRANSACTIONS_PER_REQUESTS = "global load transactions per requests"
+  GLOBAL_STORE_TRANSACTIONS_PER_REQUESTS = "global store transactions per requests"
   REGISTERS_64 = "registers_64"
   REGISTERS_256 = "registers_256"
 
@@ -45,12 +63,19 @@ class Sample:
     self.metrics = self.parse_formatted(metrics_path)
     self.features = self.parse_formatted(features_path)
     self.results = {}
+    self.data = {}
 
     self.comparisons = {}
     self.comparisons[Features.GLOBAL_LOAD_TRANSACTIONS] = self.global_load_transactions
     self.comparisons[Features.GLOBAL_STORE_TRANSACTIONS] = self.global_store_transactions
     self.comparisons[Features.GLOBAL_LOAD_EFFICIENCY] = self.global_load_efficiency
     self.comparisons[Features.GLOBAL_STORE_EFFICIENCY] = self.global_store_efficiency
+
+    self.extract_data = {}
+    self.extract_data[Data.GLOBAL_LOAD_REQUESTS] = self.global_load_requests
+    self.extract_data[Data.GLOBAL_STORE_REQUESTS] = self.global_store_requests
+    self.extract_data[Data.GLOBAL_LOAD_TRANSACTIONS_PER_REQUESTS] = self.global_load_transactions_per_requests
+    self.extract_data[Data.GLOBAL_STORE_TRANSACTIONS_PER_REQUESTS] = self.global_store_transactions_per_requests
 
     self.ignore_list = [
       "^repeat_edge",
@@ -108,14 +133,32 @@ class Sample:
     predicted = features["num_global_mem_stores_per_block"] * features["num_blocks"]
     return IntResult(actual, predicted)
 
+  def global_load_requests(self, metrics, features):
+    return IntDataResult(metrics["gld_transactions"] / metrics["gld_transactions_per_request"])
+
+  def global_store_requests(self, metrics, features):
+    return IntDataResult(metrics["gst_transactions"] / metrics["gst_transactions_per_request"])
+
+  def global_load_transactions_per_requests(self, metrics, features):
+    return DataResult(metrics["gld_transactions_per_request"])
+
+  def global_store_transactions_per_requests(self, metrics, features):
+    return DataResult(metrics["gst_transactions_per_request"])
+
   def compare_metrics_and_features(self):
     for stage in self.features:
       self.results[stage] = {}
-      for label in self.comparisons:
-        if not stage in self.metrics:
-          return False
+      self.data[stage] = {}
 
+      if not stage in self.metrics:
+        return False
+
+      for label in self.comparisons:
         self.results[stage][label] = self.comparisons[label](self.metrics[stage], self.features[stage])
+
+      for label in self.extract_data:
+        self.data[stage][label] = self.extract_data[label](self.metrics[stage], self.features[stage])
+
     return True
 
   def stages_sorted_by_ratio(self):
@@ -146,13 +189,15 @@ class Sample:
         continue
 
       width = max([len(k.value) for k in self.comparisons.keys()])
+      data_width = max([len(k.value) for k in self.extract_data.keys()])
+      width = max(width, data_width)
 
-      registers_64 = self.metrics[stage][Info.REGISTERS_64.value]
+      registers_64 = self.metrics[stage][Data.REGISTERS_64.value]
       registers_256 = "?"
-      if Info.REGISTERS_64.value in self.metrics[stage]:
-        registers_256 = self.metrics[stage][Info.REGISTERS_64.value]
+      if Data.REGISTERS_64.value in self.metrics[stage]:
+        registers_256 = self.metrics[stage][Data.REGISTERS_64.value]
 
-      stage_str = "{} (Registers = {}; {})".format(stage, registers_64, registers_256)
+      stage_str = "{} (Reg. = {}; {})".format(stage, registers_64, registers_256)
 
       if first:
         first = False
@@ -160,8 +205,10 @@ class Sample:
       else:
         out += "{:{width}}\n".format(stage_str, width=width + 2)
 
+      for label in self.data[stage]:
+        out += "  {:{width}} {}\n".format(label.value, str(self.data[stage][label]), width=width)
+
       for label in self.results[stage]:
-        result = self.results[stage][label]
         out += "  {:{width}} {}\n".format(label.value, str(self.results[stage][label]), width=width)
 
     return out

@@ -837,7 +837,7 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
         vector<int64_t> parallel_extents;
         bool any_parallel_vars = false, any_parallel_rvars = false;
         for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
-            if (!it->exists || it->extent == 1) continue;
+            if (!it->exists) continue;
             if (!it->parallel) break;
             any_parallel_rvars |= it->var.is_rvar;
             any_parallel_vars |= !it->var.is_rvar;

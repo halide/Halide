@@ -884,8 +884,12 @@ double LoopNest::storage_stride(const LoadJacobian &jac, int innermost_storage_d
 
 // Get the stride over "node's" storage for a unit increment in the vectorized loop's
 // (index)
-StorageStrides LoopNest::storage_strides(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const LoopNest &root, const ThreadInfo& thread_info) const {
+StorageStrides LoopNest::storage_strides(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const LoopNest &root, const ThreadInfo& thread_info, bool verbose) const {
     internal_assert(innermost_storage_dim >= 0);
+
+    if (verbose) {
+        aslog(0) << "\nBEGIN storage_strides: " << node->func.name() << " (stage = " << stage->index << ") loading from " << storage_node->func.name() << "\n";
+    }
 
     // The node's storage dimensions (from innermost outward)
     std::vector<int64_t> storage_dims;
@@ -918,6 +922,10 @@ StorageStrides LoopNest::storage_strides(const LoadJacobian &jac, int innermost_
 
             float s = (float)jac_stride.numerator / (float)jac_stride.denominator;
             stride += s * storage_strides[i];
+            if (verbose) {
+                aslog(0) << "loop_index = " << loop_index << "; storage_dim = " << i;
+                aslog(0) << "; s = " << s << "; stride = " << stride << "\n";
+            }
         }
 
         if (exists) {
@@ -926,6 +934,10 @@ StorageStrides LoopNest::storage_strides(const LoadJacobian &jac, int innermost_
             strides.add_invalid();
         }
 
+    }
+
+    if (verbose) {
+        aslog(0) << "END storage_strides\n\n";
     }
 
     return strides;
@@ -1151,7 +1163,7 @@ double LoopNest::min_global_mem_accesses(const FunctionDAG::Node *node, const Th
 }
 
 void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double serial_loop_extents, double access_count, GlobalMemInfo &global_mem_info, const LoopNest &root, double amortization, bool verbose) const {
-    StorageStrides strides = storage_strides(jac, innermost_dim, node, store_bounds, root, thread_info);
+    StorageStrides strides = storage_strides(jac, innermost_dim, node, store_bounds, root, thread_info, verbose);
 
     size_t dimensions = thread_info.loop_indices.size();
     if (verbose) {
@@ -1463,24 +1475,101 @@ std::pair<const LoopNest *, const LoopNest *> LoopNest::find_innermost_and_paren
     return {child, parent};
 }
 
-double LoopNest::points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const FunctionDAG::Node* producer, const LoopNest* parent, const LoopNest* grandparent, double n, const ScheduleFeatures &feat, bool verbose) const {
-    const auto& bounds = gpu_loop_info.current_thread_loop->get_bounds(producer);
-    int64_t num_points = 1;
-    for (int i = 0; i < producer->dimensions; i++) {
-        num_points *= bounds->region_required(i).extent();
-        if (verbose) {
-            aslog(0) << "region_required(" << i << ") = " << bounds->region_required(i).extent() << "; ";
+double LoopNest::points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const FunctionDAG::Node* producer, const LoadJacobian& jac, const LoopNest* parent, const LoopNest* grandparent, double n, const ScheduleFeatures &feat, bool verbose) const {
+    std::unique_ptr<LoopNest> innermost_parent_clone = make_unique<LoopNest>();
+    innermost_parent_clone->copy_from(*parent);
+    double unrolled_loop_extent = feat.unrolled_loop_extent;
+    vector<int64_t> tiling(node->dimensions, 1);
+
+    // There are 3 cases to consider when computing the number of unique points
+    // accessed:
+    // 1. If LICM can be applied, then accessed points can be reused across
+    // the loop's iterations so its extents are not counted
+    // 2. If LICM cannot be applied to a loop but it is unrolled, then accessed
+    // points can potentially be reused across the unrolled block and the number
+    // of unique points accessed is equal to the region_required
+    // 3. If LICM cannot be applied to a loop and it is not unrolled, then
+    // points accessed cannot be reused across iterations and the number of
+    // unique points accessed in 2. is multiplied by the loop's extents
+
+    int64_t product_of_non_licm_non_unrolled_extents = 1;
+    int64_t product_of_non_licm_extents = 1;
+    int num_pure_loops = 0;
+    for (size_t idx = 0; idx < parent->size.size(); idx++) {
+        bool can_apply_licm = true;
+        for (int i = 0; i < producer->dimensions; i++) {
+            if (!(jac(i, idx) == 0)) {
+                can_apply_licm = false;
+                break;
+            }
+        }
+
+        bool pure = stage->loop[idx].pure;
+        bool pure_and_unrolled = pure && unrolled_loop_extent > 1;
+
+        if (pure) {
+            ++num_pure_loops;
+        }
+
+        if (!can_apply_licm) {
+            product_of_non_licm_extents *= parent->size[idx];
+            if (pure_and_unrolled) {
+                // Case 2
+                tiling[stage->loop[idx].pure_dim] = parent->size[idx];
+                if (verbose) {
+                    aslog(0) << "loop idx = " << idx << ": non_licm_unrolled = " << parent->size[idx] << "\n";
+                }
+            } else {
+                // Case 3
+                product_of_non_licm_non_unrolled_extents *= parent->size[idx];
+                if (verbose) {
+                    aslog(0) << "loop idx = " << idx << ": non_licm_non_unrolled = " << parent->size[idx] << "\n";
+                }
+            }
+        } else if (verbose) {
+             // Case 1
+            aslog(0) << "loop idx = " << idx << ": apply licm = " << parent->size[idx] << "\n";
         }
     }
 
-    double points_accessed = std::min((double)num_points, (double)n * gpu_loop_info.total_inner_serial_extents) * gpu_loop_info.total_outer_serial_extents;
+    IntrusivePtr<const LoopNest> innermost_parent = innermost_parent_clone->parallelize_in_tiles(params, tiling, grandparent, target, true, false, false);
+
+    const auto& bounds = innermost_parent->get_bounds(producer);
+    int64_t num_points = 1;
+    for (int i = 0; i < producer->dimensions; i++) {
+        num_points *= bounds->region_required_single(i).extent();
+        if (verbose) {
+            aslog(0) << "region_required(" << i << ") = " << bounds->region_required_single(i).extent() << "; ";
+        }
+    }
+
+    // There are 2 ways to calculate the number of points accessed:
+    // 1. The region_required of the producer in the non-LICM unrolled loops * the loop extents of the non-LICM loops that cannot be unrolled
+    double points_accessed_by_region_required = (double)num_points * product_of_non_licm_non_unrolled_extents;
+
+    // 2. The number of points computed according to 'n' (the number of
+    // entries in the LoadJacobian i.e. the number of loads, ignoring any reuse
+    // of points) * the loops extents of all the non-LICM loops. This value is
+    // an upper bound
+    double points_accessed_by_loop_extents = (double)n * product_of_non_licm_extents;
+
+    // In some cases, the region_required is larger than the actual number of
+    // points that need to be loaded e.g. if f(x) = g(x) + g(x + 100), the
+    // region_required of g will be the range [x, x + 100] but really only 2
+    // points need to be loaded. In cases like this, options 1. will
+    // over-estimate and we instead use the upper bound from option 2.
+    double points_accessed = std::min(points_accessed_by_region_required, points_accessed_by_loop_extents);
+    points_accessed *= gpu_loop_info.total_outer_serial_extents;
 
     if (verbose) {
         aslog(0) << "\n";
-        aslog(0) << "original points_accessed_per_thread = " << num_points << "\n";
+        aslog(0) << "region_required = " << num_points << "\n";
         aslog(0) << "total_inner_serial_extents = " << gpu_loop_info.total_inner_serial_extents << "\n";
         aslog(0) << "total_outer_serial_extents = " << gpu_loop_info.total_outer_serial_extents << "\n";
+        aslog(0) << "product_of_non_licm_non_unrolled_extents = " << product_of_non_licm_non_unrolled_extents << "\n";
         aslog(0) << "n = " << n << "\n";
+        aslog(0) << "points_accessed_by_region_required = " << points_accessed_by_region_required << "\n";
+        aslog(0) << "points_accessed_by_loop_extents = " << points_accessed_by_loop_extents << "\n";
         aslog(0) << "final points_accessed_per_thread = " << points_accessed << "\n";
     }
 
@@ -2488,7 +2577,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
                                 }
 
-                                double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, e->producer, parent, grandparent, n, feat, verbose);
+                                double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, e->producer, jac.first, parent, grandparent, n, feat, verbose);
 
                                 compute_global_mem_load_features(
                                     jac.first,
@@ -2862,13 +2951,14 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
         auto init = Span::empty_span();
         for (int i = 0; i < f->dimensions; i++) {
             bound->region_required(i) = init;
+            bound->region_required_single(i) = init;
         }
 
         for (const auto *e : f->outgoing_edges) {
             // Ignore consumers outside of this loop nest
             if (!is_root() &&
                 (stage != e->consumer) &&
-                !stage->downstream_of(*(e->consumer->node))) {
+                (!stage->downstream_of(*(e->consumer->node)) || !computes(e->consumer->node))) {
                 continue;
             }
             const auto &c_bounds = get_bounds(e->consumer->node);
@@ -2880,6 +2970,10 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
             // map from the consumer's loop to the required region
             // of the producer.
             e->expand_footprint(consumer_loop, &(bound->region_required(0)));
+
+            if (e->consumer == stage) {
+                e->expand_footprint(consumer_loop, &(bound->region_required_single(0)));
+            }
         }
     }
 
