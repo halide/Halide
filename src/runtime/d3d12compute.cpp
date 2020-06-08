@@ -1637,8 +1637,9 @@ static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_librar
                                               int shared_mem_bytes, int threadsX, int threadsY, int threadsZ) {
     TRACELOG;
 
-    // Round shared memory size up to a multiple of 16:
-    shared_mem_bytes = (shared_mem_bytes + 0xF) & ~0xF;
+    // Round shared memory size up to a non-zero multiple of 16
+    TRACEPRINT("groupshared memory size before modification: " << shared_mem_bytes << "\n");
+    shared_mem_bytes = ((shared_mem_bytes > 0 ? shared_mem_bytes : 1) + 0xF) & ~0xF;
     TRACEPRINT("groupshared memory size: " << shared_mem_bytes << " bytes.\n");
     TRACEPRINT("numthreads( " << threadsX << ", " << threadsY << ", " << threadsZ << " )\n");
 
@@ -2288,7 +2289,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 
     // Check all strides positive
     for (int i = 0; i < buf->dimensions; i++) {
-        halide_assert(user_context, buf->dim[i].stride > 0);
+        halide_assert(user_context, buf->dim[i].stride >= 0);
     }
 
     TRACEPRINT("allocating " << *buf << "\n");

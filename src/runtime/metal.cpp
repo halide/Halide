@@ -448,7 +448,7 @@ WEAK int halide_metal_device_malloc(void *user_context, halide_buffer_t *buf) {
 
     // Check all strides positive
     for (int i = 0; i < buf->dimensions; i++) {
-        halide_assert(user_context, buf->dim[i].stride > 0);
+        halide_assert(user_context, buf->dim[i].stride >= 0);
     }
 
     debug(user_context) << "    allocating " << *buf << "\n";
