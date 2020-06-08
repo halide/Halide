@@ -36,9 +36,14 @@ public:
 
     Printer(void *ctx, char *mem = NULL)
         : user_context(ctx), own_mem(mem == NULL) {
-        buf = (mem                       ? mem :
-               length <= sizeof(scratch) ? scratch :
-                                           (char *)malloc(length));
+        if (mem != NULL) {
+            buf = mem;
+        } else if (length <= sizeof(scratch)) {
+            buf = scratch;
+        } else {
+            buf = (char *)malloc(length);
+        }
+
         dst = buf;
         if (dst) {
             end = buf + (length - 1);
