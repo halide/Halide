@@ -6,5 +6,5 @@ tests(GROUPS warning
       sliding_vectors.cpp
       )
 
-# Don't look for "Success!" in warning tests.
+# Don't look for "Success!" in warning tests, look for "Warning:" instead.
 set_tests_properties(${TEST_NAMES} PROPERTIES PASS_REGULAR_EXPRESSION "Warning:")
