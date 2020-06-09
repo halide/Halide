@@ -1221,14 +1221,7 @@ void CodeGen_LLVM::optimize_module() {
 
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
-    // At present, we default to *enabling* LLVM loop optimization,
-    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
-    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
-    // See https://github.com/halide/Halide/issues/4113 for more info.
-    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
-    // of the setting of DisableLLVMLoopOpt.)
-    const bool do_loop_opt = !get_target().has_feature(Target::DisableLLVMLoopOpt) ||
-                             get_target().has_feature(Target::EnableLLVMLoopOpt);
+    const bool do_loop_opt = get_target().has_feature(Target::EnableLLVMLoopOpt);
 
     PipelineTuningOptions pto;
     pto.LoopInterleaving = do_loop_opt;

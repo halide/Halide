@@ -455,14 +455,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         }
     }
 
-    // At present, we default to *enabling* LLVM loop optimization,
-    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
-    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
-    // See https://github.com/halide/Halide/issues/4113 for more info.
-    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
-    // of the setting of DisableLLVMLoopOpt.)
-    const bool do_loop_opt = !target.has_feature(Target::DisableLLVMLoopOpt) ||
-                             target.has_feature(Target::EnableLLVMLoopOpt);
+    const bool do_loop_opt = target.has_feature(Target::EnableLLVMLoopOpt);
 
     PassManagerBuilder b;
     b.OptLevel = 3;

@@ -137,7 +137,6 @@ void define_enums(py::module &m) {
         .value("HexagonDma", Target::Feature::HexagonDma)
         .value("EmbedBitcode", Target::Feature::EmbedBitcode)
         .value("EnableLLVMLoopOpt", Target::Feature::EnableLLVMLoopOpt)
-        .value("DisableLLVMLoopOpt", Target::Feature::DisableLLVMLoopOpt)
         .value("WasmSimd128", Target::Feature::WasmSimd128)
         .value("WasmSignExt", Target::Feature::WasmSignExt)
         .value("SVE", Target::Feature::SVE)
