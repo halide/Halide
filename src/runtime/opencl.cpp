@@ -696,20 +696,21 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL);
         if (err != CL_SUCCESS) {
 
-            // Allocate an appropriately sized buffer for the build log.
-            char buffer[8192];
+            {
+                // Allocate an appropriately sized buffer for the build log.
+                Printer<ErrorPrinter, 8192> p(user_context);
 
-            // Get build log
-            if (clGetProgramBuildInfo(program, dev,
-                                      CL_PROGRAM_BUILD_LOG,
-                                      sizeof(buffer), buffer,
-                                      NULL) == CL_SUCCESS) {
-                error(user_context) << "CL: clBuildProgram failed: "
-                                    << get_opencl_error_name(err)
-                                    << "\nBuild Log:\n"
-                                    << buffer << "\n";
-            } else {
-                error(user_context) << "clGetProgramBuildInfo failed";
+                p << "CL: clBuildProgram failed: "
+                  << get_opencl_error_name(err)
+                  << "\nBuild Log:\n";
+
+                // Get build log
+                if (clGetProgramBuildInfo(program, dev,
+                                          CL_PROGRAM_BUILD_LOG,
+                                          p.capacity() - p.size() - 1, p.dst,
+                                          NULL) != CL_SUCCESS) {
+                    p << "clGetProgramBuildInfo failed";
+                }
             }
 
             return err;
@@ -720,7 +721,6 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
-
     return 0;
 }
 
