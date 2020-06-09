@@ -214,7 +214,18 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        stream << get_indent() << "threadgroup_barrier(mem_flags::mem_threadgroup);\n";
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type\n";
+
+        auto fence_type = *as_const_int(op->args[0]);
+        stream << get_indent() << "threadgroup_barrier("
+               << "mem_flags::mem_none";
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
+            stream << "| mem_flags::mem_device";
+        }
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
+            stream << "| mem_flags::mem_threadgroup";
+        }
+        stream << ");\n";
         print_assignment(op->type, "0");
     } else {
         CodeGen_C::visit(op);

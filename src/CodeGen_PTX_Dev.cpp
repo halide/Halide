@@ -157,6 +157,11 @@ void CodeGen_PTX_Dev::init_module() {
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        // Even though we always insert a __syncthreads equivalent
+        // (which has both a device and shared memory fence)
+        // check to make sure the intrinsic has the right number of
+        // arguments
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type\n";
         llvm::Function *barrier0 = module->getFunction("llvm.nvvm.barrier0");
         internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
         builder->CreateCall(barrier0);

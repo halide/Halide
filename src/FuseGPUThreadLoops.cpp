@@ -59,6 +59,7 @@ class InjectThreadBarriers : public IRMutator {
 
     Stmt visit(const Block *op) override {
         if (!in_threads && op->rest.defined()) {
+            std::vector<std::string> temp_stores;
             Stmt first = mutate(op->first);
             Stmt rest = mutate(op->rest);
             return Block::make(Block::make(first, barrier), rest);
@@ -72,7 +73,9 @@ public:
         : in_threads(false) {
         barrier =
             Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
-                                      vector<Expr>(), Call::Intrinsic));
+                                      {CodeGen_GPU_Dev::MemoryFenceType::Device
+                                     | CodeGen_GPU_Dev::MemoryFenceType::Shared},
+                                      Call::Intrinsic));
     }
 };
 

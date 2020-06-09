@@ -217,7 +217,16 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         rhs << "abs_diff(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
         print_assignment(op->type, rhs.str());
     } else if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        stream << get_indent() << "barrier(CLK_LOCAL_MEM_FENCE);\n";
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type\n";
+        auto fence_type = *as_const_int(op->args[0]);
+        stream << get_indent() << "barrier(0";
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
+            stream << "| CLK_GLOBAL_MEM_FENCE";
+        }
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
+            stream << "| CLK_LOCAL_MEM_FENCE";
+        }
+        stream << ");\n";
         print_assignment(op->type, "0");
     } else if (op->is_intrinsic(Call::shift_left) || op->is_intrinsic(Call::shift_right)) {
         // Some OpenCL implementations forbid mixing signed-and-unsigned shift values;

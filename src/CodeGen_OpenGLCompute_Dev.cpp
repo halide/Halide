@@ -105,7 +105,18 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type\n";
+        auto fence_type = *as_const_int(op->args[0]);
+
         stream << get_indent() << "barrier();\n";
+
+        // barrier() is an execution barrier; for memory behavior, we'll use the
+        // least-common-denominator groupMemoryBarrier(), because other fence types
+        // require extensions or GL 4.3 as a minumum.
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device ||
+            fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
+            stream << "groupMemoryBarrier();\n";
+        }
         print_assignment(op->type, "0");
     } else {
         CodeGen_GLSLBase::visit(op);
