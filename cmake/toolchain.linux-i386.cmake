@@ -16,5 +16,5 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
 # Set to empty string to indicate the resulting binaries can be natively executed
-set(CMAKE_CROSSCOMPILING_EMULATOR )
+set(CMAKE_CROSSCOMPILING_EMULATOR)
 

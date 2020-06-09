@@ -53,6 +53,8 @@ class BoundSmallAllocations : public IRMutator {
 
     bool in_thread_loop = false;
 
+    DeviceAPI device_api = DeviceAPI::None;
+
     Stmt visit(const For *op) override {
         Interval min_bounds = find_constant_bounds(op->min, scope);
         Interval max_bounds = find_constant_bounds(op->min + op->extent - 1, scope);
@@ -63,7 +65,9 @@ class BoundSmallAllocations : public IRMutator {
         bool new_in_thread_loop =
             in_thread_loop || op->for_type == ForType::GPUThread;
         ScopedValue<bool> old_in_thread_loop(in_thread_loop, new_in_thread_loop);
-
+        DeviceAPI new_device_api =
+            op->device_api == DeviceAPI::None ? device_api : op->device_api;
+        ScopedValue<DeviceAPI> old_device_api(device_api, new_device_api);
         return IRMutator::visit(op);
     }
 
@@ -73,11 +77,24 @@ class BoundSmallAllocations : public IRMutator {
             total_extent *= e;
         }
         Expr bound = find_constant_bound(total_extent, Direction::Upper, scope);
-        user_assert(bound.defined() ||
-                    op->memory_type != MemoryType::Register)
-            << "Allocation " << op->name << " has a dynamic size: " << total_extent << "\n"
-            << "Only fixed-size allocations can be stored in registers. "
-            << "Try storing on the heap or stack instead.";
+
+        bool must_be_constant = (op->memory_type == MemoryType::Register ||
+                                 (device_api == DeviceAPI::OpenGLCompute &&
+                                  op->memory_type == MemoryType::GPUShared));
+
+        if (!bound.defined() && must_be_constant) {
+            user_assert(op->memory_type != MemoryType::Register)
+                << "Allocation " << op->name << " has a dynamic size. "
+                << "Only fixed-size allocations can be stored in registers. "
+                << "Try storing on the heap or stack instead.";
+
+            user_assert(!(device_api == DeviceAPI::OpenGLCompute &&
+                          op->memory_type == MemoryType::GPUShared))
+                << "Allocation " << op->name << " has a dynamic size. "
+                << "Only fixed-size allocations can be stored in shared memory "
+                << "in OpenGL compute shaders. Try storing in MemoryType::Heap "
+                << "instead.";
+        }
 
         const int64_t *size_ptr = bound.defined() ? as_const_int(bound) : nullptr;
         int64_t size = size_ptr ? *size_ptr : 0;
@@ -95,7 +112,7 @@ class BoundSmallAllocations : public IRMutator {
         if (size_ptr &&
             (in_thread_loop ||
              (op->memory_type == MemoryType::Stack && can_allocation_fit_on_stack(size)) ||
-             op->memory_type == MemoryType::Register ||
+             must_be_constant ||
              (op->memory_type == MemoryType::Auto && size <= malloc_overhead))) {
             user_assert(size >= 0 && size < (int64_t)1 << 31)
                 << "Allocation " << op->name << " has a size greater than 2^31: " << bound << "\n";

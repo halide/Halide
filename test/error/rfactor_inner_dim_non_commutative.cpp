@@ -24,5 +24,6 @@ int main(int argc, char **argv) {
     Var u("u");
     g.update(0).rfactor(r.x, u);
 
+    printf("Success!\n");
     return 0;
 }

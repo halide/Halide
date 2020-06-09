@@ -11,7 +11,5 @@ int main(int argc, char **argv) {
     Buffer<> result = f.realize(42);
 
     printf("Success!\n");
-
-    printf("I should not have reached here\n");
     return 0;
 }

@@ -13,6 +13,6 @@ int main(int argc, char **argv) {
     // Now try to add an update definition to f
     f(x) += 1;
 
-    printf("There should have been an error\n");
+    printf("Success!\n");
     return 0;
 }

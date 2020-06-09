@@ -114,10 +114,11 @@ public:
                     // along the z dimension.
                     hist_rows.update().gpu_tile(x, y, xi, yi, 32, 8);
 
-                    if (!get_target().has_feature(Target::Metal)) {
+                    if (!get_target().has_feature(Target::Metal) &&
+                        !get_target().has_feature(Target::D3D12Compute)) {
                         // bound_extent doesn't currently work inside
-                        // metal kernels because we can't compile the
-                        // assertion. For metal we just inline the
+                        // metal & d3d12compute kernels because we can't compile the
+                        // assertion. For metal & d3d12compute we just inline the
                         // luma computation.
                         Y.clone_in(intm)
                             .compute_at(intm.in(), y)

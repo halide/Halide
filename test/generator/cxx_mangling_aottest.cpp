@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
 
     printf("HalideTest::cxx_mangling is at: %p\n", (void *)f);
 #else
+    // TODO: split this up and link CUDA
     printf("TEST_CUDA is disabled, skipping cxx_mangling_gpu test.\n");
 #endif
 

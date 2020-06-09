@@ -21,5 +21,6 @@ int main(int argc, char *argv[]) {
     param.set(false);
     g.realize(out);
 
-    printf("Success\n");
+    printf("Success!\n");
+    return 0;
 }

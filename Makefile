@@ -292,6 +292,14 @@ LLVM_STATIC_LIBS += -L $(LLVM_LIBDIR) \
 	$(shell $(LLVM_CONFIG) --link-static --libfiles lto option)
 endif
 
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 110))
+# We have to insert MLPolicies.a just after Passes.a -- this is highly unfortunate,
+# but it's not a 'component' by the standards of the llvm-config tool, and simply
+# inserting somewhere with --whole-archive will leave out other things. This is a
+# fragile fix, but it will get us unstuck for now.
+LLVM_STATIC_LIBS := $(subst libLLVMPasses.a,libLLVMPasses.a $(LLVM_LIBDIR)/libLLVMMLPolicies.a,$(LLVM_STATIC_LIBS))
+endif
+
 # Add a rpath to the llvm used for linking, in case multiple llvms are
 # installed. Bakes a path on the build system into the .so, so don't
 # use this config for distributions.
@@ -382,6 +390,7 @@ endif
 
 ifneq ($(TEST_CUDA), )
 TEST_CXX_FLAGS += -DTEST_CUDA
+TEST_CXX_FLAGS += -I/usr/local/cuda/include
 endif
 
 # Compiling the tutorials requires libpng
@@ -422,7 +431,8 @@ LIB_DIR     = lib
 BIN_DIR     = bin
 DISTRIB_DIR = distrib
 INCLUDE_DIR = include
-DOC_DIR     = doc
+SHARE_DIR   = share
+DOC_DIR     = $(SHARE_DIR)/doc/Halide
 BUILD_DIR   = $(BIN_DIR)/build
 FILTERS_DIR = $(BIN_DIR)/$(TARGET)/build
 TMP_DIR     = $(BUILD_DIR)/tmp
@@ -970,7 +980,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
 	cd $(BUILD_DIR)/llvm_objects; \
-	cat list.all |  grep "libLLVM" | grep ")"  | sed "s/^[^/]*//" | sed 's/).(.*/)/' | egrep "^/|^\(" | sort | uniq > list.new; \
+	cat list.all | LANG=C sed -n 's/^[^\/]*\(\/[^ ()]*libLLVM.*[.]a\)[^a-zA-Z]*\([^ ()]*[.]o\).*$$/\1 \2/p' | sort | uniq > list.new; \
 	rm list.all; \
 	if cmp -s list.new list; \
 	then \
@@ -978,7 +988,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	touch list; \
 	else \
 	rm -f llvm_*.o*; \
-	cat list.new | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" | bash -; \
+	cat list.new | sed = | sed "N;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" | bash - ; \
 	mv list.new list; \
 	fi
 
@@ -1118,7 +1128,7 @@ clean:
 	rm -rf $(TMP_DIR)
 	rm -rf $(FILTERS_DIR)
 	rm -rf $(INCLUDE_DIR)
-	rm -rf $(DOC_DIR)
+	rm -rf $(SHARE_DIR)
 	rm -rf $(DISTRIB_DIR)
 	rm -rf $(ROOT_DIR)/apps/*/bin
 
@@ -1280,14 +1290,22 @@ TIME_COMPILATION ?= /usr/bin/time -a -f "$@,%U,%S,%E" -o
 run_tests: $(ALL_TESTS)
 	make -f $(THIS_MAKEFILE) test_performance test_auto_schedule
 
+.PHONY: build_tests
 build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/correctness_%) \
 	$(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=$(BIN_DIR)/performance_%) \
 	$(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=$(BIN_DIR)/error_%) \
 	$(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=$(BIN_DIR)/warning_%) \
-	$(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=$(BIN_DIR)/opengl_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/$(TARGET)/generator_aot_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
 	$(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=$(BIN_DIR)/auto_schedule_%)
+
+# OpenGL doesn't build on every host platform we support (eg. ARM).
+.PHONY: build_opengl_tests
+build_opengl_tests: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=$(BIN_DIR)/opengl_%)
+
+ifneq ($(WITH_OPENGL),)
+build_tests: build_opengl_tests
+endif
 
 clean_generator:
 	rm -rf $(BIN_DIR)/*.generator
@@ -1321,11 +1339,11 @@ $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(S
 # Correctness test that link against libHalide
 $(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
 	@mkdir -p $(@D)
-	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 # Correctness tests that do NOT link against libHalide
 $(BIN_DIR)/correctness_plain_c_includes: $(ROOT_DIR)/test/correctness/plain_c_includes.c $(RUNTIME_EXPORTED_INCLUDES)
-	$(CXX) -x c -Wall -Werror -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(ROOT_DIR)/src/runtime -o $@
+	$(CXX) -x c -Wall -Werror -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(ROOT_DIR)/src/runtime -o $@
 
 # Note that this test must *not* link in either libHalide, or a Halide runtime;
 # this test should be usable without either.
@@ -1335,19 +1353,19 @@ $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer
 # The image_io test additionally needs to link to libpng and
 # libjpeg.
 $(BIN_DIR)/correctness_image_io: $(ROOT_DIR)/test/correctness/image_io.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
-	$(CXX) $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # OpenCL runtime correctness test requires runtime.a to be linked.
 $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime: $(ROOT_DIR)/test/correctness/opencl_runtime.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(BIN_DIR)/$(TARGET)/runtime.a $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+	$(CXX) $(BIN_DIR)/$(TARGET)/runtime.a $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(ROOT_DIR) $(TEST_LD_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(TEST_LD_FLAGS) -o $@
 
 # Error tests that link against libHalide
 $(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
@@ -1595,7 +1613,7 @@ $(FILTERS_DIR)/nested_externs_%.a: $(BIN_DIR)/nested_externs.generator
 	$(CURDIR)/$< -g nested_externs_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
 
 GEN_AOT_CXX_FLAGS=$(TEST_CXX_FLAGS) -Wno-unknown-pragmas
-GEN_AOT_INCLUDES=-I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I$(ROOT_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools
+GEN_AOT_INCLUDES=-I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools
 GEN_AOT_LD_FLAGS=$(COMMON_LD_FLAGS)
 
 ifneq ($(TEST_METAL), )
@@ -2187,17 +2205,6 @@ $(BUILD_DIR)/rtti_ok:
 	@exit 1
 endif
 
-.PHONY: doc
-$(DOC_DIR): doc
-doc: $(SRC_DIR) Doxyfile
-	doxygen
-
-Doxyfile: Doxyfile.in
-	@echo "Generating $@"
-	@sed -e "s#@CMAKE_BINARY_DIR@#$(shell pwd)#g" \
-	     -e "s#@CMAKE_SOURCE_DIR@#$(shell pwd)#g" \
-	    $< > $@
-
 install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
 	mkdir -p $(PREFIX)/include $(PREFIX)/bin $(PREFIX)/lib $(PREFIX)/share/halide/tutorial/images $(PREFIX)/share/halide/tools $(PREFIX)/share/halide/tutorial/figures
 	cp $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(PREFIX)/lib
@@ -2255,8 +2262,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
                            $(RUNTIME_EXPORTED_INCLUDES) \
                            $(ROOT_DIR)/README*.md \
                            $(BUILD_DIR)/halide_config.cmake \
-                           $(BUILD_DIR)/halide_config.make \
-                           $(ROOT_DIR)/halide.cmake
+                           $(BUILD_DIR)/halide_config.make
 	rm -rf $(DISTRIB_DIR)
 	mkdir -p $(DISTRIB_DIR)/include \
 	         $(DISTRIB_DIR)/bin \
@@ -2290,7 +2296,6 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/halide.cmake $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
 	tar -czf $(BUILD_DIR)/halide.tgz \
 		halide/bin \
@@ -2299,8 +2304,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/tools \
 		halide/tutorial \
 		halide/README*.md \
-		halide/halide_config.* \
-		halide/halide.*
+		halide/halide_config.*
 	rm -rf halide
 	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
 
@@ -2355,3 +2359,55 @@ clang-tidy: $(BUILD_DIR)/compile_commands.json
 .PHONY: clang-tidy-fix
 clang-tidy-fix: $(BUILD_DIR)/compile_commands.json
 	@$(INVOKE_CLANG_TIDY) -fix 2>&1 | grep -v "warnings generated" | grep -v '^$(CLANG)-tidy '
+
+# Build the documentation. Be sure to keep this synchronized with doc/CMakeLists.txt
+# if you choose to edit it.
+
+# Copy ROOT_DIR to keep the following Doxyfile closer to CMake
+Halide_SOURCE_DIR=${ROOT_DIR}
+
+define Doxyfile
+# Keep the following in sync with doc/CMakeLists.txt
+ALPHABETICAL_INDEX     = NO
+BUILTIN_STL_SUPPORT    = YES
+CASE_SENSE_NAMES       = NO
+CLASS_DIAGRAMS         = NO
+DISTRIBUTE_GROUP_DOC   = YES
+EXAMPLE_PATH           = "${Halide_SOURCE_DIR}/tutorial"
+EXCLUDE                = bin
+EXTRACT_ALL            = YES
+EXTRACT_LOCAL_CLASSES  = NO
+FILE_PATTERNS          = *.h
+GENERATE_TREEVIEW      = YES
+HIDE_FRIEND_COMPOUNDS  = YES
+HIDE_IN_BODY_DOCS      = YES
+HIDE_UNDOC_CLASSES     = YES
+HIDE_UNDOC_MEMBERS     = YES
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+QUIET                  = YES
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+SORT_BY_SCOPE_NAME     = YES
+SORT_MEMBER_DOCS       = NO
+SOURCE_BROWSER         = YES
+STRIP_CODE_COMMENTS    = NO
+
+# Makefile-specific options
+GENERATE_LATEX         = NO
+HAVE_DOT               = NO
+HTML_OUTPUT            = .
+INPUT                  = "${Halide_SOURCE_DIR}/src" "${Halide_SOURCE_DIR}/test"
+OUTPUT_DIRECTORY       = ${DOC_DIR}
+PROJECT_NAME           = Halide
+endef
+
+# Make the above Doxyfile variable available to the doc target.
+export Doxyfile
+
+.PHONY: doc
+doc:
+	@-mkdir -p $(TMP_DIR)
+	echo "$$Doxyfile" > $(TMP_DIR)/Doxyfile
+	@-mkdir -p ${DOC_DIR}
+	doxygen $(TMP_DIR)/Doxyfile

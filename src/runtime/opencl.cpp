@@ -77,18 +77,18 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 // this module with weak linkage
 cl_context WEAK context = 0;
 cl_command_queue WEAK command_queue = 0;
-volatile int WEAK thread_lock = 0;
+volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 
 WEAK char platform_name[256];
-WEAK int platform_name_lock = 0;
+WEAK ScopedSpinLock::AtomicFlag platform_name_lock = 0;
 WEAK bool platform_name_initialized = false;
 
 WEAK char device_type[256];
-WEAK int device_type_lock = 0;
+WEAK ScopedSpinLock::AtomicFlag device_type_lock = 0;
 WEAK bool device_type_initialized = false;
 
 WEAK char build_options[1024];
-WEAK int build_options_lock = 0;
+WEAK ScopedSpinLock::AtomicFlag build_options_lock = 0;
 WEAK bool build_options_initialized = false;
 
 }  // namespace OpenCL
@@ -208,7 +208,7 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
     halide_assert(user_context, q != NULL);
 
     halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) {
+    while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {
     }
 
     // If the context has not been initialized, initialize it now.
@@ -217,7 +217,7 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
     if (!context && create) {
         cl_int error = create_opencl_context(user_context, &context, &command_queue);
         if (error != CL_SUCCESS) {
-            __sync_lock_release(&thread_lock);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return error;
         }
     }
@@ -228,7 +228,7 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
 }
 
 WEAK int halide_release_cl_context(void *user_context) {
-    __sync_lock_release(&thread_lock);
+    __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
     return 0;
 }
 
@@ -696,20 +696,21 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL);
         if (err != CL_SUCCESS) {
 
-            // Allocate an appropriately sized buffer for the build log.
-            char buffer[8192];
+            {
+                // Allocate an appropriately sized buffer for the build log.
+                Printer<ErrorPrinter, 8192> p(user_context);
 
-            // Get build log
-            if (clGetProgramBuildInfo(program, dev,
-                                      CL_PROGRAM_BUILD_LOG,
-                                      sizeof(buffer), buffer,
-                                      NULL) == CL_SUCCESS) {
-                error(user_context) << "CL: clBuildProgram failed: "
-                                    << get_opencl_error_name(err)
-                                    << "\nBuild Log:\n"
-                                    << buffer << "\n";
-            } else {
-                error(user_context) << "clGetProgramBuildInfo failed";
+                p << "CL: clBuildProgram failed: "
+                  << get_opencl_error_name(err)
+                  << "\nBuild Log:\n";
+
+                // Get build log
+                if (clGetProgramBuildInfo(program, dev,
+                                          CL_PROGRAM_BUILD_LOG,
+                                          p.capacity() - p.size() - 1, p.dst,
+                                          NULL) != CL_SUCCESS) {
+                    p << "clGetProgramBuildInfo failed";
+                }
             }
 
             return err;
@@ -720,7 +721,6 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
-
     return 0;
 }
 

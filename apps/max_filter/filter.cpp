@@ -35,5 +35,6 @@ int main(int argc, char **argv) {
 
     convert_and_save_image(output, argv[2]);
 
+    printf("Success!\n");
     return 0;
 }

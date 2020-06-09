@@ -48,5 +48,6 @@ int main(int argc, char **argv) {
         if (next >= 1000) break;
     }
 
+    printf("Success!\n");
     return 0;
 }

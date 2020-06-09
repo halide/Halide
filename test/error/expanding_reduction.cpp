@@ -28,5 +28,6 @@ int main(int argc, char **argv) {
     Buffer<int> in(input.get());
     assert(in.height() == 102 && in.width() == 100);
 
+    printf("Success!\n");
     return 0;
 }

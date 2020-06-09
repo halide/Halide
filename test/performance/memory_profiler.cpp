@@ -104,7 +104,7 @@ int check_error_parallel(int min_heap_peak, int max_heap_peak, int exp_num_mallo
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as it does not support profiler yet.\n");
+        printf("[SKIP] WebAssembly JIT does not yet support the profiler.\n");
         return 0;
     }
 

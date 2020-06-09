@@ -207,10 +207,13 @@ template<typename T>
         (is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
         (is_const ? halide_handle_cplusplus_type::Const : 0) |
         (is_volatile ? halide_handle_cplusplus_type::Volatile : 0));
+
+    // clang-format off
     constexpr halide_handle_cplusplus_type::ReferenceType ref_type =
         (is_lvalue_reference ? halide_handle_cplusplus_type::LValueReference :
-                               is_rvalue_reference ? halide_handle_cplusplus_type::RValueReference :
-                                                     halide_handle_cplusplus_type::NotReference);
+         is_rvalue_reference ? halide_handle_cplusplus_type::RValueReference :
+                               halide_handle_cplusplus_type::NotReference);
+    // clang-format on
 
     using TNonCVBase = typename std::remove_cv<TBase>::type;
     constexpr bool known_type = halide_c_type_to_name<TNonCVBase>::known_type;

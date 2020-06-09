@@ -47,7 +47,7 @@ public:
 
 int main(int argc, char **argv) {
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("Not running test because no gpu target enabled\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 
@@ -106,7 +106,8 @@ int main(int argc, char **argv) {
 
         Func f;
         Var x, y;
-        f(x, y) = undef<int>();
+        f(x, y) = 0;
+        f(x, y) += undef<int>();
         f(x, y) += x + 100 * y;
         // This next line is dubious, because it entirely masks the
         // effect of the previous definition. If you add an undefined
@@ -128,9 +129,10 @@ int main(int argc, char **argv) {
         f.update(1).gpu_threads(x, y);
         f.update(2).gpu_threads(x, y);
 
-        // There should be two thread barriers: one in between the
+        // There should be three thread barriers: one after the intial
+        // pure definition, one in between the
         // non-undef definitions, and one between f and g.
-        g.add_custom_lowering_pass(new CheckBarrierCount(2));
+        g.add_custom_lowering_pass(new CheckBarrierCount(3));
 
         Buffer<int> out = g.realize(100, 100);
     }
