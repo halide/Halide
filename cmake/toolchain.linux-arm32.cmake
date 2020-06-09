@@ -5,10 +5,10 @@ set(CMAKE_SYSTEM_PROCESSOR arm)
 
 if (NOT DEFINED CMAKE_C_COMPILER)
     set(CMAKE_C_COMPILER arm-linux-gnueabihf-gcc)
-endif()
+endif ()
 if (NOT DEFINED CMAKE_CXX_COMPILER)
     set(CMAKE_CXX_COMPILER arm-linux-gnueabihf-g++)
-endif()
+endif ()
 
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)

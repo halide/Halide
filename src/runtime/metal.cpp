@@ -247,7 +247,7 @@ inline mtl_device *get_default_mtl_device() {
 
 extern WEAK halide_device_interface_t metal_device_interface;
 
-volatile int WEAK thread_lock = 0;
+volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 WEAK mtl_device *device;
 WEAK mtl_command_queue *queue;
 
@@ -316,7 +316,7 @@ extern "C" {
 WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_ret,
                                       mtl_command_queue **queue_ret, bool create) {
     halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) {
+    while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {
     }
 
 #ifdef DEBUG_RUNTIME
@@ -328,7 +328,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
         device = get_default_mtl_device();
         if (device == 0) {
             error(user_context) << "Metal: cannot allocate system default device.\n";
-            __sync_lock_release(&thread_lock);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return -1;
         }
         debug(user_context) << "Metal - Allocating: new_command_queue\n";
@@ -337,7 +337,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
             error(user_context) << "Metal: cannot allocate command queue.\n";
             release_ns_object(device);
             device = 0;
-            __sync_lock_release(&thread_lock);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return -1;
         }
     }
@@ -352,7 +352,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
 }
 
 WEAK int halide_metal_release_context(void *user_context) {
-    __sync_lock_release(&thread_lock);
+    __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
     return 0;
 }
 
@@ -448,7 +448,7 @@ WEAK int halide_metal_device_malloc(void *user_context, halide_buffer_t *buf) {
 
     // Check all strides positive
     for (int i = 0; i < buf->dimensions; i++) {
-        halide_assert(user_context, buf->dim[i].stride > 0);
+        halide_assert(user_context, buf->dim[i].stride >= 0);
     }
 
     debug(user_context) << "    allocating " << *buf << "\n";

@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
 #else
-    printf("TEST_OPENCL is not enabled, skipping...\n");
+    printf("[SKIP] Test requires OpenCL.\n");
 #endif
     return 0;
 }

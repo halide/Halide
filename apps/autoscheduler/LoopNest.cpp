@@ -2048,9 +2048,11 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 const auto &b = get_bounds(e->producer);
                 int64_t bytes = e->producer->bytes_per_point, lines = 1;
                 int64_t max_extent = 1;
-                int vector_dim = (e->producer->is_input ? 0 :
-                                                          site.produce != nullptr ? site.produce->vector_dim :
-                                                                                    -1);
+                // clang-format off
+                int vector_dim = (e->producer->is_input   ? 0 :
+                                  site.produce != nullptr ? site.produce->vector_dim :
+                                                            -1);
+                // clang-format on
                 for (int i = 0; i < e->producer->dimensions; i++) {
                     int64_t extent = b->region_required(i).extent();
                     max_extent = std::max(extent, max_extent);

@@ -14,6 +14,6 @@ int main(int argc, char **argv) {
     // Explicitly don't use device support
     f.realize(128, 128, Target{"host"});
 
-    printf("Should have failed\n");
+    printf("Success!\n");
     return 0;
 }

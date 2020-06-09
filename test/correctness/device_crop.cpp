@@ -26,7 +26,12 @@ int main(int argc, char **argv) {
                        target.features_any_of({Target::HVX_64, Target::HVX_128});
 
     if (!hexagon_rpc && !target.has_gpu_feature()) {
-        printf("This is a gpu-specific test. Skipping it.\n");
+        printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
+
+    if (target.has_feature(Target::OpenGLCompute)) {
+        printf("Skipping test for OpenGLCompute, as it does not support device crops, slices, or copies\n");
         return 0;
     }
 

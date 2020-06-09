@@ -286,21 +286,24 @@ struct Split {
     }
 };
 
+enum class DimType {
+    PureVar = 0,
+    PureRVar,
+    ImpureRVar,
+};
+
 struct Dim {
     std::string var;
     ForType for_type;
     DeviceAPI device_api;
 
-    enum Type { PureVar = 0,
-                PureRVar,
-                ImpureRVar };
-    Type dim_type;
+    DimType dim_type;
 
     bool is_pure() const {
-        return (dim_type == PureVar) || (dim_type == PureRVar);
+        return (dim_type == DimType::PureVar) || (dim_type == DimType::PureRVar);
     }
     bool is_rvar() const {
-        return (dim_type == PureRVar) || (dim_type == ImpureRVar);
+        return (dim_type == DimType::PureRVar) || (dim_type == DimType::ImpureRVar);
     }
     bool is_unordered_parallel() const {
         return Halide::Internal::is_unordered_parallel(for_type);

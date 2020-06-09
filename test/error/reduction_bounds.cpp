@@ -19,5 +19,6 @@ int main(int argc, char **argv) {
 
     g.realize(100);
 
+    printf("Success!\n");
     return 0;
 }

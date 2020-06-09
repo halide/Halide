@@ -14,7 +14,7 @@ namespace {
 
 template<typename T>
 Buffer<T> init_scalar_buffer(T *x) {
-    return Buffer<T>(x, {});
+    return Buffer<T>::make_scalar(x);
 }
 
 template<typename T>

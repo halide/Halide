@@ -13,13 +13,14 @@ int main(int argc, char **argv) {
 
     f(x, y, z) = x * y + z * k + 1;
 
-    if (get_jit_target_from_environment().has_gpu_feature()) {
+    Target t = get_jit_target_from_environment();
+    if (t.has_gpu_feature() && !t.has_feature(Target::OpenGLCompute)) {
         Var xi, yi;
         f.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (get_jit_target_from_environment().features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.hexagon(y);
     } else {
-        printf("No gpu or hexagon target enabled. Skipping test.\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
     f.parallel(z);

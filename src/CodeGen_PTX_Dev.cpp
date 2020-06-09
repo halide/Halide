@@ -203,7 +203,7 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
     user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n"
                                             << "(Memoization is not supported inside GPU kernels at present.)\n";
-    if (alloc->name == "__shared") {
+    if (alloc->memory_type == MemoryType::GPUShared) {
         // PTX uses zero in address space 3 as the base address for shared memory
         Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
         sym_push(alloc->name, shared_base);
@@ -446,12 +446,21 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         }
     }
 
+    // At present, we default to *enabling* LLVM loop optimization,
+    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
+    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
+    // See https://github.com/halide/Halide/issues/4113 for more info.
+    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
+    // of the setting of DisableLLVMLoopOpt.)
+    const bool do_loop_opt = !target.has_feature(Target::DisableLLVMLoopOpt) ||
+                             target.has_feature(Target::EnableLLVMLoopOpt);
+
     PassManagerBuilder b;
     b.OptLevel = 3;
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = !target.has_feature(Target::DisableLLVMLoopOpt);
+    b.LoopVectorize = do_loop_opt;
     b.SLPVectorize = true;
-    b.DisableUnrollLoops = target.has_feature(Target::DisableLLVMLoopOpt);
+    b.DisableUnrollLoops = !do_loop_opt;
 
     target_machine->adjustPassManager(b);
 

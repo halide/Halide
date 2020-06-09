@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
 #else
-    printf("No GPU target enabled, skipping...\n");
+    printf("[SKIP] No GPU target enabled.\n");
 #endif
     return 0;
 }

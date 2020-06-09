@@ -102,7 +102,7 @@ struct BenchmarksBase {
 struct BenchmarksFloat : public BenchmarksBase<float> {
     BenchmarksFloat(std::string n)
         : BenchmarksBase(n),
-          result(1) {
+          result(Halide::Runtime::Buffer<float>::make_scalar()) {
     }
 
     Halide::Runtime::Buffer<float> result;
@@ -131,7 +131,7 @@ struct BenchmarksFloat : public BenchmarksBase<float> {
 struct BenchmarksDouble : public BenchmarksBase<double> {
     BenchmarksDouble(std::string n)
         : BenchmarksBase(n),
-          result(1) {
+          result(Halide::Runtime::Buffer<double>::make_scalar()) {
     }
 
     Halide::Runtime::Buffer<double> result;

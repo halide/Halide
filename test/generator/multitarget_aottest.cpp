@@ -41,7 +41,7 @@ bool use_noboundsquery_feature() {
     return std::stoi(value) != 0;
 }
 
-static std::atomic<int> can_use_count;
+static std::atomic<int> can_use_count{0};
 
 int my_can_use_target_features(int count, const uint64_t *features) {
     can_use_count += 1;
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("Success: Saw %x for no_bounds_query=%d\n", output(0, 0), use_noboundsquery_feature());
-
+    printf("Saw %x for no_bounds_query=%d\n", output(0, 0), use_noboundsquery_feature());
+    printf("Success!\n");
     return 0;
 }

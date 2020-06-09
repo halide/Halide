@@ -78,6 +78,29 @@ std::vector<int> get_shape_from_start_of_parameter_pack(Args &&... args) {
 template<typename T, typename T2>
 using add_const_if_T_is_const = typename std::conditional<std::is_const<T>::value, const T2, T2>::type;
 
+// Helpers to produce the name of a Buffer element type (a Halide
+// scalar type, or void, possibly with const). Useful for an error
+// messages.
+template<typename T>
+void buffer_type_name_non_const(std::ostream &s) {
+    s << type_to_c_type(type_of<T>(), false);
+}
+
+template<>
+inline void buffer_type_name_non_const<void>(std::ostream &s) {
+    s << "void";
+}
+
+template<typename T>
+std::string buffer_type_name() {
+    std::ostringstream oss;
+    if (std::is_const<T>::value) {
+        oss << "const ";
+    }
+    buffer_type_name_non_const<typename std::remove_const<T>::type>(oss);
+    return oss.str();
+}
+
 }  // namespace Internal
 
 /** A Halide::Buffer is a named shared reference to a
@@ -107,7 +130,17 @@ class Buffer {
                               std::is_void<T2>::value,
                           "type mismatch constructing Buffer");
         } else {
-            Runtime::Buffer<T>::assert_can_convert_from(*(other.get()));
+            // Don't delegate to
+            // Runtime::Buffer<T>::assert_can_convert_from. It might
+            // not assert is NDEBUG is defined. user_assert is
+            // friendlier anyway because it reports line numbers when
+            // debugging symbols are found, it throws an exception
+            // when exceptions are enabled, and we can print the
+            // actual types in question.
+            user_assert(Runtime::Buffer<T>::can_convert_from(*(other.get())))
+                << "Type mismatch constructing Buffer. Can't construct Buffer<"
+                << Internal::buffer_type_name<T>() << "> from Buffer<"
+                << type_to_c_type(other.type(), false) << ">\n";
         }
     }
 

@@ -164,5 +164,6 @@ int main(int argc, char **argv) {
                interpolation_type.c_str(), input_type.c_str(), scale_factor, time * 1000);
     }
 
+    printf("Success!\n");
     return 0;
 }

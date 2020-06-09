@@ -85,56 +85,57 @@ private:
 // in case there's no 'user_context' available in the scope of a function:
 static void *const user_context = NULL;
 //
-#if HALIDE_D3D12_TRACE
-// it's better to use StackPrinter<> instead of Printer<> (debug(ctx)) when
-// tracing calls because Printer<> calls 'halide_malloc()' which can fail;
-// there's even a test for it (generator_aot_cleanup_on_error), simulating
-// a halide_malloc failure, and user code should not affect debug-tracing
-#define trace(x) StackPrinter<4096, BasicPrinter>(x)
 
-static volatile int indent_lock = 0;
-static const char indent_pattern[] = "   ";
-static char indent[2048] = {};
-static int indent_end = 0;
-#define TRACEINDENT ((const char *)indent)
-#define TRACEPRINT(msg) trace(user_context) << TRACEINDENT << msg;
-struct TraceLogScope {
-    TraceLogScope() {
-        while (__sync_lock_test_and_set(&indent_lock, 1)) {
+// Trace and logging utilities for debugging.
+#if HALIDE_D3D12_TRACE
+static volatile ScopedSpinLock::AtomicFlag trace_lock = 0;
+static char trace_buf[4096] = {};
+static int trace_indent = 0;
+
+struct trace : public Printer<BasicPrinter, sizeof(trace_buf)> {
+    ScopedSpinLock lock;
+    trace()
+        : Printer<BasicPrinter, sizeof(trace_buf)>(NULL, trace_buf),
+          lock(&trace_lock) {
+        for (int i = 0; i < trace_indent; i++) {
+            *this << "    ";
         }
-        for (const char *p = indent_pattern; *p; ++p) {
-            indent[indent_end++] = *p;
-        }
-        __sync_lock_release(&indent_lock);
-    }
-    ~TraceLogScope() {
-        while (__sync_lock_test_and_set(&indent_lock, 1)) {
-        }
-        for (const char *p = indent_pattern; *p; ++p) {
-            indent[--indent_end] = '\0';
-        }
-        TRACEPRINT("^^^\n");
-        __sync_lock_release(&indent_lock);
     }
 };
+struct TraceScope {
+    TraceScope() {
+        ScopedSpinLock lock(&trace_lock);
+        trace_indent++;
+    }
+    ~TraceScope() {
+        ScopedSpinLock lock(&trace_lock);
+        trace_indent--;
+    }
+};
+
 #define TRACELOG                               \
-    TRACEPRINT("[@]" << __FUNCTION__ << "\n"); \
-    TraceLogScope trace_scope___;
+    trace() << "[@] " << __FUNCTION__ << "\n"; \
+    TraceScope trace_scope__;
+
+#define TRACEPRINT(msg) trace() << msg;
+
 #else
-#define TRACEINDENT ""
-#define TRACEPRINT(msg)
+typedef SinkPrinter trace;
 #define TRACELOG
+#define TRACEPRINT(msg)
 #endif
 //
-#define ERRORLOG error(user_context) << TRACEINDENT
 // ^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ^
 
-static const char *d3d12_debug_dump();
+static void d3d12_debug_dump(error &err);
 
 #define d3d12_halt(...)             \
-    ERRORLOG << __VA_ARGS__ << "\n" \
-             << d3d12_debug_dump()  \
-             << "!!! HALT !!!\n"
+    do {                            \
+        error err(NULL);            \
+        err << __VA_ARGS__ << "\n"; \
+        d3d12_debug_dump(err);      \
+        err << "!!! HALT !!!\n";    \
+    } while (0)
 
 void *d3d12_load_library(const char *name) {
     TRACELOG;
@@ -166,7 +167,7 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
 
 #if HALIDE_D3D12_RENDERDOC
 #if HALIDE_D3D12_DEBUG_LAYER
-#pragma message "RenderDoc might not work well alongside Dirct3D debug layers..."
+#pragma message "RenderDoc might not work well alongside Direct3D debug layers..."
 #endif
 #define WIN32
 #define RenderDocAssert(expr) halide_assert(user_context, expr)
@@ -240,6 +241,7 @@ D3D12TYPENAME(IDXGIOutput)
 
 template<typename ID3D12T>
 static bool D3DError(HRESULT result, ID3D12T *object, void *user_context, const char *message) {
+    TRACELOG;
     // HRESULT ERROR CODES:
     // D3D12: https://msdn.microsoft.com/en-us/library/windows/desktop/bb509553(v=vs.85).aspx
     // Win32: https://msdn.microsoft.com/en-us/library/windows/desktop/aa378137(v=vs.85).aspx
@@ -253,7 +255,7 @@ static bool D3DError(HRESULT result, ID3D12T *object, void *user_context, const 
     return false;
 }
 
-static DXGI_FORMAT FindD3D12FormatForHalideType(halide_type_t type) {
+static DXGI_FORMAT FindD3D12FormatForHalideType(void *user_context, halide_type_t type) {
     // DXGI Formats:
     // https://msdn.microsoft.com/en-us/library/windows/desktop/bb173059(v=vs.85).aspx
 
@@ -575,7 +577,7 @@ struct d3d12_profiler {
     UINT max_queries;
 };
 
-static size_t number_of_elements(const halide_buffer_t *buffer) {
+static size_t number_of_elements(void *user_context, const halide_buffer_t *buffer) {
     // halide_buffer_t::number_of_elements() does not necessarily map to D3D12
     // Buffer View 'NumElements' since the former does not account for "hidden"
     // elements in the stride regions.
@@ -724,7 +726,7 @@ static const d3d12_buffer *peel_buffer(const struct halide_buffer_t *hbuffer) {
     return peel_buffer(const_cast<halide_buffer_t *>(hbuffer));
 }
 
-WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
+WEAK int wrap_buffer(void *user_context, struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
     halide_assert(user_context, (hbuffer->device == 0));
     if (hbuffer->device != 0) {
         return halide_error_code_device_wrap_native_failed;
@@ -735,8 +737,8 @@ WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
     dbuffer->offset = 0;
     dbuffer->offsetInBytes = 0;
     dbuffer->sizeInBytes = hbuffer->size_in_bytes();
-    dbuffer->elements = number_of_elements(hbuffer);
-    dbuffer->format = FindD3D12FormatForHalideType(hbuffer->type);
+    dbuffer->elements = number_of_elements(user_context, hbuffer);
+    dbuffer->format = FindD3D12FormatForHalideType(user_context, hbuffer->type);
     if (dbuffer->format == DXGI_FORMAT_UNKNOWN) {
         d3d12_halt("unsupported buffer element type: " << hbuffer->type);
         return halide_error_code_device_wrap_native_failed;
@@ -1065,6 +1067,8 @@ WEAK void dispatch_threadgroups(d3d12_compute_command_list *cmdList,
 }
 
 WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12_HEAP_TYPE heaptype) {
+    TRACELOG;
+
     D3D12_RESOURCE_DESC desc = {};
     {
         desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -1627,24 +1631,25 @@ static void dump_shader(const char *source, ID3DBlob *compiler_msgs = NULL) {
         message = (const char *)compiler_msgs->GetBufferPointer();
     }
 
-    StackPrinter<64 * 1024> dump;
-    dump(user_context) << TRACEINDENT << "D3DCompile(): " << message << "\n";
-    dump(user_context) << TRACEINDENT << ">>> HLSL shader source dump <<<\n"
-                       << source << "\n";
+    Printer<BasicPrinter, 64 * 1024>(user_context)
+        << "D3DCompile(): " << message << "\n"
+        << ">>> HLSL shader source dump <<<\n"
+        << source << "\n";
 }
 
 static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_library *library, const char *name, size_t name_len,
                                               int shared_mem_bytes, int threadsX, int threadsY, int threadsZ) {
     TRACELOG;
 
-    // Round shared memory size up to a multiple of 16:
-    shared_mem_bytes = (shared_mem_bytes + 0xF) & ~0xF;
+    // Round shared memory size up to a non-zero multiple of 16
+    TRACEPRINT("groupshared memory size before modification: " << shared_mem_bytes << "\n");
+    shared_mem_bytes = ((shared_mem_bytes > 0 ? shared_mem_bytes : 1) + 0xF) & ~0xF;
     TRACEPRINT("groupshared memory size: " << shared_mem_bytes << " bytes.\n");
     TRACEPRINT("numthreads( " << threadsX << ", " << threadsY << ", " << threadsZ << " )\n");
 
     // consult the compiled function cache in the library first:
     d3d12_function *function = NULL;
-    StackPrinter<256, StringStreamPrinter> key;
+    Printer<StringStreamPrinter, 256> key(NULL);
     key << name << "_(" << threadsX << "," << threadsY << "," << threadsZ << ")_[" << shared_mem_bytes << "]";
     halide_assert(user_context, (key.size() < key.capacity() - 1));  // make sure key fits into the stream
     int not_found = library->cache.lookup(user_context, (const uint8_t *)key.str(), key.size(), &function);
@@ -1659,7 +1664,7 @@ static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_librar
 
     const char *source = library->source;
     int source_size = library->source_length;
-    StackPrinter<16, StringStreamPrinter> SS[4];
+    Printer<StringStreamPrinter, 16> SS[4] = {NULL, NULL, NULL, NULL};
     D3D_SHADER_MACRO pDefines[] = {
         {"__GROUPSHARED_SIZE_IN_BYTES", (SS[0] << shared_mem_bytes).str()},
         {"__NUM_TREADS_X", (SS[1] << threadsX).str()},
@@ -2142,7 +2147,7 @@ static void *buffer_contents(d3d12_buffer *buffer) {
     return pData;
 }
 
-volatile int WEAK thread_lock = 0;
+volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
@@ -2178,7 +2183,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
     TRACELOG;
 
     halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) {
+    while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {
     }
 
 #ifdef DEBUG_RUNTIME
@@ -2188,7 +2193,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
     if (create && (device == NULL)) {
         device = D3D12CreateSystemDefaultDevice(user_context);
         if (device == NULL) {
-            __sync_lock_release(&thread_lock);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return halide_error_code_generic_error;
         }
 
@@ -2197,7 +2202,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
         if (rootSignature == NULL) {
             release_object(device);
             device = NULL;
-            __sync_lock_release(&thread_lock);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return halide_error_code_generic_error;
         }
 
@@ -2207,7 +2212,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
             Release_ID3D12Object(rootSignature);
             release_object(device);
             device = NULL;
-            __sync_lock_release(&thread_lock);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return halide_error_code_generic_error;
         }
 
@@ -2229,34 +2234,36 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
 
 WEAK int halide_d3d12compute_release_context(void *user_context) {
     TRACELOG;
-    __sync_lock_release(&thread_lock);
+    __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
     return 0;
 }
 
 }  // extern "C"
 
-static const char *d3d12_debug_dump() {
+static void d3d12_debug_dump(error &err) {
     TRACELOG;
 
     if (!device) {
-        return "debug info not available: no device.";
+        err << "debug info not available: no device.\n";
+        return;
     }
 
     halide_assert(user_context, (dxgiAdapter != NULL));
     DXGI_ADAPTER_DESC1 desc = {};
     if (FAILED(dxgiAdapter->GetDesc1(&desc))) {
-        return "Unable to retrieve information about the adapter.\n";
+        err << "Unable to retrieve information about the adapter.\n";
+        return;
     }
 
     // NOTE(marcos): this printer will leak, but that's fine since debug dump
     // is a panic mechanism that precedes an operational "halt":
     void *dump_buffer = d3d12_malloc(64 * 1024);
     if (!dump_buffer) {
-        return "Unable to allocate memory for the debug dump.\n";
+        err << "Unable to allocate memory for the debug dump.\n";
+        return;
     }
-    Printer<StringStreamPrinter, 64 * 1024> dump(user_context, (char *)dump_buffer);
 
-    dump << "\n===== Debug Dump =====\n";
+    err << "\n===== Debug Dump =====\n";
 
     // simple conversion from Windows 16bit wchar to char:
     char Description[128];
@@ -2265,9 +2272,7 @@ static const char *d3d12_debug_dump() {
     }
     Description[127] = '\0';
 
-    dump << "D3D12 Adapter: " << Description << "\n";
-
-    return dump.str();
+    err << "D3D12 Adapter: " << Description << "\n";
 }
 
 using namespace Halide::Runtime::Internal::D3D12Compute;
@@ -2288,7 +2293,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 
     // Check all strides positive
     for (int i = 0; i < buf->dimensions; i++) {
-        halide_assert(user_context, buf->dim[i].stride > 0);
+        halide_assert(user_context, buf->dim[i].stride >= 0);
     }
 
     TRACEPRINT("allocating " << *buf << "\n");
@@ -2308,7 +2313,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
         return halide_error_code_device_malloc_failed;
     }
 
-    if (0 != wrap_buffer(buf, d3d12_buf)) {
+    if (0 != wrap_buffer(user_context, buf, d3d12_buf)) {
         d3d12_halt("D3D12: unable to wrap halide buffer and D3D12 buffer.");
         return halide_error_code_device_wrap_native_failed;
     }
@@ -2495,6 +2500,8 @@ namespace {
 
 static int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
                                     uint64_t src_offset, uint64_t dst_offset, int dimensions) {
+    TRACELOG;
+
     if (dimensions == 0) {
         d3d12_buffer *dsrc = reinterpret_cast<d3d12_buffer *>(c.src);
         d3d12_buffer *ddst = reinterpret_cast<d3d12_buffer *>(c.dst);
@@ -2817,7 +2824,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
 #if HALIDE_D3D12_PROFILING
     uint64_t eps = (uint64_t)get_elapsed_time(profiler, ini, end);
-    StackPrinter<64>() << "kernel execution time: " << eps << "us.\n";
+    Printer<BasicPrinter, 64>() << "kernel execution time: " << eps << "us.\n";
     // TODO: keep some live performance stats in the d3d12_function object
     // (accumulate stats based on dispatch similarities -- e.g., blocksX|Y|Z)
     release_object(profiler);
@@ -3099,7 +3106,7 @@ WEAK int halide_d3d12compute_wrap_buffer(void *user_context, struct halide_buffe
     sbuffer.type = d3d12_buffer::ReadWrite;
     sbuffer.state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-    int ret = wrap_buffer(halide_buf, &sbuffer);
+    int ret = wrap_buffer(user_context, halide_buf, &sbuffer);
     if (ret != 0) {
         return ret;
     }

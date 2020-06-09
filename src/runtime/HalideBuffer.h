@@ -24,6 +24,7 @@
 #include "HalideRuntime.h"
 
 #ifdef _MSC_VER
+#include <malloc.h>
 #define HALIDE_ALLOCA _alloca
 #else
 #define HALIDE_ALLOCA __builtin_alloca
