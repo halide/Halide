@@ -18,6 +18,11 @@ int main(int argc, char **argv) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
+    if (target.has_feature(Target::D3D12Compute)) {
+        // https://github.com/halide/Halide/issues/5000
+        printf("[SKIP] Allocation cache not yet implemented for D3D12Compute.\n");
+        return 0;
+    }
 
     const int N = 30;
     Var x, y, xi, yi;
