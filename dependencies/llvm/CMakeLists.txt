@@ -127,13 +127,23 @@ endif ()
 
 ##
 # Finish setting up llvm library
+#
+# Ideally, we would use llvm_config (instead of hardcoding LLVM lib name below):
+#    if (LLVM_USE_SHARED_LLVM_LIBRARY)
+#        set(LLVM_USE_SHARED "USE_SHARED")
+#    endif()
+#    llvm_config(Halide_LLVM ${LLVM_USE_SHARED} ${LLVM_COMPONENTS})
+# However, llvm_config (LLVM 10.0) does not accept INTERFACE_LIBRARY targets,
+# so the below code does what llvm_config() does, with the slight difference
+# that we link exclusively to the shared library without fallback to static
+# libraries for symbols not resolved by the shared library.
 ##
 
 if (LLVM_USE_SHARED_LLVM_LIBRARY)
-    set(LLVM_USE_SHARED "USE_SHARED")
+    set(LLVM_LIBNAMES LLVM)
+else ()
+    llvm_map_components_to_libnames(LLVM_LIBNAMES ${LLVM_COMPONENTS})
 endif ()
-
-llvm_map_components_to_libnames(LLVM_LIBNAMES ${LLVM_COMPONENTS})
 target_link_libraries(Halide_LLVM INTERFACE ${LLVM_LIBNAMES})
 
 ##
