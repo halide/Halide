@@ -29,7 +29,6 @@ string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__t
 string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w"};
 }  // namespace
 
-
 class ExtractBlockSize : public IRVisitor {
     Expr block_extent[4], block_count[4];
     string block_var_name[4];
@@ -287,6 +286,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
 
 public:
     vector<SharedAllocation> allocations;
+
 private:
     map<string, SharedAllocation *> shared;
 
