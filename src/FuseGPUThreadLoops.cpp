@@ -29,55 +29,6 @@ string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__t
 string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w"};
 }  // namespace
 
-class InjectThreadBarriers : public IRMutator {
-    bool in_threads;
-
-    using IRMutator::visit;
-
-    Stmt barrier;
-
-    Stmt visit(const For *op) override {
-        ScopedValue<bool> old_in_threads(in_threads,
-                                         (in_threads ||
-                                          op->for_type == ForType::GPUThread ||
-                                          op->for_type == ForType::GPULane));
-
-        if (op->for_type == ForType::Serial) {
-            Stmt body = mutate(op->body);
-            // Serial for loops at the block level with internal
-            // synchronization also need synchronization after each
-            // loop iteration.
-            if (!in_threads && !body.same_as(op->body)) {
-                body = Block::make(body, barrier);
-            }
-            return For::make(op->name, op->min, op->extent,
-                             op->for_type, op->device_api, body);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-    Stmt visit(const Block *op) override {
-        if (!in_threads && op->rest.defined()) {
-            std::vector<std::string> temp_stores;
-            Stmt first = mutate(op->first);
-            Stmt rest = mutate(op->rest);
-            return Block::make(Block::make(first, barrier), rest);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-public:
-    InjectThreadBarriers()
-        : in_threads(false) {
-        barrier =
-            Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
-                                      {CodeGen_GPU_Dev::MemoryFenceType::Device
-                                     | CodeGen_GPU_Dev::MemoryFenceType::Shared},
-                                      Call::Intrinsic));
-    }
-};
 
 class ExtractBlockSize : public IRVisitor {
     Expr block_extent[4], block_count[4];
@@ -334,7 +285,9 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
         MemoryType memory_type;          // All allocations in the group have this memory type
     };
 
+public:
     vector<SharedAllocation> allocations;
+private:
     map<string, SharedAllocation *> shared;
 
     bool in_threads;
@@ -1096,6 +1049,140 @@ public:
     bool has_thread_loop = false;
 };
 
+class InjectThreadBarriers : public IRMutator {
+    bool in_threads;
+
+    bool shared_mem_fence_required;
+    bool device_mem_fence_required;
+
+    using IRMutator::visit;
+
+    Stmt barrier;
+    ExtractSharedAndHeapAllocations &block_allocs;
+    ExtractRegisterAllocations &register_allocs;
+
+    std::set<std::string> shared_stores;
+    std::set<std::string> device_stores;
+
+
+    MemoryType memory_type_for_name(std::string name) {
+        for (auto &x: register_allocs.allocations) {
+            if (x.name == name) {
+                return x.memory_type;
+            }
+        }
+        for (auto &x: block_allocs.allocations) {
+            if (x.name == name) {
+                return x.memory_type;
+            }
+        }
+        // Not allocated here, so must assume it's input/output
+        // of shader
+        return MemoryType::Auto;
+    }
+
+    Stmt make_barrier(int mask) {
+        return Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
+                                         {IntImm::make(Int(32), mask)},
+                                         Call::Intrinsic));
+    }
+
+
+    Stmt visit(const For *op) override {
+        ScopedValue<bool> old_in_threads(in_threads,
+                                         (in_threads ||
+                                          op->for_type == ForType::GPUThread ||
+                                          op->for_type == ForType::GPULane));
+
+        if (op->for_type == ForType::Serial) {
+            Stmt body = mutate(op->body);
+            // Serial for loops at the block level with internal
+            // synchronization also need synchronization after each
+            // loop iteration.
+            if (!in_threads && !body.same_as(op->body)) {
+                body = Block::make(body, make_barrier(0));
+            }
+            return For::make(op->name, op->min, op->extent,
+                             op->for_type, op->device_api, body);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Stmt visit(const Store *op) override {
+        debug(0) << "Encountered store to " << op->name << "\n";
+        auto mem_type = memory_type_for_name(op->name);
+        switch (mem_type) {
+            case MemoryType::GPUShared:
+                debug(0) << "   memory type is shared\n";
+                if (shared_mem_fence_required) {
+                    break;
+                }
+                shared_stores.insert(op->name);
+                break;
+            case MemoryType::Auto:
+            case MemoryType::Heap:
+                debug(0) << "   memory type is heap or auto\n";
+                if (device_mem_fence_required) {
+                    break;
+                }
+                device_stores.insert(op->name);
+                break;
+            case MemoryType::Stack:
+            case MemoryType::Register:
+            case MemoryType::LockedCache:
+            case MemoryType:: VTCM:
+                break;
+        }
+
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Load *op) override {
+        debug(0) << "Encountered load from " << op->name << "\n";
+        if (shared_stores.find(op->name) != shared_stores.end()) {
+            shared_mem_fence_required = true;
+            shared_stores.clear();
+        } else if (device_stores.find(op->name) != device_stores.end()) {
+            device_mem_fence_required = true;
+            device_stores.clear();
+        }
+
+        return op;
+    }
+
+
+    Stmt visit(const Block *op) override {
+        if (!in_threads && op->rest.defined()) {
+            Stmt first = mutate(op->first);
+            shared_mem_fence_required = false;
+            device_mem_fence_required = false;
+            for (auto x: shared_stores) {
+                debug(0) << "Shared store: " << x << "\n";
+            }
+            Stmt rest = mutate(op->rest);
+            int mask = 0;
+            if (shared_mem_fence_required) {
+                mask |= CodeGen_GPU_Dev::MemoryFenceType::Shared;
+            }
+            if (device_mem_fence_required) {
+                mask |= CodeGen_GPU_Dev::MemoryFenceType::Device;
+            }
+            return Block::make(Block::make(first, make_barrier(mask)), rest);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+public:
+    InjectThreadBarriers(ExtractSharedAndHeapAllocations &sha, ExtractRegisterAllocations &ra)
+        : in_threads(false),
+          shared_mem_fence_required(false),
+          device_mem_fence_required(false),
+          block_allocs(sha),
+          register_allocs(ra) { }
+};
+
 class FuseGPUThreadLoopsSingleKernel : public IRMutator {
     using IRMutator::visit;
     const ExtractBlockSize &block_size;
@@ -1130,7 +1217,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
 
             if (register_allocs.has_thread_loop) {
                 // If there's no loop over threads, everything is already synchronous.
-                InjectThreadBarriers i;
+                InjectThreadBarriers i{block_allocations, register_allocs};
                 body = i.mutate(body);
             }
 
