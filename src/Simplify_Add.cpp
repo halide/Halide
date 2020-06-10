@@ -117,7 +117,22 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite(max(x, y + c0) + c1, max(x + c1, y), c0 + c1 == 0) ||
                rewrite(max(y + c0, x) + c1, max(y, x + c1), c0 + c1 == 0) ||
                rewrite(max(x, y) + min(x, y), x + y) ||
-               rewrite(max(x, y) + min(y, x), x + y))) ||
+               rewrite(max(x, y) + min(y, x), x + y) ||
+
+               rewrite(min(x, y + (z*c0)) + (z*c1), min(x + (z*c1), y), (c0 + c1) == 0) ||
+               rewrite(min(x, (y*c0) + z) + (y*c1), min(x + (y*c1), z), (c0 + c1) == 0) ||
+               rewrite(min(x, y*c0) + (y*c1), min(x + (y*c1), 0), (c0 + c1) == 0) ||
+               rewrite(min(x + (y*c0), z) + (y*c1), min((y*c1) + z, x), (c0 + c1) == 0) ||
+               rewrite(min((x*c0) + y, z) + (x*c1), min(y, (x*c1) + z), (c0 + c1) == 0) ||
+               rewrite(min(x*c0, y) + (x*c1), min((x*c1) + y, 0), (c0 + c1) == 0) ||
+               rewrite(max(x, y + (z*c0)) + (z*c1), max(x + (z*c1), y), (c0 + c1) == 0) ||
+               rewrite(max(x, (y*c0) + z) + (y*c1), max(x + (y*c1), z), (c0 + c1) == 0) ||
+               rewrite(max(x, y*c0) + (y*c1), max(x + (y*c1), 0), (c0 + c1) == 0) ||
+               rewrite(max(x + (y*c0), z) + (y*c1), max(x, (y*c1) + z), (c0 + c1) == 0) ||
+               rewrite(max((x*c0) + y, z) + (x*c1), max((x*c1) + z, y), (c0 + c1) == 0) ||
+               rewrite(max(x*c0, y) + (x*c1), max((x*c1) + y, 0), (c0 + c1) == 0) ||
+
+               false)) ||
              (no_overflow_int(op->type) &&
               (rewrite((x/c0)*c0 + x%c0, x, c0 != 0) ||
                rewrite((z + x/c0)*c0 + x%c0, z*c0 + x, c0 != 0) ||
