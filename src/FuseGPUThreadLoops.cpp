@@ -1064,14 +1064,13 @@ class InjectThreadBarriers : public IRMutator {
     std::set<std::string> shared_stores;
     std::set<std::string> device_stores;
 
-
     MemoryType memory_type_for_name(std::string name) {
-        for (auto &x: register_allocs.allocations) {
+        for (auto &x : register_allocs.allocations) {
             if (x.name == name) {
                 return x.memory_type;
             }
         }
-        for (auto &x: block_allocs.allocations) {
+        for (auto &x : block_allocs.allocations) {
             if (x.name == name) {
                 return x.memory_type;
             }
