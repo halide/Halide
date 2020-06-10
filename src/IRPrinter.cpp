@@ -201,15 +201,15 @@ void IRPrinter::test() {
     std::string correct_source =
         "allocate buf[float32 * 1023] in Stack\n"
         "let y = 17\n"
-        "assert((y >= 3), halide_error_param_too_small_i64(\"y\", y, 3))\n"
+        "assert(y >= 3, halide_error_param_too_small_i64(\"y\", y, 3))\n"
         "produce buf {\n"
-        " parallel (x, -2, (y + 2)) {\n"
-        "  buf[(y - 1)] = ((x*17)/(x - 3))\n"
+        " parallel (x, -2, y + 2) {\n"
+        "  buf[y - 1] = (x*17)/(x - 3)\n"
         " }\n"
         "}\n"
         "consume buf {\n"
         " vectorized (x, 0, y) {\n"
-        "  out[x] = (buf((x % 3)) + 1)\n"
+        "  out[x] = buf(x % 3) + 1\n"
         " }\n"
         "}\n";
 
