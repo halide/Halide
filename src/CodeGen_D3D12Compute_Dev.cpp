@@ -270,10 +270,13 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         // available
         // NOTE(shoaibkamil): should we replace with AllMemoryBarrierWithGroupSync()
         // if both are required?
-        stream << get_indent() << "GroupMemoryBarrierWithGroupSync();\n";
-        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
-          stream << get_indent() << "DeviceMemoryBarrierWithGroupSync();\n";
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device &&
+            !(fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared)) {
+                stream << get_indent() << "DeviceMemoryBarrierWithGroupSync();\n";
+        } else if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
+            stream << get_indent() << "DeviceMemoryBarrier();\n";
         }
+        stream << get_indent() << "GroupMemoryBarrierWithGroupSync();\n";
         print_assignment(op->type, "0");
     } else if (op->name == "pow_f32" && can_prove(op->args[0] > 0)) {
         // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
