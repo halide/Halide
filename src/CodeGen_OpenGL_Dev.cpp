@@ -238,8 +238,7 @@ void CodeGen_GLSLBase::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         Expr a = op->args[0];
         Expr b = op->args[1];
-        Type t = Float(32);
-        Expr e = cast(t, select(a < b, b - a, a - b));
+        Expr e = cast(op->type, select(a < b, b - a, a - b));
         print_expr(e);
         return;
     } else if (op->is_intrinsic(Call::return_second)) {
