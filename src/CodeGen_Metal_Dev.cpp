@@ -220,10 +220,10 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
         stream << get_indent() << "threadgroup_barrier("
                << "mem_flags::mem_none";
         if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
-            stream << "| mem_flags::mem_device";
+            stream << " | mem_flags::mem_device";
         }
         if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
-            stream << "| mem_flags::mem_threadgroup";
+            stream << " | mem_flags::mem_threadgroup";
         }
         stream << ");\n";
         print_assignment(op->type, "0");

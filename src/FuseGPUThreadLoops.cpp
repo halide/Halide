@@ -1110,11 +1110,11 @@ class InjectThreadBarriers : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        debug(0) << "Encountered store to " << op->name << "\n";
+        debug(4) << "Encountered store to " << op->name << "\n";
         auto mem_type = memory_type_for_name(op->name);
         switch (mem_type) {
             case MemoryType::GPUShared:
-                debug(0) << "   memory type is shared\n";
+                debug(4) << "   memory type is shared\n";
                 if (shared_mem_fence_required) {
                     break;
                 }
@@ -1122,7 +1122,7 @@ class InjectThreadBarriers : public IRMutator {
                 break;
             case MemoryType::Auto:
             case MemoryType::Heap:
-                debug(0) << "   memory type is heap or auto\n";
+                debug(4) << "   memory type is heap or auto\n";
                 if (device_mem_fence_required) {
                     break;
                 }
@@ -1139,7 +1139,7 @@ class InjectThreadBarriers : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        debug(0) << "Encountered load from " << op->name << "\n";
+        debug(4) << "Encountered load from " << op->name << "\n";
         if (shared_stores.find(op->name) != shared_stores.end()) {
             shared_mem_fence_required = true;
             shared_stores.clear();
@@ -1157,9 +1157,6 @@ class InjectThreadBarriers : public IRMutator {
             Stmt first = mutate(op->first);
             shared_mem_fence_required = false;
             device_mem_fence_required = false;
-            for (auto x: shared_stores) {
-                debug(0) << "Shared store: " << x << "\n";
-            }
             Stmt rest = mutate(op->rest);
             int mask = 0;
             if (shared_mem_fence_required) {
