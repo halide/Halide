@@ -1247,7 +1247,7 @@ GENERATOR_AOTWASM_TESTS := $(filter-out generator_aotwasm_memory_profiler_mandel
 test_aotwasm_generator: $(GENERATOR_AOTWASM_TESTS)
 
 # This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
-# not all will work directly (e.g. due to missing define_externs at link time), so we blacklist
+# not all will work directly (e.g. due to missing define_externs at link time), so we disable
 # those known to be broken for plausible reasons.
 GENERATOR_BUILD_RUNGEN_TESTS = $(GENERATOR_EXTERNAL_TEST_GENERATOR:$(ROOT_DIR)/test/generator/%_generator.cpp=$(FILTERS_DIR)/%.rungen)
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/async_parallel.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
