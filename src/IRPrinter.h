@@ -101,6 +101,9 @@ public:
     /** emit an expression on the output stream */
     void print(const Expr &);
 
+    /** Emit an expression on the output stream without enclosing parens */
+    void print_no_parens(const Expr &);
+
     /** emit a statement on the output stream */
     void print(const Stmt &);
 
@@ -120,7 +123,18 @@ protected:
 
     /** The current indentation level, useful for pretty-printing
      * statements */
-    int indent;
+    int indent = 0;
+
+    /** Certain expressions do not need parens around them, e.g. the
+     * args to a call are already separated by commas and a
+     * surrounding set of parens. */
+    bool implicit_parens = false;
+
+    /** Either emits "(" or "", depending on the value of implicit_parens */
+    void open();
+
+    /** Either emits ")" or "", depending on the value of implicit_parens */
+    void close();
 
     /** The symbols whose types can be inferred from values printed
      * already. */
