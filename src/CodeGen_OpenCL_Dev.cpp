@@ -221,10 +221,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         auto fence_type = *as_const_int(op->args[0]);
         stream << get_indent() << "barrier(0";
         if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
-            stream << "| CLK_GLOBAL_MEM_FENCE";
+            stream << " | CLK_GLOBAL_MEM_FENCE";
         }
         if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
-            stream << "| CLK_LOCAL_MEM_FENCE";
+            stream << " | CLK_LOCAL_MEM_FENCE";
         }
         stream << ");\n";
         print_assignment(op->type, "0");
