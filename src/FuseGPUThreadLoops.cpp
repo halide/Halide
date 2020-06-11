@@ -1057,9 +1057,8 @@ class InjectThreadBarriers : public IRMutator {
 
     using IRMutator::visit;
 
-    Stmt barrier;
-    ExtractSharedAndHeapAllocations &block_allocs;
-    ExtractRegisterAllocations &register_allocs;
+    const ExtractSharedAndHeapAllocations &block_allocs;
+    const ExtractRegisterAllocations &register_allocs;
 
     std::set<std::string> shared_stores;
     std::set<std::string> device_stores;
@@ -1093,12 +1092,14 @@ class InjectThreadBarriers : public IRMutator {
                                           op->for_type == ForType::GPUThread ||
                                           op->for_type == ForType::GPULane));
 
-        if (op->for_type == ForType::Serial) {
+        if (!is_parallel(op->for_type)) {
             Stmt body = mutate(op->body);
             // Serial for loops at the block level with internal
             // synchronization also need synchronization after each
             // loop iteration.
             if (!in_threads && !body.same_as(op->body)) {
+                // Any memory access fences should be handled by the
+                // synchronizations within the block
                 body = Block::make(body, make_barrier(0));
             }
             return For::make(op->name, op->min, op->extent,
@@ -1109,28 +1110,22 @@ class InjectThreadBarriers : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        debug(4) << "Encountered store to " << op->name << "\n";
+        debug(0) << "Encountered store to " << op->name << "\n";
         auto mem_type = memory_type_for_name(op->name);
         switch (mem_type) {
             case MemoryType::GPUShared:
                 debug(4) << "   memory type is shared\n";
-                if (shared_mem_fence_required) {
-                    break;
-                }
                 shared_stores.insert(op->name);
                 break;
             case MemoryType::Auto:
             case MemoryType::Heap:
                 debug(4) << "   memory type is heap or auto\n";
-                if (device_mem_fence_required) {
-                    break;
-                }
                 device_stores.insert(op->name);
                 break;
             case MemoryType::Stack:
             case MemoryType::Register:
             case MemoryType::LockedCache:
-            case MemoryType:: VTCM:
+            case MemoryType::VTCM:
                 break;
         }
 
@@ -1138,12 +1133,16 @@ class InjectThreadBarriers : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        debug(4) << "Encountered load from " << op->name << "\n";
+        debug(0) << "Encountered load from " << op->name << "\n";
         if (shared_stores.find(op->name) != shared_stores.end()) {
             shared_mem_fence_required = true;
+            // We can clear out the stores, since they will now be
+            // fenced
             shared_stores.clear();
         } else if (device_stores.find(op->name) != device_stores.end()) {
             device_mem_fence_required = true;
+            // We can clear out the stores, since they will now be
+            // fenced
             device_stores.clear();
         }
 
