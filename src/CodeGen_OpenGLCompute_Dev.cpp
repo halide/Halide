@@ -76,33 +76,6 @@ int thread_loop_workgroup_index(const string &name) {
 }
 }  // namespace
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
-    Type value_type = op->value.type();
-    // If both types are represented by the same GLSL type, no explicit cast
-    // is necessary.
-    if (map_type(op->type) == map_type(value_type)) {
-        Expr value = op->value;
-        if (value_type.code() == Type::Float) {
-            // float->int conversions may need explicit truncation if an
-            // integer type is embedded into a float. (Note: overflows are
-            // considered undefined behavior, so we do nothing about values
-            // that are out of range of the target type.)
-            if (op->type.code() == Type::UInt) {
-                value = simplify(floor(value));
-            } else if (op->type.code() == Type::Int) {
-                value = simplify(trunc(value));
-            }
-        }
-        // FIXME: Overflow is not UB for most Halide types
-        // https://github.com/halide/Halide/issues/4975
-        value.accept(this);
-        return;
-    } else {
-        Type target_type = map_type(op->type);
-        print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
-    }
-}
-
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         stream << get_indent() << "barrier();\n";

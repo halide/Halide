@@ -426,16 +426,7 @@ string CodeGen_GLSLBase::print_name(const string &name) {
     return replace_all(mangled, "__", "XX");
 }
 
-//
-// CodeGen_GLSL
-//
-
-CodeGen_GLSL::CodeGen_GLSL(std::ostream &s, const Target &t)
-    : CodeGen_GLSLBase(s, t) {
-    builtin["trunc_f32"] = "_trunc_f32";
-}
-
-void CodeGen_GLSL::visit(const Cast *op) {
+void CodeGen_GLSLBase::visit(const Cast *op) {
     Type value_type = op->value.type();
     // If both types are represented by the same GLSL type, no explicit cast
     // is necessary.
@@ -452,12 +443,22 @@ void CodeGen_GLSL::visit(const Cast *op) {
                 value = simplify(trunc(value));
             }
         }
+        // FIXME: Overflow is not UB for most Halide types
+        // https://github.com/halide/Halide/issues/4975
         value.accept(this);
-        return;
     } else {
         Type target_type = map_type(op->type);
         print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
     }
+}
+
+//
+// CodeGen_GLSL
+//
+
+CodeGen_GLSL::CodeGen_GLSL(std::ostream &s, const Target &t)
+    : CodeGen_GLSLBase(s, t) {
+    builtin["trunc_f32"] = "_trunc_f32";
 }
 
 void CodeGen_GLSL::visit(const Let *op) {
