@@ -1062,7 +1062,7 @@ class InjectThreadBarriers : public IRMutator {
     std::set<std::string> shared_loads;
     std::set<std::string> device_loads;
 
-    MemoryType memory_type_for_name(std::string name) {
+    MemoryType memory_type_for_name(const std::string &name) {
         for (auto &x : register_allocs.allocations) {
             if (x.name == name) {
                 return x.memory_type;
