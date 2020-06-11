@@ -1052,9 +1052,6 @@ public:
 class InjectThreadBarriers : public IRMutator {
     bool in_threads;
 
-    bool shared_mem_fence_required;
-    bool device_mem_fence_required;
-
     using IRMutator::visit;
 
     const ExtractSharedAndHeapAllocations &block_allocs;
@@ -1062,6 +1059,8 @@ class InjectThreadBarriers : public IRMutator {
 
     std::set<std::string> shared_stores;
     std::set<std::string> device_stores;
+    std::set<std::string> shared_loads;
+    std::set<std::string> device_loads;
 
     MemoryType memory_type_for_name(std::string name) {
         for (auto &x : register_allocs.allocations) {
@@ -1084,7 +1083,6 @@ class InjectThreadBarriers : public IRMutator {
                                          {IntImm::make(Int(32), mask)},
                                          Call::Intrinsic));
     }
-
 
     Stmt visit(const For *op) override {
         ScopedValue<bool> old_in_threads(in_threads,
@@ -1110,58 +1108,81 @@ class InjectThreadBarriers : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        debug(0) << "Encountered store to " << op->name << "\n";
+        debug(4) << "Encountered store to " << op->name << "\n";
         auto mem_type = memory_type_for_name(op->name);
         switch (mem_type) {
-            case MemoryType::GPUShared:
-                debug(4) << "   memory type is shared\n";
-                shared_stores.insert(op->name);
-                break;
-            case MemoryType::Auto:
-            case MemoryType::Heap:
-                debug(4) << "   memory type is heap or auto\n";
-                device_stores.insert(op->name);
-                break;
-            case MemoryType::Stack:
-            case MemoryType::Register:
-            case MemoryType::LockedCache:
-            case MemoryType::VTCM:
-                break;
+        case MemoryType::GPUShared:
+            debug(4) << "   memory type is shared\n";
+            shared_stores.insert(op->name);
+            break;
+        case MemoryType::Auto:
+        case MemoryType::Heap:
+            debug(4) << "   memory type is heap or auto\n";
+            device_stores.insert(op->name);
+            break;
+        case MemoryType::Stack:
+        case MemoryType::Register:
+        case MemoryType::LockedCache:
+        case MemoryType::VTCM:
+            break;
         }
 
         return IRMutator::visit(op);
     }
 
     Expr visit(const Load *op) override {
-        debug(0) << "Encountered load from " << op->name << "\n";
-        if (shared_stores.find(op->name) != shared_stores.end()) {
-            shared_mem_fence_required = true;
-            // We can clear out the stores, since they will now be
-            // fenced
-            shared_stores.clear();
-        } else if (device_stores.find(op->name) != device_stores.end()) {
-            device_mem_fence_required = true;
-            // We can clear out the stores, since they will now be
-            // fenced
-            device_stores.clear();
+        debug(4) << "Encountered load from " << op->name << "\n";
+        auto mem_type = memory_type_for_name(op->name);
+        switch (mem_type) {
+        case MemoryType::GPUShared:
+            debug(4) << "   memory type is shared\n";
+            shared_loads.insert(op->name);
+            break;
+        case MemoryType::Auto:
+        case MemoryType::Heap:
+            debug(4) << "   memory type is heap or auto\n";
+            device_loads.insert(op->name);
+            break;
+        case MemoryType::Stack:
+        case MemoryType::Register:
+        case MemoryType::LockedCache:
+        case MemoryType::VTCM:
+            break;
         }
 
+        return IRMutator::visit(op);
         return op;
     }
 
-
     Stmt visit(const Block *op) override {
         if (!in_threads && op->rest.defined()) {
-            Stmt first = mutate(op->first);
-            shared_mem_fence_required = false;
-            device_mem_fence_required = false;
+            // First, we record which loads from shared/device memory occur
+            // in the rest block
             Stmt rest = mutate(op->rest);
+
+            // Now, record which stores occur in the first stmt
+            // of this block
+            shared_stores.clear();
+            device_stores.clear();
+            Stmt first = mutate(op->first);
+
+            // If there are any loads in the rest part that
+            // load from something stored in first, insert the appropriate
+            // fence type
             int mask = 0;
-            if (shared_mem_fence_required) {
-                mask |= CodeGen_GPU_Dev::MemoryFenceType::Shared;
+            for (auto &st : shared_stores) {
+                auto elem = shared_loads.find(st);
+                if (elem != shared_loads.end()) {
+                    mask |= CodeGen_GPU_Dev::MemoryFenceType::Shared;
+                    break;
+                }
             }
-            if (device_mem_fence_required) {
-                mask |= CodeGen_GPU_Dev::MemoryFenceType::Device;
+            for (auto &st : device_stores) {
+                auto elem = device_loads.find(st);
+                if (elem != device_loads.end()) {
+                    mask |= CodeGen_GPU_Dev::MemoryFenceType::Device;
+                    break;
+                }
             }
             return Block::make(Block::make(first, make_barrier(mask)), rest);
         } else {
@@ -1172,10 +1193,9 @@ class InjectThreadBarriers : public IRMutator {
 public:
     InjectThreadBarriers(ExtractSharedAndHeapAllocations &sha, ExtractRegisterAllocations &ra)
         : in_threads(false),
-          shared_mem_fence_required(false),
-          device_mem_fence_required(false),
           block_allocs(sha),
-          register_allocs(ra) { }
+          register_allocs(ra) {
+    }
 };
 
 class FuseGPUThreadLoopsSingleKernel : public IRMutator {

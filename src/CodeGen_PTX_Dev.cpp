@@ -161,7 +161,11 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         // (which has both a device and shared memory fence)
         // check to make sure the intrinsic has the right number of
         // arguments
-        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type\n";
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
+
+        auto fence_type_ptr = as_const_int(op->args[0]);
+        internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
+
         llvm::Function *barrier0 = module->getFunction("llvm.nvvm.barrier0");
         internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
         builder->CreateCall(barrier0);
