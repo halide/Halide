@@ -77,6 +77,13 @@ class LiftLoopInvariants : public IRMutator {
                 return false;
             }
         }
+        if (const Add *add = e.as<Add>()) {
+            if (add->type == Int(32) &&
+                is_const(add->b)) {
+                // Don't lift constant integer offsets. They're often free.
+                return false;
+            }
+        }
         return true;
     }
 
