@@ -6,7 +6,6 @@ tests(GROUPS error
       atomics_gpu_8_bit.cpp
       atomics_gpu_mutex.cpp
       atomics_self_reference.cpp
-      atomics_vectorized_mutex.cpp
       auto_schedule_no_parallel.cpp
       auto_schedule_no_reorder.cpp
       autodiff_unbounded.cpp

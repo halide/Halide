@@ -1394,6 +1394,16 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
     value = nullptr;
     e.accept(this);
     internal_assert(value) << "Codegen of an expr did not produce an llvm value\n";
+
+    // Halide's type system doesn't distinguish between scalars and
+    // vectors of size 1, so if a codegen method returned a vector of
+    // size one, just extract it out as a scalar.
+    if (e.type().is_scalar() &&
+        value->getType()->isVectorTy()) {
+        internal_assert(get_vector_num_elements(value->getType()) == 1);
+        value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
+    }
+
     // TODO: skip this correctness check for bool vectors,
     // as eliminate_bool_vectors() will cause a discrepancy for some backends
     // (eg OpenCL, HVX); for now we're just ignoring the assert, but
@@ -1534,10 +1544,36 @@ void CodeGen_LLVM::visit(const Variable *op) {
     value = sym_get(op->name);
 }
 
+template<typename Op>
+bool CodeGen_LLVM::try_to_fold_vector_reduce(const Op *op) {
+    const VectorReduce *red = op->a.template as<VectorReduce>();
+    Expr b = op->b;
+    if (!red) {
+        red = op->b.template as<VectorReduce>();
+        b = op->a;
+    }
+    if (red &&
+        ((std::is_same<Op, Add>::value && red->op == VectorReduce::Add) ||
+         (std::is_same<Op, Min>::value && red->op == VectorReduce::Min) ||
+         (std::is_same<Op, Max>::value && red->op == VectorReduce::Max) ||
+         (std::is_same<Op, Mul>::value && red->op == VectorReduce::Mul) ||
+         (std::is_same<Op, And>::value && red->op == VectorReduce::And) ||
+         (std::is_same<Op, Or>::value && red->op == VectorReduce::Or))) {
+        codegen_vector_reduce(red, b);
+        return true;
+    }
+    return false;
+}
+
 void CodeGen_LLVM::visit(const Add *op) {
     Type t = upgrade_type_for_arithmetic(op->type);
     if (t != op->type) {
         codegen(cast(op->type, Add::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
+    // Some backends can fold the add into a vector reduce
+    if (try_to_fold_vector_reduce(op)) {
         return;
     }
 
@@ -1578,6 +1614,10 @@ void CodeGen_LLVM::visit(const Mul *op) {
     Type t = upgrade_type_for_arithmetic(op->type);
     if (t != op->type) {
         codegen(cast(op->type, Mul::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
+    if (try_to_fold_vector_reduce(op)) {
         return;
     }
 
@@ -1637,6 +1677,10 @@ void CodeGen_LLVM::visit(const Min *op) {
         return;
     }
 
+    if (try_to_fold_vector_reduce(op)) {
+        return;
+    }
+
     string a_name = unique_name('a');
     string b_name = unique_name('b');
     Expr a = Variable::make(op->a.type(), a_name);
@@ -1650,6 +1694,10 @@ void CodeGen_LLVM::visit(const Max *op) {
     Type t = upgrade_type_for_arithmetic(op->type);
     if (t != op->type) {
         codegen(cast(op->type, Max::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
+    if (try_to_fold_vector_reduce(op)) {
         return;
     }
 
@@ -1768,12 +1816,20 @@ void CodeGen_LLVM::visit(const GE *op) {
 }
 
 void CodeGen_LLVM::visit(const And *op) {
+    if (try_to_fold_vector_reduce(op)) {
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     value = builder->CreateAnd(a, b);
 }
 
 void CodeGen_LLVM::visit(const Or *op) {
+    if (try_to_fold_vector_reduce(op)) {
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     value = builder->CreateOr(a, b);
@@ -2352,7 +2408,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     // For dense vector loads wider than the native vector
     // width, bust them up into native vectors
     int load_lanes = load->type.lanes();
-    int native_lanes = native_bits / load->type.bits();
+    int native_lanes = std::max(1, native_bits / load->type.bits());
     vector<Value *> slices;
     for (int i = 0; i < load_lanes; i += native_lanes) {
         int slice_lanes = std::min(native_lanes, load_lanes - i);
@@ -4223,10 +4279,250 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
         }
     }
 
-    if (op->type.is_scalar()) {
+    if (op->type.is_scalar() && value->getType()->isVectorTy()) {
         value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
     }
 }
+
+void CodeGen_LLVM::visit(const VectorReduce *op) {
+    codegen_vector_reduce(op, Expr());
+}
+
+void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
+    Expr val = op->value;
+    const int output_lanes = op->type.lanes();
+    const int native_lanes = native_vector_bits() / op->type.bits();
+    const int factor = val.type().lanes() / output_lanes;
+
+    Expr (*binop)(Expr, Expr) = nullptr;
+    switch (op->op) {
+    case VectorReduce::Add:
+        binop = Add::make;
+        break;
+    case VectorReduce::Mul:
+        binop = Mul::make;
+        break;
+    case VectorReduce::Min:
+        binop = Min::make;
+        break;
+    case VectorReduce::Max:
+        binop = Max::make;
+        break;
+    case VectorReduce::And:
+        binop = And::make;
+        break;
+    case VectorReduce::Or:
+        binop = Or::make;
+        break;
+    }
+
+    if (op->type.is_bool() && op->op == VectorReduce::Or) {
+        // Cast to u8, use max, cast back to bool.
+        Expr equiv = cast(op->value.type().with_bits(8), op->value);
+        equiv = VectorReduce::make(VectorReduce::Max, equiv, op->type.lanes());
+        if (init.defined()) {
+            equiv = max(equiv, init);
+        }
+        equiv = cast(op->type, equiv);
+        equiv.accept(this);
+        return;
+    }
+
+    if (op->type.is_bool() && op->op == VectorReduce::And) {
+        // Cast to u8, use min, cast back to bool.
+        Expr equiv = cast(op->value.type().with_bits(8), op->value);
+        equiv = VectorReduce::make(VectorReduce::Min, equiv, op->type.lanes());
+        equiv = cast(op->type, equiv);
+        if (init.defined()) {
+            equiv = min(equiv, init);
+        }
+        equiv.accept(this);
+        return;
+    }
+
+    if (op->type.element_of() == Float(16)) {
+        Expr equiv = cast(op->value.type().with_bits(32), op->value);
+        equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
+        if (init.defined()) {
+            equiv = binop(equiv, init);
+        }
+        equiv = cast(op->type, equiv);
+        equiv.accept(this);
+        return;
+    }
+
+#if LLVM_VERSION >= 90
+    if (output_lanes == 1) {
+        const int input_lanes = val.type().lanes();
+        const int input_bytes = input_lanes * val.type().bytes();
+        const bool llvm_has_intrinsic =
+            // Must be one of these ops
+            ((op->op == VectorReduce::Add ||
+              op->op == VectorReduce::Mul ||
+              op->op == VectorReduce::Min ||
+              op->op == VectorReduce::Max) &&
+             // Must be a power of two lanes
+             (input_lanes >= 2) &&
+             ((input_lanes & (input_lanes - 1)) == 0) &&
+             // int versions exist up to 1024 bits
+             ((!op->type.is_float() && input_bytes <= 1024) ||
+              // float versions exist up to 16 lanes
+              input_lanes <= 16) &&
+             // As of the release of llvm 10, the 64-bit experimental total
+             // reductions don't seem to be done yet on arm.
+             (val.type().bits() != 64 ||
+              target.arch != Target::ARM));
+
+        if (llvm_has_intrinsic) {
+            std::stringstream name;
+            name << "llvm.experimental.vector.reduce.";
+            const int bits = op->type.bits();
+            bool takes_initial_value = false;
+            Expr initial_value = init;
+            if (op->type.is_float()) {
+                switch (op->op) {
+                case VectorReduce::Add:
+                    name << "v2.fadd.f" << bits;
+                    takes_initial_value = true;
+                    if (!initial_value.defined()) {
+                        initial_value = make_zero(op->type);
+                    }
+                    break;
+                case VectorReduce::Mul:
+                    name << "v2.fmul.f" << bits;
+                    takes_initial_value = true;
+                    if (!initial_value.defined()) {
+                        initial_value = make_one(op->type);
+                    }
+                    break;
+                case VectorReduce::Min:
+                    name << "fmin";
+                    break;
+                case VectorReduce::Max:
+                    name << "fmax";
+                    break;
+                default:
+                    break;
+                }
+            } else if (op->type.is_int() || op->type.is_uint()) {
+                switch (op->op) {
+                case VectorReduce::Add:
+                    name << "add";
+                    break;
+                case VectorReduce::Mul:
+                    name << "mul";
+                    break;
+                case VectorReduce::Min:
+                    name << (op->type.is_int() ? 's' : 'u') << "min";
+                    break;
+                case VectorReduce::Max:
+                    name << (op->type.is_int() ? 's' : 'u') << "max";
+                    break;
+                default:
+                    break;
+                }
+            }
+            name << ".v" << val.type().lanes() << (op->type.is_float() ? 'f' : 'i') << bits;
+
+            string intrin_name = name.str();
+
+            vector<Expr> args;
+            if (takes_initial_value) {
+                args.push_back(initial_value);
+                initial_value = Expr();
+            }
+            args.push_back(op->value);
+
+            // Make sure the declaration exists, or the codegen for
+            // call will assume that the args should scalarize.
+            if (!module->getFunction(intrin_name)) {
+                vector<llvm::Type *> arg_types;
+                for (const Expr &e : args) {
+                    arg_types.push_back(llvm_type_of(e.type()));
+                }
+                FunctionType *func_t = FunctionType::get(llvm_type_of(op->type), arg_types, false);
+                llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
+            }
+
+            Expr equiv = Call::make(op->type, intrin_name, args, Call::PureExtern);
+            if (initial_value.defined()) {
+                equiv = binop(initial_value, equiv);
+            }
+            equiv.accept(this);
+            return;
+        }
+    }
+#endif
+
+    if (output_lanes == 1 &&
+        factor > native_lanes &&
+        factor % native_lanes == 0) {
+        // It's a total reduction of multiple native
+        // vectors. Start by adding the vectors together.
+        Expr equiv;
+        for (int i = 0; i < factor / native_lanes; i++) {
+            Expr next = Shuffle::make_slice(val, i * native_lanes, 1, native_lanes);
+            if (equiv.defined()) {
+                equiv = binop(equiv, next);
+            } else {
+                equiv = next;
+            }
+        }
+        equiv = VectorReduce::make(op->op, equiv, 1);
+        if (init.defined()) {
+            equiv = binop(equiv, init);
+        }
+        equiv = common_subexpression_elimination(equiv);
+        equiv.accept(this);
+        return;
+    }
+
+    if (factor > 2 && ((factor & 1) == 0)) {
+        // Factor the reduce into multiple stages. If we're going to
+        // be widening the type by 4x or more we should also factor the
+        // widening into multiple stages.
+        Type intermediate_type = op->value.type().with_lanes(op->value.type().lanes() / 2);
+        Expr equiv = VectorReduce::make(op->op, op->value, intermediate_type.lanes());
+        if (op->op == VectorReduce::Add &&
+            (op->type.is_int() || op->type.is_uint()) &&
+            op->type.bits() >= 32) {
+            Type narrower_type = op->value.type().with_bits(op->type.bits() / 4);
+            Expr narrower = lossless_cast(narrower_type, op->value);
+            if (!narrower.defined() && narrower_type.is_int()) {
+                // Maybe we can narrow to an unsigned int instead.
+                narrower_type = narrower_type.with_code(Type::UInt);
+                narrower = lossless_cast(narrower_type, op->value);
+            }
+            if (narrower.defined()) {
+                // Widen it by 2x before the horizontal add
+                narrower = cast(narrower.type().with_bits(narrower.type().bits() * 2), narrower);
+                equiv = VectorReduce::make(op->op, narrower, intermediate_type.lanes());
+                // Then widen it by 2x again afterwards
+                equiv = cast(intermediate_type, equiv);
+            }
+        }
+        equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
+        if (init.defined()) {
+            equiv = binop(equiv, init);
+        }
+        equiv = common_subexpression_elimination(equiv);
+        codegen(equiv);
+        return;
+    }
+
+    // Extract each slice and combine
+    Expr equiv = init;
+    for (int i = 0; i < factor; i++) {
+        Expr next = Shuffle::make_slice(val, i, factor, val.type().lanes() / factor);
+        if (equiv.defined()) {
+            equiv = binop(equiv, next);
+        } else {
+            equiv = next;
+        }
+    }
+    equiv = common_subexpression_elimination(equiv);
+    codegen(equiv);
+}  // namespace Internal
 
 void CodeGen_LLVM::visit(const Atomic *op) {
     if (op->mutex_name != "") {
@@ -4286,16 +4582,19 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
         arg_values[i] = codegen(args[i]);
     }
 
-    return call_intrin(llvm_type_of(result_type),
+    llvm::Type *t = llvm_type_of(result_type);
+
+    return call_intrin(t,
                        intrin_lanes,
                        name, arg_values);
 }
 
 Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
                                  const string &name, vector<Value *> arg_values) {
-    internal_assert(result_type->isVectorTy()) << "call_intrin is for vector intrinsics only\n";
-
-    int arg_lanes = get_vector_num_elements(result_type);
+    int arg_lanes = 1;
+    if (result_type->isVectorTy()) {
+        arg_lanes = get_vector_num_elements(result_type);
+    }
 
     if (intrin_lanes != arg_lanes) {
         // Cut up each arg into appropriately-sized pieces, call the
@@ -4304,17 +4603,24 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
         for (int start = 0; start < arg_lanes; start += intrin_lanes) {
             vector<Value *> args;
             for (size_t i = 0; i < arg_values.size(); i++) {
+                int arg_i_lanes = 1;
                 if (arg_values[i]->getType()->isVectorTy()) {
-                    int arg_i_lanes = get_vector_num_elements(arg_values[i]->getType());
-                    internal_assert(arg_i_lanes >= arg_lanes);
+                    arg_i_lanes = get_vector_num_elements(arg_values[i]->getType());
+                }
+                if (arg_i_lanes >= arg_lanes) {
                     // Horizontally reducing intrinsics may have
                     // arguments that have more lanes than the
                     // result. Assume that the horizontally reduce
                     // neighboring elements...
                     int reduce = arg_i_lanes / arg_lanes;
                     args.push_back(slice_vector(arg_values[i], start * reduce, intrin_lanes * reduce));
-                } else {
+                } else if (arg_i_lanes == 1) {
+                    // It's a scalar arg to an intrinsic that returns
+                    // a vector. Replicate it over the slices.
                     args.push_back(arg_values[i]);
+                } else {
+                    internal_error << "Argument in call_intrin has " << arg_i_lanes
+                                   << " with result type having " << arg_lanes << "\n";
                 }
             }
 
@@ -4335,7 +4641,10 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
     llvm::Function *fn = module->getFunction(name);
 
     if (!fn) {
-        llvm::Type *intrinsic_result_type = VectorType::get(result_type->getScalarType(), intrin_lanes);
+        llvm::Type *intrinsic_result_type = result_type->getScalarType();
+        if (intrin_lanes > 1) {
+            intrinsic_result_type = VectorType::get(result_type->getScalarType(), intrin_lanes);
+        }
         FunctionType *func_t = FunctionType::get(intrinsic_result_type, arg_types, false);
         fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
         fn->setCallingConv(CallingConv::C);
@@ -4350,10 +4659,19 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
 }
 
 Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
+    // Force the arg to be an actual vector
+    if (!vec->getType()->isVectorTy()) {
+        vec = create_broadcast(vec, 1);
+    }
+
     int vec_lanes = get_vector_num_elements(vec->getType());
 
     if (start == 0 && size == vec_lanes) {
         return vec;
+    }
+
+    if (size == 1) {
+        return builder->CreateExtractElement(vec, (uint64_t)start);
     }
 
     vector<int> indices(size);
