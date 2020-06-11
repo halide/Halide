@@ -294,9 +294,6 @@ protected:
             for (auto &a : op->args) {
                 include_lerp_types(a.type());
             }
-        } else if (op->is_intrinsic(Call::absd)) {
-            // absd() can synthesize a new type
-            include_type(op->type.with_code(op->type.is_int() ? Type::UInt : op->type.code()));
         }
 
         IRGraphVisitor::visit(op);
@@ -2100,8 +2097,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         Expr a = op->args[0];
         Expr b = op->args[1];
-        Type t = op->type.with_code(op->type.is_int() ? Type::UInt : op->type.code());
-        Expr e = cast(t, select(a < b, b - a, a - b));
+        Expr e = cast(op->type, select(a < b, b - a, a - b));
         rhs << print_expr(e);
     } else if (op->is_intrinsic(Call::return_second)) {
         internal_assert(op->args.size() == 2);
