@@ -1072,16 +1072,11 @@ Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVa
 }
 
 Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused) {
-    if (inner.is_rvar) {
-        user_assert(outer.is_rvar) << "Can't fuse RVar " << inner.name()
-                                   << " with Var " << outer.name() << "\n";
-        user_assert(fused.is_rvar) << "Can't fuse RVar " << inner.name()
-                                   << "into Var " << fused.name() << "\n";
-    } else {
-        user_assert(!outer.is_rvar) << "Can't fuse Var " << inner.name()
-                                    << " with RVar " << outer.name() << "\n";
-        user_assert(!fused.is_rvar) << "Can't fuse Var " << inner.name()
-                                    << "into RVar " << fused.name() << "\n";
+    if (!fused.is_rvar) {
+        user_assert(!outer.is_rvar) << "Can't fuse Var " << fused.name()
+                                    << " from RVar " << outer.name() << "\n";
+        user_assert(!inner.is_rvar) << "Can't fuse Var " << inner.name()
+                                    << " from RVar " << inner.name() << "\n";
     }
 
     debug(4) << "In schedule for " << name() << ", fuse " << outer.name()
@@ -1116,13 +1111,14 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
             fused_name = inner_name + "." + fused.name();
             dims[i].var = fused_name;
 
-            internal_assert(
-                (dims[i].is_rvar() && ((outer_type == DimType::PureRVar) ||
-                                       (outer_type == DimType::ImpureRVar))) ||
-                (!dims[i].is_rvar() && (outer_type == DimType::PureVar)));
-
-            if (dims[i].is_rvar()) {
-                dims[i].dim_type = (dims[i].dim_type == DimType::PureRVar) && (outer_type == DimType::PureRVar) ? DimType::PureRVar : DimType::ImpureRVar;
+            if (dims[i].dim_type == DimType::ImpureRVar ||
+                outer_type == DimType::ImpureRVar) {
+                dims[i].dim_type = DimType::ImpureRVar;
+            } else if (dims[i].dim_type == DimType::PureRVar ||
+                       outer_type == DimType::PureRVar) {
+                dims[i].dim_type = DimType::PureRVar;
+            } else {
+                dims[i].dim_type = DimType::PureVar;
             }
         }
     }
