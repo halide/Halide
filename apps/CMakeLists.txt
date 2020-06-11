@@ -52,6 +52,8 @@ function(add_app_test NAME)
     endif ()
 
     set(cmakeDefinitionOpts
+        # TODO: enable verbose here temporarily, to try to track down flaky Windows failures
+        "-DCMAKE_VERBOSE_MAKEFILE=ON"
         "-DCMAKE_PREFIX_PATH=${HALIDE_DIR}"
         "-DCMAKE_BUILD_TYPE=$<CONFIG>"
         "-DLLVM_DIR=${LLVM_DIR}")
@@ -61,6 +63,7 @@ function(add_app_test NAME)
 
     add_test(NAME ${NAME}
              COMMAND ${CMAKE_CTEST_COMMAND}
+             --output-on-failure
              --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/${NAME}" "${CMAKE_CURRENT_BINARY_DIR}/app_test_${NAME}"
              --build-generator "${CMAKE_GENERATOR}"
              ${cmakeGenOpts}
