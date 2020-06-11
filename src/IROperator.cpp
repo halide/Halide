@@ -463,6 +463,31 @@ Expr lossless_cast(Type t, Expr e) {
                 return Expr();
             }
         }
+
+        if (const VectorReduce *red = e.as<VectorReduce>()) {
+            const int factor = red->value.type().lanes() / red->type.lanes();
+            switch (red->op) {
+            case VectorReduce::Add:
+                if (t.bits() >= 16 && factor < (1 << (t.bits() / 2))) {
+                    Type narrower = red->value.type().with_bits(t.bits() / 2);
+                    Expr val = lossless_cast(narrower, red->value);
+                    if (val.defined()) {
+                        return VectorReduce::make(red->op, val, red->type.lanes());
+                    }
+                }
+                break;
+            case VectorReduce::Max:
+            case VectorReduce::Min: {
+                Expr val = lossless_cast(t, red->value);
+                if (val.defined()) {
+                    return VectorReduce::make(red->op, val, red->type.lanes());
+                }
+                break;
+            }
+            default:
+                break;
+            }
+        }
     }
 
     return Expr();

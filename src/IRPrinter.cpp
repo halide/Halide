@@ -274,6 +274,30 @@ ostream &operator<<(ostream &out, const ForType &type) {
     return out;
 }
 
+ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
+    switch (op) {
+    case VectorReduce::Add:
+        out << "Add";
+        break;
+    case VectorReduce::Mul:
+        out << "Mul";
+        break;
+    case VectorReduce::Min:
+        out << "Min";
+        break;
+    case VectorReduce::Max:
+        out << "Max";
+        break;
+    case VectorReduce::And:
+        out << "And";
+        break;
+    case VectorReduce::Or:
+        out << "Or";
+        break;
+    }
+    return out;
+}
+
 ostream &operator<<(ostream &out, const NameMangling &m) {
     switch (m) {
     case NameMangling::Default:
@@ -971,6 +995,16 @@ void IRPrinter::visit(const Shuffle *op) {
         }
         stream << ")";
     }
+}
+
+void IRPrinter::visit(const VectorReduce *op) {
+    stream << "("
+           << op->type
+           << ")vector_reduce("
+           << op->op
+           << ", "
+           << op->value
+           << ")\n";
 }
 
 void IRPrinter::visit(const Atomic *op) {
