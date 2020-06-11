@@ -599,7 +599,9 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
         for (auto it = features.begin(); it != features.end(); it++) {
             auto &stage = *(it.key());
             const auto &feat = it.value();
-            aslog(0) << "Schedule features for " << stage.node->func.name() << "_s" << stage.index << "\n";
+            std::string name = stage.node->func.name();
+            sanitize_names(name);
+            aslog(0) << "Schedule features for " << name << "_s" << stage.index << "\n";
             feat.dump();
         }
     }
@@ -1012,8 +1014,12 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
 
     // Sanitize the names of things to make them legal source code.
     schedule_source = src.str();
+    sanitize_names(schedule_source);
+}
+
+void sanitize_names(std::string& str) {
     bool in_quotes = false;
-    for (auto &c : schedule_source) {
+    for (auto &c : str) {
         in_quotes ^= (c == '"');
         if (!in_quotes && c == '$') c = '_';
     }
