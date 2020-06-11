@@ -335,7 +335,7 @@ Module lower(const vector<Function> &output_funcs,
              << s << "\n\n";
 
     debug(1) << "Vectorizing...\n";
-    s = vectorize_loops(s, t);
+    s = vectorize_loops(s, env, t);
     s = simplify(s);
     debug(2) << "Lowering after vectorizing:\n"
              << s << "\n\n";
