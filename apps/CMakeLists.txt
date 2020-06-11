@@ -52,6 +52,8 @@ function(add_app_test NAME)
     endif ()
 
     set(cmakeDefinitionOpts
+        # TODO: enable verbose here temporarily, to try to track down flaky Windows failures
+        "-DCMAKE_VERBOSE_MAKEFILE=ON"
         "-DCMAKE_PREFIX_PATH=${HALIDE_DIR}"
         "-DCMAKE_BUILD_TYPE=$<CONFIG>"
         "-DLLVM_DIR=${LLVM_DIR}")
