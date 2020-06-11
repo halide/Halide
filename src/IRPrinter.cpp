@@ -515,7 +515,7 @@ void IRPrinter::visit(const Min *op) {
     print_no_parens(op->a);
     stream << ", ";
     print_no_parens(op->b);
-    close();
+    stream << ")";
 }
 
 void IRPrinter::visit(const Max *op) {
@@ -523,7 +523,7 @@ void IRPrinter::visit(const Max *op) {
     print_no_parens(op->a);
     stream << ", ";
     print_no_parens(op->b);
-    close();
+    stream << ")";
 }
 
 void IRPrinter::visit(const EQ *op) {
