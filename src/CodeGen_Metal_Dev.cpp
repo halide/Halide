@@ -220,13 +220,20 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 
-        stream << get_indent() << "threadgroup_barrier("
-               << "mem_flags::mem_none";
-        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
-            stream << " | mem_flags::mem_device";
-        }
-        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
-            stream << " | mem_flags::mem_threadgroup";
+        // This is quite annoying: even though the MSL docs claim these flags can be combined,
+        // Metal compilers prior to Metal 1.2 give compiler errors.  So, we do not combine them,
+        // and rather use a preprocessor definition to do the right thing.
+
+        stream << get_indent() << "threadgroup_barrier(";
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device &&
+            fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
+            stream << "_halide_mem_fence_device_and_threadgroup";
+        } else if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
+            stream << "mem_flags::mem_device";
+        } else if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
+            stream << "mem_flags::mem_threadgroup";
+        } else {
+            stream << "mem_flags::mem_none";
         }
         stream << ");\n";
         print_assignment(op->type, "0");
@@ -678,6 +685,14 @@ void CodeGen_Metal_Dev::init_module() {
                << "#define tanh_f32 tanh\n"
                << "#define atanh_f32 atanh\n"
                << "#define fast_inverse_sqrt_f32 rsqrt\n"
+               // This is quite annoying: even though the MSL docs claim
+               // all versions of Metal support the same memory fence
+               // names, the truth is that 1.0 does not.
+               << "#if __METAL_VERSION__ >= 120\n"
+               << "#define _halide_mem_fence_device_and_threadgroup (mem_flags::mem_device | mem_flags::mem_threadgroup)\n"
+               << "#else\n"
+               << "#define _halide_mem_fence_device_and_threadgroup mem_flags::mem_device_and_threadgroup\n"
+               << "#endif\n"
                << "}\n";  // close namespace
 
     metal_c.add_common_macros(src_stream);
