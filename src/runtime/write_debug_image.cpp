@@ -107,16 +107,16 @@ WEAK bool ends_with(const char *filename, const char *suffix) {
 
 struct ScopedFile {
     void *f;
-    ScopedFile(const char *filename, const char *mode) {
+    __attribute__((always_inline)) ScopedFile(const char *filename, const char *mode) {
         f = fopen(filename, mode);
     }
-    ~ScopedFile() {
+    __attribute__((always_inline)) ~ScopedFile() {
         fclose(f);
     }
-    bool write(const void *ptr, size_t bytes) {
+    __attribute__((always_inline)) bool write(const void *ptr, size_t bytes) {
         return fwrite(ptr, bytes, 1, f);
     }
-    bool open() const {
+    __attribute__((always_inline)) bool open() const {
         return f;
     }
 };

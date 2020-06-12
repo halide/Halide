@@ -283,8 +283,12 @@ struct word_lock_queue_data {
 
     word_lock_queue_data *tail;
 
-    word_lock_queue_data()
+    __attribute__((always_inline)) word_lock_queue_data()
         : next(NULL), prev(NULL), tail(NULL) {
+    }
+
+    // Inlined, empty dtor needed to avoid confusing MachO builds
+    __attribute__((always_inline)) ~word_lock_queue_data() {
     }
 };
 
@@ -295,7 +299,7 @@ class word_lock {
     void unlock_full();
 
 public:
-    word_lock()
+    __attribute__((always_inline)) word_lock()
         : state(0) {
     }
     __attribute__((always_inline)) void lock() {
@@ -464,8 +468,11 @@ struct queue_data {
 
     uintptr_t unpark_info;
 
-    queue_data()
+    __attribute__((always_inline)) queue_data()
         : sleep_address(0), next(NULL), unpark_info(0) {
+    }
+    // Inlined, empty dtor needed to avoid confusing MachO builds
+    __attribute__((always_inline)) ~queue_data() {
     }
 };
 
@@ -490,7 +497,7 @@ struct hash_table {
 WEAK char table_storage[sizeof(hash_table)];
 #define table (*(hash_table *)table_storage)
 
-inline void check_hash(uintptr_t hash) {
+__attribute__((always_inline)) void check_hash(uintptr_t hash) {
     halide_assert(NULL, hash < sizeof(table.buckets) / sizeof(table.buckets[0]));
 }
 
@@ -508,7 +515,7 @@ WEAK void dump_hash() {
 }
 #endif
 
-static inline uintptr_t addr_hash(uintptr_t addr, uint32_t bits) {
+static __attribute__((always_inline)) uintptr_t addr_hash(uintptr_t addr, uint32_t bits) {
     // Fibonacci hashing. The golden ratio is 1.9E3779B97F4A7C15F39...
     // in hexadecimal.
     if (sizeof(uintptr_t) >= 8) {
@@ -535,7 +542,7 @@ struct bucket_pair {
     hash_bucket &from;
     hash_bucket &to;
 
-    bucket_pair(hash_bucket &from, hash_bucket &to)
+    __attribute__((always_inline)) bucket_pair(hash_bucket &from, hash_bucket &to)
         : from(from), to(to) {
     }
 };
@@ -947,7 +954,7 @@ public:
         }
     }
 
-    bool make_parked_if_locked() {
+    __attribute__((always_inline)) bool make_parked_if_locked() {
         uintptr_t val;
         atomic_load_relaxed(&state, &val);
         while (true) {
@@ -962,7 +969,7 @@ public:
         }
     }
 
-    void make_parked() {
+    __attribute__((always_inline)) void make_parked() {
         atomic_or_fetch_relaxed(&state, parked_bit);
     }
 };
@@ -971,7 +978,7 @@ struct signal_parking_control : parking_control {
     uintptr_t *cond_state;
     fast_mutex *mutex;
 
-    signal_parking_control(uintptr_t *cond_state, fast_mutex *mutex)
+    __attribute__((always_inline)) signal_parking_control(uintptr_t *cond_state, fast_mutex *mutex)
         : cond_state(cond_state), mutex(mutex) {
         unpark = signal_parking_control_unpark;
     }
@@ -998,7 +1005,7 @@ struct broadcast_parking_control : parking_control {
     uintptr_t *cond_state;
     fast_mutex *mutex;
 
-    broadcast_parking_control(uintptr_t *cond_state, fast_mutex *mutex)
+    __attribute__((always_inline)) broadcast_parking_control(uintptr_t *cond_state, fast_mutex *mutex)
         : cond_state(cond_state), mutex(mutex) {
         validate = broadcast_parking_control_validate;
         requeue_callback = broadcast_parking_control_requeue_callback;
@@ -1039,7 +1046,7 @@ struct wait_parking_control : parking_control {
     uintptr_t *cond_state;
     fast_mutex *mutex;
 
-    wait_parking_control(uintptr_t *cond_state, fast_mutex *mutex)
+    __attribute__((always_inline)) wait_parking_control(uintptr_t *cond_state, fast_mutex *mutex)
         : cond_state(cond_state), mutex(mutex) {
         validate = wait_parking_control_validate;
         before_sleep = wait_parking_control_before_sleep;

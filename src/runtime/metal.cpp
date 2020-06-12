@@ -226,7 +226,7 @@ WEAK void *nsarray_first_object(objc_id arr) {
 // intended for non-GUI apps.  Newer versions of macOS (10.15+)
 // will not return a valid device if MTLCreateSystemDefaultDevice()
 // is used from a non-GUI app.
-inline mtl_device *get_default_mtl_device() {
+WEAK mtl_device *get_default_mtl_device() {
     mtl_device *device = (mtl_device *)MTLCreateSystemDefaultDevice();
     if (device == NULL) {
         // We assume Metal.framework is already loaded
@@ -567,7 +567,7 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
 
 namespace {
 
-inline void halide_metal_device_sync_internal(mtl_command_queue *queue, struct halide_buffer_t *buffer) {
+WEAK void halide_metal_device_sync_internal(mtl_command_queue *queue, struct halide_buffer_t *buffer) {
     const char *buffer_label = "halide_metal_device_sync_internal";
     mtl_command_buffer *sync_command_buffer = new_command_buffer(queue, buffer_label, strlen(buffer_label));
     if (buffer != NULL) {
