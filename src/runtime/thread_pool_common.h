@@ -43,7 +43,7 @@ struct work {
     // which condition variable is the owner sleeping on. NULL if it isn't sleeping.
     bool owner_is_sleeping;
 
-    bool make_runnable() {
+    __attribute__((always_inline)) bool make_runnable() {
         for (; next_semaphore < task.num_semaphores; next_semaphore++) {
             if (!halide_default_semaphore_try_acquire(task.semaphores[next_semaphore].semaphore,
                                                       task.semaphores[next_semaphore].count)) {
@@ -59,7 +59,7 @@ struct work {
         return true;
     }
 
-    bool running() {
+    __attribute__((always_inline)) bool running() const {
         return task.extent || active_workers;
     }
 };
@@ -138,12 +138,12 @@ struct work_queue_t {
     // to prevent deadlock due to oversubscription of threads.
     int threads_reserved;
 
-    bool running() const {
+    __attribute__((always_inline)) bool running() const {
         return !shutdown;
     }
 
     // Used to check initial state is correct.
-    void assert_zeroed() const {
+    __attribute__((always_inline)) void assert_zeroed() const {
         // Assert that all fields except the mutex and desired hreads count are zeroed.
         const char *bytes = ((const char *)&this->zero_marker);
         const char *limit = ((const char *)this) + sizeof(work_queue_t);
@@ -155,7 +155,7 @@ struct work_queue_t {
 
     // Return the work queue to initial state. Must be called while locked
     // and queue will remain locked.
-    void reset() {
+    __attribute__((always_inline)) void reset() {
         // Ensure all fields except the mutex and desired hreads count are zeroed.
         char *bytes = ((char *)&this->zero_marker);
         char *limit = ((char *)this) + sizeof(work_queue_t);
