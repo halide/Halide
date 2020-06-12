@@ -322,8 +322,10 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
     AssociativeOp assoc_op(exprs.size());
 
     for (Expr &arg : args) {
-        arg = common_subexpression_elimination(arg);
-        arg = simplify(arg);
+        // Undo the existing CSE pass done at function definition time
+        // to ensure things like += are in the expected form. Make no
+        // further transformations so that the LHS and RHS don't
+        // diverge.
         arg = substitute_in_all_lets(arg);
     }
 
@@ -340,10 +342,7 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
     // For a Tuple of exprs to be associative, each element of the Tuple
     // has to be associative.
     for (int idx = exprs.size() - 1; idx >= 0; --idx) {
-        exprs[idx] = simplify(exprs[idx]);
-        exprs[idx] = common_subexpression_elimination(exprs[idx]);
-        // Calling Simplify or the original expr itself might have let exprs,
-        // so we should substitutes in all lets first
+        // Undo the existing CSE pass done at function definition time.
         exprs[idx] = substitute_in_all_lets(exprs[idx]);
 
         // Replace any self-reference to Func 'f' with a Var

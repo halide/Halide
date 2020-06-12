@@ -61,6 +61,9 @@ public:
 
 protected:
     using CodeGen_C::visit;
+
+    void visit(const Cast *) override;
+
     void visit(const FloatImm *) override;
     void visit(const UIntImm *) override;
     void visit(const IntImm *) override;
@@ -99,9 +102,8 @@ public:
     static void test();
 
 protected:
-    using CodeGen_C::visit;
+    using CodeGen_GLSLBase::visit;
 
-    void visit(const Cast *) override;
     void visit(const Let *) override;
     void visit(const For *) override;
     void visit(const Select *) override;
