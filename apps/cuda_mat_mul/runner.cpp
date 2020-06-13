@@ -1,3 +1,8 @@
+// We always want asserts
+#ifndef NDEBUG
+#undef NDEBUG
+#endif
+
 #include "HalideBuffer.h"
 #include "HalideRuntimeCuda.h"
 #include "halide_benchmark.h"
@@ -12,6 +17,7 @@ int main(int argc, char **argv) {
     // Our Generator is compiled using cuda_capability_50; if the system running this
     // test doesn't have at least that, quietly skip the test.
     const auto *interface = halide_cuda_device_interface();
+    assert(interface);
     assert(interface->compute_capability != nullptr);
     int major, minor;
     int err = interface->compute_capability(nullptr, &major, &minor);
