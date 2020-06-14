@@ -140,6 +140,9 @@ struct BenchmarkResult {
     // Will be <= config.accuracy unless max_time is exceeded.
     double accuracy;
 
+    // Total elapsed wall-clock time (seconds).
+    double total_time;
+
     operator double() const {
         return wall_time;
     }
@@ -147,6 +150,7 @@ struct BenchmarkResult {
 
 inline BenchmarkResult benchmark(const std::function<void()> &op, const BenchmarkConfig &config = {}) {
     BenchmarkResult result{0, 0, 0};
+    auto start = benchmark_now();
 
     const double min_time = std::max(10 * 1e-6, config.min_time);
     const double max_time = std::max(config.min_time, config.max_time);
@@ -197,6 +201,8 @@ inline BenchmarkResult benchmark(const std::function<void()> &op, const Benchmar
     result.wall_time = times[0];
     result.accuracy = (times[kMinSamples - 1] / times[0]) - 1.0;
 
+    auto end = benchmark_now();
+    result.total_time = benchmark_duration_seconds(start, end);
     return result;
 }
 
