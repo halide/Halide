@@ -44,15 +44,15 @@ class IntResult(Result):
     return "{:>14d} {:>14d} {:>7.2f}".format(int(self.actual), int(self.predicted), self.ratio)
 
 class Features(Enum):
+  GLOBAL_LOAD_REQUESTS = "global load requests"
+  GLOBAL_LOAD_TRANSACTIONS_PER_REQUESTS = "global load transactions per requests"
   GLOBAL_LOAD_TRANSACTIONS = "global load transactions"
   GLOBAL_STORE_TRANSACTIONS = "global store transactions"
   GLOBAL_LOAD_EFFICIENCY = "global load efficiency"
   GLOBAL_STORE_EFFICIENCY = "global store efficiency"
 
 class Data(Enum):
-  GLOBAL_LOAD_REQUESTS = "global load requests"
   GLOBAL_STORE_REQUESTS = "global store requests"
-  GLOBAL_LOAD_TRANSACTIONS_PER_REQUESTS = "global load transactions per requests"
   GLOBAL_STORE_TRANSACTIONS_PER_REQUESTS = "global store transactions per requests"
   REGISTERS_64 = "registers_64"
   REGISTERS_256 = "registers_256"
@@ -67,14 +67,14 @@ class Sample:
 
     self.comparisons = {}
     self.comparisons[Features.GLOBAL_LOAD_TRANSACTIONS] = self.global_load_transactions
+    self.comparisons[Features.GLOBAL_LOAD_REQUESTS] = self.global_load_requests
+    self.comparisons[Features.GLOBAL_LOAD_TRANSACTIONS_PER_REQUESTS] = self.global_load_transactions_per_request
     self.comparisons[Features.GLOBAL_STORE_TRANSACTIONS] = self.global_store_transactions
     self.comparisons[Features.GLOBAL_LOAD_EFFICIENCY] = self.global_load_efficiency
     self.comparisons[Features.GLOBAL_STORE_EFFICIENCY] = self.global_store_efficiency
 
     self.extract_data = {}
-    self.extract_data[Data.GLOBAL_LOAD_REQUESTS] = self.global_load_requests
     self.extract_data[Data.GLOBAL_STORE_REQUESTS] = self.global_store_requests
-    self.extract_data[Data.GLOBAL_LOAD_TRANSACTIONS_PER_REQUESTS] = self.global_load_transactions_per_requests
     self.extract_data[Data.GLOBAL_STORE_TRANSACTIONS_PER_REQUESTS] = self.global_store_transactions_per_requests
 
     self.ignore_list = [
@@ -134,13 +134,28 @@ class Sample:
     return IntResult(actual, predicted)
 
   def global_load_requests(self, metrics, features):
-    return IntDataResult(metrics["gld_transactions"] / metrics["gld_transactions_per_request"])
+    if metrics["gld_transactions_per_request"] == 0:
+      return IntResult(0, 0)
+
+    actual = metrics["gld_transactions"] / metrics["gld_transactions_per_request"]
+    predicted = features["num_global_load_requests"]
+
+    return IntResult(actual, predicted)
+
+  def global_load_transactions_per_request(self, metrics, features):
+    actual = metrics["gld_transactions_per_request"]
+    try:
+      predicted = features["num_global_load_transactions_per_request"]
+    except:
+      return Result(0, 0)
+
+    return Result(actual, predicted)
 
   def global_store_requests(self, metrics, features):
-    return IntDataResult(metrics["gst_transactions"] / metrics["gst_transactions_per_request"])
+    if metrics["gst_transactions_per_request"] == 0:
+      return IntDataResult(0)
 
-  def global_load_transactions_per_requests(self, metrics, features):
-    return DataResult(metrics["gld_transactions_per_request"])
+    return IntDataResult(metrics["gst_transactions"] / metrics["gst_transactions_per_request"])
 
   def global_store_transactions_per_requests(self, metrics, features):
     return DataResult(metrics["gst_transactions_per_request"])
@@ -151,6 +166,7 @@ class Sample:
       self.data[stage] = {}
 
       if not stage in self.metrics:
+        print("Stage: {} not found.".format(stage))
         return False
 
       for label in self.comparisons:

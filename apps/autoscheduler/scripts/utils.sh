@@ -429,6 +429,7 @@ function format_features() {
         grep -A ${num_features} "features for ${stage}" "${compile_err_file}" | tail -n +2 | sed -e 's/://g' | awk -v s="${stage}" '{printf("%s %s %f\n", s, $1, $2);}' >> "${formatted_features_file}"
     done
 
+    python3 $(dirname $0)/extract_features.py --filename "${compile_err_file}"
     echo "Formatted features saved to ${formatted_features_file}"
 }
 
