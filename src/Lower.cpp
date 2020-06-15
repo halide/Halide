@@ -264,6 +264,12 @@ Module lower(const vector<Function> &output_funcs,
                  << s << "\n";
     }
 
+    debug(1) << "Bounding small realizations...\n";
+    s = simplify_correlated_differences(s);
+    s = bound_small_allocations(s);
+    debug(2) << "Lowering after bounding small realizations:\n"
+             << s << "\n\n";
+
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n"
