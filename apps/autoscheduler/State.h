@@ -236,9 +236,6 @@ public:
     }
 };
 
-void sanitize_names(std::string& str);
-
-
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide

@@ -1017,14 +1017,6 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
     sanitize_names(schedule_source);
 }
 
-void sanitize_names(std::string& str) {
-    bool in_quotes = false;
-    for (auto &c : str) {
-        in_quotes ^= (c == '"');
-        if (!in_quotes && c == '$') c = '_';
-    }
-}
-
 }  // namespace Autoscheduler
 
 template<>

@@ -552,6 +552,8 @@ struct LoopNest {
     int64_t product_of_descendants(int loop_index) const;
 };
 
+void sanitize_names(std::string& str);
+
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide

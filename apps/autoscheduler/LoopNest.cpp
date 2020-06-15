@@ -2573,7 +2573,11 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                             } else if (is_global_mem && get_compute_global_mem_load_features()) {
 
                                 if (verbose) {
-                                    aslog(0) << "BEGIN global_mem_load. consumer: " << node->func.name() <<  "; producer: " << e->producer->func.name() <<"\n";
+                                    std::string consumer_name = node->func.name();
+                                    sanitize_names(consumer_name);
+                                    std::string producer_name = e->producer->func.name();
+                                    sanitize_names(producer_name);
+                                    aslog(0) << "BEGIN global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                                     aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
                                 }
 
@@ -4271,6 +4275,14 @@ void LoopNest::collect_nodes_that_should_be_inlined(const NodeMap<bool>& nodes_t
 
     for (const auto& c : children) {
         c->collect_nodes_that_should_be_inlined(nodes_to_freeze, inlined_nodes);
+    }
+}
+
+void sanitize_names(std::string& str) {
+    bool in_quotes = false;
+    for (auto &c : str) {
+        in_quotes ^= (c == '"');
+        if (!in_quotes && c == '$') c = '_';
     }
 }
 
