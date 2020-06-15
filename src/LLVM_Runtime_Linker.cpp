@@ -457,7 +457,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
             triple.setEnvironment(llvm::Triple::MSVC);
             if (target.has_feature(Target::JIT)) {
                 //TODO(shoaibkamil): figure out a way to test this.
-                user_error() << "No JIT support for this OS/CPU combination yet.\n";
+                user_error << "No JIT support for this OS/CPU combination yet.\n";
             }
         } else if (target.os == Target::Fuchsia) {
             triple.setOS(llvm::Triple::Fuchsia);
