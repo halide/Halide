@@ -10,11 +10,12 @@ namespace Internal {
 
 using std::vector;
 
-class RemoveUndef : public IRMutator2 {
+class RemoveUndef : public IRMutator {
 public:
     Expr predicate;
+
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Scope<> dead_vars;
 
@@ -50,21 +51,51 @@ private:
         }
     }
 
-    Expr visit(const Add *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Sub *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Mul *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Div *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Mod *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Min *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Max *op) override {return mutate_binary_operator(op);}
-    Expr visit(const EQ *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const NE *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const LT *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const LE *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const GT *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const GE *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const And *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Or *op)  override {return mutate_binary_operator(op);}
+    Expr visit(const Add *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Sub *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Mul *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Div *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Mod *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Min *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Max *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const EQ *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const NE *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const LT *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const LE *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const GT *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const GE *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const And *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Or *op) override {
+        return mutate_binary_operator(op);
+    }
 
     Expr visit(const Not *op) override {
         Expr a = mutate(op->a);
@@ -106,8 +137,8 @@ private:
             }
             return t;
         } else if (cond.same_as(op->condition) &&
-            t.same_as(op->true_value) &&
-            f.same_as(op->false_value)) {
+                   t.same_as(op->true_value) &&
+                   f.same_as(op->false_value)) {
             return op;
         } else {
             return Select::make(cond, t, f);
@@ -122,7 +153,7 @@ private:
         if (pred.same_as(op->predicate) && index.same_as(op->index)) {
             return op;
         } else {
-            return Load::make(op->type, op->name, index, op->image, op->param, pred);
+            return Load::make(op->type, op->name, index, op->image, op->param, pred, op->alignment);
         }
     }
 
@@ -174,46 +205,49 @@ private:
         }
     }
 
+    template<typename T, typename Body>
+    Body visit_let(const T *op) {
+        // Visit an entire chain of lets in a single method to conserve stack space.
+        struct Frame {
+            const T *op;
+            Expr new_value;
+            ScopedBinding<> binding;
+            Frame(const T *op, Expr v, Scope<> &scope)
+                : op(op), new_value(std::move(v)),
+                  binding(!new_value.defined(), scope, op->name) {
+            }
+        };
+        vector<Frame> frames;
+
+        Body result;
+        do {
+            frames.emplace_back(op, mutate(op->value), dead_vars);
+            result = op->body;
+        } while ((op = result.template as<T>()));
+
+        result = mutate(result);
+
+        if (result.defined()) {
+            for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+                if (!it->new_value.defined()) continue;
+                predicate = substitute(it->op->name, it->new_value, predicate);
+                if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
+                    result = it->op;
+                } else {
+                    result = T::make(it->op->name, std::move(it->new_value), result);
+                }
+            }
+        }
+
+        return result;
+    }
+
     Expr visit(const Let *op) override {
-        Expr value = mutate(op->value);
-        if (!value.defined()) {
-            dead_vars.push(op->name);
-        }
-        Expr body = mutate(op->body);
-        if (!value.defined()) {
-            dead_vars.pop(op->name);
-        }
-        if (!body.defined()) return Expr();
-        if (value.same_as(op->value) &&
-            body.same_as(op->body)) {
-            return op;
-        } else if (!value.defined()) {
-            return body;
-        } else {
-            Expr expr = Let::make(op->name, value, body);
-            predicate = substitute(op->name, value, predicate);
-            return expr;
-        }
+        return visit_let<Let, Expr>(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        Expr value = mutate(op->value);
-        if (!value.defined()) {
-            dead_vars.push(op->name);
-        }
-        Stmt body = mutate(op->body);
-        if (!value.defined()) {
-            dead_vars.pop(op->name);
-        }
-        if (!body.defined()) return Stmt();
-        if (value.same_as(op->value) &&
-            body.same_as(op->body)) {
-            return op;
-        } else if (!value.defined()) {
-            return body;
-        } else {
-            return LetStmt::make(op->name, value, body);
-        }
+        return visit_let<LetStmt, Stmt>(op);
     }
 
     Stmt visit(const AssertStmt *op) override {
@@ -280,7 +314,7 @@ private:
 
         if (predicate.defined()) {
             // This becomes a conditional store
-            Stmt stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred));
+            Stmt stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred, op->alignment));
             predicate = Expr();
             return stmt;
         } else if (pred.same_as(op->predicate) &&
@@ -288,7 +322,7 @@ private:
                    index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, pred);
+            return Store::make(op->name, value, index, op->param, pred, op->alignment);
         }
     }
 
@@ -315,9 +349,9 @@ private:
         }
 
         for (size_t i = 1; i < args_predicates.size(); i++) {
-            user_assert(equal(args_predicates[i-1], args_predicates[i]))
+            user_assert(equal(args_predicates[i - 1], args_predicates[i]))
                 << "Conditionally-undef args in a Tuple should have the same conditions\n"
-                << "  Condition " << i-1 << ": " << args_predicates[i-1] << "\n"
+                << "  Condition " << i - 1 << ": " << args_predicates[i - 1] << "\n"
                 << "  Condition " << i << ": " << args_predicates[i] << "\n";
         }
 
@@ -341,9 +375,9 @@ private:
         }
 
         for (size_t i = 1; i < values_predicates.size(); i++) {
-            user_assert(equal(values_predicates[i-1], values_predicates[i]))
+            user_assert(equal(values_predicates[i - 1], values_predicates[i]))
                 << "Conditionally-undef values in a Tuple should have the same conditions\n"
-                << "  Condition " << i-1 << ": " << values_predicates[i-1] << "\n"
+                << "  Condition " << i - 1 << ": " << values_predicates[i - 1] << "\n"
                 << "  Condition " << i << ": " << values_predicates[i] << "\n";
         }
 
@@ -400,9 +434,9 @@ private:
 
         // Mutate the bounds
         for (size_t i = 0; i < op->bounds.size(); i++) {
-            Expr old_min    = op->bounds[i].min;
+            Expr old_min = op->bounds[i].min;
             Expr old_extent = op->bounds[i].extent;
-            Expr new_min    = mutate(old_min);
+            Expr new_min = mutate(old_min);
             if (!new_min.defined()) {
                 return Stmt();
             }
@@ -410,8 +444,12 @@ private:
             if (!new_extent.defined()) {
                 return Stmt();
             }
-            if (!new_min.same_as(old_min))       bounds_changed = true;
-            if (!new_extent.same_as(old_extent)) bounds_changed = true;
+            if (!new_min.same_as(old_min)) {
+                bounds_changed = true;
+            }
+            if (!new_extent.same_as(old_extent)) {
+                bounds_changed = true;
+            }
             new_bounds[i] = Range(new_min, new_extent);
         }
 
@@ -431,18 +469,32 @@ private:
     }
 
     Stmt visit(const Block *op) override {
-        Stmt first = mutate(op->first);
-        Stmt rest = mutate(op->rest);
-        if (!first.defined()) {
-            return rest;
-        } else if (!rest.defined()) {
-            return first;
-        } else if (first.same_as(op->first) &&
-                   rest.same_as(op->rest)) {
-            return op;
-        } else {
-            return Block::make(first, rest);
+        // Visit a sequence of blocks in a single method to conserve stack space.
+        Stmt result;
+        vector<std::pair<const Block *, Stmt>> frames;
+
+        do {
+            Stmt next = mutate(op->first);
+            if (next.defined()) {
+                frames.emplace_back(op, std::move(next));
+            }
+            result = op->rest;
+        } while ((op = result.as<Block>()));
+
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            op = it->first;
+            Stmt new_first = std::move(it->second);
+            if (!result.defined()) {
+                result = new_first;
+            } else if (new_first.same_as(op->first) && result.same_as(op->rest)) {
+                result = op;
+            } else {
+                result = Block::make(new_first, result);
+            }
         }
+        return result;
     }
 
     Stmt visit(const IfThenElse *op) override {

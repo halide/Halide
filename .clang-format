@@ -1,28 +1,29 @@
 ---
-# BasedOnStyle: LLVM
 AccessModifierOffset: -4
-AlignEscapedNewlinesLeft: true
-AlignTrailingComments: false
+AlignEscapedNewlines: Left
+AlignTrailingComments: true
 AllowAllParametersOfDeclarationOnNextLine: true
-AllowShortFunctionsOnASingleLine: false
-AllowShortIfStatementsOnASingleLine: true
+# Requires Clang-Format 10+
+# AllowShortBlocksOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Always
 AllowShortLoopsOnASingleLine: false
 AlwaysBreakBeforeMultilineStrings: false
-AlwaysBreakTemplateDeclarations: true
+AlwaysBreakTemplateDeclarations: Yes
 BinPackParameters: true
-BreakBeforeBinaryOperators: false
+BreakBeforeBinaryOperators: None
 BreakBeforeBraces: Attach
-BreakBeforeTernaryOperators: true
+BreakBeforeTernaryOperators: false
 BreakConstructorInitializersBeforeComma: false
 ColumnLimit: 0
 ConstructorInitializerAllOnOneLineOrOnePerLine: false
 ConstructorInitializerIndentWidth: 4
 ContinuationIndentWidth: 4
-Cpp11BracedListStyle: false
-DerivePointerBinding: false
+Cpp11BracedListStyle: true
+DerivePointerAlignment: false
 ExperimentalAutoDetectBinPacking: false
 IndentCaseLabels: false
-IndentFunctionDeclarationAfterType: false
+IndentWrappedFunctionNames: false
 IndentWidth: 4
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
@@ -33,9 +34,9 @@ PenaltyBreakFirstLessLess: 120
 PenaltyBreakString: 1000
 PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
-PointerBindsToType: false
-SpaceAfterCStyleCast: true
-SpaceAfterControlStatementKeyword: true
+PointerAlignment: Right
+SpaceBeforeParens: ControlStatements
+SpaceAfterCStyleCast: false
 SpaceAfterTemplateKeyword: false
 SpaceBeforeAssignmentOperators: true
 SpaceInEmptyParentheses: false
@@ -46,5 +47,5 @@ SpacesInParentheses: false
 Standard: Cpp11
 TabWidth: 8
 UseTab: Never
-...
 
+...

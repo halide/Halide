@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-template <typename T>
+template<typename T>
 int check_result(Buffer<T> output, int n_types, int offset) {
     for (int x = 0; x < output.width(); x++) {
         T correct = n_types * (static_cast<uint16_t>(x) / 16) + offset;
@@ -19,13 +19,13 @@ int check_result(Buffer<T> output, int n_types, int offset) {
 int main(int argc, char **argv) {
     Target t(get_jit_target_from_environment());
     if (!t.has_gpu_feature()) {
-        printf("Not running test because no gpu target enabled\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 
-    Type types[] = { Int(8),  Int(16),  Int(32),  Int(64),
+    Type types[] = {Int(8), Int(16), Int(32), Int(64),
                     UInt(8), UInt(16), UInt(32), UInt(64),
-                    Float(32) };
+                    Float(32)};
 
     const int n_types = sizeof(types) / sizeof(types[0]);
 
@@ -35,12 +35,9 @@ int main(int argc, char **argv) {
 
     Func out("out");
 
-    Type result_type;
-    if (t.has_feature(Target::Metal) ||
-        t.has_feature(Target::D3D12Compute)) {
+    Type result_type = UInt(64);
+    if (!t.supports_type(result_type)) {
         result_type = UInt(32);
-    } else {
-        result_type = UInt(64);
     }
     Expr e = cast(result_type, 0);
     int offset = 0;
@@ -51,6 +48,7 @@ int main(int argc, char **argv) {
             // Metal does not support 64-bit integers.
             // neither does D3D12 under SM 5.1.
             if ((t.supports_device_api(DeviceAPI::Metal) ||
+                 t.supports_device_api(DeviceAPI::OpenGLCompute) ||
                  t.supports_device_api(DeviceAPI::D3D12Compute)) &&
                 types[i].bits() >= 64) {
                 ++skipped_types;
@@ -63,20 +61,25 @@ int main(int argc, char **argv) {
         }
         offset += off;
 
-        funcs[i](x) = cast(types[i], x/16 + off);
+        funcs[i](x) = cast(types[i], x / 16 + off);
         e += cast(result_type, funcs[i](x));
         funcs[i].compute_at(out, x).gpu_threads(x);
-    }
 
+        // Alternate between shared and global
+        if (i & 1) {
+            funcs[i].store_in(MemoryType::GPUShared);
+        } else {
+            funcs[i].store_in(MemoryType::Heap);
+        }
+    }
 
     out(x) = e;
     out.gpu_tile(x, xi, 23);
 
-    Buffer<> output = out.realize(23*5);
+    Buffer<> output = out.realize(23 * 5);
 
     int result;
-    if (t.has_feature(Target::Metal) ||
-        t.has_feature(Target::D3D12Compute)) {
+    if (result_type == UInt(32)) {
         result = check_result<uint32_t>(output, n_types - skipped_types, offset);
     } else {
         result = check_result<uint64_t>(output, n_types, offset);

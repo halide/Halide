@@ -10,9 +10,9 @@ int main(int argc, char **argv) {
     Var x, y, z;
     RDom r(0, 10);
 
-    f(x, y) = x*y;
+    f(x, y) = x * y;
     g(x, y) = 0;
-    g(x, r) = f(r, x)+1;
+    g(x, r) = f(r, x) + 1;
 
     f.compute_at(g, r);
     g.realize(10, 10);

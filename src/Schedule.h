@@ -5,11 +5,16 @@
  * Defines the internal representation of the schedule for a function
  */
 
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "DeviceAPI.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
 #include "Parameter.h"
-
-#include <map>
+#include "PrefetchDirective.h"
 
 namespace Halide {
 
@@ -84,26 +89,6 @@ enum class LoopAlignStrategy {
     Auto
 };
 
-/** Different ways to handle accesses outside the original extents in a prefetch. */
-enum class PrefetchBoundStrategy {
-    /** Clamp the prefetched exprs by intersecting the prefetched region with
-     * the original extents. This may make the exprs of the prefetched region
-     * more complicated. */
-    Clamp,
-
-    /** Guard the prefetch with if-guards that ignores the prefetch if
-     * any of the prefetched region ever goes beyond the original extents
-     * (i.e. all or nothing). */
-    GuardWithIf,
-
-    /** Leave the prefetched exprs as are (no if-guards around the prefetch
-     * and no intersecting with the original extents). This makes the prefetch
-     * exprs simpler but this may cause prefetching of region outside the original
-     * extents. This is good if prefetch won't fault when accessing region
-     * outside the original extents. */
-    NonFaulting
-};
-
 /** A reference to a site in a Halide statement at the top of the
  * body of a particular for loop. Evaluating a region of a halide
  * function is done by generating a loop nest that spans its
@@ -158,7 +143,9 @@ enum class PrefetchBoundStrategy {
 class LoopLevel {
     Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
-    explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c) : contents(c) {}
+    explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c)
+        : contents(std::move(c)) {
+    }
     LoopLevel(const std::string &func_name, const std::string &var_name,
               bool is_rvar, int stage_index, bool locked = false);
 
@@ -169,8 +156,8 @@ public:
 
     /** Identify the loop nest corresponding to some dimension of some function */
     // @{
-    LoopLevel(const Internal::Function &f, VarOrRVar v, int stage_index = -1);
-    LoopLevel(const Func &f, VarOrRVar v, int stage_index = -1);
+    LoopLevel(const Internal::Function &f, const VarOrRVar &v, int stage_index = -1);
+    LoopLevel(const Func &f, const VarOrRVar &v, int stage_index = -1);
     // @}
 
     /** Construct an undefined LoopLevel. Calling any method on an undefined
@@ -227,7 +214,9 @@ public:
     // Check if two loop levels are exactly the same.
     bool operator==(const LoopLevel &other) const;
 
-    bool operator!=(const LoopLevel &other) const { return !(*this == other); }
+    bool operator!=(const LoopLevel &other) const {
+        return !(*this == other);
+    }
 
 private:
     void check_defined() const;
@@ -243,25 +232,31 @@ struct FuseLoopLevel {
      */
     std::map<std::string, LoopAlignStrategy> align;
 
-    FuseLoopLevel() : level(LoopLevel::inlined().lock()) {}
+    FuseLoopLevel()
+        : level(LoopLevel::inlined().lock()) {
+    }
     FuseLoopLevel(const LoopLevel &level, const std::map<std::string, LoopAlignStrategy> &align)
-        : level(level), align(align) {}
+        : level(level), align(align) {
+    }
 };
 
 namespace Internal {
 
-class IRMutator2;
+class IRMutator;
 struct ReductionVariable;
 
 struct Split {
     std::string old_var, outer, inner;
     Expr factor;
-    bool exact; // Is it required that the factor divides the extent
-                // of the old var. True for splits of RVars. Forces
-                // tail strategy to be GuardWithIf.
+    bool exact;  // Is it required that the factor divides the extent
+        // of the old var. True for splits of RVars. Forces
+        // tail strategy to be GuardWithIf.
     TailStrategy tail;
 
-    enum SplitType {SplitVar = 0, RenameVar, FuseVars, PurifyRVar};
+    enum SplitType { SplitVar = 0,
+                     RenameVar,
+                     FuseVars,
+                     PurifyRVar };
 
     // If split_type is Rename, then this is just a renaming of the
     // old_var to the outer and not a split. The inner var should
@@ -277,10 +272,24 @@ struct Split {
     // split, it joins the outer and inner into the old_var.
     SplitType split_type;
 
-    bool is_rename() const {return split_type == RenameVar;}
-    bool is_split() const {return split_type == SplitVar;}
-    bool is_fuse() const {return split_type == FuseVars;}
-    bool is_purify() const {return split_type == PurifyRVar;}
+    bool is_rename() const {
+        return split_type == RenameVar;
+    }
+    bool is_split() const {
+        return split_type == SplitVar;
+    }
+    bool is_fuse() const {
+        return split_type == FuseVars;
+    }
+    bool is_purify() const {
+        return split_type == PurifyRVar;
+    }
+};
+
+enum class DimType {
+    PureVar = 0,
+    PureRVar,
+    ImpureRVar,
 };
 
 struct Dim {
@@ -288,15 +297,19 @@ struct Dim {
     ForType for_type;
     DeviceAPI device_api;
 
-    enum Type {PureVar = 0, PureRVar, ImpureRVar};
-    Type dim_type;
+    DimType dim_type;
 
-    bool is_pure() const {return (dim_type == PureVar) || (dim_type == PureRVar);}
-    bool is_rvar() const {return (dim_type == PureRVar) || (dim_type == ImpureRVar);}
+    bool is_pure() const {
+        return (dim_type == DimType::PureVar) || (dim_type == DimType::PureRVar);
+    }
+    bool is_rvar() const {
+        return (dim_type == DimType::PureRVar) || (dim_type == DimType::ImpureRVar);
+    }
+    bool is_unordered_parallel() const {
+        return Halide::Internal::is_unordered_parallel(for_type);
+    }
     bool is_parallel() const {
-        return (for_type == ForType::Parallel ||
-                for_type == ForType::GPUBlock ||
-                for_type == ForType::GPUThread);
+        return Halide::Internal::is_parallel(for_type);
     }
 };
 
@@ -324,10 +337,11 @@ struct FusedPair {
     size_t stage_2;
     std::string var_name;
 
-    FusedPair() {}
+    FusedPair() = default;
     FusedPair(const std::string &f1, size_t s1, const std::string &f2,
               size_t s2, const std::string &var)
-        : func_1(f1), func_2(f2), stage_1(s1), stage_2(s2), var_name(var) {}
+        : func_1(f1), func_2(f2), stage_1(s1), stage_2(s2), var_name(var) {
+    }
 
     bool operator==(const FusedPair &other) const {
         return (func_1 == other.func_1) && (func_2 == other.func_2) &&
@@ -351,15 +365,6 @@ struct FusedPair {
     }
 };
 
-struct PrefetchDirective {
-    std::string name;
-    std::string var;
-    Expr offset;
-    PrefetchBoundStrategy strategy;
-    // If it's a prefetch load from an image parameter, this points to that.
-    Parameter param;
-};
-
 struct FuncScheduleContents;
 struct StageScheduleContents;
 struct FunctionContents;
@@ -372,9 +377,12 @@ class FuncSchedule {
     IntrusivePtr<FuncScheduleContents> contents;
 
 public:
-
-    FuncSchedule(IntrusivePtr<FuncScheduleContents> c) : contents(c) {}
-    FuncSchedule(const FuncSchedule &other) : contents(other.contents) {}
+    FuncSchedule(IntrusivePtr<FuncScheduleContents> c)
+        : contents(std::move(c)) {
+    }
+    FuncSchedule(const FuncSchedule &other)
+        : contents(other.contents) {
+    }
     FuncSchedule();
 
     /** Return a deep copy of this FuncSchedule. It recursively deep copies all
@@ -455,11 +463,10 @@ public:
      * Schedule. */
     void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator2 through to all Exprs referenced in the
+    /** Pass an IRMutator through to all Exprs referenced in the
      * Schedule. */
-    void mutate(IRMutator2 *);
+    void mutate(IRMutator *);
 };
-
 
 /** A schedule for a single stage of a Halide pipeline. Right now this
  * interface is basically a struct, offering mutable access to its
@@ -468,9 +475,12 @@ class StageSchedule {
     IntrusivePtr<StageScheduleContents> contents;
 
 public:
-
-    StageSchedule(IntrusivePtr<StageScheduleContents> c) : contents(c) {}
-    StageSchedule(const StageSchedule &other) : contents(other.contents) {}
+    StageSchedule(IntrusivePtr<StageScheduleContents> c)
+        : contents(std::move(c)) {
+    }
+    StageSchedule(const StageSchedule &other)
+        : contents(other.contents) {
+    }
     StageSchedule();
 
     /** Return a copy of this StageSchedule. */
@@ -542,13 +552,28 @@ public:
     bool &allow_race_conditions();
     // @}
 
+    /** Use atomic update? */
+    // @{
+    bool atomic() const;
+    bool &atomic();
+    // @}
+
+    /** Atomic updates are only allowed on associative reductions.
+     *  We try to prove the associativity, but the user can override
+     *  the associativity test and suppress compiler error if the prover
+     *  fails to recognize the associativity or the user does not care. */
+    // @{
+    bool override_atomic_associativity_test() const;
+    bool &override_atomic_associativity_test();
+    // @}
+
     /** Pass an IRVisitor through to all Exprs referenced in the
      * Schedule. */
     void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator2 through to all Exprs referenced in the
+    /** Pass an IRMutator through to all Exprs referenced in the
      * Schedule. */
-    void mutate(IRMutator2 *);
+    void mutate(IRMutator *);
 };
 
 }  // namespace Internal

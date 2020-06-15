@@ -13,16 +13,16 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
-using std::pair;
 using std::string;
 using std::vector;
 
 using namespace llvm;
 
-CodeGen_Posix::CodeGen_Posix(Target t) : CodeGen_LLVM(t) {}
+CodeGen_Posix::CodeGen_Posix(Target t)
+    : CodeGen_LLVM(t) {
+}
 
-Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, Expr condition) {
+Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, const Expr &condition) {
     // Compute size from list of extents checking for overflow.
 
     Expr overflow = make_zero(UInt(64));
@@ -82,8 +82,8 @@ int CodeGen_Posix::allocation_padding(Type type) const {
 }
 
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, MemoryType memory_type,
-                                                           const std::vector<Expr> &extents, Expr condition,
-                                                           Expr new_expr, std::string free_function) {
+                                                           const std::vector<Expr> &extents, const Expr &condition,
+                                                           const Expr &new_expr, std::string free_function) {
     Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
     int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);
@@ -230,7 +230,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         slot = builder->CreatePointerCast(slot, arg_iter->getType());
         ++arg_iter;  // skip the pointer to the stack slot
         llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
-        Value *args[3] = { get_user_context(), slot, llvm_size };
+        Value *args[3] = {get_user_context(), slot, llvm_size};
         Value *call = builder->CreateCall(malloc_fn, args);
 
         // Fix the type to avoid pointless bitcasts later
@@ -255,7 +255,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
                 debug(4) << " x " << e;
             }
             debug(4) << "\n";
-            Value *args[2] = { get_user_context(), llvm_size };
+            Value *args[2] = {get_user_context(), llvm_size};
 
             Value *call = builder->CreateCall(malloc_fn, args);
 

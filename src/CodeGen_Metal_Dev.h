@@ -38,14 +38,17 @@ public:
 
     std::string print_gpu_name(const std::string &name) override;
 
-    std::string api_unique_name() override { return "metal"; }
+    std::string api_unique_name() override {
+        return "metal";
+    }
 
 protected:
-
     class CodeGen_Metal_C : public CodeGen_C {
     public:
-        CodeGen_Metal_C(std::ostream &s, Target t) : CodeGen_C(s, t) {}
-        void add_kernel(Stmt stmt,
+        CodeGen_Metal_C(std::ostream &s, Target t)
+            : CodeGen_C(s, t) {
+        }
+        void add_kernel(const Stmt &stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
 
@@ -61,10 +64,12 @@ protected:
         // hence the method name.
         std::string print_storage_type(Type type);
         std::string print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space);
-        std::string print_reinterpret(Type type, Expr e) override;
+        std::string print_reinterpret(Type type, const Expr &e) override;
         std::string print_extern_call(const Call *op) override;
 
         std::string get_memory_space(const std::string &);
+
+        std::string shared_name;
 
         void visit(const Min *) override;
         void visit(const Max *) override;
@@ -80,6 +85,7 @@ protected:
         void visit(const Allocate *op) override;
         void visit(const Free *op) override;
         void visit(const Cast *op) override;
+        void visit(const Atomic *op) override;
     };
 
     std::ostringstream src_stream;

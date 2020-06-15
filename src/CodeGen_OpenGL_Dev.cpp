@@ -1,4 +1,5 @@
 #include "CodeGen_OpenGL_Dev.h"
+#include "CSE.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "IRMatch.h"
@@ -13,7 +14,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
@@ -28,60 +28,9 @@ bool is_opengl_es(const Target &target) {
             target.os == Target::IOS);
 }
 
-// Maps Halide types to appropriate GLSL types or emit error if no equivalent
-// type is available.
-Type map_type(const Type &type) {
-    Type result = type;
-    if (type.is_scalar()) {
-        if (type.is_float()) {
-            user_assert(type.bits() <= 32)
-                << "GLSL: Can't represent a float with " << type.bits() << " bits.\n";
-            result = Float(32);
-        } else if (type.bits() == 1) {
-            result = Bool();
-        } else if (type == Int(32)) {
-            // Keep unchanged
-        } else if (type == UInt(32)) {
-            // GLSL doesn't have unsigned types, simply use int.
-            result = Int(32);
-        } else if (type.bits() <= 16) {
-            // Embed all other ints in a GLSL float. Probably not actually
-            // valid for uint16 on systems with low float precision.
-            result = Float(32);
-        } else {
-            user_error << "GLSL: Can't represent type '"<< type << "'.\n";
-        }
-    } else {
-        user_assert(type.lanes() <= 4)
-            << "GLSL: vector types wider than 4 aren't supported\n";
-        user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
-            << "GLSL: Can't represent vector type '"<< type << "'.\n";
-        Type scalar_type = type.element_of();
-        result = map_type(scalar_type).with_lanes(type.lanes());
-    }
-    return result;
-}
-
 char get_lane_suffix(int i) {
     internal_assert(i >= 0 && i < 4);
     return "rgba"[i];
-}
-
-// Most GLSL builtins are only defined for float arguments, so we may have to
-// introduce type casts around the arguments and the entire function call.
-Expr call_builtin(const Type &result_type, const string &func,
-                  const vector<Expr> &args) {
-    Type float_type = Float(32, result_type.lanes());
-    vector<Expr> new_args(args.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        if (!args[i].type().is_float()) {
-            new_args[i] = Cast::make(float_type, args[i]);
-        } else {
-            new_args[i] = args[i];
-        }
-    }
-    Expr val = Call::make(float_type, func, new_args, Call::Extern);
-    return simplify(Cast::make(result_type, val));
 }
 
 }  // namespace
@@ -105,12 +54,14 @@ void CodeGen_OpenGL_Dev::add_kernel(Stmt s, const string &name,
 void CodeGen_OpenGL_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
+    glc->add_common_macros(src_stream);
     cur_kernel_name = "";
 }
 
 vector<char> CodeGen_OpenGL_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "GLSL source:\n" << str << '\n';
+    debug(1) << "GLSL source:\n"
+             << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
@@ -121,7 +72,7 @@ string CodeGen_OpenGL_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_OpenGL_Dev::dump() {
-    std::cerr << src_stream.str() << std::endl;
+    std::cerr << src_stream.str() << "\n";
 }
 
 string CodeGen_OpenGL_Dev::print_gpu_name(const string &name) {
@@ -131,7 +82,8 @@ string CodeGen_OpenGL_Dev::print_gpu_name(const string &name) {
 //
 // CodeGen_GLSLBase
 //
-CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target) : CodeGen_C(s, target) {
+CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target)
+    : CodeGen_C(s, target) {
     builtin["sin_f32"] = "sin";
     builtin["sqrt_f32"] = "sqrt";
     builtin["cos_f32"] = "cos";
@@ -140,12 +92,11 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target) : CodeGen_C(s
     builtin["abs_f32"] = "abs";
     builtin["floor_f32"] = "floor";
     builtin["ceil_f32"] = "ceil";
-    builtin["pow_f32"] = "pow";
     builtin["asin_f32"] = "asin";
     builtin["acos_f32"] = "acos";
     builtin["tan_f32"] = "tan";
     builtin["atan_f32"] = "atan";
-    builtin["atan2_f32"] = "atan"; // also called atan in GLSL
+    builtin["atan2_f32"] = "atan";  // also called atan in GLSL
     builtin["sinh_f32"] = "sinh";
     builtin["cosh_f32"] = "cosh";
     builtin["tanh_f32"] = "tanh";
@@ -159,6 +110,7 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target) : CodeGen_C(s
     builtin["abs"] = "abs";
     builtin["isnan"] = "isnan";
     builtin["round_f32"] = "roundEven";
+    builtin["fast_inverse_sqrt_f32"] = "inversesqrt";
 
     // functions that produce bvecs
     builtin["equal"] = "equal";
@@ -169,13 +121,42 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target) : CodeGen_C(s
     builtin["greaterThanEqual"] = "greaterThanEqual";
 }
 
+// Maps Halide types to appropriate GLSL types or emit error if no equivalent
+// type is available.
+Type CodeGen_GLSLBase::map_type(const Type &type) {
+    Type result = type;
+    if (type.is_scalar()) {
+        if (type.is_float()) {
+            user_assert(type.bits() <= 32)
+                << "GLSL: Can't represent a float with " << type.bits() << " bits.\n";
+            result = Float(32);
+        } else if (type.is_bool()) {
+            // unchanged
+        } else if (type.is_int() && type.bits() <= 32) {
+            result = Int(32);
+        } else if (type.is_uint() && type.bits() <= 32) {
+            result = UInt(32);
+        } else {
+            user_error << "GLSL: Can't represent type '" << type << "'.\n";
+        }
+    } else {
+        user_assert(type.lanes() <= 4)
+            << "GLSL: vector types wider than 4 aren't supported\n";
+        user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
+            << "GLSL: Can't represent vector type '" << type << "'.\n";
+        Type scalar_type = type.element_of();
+        result = map_type(scalar_type).with_lanes(type.lanes());
+    }
+    return result;
+}
+
 void CodeGen_GLSLBase::visit(const FloatImm *op) {
     ostringstream oss;
     // Print integral numbers with trailing ".0". For fractional numbers use a
     // precision of 9 digits, which should be enough to recover the binary
     // float unambiguously from the decimal representation (if iostreams
     // implements correct rounding).
-    const float truncated = (op->value < 0 ? std::ceil(op->value) : std::floor(op->value) );
+    const float truncated = (op->value < 0 ? std::ceil(op->value) : std::floor(op->value));
     if (truncated == op->value) {
         oss << std::fixed << std::setprecision(1) << op->value;
     } else {
@@ -185,40 +166,42 @@ void CodeGen_GLSLBase::visit(const FloatImm *op) {
 }
 
 void CodeGen_GLSLBase::visit(const IntImm *op) {
-    if (op->type == Int(32)) {
-        id = std::to_string(op->value);
-    } else {
-        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
-    }
-}
-
-void CodeGen_GLSLBase::visit(const UIntImm *op) {
     id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
 }
 
-void CodeGen_GLSLBase::visit(const Max *op) {
-    print_expr(call_builtin(op->type, "max", {op->a, op->b}));
-}
-
-void CodeGen_GLSLBase::visit(const Min *op) {
-    print_expr(call_builtin(op->type, "min", {op->a, op->b}));
-}
-
-void CodeGen_GLSLBase::visit(const Div *op) {
-    if (op->type.is_int()) {
-        // Halide's integer division is defined to round down. Since the
-        // rounding behavior of GLSL's integer division is undefined, emulate
-        // the correct behavior using floating point arithmetic.
-        Type float_type = Float(32, op->type.lanes());
-        Expr val = Div::make(Cast::make(float_type, op->a), Cast::make(float_type, op->b));
-        print_expr(call_builtin(op->type, "floor_f32", {val}));
+void CodeGen_GLSLBase::visit(const UIntImm *op) {
+    if (op->type == Bool()) {
+        if (op->value == 1) {
+            id = "true";
+        } else {
+            id = "false";
+        }
     } else {
-        visit_binop(op->type, op->a, op->b, "/");
+        id = std::to_string(op->value) + "u";
     }
 }
 
+void CodeGen_GLSLBase::visit(const Max *op) {
+    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::PureExtern));
+}
+
+void CodeGen_GLSLBase::visit(const Min *op) {
+    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::PureExtern));
+}
+
 void CodeGen_GLSLBase::visit(const Mod *op) {
-    print_expr(call_builtin(op->type, "mod", {op->a, op->b}));
+    if (op->type.is_int() || op->type.is_uint()) {
+        // Just exploit the Euclidean identity
+        // FIXME: Why doesn't lower_euclidean_mod work for glsl?
+        // https://github.com/halide/Halide/issues/4979
+        Expr zero = make_zero(op->type);
+        Expr equiv = select(op->a == zero, zero,
+                            op->a - (op->a / op->b) * op->b);
+        equiv = common_subexpression_elimination(equiv);
+        print_expr(equiv);
+    } else {
+        print_expr(Call::make(op->type, "mod", {op->a, op->b}, Call::Extern));
+    }
 }
 
 void CodeGen_GLSLBase::visit(const Call *op) {
@@ -243,7 +226,7 @@ void CodeGen_GLSLBase::visit(const Call *op) {
         }
 
         Type result_type = Float(32, op->type.lanes());
-        Expr e = call_builtin(result_type, "mix", {zero_val, one_val, weight});
+        Expr e = Call::make(result_type, "mix", {zero_val, one_val, weight}, Call::Extern);
 
         if (!op->type.is_float()) {
             // Mirror rounding implementation of Halide's integer lerp.
@@ -265,6 +248,51 @@ void CodeGen_GLSLBase::visit(const Call *op) {
         // 'halide_printf'.
         print_expr(op->args[1]);
         return;
+    } else if (op->name == "fast_inverse_f32") {
+        print_expr(make_one(op->type) / op->args[0]);
+        return;
+    } else if (op->name == "fast_inverse_sqrt_f32") {
+        print_expr(make_one(op->type) / sqrt(op->args[0]));
+        return;
+    } else if (op->name == "pow_f32") {
+        if (can_prove(op->args[0] > 0)) {
+            ostringstream rhs;
+            rhs << "pow(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
+            print_assignment(op->type, rhs.str());
+            return;
+        } else {
+            ostringstream base;
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            base << "pow(abs(" << a << "), " << b << ")";
+            string c = print_assignment(op->type, base.str());
+            Expr a_var = Variable::make(op->type, a);
+            Expr b_var = Variable::make(op->type, b);
+            Expr c_var = Variable::make(op->type, c);
+            // OpenGL isn't required to produce NaNs, so we return
+            // zero in the undefined case.
+            Expr equiv = select(a_var > 0 || b_var % 2 == 0, c_var,
+                                b_var % 2 == 1, -c_var,
+                                0.0f);
+            print_expr(equiv);
+            return;
+        }
+    } else if (op->is_intrinsic(Call::shift_right)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " >> " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::shift_left)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " << " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::bitwise_not)) {
+        print_assignment(op->type, "~" + print_expr(op->args[0]));
+    } else if (op->is_intrinsic(Call::bitwise_and)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " & " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::bitwise_or)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " | " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::bitwise_xor)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " ^ " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::div_round_to_zero)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " / " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " % " + print_expr(op->args[1]));
     } else {
         ostringstream rhs;
         if (builtin.count(op->name) == 0) {
@@ -291,6 +319,8 @@ string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option)
             oss << "bool";
         } else if (type.is_int()) {
             oss << "int";
+        } else if (type.is_uint()) {
+            oss << "uint";
         } else {
             internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
         }
@@ -301,6 +331,8 @@ string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option)
             oss << "b";
         } else if (type.is_int()) {
             oss << "i";
+        } else if (type.is_uint()) {
+            oss << "u";
         } else {
             internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
         }
@@ -398,7 +430,8 @@ string CodeGen_GLSLBase::print_name(const string &name) {
 // CodeGen_GLSL
 //
 
-CodeGen_GLSL::CodeGen_GLSL(std::ostream &s, const Target &t) : CodeGen_GLSLBase(s, t) {
+CodeGen_GLSL::CodeGen_GLSL(std::ostream &s, const Target &t)
+    : CodeGen_GLSLBase(s, t) {
     builtin["trunc_f32"] = "_trunc_f32";
 }
 
@@ -441,6 +474,9 @@ void CodeGen_GLSL::visit(const Let *op) {
 }
 
 void CodeGen_GLSL::visit(const For *loop) {
+    user_assert(loop->for_type != ForType::GPULane)
+        << "The GLSL backend does not support the gpu_lanes() scheduling directive.";
+
     if (ends_with(loop->name, ".__block_id_x") ||
         ends_with(loop->name, ".__block_id_y")) {
         internal_assert(loop->for_type == ForType::GPUBlock)
@@ -454,8 +490,7 @@ void CodeGen_GLSL::visit(const For *loop) {
         } else if (ends_with(loop->name, ".__block_id_y")) {
             idx = "int(_varyingf0[1])";
         }
-        do_indent();
-        stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << idx << ";\n";
+        stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name) << " = " << idx << ";\n";
         loop->body.accept(this);
     } else {
         user_assert(loop->for_type != ForType::Parallel) << "GLSL: parallel loops aren't allowed inside kernel.\n";
@@ -484,26 +519,21 @@ void CodeGen_GLSL::visit(const Select *op) {
     string id_value;
     if (op->condition.type().is_scalar()) {
         id_value = unique_name('_');
-        do_indent();
-        stream << print_type(op->type) << " " << id_value << ";\n";
+        stream << get_indent() << print_type(op->type) << " " << id_value << ";\n";
         string cond = print_expr(op->condition);
-        do_indent();
-        stream << "if (" << cond << ") ";
+        stream << get_indent() << "if (" << cond << ") ";
         open_scope();
         {
             string true_val = print_expr(op->true_value);
-            do_indent();
-            stream << id_value << " = " << true_val << ";\n";
+            stream << get_indent() << id_value << " = " << true_val << ";\n";
         }
         close_scope("");
 
-        do_indent();
-        stream << "else ";
+        stream << get_indent() << "else ";
         open_scope();
         {
             string false_val = print_expr(op->false_value);
-            do_indent();
-            stream << id_value << " = " << false_val<< ";\n";
+            stream << get_indent() << id_value << " = " << false_val << ";\n";
         }
         close_scope("");
     } else {
@@ -519,8 +549,7 @@ void CodeGen_GLSL::visit(const Select *op) {
             ids[i] = print_expr(result[i]);
         }
         id_value = unique_name('_');
-        do_indent();
-        stream << print_type(op->type) << " " << id_value << " = "
+        stream << get_indent() << print_type(op->type) << " " << id_value << " = "
                << print_type(op->type) << "(";
         for (int i = 0; i < lanes; i++) {
             stream << ids[i] << ((i < lanes - 1) ? ", " : ");\n");
@@ -530,7 +559,7 @@ void CodeGen_GLSL::visit(const Select *op) {
     id = id_value;
 }
 
-string CodeGen_GLSL::get_vector_suffix(Expr e) {
+string CodeGen_GLSL::get_vector_suffix(const Expr &e) {
     vector<Expr> matches;
     Expr w = Variable::make(Int(32), "*");
 
@@ -554,7 +583,7 @@ string CodeGen_GLSL::get_vector_suffix(Expr e) {
     }
 }
 
-vector<string> CodeGen_GLSL::print_lanes(Expr e) {
+vector<string> CodeGen_GLSL::print_lanes(const Expr &e) {
     int l = e.type().lanes();
     internal_assert(e.type().is_vector());
     vector<string> result(l);
@@ -606,30 +635,25 @@ void CodeGen_GLSL::visit(const Store *op) {
     if (scalar_vars.contains(op->name)) {
         internal_assert(is_zero(op->index));
         string val = print_expr(op->value);
-        do_indent();
-        stream << print_name(op->name) << " = " << val << ";\n";
+        stream << get_indent() << print_name(op->name) << " = " << val << ";\n";
     } else if (vector_vars.contains(op->name)) {
         string val = print_expr(op->value);
-        do_indent();
-        stream << print_name(op->name) << get_vector_suffix(op->index)
+        stream << get_indent() << print_name(op->name) << get_vector_suffix(op->index)
                << " = " << val << ";\n";
     } else if (op->value.type().is_scalar()) {
         string val = print_expr(op->value);
         string idx = print_expr(op->index);
-        do_indent();
-        stream << print_name(op->name) << "[" << idx << "] = " << val << ";\n";
+        stream << get_indent() << print_name(op->name) << "[" << idx << "] = " << val << ";\n";
     } else {
         vector<string> indices = print_lanes(op->index);
         vector<string> values = print_lanes(op->value);
         for (int i = 0; i < op->value.type().lanes(); i++) {
-            do_indent();
-            stream << print_name(op->name)
+            stream << get_indent() << print_name(op->name)
                    << "[" << indices[i] << "] = "
                    << values[i] << ";\n";
         }
     }
 }
-
 
 void CodeGen_GLSL::visit(const Evaluate *op) {
     print_expr(op->value);
@@ -717,7 +741,6 @@ void CodeGen_GLSL::visit(const Call *op) {
                 << print_expr(op->args[2]) << ", "
                 << print_expr(op->args[3]) << "))["
                 << print_expr(op->args[4]) << "]";
-
         }
 
         if (op->type.is_uint()) {
@@ -728,8 +751,7 @@ void CodeGen_GLSL::visit(const Call *op) {
         internal_assert(op->args.size() == 6);
         string sval = print_expr(op->args[5]);
         string suffix = get_vector_suffix(op->args[4]);
-        do_indent();
-        stream << "gl_FragColor" << suffix
+        stream << get_indent() << "gl_FragColor" << suffix
                << " = " << sval;
         if (op->args[5].type().is_uint()) {
             stream << " / " << print_expr(cast<float>(op->args[5].type().max()));
@@ -776,7 +798,7 @@ public:
     bool result = true;
     string buf;
 };
-}
+}  // namespace
 
 void CodeGen_GLSL::visit(const Allocate *op) {
     int32_t size = op->constant_allocation_size();
@@ -787,7 +809,7 @@ void CodeGen_GLSL::visit(const Allocate *op) {
     all_access_constant.buf = op->name;
     op->body.accept(&all_access_constant);
 
-    do_indent();
+    stream << get_indent();
     if (size == 1) {
         // We can use a variable
         stream << print_type(op->type) << " " << print_name(op->name) << ";\n";
@@ -834,7 +856,16 @@ void CodeGen_GLSL::visit(const Broadcast *op) {
     print_assignment(op->type, rhs.str());
 }
 
-void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
+void CodeGen_GLSL::visit(const Atomic *op) {
+    // Floating point atomics can be tricky as there are no floating point atomics
+    // operations, and GLSL does not allow converting a  floating point buffer to an
+    // integer buffer.
+    // Plus, OpenGL supports atomics starting from 4.3, but Halide doesn't distinguish
+    // between OpenGL versions yet.
+    user_assert(false) << "GLSL: atomics are not supported.\n";
+}
+
+void CodeGen_GLSL::add_kernel(const Stmt &stmt, const string &name,
                               const vector<DeviceArgument> &args) {
 
     // This function produces fragment shader source for the halide statement.
@@ -864,8 +895,7 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
         if (args[i].is_buffer) {
             Type t = args[i].type.element_of();
 
-            user_assert(args[i].read != args[i].write) <<
-                "GLSL: buffers may only be read OR written inside a kernel loop.\n";
+            user_assert(args[i].read != args[i].write) << "GLSL: buffers may only be read OR written inside a kernel loop.\n";
             string type_name;
             if (t == UInt(8)) {
                 type_name = "uint8_t";
@@ -880,20 +910,20 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
                    << type_name << " " << print_name(args[i].name) << "\n";
         } else if (ends_with(args[i].name, ".varying")) {
             header << "/// VARYING "
-            // GLSL requires that varying attributes are float. Integer
-            // expressions for vertex attributes are cast to float during
-            // host codegen
-            << "float " << print_name(args[i].name) << " varyingf" << args[i].packed_index/4 << "[" << args[i].packed_index%4 << "]\n";
+                   // GLSL requires that varying attributes are float. Integer
+                   // expressions for vertex attributes are cast to float during
+                   // host codegen
+                   << "float " << print_name(args[i].name) << " varyingf" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_varying_floats;
         } else if (args[i].type.is_float()) {
             header << "/// UNIFORM "
-            << CodeGen_C::print_type(args[i].type) << " "
-            << print_name(args[i].name) << " uniformf" << args[i].packed_index/4 << "[" << args[i].packed_index%4 << "]\n";
+                   << CodeGen_GLSLBase::print_type(args[i].type) << " "
+                   << print_name(args[i].name) << " uniformf" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_uniform_floats;
         } else if (args[i].type.is_int()) {
             header << "/// UNIFORM "
-            << CodeGen_C::print_type(args[i].type) << " "
-            << print_name(args[i].name) << " uniformi" << args[i].packed_index/4 << "[" << args[i].packed_index%4 << "]\n";
+                   << CodeGen_GLSLBase::print_type(args[i].type) << " "
+                   << print_name(args[i].name) << " uniformi" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_uniform_ints;
         }
     }
@@ -901,7 +931,7 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
     // Compute the number of vec4's needed to pack the arguments
     num_varying_floats = (num_varying_floats + 3) / 4;
     num_uniform_floats = (num_uniform_floats + 3) / 4;
-    num_uniform_ints   = (num_uniform_ints + 3) / 4;
+    num_uniform_ints = (num_uniform_ints + 3) / 4;
 
     stream << header.str();
 
@@ -933,11 +963,10 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
     }
 
     // Output additional builtin functions.
-    stream <<
-        "float _trunc_f32(float x) {\n"
-        "  return floor(abs(x)) * sign(x);\n"
-        "}\n";
-    
+    stream << "float _trunc_f32(float x) {\n"
+              "  return floor(abs(x)) * sign(x);\n"
+              "}\n";
+
     stream << "void main() {\n";
     indent += 2;
 
@@ -946,22 +975,19 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
         if (args[i].is_buffer) {
             continue;
         } else if (ends_with(args[i].name, ".varying")) {
-            do_indent();
-            stream << "float " << print_name(args[i].name)
-                   << " = _varyingf" << args[i].packed_index/4
-                   << "[" << args[i].packed_index%4 << "];\n";
+            stream << get_indent() << "float " << print_name(args[i].name)
+                   << " = _varyingf" << args[i].packed_index / 4
+                   << "[" << args[i].packed_index % 4 << "];\n";
         } else if (args[i].type.is_float()) {
-            do_indent();
-            stream << print_type(args[i].type) << " "
+            stream << get_indent() << print_type(args[i].type) << " "
                    << print_name(args[i].name)
-                   << " = _uniformf" << args[i].packed_index/4
-                   << "[" << args[i].packed_index%4 << "];\n";
+                   << " = _uniformf" << args[i].packed_index / 4
+                   << "[" << args[i].packed_index % 4 << "];\n";
         } else if (args[i].type.is_int()) {
-            do_indent();
-            stream << print_type(args[i].type) << " "
+            stream << get_indent() << print_type(args[i].type) << " "
                    << print_name(args[i].name)
-                   << " = _uniformi" << args[i].packed_index/4
-                   << "[" << args[i].packed_index%4 << "];\n";
+                   << " = _uniformi" << args[i].packed_index / 4
+                   << "[" << args[i].packed_index % 4 << "];\n";
         }
     }
 
@@ -975,7 +1001,7 @@ namespace {
 // make the individual tests below self-contained.
 string normalize_temporaries(const string &s) {
     string result;
-    for (size_t i = 0; i < s.size(); ) {
+    for (size_t i = 0; i < s.size();) {
         if (s[i] == '_') {
             result += '$';
             for (i++; i < s.size() && isdigit(s[i]); i++) {
@@ -1000,8 +1026,10 @@ void check(Expr e, const string &result) {
     if (!ends_with(src, result)) {
         internal_error
             << "Codegen failed for " << e << "\n"
-            << "  Correct source code:\n" << result
-            << "  Actual source code:\n" << src;
+            << "  Correct source code:\n"
+            << result
+            << "  Actual source code:\n"
+            << src;
     }
 }
 

@@ -4,7 +4,7 @@
 namespace Halide {
 namespace Internal {
 
-HostClosure::HostClosure(Stmt s, const std::string &loop_variable) {
+HostClosure::HostClosure(const Stmt &s, const std::string &loop_variable) {
     if (!loop_variable.empty()) {
         ignore.push(loop_variable);
     }
@@ -15,7 +15,7 @@ std::vector<DeviceArgument> HostClosure::arguments() {
     std::vector<DeviceArgument> res;
     for (const auto &v : vars) {
         debug(2) << "var: " << v.first << "\n";
-        res.push_back(DeviceArgument(v.first, false, v.second, 0));
+        res.emplace_back(v.first, false, v.second, 0);
     }
     for (const auto &b : buffers) {
         debug(2) << "buffer: " << b.first << " " << b.second.size;
@@ -53,11 +53,11 @@ void HostClosure::visit(const Call *op) {
         ref.type = op->type;
         // TODO: do we need to set ref.dimensions?
 
-        if (op->name == Call::glsl_texture_load ||
-            op->name == Call::image_load) {
+        if (op->is_intrinsic(Call::glsl_texture_load) ||
+            op->is_intrinsic(Call::image_load)) {
             ref.read = true;
-        } else if (op->name == Call::glsl_texture_store ||
-                   op->name == Call::image_store) {
+        } else if (op->is_intrinsic(Call::glsl_texture_store) ||
+                   op->is_intrinsic(Call::image_store)) {
             ref.write = true;
         }
 

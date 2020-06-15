@@ -26,6 +26,15 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
  * is enabled in the target, returns DeviceAPI::Host. */
 DeviceAPI get_default_device_api_for_target(const Target &t);
 
+/** This attempts to sniff whether a given Target (and its implied DeviceAPI) is usable on
+ * the current host. If it appears to be usable, return true; if not, return false.
+ * Note that a return value of true does *not* guarantee that future usage of
+ * that device will succeed; it is intended mainly as a simple diagnostic
+ * to allow early-exit when a desired device is definitely not usable.
+ * Also note that this call is *NOT* threadsafe, as it temporarily redirect various
+ * global error-handling hooks in Halide. */
+bool host_supports_target_device(const Target &t);
+
 namespace Internal {
 /** Get an Expr which evaluates to the device interface for the given device api at runtime. */
 Expr make_device_interface_call(DeviceAPI device_api);

@@ -7,7 +7,6 @@
 
 #include "Expr.h"
 #include "IntrusivePtr.h"
-#include "Reduction.h"
 #include "Schedule.h"
 
 #include <map>
@@ -17,12 +16,13 @@ namespace Halide {
 namespace Internal {
 struct DefinitionContents;
 struct FunctionContents;
+class ReductionDomain;
 }  // namespace Internal
 
 namespace Internal {
 
 class IRVisitor;
-class IRMutator2;
+class IRMutator;
 struct Specialization;
 
 /** A Function definition which can either represent a init or an update
@@ -68,9 +68,9 @@ public:
      * definition. */
     void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator2 through to all Exprs referenced in the
+    /** Pass an IRMutator through to all Exprs referenced in the
      * definition. */
-    void mutate(IRMutator2 *);
+    void mutate(IRMutator *);
 
     /** Get the default (no-specialization) arguments (left-hand-side) of the definition */
     // @{

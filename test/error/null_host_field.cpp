@@ -5,6 +5,11 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] WebAssembly JIT does not yet support non-host buffers.\n");
+        _halide_user_assert(0);
+    }
+
     Func f;
     Var x, y;
     ImageParam in(UInt(8), 2);
@@ -28,7 +33,6 @@ int main(int argc, char **argv) {
     param_buf.raw_buffer()->device = 0;
     param_buf.raw_buffer()->device_interface = 0;
 
-    printf("I should not have reached here\n");
-
+    printf("Success!\n");
     return 0;
 }

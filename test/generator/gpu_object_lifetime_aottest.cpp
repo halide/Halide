@@ -1,8 +1,8 @@
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
-#include "HalideRuntime.h"
-#include "HalideBuffer.h"
-#include <assert.h>
 
 #if defined(TEST_CUDA)
 #include "HalideRuntimeCuda.h"
@@ -14,7 +14,7 @@
 
 #include "gpu_object_lifetime.h"
 
-#include "test/common/gpu_object_lifetime_tracker.h"
+#include "gpu_object_lifetime_tracker.h"
 
 using namespace Halide::Runtime;
 
@@ -35,7 +35,8 @@ int main(int argc, char **argv) {
 #elif defined(TEST_METAL)
     printf("TEST_METAL enabled for gpu_object_lifetime testing...\n");
 #else
-    printf("No GPU features enabled for gpu_object_lifetime testing!\n");
+    printf("[SKIP] No GPU features enabled for gpu_object_lifetime testing!\n");
+    return 0;
 #endif
 
     halide_set_custom_print(&my_halide_print);
@@ -92,9 +93,9 @@ int main(int argc, char **argv) {
             gpu_object_lifetime(output);
 
             {
-              // Construct a new buffer from the halide_buffer_t and let it destruct.
-              // Verifies this does not deallocate or otherwise disable the device handle.
-              Buffer<int> temp(*output.raw_buffer());
+                // Construct a new buffer from the halide_buffer_t and let it destruct.
+                // Verifies this does not deallocate or otherwise disable the device handle.
+                Buffer<int> temp(*output.raw_buffer());
             }
             output.copy_to_host();
         }
@@ -119,14 +120,12 @@ int main(int argc, char **argv) {
                 native_handle = output.raw_buffer()->device;
                 can_rewrap = true;
             }
-#endif
-#if defined(TEST_OPENCL)
+#elif defined(TEST_OPENCL)
             if (output.raw_buffer()->device_interface == halide_opencl_device_interface()) {
                 native_handle = halide_opencl_get_cl_mem(nullptr, output.raw_buffer());
                 can_rewrap = true;
             }
-#endif
-#if defined(TEST_METAL)
+#elif defined(TEST_METAL)
             if (output.raw_buffer()->device_interface == halide_metal_device_interface()) {
                 native_handle = halide_metal_get_buffer(nullptr, output.raw_buffer());
                 can_rewrap = true;
@@ -141,7 +140,7 @@ int main(int argc, char **argv) {
                 output.copy_to_host();
 
                 for (int x = 0; x < output.width(); x++) {
-                  if (output(x) != wrap_test(x)) {
+                    if (output(x) != wrap_test(x)) {
                         printf("Error! (wrap native test %d): %d != %d\n", i, output(x), wrap_test(x));
                         return -1;
                     }
@@ -190,10 +189,10 @@ int main(int argc, char **argv) {
                 output2.copy_to_host();
 
                 for (int x = 0; x < output.width(); x++) {
-                     if (output(x) != output2(x)) {
-                          printf("Error! (device and host allocation test): %d != %d\n", output(x), output2(x));
-                          return -1;
-                     }
+                    if (output(x) != output2(x)) {
+                        printf("Error! (device and host allocation test): %d != %d\n", output(x), output2(x));
+                        return -1;
+                    }
                 }
             }
         }

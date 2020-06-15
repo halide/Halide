@@ -1,6 +1,8 @@
 #include "SplitTuples.h"
 #include "Bounds.h"
+#include "Function.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -40,19 +42,22 @@ class UsesExternImage : public IRVisitor {
             IRVisitor::visit(c);
         }
     }
+
 public:
-    UsesExternImage() : result(false) {}
+    UsesExternImage()
+        : result(false) {
+    }
     bool result;
 };
 
-inline bool uses_extern_image(Stmt s) {
+inline bool uses_extern_image(const Stmt &s) {
     UsesExternImage uses;
     s.accept(&uses);
     return uses.result;
 }
 
-class SplitTuples : public IRMutator2 {
-    using IRMutator2::visit;
+class SplitTuples : public IRMutator {
+    using IRMutator::visit;
 
     map<string, set<int>> func_value_indices;
 
@@ -66,7 +71,7 @@ class SplitTuples : public IRMutator2 {
             }
             return body;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -77,7 +82,7 @@ class SplitTuples : public IRMutator2 {
         op->body.accept(&find);
 
         func_value_indices = find.func_value_indices;
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         func_value_indices = old_func_value_indices;
         return stmt;
     }
@@ -97,7 +102,7 @@ class SplitTuples : public IRMutator2 {
             }
             return body;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -120,13 +125,13 @@ class SplitTuples : public IRMutator2 {
             // for scalar provides.
             return Call::make(op->type, name, args, op->call_type, f.get_contents());
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
     Stmt visit(const Provide *op) override {
         if (op->values.size() == 1) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         // Detect if the provide needs to be lowered atomically. By
@@ -170,7 +175,7 @@ class SplitTuples : public IRMutator2 {
             string var_name = name + ".value";
             Expr val = mutate(op->values[i]);
             if (!is_undef(val) && atomic) {
-                lets.push_back({ var_name, val });
+                lets.emplace_back(var_name, val);
                 val = Variable::make(val.type(), var_name);
             }
             provides.push_back(Provide::make(name, {val}, args));
@@ -191,13 +196,14 @@ class SplitTuples : public IRMutator2 {
     Scope<int> realizations;
 
 public:
-
-    SplitTuples(const map<string, Function> &e) : env(e) {}
+    SplitTuples(const map<string, Function> &e)
+        : env(e) {
+    }
 };
 
 }  // namespace
 
-Stmt split_tuples(Stmt s, const map<string, Function> &env) {
+Stmt split_tuples(const Stmt &s, const map<string, Function> &env) {
     return SplitTuples(env).mutate(s);
 }
 

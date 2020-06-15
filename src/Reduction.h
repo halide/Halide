@@ -10,7 +10,7 @@
 namespace Halide {
 namespace Internal {
 
-class IRMutator2;
+class IRMutator;
 
 /** A single named dimension of a reduction domain */
 struct ReductionVariable {
@@ -32,6 +32,7 @@ struct ReductionDomainContents;
  * vector of ReductionVariable. */
 class ReductionDomain {
     IntrusivePtr<ReductionDomainContents> contents;
+
 public:
     /** This lets you use a ReductionDomain as a key in a map of the form
      * map<ReductionDomain, Foo, ReductionDomain::Compare> */
@@ -43,7 +44,9 @@ public:
     };
 
     /** Construct a new nullptr reduction domain */
-    ReductionDomain() : contents(nullptr) {}
+    ReductionDomain()
+        : contents(nullptr) {
+    }
 
     /** Construct a reduction domain that spans the outer product of
      * all values of the given ReductionVariable in scanline order,
@@ -77,7 +80,7 @@ public:
     Expr predicate() const;
 
     /** Set the predicate, replacing any previously set predicate. */
-    void set_predicate(Expr);
+    void set_predicate(const Expr &);
 
     /** Split predicate into vector of ANDs. If there is no predicate (i.e. all
      * iteration domain in this reduction domain is valid), this returns an
@@ -96,9 +99,9 @@ public:
      * ReductionDomain. */
     void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator2 through to all Exprs referenced in the
+    /** Pass an IRMutator through to all Exprs referenced in the
      * ReductionDomain. */
-    void mutate(IRMutator2 *);
+    void mutate(IRMutator *);
 };
 
 void split_predicate_test();

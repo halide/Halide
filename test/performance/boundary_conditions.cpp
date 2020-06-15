@@ -3,13 +3,25 @@
 
 #include "halide_benchmark.h"
 
-const int W = 4000, H = 2400;
+const int W = 8000, H = 6000;
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;
 using namespace Halide::Tools;
 
 Target target;
+
+Buffer<float> make_replicated_buffer(int w, int h) {
+    // Make a buffer that is just the same memory for every scanline,
+    // to ensure it fits in L1/L2. We're just trying to measure
+    // codegen effects here, not cache effects of different boundary
+    // conditions.
+
+    Buffer<float> buf(w, 1);
+    buf.raw_buffer()->dim[1].extent = h;
+    buf.raw_buffer()->dim[1].stride = 0;
+    return buf;
+}
 
 struct Test {
     const char *name;
@@ -28,11 +40,12 @@ struct Test {
             g.vectorize(x, 4);
         }
 
-        Buffer<float> out = g.realize(W, H);
+        g.compile_jit();
 
+        Buffer<float> out = make_replicated_buffer(W, H);
         time = benchmark([&]() {
-                g.realize(out);
-                out.device_sync();
+            g.realize(out);
+            out.device_sync();
         });
 
         printf("%-20s: %f us\n", name, time * 1e6);
@@ -44,7 +57,7 @@ struct Test {
 
         Func g(name);
         Var x, y, xi, yi;
-        RDom r(-blur_radius, 2*blur_radius+1, -blur_radius, 2*blur_radius+1);
+        RDom r(-blur_radius, 2 * blur_radius + 1, -blur_radius, 2 * blur_radius + 1);
         g(x, y) = sum(f(x + r.x, y + r.y));
         if (target.has_gpu_feature()) {
             Var xo, yo, xi, yi;
@@ -53,11 +66,12 @@ struct Test {
             g.tile(x, y, xi, yi, 8, 8).vectorize(xi, 4);
         }
 
-        Buffer<float> out = g.realize(W, H);
+        g.compile_jit();
 
+        Buffer<float> out = make_replicated_buffer(W, H);
         time = benchmark([&]() {
-                g.realize(out);
-                out.device_sync();
+            g.realize(out);
+            out.device_sync();
         });
 
         printf("%-20s: %f us\n", name, time * 1e6);
@@ -73,10 +87,10 @@ int main(int argc, char **argv) {
     // We use image params bound to concrete images. Using images
     // directly lets Halide assume things about the width and height,
     // and we don't want that to pollute the timings.
-    Buffer<float> in(W, H);
+    Buffer<float> in = make_replicated_buffer(W, H);
 
     // A padded version of the input to use as a baseline.
-    Buffer<float> padded_in(W + 16, H + 16);
+    Buffer<float> padded_in = make_replicated_buffer(W + 16, H + 16);
 
     Var x, y;
 
@@ -85,13 +99,13 @@ int main(int argc, char **argv) {
 
     // Apply several different boundary conditions.
     Test tests[] = {
-        {"unbounded", lambda(x, y, padded_input(x+8, y+8)), 0.0},
+        {"unbounded", lambda(x, y, padded_input(x + 8, y + 8)), 0.0},
         {"constant_exterior", constant_exterior(input, 0.0f), 0.0},
         {"repeat_edge", repeat_edge(input), 0.0},
         {"repeat_image", repeat_image(input), 0.0},
         {"mirror_image", mirror_image(input), 0.0},
         {"mirror_interior", mirror_interior(input), 0.0},
-        {nullptr, Func(), 0.0}}; // Sentinel
+        {nullptr, Func(), 0.0}};  // Sentinel
 
     // Time each
     for (int i = 0; tests[i].name; i++) {

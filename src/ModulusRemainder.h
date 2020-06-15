@@ -5,10 +5,16 @@
  * Routines for statically determining what expressions are divisible by.
  */
 
-#include "Scope.h"
+#include <stdint.h>
 
 namespace Halide {
+
+struct Expr;
+
 namespace Internal {
+
+template<typename T>
+class Scope;
 
 /** The result of modulus_remainder analysis. These represent strided
  * subsets of the integers. A ModulusRemainder object m represents all
@@ -23,8 +29,12 @@ namespace Internal {
  * remainder == 0). */
 
 struct ModulusRemainder {
-    ModulusRemainder() : modulus(1), remainder(0) {}
-    ModulusRemainder(int64_t m, int64_t r) : modulus(m), remainder(r) {}
+    ModulusRemainder()
+        : modulus(1), remainder(0) {
+    }
+    ModulusRemainder(int64_t m, int64_t r)
+        : modulus(m), remainder(r) {
+    }
 
     int64_t modulus, remainder;
 
@@ -35,6 +45,10 @@ struct ModulusRemainder {
     // Take a conservatively-large intersection. Everything in the
     // result is in at least one of the two sets, but not always both.
     static ModulusRemainder intersect(const ModulusRemainder &a, const ModulusRemainder &b);
+
+    bool operator==(const ModulusRemainder &other) const {
+        return (modulus == other.modulus) && (remainder == other.remainder);
+    }
 };
 
 ModulusRemainder operator+(const ModulusRemainder &a, const ModulusRemainder &b);
@@ -42,6 +56,12 @@ ModulusRemainder operator-(const ModulusRemainder &a, const ModulusRemainder &b)
 ModulusRemainder operator*(const ModulusRemainder &a, const ModulusRemainder &b);
 ModulusRemainder operator/(const ModulusRemainder &a, const ModulusRemainder &b);
 ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b);
+
+ModulusRemainder operator+(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator-(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator*(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator/(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator%(const ModulusRemainder &a, int64_t b);
 
 /** For things like alignment analysis, often it's helpful to know
  * if an integer expression is some multiple of a constant plus
@@ -55,18 +75,18 @@ ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b)
  * aligned load. If all else fails, we can just say that an integer is
  * congruent to zero modulo one.
  */
-ModulusRemainder modulus_remainder(Expr e);
+ModulusRemainder modulus_remainder(const Expr &e);
 
 /** If we have alignment information about external variables, we can
  * let the analysis know about that using this version of
  * modulus_remainder: */
-ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope);
+ModulusRemainder modulus_remainder(const Expr &e, const Scope<ModulusRemainder> &scope);
 
 /** Reduce an expression modulo some integer. Returns true and assigns
  * to remainder if an answer could be found. */
 ///@{
-bool reduce_expr_modulo(Expr e, int64_t modulus, int64_t *remainder);
-bool reduce_expr_modulo(Expr e, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope);
+bool reduce_expr_modulo(const Expr &e, int64_t modulus, int64_t *remainder);
+bool reduce_expr_modulo(const Expr &e, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope);
 ///@}
 
 void modulus_remainder_test();

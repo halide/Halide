@@ -38,13 +38,16 @@ public:
 
     std::string print_gpu_name(const std::string &name) override;
 
-    std::string api_unique_name() override { return "opencl"; }
+    std::string api_unique_name() override {
+        return "opencl";
+    }
 
 protected:
-
     class CodeGen_OpenCL_C : public CodeGen_C {
     public:
-        CodeGen_OpenCL_C(std::ostream &s, Target t) : CodeGen_C(s, t) {}
+        CodeGen_OpenCL_C(std::ostream &s, Target t)
+            : CodeGen_C(s, t) {
+        }
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
@@ -52,11 +55,16 @@ protected:
     protected:
         using CodeGen_C::visit;
         std::string print_type(Type type, AppendSpaceIfNeeded append_space = DoNotAppendSpace) override;
-        std::string print_reinterpret(Type type, Expr e) override;
+        std::string print_reinterpret(Type type, const Expr &e) override;
         std::string print_extern_call(const Call *op) override;
+        std::string print_array_access(const std::string &name,
+                                       const Type &type,
+                                       const std::string &id_index);
         void add_vector_typedefs(const std::set<Type> &vector_types) override;
 
         std::string get_memory_space(const std::string &);
+
+        std::string shared_name;
 
         void visit(const For *) override;
         void visit(const Ramp *op) override;
@@ -78,6 +86,7 @@ protected:
         void visit(const Shuffle *op) override;
         void visit(const Min *op) override;
         void visit(const Max *op) override;
+        void visit(const Atomic *op) override;
     };
 
     std::ostringstream src_stream;

@@ -5,6 +5,8 @@
  * Defines the Dimension utility class for Halide pipelines
  */
 
+#include <utility>
+
 #include "Func.h"
 #include "Parameter.h"
 
@@ -28,15 +30,6 @@ public:
     /** Get an expression representing the stride of this image in the
      * given dimension */
     Expr stride() const;
-
-    /** Get the estimate of the minimum coordinate of this image parameter
-     * in the given dimension. Return an undefined expr if the estimate is
-     * never specified. */
-    Expr min_estimate() const;
-
-    /** Get the estimate of the extent of this image parameter in the given
-     * dimension. Return an undefined expr if the estimate is never specified. */
-    Expr extent_estimate() const;
 
     /** Set the min in a given dimension to equal the given
      * expression. Setting the mins to zero may simplify some
@@ -76,8 +69,16 @@ public:
     Dimension set_bounds(Expr min, Expr extent);
 
     /** Set the min and extent estimates in one call. These values are only
-     * used by the auto-scheduler. */
-    Dimension set_bounds_estimate(Expr min, Expr extent);
+     * used by the auto-scheduler and/or the RunGen tool/ */
+    Dimension set_estimate(Expr min, Expr extent);
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    Dimension set_bounds_estimate(Expr min, Expr extent) {
+        return set_estimate(std::move(min), std::move(extent));
+    }
+
+    Expr min_estimate() const;
+    Expr extent_estimate() const;
 
     /** Get a different dimension of the same buffer */
     // @{

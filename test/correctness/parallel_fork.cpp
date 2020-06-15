@@ -1,10 +1,10 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
 
-#include <stdio.h>
-#include <chrono>
-#include <thread>
 #include <atomic>
+#include <chrono>
+#include <stdio.h>
+#include <thread>
 
 using namespace Halide;
 using namespace Halide::Tools;
@@ -17,11 +17,10 @@ std::atomic<int32_t> call_count;
 #define DLLEXPORT
 #endif
 
-extern "C" DLLEXPORT
-int five_ms(int arg) {
-  call_count++;
-  std::this_thread::sleep_for(std::chrono::milliseconds(5));
-  return arg;
+extern "C" DLLEXPORT int five_ms(int arg) {
+    call_count++;
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    return arg;
 }
 
 namespace halide_externs {
@@ -29,10 +28,10 @@ HalideExtern_1(int, five_ms, int);
 }
 
 enum Schedule {
-  Serial,
-  Parallel,
-  AsyncRoot,
-  AsyncComputeAt,
+    Serial,
+    Parallel,
+    AsyncRoot,
+    AsyncComputeAt,
 };
 
 Func make(Schedule schedule) {
@@ -70,13 +69,18 @@ Func make(Schedule schedule) {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as it does not support async() yet.\n");
+        return 0;
+    }
+
     Func both;
     Buffer<int32_t> im;
     int count;
     double time;
 
     call_count = 0;
-    both  = make(Serial);
+    both = make(Serial);
     im = both.realize(10, 10, 2);
     count = call_count;
     time = benchmark([&]() {
@@ -84,7 +88,7 @@ int main(int argc, char **argv) {
     });
     printf("Serial time %f for %d calls.\n", time, count);
     fflush(stdout);
-    
+
     call_count = 0;
     both = make(Parallel);
     im = both.realize(10, 10, 2);

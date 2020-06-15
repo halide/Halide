@@ -5,11 +5,15 @@
  * Defines the lowering optimization pass that reduces large buffers
  * down to smaller circular buffers when possible
  */
+#include <map>
+#include <string>
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Fold storage of functions if possible. This means reducing one of
  * the dimensions module something for the purpose of storage, if we
@@ -24,7 +28,7 @@ namespace Internal {
  * We can store f as a circular buffer of size two, instead of
  * allocating space for all of it.
  */
-Stmt storage_folding(Stmt s, const std::map<std::string, Function> &env);
+Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

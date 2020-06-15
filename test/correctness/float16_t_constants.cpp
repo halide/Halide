@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <cmath>
+#include <stdio.h>
 
 using namespace Halide;
 
-void h_assert(bool condition, const char* msg) {
+void h_assert(bool condition, const char *msg) {
     if (!condition) {
         printf("FAIL: %s\n", msg);
         abort();
@@ -20,7 +20,7 @@ int main() {
         // Try constructing positive zero in different ways and check they all represent
         // the same float16_t
         const float16_t zeroDefaultConstructor;
-        const float16_t zeroP = float16_t::make_zero(/*positive=*/true);
+        const float16_t zeroP = float16_t::make_zero();
         const float16_t zeroPFromFloat(0.0f);
         const float16_t zeroPFromDouble(0.0);
         const float16_t zeroPFromInt(0);
@@ -43,7 +43,7 @@ int main() {
         printf("Checking negative zero...\n");
         // Try constructing negative zero in different ways and check they all represent
         // the same float16_t
-        const float16_t zeroN = float16_t::make_zero(/*positive=*/false);
+        const float16_t zeroN = float16_t::make_negative_zero();
         const float16_t zeroNFromFloat(-0.0f);
         const float16_t zeroNFromDouble(-0.0);
         h_assert(zeroNFromFloat.to_bits() == zeroN.to_bits(), "Mismatch between constructors");
@@ -64,7 +64,7 @@ int main() {
         printf("Checking positive infinity...\n");
         // Try constructing positive infinity in different ways and check they all
         // represent the same float16_t
-        const float16_t infinityP = float16_t::make_infinity(/*positive=*/true);
+        const float16_t infinityP = float16_t::make_infinity();
         const float16_t infinityPFromFloat(std::numeric_limits<float>::infinity());
         const float16_t infinityPFromDouble(std::numeric_limits<double>::infinity());
         h_assert(infinityPFromFloat.to_bits() == infinityP.to_bits(), "Mismatch between constructors");
@@ -88,7 +88,7 @@ int main() {
         printf("Checking negative infinity...\n");
         // Try constructing negative infinity in different ways and check they all
         // represent the same float16_t
-        const float16_t infinityN = float16_t::make_infinity(/*positive=*/false);
+        const float16_t infinityN = float16_t::make_negative_infinity();
         const float16_t infinityNFromFloat(-std::numeric_limits<float>::infinity());
         const float16_t infinityNFromDouble(-std::numeric_limits<double>::infinity());
         h_assert(infinityNFromFloat.to_bits() == infinityN.to_bits(), "Mismatch between constructors");
@@ -115,7 +115,6 @@ int main() {
         const float16_t nanValue = float16_t::make_nan();
         const float16_t nanValueFromFloat(std::numeric_limits<float>::quiet_NaN());
         const float16_t nanValueFromDouble(std::numeric_limits<double>::quiet_NaN());
-        printf("%u %u %u\n", nanValue.to_bits(), nanValueFromFloat.to_bits(), nanValueFromDouble.to_bits());
         h_assert(nanValueFromFloat.to_bits() == nanValue.to_bits(), "Mismatch between constructors");
         h_assert(nanValueFromDouble.to_bits() == nanValue.to_bits(), "Mismatch between constructors");
 
@@ -127,8 +126,8 @@ int main() {
         h_assert((nanValue.to_bits() & 0x03ff) > 0, "NaN significant invalid");
 
         // Try converting to native float types
-        float nanValuef = (float) nanValue;
-        double nanValued = (double) nanValue;
+        float nanValuef = (float)nanValue;
+        double nanValued = (double)nanValue;
         h_assert(std::isnan(nanValuef), "NaN conversion to float invalid");
         h_assert(std::isnan(nanValued), "NaN conversion to double invalid");
     }
@@ -140,16 +139,16 @@ int main() {
     };
 
     test_case tests[] = {
-        {1.0 / (1 << 24), 0x001},   // smallest positive
-        {-1.0 / (1 << 24), 0x8001}, // smallest negative
-        {65504, 0x7bff},            // largest positive
-        {-65504, 0xfbff},           // largest negative
+        {1.0 / (1 << 24), 0x001},    // smallest positive
+        {-1.0 / (1 << 24), 0x8001},  // smallest negative
+        {65504, 0x7bff},             // largest positive
+        {-65504, 0xfbff},            // largest negative
         {0.1, 0x2e66},
         {0.3, 0x34cd},
         {4091, 0x6bfe},
         {-4091, 0xebfe},
-        {1000000, 0x7c00},  // Out of range maps to +infinity
-        {-1000000, 0xfc00}, // Out of range maps to -infinity
+        {1000000, 0x7c00},   // Out of range maps to +infinity
+        {-1000000, 0xfc00},  // Out of range maps to -infinity
     };
 
     for (auto test : tests) {

@@ -4,12 +4,12 @@
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
-#include "auto_viz_demo_naive_up.h"
-#include "auto_viz_demo_naive_down.h"
-#include "auto_viz_demo_lessnaive_up.h"
-#include "auto_viz_demo_lessnaive_down.h"
-#include "auto_viz_demo_complex_up.h"
 #include "auto_viz_demo_complex_down.h"
+#include "auto_viz_demo_complex_up.h"
+#include "auto_viz_demo_lessnaive_down.h"
+#include "auto_viz_demo_lessnaive_up.h"
+#include "auto_viz_demo_naive_down.h"
+#include "auto_viz_demo_naive_up.h"
 
 std::string infile, outfile, schedule_type;
 float scale_factor = 1.0f;
@@ -25,11 +25,11 @@ void show_usage_and_exit() {
 }
 
 void parse_commandline(int argc, char **argv) {
-for (int i = 1; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
-        if (arg == "-f" && i+1 < argc) {
+        if (arg == "-f" && i + 1 < argc) {
             scale_factor = atof(argv[++i]);
-        } else if (arg == "-s" && i+1 < argc) {
+        } else if (arg == "-s" && i + 1 < argc) {
             schedule_type = argv[++i];
         } else if (infile.empty()) {
             infile = arg;
@@ -55,14 +55,14 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<float> out(out_width, out_height, 3);
 
     decltype(&auto_viz_demo_naive_up) variants[2][3] =
-    {
-        {&auto_viz_demo_naive_up,
-          &auto_viz_demo_lessnaive_up,
-          &auto_viz_demo_complex_up},
-         {&auto_viz_demo_naive_down,
-          &auto_viz_demo_lessnaive_down,
-          &auto_viz_demo_complex_up},
-    };
+        {
+            {&auto_viz_demo_naive_up,
+             &auto_viz_demo_lessnaive_up,
+             &auto_viz_demo_complex_up},
+            {&auto_viz_demo_naive_down,
+             &auto_viz_demo_lessnaive_down,
+             &auto_viz_demo_complex_up},
+        };
 
     int schedule_idx = 0;
     if (schedule_type == "naive") {
@@ -77,7 +77,6 @@ int main(int argc, char **argv) {
     }
 
     int upsample_idx = scale_factor > 1.0f ? 0 : 1;
-
 
     auto fn = variants[upsample_idx][schedule_idx];
 

@@ -16,8 +16,8 @@ Halide::Expr is_planar(const T &p, int channels = 3) {
 
 class TiledBlur : public Halide::Generator<TiledBlur> {
 public:
-    Input<Buffer<uint8_t>> input{ "input", 3 };
-    Output<Buffer<uint8_t>> output{ "output", 3 };
+    Input<Buffer<uint8_t>> input{"input", 3};
+    Output<Buffer<uint8_t>> output{"output", 3};
 
     void generate() {
         Expr input_float = cast<float>(input(x, y, c)) / 255.f;
@@ -30,7 +30,7 @@ public:
 
         tiled_blur.define_extern(
             "blur2x2",
-            { brightened, input.dim(0).extent(), input.dim(1).extent() },
+            {brightened, input.dim(0).extent(), input.dim(1).extent()},
             Float(32), 3);
 
         Expr tiled_blur_brightened = tiled_blur(x, y, c) * 1.2f;
@@ -64,6 +64,7 @@ public:
         // Note that other combinations (e.g. interleaved -> planar) will work
         // but be relatively unoptimized.
     }
+
 private:
     Var x{"x"}, y{"y"}, c{"c"};
     Func tiled_blur{"tiled_blur"};

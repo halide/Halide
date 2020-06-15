@@ -1,7 +1,8 @@
 #include <algorithm>
+#include <cstdio>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "stubtest.h"
 
 using Halide::Runtime::Buffer;
@@ -25,7 +26,7 @@ template<typename InputType, typename OutputType>
 void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const Buffer<OutputType> &output) {
     if (input.width() != output.width() ||
         input.height() != output.height()) {
-        fprintf(stderr, "size mismatch: %dx%d vs %dx%d\n",input.width(),input.height(),output.width(),output.height());
+        fprintf(stderr, "size mismatch: %dx%d vs %dx%d\n", input.width(), input.height(), output.width(), output.height());
         exit(-1);
     }
     int channels = std::max(1, std::min(input.channels(), output.channels()));
@@ -55,6 +56,9 @@ int main(int argc, char **argv) {
     Buffer<uint8_t> array_buffer_input0 = make_image<uint8_t>(0);
     Buffer<uint8_t> array_buffer_input1 = make_image<uint8_t>(1);
     Buffer<float> simple_output(kSize, kSize, 3);
+    // TODO: see Issues #3709, #3967
+    Buffer<> float16_output(halide_type_t(halide_type_float, 16), kSize, kSize, 3);
+    Buffer<> bfloat16_output(halide_type_t(halide_type_bfloat, 16), kSize, kSize, 3);
     Buffer<float> tuple_output0(kSize, kSize, 3), tuple_output1(kSize, kSize, 3);
     Buffer<int16_t> array_output0(kSize, kSize), array_output1(kSize, kSize);
     Buffer<uint8_t> static_compiled_buffer_output(kSize, kSize, 3);
@@ -76,8 +80,9 @@ int main(int argc, char **argv) {
         untyped_buffer_output,
         tupled_output0, tupled_output1,
         static_compiled_buffer_output,
-        array_buffer_output0, array_buffer_output1
-    );
+        array_buffer_output0, array_buffer_output1,
+        float16_output,
+        bfloat16_output);
 
     verify(buffer_input, 1.f, 0, typed_buffer_output);
     verify(buffer_input, 1.f, 0, untyped_buffer_output);

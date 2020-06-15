@@ -1,22 +1,24 @@
-#include "IR.h"
-#include "IRPrinter.h"
-#include "CodeGen_X86.h"
-#include "CodeGen_C.h"
-#include "CPlusPlusMangle.h"
-#include "Func.h"
+#include "Associativity.h"
+#include "AutoScheduleUtils.h"
 #include "Bounds.h"
-#include "IRMatch.h"
-#include "Deinterleave.h"
-#include "ModulusRemainder.h"
+#include "CPlusPlusMangle.h"
 #include "CSE.h"
+#include "CodeGen_C.h"
+#include "CodeGen_PyTorch.h"
+#include "CodeGen_X86.h"
+#include "Deinterleave.h"
+#include "Func.h"
+#include "Generator.h"
+#include "IR.h"
 #include "IREquality.h"
-#include "Solve.h"
+#include "IRMatch.h"
+#include "IRPrinter.h"
+#include "Interval.h"
+#include "ModulusRemainder.h"
 #include "Monotonic.h"
 #include "Reduction.h"
-#include "Interval.h"
-#include "Associativity.h"
-#include "Generator.h"
-#include "AutoScheduleUtils.h"
+#include "Solve.h"
+#include "UniquifyVariableNames.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -24,6 +26,7 @@ using namespace Halide::Internal;
 int main(int argc, const char **argv) {
     IRPrinter::test();
     CodeGen_C::test();
+    CodeGen_PyTorch::test();
     ir_equality_test();
     bounds_test();
     expr_match_test();
@@ -35,10 +38,11 @@ int main(int argc, const char **argv) {
     cplusplus_mangle_test();
     is_monotonic_test();
     split_predicate_test();
-    interval_test();
     associativity_test();
     generator_test();
     propagate_estimate_test();
+    uniquify_variable_names_test();
 
+    printf("Success!\n");
     return 0;
 }

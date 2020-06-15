@@ -6,25 +6,25 @@
  * generated halide pipeline
  */
 
-#include "Buffer.h"
-#include "Error.h"
 #include "Expr.h"
 #include "Type.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
 
+template<typename T>
+class Buffer;
+
 struct ArgumentEstimates {
     /** If this is a scalar argument, then these are its default, min, max, and estimated values.
      * For buffer arguments, all should be undefined. */
     Expr scalar_def, scalar_min, scalar_max, scalar_estimate;
 
-    /** If this is a buffer argument, these are the estimated min and extent for each dimension.
-     * If there are no estimates, buffer_estimates.size() can be zero; otherwise, it must always equal the dimensions */
-    struct MinAndExtent {
-        Expr min, extent;
-    };
-    std::vector<MinAndExtent> buffer_estimates;
+    /** If this is a buffer argument, these are the estimated min and
+     * extent for each dimension.  If there are no estimates,
+     * buffer_estimates.size() can be zero; otherwise, it must always
+     * equal the dimensions */
+    Region buffer_estimates;
 
     bool operator==(const ArgumentEstimates &rhs) const;
 };
@@ -79,17 +79,26 @@ struct Argument {
     // to indicate that it shouldn't be baked into the object file,
     // but instead received as an argument at runtime
     template<typename T>
-    Argument(Buffer<T> im) :
-        name(im.name()),
-        kind(InputBuffer),
-        dimensions(im.dimensions()),
-        type(im.type()) {}
+    Argument(Buffer<T> im)
+        : name(im.name()),
+          kind(InputBuffer),
+          dimensions(im.dimensions()),
+          type(im.type()) {
+    }
 
-    bool is_buffer() const { return kind == InputBuffer || kind == OutputBuffer; }
-    bool is_scalar() const { return kind == InputScalar; }
+    bool is_buffer() const {
+        return kind == InputBuffer || kind == OutputBuffer;
+    }
+    bool is_scalar() const {
+        return kind == InputScalar;
+    }
 
-    bool is_input() const { return kind == InputScalar || kind == InputBuffer; }
-    bool is_output() const { return kind == OutputBuffer; }
+    bool is_input() const {
+        return kind == InputScalar || kind == InputBuffer;
+    }
+    bool is_output() const {
+        return kind == OutputBuffer;
+    }
 
     bool operator==(const Argument &rhs) const {
         return name == rhs.name &&

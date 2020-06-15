@@ -7,9 +7,9 @@
 
 #if defined(__linux__) || defined(__APPLE__) || defined(__unix) || defined(__posix)
 
-#include <stdio.h>
 #include <signal.h>
 #include <stack>
+#include <stdio.h>
 #include <string>
 
 using namespace Halide;
@@ -20,7 +20,6 @@ using std::stack;
 using std::string;
 
 stack<string> stack_trace;
-
 
 int my_trace(void *user_context, const halide_trace_event_t *e) {
     const string event_types[] = {"Load ",
@@ -77,7 +76,7 @@ int main(int argc, char **argv) {
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y");
 
-    f(x, y) = x+y;
+    f(x, y) = x + y;
     f.compute_root().trace_realizations();
 
     g(x, y) = f(x, y) + 37;
@@ -98,7 +97,7 @@ int main(int argc, char **argv) {
 #include <stdio.h>
 
 int main(int argc, char **argv) {
-    printf("Test skipped because we're not on a system with UNIX signal handling\n");
+    printf("[SKIP] Test requires UNIX signal handling\n");
     return 0;
 }
 

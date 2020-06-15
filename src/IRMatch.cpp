@@ -1,5 +1,6 @@
 #include <iostream>
 #include <map>
+#include <utility>
 
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -27,19 +28,19 @@ void expr_match_test() {
     internal_assert(expr_match(w, 3, matches) &&
                     equal(matches[0], 3));
 
-    internal_assert(expr_match(w + 3, (y*2) + 3, matches) &&
-                    equal(matches[0], y*2));
+    internal_assert(expr_match(w + 3, (y * 2) + 3, matches) &&
+                    equal(matches[0], y * 2));
 
     internal_assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)),
-                               (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(x + 4.5f)), matches) &&
+                               (81.0f * fy) * 17 + cast<float>(x / 2 + cast<int>(x + 4.5f)), matches) &&
                     matches.size() == 3 &&
                     equal(matches[0], 81.0f * fy) &&
-                    equal(matches[1], x/2) &&
+                    equal(matches[1], x / 2) &&
                     equal(matches[2], x + 4.5f));
 
     internal_assert(!expr_match(fw + 17, fx + 18, matches) &&
                     matches.empty());
-    internal_assert(!expr_match((w*2) + 17, fx + 17, matches) &&
+    internal_assert(!expr_match((w * 2) + 17, fx + 17, matches) &&
                     matches.empty());
     internal_assert(!expr_match(w * 3, 3 * x, matches) &&
                     matches.empty());
@@ -56,17 +57,19 @@ public:
     map<string, Expr> *var_matches;
     Expr expr;
 
-    IRMatch(Expr e, vector<Expr> &m) : result(true), matches(&m), var_matches(nullptr), expr(e) {
+    IRMatch(Expr e, vector<Expr> &m)
+        : result(true), matches(&m), var_matches(nullptr), expr(std::move(e)) {
     }
-    IRMatch(Expr e, map<string, Expr> &m) : result(true), matches(nullptr), var_matches(&m), expr(e) {
+    IRMatch(Expr e, map<string, Expr> &m)
+        : result(true), matches(nullptr), var_matches(&m), expr(std::move(e)) {
     }
 
     using IRVisitor::visit;
 
     bool types_match(Type pattern_type, Type expr_type) {
-        bool bits_matches  = (pattern_type.bits()  == 0) || (pattern_type.bits()  == expr_type.bits());
+        bool bits_matches = (pattern_type.bits() == 0) || (pattern_type.bits() == expr_type.bits());
         bool lanes_matches = (pattern_type.lanes() == 0) || (pattern_type.lanes() == expr_type.lanes());
-        bool code_matches  = (pattern_type.code()  == expr_type.code());
+        bool code_matches = (pattern_type.code() == expr_type.code());
         return bits_matches && lanes_matches && code_matches;
     }
 
@@ -94,7 +97,7 @@ public:
         // catch NaNs. We're checking for the same bits.
         if (!e ||
             reinterpret_bits<uint64_t>(e->value) !=
-            reinterpret_bits<uint64_t>(op->value) ||
+                reinterpret_bits<uint64_t>(op->value) ||
             !types_match(op->type, e->type)) {
             result = false;
         }
@@ -147,21 +150,51 @@ public:
         }
     }
 
-    void visit(const Add *op) override {visit_binary_operator(op);}
-    void visit(const Sub *op) override {visit_binary_operator(op);}
-    void visit(const Mul *op) override {visit_binary_operator(op);}
-    void visit(const Div *op) override {visit_binary_operator(op);}
-    void visit(const Mod *op) override {visit_binary_operator(op);}
-    void visit(const Min *op) override {visit_binary_operator(op);}
-    void visit(const Max *op) override {visit_binary_operator(op);}
-    void visit(const EQ *op) override {visit_binary_operator(op);}
-    void visit(const NE *op) override {visit_binary_operator(op);}
-    void visit(const LT *op) override {visit_binary_operator(op);}
-    void visit(const LE *op) override {visit_binary_operator(op);}
-    void visit(const GT *op) override {visit_binary_operator(op);}
-    void visit(const GE *op) override {visit_binary_operator(op);}
-    void visit(const And *op) override {visit_binary_operator(op);}
-    void visit(const Or *op) override {visit_binary_operator(op);}
+    void visit(const Add *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const Sub *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const Mul *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const Div *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const Mod *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const Min *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const Max *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const EQ *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const NE *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const LT *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const LE *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const GT *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const GE *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const And *op) override {
+        visit_binary_operator(op);
+    }
+    void visit(const Or *op) override {
+        visit_binary_operator(op);
+    }
 
     void visit(const Not *op) override {
         const Not *e = expr.as<Not>();
@@ -189,7 +222,7 @@ public:
 
     void visit(const Load *op) override {
         const Load *e = expr.as<Load>();
-        if (result && e && types_match(op->type, e->type) && e->name == op->name) {
+        if (result && e && types_match(op->type, e->type) && e->name == op->name && e->alignment == op->alignment) {
             expr = e->predicate;
             op->predicate.accept(this);
             expr = e->index;
@@ -251,7 +284,7 @@ public:
     }
 };
 
-bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
+bool expr_match(const Expr &pattern, const Expr &expr, vector<Expr> &matches) {
     matches.clear();
     if (!pattern.defined() && !expr.defined()) return true;
     if (!pattern.defined() || !expr.defined()) return false;
@@ -266,7 +299,7 @@ bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
     }
 }
 
-bool expr_match(Expr pattern, Expr expr, map<string, Expr> &matches) {
+bool expr_match(const Expr &pattern, const Expr &expr, map<string, Expr> &matches) {
     // Explicitly don't clear matches. This allows usages to pre-match
     // some variables.
 
@@ -291,8 +324,7 @@ bool equal_helper(const Expr &a, const Expr &b) {
 }
 
 template<typename Op>
-HALIDE_ALWAYS_INLINE
-bool equal_helper_binop(const BaseExprNode &a, const BaseExprNode &b) {
+HALIDE_ALWAYS_INLINE bool equal_helper_binop(const BaseExprNode &a, const BaseExprNode &b) {
     return (equal_helper(((const Op &)a).a, ((const Op &)b).a) &&
             equal_helper(((const Op &)a).b, ((const Op &)b).b));
 }
@@ -303,8 +335,7 @@ bool equal_helper(int a, int b) {
 }
 
 template<typename T>
-HALIDE_ALWAYS_INLINE
-bool equal_helper(const std::vector<T> &a, const std::vector<T> &b) {
+HALIDE_ALWAYS_INLINE bool equal_helper(const std::vector<T> &a, const std::vector<T> &b) {
     if (a.size() != b.size()) return false;
     for (size_t i = 0; i < a.size(); i++) {
         if (!equal_helper(a[i], b[i])) return false;
@@ -313,7 +344,7 @@ bool equal_helper(const std::vector<T> &a, const std::vector<T> &b) {
 }
 
 bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
-    switch(a.node_type) {
+    switch (a.node_type) {
     case IRNodeType::IntImm:
         return ((const IntImm &)a).value == ((const IntImm &)b).value;
     case IRNodeType::UIntImm:
@@ -400,7 +431,8 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::IfThenElse:
     case IRNodeType::Evaluate:
     case IRNodeType::Prefetch:
-        ;
+    case IRNodeType::Atomic:
+        break;
     }
     return false;
 }

@@ -35,16 +35,18 @@ public:
 
     std::string print_gpu_name(const std::string &name) override;
 
-    std::string api_unique_name() override { return "openglcompute"; }
-    bool kernel_run_takes_types() const override { return true; }
-
+    std::string api_unique_name() override {
+        return "openglcompute";
+    }
+    bool kernel_run_takes_types() const override {
+        return true;
+    }
 
 protected:
-
     class CodeGen_OpenGLCompute_C : public CodeGen_GLSLBase {
     public:
         CodeGen_OpenGLCompute_C(std::ostream &s, Target t);
-        void add_kernel(Stmt stmt,
+        void add_kernel(const Stmt &stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
 

@@ -8,7 +8,7 @@
  * E.g:
  \code
  Expr foo = ...
- std::cout << "Foo is " << foo << std::endl;
+ std::cout << "Foo is " << foo << "\n";
  \endcode
  *
  * These operators are implemented using \ref Halide::Internal::IRPrinter
@@ -18,6 +18,7 @@
 
 #include "IRVisitor.h"
 #include "Module.h"
+#include "Scope.h"
 
 namespace Halide {
 
@@ -79,23 +80,29 @@ std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
 /** Emit a halide linkage value in a human readable format */
 std::ostream &operator<<(std::ostream &stream, const LinkageType &);
 
+/** Emit a halide dimension type in human-readable format */
+std::ostream &operator<<(std::ostream &stream, const DimType &);
+
+struct Indentation {
+    int indent;
+};
+std::ostream &operator<<(std::ostream &stream, const Indentation &);
+
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
  * which it prints.
  */
 class IRPrinter : public IRVisitor {
 public:
-    virtual ~IRPrinter();
-
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
-    IRPrinter(std::ostream &);
+    explicit IRPrinter(std::ostream &);
 
     /** emit an expression on the output stream */
-    void print(Expr);
+    void print(const Expr &);
 
     /** emit a statement on the output stream */
-    void print(Stmt);
+    void print(const Stmt &);
 
     /** emit a comma delimited list of exprs, without any leading or
      * trailing punctuation. */
@@ -104,15 +111,23 @@ public:
     static void test();
 
 protected:
-    /** The stream we're outputting on */
+    Indentation get_indent() const {
+        return Indentation{indent};
+    }
+
+    /** The stream on which we're outputting */
     std::ostream &stream;
 
     /** The current indentation level, useful for pretty-printing
      * statements */
     int indent;
 
-    /** Emit spaces according to the current indentation level */
-    void do_indent();
+    /** The symbols whose types can be inferred from values printed
+     * already. */
+    Scope<> known_type;
+
+    /** A helper for printing a chain of lets with line breaks */
+    void print_lets(const Let *let);
 
     void visit(const IntImm *) override;
     void visit(const UIntImm *) override;
@@ -158,7 +173,9 @@ protected:
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
     void visit(const Prefetch *) override;
+    void visit(const Atomic *) override;
 };
+
 }  // namespace Internal
 }  // namespace Halide
 

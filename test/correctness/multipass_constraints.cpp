@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     Func out("out");
     Var x("x"), y("y");
 
-    out(x, y) = in(x+1, y+1) + in(x-1, y-1);
+    out(x, y) = in(x + 1, y + 1) + in(x - 1, y - 1);
     out(x, y) += 3.0f;
     out.update().vectorize(x, 4);
 
@@ -46,5 +46,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    printf("Success!\n");
     return 0;
 }

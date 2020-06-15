@@ -8,10 +8,10 @@ int main(int argc, char **argv) {
 
     g(x) = x;
     g(x) += 10;
-    h(x) = x*x;
+    h(x) = x * x;
     f(x) = select(false, g(x + 1), h(x + 1));
 
-    f.estimate(x, 0, 256);
+    f.set_estimates({{0, 256}});
 
     Target target = get_jit_target_from_environment();
     Pipeline p(f);

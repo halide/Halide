@@ -1,4 +1,5 @@
 #include "Buffer.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "Var.h"
@@ -7,7 +8,7 @@ namespace Halide {
 namespace Internal {
 
 template<>
-RefCount &ref_count<BufferContents>(const BufferContents *c) {
+RefCount &ref_count<BufferContents>(const BufferContents *c) noexcept {
     return c->ref_count;
 }
 

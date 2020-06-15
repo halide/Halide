@@ -40,11 +40,11 @@ extern "C" DLLEXPORT const Variable *record_varying(const Variable *op) {
 HalideExtern_1(const Variable *, record_varying, const Variable *);
 
 // This visitor inserts the above function in the IR tree.
-class CountVarying : public IRMutator2 {
-    using IRMutator2::visit;
+class CountVarying : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Variable *op) override {
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         if (ends_with(op->name, ".varying")) {
             expr = record_varying(op);
         }
@@ -88,9 +88,9 @@ bool test0(const Target target, Var &x, Var &y, Var &c) {
     p.set(p_value);
 
     Func f0("f0");
-    f0(x, y, c) = select(c == 0, 4.0f,  // Constant term
-                         c == 1, p * 10.0f,  // Linear expression not in terms of a loop parameter
-                         cast<float>(x) * 100.0f);  // Linear expression in terms of x
+    f0(x, y, c) = mux(c, {4.0f,                       // Constant term
+                          p * 10.0f,                  // Linear expression not in terms of a loop parameter
+                          cast<float>(x) * 100.0f});  // Linear expression in terms of x
 
     f0.bound(c, 0, 3);
     f0.glsl(x, y, c);
@@ -108,10 +108,10 @@ struct CoordXform {
     const float c_th = cosf(th);
     const float m[6] = {
         c_th, -s_th, 0.0f,
-        s_th, c_th, 0.0f
-    };
+        s_th, c_th, 0.0f};
     Param<float> m0, m1, m2, m3, m4, m5;
-    CoordXform() : m0("m0"), m1("m1"), m2("m2"), m3("m3"), m4("m4"), m5("m5") {
+    CoordXform()
+        : m0("m0"), m1("m1"), m2("m2"), m3("m3"), m4("m4"), m5("m5") {
         m0.set(m[0]);
         m1.set(m[1]);
         m2.set(m[2]);
@@ -126,9 +126,9 @@ struct CoordXform {
 bool test1(const Target target, Var &x, Var &y, Var &c) {
     struct CoordXform m;
     Func f1("f1");
-    f1(x, y, c) = select(c == 0, m.m0 * x + m.m1 * y + m.m2,
-                         c == 1, m.m3 * x + m.m4 * y + m.m5,
-                         1.0f);
+    f1(x, y, c) = mux(c, {m.m0 * x + m.m1 * y + m.m2,
+                          m.m3 * x + m.m4 * y + m.m5,
+                          1.0f});
 
     f1.bound(c, 0, 3);
     f1.glsl(x, y, c);
@@ -147,9 +147,9 @@ bool test1(const Target target, Var &x, Var &y, Var &c) {
 bool test2(const Target target, Var &x, Var &y, Var &c) {
     struct CoordXform m;
     Func f2("f2");
-    f2(x, y, c) = select(c == 0, sqrt(m.m0 * x + m.m1 * y + m.m2),
-                         c == 1, sqrt(m.m3 * x + m.m4 * y + m.m5),
-                         1.0f);
+    f2(x, y, c) = mux(c, {sqrt(m.m0 * x + m.m1 * y + m.m2),
+                          sqrt(m.m3 * x + m.m4 * y + m.m5),
+                          1.0f});
     f2.bound(c, 0, 3);
     f2.glsl(x, y, c);
 
@@ -179,9 +179,7 @@ bool test3(const Target target, Var &x, Var &y, Var &c) {
     }
 
     Func f3("f3");
-    f3(x, y, c) = select(c == 0, foo,
-                         c == 1, 1.0f,
-                         2.0f);
+    f3(x, y, c) = mux(c, {foo, 1.0f, 2.0f});
 
     f3.bound(c, 0, 3);
     f3.glsl(x, y, c);

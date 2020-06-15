@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     f(x) = x;
 
     g(x) = 0;
-    g(x) = f(g(x-1)) + r;
+    g(x) = f(g(x - 1)) + r;
 
     f.compute_at(g, r.x);
 
@@ -19,5 +19,6 @@ int main(int argc, char **argv) {
 
     g.realize(100);
 
+    printf("Success!\n");
     return 0;
 }

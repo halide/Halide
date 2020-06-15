@@ -34,7 +34,9 @@ public:
 
     void dump() override;
 
-    std::string api_unique_name() override { return "opengl"; }
+    std::string api_unique_name() override {
+        return "opengl";
+    }
 
 private:
     CodeGen_GLSL *glc;
@@ -65,9 +67,9 @@ protected:
 
     void visit(const Max *op) override;
     void visit(const Min *op) override;
-    void visit(const Div *op) override;
-    void visit(const Mod *op) override;
     void visit(const Call *op) override;
+
+    void visit(const Mod *) override;
 
     // these have specific functions
     // in GLSL that operate on vectors
@@ -80,17 +82,18 @@ protected:
 
     void visit(const Shuffle *) override;
 
+    Type map_type(const Type &);
+
     std::map<std::string, std::string> builtin;
 };
-
 
 /** Compile one statement into GLSL. */
 class CodeGen_GLSL : public CodeGen_GLSLBase {
 public:
     CodeGen_GLSL(std::ostream &s, const Target &t);
 
-    void add_kernel(Stmt stmt,
-                    std::string name,
+    void add_kernel(const Stmt &stmt,
+                    const std::string &name,
                     const std::vector<DeviceArgument> &args);
 
     static void test();
@@ -114,11 +117,12 @@ protected:
     void visit(const Broadcast *) override;
 
     void visit(const Evaluate *) override;
+    void visit(const Atomic *) override;
 
 private:
-    std::string get_vector_suffix(Expr e);
+    std::string get_vector_suffix(const Expr &e);
 
-    std::vector<std::string> print_lanes(Expr expr);
+    std::vector<std::string> print_lanes(const Expr &expr);
 
     Scope<int> scalar_vars, vector_vars;
 };

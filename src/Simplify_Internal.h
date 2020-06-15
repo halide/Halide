@@ -23,7 +23,7 @@
 // of temporary objects when they are built and matched against. If we
 // wrap the expressions that imply lots of temporaries in a lambda, we
 // can get these large frames out of the recursive path.
-#define EVAL_IN_LAMBDA(x) (([&]() HALIDE_NEVER_INLINE {return (x);})())
+#define EVAL_IN_LAMBDA(x) (([&]() HALIDE_NEVER_INLINE { return (x); })())
 
 namespace Halide {
 namespace Internal {
@@ -90,9 +90,11 @@ public:
         }
     };
 
-#if LOG_EXPR_MUTATIONS
+#if (LOG_EXPR_MUTATORIONS || LOG_STMT_MUTATIONS)
     static int debug_indent;
+#endif
 
+#if LOG_EXPR_MUTATIONS
     Expr mutate(const Expr &e, ExprInfo *b) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
@@ -141,24 +143,24 @@ public:
     bool no_float_simplify;
 
     HALIDE_ALWAYS_INLINE
-    bool may_simplify(const Type &t) {
+    bool may_simplify(const Type &t) const {
         return !no_float_simplify || !t.is_float();
     }
 
     // Returns true iff t is an integral type where overflow is undefined
     HALIDE_ALWAYS_INLINE
-        bool no_overflow_int(Type t) {
+    bool no_overflow_int(Type t) {
         return t.is_int() && t.bits() >= 32;
     }
 
     HALIDE_ALWAYS_INLINE
-        bool no_overflow_scalar_int(Type t) {
+    bool no_overflow_scalar_int(Type t) {
         return t.is_scalar() && no_overflow_int(t);
     }
 
     // Returns true iff t does not have a well defined overflow behavior.
     HALIDE_ALWAYS_INLINE
-        bool no_overflow(Type t) {
+    bool no_overflow(Type t) {
         return t.is_float() || no_overflow_int(t);
     }
 
@@ -184,6 +186,11 @@ public:
     IRMatcher::WildConst<1> c1;
     IRMatcher::WildConst<2> c2;
     IRMatcher::WildConst<3> c3;
+
+    // Tracks whether or not we're inside a vector loop. Certain
+    // transformations are not a good idea if the code is to be
+    // vectorized.
+    bool in_vector_loop = false;
 
     // If we encounter a reference to a buffer (a Load, Store, Call,
     // or Provide), there's an implicit dependence on some associated
@@ -227,12 +234,14 @@ public:
         void learn_upper_bound(const Variable *v, int64_t val);
         void learn_lower_bound(const Variable *v, int64_t val);
 
-        ScopedFact(Simplify *s) : simplify(s) {}
+        ScopedFact(Simplify *s)
+            : simplify(s) {
+        }
         ~ScopedFact();
 
         // allow move but not copy
-        ScopedFact(const ScopedFact& that) = delete;
-        ScopedFact(ScopedFact&& that) = default;
+        ScopedFact(const ScopedFact &that) = delete;
+        ScopedFact(ScopedFact &&that) = default;
     };
 
     // Tell the simplifier to learn from and exploit a boolean
@@ -251,11 +260,15 @@ public:
         return f;
     }
 
-    template <typename T>
+    template<typename T>
     Expr hoist_slice_vector(Expr e);
 
-    Stmt mutate_let_body(Stmt s, ExprInfo *) {return mutate(s);}
-    Expr mutate_let_body(Expr e, ExprInfo *bounds) {return mutate(e, bounds);}
+    Stmt mutate_let_body(const Stmt &s, ExprInfo *) {
+        return mutate(s);
+    }
+    Expr mutate_let_body(const Expr &e, ExprInfo *bounds) {
+        return mutate(e, bounds);
+    }
 
     template<typename T, typename Body>
     Body simplify_let(const T *op, ExprInfo *bounds);
@@ -304,9 +317,10 @@ public:
     Stmt visit(const Free *op);
     Stmt visit(const Acquire *op);
     Stmt visit(const Fork *op);
+    Stmt visit(const Atomic *op);
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

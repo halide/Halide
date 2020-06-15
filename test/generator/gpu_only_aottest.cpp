@@ -1,8 +1,8 @@
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
-#include "HalideRuntime.h"
-#include "HalideBuffer.h"
-#include <assert.h>
 #if defined(TEST_OPENCL)
 #include "HalideRuntimeOpenCL.h"
 #elif defined(TEST_CUDA)
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
 #else
-    printf("No GPU target enabled, skipping...\n");
+    printf("[SKIP] No GPU target enabled.\n");
 #endif
     return 0;
 }

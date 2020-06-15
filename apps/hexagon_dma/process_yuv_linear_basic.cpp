@@ -1,12 +1,12 @@
-#include <stdio.h>
-#include <memory.h>
-#include <assert.h>
-#include <stdlib.h>
 #include "halide_benchmark.h"
+#include <assert.h>
+#include <memory.h>
+#include <stdio.h>
+#include <stdlib.h>
 #ifdef SCHEDULE_ALL
+#include "pipeline_nv12_linear_ro_async.h"
 #include "pipeline_nv12_linear_ro_basic.h"
 #include "pipeline_nv12_linear_ro_fold.h"
-#include "pipeline_nv12_linear_ro_async.h"
 #include "pipeline_nv12_linear_ro_split.h"
 #include "pipeline_nv12_linear_ro_split_async.h"
 
@@ -17,21 +17,20 @@
 #include "pipeline_nv12_linear_rw_split.h"
 #include "pipeline_nv12_linear_rw_split_async.h"
 #ifdef SCHEDULE_ALL
+#include "pipeline_p010_linear_ro_async.h"
 #include "pipeline_p010_linear_ro_basic.h"
 #include "pipeline_p010_linear_ro_fold.h"
-#include "pipeline_p010_linear_ro_async.h"
 #include "pipeline_p010_linear_ro_split.h"
 #include "pipeline_p010_linear_ro_split_async.h"
 
 #include "pipeline_p010_linear_rw_basic.h"
 #include "pipeline_p010_linear_rw_fold.h"
 #endif
+#include "HalideBuffer.h"
+#include "HalideRuntimeHexagonDma.h"
 #include "pipeline_p010_linear_rw_async.h"
 #include "pipeline_p010_linear_rw_split.h"
 #include "pipeline_p010_linear_rw_split_async.h"
-#include "HalideRuntimeHexagonDma.h"
-#include "HalideBuffer.h"
-
 
 enum {
     SCHEDULE_BASIC,
@@ -54,56 +53,54 @@ typedef struct {
 } ScheduleList;
 
 #define _SCHEDULE_STR(s) #s
-#define _SCHEDULE_NAME(data, direction, schedule)       pipeline_##data##_##direction##_##schedule
-#define _SCHEDULE_PAIR(data, direction, schedule)       {_SCHEDULE_STR(scheduled-pipeline(data, direction, schedule)), _SCHEDULE_NAME(data, direction, schedule)}
-#define _SCHEDULE_DUMMY_PAIR                            {NULL, NULL}
-#define SCHEDULE_FUNCTION_RW(type, schedule)            _SCHEDULE_PAIR(type##_linear, rw, schedule)
+#define _SCHEDULE_NAME(data, direction, schedule) pipeline_##data##_##direction##_##schedule
+#define _SCHEDULE_PAIR(data, direction, schedule) \
+    { _SCHEDULE_STR(scheduled - pipeline(data, direction, schedule)), _SCHEDULE_NAME(data, direction, schedule) }
+#define _SCHEDULE_DUMMY_PAIR \
+    { NULL, NULL }
+#define SCHEDULE_FUNCTION_RW(type, schedule) _SCHEDULE_PAIR(type##_linear, rw, schedule)
 
 #ifdef SCHEDULE_ALL
-#define SCHEDULE_FUNCTION_RO(type, schedule)            _SCHEDULE_PAIR(type##_linear, ro, schedule)
+#define SCHEDULE_FUNCTION_RO(type, schedule) _SCHEDULE_PAIR(type##_linear, ro, schedule)
 #else
-#define SCHEDULE_FUNCTION_RO(type, schedule)            _SCHEDULE_DUMMY_PAIR
+#define SCHEDULE_FUNCTION_RO(type, schedule) _SCHEDULE_DUMMY_PAIR
 #endif
 
 static ScheduleList schedule_listNV12[DIRECTION_MAX][SCHEDULE_MAX] = {{
 #ifdef SCHEDULE_ALL
-    SCHEDULE_FUNCTION_RW(nv12, basic),
-    SCHEDULE_FUNCTION_RW(nv12, fold),
+                                                                          SCHEDULE_FUNCTION_RW(nv12, basic),
+                                                                          SCHEDULE_FUNCTION_RW(nv12, fold),
 #else
-    SCHEDULE_FUNCTION_RO(nv12, basic),    // dummy
-    SCHEDULE_FUNCTION_RO(nv12, fold),     // dummy
+                                                                          SCHEDULE_FUNCTION_RO(nv12, basic),  // dummy
+                                                                          SCHEDULE_FUNCTION_RO(nv12, fold),   // dummy
 #endif
-    SCHEDULE_FUNCTION_RW(nv12, async),
-    SCHEDULE_FUNCTION_RW(nv12, split),
-    SCHEDULE_FUNCTION_RW(nv12, split_async)
-    },{
-    SCHEDULE_FUNCTION_RO(nv12, basic),
-    SCHEDULE_FUNCTION_RO(nv12, fold),
-    SCHEDULE_FUNCTION_RO(nv12, async),
-    SCHEDULE_FUNCTION_RO(nv12, split),
-    SCHEDULE_FUNCTION_RO(nv12, split_async)
-}};
+                                                                          SCHEDULE_FUNCTION_RW(nv12, async),
+                                                                          SCHEDULE_FUNCTION_RW(nv12, split),
+                                                                          SCHEDULE_FUNCTION_RW(nv12, split_async)},
+                                                                      {SCHEDULE_FUNCTION_RO(nv12, basic),
+                                                                       SCHEDULE_FUNCTION_RO(nv12, fold),
+                                                                       SCHEDULE_FUNCTION_RO(nv12, async),
+                                                                       SCHEDULE_FUNCTION_RO(nv12, split),
+                                                                       SCHEDULE_FUNCTION_RO(nv12, split_async)}};
 
 static ScheduleList schedule_listP010[DIRECTION_MAX][SCHEDULE_MAX] = {{
 #ifdef SCHEDULE_ALL
-    SCHEDULE_FUNCTION_RW(p010, basic),
-    SCHEDULE_FUNCTION_RW(p010, fold),
+                                                                          SCHEDULE_FUNCTION_RW(p010, basic),
+                                                                          SCHEDULE_FUNCTION_RW(p010, fold),
 #else
-    SCHEDULE_FUNCTION_RO(p010, basic),    // dummy
-    SCHEDULE_FUNCTION_RO(p010, fold),     // dummy
+                                                                          SCHEDULE_FUNCTION_RO(p010, basic),  // dummy
+                                                                          SCHEDULE_FUNCTION_RO(p010, fold),   // dummy
 #endif
-    SCHEDULE_FUNCTION_RW(p010, async),
-    SCHEDULE_FUNCTION_RW(p010, split),
-    SCHEDULE_FUNCTION_RW(p010, split_async)
-    },{
-    SCHEDULE_FUNCTION_RO(p010, basic),
-    SCHEDULE_FUNCTION_RO(p010, fold),
-    SCHEDULE_FUNCTION_RO(p010, async),
-    SCHEDULE_FUNCTION_RO(p010, split),
-    SCHEDULE_FUNCTION_RO(p010, split_async)
-}};
+                                                                          SCHEDULE_FUNCTION_RW(p010, async),
+                                                                          SCHEDULE_FUNCTION_RW(p010, split),
+                                                                          SCHEDULE_FUNCTION_RW(p010, split_async)},
+                                                                      {SCHEDULE_FUNCTION_RO(p010, basic),
+                                                                       SCHEDULE_FUNCTION_RO(p010, fold),
+                                                                       SCHEDULE_FUNCTION_RO(p010, async),
+                                                                       SCHEDULE_FUNCTION_RO(p010, split),
+                                                                       SCHEDULE_FUNCTION_RO(p010, split_async)}};
 
-template <typename T, size_t size_direction, size_t size_schedule>
+template<typename T, size_t size_direction, size_t size_schedule>
 inline int process_pipeline(T const &type, const int width, const int height,
                             const char *schedule, const char *dma_direction,
                             ScheduleList (&schedule_list)[size_direction][size_schedule]) {
@@ -114,16 +111,16 @@ inline int process_pipeline(T const &type, const int width, const int height,
     T *data_in = (T *)malloc(buf_size * sizeof(T));
     T *data_out = (T *)malloc(buf_size * sizeof(T));
     // Creating the Input Data so that we can catch if there are any Errors in DMA
-    for (int i = 0; i < buf_size ;  i++) {
-        data_in[i] =  ((T)rand()) >> 1;
+    for (int i = 0; i < buf_size; i++) {
+        data_in[i] = ((T)rand()) >> 1;
         data_out[i] = 0;
     }
 
     // Setup Halide input buffer with the test buffer
     Halide::Runtime::Buffer<T> input_validation(data_in, width, height, 2);
     Halide::Runtime::Buffer<T> input(nullptr, width, (3 * height) / 2);
-    Halide::Runtime::Buffer<T> input_y = input.cropped(1, 0, height);             // Luma plane only
-    Halide::Runtime::Buffer<T> input_uv = input.cropped(1, height, height / 2);   // Chroma plane only, with reduced height
+    Halide::Runtime::Buffer<T> input_y = input.cropped(1, 0, height);            // Luma plane only
+    Halide::Runtime::Buffer<T> input_uv = input.cropped(1, height, height / 2);  // Chroma plane only, with reduced height
 
     // describe the UV interleaving for 4:2:0 format
     input_uv.embed(2, 0);
@@ -134,8 +131,8 @@ inline int process_pipeline(T const &type, const int width, const int height,
 
     // Setup Halide output buffer
     Halide::Runtime::Buffer<T> output(width, (3 * height) / 2);
-    Halide::Runtime::Buffer<T> output_y = output.cropped(1, 0, height);               // Luma plane only
-    Halide::Runtime::Buffer<T> output_uv = output.cropped(1, height, (height / 2));   // Chroma plane only, with reduced height
+    Halide::Runtime::Buffer<T> output_y = output.cropped(1, 0, height);              // Luma plane only
+    Halide::Runtime::Buffer<T> output_uv = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
 
     // describe the UV interleaving for 4:2:0 format
     output_uv.embed(2, 0);
@@ -163,19 +160,19 @@ inline int process_pipeline(T const &type, const int width, const int height,
     void *dma_engine_write = nullptr;
     halide_hexagon_dma_allocate_engine(nullptr, &dma_engine);
 
-    if ((!strcmp(schedule,"async") || !strcmp(schedule,"split_async")) && !strcmp(dma_direction, "rw")) {
+    if ((!strcmp(schedule, "async") || !strcmp(schedule, "split_async")) && !strcmp(dma_direction, "rw")) {
         printf("A separate engine for DMA write\n");
         halide_hexagon_dma_allocate_engine(nullptr, &dma_engine_write);
     }
 
-    halide_hexagon_image_fmt_t fmt_y = (sizeof(type)==1) ? halide_hexagon_fmt_NV12_Y : halide_hexagon_fmt_P010_Y;
-    halide_hexagon_image_fmt_t fmt_uv = (sizeof(type)==1) ? halide_hexagon_fmt_NV12_UV : halide_hexagon_fmt_P010_UV;
+    halide_hexagon_image_fmt_t fmt_y = (sizeof(type) == 1) ? halide_hexagon_fmt_NV12_Y : halide_hexagon_fmt_P010_Y;
+    halide_hexagon_image_fmt_t fmt_uv = (sizeof(type) == 1) ? halide_hexagon_fmt_NV12_UV : halide_hexagon_fmt_P010_UV;
 
     // DMA_step 3: Associate buffer to DMA engine, and prepare for copying to host (DMA read) and device (DMA write)
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_y, dma_engine, false, fmt_y);
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, fmt_uv);
     if (!strcmp(dma_direction, "rw")) {
-        if (!strcmp(schedule,"async") || !strcmp(schedule,"split_async")) {
+        if (!strcmp(schedule, "async") || !strcmp(schedule, "split_async")) {
             printf("Use separate engine for DMA output\n");
             halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_y, dma_engine_write, false, fmt_y);
             halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_uv, dma_engine_write, false, fmt_uv);
@@ -187,15 +184,15 @@ inline int process_pipeline(T const &type, const int width, const int height,
 
     int my_direction = (!strcmp(dma_direction, "rw")) ? DIRECTION_RW : DIRECTION_RO;
     int my_schedule = SCHEDULE_MAX;
-    if (!strcmp(schedule,"basic")) {
+    if (!strcmp(schedule, "basic")) {
         my_schedule = SCHEDULE_BASIC;
-    } else if (!strcmp(schedule,"fold")) {
+    } else if (!strcmp(schedule, "fold")) {
         my_schedule = SCHEDULE_FOLD;
-    } else if (!strcmp(schedule,"async")) {
+    } else if (!strcmp(schedule, "async")) {
         my_schedule = SCHEDULE_ASYNC;
-    } else if (!strcmp(schedule,"split")) {
+    } else if (!strcmp(schedule, "split")) {
         my_schedule = SCHEDULE_SPLIT;
-    } else if (!strcmp(schedule,"split_async")) {
+    } else if (!strcmp(schedule, "split_async")) {
         my_schedule = SCHEDULE_SPLIT_ASYNC;
     }
     if (my_schedule < SCHEDULE_MAX) {
@@ -233,7 +230,7 @@ inline int process_pipeline(T const &type, const int width, const int height,
     //             Optional goto DMA_step 0 for processing more buffers
     halide_hexagon_dma_unprepare(nullptr, input_y);
     halide_hexagon_dma_unprepare(nullptr, input_uv);
- 
+
     if (!strcmp(dma_direction, "rw")) {
         halide_hexagon_dma_unprepare(nullptr, output_y);
         halide_hexagon_dma_unprepare(nullptr, output_uv);
@@ -242,7 +239,7 @@ inline int process_pipeline(T const &type, const int width, const int height,
     // DMA_step 5: Processing is completed and ready to exit, deallocate the DMA engine
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
 
-    if ((!strcmp(schedule,"async") || !strcmp(schedule,"split_async")) && !strcmp(dma_direction, "rw")) {
+    if ((!strcmp(schedule, "async") || !strcmp(schedule, "split_async")) && !strcmp(dma_direction, "rw")) {
         halide_hexagon_dma_deallocate_engine(nullptr, dma_engine_write);
     }
 
@@ -266,13 +263,13 @@ int main(int argc, char **argv) {
     const char *dma_direction = argv[4];
     const char *yuv_type = argv[5];
 
-    if (!strcmp(yuv_type,"p010")) {
-        uint16_t type=0;
+    if (!strcmp(yuv_type, "p010")) {
+        uint16_t type = 0;
         ret = process_pipeline(type, width, height, schedule, dma_direction, schedule_listP010);
     } else {
-        uint8_t type=0;
+        uint8_t type = 0;
         ret = process_pipeline(type, width, height, schedule, dma_direction, schedule_listNV12);
     }
-    
+
     return ret;
 }

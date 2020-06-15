@@ -1,27 +1,16 @@
 #!/usr/bin/python3
+
 # Halide tutorial lesson 3
 
-# This lesson demonstrates how to inspect what the Halide compiler is producing.
+# This lesson demonstrates how to inspect what the Halide compiler is
+# producing.
 
 # This lesson can be built by invoking the command:
-#    make tutorial_lesson_03_debugging_1
-# in a shell with the current directory at the top of the halide source tree.
-# Otherwise, see the platform-specific compiler invocations below.
+#    make test_tutorial_lesson_03_debugging_1
+# in a shell with the current directory at python_bindings/
 
-# On linux, you can compile and run it like so:
-# g++ lesson_03*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_03 -std=c++11
-# LD_LIBRARY_PATH=../bin ./lesson_03
-
-# On os x:
-# g++ lesson_03*.cpp -g -I ../include -L ../bin -lHalide -o lesson_03 -std=c++11
-# DYLD_LIBRARY_PATH=../bin ./lesson_03
-
-#include "Halide.h"
-#include <stdio.h>
-
-# This time we'll just import the entire Halide namespace
-#using namespace Halide
 import halide as hl
+
 
 def main():
 

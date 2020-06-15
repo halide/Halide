@@ -8,6 +8,24 @@
 namespace Halide {
 namespace Internal {
 
+std::ostream &operator<<(std::ostream &stream, const Monotonic &m) {
+    switch (m) {
+    case Monotonic::Constant:
+        stream << "Constant";
+        break;
+    case Monotonic::Increasing:
+        stream << "Increasing";
+        break;
+    case Monotonic::Decreasing:
+        stream << "Decreasing";
+        break;
+    case Monotonic::Unknown:
+        stream << "Unknown";
+        break;
+    }
+    return stream;
+}
+
 using std::string;
 
 class MonotonicVisitor : public IRVisitor {
@@ -28,7 +46,8 @@ class MonotonicVisitor : public IRVisitor {
     }
 
     void visit(const StringImm *) override {
-        internal_error << "Monotonic on String\n";
+        // require() Exprs can includes Strings.
+        result = Monotonic::Constant;
     }
 
     void visit(const Cast *op) override {
@@ -63,9 +82,12 @@ class MonotonicVisitor : public IRVisitor {
 
     Monotonic flip(Monotonic r) {
         switch (r) {
-        case Monotonic::Increasing: return Monotonic::Decreasing;
-        case Monotonic::Decreasing: return Monotonic::Increasing;
-        default: return r;
+        case Monotonic::Increasing:
+            return Monotonic::Decreasing;
+        case Monotonic::Decreasing:
+            return Monotonic::Increasing;
+        default:
+            return r;
         }
     }
 
@@ -124,7 +146,6 @@ class MonotonicVisitor : public IRVisitor {
         } else {
             result = Monotonic::Unknown;
         }
-
     }
 
     void visit(const Div *op) override {
@@ -164,7 +185,7 @@ class MonotonicVisitor : public IRVisitor {
         result = unify(ra, rb);
     }
 
-    void visit_eq(Expr a, Expr b) {
+    void visit_eq(const Expr &a, const Expr &b) {
         a.accept(this);
         Monotonic ra = result;
         b.accept(this);
@@ -184,7 +205,7 @@ class MonotonicVisitor : public IRVisitor {
         visit_eq(op->a, op->b);
     }
 
-    void visit_lt(Expr a, Expr b) {
+    void visit_lt(const Expr &a, const Expr &b) {
         a.accept(this);
         Monotonic ra = result;
         b.accept(this);
@@ -255,8 +276,8 @@ class MonotonicVisitor : public IRVisitor {
             // The true value equals the false value.
             result = ra;
         } else if ((unified == Monotonic::Increasing || unified == Monotonic::Constant) &&
-            ((switches_from_false_to_true && true_value_ge_false_value) ||
-             (switches_from_true_to_false && true_value_le_false_value))) {
+                   ((switches_from_false_to_true && true_value_ge_false_value) ||
+                    (switches_from_true_to_false && true_value_le_false_value))) {
             // Both paths increase, and the condition makes it switch
             // from the lesser path to the greater path.
             result = Monotonic::Increasing;
@@ -279,11 +300,12 @@ class MonotonicVisitor : public IRVisitor {
     }
 
     void visit(const Ramp *op) override {
-        internal_error << "Monotonic of vector\n";
+        Expr equiv = op->base + Variable::make(op->base.type(), unique_name('t')) * op->stride;
+        equiv.accept(this);
     }
 
     void visit(const Broadcast *op) override {
-        internal_error << "Monotonic of vector\n";
+        op->value.accept(this);
     }
 
     void visit(const Call *op) override {
@@ -295,9 +317,28 @@ class MonotonicVisitor : public IRVisitor {
             return;
         }
 
+        if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
+            op->is_intrinsic(Call::promise_clamped)) {
+            op->args[0].accept(this);
+            return;
+        }
+
+        if (op->is_intrinsic(Call::require)) {
+            // require() returns the value of the second arg in all non-failure cases
+            op->args[1].accept(this);
+            return;
+        }
+
+        if (!op->is_pure()) {
+            // Even with constant args, the result could vary from one loop iteration to the next.
+            result = Monotonic::Unknown;
+            return;
+        }
+
         for (size_t i = 0; i < op->args.size(); i++) {
             op->args[i].accept(this);
             if (result != Monotonic::Constant) {
+                // One of the args is not constant.
                 result = Monotonic::Unknown;
                 return;
             }
@@ -390,40 +431,47 @@ class MonotonicVisitor : public IRVisitor {
         internal_error << "Monotonic of statement\n";
     }
 
+    void visit(const Atomic *op) override {
+        internal_error << "Monotonic of statement\n";
+    }
+
 public:
     Monotonic result;
 
-    MonotonicVisitor(const std::string &v) : var(v), result(Monotonic::Unknown) {}
+    MonotonicVisitor(const std::string &v, const Scope<Monotonic> &parent)
+        : var(v), result(Monotonic::Unknown) {
+        scope.set_containing_scope(&parent);
+    }
 };
 
-Monotonic is_monotonic(Expr e, const std::string &var) {
+Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monotonic> &scope) {
     if (!e.defined()) return Monotonic::Unknown;
-    MonotonicVisitor m(var);
+    MonotonicVisitor m(var, scope);
     e.accept(&m);
     return m.result;
 }
 
 namespace {
-void check_increasing(Expr e) {
+void check_increasing(const Expr &e) {
     internal_assert(is_monotonic(e, "x") == Monotonic::Increasing)
         << "Was supposed to be increasing: " << e << "\n";
 }
 
-void check_decreasing(Expr e) {
+void check_decreasing(const Expr &e) {
     internal_assert(is_monotonic(e, "x") == Monotonic::Decreasing)
         << "Was supposed to be decreasing: " << e << "\n";
 }
 
-void check_constant(Expr e) {
+void check_constant(const Expr &e) {
     internal_assert(is_monotonic(e, "x") == Monotonic::Constant)
         << "Was supposed to be constant: " << e << "\n";
 }
 
-void check_unknown(Expr e) {
+void check_unknown(const Expr &e) {
     internal_assert(is_monotonic(e, "x") == Monotonic::Unknown)
         << "Was supposed to be unknown: " << e << "\n";
 }
-}
+}  // namespace
 
 void is_monotonic_test() {
 
@@ -431,43 +479,46 @@ void is_monotonic_test() {
     Expr y = Variable::make(Int(32), "y");
 
     check_increasing(x);
-    check_increasing(x+4);
-    check_increasing(x+y);
-    check_increasing(x*4);
-    check_increasing(min(x+4, y+4));
-    check_increasing(max(x+y, x-y));
+    check_increasing(x + 4);
+    check_increasing(x + y);
+    check_increasing(x * 4);
+    check_increasing(min(x + 4, y + 4));
+    check_increasing(max(x + y, x - y));
     check_increasing(x >= y);
     check_increasing(x > y);
 
     check_decreasing(-x);
-    check_decreasing(x*-4);
+    check_decreasing(x * -4);
     check_decreasing(y - x);
     check_decreasing(x < y);
     check_decreasing(x <= y);
 
     check_unknown(x == y);
     check_unknown(x != y);
-    check_unknown(x*y);
+    check_unknown(x * y);
 
-    check_increasing(select(y == 2, x, x+4));
-    check_decreasing(select(y == 2, -x, x*-4));
+    // Not constant despite having constant args, because there's a side-effect.
+    check_unknown(Call::make(Int(32), "foo", {Expr(3)}, Call::Extern));
 
-    check_increasing(select(x > 2, x+1, x));
-    check_increasing(select(x < 2, x, x+1));
-    check_decreasing(select(x > 2, -x-1, -x));
-    check_decreasing(select(x < 2, -x, -x-1));
+    check_increasing(select(y == 2, x, x + 4));
+    check_decreasing(select(y == 2, -x, x * -4));
 
-    check_unknown(select(x < 2, x, x-5));
-    check_unknown(select(x > 2, x-5, x));
+    check_increasing(select(x > 2, x + 1, x));
+    check_increasing(select(x < 2, x, x + 1));
+    check_decreasing(select(x > 2, -x - 1, -x));
+    check_decreasing(select(x < 2, -x, -x - 1));
+
+    check_unknown(select(x < 2, x, x - 5));
+    check_unknown(select(x > 2, x - 5, x));
 
     check_constant(y);
 
-    check_increasing(select(x < 17, y, y+1));
-    check_increasing(select(x > 17, y, y-1));
-    check_decreasing(select(x < 17, y, y-1));
-    check_decreasing(select(x > 17, y, y+1));
+    check_increasing(select(x < 17, y, y + 1));
+    check_increasing(select(x > 17, y, y - 1));
+    check_decreasing(select(x < 17, y, y - 1));
+    check_decreasing(select(x > 17, y, y + 1));
 
-    check_increasing(select(x % 2 == 0, x+3, x+3));
+    check_increasing(select(x % 2 == 0, x + 3, x + 3));
 
     check_constant(select(y > 3, y + 23, y - 65));
 

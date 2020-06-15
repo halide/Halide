@@ -18,6 +18,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::and_op(a, b), op->type);
 
+    // clang-format off
     if (EVAL_IN_LAMBDA
         (rewrite(x && true, a) ||
          rewrite(x && false, b) ||
@@ -73,6 +74,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
          rewrite(x <= c0 && x <= c1, x <= fold(min(c0, c1))))) {
         return rewrite.result;
     }
+    // clang-format on
 
     if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y, op->type.lanes())) ||
 
@@ -99,9 +101,14 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
         rewrite((x || y) && (x || z), x || (y && z)) ||
         rewrite((x || y) && (z || x), x || (y && z)) ||
         rewrite((y || x) && (x || z), x || (y && z)) ||
-        rewrite((y || x) && (z || x), x || (y && z))) {
+        rewrite((y || x) && (z || x), x || (y && z)) ||
 
-        return mutate(std::move(rewrite.result), bounds);
+        rewrite(x < y && x < z, x < min(y, z)) ||
+        rewrite(y < x && z < x, max(y, z) < x) ||
+        rewrite(x <= y && x <= z, x <= min(y, z)) ||
+        rewrite(y <= x && z <= x, max(y, z) <= x)) {
+
+        return mutate(rewrite.result, bounds);
     }
 
     if (a.same_as(op->a) &&
@@ -112,5 +119,5 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

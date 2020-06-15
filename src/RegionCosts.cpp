@@ -1,6 +1,8 @@
 #include "RegionCosts.h"
 #include "FindCalls.h"
+#include "Function.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRVisitor.h"
 #include "PartitionLoops.h"
 #include "RealizationOrder.h"
@@ -51,6 +53,7 @@ class FindImageInputs : public IRVisitor {
             call->args[i].accept(this);
         }
     }
+
 public:
     map<string, Type> input_type;
     map<string, Interval> input_estimates;
@@ -61,11 +64,16 @@ class ExprCost : public IRVisitor {
     using IRVisitor::visit;
 
     // Immediate values and variables do not incur any cost.
-    void visit(const IntImm *) override {}
-    void visit(const UIntImm *) override {}
-    void visit(const FloatImm *) override {}
-    void visit(const StringImm *) override {}
-    void visit(const Variable *) override {}
+    void visit(const IntImm *) override {
+    }
+    void visit(const UIntImm *) override {
+    }
+    void visit(const FloatImm *) override {
+    }
+    void visit(const StringImm *) override {
+    }
+    void visit(const Variable *) override {
+    }
 
     void visit(const Cast *op) override {
         op->value.accept(this);
@@ -84,21 +92,51 @@ class ExprCost : public IRVisitor {
     // beneficial. Write a test case to validate this and update the costs
     // accordingly.
 
-    void visit(const Add *op) override { visit_binary_operator(op, 1); }
-    void visit(const Sub *op) override { visit_binary_operator(op, 1); }
-    void visit(const Mul *op) override { visit_binary_operator(op, 1); }
-    void visit(const Div *op) override { visit_binary_operator(op, 1); }
-    void visit(const Mod *op) override { visit_binary_operator(op, 1); }
-    void visit(const Min *op) override { visit_binary_operator(op, 1); }
-    void visit(const Max *op) override { visit_binary_operator(op, 1); }
-    void visit(const EQ *op) override { visit_binary_operator(op, 1); }
-    void visit(const NE *op) override { visit_binary_operator(op, 1); }
-    void visit(const LT *op) override { visit_binary_operator(op, 1); }
-    void visit(const LE *op) override { visit_binary_operator(op, 1); }
-    void visit(const GT *op) override { visit_binary_operator(op, 1); }
-    void visit(const GE *op) override { visit_binary_operator(op, 1); }
-    void visit(const And *op) override { visit_binary_operator(op, 1); }
-    void visit(const Or *op) override { visit_binary_operator(op, 1); }
+    void visit(const Add *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const Sub *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const Mul *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const Div *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const Mod *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const Min *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const Max *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const EQ *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const NE *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const LT *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const LE *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const GT *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const GE *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const And *op) override {
+        visit_binary_operator(op, 1);
+    }
+    void visit(const Or *op) override {
+        visit_binary_operator(op, 1);
+    }
 
     void visit(const Not *op) override {
         op->a.accept(this);
@@ -173,17 +211,17 @@ class ExprCost : public IRVisitor {
                 // There is no visibility into an extern stage so there is no
                 // way to know the cost of the call statically. Modeling the
                 // cost of an extern stage requires profiling or user annotation.
-                user_warning << "Unknown extern call " << call->name << '\n';
+                user_warning << "Unknown extern call " << call->name << "\n";
             }
         } else if (call->is_intrinsic()) {
             // TODO: Improve the cost model. In some architectures (e.g. ARM or
             // NEON), count_leading_zeros should be as cheap as bitwise ops.
             // div_round_to_zero and mod_round_to_zero can also get fairly expensive.
             if (call->is_intrinsic(Call::reinterpret) || call->is_intrinsic(Call::bitwise_and) ||
-                    call->is_intrinsic(Call::bitwise_not) || call->is_intrinsic(Call::bitwise_xor) ||
-                    call->is_intrinsic(Call::bitwise_or) || call->is_intrinsic(Call::shift_left) ||
-                    call->is_intrinsic(Call::shift_right) || call->is_intrinsic(Call::div_round_to_zero) ||
-                    call->is_intrinsic(Call::mod_round_to_zero) || call->is_intrinsic(Call::undef)) {
+                call->is_intrinsic(Call::bitwise_not) || call->is_intrinsic(Call::bitwise_xor) ||
+                call->is_intrinsic(Call::bitwise_or) || call->is_intrinsic(Call::shift_left) ||
+                call->is_intrinsic(Call::shift_right) || call->is_intrinsic(Call::div_round_to_zero) ||
+                call->is_intrinsic(Call::mod_round_to_zero) || call->is_intrinsic(Call::undef)) {
                 arith += 1;
             } else if (call->is_intrinsic(Call::abs) || call->is_intrinsic(Call::absd) ||
                        call->is_intrinsic(Call::lerp) || call->is_intrinsic(Call::random) ||
@@ -196,7 +234,7 @@ class ExprCost : public IRVisitor {
             } else {
                 // For other intrinsics, use 1 for the arithmetic cost.
                 arith += 1;
-                user_warning << "Unhandled intrinsic call " << call->name << '\n';
+                user_warning << "Unhandled intrinsic call " << call->name << "\n";
             }
         }
 
@@ -216,21 +254,51 @@ class ExprCost : public IRVisitor {
 
     // None of the following IR nodes should be encountered when traversing the
     // IR at the level at which the auto scheduler operates.
-    void visit(const Load *) override { internal_assert(false); }
-    void visit(const Ramp *) override { internal_assert(false); }
-    void visit(const Broadcast *) override { internal_assert(false); }
-    void visit(const LetStmt *) override { internal_assert(false); }
-    void visit(const AssertStmt *) override { internal_assert(false); }
-    void visit(const ProducerConsumer *) override { internal_assert(false); }
-    void visit(const For *) override { internal_assert(false); }
-    void visit(const Store *) override { internal_assert(false); }
-    void visit(const Provide *) override { internal_assert(false); }
-    void visit(const Allocate *) override { internal_assert(false); }
-    void visit(const Free *) override { internal_assert(false); }
-    void visit(const Realize *) override { internal_assert(false); }
-    void visit(const Block *) override { internal_assert(false); }
-    void visit(const IfThenElse *) override { internal_assert(false); }
-    void visit(const Evaluate *) override { internal_assert(false); }
+    void visit(const Load *) override {
+        internal_error;
+    }
+    void visit(const Ramp *) override {
+        internal_error;
+    }
+    void visit(const Broadcast *) override {
+        internal_error;
+    }
+    void visit(const LetStmt *) override {
+        internal_error;
+    }
+    void visit(const AssertStmt *) override {
+        internal_error;
+    }
+    void visit(const ProducerConsumer *) override {
+        internal_error;
+    }
+    void visit(const For *) override {
+        internal_error;
+    }
+    void visit(const Store *) override {
+        internal_error;
+    }
+    void visit(const Provide *) override {
+        internal_error;
+    }
+    void visit(const Allocate *) override {
+        internal_error;
+    }
+    void visit(const Free *) override {
+        internal_error;
+    }
+    void visit(const Realize *) override {
+        internal_error;
+    }
+    void visit(const Block *) override {
+        internal_error;
+    }
+    void visit(const IfThenElse *) override {
+        internal_error;
+    }
+    void visit(const Evaluate *) override {
+        internal_error;
+    }
 
 public:
     int64_t arith;
@@ -239,7 +307,9 @@ public:
     // they are loaded from.
     map<string, int64_t> detailed_byte_loads;
 
-    ExprCost() : arith(0), memory(0) {}
+    ExprCost()
+        : arith(0), memory(0) {
+    }
 };
 
 // Return the number of bytes required to store a single value of the
@@ -262,8 +332,8 @@ Expr get_func_value_size(const Function &f) {
 //
 // TODO: Comment this out for now until we modify the compute expr cost and
 // detailed byte loads functions to account for likely exprs.
-/*class LikelyExpression : public IRMutator2 {
-    using IRMutator2::visit;
+/*class LikelyExpression : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Min *op) override {
         IRVisitor::visit(op);
@@ -322,11 +392,11 @@ map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
     return loads;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 RegionCosts::RegionCosts(const map<string, Function> &_env,
                          const vector<string> &_order)
-        : env(_env), order(_order) {
+    : env(_env), order(_order) {
     for (const auto &kv : env) {
         // Pre-compute the function costs without any inlining.
         func_cost[kv.first] = get_func_cost(kv.second);
@@ -345,7 +415,7 @@ RegionCosts::RegionCosts(const map<string, Function> &_env,
     }
 }
 
-Cost RegionCosts::stage_region_cost(string func, int stage, const DimBounds &bounds,
+Cost RegionCosts::stage_region_cost(const string &func, int stage, const DimBounds &bounds,
                                     const set<string> &inlines) {
     Function curr_f = get_element(env, func);
 
@@ -364,15 +434,14 @@ Cost RegionCosts::stage_region_cost(string func, int stage, const DimBounds &bou
     }
 
     // If there is nothing to be inlined, use the pre-computed function cost.
-    Cost cost = inlines.empty() ? get_element(func_cost, func)[stage]
-                                : get_func_stage_cost(curr_f, stage, inlines);
+    Cost cost = inlines.empty() ? get_element(func_cost, func)[stage] : get_func_stage_cost(curr_f, stage, inlines);
     if (!cost.defined()) {
         return Cost();
     }
     return Cost(simplify(size * cost.arith), simplify(size * cost.memory));
 }
 
-Cost RegionCosts::stage_region_cost(string func, int stage, const Box &region,
+Cost RegionCosts::stage_region_cost(const string &func, int stage, const Box &region,
                                     const set<string> &inlines) {
     Function curr_f = get_element(env, func);
 
@@ -387,7 +456,7 @@ Cost RegionCosts::stage_region_cost(string func, int stage, const Box &region,
     return stage_region_cost(func, stage, stage_bounds, inlines);
 }
 
-Cost RegionCosts::region_cost(string func, const Box &region, const set<string> &inlines) {
+Cost RegionCosts::region_cost(const string &func, const Box &region, const set<string> &inlines) {
     Function curr_f = get_element(env, func);
     Cost region_cost(0, 0);
 
@@ -407,7 +476,7 @@ Cost RegionCosts::region_cost(string func, const Box &region, const set<string> 
     return region_cost;
 }
 
-Cost RegionCosts::region_cost(const map<string, Box> &regions, const set<string> &inlines){
+Cost RegionCosts::region_cost(const map<string, Box> &regions, const set<string> &inlines) {
     Cost total_cost(0, 0);
     for (const auto &f : regions) {
         // The cost for pure inlined functions will be accounted in the
@@ -432,7 +501,7 @@ Cost RegionCosts::region_cost(const map<string, Box> &regions, const set<string>
 }
 
 map<string, Expr>
-RegionCosts::stage_detailed_load_costs(string func, int stage,
+RegionCosts::stage_detailed_load_costs(const string &func, int stage,
                                        const set<string> &inlines) {
     map<string, Expr> load_costs;
     Function curr_f = get_element(env, func);
@@ -464,7 +533,7 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
 }
 
 map<string, Expr>
-RegionCosts::stage_detailed_load_costs(string func, int stage,
+RegionCosts::stage_detailed_load_costs(const string &func, int stage,
                                        DimBounds &bounds,
                                        const set<string> &inlines) {
     Function curr_f = get_element(env, func);
@@ -493,7 +562,7 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
 }
 
 map<string, Expr>
-RegionCosts::detailed_load_costs(string func, const Box &region,
+RegionCosts::detailed_load_costs(const string &func, const Box &region,
                                  const set<string> &inlines) {
     Function curr_f = get_element(env, func);
     map<string, Expr> load_costs;
@@ -556,7 +625,7 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
 }
 
 Cost RegionCosts::get_func_stage_cost(const Function &f, int stage,
-                                      const set<string> &inlines) {
+                                      const set<string> &inlines) const {
     if (f.has_extern_definition()) {
         return Cost();
     }
@@ -597,7 +666,7 @@ Cost RegionCosts::get_func_stage_cost(const Function &f, int stage,
 
 vector<Cost> RegionCosts::get_func_cost(const Function &f, const set<string> &inlines) {
     if (f.has_extern_definition()) {
-        return { Cost() };
+        return {Cost()};
     }
 
     vector<Cost> func_costs;
@@ -608,7 +677,7 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f, const set<string> &in
     return func_costs;
 }
 
-Expr RegionCosts::region_size(string func, const Box &region) {
+Expr RegionCosts::region_size(const string &func, const Box &region) {
     const Function &f = get_element(env, func);
     Expr size = box_size(region);
     if (!size.defined()) {
@@ -681,7 +750,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
     return simplify(working_set_size);
 }
 
-Expr RegionCosts::input_region_size(string input, const Box &region) {
+Expr RegionCosts::input_region_size(const string &input, const Box &region) {
     Expr size = box_size(region);
     if (!size.defined()) {
         return Expr();
@@ -705,9 +774,9 @@ Expr RegionCosts::input_region_size(const map<string, Box> &input_regions) {
 }
 
 void RegionCosts::disp_func_costs() {
-    debug(0) << "===========================" << '\n';
-    debug(0) << "Pipeline per element costs:" << '\n';
-    debug(0) << "===========================" << '\n';
+    debug(0) << "===========================\n"
+             << "Pipeline per element costs:\n"
+             << "===========================\n";
     for (const auto &kv : env) {
         int stage = 0;
         for (const auto &cost : func_cost[kv.first]) {
@@ -716,15 +785,15 @@ void RegionCosts::disp_func_costs() {
             } else {
                 Definition def = get_stage_definition(kv.second, stage);
                 for (const auto &e : def.values()) {
-                    debug(0) << simplify(e) << '\n';
+                    debug(0) << simplify(e) << "\n";
                 }
             }
             debug(0) << "(" << kv.first << ", " << stage << ") -> ("
-                     << cost.arith << ", " << cost.memory << ")" << '\n';
+                     << cost.arith << ", " << cost.memory << ")\n";
             stage++;
         }
     }
-    debug(0) << "===========================" << '\n';
+    debug(0) << "===========================\n";
 }
 
 bool is_func_trivial_to_inline(const Function &func) {

@@ -1,8 +1,8 @@
 #include "Halide.h"
+#include <limits>
 #include <stdio.h>
 #include <string>
 #include <vector>
-#include <limits>
 
 using namespace Halide;
 
@@ -22,14 +22,14 @@ int main(int argc, char **argv) {
     if (target.has_feature(Target::Profile)) {
         // The profiler adds lots of extra prints, so counting the
         // number of prints is not useful.
-        printf("Skipping test because profiler is active\n");
+        printf("[SKIP] Test incompatible with profiler.\n");
         return 0;
     }
 
     if (target.has_feature(Target::Debug)) {
         // Same thing here: the runtime debug adds lots of extra prints,
         // so counting the number of prints is not useful.
-        printf("Skipping test because runtime debug is active\n");
+        printf("[SKIP] Test incompatible with debug runtime.\n");
         return 0;
     }
 
@@ -92,7 +92,6 @@ int main(int argc, char **argv) {
         assert(nine == 9);
         assert(forty_two == 42.0f);
         assert(p == 127);
-
     }
 
     messages.clear();
@@ -109,9 +108,9 @@ int main(int argc, char **argv) {
             n *= n;
             n *= n;
             n += 100;
-            int32_t hi = n >> 32;
-            int32_t lo = n & 0xffffffff;
-            args.push_back((cast<uint64_t>(hi) << 32) | lo);
+            uint64_t hi = n >> 32;
+            uint64_t lo = n & 0xffffffff;
+            args.push_back((Expr(hi) << 32) | Expr(lo));
             Expr dn = cast<double>((float)(n));
             args.push_back(dn);
         }
@@ -131,7 +130,7 @@ int main(int argc, char **argv) {
     // Check that Halide's stringification of floats and doubles
     // matches %f and %e respectively.
 
-    #ifndef _WIN32
+#ifndef _WIN32
     // msvc's library has different ideas about how %f and %e should come out.
     {
         Func f, g;
@@ -199,10 +198,8 @@ int main(int argc, char **argv) {
                 return -1;
             }
         }
-
-
     }
-    #endif
+#endif
 
     messages.clear();
 
@@ -253,7 +250,6 @@ int main(int argc, char **argv) {
             // can't read the messages.
         }
     }
-
 
     printf("Success!\n");
     return 0;

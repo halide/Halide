@@ -6,15 +6,16 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include <iostream>
 #include <string>
+#include <utility>
+
 #include <vector>
 
 #include "Halide.h"
 
 namespace py = pybind11;
 
-using FactoryFunc = std::unique_ptr<Halide::Internal::GeneratorBase> (*)(const Halide::GeneratorContext& context);
+using FactoryFunc = std::unique_ptr<Halide::Internal::GeneratorBase> (*)(const Halide::GeneratorContext &context);
 
 namespace Halide {
 namespace PythonBindings {
@@ -39,11 +40,11 @@ void halide_python_print(void *, const char *msg) {
 
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
-    void warning(const char* msg) {
+    void warning(const char *msg) override {
         py::print(msg, py::arg("end") = "");
     }
 
-    void error(const char* msg) {
+    void error(const char *msg) override {
         throw Error(msg);
         // This method must not return!
     }
@@ -61,11 +62,11 @@ void install_error_handlers(py::module &m) {
 
 // Anything that defines __getitem__ looks sequencelike to pybind,
 // so also check for __len_ to avoid things like Buffer and Func here.
-bool is_real_sequence(py::object o) {
+bool is_real_sequence(const py::object &o) {
     return py::isinstance<py::sequence>(o) && py::hasattr(o, "__len__");
 }
 
-StubInput to_stub_input(py::object o) {
+StubInput to_stub_input(const py::object &o) {
     // Don't use isinstance: we want to get things that
     // can be implicitly converted as well (eg ImageParam -> Func)
     try {
@@ -83,7 +84,7 @@ StubInput to_stub_input(py::object o) {
     return StubInput(o.cast<Expr>());
 }
 
-void append_input(py::object value, std::vector<StubInput> &v) {
+void append_input(const py::object &value, std::vector<StubInput> &v) {
     if (is_real_sequence(value)) {
         for (auto o : py::reinterpret_borrow<py::sequence>(value)) {
             v.push_back(to_stub_input(o));
@@ -93,7 +94,7 @@ void append_input(py::object value, std::vector<StubInput> &v) {
     }
 }
 
-py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, py::args args, py::kwargs kwargs) {
+py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
     Stub stub(context, [factory](const GeneratorContext &context) -> std::unique_ptr<Halide::Internal::GeneratorBase> {
         return factory(context);
     });
@@ -148,7 +149,7 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, p
             << "Generator Input named '" << names.inputs[i] << "' was not specified.";
     }
 
-    const std::vector<std::vector<Func>> outputs =  stub.generate(generator_params, inputs);
+    const std::vector<std::vector<Func>> outputs = stub.generate(generator_params, inputs);
 
     py::tuple py_outputs(outputs.size());
     for (size_t i = 0; i < outputs.size(); i++) {
@@ -165,13 +166,17 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, p
         }
         py_outputs[i] = o;
     }
-    return py_outputs;
+    // An explicit "std::move" is needed here because there's
+    // an implicit tuple->object conversion that inhibits it otherwise.
+    return std::move(py_outputs);
 }
 
 void pystub_init(pybind11::module &m, FactoryFunc factory) {
-    m.def("generate", [factory](const Halide::Target &target, py::args args, py::kwargs kwargs) -> py::object {
-        return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
-    }, py::arg("target"));
+    m.def(
+        "generate", [factory](const Halide::Target &target, py::args args, py::kwargs kwargs) -> py::object {
+            return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
+        },
+        py::arg("target"));
 }
 
 }  // namespace
@@ -187,7 +192,8 @@ extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc fa
         PyErr_Format(PyExc_ImportError,
                      "Python version mismatch: module was compiled for "
                      "version %i.%i, while the interpreter is running "
-                     "version %i.%i.", PY_MAJOR_VERSION, PY_MINOR_VERSION,
+                     "version %i.%i.",
+                     PY_MAJOR_VERSION, PY_MINOR_VERSION,
                      major, minor);
         return nullptr;
     }

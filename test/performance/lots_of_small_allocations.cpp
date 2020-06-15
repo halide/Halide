@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         p.set(200);
 
         Buffer<int> out(16 * 1000 * 1000);
-        t[i] = Halide::Tools::benchmark([&] {chain.back().realize(out);});
+        t[i] = Halide::Tools::benchmark([&] { chain.back().realize(out); });
 
         printf("Time using %s: %f\n", names[i], t[i]);
     }
@@ -66,5 +66,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    printf("Success!\n");
     return 0;
 }

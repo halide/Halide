@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
-            input(x, y) = y*input.width() + x;
+            input(x, y) = y * input.width() + x;
         }
     }
 
@@ -25,12 +25,15 @@ int main(int argc, char **argv) {
     {
         Func f;
         f(x, y) = select(((input(x, y) > 10) && (input(x, y) < 20)) ||
-                         ((input(x, y) > 40) && (!(input(x, y) > 50))),
+                             ((input(x, y) > 40) && (!(input(x, y) > 50))),
                          u8(255), u8(0));
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
+            f.gpu_tile(x, y, xi, yi, 16, 16);
+            if (!target.has_feature(Target::OpenGLCompute)) {
+                f.vectorize(xi, 4);
+            }
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -42,7 +45,7 @@ int main(int argc, char **argv) {
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
                 bool cond = ((input(x, y) > 10) && (input(x, y) < 20)) ||
-                    ((input(x, y) > 40) && (!(input(x, y) > 50)));
+                            ((input(x, y) > 40) && (!(input(x, y) > 50)));
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
@@ -58,12 +61,15 @@ int main(int argc, char **argv) {
         Func f;
         Expr common_cond = input(x, y) > 10;
         f(x, y) = select((common_cond && (input(x, y) < 20)) ||
-                         ((input(x, y) > 40) && (!common_cond)),
+                             ((input(x, y) > 40) && (!common_cond)),
                          u8(255), u8(0));
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
+            f.gpu_tile(x, y, xi, yi, 16, 16);
+            if (!target.has_feature(Target::OpenGLCompute)) {
+                f.vectorize(xi, 4);
+            }
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -76,7 +82,7 @@ int main(int argc, char **argv) {
             for (int x = 0; x < input.width(); x++) {
                 bool common_cond = input(x, y) > 10;
                 bool cond = (common_cond && (input(x, y) < 20)) ||
-                    ((input(x, y) > 40) && (!common_cond));
+                            ((input(x, y) > 40) && (!common_cond));
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
@@ -94,7 +100,10 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
 
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
+            f.gpu_tile(x, y, xi, yi, 16, 16);
+            if (!target.has_feature(Target::OpenGLCompute)) {
+                f.vectorize(xi, 4);
+            }
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -106,7 +115,7 @@ int main(int argc, char **argv) {
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
                 bool cond = x < 10 || x > 20 || y < 10 || y > 20;
-                uint8_t correct = cond ? 0 : input(x,y);
+                uint8_t correct = cond ? 0 : input(x, y);
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
                     return -1;
@@ -123,7 +132,10 @@ int main(int argc, char **argv) {
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
+            f.gpu_tile(x, y, xi, yi, 16, 16);
+            if (!target.has_feature(Target::OpenGLCompute)) {
+                f.vectorize(xi, 4);
+            }
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -151,15 +163,15 @@ int main(int argc, char **argv) {
             Type narrow = UInt(n), wide = UInt(w);
 
             Func in_wide;
-            in_wide(x, y) = cast(wide, y + x*3);
+            in_wide(x, y) = cast(wide, y + x * 3);
             in_wide.compute_root();
 
             Func in_narrow;
-            in_narrow(x, y) = cast(narrow, x*y + x - 17);
+            in_narrow(x, y) = cast(narrow, x * y + x - 17);
             in_narrow.compute_root();
 
             Func f;
-            f(x, y) = select(in_narrow(x, y) > 10, in_wide(x, y*2), in_wide(x, y*2+1));
+            f(x, y) = select(in_narrow(x, y) > 10, in_wide(x, y * 2), in_wide(x, y * 2 + 1));
 
             Func cpu;
             cpu(x, y) = f(x, y);
@@ -180,7 +192,10 @@ int main(int argc, char **argv) {
                 continue;
             }
             if (target.has_gpu_feature()) {
-                gpu.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
+                gpu.gpu_tile(x, y, xi, yi, 16, 16);
+                if (!target.has_feature(Target::OpenGLCompute)) {
+                    gpu.vectorize(xi, 4);
+                }
             } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
                 gpu.hexagon().vectorize(x, 128);
             } else {
@@ -196,7 +211,7 @@ int main(int argc, char **argv) {
                 for (int x = 0; x < input.width(); x++) {
                     if (cpu_output(x, y) != gpu_output(x, y)) {
                         fprintf(stderr, "gpu_output(%d, %d) = %d instead of %d for uint%d -> uint%d\n",
-                               x, y, gpu_output(x, y), cpu_output(x, y), n, w);
+                                x, y, gpu_output(x, y), cpu_output(x, y), n, w);
                         return -1;
                     }
                 }
@@ -204,8 +219,6 @@ int main(int argc, char **argv) {
         }
     }
 
-
     printf("Success!\n");
     return 0;
-
 }

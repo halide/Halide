@@ -1,10 +1,15 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <memory>
+#include <stdio.h>
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] WebAssembly JIT does not yet support async().\n");
+        _halide_user_assert(0);
+    }
+
     const int kPrime1 = 7829;
     const int kPrime2 = 7919;
 
@@ -22,6 +27,6 @@ int main(int argc, char **argv) {
     p2.set(2);
     result = g.realize(1);
 
+    printf("Success!\n");
     return 0;
-
 }

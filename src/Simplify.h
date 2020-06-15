@@ -5,9 +5,10 @@
  * Methods for simplifying halide statements and expressions
  */
 
-#include "IR.h"
-#include "Bounds.h"
+#include "Expr.h"
+#include "Interval.h"
 #include "ModulusRemainder.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
@@ -19,10 +20,10 @@ namespace Internal {
  * repeated variable names.
  */
 // @{
-Stmt simplify(Stmt, bool remove_dead_lets = true,
+Stmt simplify(const Stmt &, bool remove_dead_let_stmts = true,
               const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
               const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
-Expr simplify(Expr, bool remove_dead_lets = true,
+Expr simplify(const Expr &, bool remove_dead_let_stmts = true,
               const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
               const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 // @}
@@ -33,7 +34,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds = Scope<Interval>::empty_sc
 /** Simplify expressions found in a statement, but don't simplify
  * across different statements. This is safe to perform at an earlier
  * stage in lowering than full simplification of a stmt. */
-Stmt simplify_exprs(Stmt);
+Stmt simplify_exprs(const Stmt &);
 
 }  // namespace Internal
 }  // namespace Halide

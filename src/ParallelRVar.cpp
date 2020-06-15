@@ -34,20 +34,22 @@ class FindLoads : public IRVisitor {
         IRVisitor::visit(op);
         for (size_t i = 0; i < loads.size(); i++) {
             for (size_t j = 0; j < loads[i].size(); j++) {
-                loads[i][j] = substitute(op->name, op->value, loads[i][j]);
+                loads[i][j] = graph_substitute(op->name, op->value, loads[i][j]);
             }
         }
     }
 
 public:
-    FindLoads(const string &f) : func(f) {}
+    FindLoads(const string &f)
+        : func(f) {
+    }
 
     vector<vector<Expr>> loads;
 };
 
 /** Rename all free variables to unique new names. */
-class RenameFreeVars : public IRMutator2 {
-    using IRMutator2::visit;
+class RenameFreeVars : public IRMutator {
+    using IRMutator::visit;
 
     map<string, string> new_names;
 
@@ -73,14 +75,14 @@ public:
 };
 
 /** Substitute in boolean expressions. */
-class SubstituteInBooleanLets : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteInBooleanLets : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Let *op) override {
         if (op->value.type() == Bool()) {
             return substitute(op->name, mutate(op->value), mutate(op->body));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };

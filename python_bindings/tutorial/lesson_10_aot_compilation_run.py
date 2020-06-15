@@ -10,14 +10,15 @@ import lesson_10_halide
 
 import numpy as np
 
+
 def main():
     # Have a look at the generated files above (they won't exist until you've run
-    # lesson_10_generate): lesson_10_halide.py.c, lesson_10_halide.h
+    # lesson_10_generate): lesson_10_halide.py.cpp, lesson_10_halide.h
     #
     # In the header file, the generated function is represented like this:
     # int lesson_10_halide(halide_buffer_t*, uint8_t, halide_buffer_t*);
     #
-    # lesson_10_halide.py.c creates a Python wrapper around this function.
+    # lesson_10_halide.py.cpp creates a Python wrapper around this function.
     # Buffers are converted using the Python buffer API:
     #
     # https://docs.python.org/2/c-api/buffer.html
@@ -33,7 +34,7 @@ def main():
             input[x, y] = x ^ (y + 1)
 
     # And the memory where we want to write our output:
-    output = np.empty((640,480), dtype=np.uint8, order='F')
+    output = np.empty((640, 480), dtype=np.uint8, order='F')
 
     offset_value = 5
 
@@ -49,10 +50,8 @@ def main():
             correct_val[0] = input_val
             # we add over a uint8 value (will properly model overflow)
             correct_val[0] += offset_value
-            if output_val != correct_val[0]:
-                raise Exception("output(%d, %d) was %d instead of %d" % (
-                       x, y, output_val, correct_val))
-                #return -1
+            assert output_val == correct_val[0], \
+                "output(%d, %d) was %d instead of %d" % (x, y, output_val, correct_val)
 
     # Everything worked!
     print("Success!")

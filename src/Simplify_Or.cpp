@@ -17,6 +17,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::or_op(a, b), op->type);
 
+    // clang-format off
     if (EVAL_IN_LAMBDA
         (rewrite(x || true, b) ||
          rewrite(x || false, a) ||
@@ -40,15 +41,6 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
          rewrite(x || (x && y), a) ||
          rewrite((x && y) || y, b) ||
          rewrite(y || (x && y), a) ||
-
-         rewrite(((x || y) || z) || x, a) ||
-         rewrite(x || ((x || y) || z), b) ||
-         rewrite((z || (x || y)) || x, a) ||
-         rewrite(x || (z || (x || y)), b) ||
-         rewrite(((x || y) || z) || y, a) ||
-         rewrite(y || ((x || y) || z), b) ||
-         rewrite((z || (x || y)) || y, a) ||
-         rewrite(y || (z || (x || y)), b) ||
 
          rewrite(x != y || x == y, true) ||
          rewrite(x != y || y == x, true) ||
@@ -76,6 +68,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
          rewrite(x <= c0 || x <= c1, x <= fold(max(c0, c1))))) {
         return rewrite.result;
     }
+    // clang-format on
 
     if (rewrite(broadcast(x) || broadcast(y), broadcast(x || y, op->type.lanes())) ||
 
@@ -102,9 +95,14 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
         rewrite((x && y) || (x && z), x && (y || z)) ||
         rewrite((x && y) || (z && x), x && (y || z)) ||
         rewrite((y && x) || (x && z), x && (y || z)) ||
-        rewrite((y && x) || (z && x), x && (y || z))) {
+        rewrite((y && x) || (z && x), x && (y || z)) ||
 
-        return mutate(std::move(rewrite.result), bounds);
+        rewrite(x < y || x < z, x < max(y, z)) ||
+        rewrite(y < x || z < x, min(y, z) < x) ||
+        rewrite(x <= y || x <= z, x <= max(y, z)) ||
+        rewrite(y <= x || z <= x, min(y, z) <= x)) {
+
+        return mutate(rewrite.result, bounds);
     }
 
     if (a.same_as(op->a) &&
@@ -115,5 +113,5 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

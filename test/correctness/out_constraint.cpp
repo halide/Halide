@@ -11,7 +11,7 @@ using namespace Halide::Internal;
 void check_int(const Expr &expr, int expected) {
     if (!is_const(expr, expected)) {
         std::cerr << "Found expression " << expr << "; "
-                  << "expected constant int " << expected << std::endl;
+                  << "expected constant int " << expected << "\n";
         exit(-1);
     }
 }
@@ -26,7 +26,7 @@ private:
     using IRVisitor::visit;
 
     void visit(const For *op) override {
-        std::cout << "for(" << op->name << ", " << op->min << ", " << op->extent << ")" << std::endl;
+        std::cout << "for(" << op->name << ", " << op->min << ", " << op->extent << ")\n";
         check_int(op->min, 0);
         check_int(op->extent, size);
         ++count;
@@ -34,15 +34,15 @@ private:
     }
 };
 
-class Validator : public IRMutator2 {
-    using IRMutator2::mutate;
+class Validator : public IRMutator {
+    using IRMutator::mutate;
 
     Stmt mutate(const Stmt &s) override {
         CheckLoops c;
         s.accept(&c);
 
         if (c.count != 1) {
-            std::cerr << "expected one loop, found " << c.count << std::endl;
+            std::cerr << "expected one loop, found " << c.count << "\n";
             exit(-1);
         }
 
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
         input.set(dummy);
         Buffer<uint8_t> out = f.realize(size);
         if (!out.all_equal(42)) {
-            std::cerr << "wrong output" << std::endl;
+            std::cerr << "wrong output\n";
             exit(-1);
         }
     }
@@ -87,13 +87,11 @@ int main(int argc, char **argv) {
         input.set(dummy);
         Buffer<uint8_t> out = f.realize(size);
         if (!out.all_equal(42)) {
-            std::cerr << "wrong output" << std::endl;
+            std::cerr << "wrong output\n";
             exit(-1);
         }
     }
 
-    std::cout << "Success!" << std::endl;
-
+    std::cout << "Success!\n";
     return 0;
-
 }

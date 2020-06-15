@@ -9,7 +9,7 @@ namespace Internal {
 using std::map;
 using std::string;
 
-class Substitute : public IRMutator2 {
+class Substitute : public IRMutator {
     const map<string, Expr> &replace;
     Scope<> hidden;
 
@@ -23,9 +23,11 @@ class Substitute : public IRMutator2 {
     }
 
 public:
-    Substitute(const map<string, Expr> &m) : replace(m) {}
+    Substitute(const map<string, Expr> &m)
+        : replace(m) {
+    }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Variable *v) override {
         Expr r = find_replacement(v->name);
@@ -79,7 +81,6 @@ public:
             return For::make(op->name, new_min, new_extent, op->for_type, op->device_api, new_body);
         }
     }
-
 };
 
 Expr substitute(const string &name, const Expr &replacement, const Expr &expr) {
@@ -106,18 +107,17 @@ Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
     return s.mutate(stmt);
 }
 
-
-class SubstituteExpr : public IRMutator2 {
+class SubstituteExpr : public IRMutator {
 public:
     Expr find, replacement;
 
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         if (equal(e, find)) {
             return replacement;
         } else {
-            return IRMutator2::mutate(e);
+            return IRMutator::mutate(e);
         }
     }
 };
@@ -137,11 +137,11 @@ Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
 }
 
 /** Substitute an expr for a var in a graph. */
-class GraphSubstitute : public IRGraphMutator2 {
+class GraphSubstitute : public IRGraphMutator {
     string var;
     Expr value;
 
-    using IRGraphMutator2::visit;
+    using IRGraphMutator::visit;
 
     Expr visit(const Variable *op) override {
         if (op->name == var) {
@@ -151,28 +151,40 @@ class GraphSubstitute : public IRGraphMutator2 {
         }
     }
 
-public:
+    Expr visit(const Let *op) override {
+        Expr new_value = mutate(op->value);
+        if (op->name == var) {
+            return Let::make(op->name, new_value, op->body);
+        } else {
+            return Let::make(op->name, new_value, mutate(op->body));
+        }
+    }
 
-    GraphSubstitute(const string &var, const Expr &value) : var(var), value(value) {}
+public:
+    GraphSubstitute(const string &var, const Expr &value)
+        : var(var), value(value) {
+    }
 };
 
 /** Substitute an Expr for another Expr in a graph. Unlike substitute,
  * this only checks for shallow equality. */
-class GraphSubstituteExpr : public IRGraphMutator2 {
+class GraphSubstituteExpr : public IRGraphMutator {
     Expr find, replace;
-public:
 
-    using IRGraphMutator2::mutate;
+public:
+    using IRGraphMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         if (e.same_as(find)) {
             return replace;
         } else {
-            return IRGraphMutator2::mutate(e);
+            return IRGraphMutator::mutate(e);
         }
     }
 
-    GraphSubstituteExpr(const Expr &find, const Expr &replace) : find(find), replace(replace) {}
+    GraphSubstituteExpr(const Expr &find, const Expr &replace)
+        : find(find), replace(replace) {
+    }
 };
 
 Expr graph_substitute(const string &name, const Expr &replacement, const Expr &expr) {
@@ -191,9 +203,9 @@ Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stm
     return GraphSubstituteExpr(find, replacement).mutate(stmt);
 }
 
-class SubstituteInAllLets : public IRGraphMutator2 {
+class SubstituteInAllLets : public IRGraphMutator {
 
-    using IRGraphMutator2::visit;
+    using IRGraphMutator::visit;
 
     Expr visit(const Let *op) override {
         Expr value = mutate(op->value);

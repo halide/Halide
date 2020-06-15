@@ -6,15 +6,19 @@ struct mach_timebase_info {
 };
 
 typedef struct mach_timebase_info *mach_timebase_info_t;
-typedef struct mach_timebase_info  mach_timebase_info_data_t;
+typedef struct mach_timebase_info mach_timebase_info_data_t;
 
 typedef int kern_return_t;
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 WEAK bool halide_reference_clock_inited = false;
 WEAK uint64_t halide_reference_clock = 0;
 WEAK mach_timebase_info_data_t halide_timebase_info;
-}}} // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
@@ -37,10 +41,8 @@ WEAK int64_t halide_current_time_ns(void *user_context) {
     return (now - halide_reference_clock) * halide_timebase_info.numer / halide_timebase_info.denom;
 }
 
-
 extern int usleep(int);
 WEAK void halide_sleep_ms(void *user_context, int ms) {
-        usleep(ms * 1000);
+    usleep(ms * 1000);
 }
-
 }

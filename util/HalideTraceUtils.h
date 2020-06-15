@@ -2,8 +2,8 @@
 #define HALIDE_TRACE_UTILS_H
 
 #include "HalideRuntime.h"
-#include <stdio.h>
 #include <cstring>
+#include <stdio.h>
 
 namespace Halide {
 namespace Internal {
@@ -12,18 +12,18 @@ void bad_type_error(halide_type_t type);
 
 // Simple conversion. Note: assume that 'value' is aligned properly.
 template<typename T>
-T value_as(halide_type_t type, const halide_scalar_value_t& value) {
+T value_as(halide_type_t type, const halide_scalar_value_t &value) {
     switch (type.code) {
     case halide_type_int:
         switch (type.bits) {
         case 8:
-            return (T) value.u.i8;
+            return (T)value.u.i8;
         case 16:
-            return (T) value.u.i16;
+            return (T)value.u.i16;
         case 32:
-            return (T) value.u.i32;
+            return (T)value.u.i32;
         case 64:
-            return (T) value.u.i64;
+            return (T)value.u.i64;
         default:
             bad_type_error(type);
         }
@@ -31,15 +31,15 @@ T value_as(halide_type_t type, const halide_scalar_value_t& value) {
     case halide_type_uint:
         switch (type.bits) {
         case 1:
-            return (T) value.u.b;
+            return (T)value.u.b;
         case 8:
-            return (T) value.u.u8;
+            return (T)value.u.u8;
         case 16:
-            return (T) value.u.u16;
+            return (T)value.u.u16;
         case 32:
-            return (T) value.u.u32;
+            return (T)value.u.u32;
         case 64:
-            return (T) value.u.u64;
+            return (T)value.u.u64;
         default:
             bad_type_error(type);
         }
@@ -47,9 +47,9 @@ T value_as(halide_type_t type, const halide_scalar_value_t& value) {
     case halide_type_float:
         switch (type.bits) {
         case 32:
-            return (T) value.u.f32;
+            return (T)value.u.f32;
         case 64:
-            return (T) value.u.f64;
+            return (T)value.u.f64;
         default:
             bad_type_error(type);
         }
@@ -57,7 +57,7 @@ T value_as(halide_type_t type, const halide_scalar_value_t& value) {
     default:
         bad_type_error(type);
     }
-    return (T) 0;
+    return (T)0;
 }
 
 // A struct representing a single Halide tracing packet.
@@ -94,7 +94,7 @@ private:
     bool read(void *d, size_t size, FILE *fdesc);
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

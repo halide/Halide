@@ -42,31 +42,31 @@ public:
     Input<Buffer<int32_t>> bias_{"bias", 1};
 
     // Offsets and multipliers for the input, filter, and output.
-    Input<int16_t> input_offset_{ "input_offset", 0, -255, 0 };
-    Input<int16_t> filter_offset_{ "filter_offset", 0, -255, 0 };
+    Input<int16_t> input_offset_{"input_offset", 0, -255, 0};
+    Input<int16_t> filter_offset_{"filter_offset", 0, -255, 0};
 
     // For each x, y, batch, only the first input_depth_ elements can be non-zero.
     // All remaining elements are assigned byte_zero_. This value should be <=
     // input_.dim(0).extent()
-    Input<int> input_depth_{ "input_depth" };
+    Input<int> input_depth_{"input_depth"};
 
     // The stride specifies how the input [x, y] is sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
     // spatially at [x * stride, y * stride]. The caller is responsible for
     // allocating the correct output memory.
-    Input<int> stride_{ "stride" };
-    Input<int> pad_width_{ "pad_width" };
-    Input<int> pad_height_{ "pad_height" };
+    Input<int> stride_{"stride"};
+    Input<int> pad_width_{"pad_width"};
+    Input<int> pad_height_{"pad_height"};
     // byte_zero_ denotes the value padded at the input tensor boundary (in the x
     // and y dimensions). The name byte_zero_ follows tfmini convention.
-    Input<uint8_t> byte_zero_{ "byte_zero" };
+    Input<uint8_t> byte_zero_{"byte_zero"};
 
     // Parameters for pointwise operations on the output.
-    Input<int> output_multiplier_{ "output_multiplier" };
-    Input<int> output_shift_{ "output_shift" };
-    Input<int> output_offset_{ "output_offset", 0, 0, 255 };
-    Input<uint8_t> output_min_{ "output_min" };
-    Input<uint8_t> output_max_{ "output_max" };
+    Input<int> output_multiplier_{"output_multiplier"};
+    Input<int> output_shift_{"output_shift"};
+    Input<int> output_offset_{"output_offset", 0, 0, 255};
+    Input<uint8_t> output_min_{"output_min"};
+    Input<uint8_t> output_max_{"output_max"};
 
     Output<Buffer<uint8_t>> output_{"output", 4};
 
@@ -84,10 +84,10 @@ public:
         // Add a zero boundary condition to x and y dimensions of the input.
         Func input_with_offset_bounded =
             constant_exterior(input_with_offset, i16(byte_zero_),
-                              { { Expr(), Expr() },
-                                { 0, input_.dim(1).extent() },
-                                { 0, input_.dim(2).extent() },
-                                { Expr(), Expr() } });
+                              {{Expr(), Expr()},
+                               {0, input_.dim(1).extent()},
+                               {0, input_.dim(2).extent()},
+                               {Expr(), Expr()}});
 
         // For the filter, add the offset and upcast to 16-bit.
         Func filter_with_offset("filter_with_offset");
@@ -124,7 +124,7 @@ public:
                     u8_sat(u16_sat(scaled_plus_offset(depth, x, y, batch)))));
 
         const bool use_hexagon =
-            get_target().features_any_of({ Target::HVX_64, Target::HVX_128 });
+            get_target().features_any_of({Target::HVX_64, Target::HVX_128});
 
         // Specifying .hexagon() on a Func will generate an RPC to run this stage
         // on Hexagon. If Hexagon is the host (that is, the architecture is

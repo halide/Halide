@@ -131,22 +131,20 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
     Expr result;
     if (t.is_uint()) {
         Expr mul, shift;
-        switch(t.bits()) {
-        case 8:
-        {
+        switch (t.bits()) {
+        case 8: {
             Buffer<uint8_t> table = IntegerDivideTable::integer_divide_table_u8();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
-        case 16:
-        {
+        case 16: {
             Buffer<uint16_t> table = IntegerDivideTable::integer_divide_table_u16();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
-        default: // 32
+        default:  // 32
         {
             Buffer<uint32_t> table = IntegerDivideTable::integer_divide_table_u32();
             mul = table(denominator, 0);
@@ -158,37 +156,37 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
         // Multiply-keep-high-half
         result = (cast(wide, mul) * numerator);
 
-        if (t.bits() < 32) result = result / (1 << t.bits());
-        else result = result >> t.bits();
+        if (t.bits() < 32) {
+            result = result / (1 << t.bits());
+        } else {
+            result = result >> Internal::make_const(result.type(), t.bits());
+        }
 
         result = cast(t, result);
 
         // Add half the difference between input and output so far
-        result = result + (numerator - result)/2;
+        result = result + (numerator - result) / 2;
 
         // Do a final shift
-        result = result >> shift;
-
+        result = result >> cast(result.type(), shift);
 
     } else {
 
         Expr mul, shift;
-        switch(t.bits()) {
-        case 8:
-        {
+        switch (t.bits()) {
+        case 8: {
             Buffer<uint8_t> table = IntegerDivideTable::integer_divide_table_s8();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
-        case 16:
-        {
+        case 16: {
             Buffer<uint16_t> table = IntegerDivideTable::integer_divide_table_s16();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
-        default: // 32
+        default:  // 32
         {
             Buffer<uint32_t> table = IntegerDivideTable::integer_divide_table_s32();
             mul = table(denominator, 0);
@@ -208,19 +206,22 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
 
         // Multiply-keep-high-half
         result = (cast(wide, mul) * numerator);
-        if (t.bits() < 32) result = result / (1 << t.bits());
-        else result = result >> t.bits();
+        if (t.bits() < 32) {
+            result = result / (1 << t.bits());
+        } else {
+            result = result >> Internal::make_const(result.type(), t.bits());
+        }
         result = cast(t, result);
 
         // Do the final shift
-        result = result >> shift;
+        result = result >> cast(result.type(), shift);
 
         // Maybe flip the bits again
         result = xsign ^ result;
     }
 
     // The tables don't work for denominator == 1
-    result = select(denominator == 1, numerator, result);
+    result = select(std::move(denominator) == 1, std::move(numerator), result);
 
     internal_assert(result.type() == t);
 
@@ -228,7 +229,8 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
 }
 
 Expr fast_integer_modulo(Expr numerator, Expr denominator) {
-    return numerator - fast_integer_divide(numerator, denominator) * denominator;
+    Expr ratio = fast_integer_divide(numerator, denominator);
+    return std::move(numerator) - ratio * std::move(denominator);
 }
 
 }  // namespace Halide

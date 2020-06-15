@@ -1,10 +1,12 @@
 #include "InlineReductions.h"
+
 #include "CSE.h"
 #include "Debug.h"
 #include "Func.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
+#include <utility>
 
 namespace Halide {
 
@@ -14,14 +16,14 @@ using std::vector;
 
 namespace Internal {
 
-class FindFreeVars : public IRMutator2 {
+class FindFreeVars : public IRMutator {
 public:
     vector<Var> free_vars;
     vector<Expr> call_args;
     RDom rdom;
 
-    FindFreeVars(RDom r, const string &n) :
-        rdom(r), explicit_rdom(r.defined()), name(n) {
+    FindFreeVars(const RDom &r, const string &n)
+        : rdom(r), explicit_rdom(r.defined()), name(n) {
     }
 
 private:
@@ -30,7 +32,7 @@ private:
 
     Scope<> internal;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Let *op) override {
         Expr value = mutate(op->value);
@@ -96,18 +98,18 @@ private:
             }
         }
 
-        free_vars.push_back(Var(var_name));
-        call_args.push_back(v);
+        free_vars.emplace_back(var_name);
+        call_args.emplace_back(v);
         return expr;
     }
 };
 }  // namespace Internal
 
 Expr sum(Expr e, const std::string &name) {
-    return sum(RDom(), e, name);
+    return sum(RDom(), std::move(e), name);
 }
 
-Expr sum(RDom r, Expr e, const std::string &name) {
+Expr sum(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
@@ -119,10 +121,10 @@ Expr sum(RDom r, Expr e, const std::string &name) {
 }
 
 Expr product(Expr e, const std::string &name) {
-    return product(RDom(), e, name);
+    return product(RDom(), std::move(e), name);
 }
 
-Expr product(RDom r, Expr e, const std::string &name) {
+Expr product(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
@@ -134,10 +136,10 @@ Expr product(RDom r, Expr e, const std::string &name) {
 }
 
 Expr maximum(Expr e, const std::string &name) {
-    return maximum(RDom(), e, name);
+    return maximum(RDom(), std::move(e), name);
 }
 
-Expr maximum(RDom r, Expr e, const std::string &name) {
+Expr maximum(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
@@ -150,10 +152,10 @@ Expr maximum(RDom r, Expr e, const std::string &name) {
 }
 
 Expr minimum(Expr e, const std::string &name) {
-    return minimum(RDom(), e, name);
+    return minimum(RDom(), std::move(e), name);
 }
 
-Expr minimum(RDom r, Expr e, const std::string &name) {
+Expr minimum(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
@@ -166,10 +168,10 @@ Expr minimum(RDom r, Expr e, const std::string &name) {
 }
 
 Tuple argmax(Expr e, const std::string &name) {
-    return argmax(RDom(), e, name);
+    return argmax(RDom(), std::move(e), name);
 }
 
-Tuple argmax(RDom r, Expr e, const std::string &name) {
+Tuple argmax(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
@@ -177,13 +179,13 @@ Tuple argmax(RDom r, Expr e, const std::string &name) {
 
     user_assert(v.rdom.defined()) << "Expression passed to argmax must reference a reduction domain";
 
-    Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
-    Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
+    Tuple initial_tup(vector<Expr>(v.rdom.dimensions() + 1));
+    Tuple update_tup(vector<Expr>(v.rdom.dimensions() + 1));
     for (int i = 0; i < v.rdom.dimensions(); i++) {
         initial_tup[i] = 0;
         update_tup[i] = v.rdom[i];
     }
-    int value_index = (int)initial_tup.size()-1;
+    int value_index = (int)initial_tup.size() - 1;
     initial_tup[value_index] = e.type().min();
     update_tup[value_index] = e;
 
@@ -195,10 +197,10 @@ Tuple argmax(RDom r, Expr e, const std::string &name) {
 }
 
 Tuple argmin(Expr e, const std::string &name) {
-    return argmin(RDom(), e, name);
+    return argmin(RDom(), std::move(e), name);
 }
 
-Tuple argmin(RDom r, Expr e, const std::string &name) {
+Tuple argmin(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
@@ -206,13 +208,13 @@ Tuple argmin(RDom r, Expr e, const std::string &name) {
 
     user_assert(v.rdom.defined()) << "Expression passed to argmin must reference a reduction domain";
 
-    Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
-    Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
+    Tuple initial_tup(vector<Expr>(v.rdom.dimensions() + 1));
+    Tuple update_tup(vector<Expr>(v.rdom.dimensions() + 1));
     for (int i = 0; i < v.rdom.dimensions(); i++) {
         initial_tup[i] = 0;
         update_tup[i] = v.rdom[i];
     }
-    int value_index = (int)initial_tup.size()-1;
+    int value_index = (int)initial_tup.size() - 1;
     initial_tup[value_index] = e.type().max();
     update_tup[value_index] = e;
 

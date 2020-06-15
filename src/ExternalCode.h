@@ -16,7 +16,7 @@ private:
         CPlusPlusSource,
     } kind;
 
-    Target llvm_target; // For LLVMBitcode.
+    Target llvm_target;  // For LLVMBitcode.
     DeviceAPI device_code_kind;
 
     std::vector<uint8_t> code;
@@ -29,7 +29,6 @@ private:
     }
 
 public:
-
     /** Construct an ExternalCode container from llvm bitcode. The
      * result can be passed to Halide::Module::append to have the
      * contained bitcode linked with that module. The Module's target
@@ -102,9 +101,9 @@ public:
      * appropriately. */
     bool is_for_cpu_target(const Target &host) const {
         return kind == LLVMBitcode &&
-            (llvm_target.arch == Target::ArchUnknown || llvm_target.arch == host.arch) &&
-            (llvm_target.os == Target::OSUnknown || llvm_target.os == host.os) &&
-            (llvm_target.bits == host.bits);
+               (llvm_target.arch == Target::ArchUnknown || llvm_target.arch == host.arch) &&
+               (llvm_target.os == Target::OSUnknown || llvm_target.os == host.os) &&
+               (llvm_target.bits == host.bits);
     }
 
     /** True if this container holds code linkable with a code generated for a GPU. */
@@ -114,17 +113,22 @@ public:
 
     /** True if this container holds C++ source code for inclusion in
      *  generating C++ output. */
-    bool is_c_plus_plus_source() const { return kind == CPlusPlusSource; }
+    bool is_c_plus_plus_source() const {
+        return kind == CPlusPlusSource;
+    }
 
     /** Retrieve the bytes of external code held by this container. */
-    const std::vector<uint8_t> &contents() const { return code; }
+    const std::vector<uint8_t> &contents() const {
+        return code;
+    }
 
     /** Retrieve the name of this container. Used to ensure the same
      *  piece of external code is only included once in linkage. */
-    const std::string &name() const { return nametag; }
+    const std::string &name() const {
+        return nametag;
+    }
 };
 
 }  // namespace Halide
 
 #endif
-

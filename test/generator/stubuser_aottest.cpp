@@ -1,5 +1,7 @@
-#include "HalideRuntime.h"
+#include <cstdio>
+
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 #include "stubuser.h"
 
@@ -48,22 +50,28 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, float 
 
 int main(int argc, char **argv) {
 
-  Buffer<uint8_t> input = make_image<uint8_t>();
-  Buffer<uint8_t> calculated_output(kSize, kSize, 3);
-  Buffer<float> float32_buffer_output(kSize, kSize, 3);
-  Buffer<> int32_buffer_output(halide_type_t(halide_type_int, 32), kSize, kSize, 3);
-  Buffer<uint8_t> array_test_output(kSize, kSize, 3);
-  Buffer<float> tupled_output0(kSize, kSize, 3);
-  Buffer<int32_t> tupled_output1(kSize, kSize, 3);
+    Buffer<uint8_t> input = make_image<uint8_t>();
+    Buffer<uint8_t> calculated_output(kSize, kSize, 3);
+    Buffer<float> float32_buffer_output(kSize, kSize, 3);
+    Buffer<> int32_buffer_output(halide_type_t(halide_type_int, 32), kSize, kSize, 3);
+    Buffer<uint8_t> array_test_output(kSize, kSize, 3);
+    Buffer<float> tupled_output0(kSize, kSize, 3);
+    Buffer<int32_t> tupled_output1(kSize, kSize, 3);
+    Buffer<int> int_output(kSize, kSize, 3);
+    // TODO: see Issues #3709, #3967
+    Buffer<> float16_output(halide_type_t(halide_type_float, 16), kSize, kSize, 3);
+    Buffer<> bfloat16_output(halide_type_t(halide_type_bfloat, 16), kSize, kSize, 3);
 
-  stubuser(input, calculated_output, float32_buffer_output, int32_buffer_output, array_test_output, tupled_output0, tupled_output1);
-  verify(input, kFloatArg, kIntArg, kOffset, calculated_output);
-  verify(input, 1.f, 0, 0.f, float32_buffer_output);
-  verify<uint8_t, int32_t>(input, 1.f, 0, 0.f, int32_buffer_output);
-  verify(input, 1.f, 0, 2, array_test_output);
-  verify(input, 1.f, 0, 0, tupled_output0);
-  verify(input, 1.f, 1, 0, tupled_output1);
+    stubuser(input, calculated_output, float32_buffer_output, int32_buffer_output,
+             array_test_output, tupled_output0, tupled_output1, int_output,
+             float16_output, bfloat16_output);
+    verify(input, kFloatArg, kIntArg, kOffset, calculated_output);
+    verify(input, 1.f, 0, 0.f, float32_buffer_output);
+    verify<uint8_t, int32_t>(input, 1.f, 0, 0.f, int32_buffer_output);
+    verify(input, 1.f, 0, 2, array_test_output);
+    verify(input, 1.f, 0, 0, tupled_output0);
+    verify(input, 1.f, 1, 3, int_output);
 
-  printf("Success!\n");
-  return 0;
+    printf("Success!\n");
+    return 0;
 }

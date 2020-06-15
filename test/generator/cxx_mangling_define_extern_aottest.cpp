@@ -1,10 +1,10 @@
 #include <stdio.h>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 #include <assert.h>
-#include <string.h>
+#include <string>
 
 #include "cxx_mangling_define_extern.h"
 

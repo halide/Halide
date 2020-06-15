@@ -5,8 +5,11 @@
  *
  * Methods for computing whether expressions are monotonic
  */
+#include <iostream>
+#include <string>
 
-#include "IR.h"
+#include "Expr.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
@@ -15,8 +18,15 @@ namespace Internal {
  * Detect whether an expression is monotonic increasing in a variable,
  * decreasing, or unknown.
  */
-enum class Monotonic {Constant, Increasing, Decreasing, Unknown};
-Monotonic is_monotonic(Expr e, const std::string &var);
+enum class Monotonic { Constant,
+                       Increasing,
+                       Decreasing,
+                       Unknown };
+Monotonic is_monotonic(const Expr &e, const std::string &var,
+                       const Scope<Monotonic> &scope = Scope<Monotonic>::empty_scope());
+
+/** Emit the monotonic class in human-readable form for debugging. */
+std::ostream &operator<<(std::ostream &stream, const Monotonic &m);
 
 void is_monotonic_test();
 

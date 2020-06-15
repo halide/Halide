@@ -1,5 +1,6 @@
 #include "AsyncProducers.h"
 #include "ExprUsesVar.h"
+#include "Function.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -7,17 +8,16 @@
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::set;
-using std::pair;
-using std::string;
 using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 /** A mutator which eagerly folds no-op stmts */
-class NoOpCollapsingMutator : public IRMutator2 {
+class NoOpCollapsingMutator : public IRMutator {
 protected:
-
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const LetStmt *op) override {
         Stmt body = mutate(op->body);
@@ -89,6 +89,17 @@ protected:
             return then_case;
         } else {
             return IfThenElse::make(op->condition, then_case, else_case);
+        }
+    }
+
+    Stmt visit(const Atomic *op) override {
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return body;
+        } else {
+            return Atomic::make(op->producer_name,
+                                op->mutex_name,
+                                std::move(body));
         }
     }
 };
@@ -165,6 +176,10 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         }
     }
 
+    Stmt visit(const Atomic *op) override {
+        return Evaluate::make(0);
+    }
+
     Expr visit(const Call *op) override {
         if (op->name == "halide_semaphore_init") {
             internal_assert(op->args.size() == 2);
@@ -179,8 +194,8 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
     set<string> inner_semaphores;
 
 public:
-    GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, string> &a) :
-        func(f), sema(s), cloned_acquires(a) {
+    GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, string> &a)
+        : func(f), sema(s), cloned_acquires(a) {
     }
 };
 
@@ -202,7 +217,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
                 return Acquire::make(acquire_sema, 1, op);
             }
         } else {
-            return IRMutator2::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
@@ -211,7 +226,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return mutate(op->body);
         } else {
-            return IRMutator2::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
@@ -219,7 +234,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return Evaluate::make(0);
         } else {
-            return IRMutator2::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
@@ -231,26 +246,25 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(var->name, func + ".folding_semaphore.")) {
             return mutate(op->body);
         } else {
-            return IRMutator2::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
 public:
-    GenerateConsumerBody(const string &f, const vector<Expr> &s) :
-        func(f), sema(s) {}
+    GenerateConsumerBody(const string &f, const vector<Expr> &s)
+        : func(f), sema(s) {
+    }
 };
 
-class CloneAcquire : public IRMutator2 {
-    using IRMutator2::visit;
+class CloneAcquire : public IRMutator {
+    using IRMutator::visit;
 
     const string &old_name;
     Expr new_var;
 
     Stmt visit(const Evaluate *op) override {
         const Call *call = op->value.as<Call>();
-        const Variable *var = ((call && !call->args.empty()) ?
-                               call->args[0].as<Variable>() :
-                               nullptr);
+        const Variable *var = ((call && !call->args.empty()) ? call->args[0].as<Variable>() : nullptr);
         if (var && var->name == old_name &&
             (call->name == "halide_semaphore_release" ||
              call->name == "halide_semaphore_init")) {
@@ -265,7 +279,8 @@ class CloneAcquire : public IRMutator2 {
     }
 
 public:
-    CloneAcquire(const string &o, const string &new_name) : old_name(o) {
+    CloneAcquire(const string &o, const string &new_name)
+        : old_name(o) {
         new_var = Variable::make(type_of<halide_semaphore_t *>(), new_name);
     }
 };
@@ -281,13 +296,16 @@ class CountConsumeNodes : public IRVisitor {
         }
         IRVisitor::visit(op);
     }
+
 public:
-    CountConsumeNodes(const string &f) : func(f) {}
+    CountConsumeNodes(const string &f)
+        : func(f) {
+    }
     int count = 0;
 };
 
-class ForkAsyncProducers : public IRMutator2 {
-    using IRMutator2::visit;
+class ForkAsyncProducers : public IRMutator {
+    using IRMutator::visit;
 
     const map<string, Function> &env;
 
@@ -346,12 +364,14 @@ class ForkAsyncProducers : public IRMutator2 {
             return Realize::make(op->name, op->types, op->memory_type,
                                  op->bounds, op->condition, body);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
 public:
-    ForkAsyncProducers(const map<string, Function> &e) : env(e) {}
+    ForkAsyncProducers(const map<string, Function> &e)
+        : env(e) {
+    }
 };
 
 // Lowers semaphore initialization from a call to
@@ -366,8 +386,8 @@ public:
 // the failure, which remains to be proven. (There is a test for the
 // simple failure case, error_async_require_fail. One has not been
 // written for the complex nested case yet.)
-class InitializeSemaphores : public IRMutator2 {
-    using IRMutator2::visit;
+class InitializeSemaphores : public IRMutator {
+    using IRMutator::visit;
 
     const Type sema_type = type_of<halide_semaphore_t *>();
 
@@ -430,10 +450,10 @@ class InitializeSemaphores : public IRMutator2 {
 };
 
 // Tighten the scope of consume nodes as much as possible to avoid needless synchronization.
-class TightenProducerConsumerNodes : public IRMutator2 {
-    using IRMutator2::visit;
+class TightenProducerConsumerNodes : public IRMutator {
+    using IRMutator::visit;
 
-    Stmt make_producer_consumer(string name, bool is_producer, Stmt body, const Scope<int> &scope) {
+    Stmt make_producer_consumer(const string &name, bool is_producer, Stmt body, const Scope<int> &scope) {
         if (const LetStmt *let = body.as<LetStmt>()) {
             if (expr_uses_vars(let->value, scope)) {
                 return ProducerConsumer::make(name, is_producer, body);
@@ -484,25 +504,44 @@ class TightenProducerConsumerNodes : public IRMutator2 {
     }
 
     const map<string, Function> &env;
+
 public:
-    TightenProducerConsumerNodes(const map<string, Function> &e) : env(e) {}
+    TightenProducerConsumerNodes(const map<string, Function> &e)
+        : env(e) {
+    }
 };
 
 // Broaden the scope of acquire nodes to pack trailing work into the
 // same task and to potentially reduce the nesting depth of tasks.
-class ExpandAcquireNodes : public IRMutator2 {
-    using IRMutator2::visit;
+class ExpandAcquireNodes : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const Block *op) override {
-        Stmt first = mutate(op->first), rest = mutate(op->rest);
-        if (const Acquire *a = first.as<Acquire>()) {
-            // May as well nest the rest stmt inside the acquire
-            // node. It's also blocked on it.
-            return Acquire::make(a->semaphore, a->count,
-                                 mutate(Block::make(a->body, op->rest)));
-        } else {
-            return Block::make(first, rest);
+        // Do an entire sequence of blocks in a single visit method to conserve stack space.
+        vector<Stmt> stmts;
+        Stmt result;
+        do {
+            stmts.push_back(mutate(op->first));
+            result = op->rest;
+        } while ((op = result.as<Block>()));
+
+        result = mutate(result);
+
+        vector<pair<Expr, Expr>> semaphores;
+        for (auto it = stmts.rbegin(); it != stmts.rend(); it++) {
+            Stmt s = *it;
+            while (const Acquire *a = s.as<Acquire>()) {
+                semaphores.emplace_back(a->semaphore, a->count);
+                s = a->body;
+            }
+            result = Block::make(s, result);
+            while (!semaphores.empty()) {
+                result = Acquire::make(semaphores.back().first, semaphores.back().second, result);
+                semaphores.pop_back();
+            }
         }
+
+        return result;
     }
 
     Stmt visit(const Realize *op) override {
@@ -543,10 +582,10 @@ class ExpandAcquireNodes : public IRMutator2 {
     }
 };
 
-class TightenForkNodes : public IRMutator2 {
-    using IRMutator2::visit;
+class TightenForkNodes : public IRMutator {
+    using IRMutator::visit;
 
-    Stmt make_fork(Stmt first, Stmt rest) {
+    Stmt make_fork(const Stmt &first, const Stmt &rest) {
         const LetStmt *lf = first.as<LetStmt>();
         const LetStmt *lr = rest.as<LetStmt>();
         const Realize *rf = first.as<Realize>();
@@ -621,5 +660,5 @@ Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

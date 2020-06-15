@@ -5,13 +5,18 @@
  *
  * Provides Closure class.
  */
+#include <map>
+#include <string>
 
-#include "Buffer.h"
 #include "IR.h"
 #include "IRVisitor.h"
 #include "Scope.h"
 
 namespace Halide {
+
+template<typename T>
+class Buffer;
+
 namespace Internal {
 
 /** A helper class to manage closures. Walks over a statement and
@@ -33,11 +38,11 @@ protected:
     void visit(const Store *op) override;
     void visit(const Allocate *op) override;
     void visit(const Variable *op) override;
+    void visit(const Atomic *op) override;
 
 public:
     /** Information about a buffer reference from a closure. */
-    struct Buffer
-    {
+    struct Buffer {
         /** The type of the buffer referenced. */
         Type type;
 
@@ -53,24 +58,26 @@ public:
         /** The size of the buffer if known, otherwise zero. */
         size_t size;
 
-        Buffer() : dimensions(0), read(false), write(false), size(0) { }
+        Buffer()
+            : dimensions(0), read(false), write(false), size(0) {
+        }
     };
 
 protected:
     void found_buffer_ref(const std::string &name, Type type,
-                          bool read, bool written, Halide::Buffer<> image);
+                          bool read, bool written, const Halide::Buffer<void> &image);
 
 public:
-    Closure() {}
+    Closure() = default;
 
     /** Traverse a statement and find all references to external
      * symbols.
      *
      * When the closure encounters a read or write to 'foo', it
      * assumes that the host pointer is found in the symbol table as
-     * 'foo.host', and any buffer_t pointer is found under
+     * 'foo.host', and any halide_buffer_t pointer is found under
      * 'foo.buffer'. */
-    Closure(Stmt s, const std::string &loop_variable = "");
+    Closure(const Stmt &s, const std::string &loop_variable = "");
 
     /** External variables referenced. */
     std::map<std::string, Type> vars;

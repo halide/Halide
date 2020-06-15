@@ -16,16 +16,11 @@ public:
     /** Create a Hexagon code generator for the given Hexagon target. */
     CodeGen_Hexagon(Target);
 
-    std::unique_ptr<llvm::Module> compile(const Module &module) override;
-
 protected:
     void compile_func(const LoweredFunc &f,
                       const std::string &simple_name, const std::string &extern_name) override;
 
     void init_module() override;
-
-    Expr mulhi_shr(Expr a, Expr b, int shr) override;
-    Expr sorted_avg(Expr a, Expr b) override;
 
     std::string mcpu() const override;
     std::string mattrs() const override;
@@ -33,37 +28,23 @@ protected:
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
 
-    llvm::Function *define_hvx_intrinsic(int intrin, Type ret_ty,
-                                         const std::string &name,
-                                         const std::vector<Type> &arg_types,
-                                         int flags);
     llvm::Function *define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty,
                                          const std::string &name,
                                          std::vector<Type> arg_types,
                                          int flags);
 
-    int is_hvx_v62_or_later() {return (isa_version >= 62);}
-    int is_hvx_v65_or_later() {return (isa_version >= 65);}
+    int is_hvx_v65_or_later() const {
+        return (isa_version >= 65);
+    }
 
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific hexagon intrinsics */
     ///@{
-    void visit(const Add *) override;
-    void visit(const Sub *) override;
-    void visit(const Broadcast *) override;
-    void visit(const Div *) override;
     void visit(const Max *) override;
     void visit(const Min *) override;
-    void visit(const Cast *) override;
     void visit(const Call *) override;
     void visit(const Mul *) override;
-    void visit(const GE *) override;
-    void visit(const LE *) override;
-    void visit(const LT *) override;
-    void visit(const NE *) override;
-    void visit(const GT *) override;
-    void visit(const EQ *) override;
     void visit(const Select *) override;
     void visit(const Allocate *) override;
     ///@}
@@ -71,7 +52,7 @@ protected:
     /** We ask for an extra vector on each allocation to enable fast
      * clamped ramp loads. */
     int allocation_padding(Type type) const override {
-        return CodeGen_Posix::allocation_padding(type) + native_vector_bits()/8;
+        return CodeGen_Posix::allocation_padding(type) + native_vector_bits() / 8;
     }
 
     /** Call an LLVM intrinsic, potentially casting the operands to
@@ -123,6 +104,9 @@ private:
      * (halide_error) if the size overflows 2^31 -1, the maximum
      * positive number an int32_t can hold. */
     llvm::Value *codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);
+
+    /** Generate a LUT (8/16 bit, max_index < 256) lookup using vlut instructions. */
+    llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
 };
 
 }  // namespace Internal

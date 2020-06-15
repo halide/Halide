@@ -15,12 +15,14 @@ RegisteredFilter *registered_filters = nullptr;
 
 extern "C" void halide_register_argv_and_metadata(
     int (*filter_argv_call)(void **),
-    const struct halide_filter_metadata_t *filter_metadata) {
+    const struct halide_filter_metadata_t *filter_metadata,
+    const char *const *extra_key_value_pairs) {
 
     auto *rf = new RegisteredFilter();
     rf->next = registered_filters;
     rf->filter_argv_call = filter_argv_call;
     rf->filter_metadata = filter_metadata;
+    // RunGen ignores extra_key_value_pairs
     registered_filters = rf;
 }
 
@@ -37,7 +39,7 @@ std::string replace_all(const std::string &str,
 }
 
 void usage(const char *argv0) {
-const std::string usage = R"USAGE(
+    const std::string usage = R"USAGE(
 Usage: $NAME$ argument=value [argument=value... ] [flags]
 
 Arguments:
@@ -49,7 +51,8 @@ Arguments:
         some_int=42 some_float=3.1415
 
     You can also use the text `default` or `estimate` to use the default or
-    estimate value of the given input.
+    estimate value of the given input, respectively. (You can join these by
+    commas to give default-then-estimate or estimate-then-default behaviors.)
 
     Buffer inputs and outputs are specified by pathname:
 
@@ -101,7 +104,7 @@ Arguments:
         the --output_extents flag.)
 
         In place of [NUM,NUM,...] for boundary, you may specify 'estimate';
-        this will use the esimated bounds specified in the code.
+        this will use the estimated bounds specified in the code.
 
 Flags:
 
@@ -136,14 +139,6 @@ Flags:
         Override the default minimum desired benchmarking time; ignored if
         --benchmarks is not also specified.
 
-    --benchmark_min_iters=NUM [default = 1]:
-        Override the default minimum number of benchmarking iterations; ignored
-        if --benchmarks is not also specified.
-
-    --benchmark_max_iters=NUM [default = 1000000000]:
-        Override the default maximum number of benchmarking iterations; ignored
-        if --benchmarks is not also specified.
-
     --track_memory:
         Override Halide memory allocator to track high-water mark of memory
         allocation during run; note that this may slow down execution, so
@@ -151,11 +146,27 @@ Flags:
 
     --default_input_buffers=VALUE:
         Specify the value for all otherwise-unspecified buffer inputs, in the
-        same syntax in use above.
+        same syntax in use above. If you omit =VALUE, "zero:auto" will be used.
 
     --default_input_scalars=VALUE:
         Specify the value for all otherwise-unspecified scalar inputs, in the
-        same syntax in use above.
+        same syntax in use above. If you omit =VALUE, "estimate,default"
+        will be used.
+
+    --parsable_output:
+        Final output is emitted in an easy-to-parse output (one value per line),
+        rather than easy-for-humans.
+
+    --estimate_all:
+        Request that all inputs and outputs are based on estimate,
+        and fill buffers with random values. This is exactly equivalent to
+        specifying
+
+            --default_input_buffers=estimate_then_auto
+            --default_input_scalars=estimate
+            --output_extents=estimate
+
+        and is a convenience for automated benchmarking.
 
 Known Issues:
 
@@ -214,7 +225,7 @@ class HalideMemoryTracker {
         }
         size_t x = it->second;
         memory_allocated -= x;
-        memory_size_map. erase(it);
+        memory_size_map.erase(it);
         halide_default_free(user_context, ptr);
     }
 
@@ -226,7 +237,7 @@ class HalideMemoryTracker {
         return active->tracker_free_impl(user_context, ptr);
     }
 
-  public:
+public:
     void install() {
         assert(!active);
         active = this;
@@ -286,7 +297,7 @@ namespace Halide {
 namespace RunGen {
 
 Logger log() {
-    return { do_log_cout, do_log_info, do_log_warn, do_log_fail };
+    return {do_log_cout, do_log_info, do_log_warn, do_log_fail};
 }
 
 }  // namespace RunGen
@@ -302,9 +313,9 @@ int main(int argc, char **argv) {
     std::string filter_name;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
-            const char *p = argv[i] + 1; // skip -
+            const char *p = argv[i] + 1;  // skip -
             if (p[0] == '-') {
-                p++; // allow -- as well, because why not
+                p++;  // allow -- as well, because why not
             }
             std::vector<std::string> v = split_string(p, "=");
             std::string flag_name = v[0];
@@ -331,14 +342,14 @@ int main(int argc, char **argv) {
         if (rf->next != nullptr) {
             std::ostringstream o;
             o << "Must specify --name if multiple filters are registered; registered filters are:\n";
-            for (auto *rf = registered_filters ; rf != nullptr; rf = rf->next) {
+            for (auto *rf = registered_filters; rf != nullptr; rf = rf->next) {
                 o << "  " << rf->filter_metadata->name << "\n";
             }
             o << "\n";
             fail() << o.str();
         }
     } else {
-        for ( ; rf != nullptr; rf = rf->next) {
+        for (; rf != nullptr; rf = rf->next) {
             if (filter_name == rf->filter_metadata->name) {
                 break;
             }
@@ -346,7 +357,7 @@ int main(int argc, char **argv) {
         if (rf == nullptr) {
             std::ostringstream o;
             o << "Filter " << filter_name << " not found; registered filters are:\n";
-            for (auto *rf = registered_filters ; rf != nullptr; rf = rf->next) {
+            for (auto *rf = registered_filters; rf != nullptr; rf = rf->next) {
                 o << "  " << rf->filter_metadata->name << "\n";
             }
             o << "\n";
@@ -362,15 +373,14 @@ int main(int argc, char **argv) {
     bool track_memory = false;
     bool describe = false;
     double benchmark_min_time = BenchmarkConfig().min_time;
-    uint64_t benchmark_min_iters = BenchmarkConfig().min_iters;
-    uint64_t benchmark_max_iters = BenchmarkConfig().max_iters;
     std::string default_input_buffers;
     std::string default_input_scalars;
+    std::string benchmarks_flag_value;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
-            const char *p = argv[i] + 1; // skip -
+            const char *p = argv[i] + 1;  // skip -
             if (p[0] == '-') {
-                p++; // allow -- as well, because why not
+                p++;  // allow -- as well, because why not
             }
             std::vector<std::string> v = split_string(p, "=");
             std::string flag_name = v[0];
@@ -396,6 +406,15 @@ int main(int argc, char **argv) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
                 r.set_quiet(quiet);
+            } else if (flag_name == "parsable_output") {
+                if (flag_value.empty()) {
+                    flag_value = "true";
+                }
+                bool parsable_output;
+                if (!parse_scalar(flag_value, &parsable_output)) {
+                    fail() << "Invalid value for flag: " << flag_name;
+                }
+                r.set_parsable_output(parsable_output);
             } else if (flag_name == "describe") {
                 if (flag_value.empty()) {
                     flag_value = "true";
@@ -411,20 +430,10 @@ int main(int argc, char **argv) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "benchmarks") {
-                if (flag_value != "all") {
-                    fail() << "The only valid value for --benchmarks is 'all'";
-                }
+                benchmarks_flag_value = flag_value;
                 benchmark = true;
             } else if (flag_name == "benchmark_min_time") {
                 if (!parse_scalar(flag_value, &benchmark_min_time)) {
-                    fail() << "Invalid value for flag: " << flag_name;
-                }
-            } else if (flag_name == "benchmark_min_iters") {
-                if (!parse_scalar(flag_value, &benchmark_min_iters)) {
-                    fail() << "Invalid value for flag: " << flag_name;
-                }
-            } else if (flag_name == "benchmark_max_iters") {
-                if (!parse_scalar(flag_value, &benchmark_max_iters)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "default_input_buffers") {
@@ -435,10 +444,18 @@ int main(int argc, char **argv) {
             } else if (flag_name == "default_input_scalars") {
                 default_input_scalars = flag_value;
                 if (default_input_scalars.empty()) {
-                    default_input_scalars = "default";
+                    default_input_scalars = "estimate,default";
                 }
             } else if (flag_name == "output_extents") {
                 user_specified_output_shape = flag_value;
+            } else if (flag_name == "estimate_all") {
+                // Equivalent to:
+                // --default_input_buffers=random:0:estimate_then_auto
+                // --default_input_scalars=estimate
+                // --output_extents=estimate
+                default_input_buffers = "random:0:estimate_then_auto";
+                default_input_scalars = "estimate";
+                user_specified_output_shape = "estimate";
             } else {
                 usage(argv[0]);
                 fail() << "Unknown flag: " << flag_name;
@@ -486,8 +503,18 @@ int main(int argc, char **argv) {
         tracker.install();
     }
 
+    // This is a single-purpose binary to benchmark this filter, so we
+    // shouldn't be eagerly returning device memory.
+    halide_reuse_device_allocations(nullptr, true);
+
     if (benchmark) {
-        r.run_for_benchmark(benchmark_min_time, benchmark_min_iters, benchmark_max_iters);
+        if (benchmarks_flag_value.empty()) {
+            benchmarks_flag_value = "all";
+        }
+        if (benchmarks_flag_value != "all") {
+            fail() << "The only valid value for --benchmarks is 'all'";
+        }
+        r.run_for_benchmark(benchmark_min_time);
     } else {
         r.run_for_output();
     }
@@ -497,7 +524,7 @@ int main(int argc, char **argv) {
         // we report on memory usage.
         r.copy_outputs_to_host();
         std::cout << "Maximum Halide memory: " << tracker.highwater()
-            << " bytes for output of " << r.megapixels_out() << " mpix.\n";
+                  << " bytes for output of " << r.megapixels_out() << " mpix.\n";
     }
 
     // Save the output(s), if necessary.

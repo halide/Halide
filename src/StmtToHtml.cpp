@@ -1,11 +1,11 @@
 #include "StmtToHtml.h"
-#include "IRVisitor.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Scope.h"
 
-#include <iterator>
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <iterator>
 #include <sstream>
 #include <stdio.h>
 
@@ -15,11 +15,11 @@ namespace Internal {
 using std::string;
 
 namespace {
-template <typename T>
+template<typename T>
 std::string to_string(T value) {
-    std::ostringstream os ;
-    os << value ;
-    return os.str() ;
+    std::ostringstream os;
+    os << value;
+    return os.str();
 }
 
 class StmtToHtml : public IRVisitor {
@@ -32,7 +32,9 @@ class StmtToHtml : public IRVisitor {
 private:
     std::ofstream stream;
 
-    int unique_id() { return ++id_count; }
+    int unique_id() {
+        return ++id_count;
+    }
 
     // All spans and divs will have an id of the form "x-y", where x
     // is shared among all spans/divs in the same context, and y is unique.
@@ -85,12 +87,22 @@ private:
         return close_tag("div") + "\n";
     }
 
-    string open_line() { return "<p class=WrapLine>"; }
-    string close_line() { return "</p>"; }
+    string open_line() {
+        return "<p class=WrapLine>";
+    }
+    string close_line() {
+        return "</p>";
+    }
 
-    string keyword(const string &x) { return span("Keyword", x); }
-    string type(const string &x) { return span("Type", x); }
-    string symbol(const string &x) { return span("Symbol", x); }
+    string keyword(const string &x) {
+        return span("Keyword", x);
+    }
+    string type(const string &x) {
+        return span("Type", x);
+    }
+    string symbol(const string &x) {
+        return span("Symbol", x);
+    }
 
     Scope<int> scope;
     string var(const string &x) {
@@ -127,8 +139,10 @@ private:
         std::stringstream button;
         button << "<a class=ExpandButton onclick='return toggle(" << id << ");' href=_blank>"
                << "<div style='position:relative; width:0; height:0;'>"
-               << "<div class=ShowHide style='display:none;' id=" << id << "-show" << "><i class='fa fa-plus-square-o'></i></div>"
-               << "<div class=ShowHide id=" << id << "-hide" << "><i class='fa fa-minus-square-o'></i></div>"
+               << "<div class=ShowHide style='display:none;' id=" << id << "-show"
+               << "><i class='fa fa-plus-square-o'></i></div>"
+               << "<div class=ShowHide id=" << id << "-hide"
+               << "><i class='fa fa-minus-square-o'></i></div>"
                << "</div>";
         return button.str();
     }
@@ -157,37 +171,37 @@ private:
 
     void visit(const StringImm *op) override {
         stream << open_span("StringImm");
-        stream << '"';
+        stream << "\"";
         for (size_t i = 0; i < op->value.size(); i++) {
             unsigned char c = op->value[i];
             if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
                 stream << c;
             } else {
-                stream << '\\';
+                stream << "\\";
                 switch (c) {
                 case '"':
-                    stream << '"';
+                    stream << "\"";
                     break;
                 case '\\':
-                    stream << '\\';
+                    stream << "\\";
                     break;
                 case '\t':
-                    stream << 't';
+                    stream << "t";
                     break;
                 case '\r':
-                    stream << 'r';
+                    stream << "r";
                     break;
                 case '\n':
-                    stream << 'n';
+                    stream << "n";
                     break;
                 default:
                     string hex_digits = "0123456789ABCDEF";
-                    stream << 'x' << hex_digits[c >> 4] << hex_digits[c & 0xf];
+                    stream << "x" << hex_digits[c >> 4] << hex_digits[c & 0xf];
                 }
             }
         }
-        stream << '"';
-        stream << close_span();
+        stream << "\""
+               << close_span();
     }
 
     void visit(const Variable *op) override {
@@ -207,7 +221,7 @@ private:
         stream << close_span();
     }
 
-    void visit_binary_op(Expr a, Expr b, const char *op) {
+    void visit_binary_op(const Expr &a, const Expr &b, const char *op) {
         stream << open_span("BinaryOp");
 
         stream << matched("(");
@@ -219,19 +233,45 @@ private:
         stream << close_span();
     }
 
-    void visit(const Add *op) override { visit_binary_op(op->a, op->b, "+"); }
-    void visit(const Sub *op) override { visit_binary_op(op->a, op->b, "-"); }
-    void visit(const Mul *op) override { visit_binary_op(op->a, op->b, "*"); }
-    void visit(const Div *op) override { visit_binary_op(op->a, op->b, "/"); }
-    void visit(const Mod *op) override { visit_binary_op(op->a, op->b, "%"); }
-    void visit(const And *op) override { visit_binary_op(op->a, op->b, "&amp;&amp;"); }
-    void visit(const Or *op) override { visit_binary_op(op->a, op->b, "||"); }
-    void visit(const NE *op) override { visit_binary_op(op->a, op->b, "!="); }
-    void visit(const LT *op) override { visit_binary_op(op->a, op->b, "&lt;"); }
-    void visit(const LE *op) override { visit_binary_op(op->a, op->b, "&lt="); }
-    void visit(const GT *op) override { visit_binary_op(op->a, op->b, "&gt;"); }
-    void visit(const GE *op) override { visit_binary_op(op->a, op->b, "&gt;="); }
-    void visit(const EQ *op) override { visit_binary_op(op->a, op->b, "=="); }
+    void visit(const Add *op) override {
+        visit_binary_op(op->a, op->b, "+");
+    }
+    void visit(const Sub *op) override {
+        visit_binary_op(op->a, op->b, "-");
+    }
+    void visit(const Mul *op) override {
+        visit_binary_op(op->a, op->b, "*");
+    }
+    void visit(const Div *op) override {
+        visit_binary_op(op->a, op->b, "/");
+    }
+    void visit(const Mod *op) override {
+        visit_binary_op(op->a, op->b, "%");
+    }
+    void visit(const And *op) override {
+        visit_binary_op(op->a, op->b, "&amp;&amp;");
+    }
+    void visit(const Or *op) override {
+        visit_binary_op(op->a, op->b, "||");
+    }
+    void visit(const NE *op) override {
+        visit_binary_op(op->a, op->b, "!=");
+    }
+    void visit(const LT *op) override {
+        visit_binary_op(op->a, op->b, "&lt;");
+    }
+    void visit(const LE *op) override {
+        visit_binary_op(op->a, op->b, "&lt=");
+    }
+    void visit(const GT *op) override {
+        visit_binary_op(op->a, op->b, "&gt;");
+    }
+    void visit(const GE *op) override {
+        visit_binary_op(op->a, op->b, "&gt;=");
+    }
+    void visit(const EQ *op) override {
+        visit_binary_op(op->a, op->b, "==");
+    }
 
     void visit(const Min *op) override {
         stream << open_span("Min");
@@ -245,7 +285,7 @@ private:
     }
     void visit(const Not *op) override {
         stream << open_span("Not");
-        stream << '!';
+        stream << "!";
         print(op->a);
         stream << close_span();
     }
@@ -333,7 +373,8 @@ private:
         stream << keyword(op->is_producer ? "produce" : "consume") << " ";
         stream << var(op->name);
         stream << close_expand_button() << " {";
-        stream << close_span();;
+        stream << close_span();
+        ;
         stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent", produce_id);
         print(op->body);
         stream << close_div();
@@ -364,7 +405,7 @@ private:
         } else if (op->for_type == ForType::GPULane) {
             stream << keyword("gpu_lane");
         } else {
-            internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
+            internal_error << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
         stream << " (";
         stream << close_span();
@@ -445,7 +486,7 @@ private:
         stream << close_span();
 
         for (size_t i = 0; i < op->extents.size(); i++) {
-            stream  << " * ";
+            stream << " * ";
             print(op->extents[i]);
         }
         stream << matched("]");
@@ -528,7 +569,7 @@ private:
     }
 
     // To avoid generating ridiculously deep DOMs, we flatten blocks here.
-    void visit_block_stmt(Stmt stmt) {
+    void visit_block_stmt(const Stmt &stmt) {
         if (const Block *b = stmt.as<Block>()) {
             visit_block_stmt(b->first);
             visit_block_stmt(b->rest);
@@ -544,7 +585,7 @@ private:
     }
 
     // We also flatten forks
-    void visit_fork_stmt(Stmt stmt) {
+    void visit_fork_stmt(const Stmt &stmt) {
         if (const Fork *f = stmt.as<Fork>()) {
             visit_fork_stmt(f->first);
             visit_fork_stmt(f->rest);
@@ -586,11 +627,11 @@ private:
             print(op->condition);
             stream << matched(")");
             stream << close_expand_button() << " ";
-            stream << matched("{"); // close if (or else if) span
+            stream << matched("{");  // close if (or else if) span
 
             stream << open_div("ThenBody Indent", id);
             print(op->then_case);
-            stream << close_div(); // close thenbody div
+            stream << close_div();  // close thenbody div
 
             if (!op->else_case.defined()) {
                 stream << matched("}");
@@ -618,7 +659,7 @@ private:
                 break;
             }
         }
-        stream << close_div(); // Closing ifthenelse div.
+        stream << close_div();  // Closing ifthenelse div.
     }
 
     void visit(const Evaluate *op) override {
@@ -635,30 +676,49 @@ private:
             print_list(symbol("interleave_vectors("), op->vectors, ")");
         } else if (op->is_extract_element()) {
             std::vector<Expr> args = op->vectors;
-            args.push_back(op->slice_begin());
+            args.emplace_back(op->slice_begin());
             print_list(symbol("extract_element("), args, ")");
         } else if (op->is_slice()) {
             std::vector<Expr> args = op->vectors;
-            args.push_back(op->slice_begin());
-            args.push_back(op->slice_stride());
-            args.push_back(static_cast<int>(op->indices.size()));
+            args.emplace_back(op->slice_begin());
+            args.emplace_back(op->slice_stride());
+            args.emplace_back(static_cast<int>(op->indices.size()));
             print_list(symbol("slice_vectors("), args, ")");
         } else {
             std::vector<Expr> args = op->vectors;
             for (int i : op->indices) {
-                args.push_back(i);
+                args.emplace_back(i);
             }
             print_list(symbol("shuffle("), args, ")");
         }
         stream << close_span();
     }
 
+    void visit(const Atomic *op) override {
+        stream << open_div("Atomic");
+        int id = unique_id();
+        stream << open_expand_button(id);
+        stream << open_span("Matched");
+        if (op->mutex_name.empty()) {
+            stream << keyword("atomic") << matched("{");
+        } else {
+            stream << keyword("atomic") << " (";
+            stream << symbol(op->mutex_name);
+            stream << ")" << matched("{");
+        }
+        stream << close_span();
+        stream << open_div("Atomic Body Indent", id);
+        print(op->body);
+        stream << close_div() << matched("}");
+        stream << close_div();
+    }
+
 public:
-    void print(Expr ir) {
+    void print(const Expr &ir) {
         ir.accept(this);
     }
 
-    void print(Stmt ir) {
+    void print(const Stmt &ir) {
         ir.accept(this);
     }
 
@@ -696,7 +756,7 @@ public:
         stream << close_div();
     }
 
-    void print(const Module& m) {
+    void print(const Module &m) {
         scope.push(m.name(), unique_id());
         for (const auto &s : m.submodules()) {
             print(s);
@@ -726,12 +786,13 @@ public:
         scope.pop(m.name());
     }
 
-    StmtToHtml(string filename) : id_count(0), context_stack(1, 0) {
+    StmtToHtml(const string &filename)
+        : id_count(0), context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
         stream << "<style type='text/css'>" << css << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
-        stream <<"<link rel='stylesheet' type='text/css' href='my.css'>\n";
+        stream << "<link rel='stylesheet' type='text/css' href='my.css'>\n";
         stream << "<script language='javascript' type='text/javascript' src='my.js'></script>\n";
         stream << "<link href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css' rel='stylesheet'>\n";
         stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
@@ -785,17 +846,17 @@ function toggle(id) { \n \
     } \n \
     return false; \n \
 }";
-}
+}  // namespace
 
-void print_to_html(string filename, Stmt s) {
+void print_to_html(const string &filename, const Stmt &s) {
     StmtToHtml sth(filename);
     sth.print(s);
 }
 
-void print_to_html(string filename, const Module &m) {
+void print_to_html(const string &filename, const Module &m) {
     StmtToHtml sth(filename);
     sth.print(m);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

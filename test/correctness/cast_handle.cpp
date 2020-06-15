@@ -4,6 +4,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] WebAssembly JIT does not support Param<> for pointer types.\n");
+        return 0;
+    }
+
     Func f, g;
     Var x;
     Param<void *> handle;

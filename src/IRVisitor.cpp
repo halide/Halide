@@ -1,5 +1,8 @@
 #include "IRVisitor.h"
 
+#include "ExternFuncArgument.h"
+#include "Function.h"
+
 namespace Halide {
 namespace Internal {
 
@@ -256,6 +259,10 @@ void IRVisitor::visit(const Shuffle *op) {
     }
 }
 
+void IRVisitor::visit(const Atomic *op) {
+    op->body.accept(this);
+}
+
 void IRGraphVisitor::include(const Expr &e) {
     auto r = visited.insert(e.get());
     if (r.second) {
@@ -500,6 +507,10 @@ void IRGraphVisitor::visit(const Shuffle *op) {
     for (Expr i : op->vectors) {
         include(i);
     }
+}
+
+void IRGraphVisitor::visit(const Atomic *op) {
+    include(op->body);
 }
 
 }  // namespace Internal

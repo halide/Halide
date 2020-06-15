@@ -4,7 +4,7 @@ export HL_NUMTHREADS=4
 rm -f $1/camera_pipe.mp4
 # Do trivial partial-overrides of trace settings via flags
 # (--zoom and --rlabel) just to demonstrate that it works.
-$1/viz/process ../images/bayer_small.png 3700 1.8 50 1 1 $1/out.png |
+$1/process_viz ../images/bayer_small.png 3700 1.8 50 1 1 $1/out.png |
 ../../bin/HalideTraceViz --timestep 1000 --size 1920 1080 \
 --zoom 4 --func sharpen_strength_x32 \
 --rlabel curve "tone curve LUT" 0 0 10 \
