@@ -367,6 +367,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
             first=$(printf "%04d%04d" $BATCH_ID 0)
             last=$(printf "%04d%04d" $BATCH_ID $(($BATCH_SIZE-1)))
             echo Compiling ${BATCH_SIZE} samples from ${first} to ${last}
+            CUR_SECONDS="$SECONDS"
             for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
                 while [[ 1 ]]; do
                     RUNNING=$(jobs -r | wc -l)
@@ -382,9 +383,11 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
                 make_featurization "${DIR}/${SAMPLE_ID}" $RANDOM_DROPOUT_SEED $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID ${DIR}/used.weights &
             done
             wait
-            echo done.
+            COMPILE_TIME=$(("SECONDS"-CUR_SECONDS))
+            echo "Compile time for batch: ${COMPILE_TIME}"
 
             # benchmark them serially using rungen
+            CUR_SECONDS="$SECONDS"
             for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID=SAMPLE_ID+NUM_GPUS)); do
                 for ((INDEX=0;INDEX<NUM_GPUS;INDEX++)); do
                     SAMPLE_ID_GPU=$((SAMPLE_ID + INDEX))
@@ -394,13 +397,18 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
                 done
                 wait
             done
+            BENCHMARK_TIME=$(("SECONDS"-CUR_SECONDS))
+            echo "Benchmark time for batch: ${BENCHMARK_TIME}"
         done
     fi
 
     # retrain model weights on all samples seen so far
     echo Retraining model...
 
+    CUR_SECONDS="$SECONDS"
     retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
+    TRAIN_TIME=$(("SECONDS"-CUR_SECONDS))
+    echo "Train time for batch: ${TRAIN_TIME}"
 
     if [[ $TRAIN_ONLY == 1 ]]; then
         echo Batch ${BATCH_ID} took ${SECONDS} seconds to retrain
