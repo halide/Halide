@@ -1,5 +1,5 @@
 // We always want asserts
-#ifndef NDEBUG
+#ifdef NDEBUG
 #undef NDEBUG
 #endif
 
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     // test doesn't have at least that, quietly skip the test.
 
     fprintf(stderr, "%d\n", __LINE__);
-    fflush(stderr);    
+    fflush(stderr);
 
     const auto *interface = halide_cuda_device_interface();
     assert(interface);
@@ -26,14 +26,14 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "%d\n", __LINE__);
     fflush(stderr);
-    
+
     int major, minor;
     int err = interface->compute_capability(nullptr, &major, &minor);
     assert(err == 0);
     int ver = major * 10 + minor;
 
     fprintf(stderr, "%d\n", __LINE__);
-    fflush(stderr);    
+    fflush(stderr);
 
     if (ver < 50) {
         printf("[SKIP] This system supports only Cuda compute capability %d.%d, but compute capability 5.0+ is required.\n", major, minor);
@@ -41,16 +41,16 @@ int main(int argc, char **argv) {
     }
 
     fprintf(stderr, "%d\n", __LINE__);
-    fflush(stderr);    
-    
+    fflush(stderr);
+
     int size = 1024;
     if (argc > 1) {
         size = atoi(argv[1]);
     }
 
     fprintf(stderr, "%d\n", __LINE__);
-    fflush(stderr);    
-    
+    fflush(stderr);
+
     // Check correctness using small-integer matrices
     if (1) {
         Buffer<float> A(size, size), B(size, size), C(size, size);
@@ -60,12 +60,12 @@ int main(int argc, char **argv) {
         B.set_host_dirty();
 
         fprintf(stderr, "%d\n", __LINE__);
-        fflush(stderr);    
+        fflush(stderr);
 
         mat_mul(A, B, C);
 
         fprintf(stderr, "%d\n", __LINE__);
-        fflush(stderr);    
+        fflush(stderr);
 
         C.copy_to_host();
         for (int y = 0; y < size; y++) {
@@ -84,8 +84,8 @@ int main(int argc, char **argv) {
     }
 
     fprintf(stderr, "%d\n", __LINE__);
-    fflush(stderr);    
-    
+    fflush(stderr);
+
     // Benchmark it
     {
         Buffer<float> A(size, size), B(size, size), C(size, size);
@@ -97,8 +97,8 @@ int main(int argc, char **argv) {
     }
 
     fprintf(stderr, "%d\n", __LINE__);
-    fflush(stderr);    
-    
+    fflush(stderr);
+
     // Benchmark cublas
     {
         float *A, *B, *C;
@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
 
         fprintf(stderr, "%d\n", __LINE__);
         fflush(stderr);
-        
+
         cublasHandle_t handle;
         cublasCreate(&handle);
         float alpha = 1.0f, beta = 1.0f;
@@ -125,8 +125,8 @@ int main(int argc, char **argv) {
     }
 
     fprintf(stderr, "%d\n", __LINE__);
-    fflush(stderr);    
-    
+    fflush(stderr);
+
     printf("Success!\n");
     return 0;
 }
