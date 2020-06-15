@@ -108,8 +108,9 @@ namespace {
 const int num_unique_name_counters = (1 << 14);
 
 // We want to init these to zero, but cannot use = {0} because that
-// would invoke a (deleted) copy ctor; this syntax should force
-// the correct behavior.
+// would invoke a (deleted) copy ctor. The default initialization for
+// atomics doesn't guarantee any actual initialization. Fortunately
+// this is a global, which is always zero-initialized.
 std::atomic<int> unique_name_counters[num_unique_name_counters] = {};
 
 int unique_count(size_t h) {

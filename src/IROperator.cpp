@@ -368,7 +368,7 @@ Expr make_two(Type t) {
 }
 
 Expr make_signed_integer_overflow(Type type) {
-    static std::atomic<int> counter;
+    static std::atomic<int> counter{0};
     return Call::make(type, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
 }
 
@@ -426,6 +426,42 @@ Expr lossless_cast(Type t, Expr e) {
             return make_const(t, f->value);
         } else {
             return Expr();
+        }
+    }
+
+    if ((t.is_int() || t.is_uint()) && t.bits() >= 16) {
+        if (const Add *add = e.as<Add>()) {
+            // If we can losslessly narrow the args even more
+            // aggressively, we're good.
+            // E.g. lossless_cast(uint16, (uint32)(some_u8) + 37)
+            // = (uint16)(some_u8) + 37
+            Expr a = lossless_cast(t.with_bits(t.bits() / 2), add->a);
+            Expr b = lossless_cast(t.with_bits(t.bits() / 2), add->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) + cast(t, b);
+            } else {
+                return Expr();
+            }
+        }
+
+        if (const Sub *sub = e.as<Sub>()) {
+            Expr a = lossless_cast(t.with_bits(t.bits() / 2), sub->a);
+            Expr b = lossless_cast(t.with_bits(t.bits() / 2), sub->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) + cast(t, b);
+            } else {
+                return Expr();
+            }
+        }
+
+        if (const Mul *mul = e.as<Mul>()) {
+            Expr a = lossless_cast(t.with_bits(t.bits() / 2), mul->a);
+            Expr b = lossless_cast(t.with_bits(t.bits() / 2), mul->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) * cast(t, b);
+            } else {
+                return Expr();
+            }
         }
     }
 
@@ -2158,7 +2194,7 @@ Expr mod_round_to_zero(Expr x, Expr y) {
 
 Expr random_float(Expr seed) {
     // Random floats get even IDs
-    static std::atomic<int> counter;
+    static std::atomic<int> counter{0};
     int id = (counter++) * 2;
 
     std::vector<Expr> args;
@@ -2178,7 +2214,7 @@ Expr random_float(Expr seed) {
 
 Expr random_uint(Expr seed) {
     // Random ints get odd IDs
-    static std::atomic<int> counter;
+    static std::atomic<int> counter{0};
     int id = (counter++) * 2 + 1;
 
     std::vector<Expr> args;

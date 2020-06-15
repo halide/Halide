@@ -592,9 +592,9 @@ class LowerWarpShuffles : public IRMutator {
             // this.
             Expr mask = (1 << bits) - 1;
             Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl.down" + intrin_suffix,
-                                   {base_val, result[0], (1 << bits) - 1}, Call::PureExtern);
+                                   {base_val, result[0], mask}, Call::PureExtern);
             Expr up = Call::make(shuffle_type, "llvm.nvvm.shfl.up" + intrin_suffix,
-                                 {base_val, (1 << bits) - result[0], 0, mask}, Call::PureExtern);
+                                 {base_val, (1 << bits) - result[0], 0}, Call::PureExtern);
             Expr cond = (this_lane >= (1 << bits) - result[0]);
             Expr equiv = select(cond, up, down);
             shuffled = simplify(equiv, true, bounds);

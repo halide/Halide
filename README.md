@@ -147,7 +147,7 @@ D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary
 For a 32-bit build, run:
 
 ```
-D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x86
+D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x86_amd64
 ```
 
 #### Managing dependencies with vcpkg
@@ -158,6 +158,7 @@ The best way to get compatible dependencies on Windows is to use
 ```
 D:\> git clone https://github.com/Microsoft/vcpkg.git
 D:\> cd vcpkg
+D:\> .\bootstrap-vcpkg.bat
 D:\vcpkg> .\vcpkg integrate install
 ...
 CMake projects should use: "-DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake"

@@ -191,6 +191,8 @@ protected:
         // Search for let bindings that access the producers.
         FindAtomicLetBindings finder(collector.store_names);
         op->body.accept(&finder);
+        // Each individual Store that remains can be done as a CAS
+        // loop or an actual atomic RMW of some form.
         if (finder.found) {
             // Can't remove mutex lock. Leave the Stmt as is.
             return IRMutator::visit(op);
