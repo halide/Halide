@@ -67,6 +67,15 @@ struct CodeGen_GPU_Dev {
      * candidate for constant storage if it is never written to, and loads are
      * uniform within the workgroup. */
     static bool is_buffer_constant(const Stmt &kernel, const std::string &buffer);
+
+    /** An mask describing which type of memory fence to use for the gpu_thread_barrier()
+    * intrinsic.  Not all GPUs APIs support all types.
+    */
+    enum MemoryFenceType {
+        None = 0,    // No fence required (just a sync)
+        Device = 1,  // Device/global memory fence
+        Shared = 2   // Threadgroup/shared memory fence
+    };
 };
 
 }  // namespace Internal

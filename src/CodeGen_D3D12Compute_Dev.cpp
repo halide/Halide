@@ -261,14 +261,24 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        // NOTE(marcos): adding both types of thread-group barriers here
-        // because Halide at the moment only has the concept of a general
-        // GPU sync point (gpu_thread_barrier); ideally, some distinction
-        // between shared memory and device memory is needed, and we could
-        // even go one step further and issue barriers that only affect
-        // memory loads/stores without synchronizing the threads...
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
+
+        auto fence_type_ptr = as_const_int(op->args[0]);
+        internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
+        auto fence_type = *fence_type_ptr;
+
+        // By default, we'll just issue a Group (aka Shared) memory barrier,
+        // since it seems there isn't a sync without a memory barrier
+        // available
+        // NOTE(shoaibkamil): should we replace with AllMemoryBarrierWithGroupSync()
+        // if both are required?
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device &&
+            !(fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared)) {
+            stream << get_indent() << "DeviceMemoryBarrierWithGroupSync();\n";
+        } else if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
+            stream << get_indent() << "DeviceMemoryBarrier();\n";
+        }
         stream << get_indent() << "GroupMemoryBarrierWithGroupSync();\n";
-        stream << get_indent() << "DeviceMemoryBarrierWithGroupSync();\n";
         print_assignment(op->type, "0");
     } else if (op->name == "pow_f32" && can_prove(op->args[0] > 0)) {
         // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
