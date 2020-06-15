@@ -293,7 +293,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                       if (a.is_buffer == b.is_buffer) {
                           return a.type.bits() > b.type.bits();
                       } else {
-                          return a.is_buffer < b.is_buffer;
+                          return a.is_buffer > b.is_buffer;
                       }
                   });
 
