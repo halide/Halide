@@ -1052,7 +1052,7 @@ std::pair<double, double> LoopNest::compute_shared_mem_load_features(const LoadJ
     return {num_accesses, min_accesses};
 }
 
-void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root, GlobalMemInfo& global_mem_loads) const {
+void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root, GlobalMemInfo& global_mem_loads, bool verbose) const {
     const ThreadInfo &thread_info = *gpu_loop_info.thread_info;
 
     // If any of the store dimensions are constant over all the loop dimensions,
@@ -1092,6 +1092,12 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
     }
 
     if (consumer_site.gpu_store_memory_type == GPUMemoryType::global) {
+        if (stage->index > 0 && verbose) {
+            std::string consumer_name = node->func.name();
+            sanitize_names(consumer_name);
+            aslog(0) << "BEGIN global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << consumer_name <<"\n";
+        }
+
         auto store_jac = jac * inner_serial_loop_extents;
         auto global_mem_info = compute_global_mem_store_features(
             store_jac,
@@ -1101,12 +1107,24 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             thread_info,
             total_serial_loop_extents,
             jac.count(),
-            root
+            root,
+            stage->index > 0 && verbose
         );
 
         feat.num_global_mem_stores_per_block = global_mem_info.num_transactions();
         if (stage->index > 0) {
             global_mem_loads.add(global_mem_info);
+            if (verbose) {
+                aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
+                std::string consumer_name = node->func.name();
+                sanitize_names(consumer_name);
+                aslog(0) << "END global_mem_load. consumer: " << consumer_name << "_s" << stage->index << "; producer: " << consumer_name;
+                if (!store_jac.all_coeffs_exist()) {
+                    aslog(0) << " (not all coeffs exist)";
+
+                }
+                aslog(0) << "\n\n";
+            }
         }
         feat.global_mem_store_efficiency = global_mem_info.efficiency();
 
@@ -1179,10 +1197,6 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
 
     {
         int num_requests = thread_info.num_regular_active_warps_per_block * serial_loop_extents;
-        if (verbose) {
-            aslog(0) << "num regular warps: " << thread_info.num_regular_active_warps_per_block << "\n";
-        }
-
         GlobalAccessAccumulator accumulator(bytes_per_access, dimensions, strides, verbose);
         thread_info.for_each_thread_id_in_first_warp(accumulator);
 
@@ -1192,6 +1206,10 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
             amortization,
             global_mem_info
         );
+
+        if (verbose) {
+            aslog(0) << "num_regular_warps = " << thread_info.num_regular_active_warps_per_block << "\n";
+        }
     }
 
     if (!thread_info.has_tail_warp) {
@@ -1199,7 +1217,7 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
     }
 
     if (verbose) {
-        aslog(0) << "BEGIN tail warp\n";
+        aslog(0) << "\nBEGIN tail warp\n";
         aslog(0) << "# threads in tail warp: " << thread_info.num_threads_in_final_warp << "\n";
     }
 
@@ -1216,7 +1234,7 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
     );
 
     if (verbose) {
-        aslog(0) << "END tail warp\n";
+        aslog(0) << "END tail warp\n\n";
     }
 }
 
@@ -2320,7 +2338,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     feat,
                     parent,
                     root,
-                    global_mem_loads
+                    global_mem_loads,
+                    verbose
                 );
             }
         }
@@ -2578,7 +2597,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     std::string producer_name = e->producer->func.name();
                                     sanitize_names(producer_name);
                                     aslog(0) << "BEGIN global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
-                                    aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
                                 }
 
                                 double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, e->producer, jac.first, parent, grandparent, n, feat, verbose);
@@ -2599,7 +2617,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 );
 
                                 if (verbose) {
-                                    aslog(0) << "END global_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name() <<"\n\n";
+                                    aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
+                                    aslog(0) << "END global_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
+                                    if (!jac.first.all_coeffs_exist()) {
+                                        aslog(0) << " (not all coeffs exist)";
+                                    }
+                                    aslog(0) << "\n\n";
                                 }
                             }
                         }

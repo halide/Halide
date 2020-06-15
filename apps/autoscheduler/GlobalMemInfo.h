@@ -130,11 +130,17 @@ struct GlobalAccessAccumulator {
         }
 
         int64_t sector = byte / 32;
+        if (verbose) {
+            aslog(0) << "sectors accessed: ";
+        }
         for (int i = 0; i < bytes_per_access; ++i) {
             if (verbose) {
-                aslog(0) << "sector accessed: " << sector << "\n";
+                aslog(0) << sector << " ";
             }
             sectors_accessed[sector].insert(byte + i);
+        }
+        if (verbose) {
+            aslog(0) << "\n\n";
         }
     }
 
@@ -153,7 +159,7 @@ struct GlobalAccessAccumulator {
         num_bytes_used_per_request += unknown_sectors * bytes_per_access;
 
         if (verbose) {
-            aslog(0) << "num_requests = " << num_requests << "\n";
+            aslog(0) << "num_requests_per_block = " << num_requests << "\n";
         }
 
         global_mem_info.add_access_info(
