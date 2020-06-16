@@ -456,7 +456,8 @@ llvm::Triple get_triple_for_target(const Target &target) {
             triple.setOS(llvm::Triple::Win32);
             triple.setEnvironment(llvm::Triple::MSVC);
             if (target.has_feature(Target::JIT)) {
-                //TODO(shoaibkamil): figure out a way to test this.
+                // TODO(shoaibkamil): figure out a way to test this.
+                // Currently blocked by https://github.com/halide/Halide/issues/5040
                 user_error << "No JIT support for this OS/CPU combination yet.\n";
             }
         } else if (target.os == Target::Fuchsia) {
