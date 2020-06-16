@@ -54,21 +54,21 @@ struct tiff_tag {
         int32_t i32;
     } value;
 
-    void assign16(uint16_t tag_code, int32_t count, int16_t value) __attribute__((always_inline)) {
+    ALWAYS_INLINE void assign16(uint16_t tag_code, int32_t count, int16_t value) {
         this->tag_code = tag_code;
         this->type_code = 3;
         this->count = count;
         this->value.i16 = value;
     }
 
-    void assign32(uint16_t tag_code, int32_t count, int32_t value) __attribute__((always_inline)) {
+    ALWAYS_INLINE void assign32(uint16_t tag_code, int32_t count, int32_t value) {
         this->tag_code = tag_code;
         this->type_code = 4;
         this->count = count;
         this->value.i32 = value;
     }
 
-    void assign32(uint16_t tag_code, int16_t type_code, int32_t count, int32_t value) __attribute__((always_inline)) {
+    ALWAYS_INLINE void assign32(uint16_t tag_code, int16_t type_code, int32_t count, int32_t value) {
         this->tag_code = tag_code;
         this->type_code = type_code;
         this->count = count;
@@ -107,16 +107,16 @@ WEAK bool ends_with(const char *filename, const char *suffix) {
 
 struct ScopedFile {
     void *f;
-    __attribute__((always_inline)) ScopedFile(const char *filename, const char *mode) {
+    ALWAYS_INLINE ScopedFile(const char *filename, const char *mode) {
         f = fopen(filename, mode);
     }
-    __attribute__((always_inline)) ~ScopedFile() {
+    ALWAYS_INLINE ~ScopedFile() {
         fclose(f);
     }
-    __attribute__((always_inline)) bool write(const void *ptr, size_t bytes) {
+    ALWAYS_INLINE bool write(const void *ptr, size_t bytes) {
         return fwrite(ptr, bytes, 1, f);
     }
-    __attribute__((always_inline)) bool open() const {
+    ALWAYS_INLINE bool open() const {
         return f;
     }
 };
