@@ -497,9 +497,12 @@ struct hash_table {
 WEAK char table_storage[sizeof(hash_table)];
 #define table (*(hash_table *)table_storage)
 
-__attribute__((always_inline)) void check_hash(uintptr_t hash) {
-    halide_assert(NULL, hash < sizeof(table.buckets) / sizeof(table.buckets[0]));
-}
+// Make this a macro, not an always-inline function; some runtime build configurations
+// can refuse to inline it properly, leading to link conflicts.
+#define CHECK_HASH(hash)                                                                \
+    do {                                                                                \
+        halide_assert(NULL, (hash) < sizeof(table.buckets) / sizeof(table.buckets[0])); \
+    } while (0)
 
 #if 0
 WEAK void dump_hash() {
@@ -528,7 +531,7 @@ static __attribute__((always_inline)) uintptr_t addr_hash(uintptr_t addr, uint32
 WEAK hash_bucket &lock_bucket(uintptr_t addr) {
     uintptr_t hash = addr_hash(addr, HASH_TABLE_BITS);
 
-    check_hash(hash);
+    CHECK_HASH(hash);
 
     // TODO: if resizing is implemented, loop, etc.
     hash_bucket &bucket = table.buckets[hash];
@@ -552,8 +555,8 @@ WEAK bucket_pair lock_bucket_pair(uintptr_t addr_from, uintptr_t addr_to) {
     uintptr_t hash_from = addr_hash(addr_from, HASH_TABLE_BITS);
     uintptr_t hash_to = addr_hash(addr_to, HASH_TABLE_BITS);
 
-    check_hash(hash_from);
-    check_hash(hash_to);
+    CHECK_HASH(hash_from);
+    CHECK_HASH(hash_to);
 
     // Lock the bucket with the smaller hash first in order
     // to prevent deadlock.
@@ -1222,3 +1225,5 @@ WEAK int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry) 
     return 0;
 }
 }
+
+#undef CHECK_HASH(hash)
