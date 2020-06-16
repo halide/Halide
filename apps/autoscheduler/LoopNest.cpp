@@ -4239,7 +4239,7 @@ void LoopNest::apply(LoopLevel here,
                     continue;
                 }
 
-                state.producers_to_be_staged.insert(e->producer, true);
+                state.producers_to_be_staged.insert(e->producer, this);
             }
         }
 

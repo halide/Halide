@@ -748,10 +748,35 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, 
                 }
 
                 Func producer(e->producer->func);
-                staged_funcs_schedule_source << producer.name() << ".in(" << func.name() << ").compute_at(" << func.name() << ", " << v.var.var.name() << ")";
+                producer.in(func).store_in(MemoryType::Register).compute_at(func, v.var.var);
+                staged_funcs_schedule_source
+                    << producer.name()
+                    << ".in("
+                    << func.name()
+                    << ").store_in(MemoryType::Register).compute_at("
+                    << func.name()
+                    << ", "
+                    << v.var.var.name()
+                    << ")";
+
+                const LoopNest* loop_nest = state->producers_to_be_staged.get(e->producer);
+
+                const auto& bounds = loop_nest->get_bounds(e->producer);
+
+                int i = 0;
                 for (const auto& l : e->producer->stages[0].loop) {
                     Var unrolled_var(l.var);
-                    producer.in(func).compute_at(func, v.var.var).unroll(unrolled_var);
+
+                    int extent = bounds->region_required(i++).extent();
+                    producer.in(func).bound_extent(unrolled_var, extent);
+                    staged_funcs_schedule_source
+                        << "\n    .bound_extent("
+                        << unrolled_var.name()
+                        << ", "
+                        << extent
+                        << ")";
+
+                    producer.in(func).unroll(unrolled_var);
                     staged_funcs_schedule_source << "\n    .unroll(" << unrolled_var.name() << ")";
                 }
                 staged_funcs_schedule_source << ";\n";
