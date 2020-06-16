@@ -192,6 +192,7 @@ tests(GROUPS correctness
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
       lots_of_dimensions.cpp
+      lots_of_loop_invariants.cpp
       make_struct.cpp
       many_dimensions.cpp
       many_small_extern_stages.cpp

@@ -1304,7 +1304,8 @@ void CodeGen_LLVM::optimize_module() {
 #if LLVM_VERSION >= 110
         pb.registerOptimizerLastEPCallback(
             [](ModulePassManager &mpm, PassBuilder::OptimizationLevel level) {
-                mpm.addPass(ThreadSanitizerPass());
+                mpm.addPass(
+                    createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
             });
 #else
         pb.registerOptimizerLastEPCallback(
