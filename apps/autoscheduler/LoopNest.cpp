@@ -3558,12 +3558,17 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         union_counts = get_union_thread_counts(f);
     }
 
+    bool is_block_level = !is_root() && !in_threads_loop;
+    bool can_compute_here = (is_root() && search_space_options.compute_root()) || f->is_output;
+    can_compute_here = can_compute_here || (is_block_level && search_space_options.compute_at_block());
+    can_compute_here = can_compute_here || (in_threads_loop && search_space_options.compute_at_thread());
+
     // Place the computation directly inside this loop (provided it's not a SIMD loop)
     if (!innermost &&
         (!in_realization ||
          size.empty() ||
          vector_dim == -1 ||
-         size[vector_dim] == 1)) {
+         size[vector_dim] == 1) && can_compute_here) {
 
         std::unique_ptr<LoopNest> r{new LoopNest};
         r->copy_from(*this);
@@ -3585,7 +3590,8 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         }
     }
 
-    if (search_space_options.compute_root_only() || f->is_output || is_pre_pass) {
+    bool stop_here = is_root() && !search_space_options.compute_at_block() && !search_space_options.compute_at_thread();
+    if (stop_here || f->is_output || is_pre_pass) {
         // Outputs must be compute_root, so we're done.
         return result;
     }
