@@ -888,7 +888,7 @@ StorageStrides LoopNest::storage_strides(const LoadJacobian &jac, int innermost_
     internal_assert(innermost_storage_dim >= 0);
 
     if (verbose) {
-        aslog(0) << "\nBEGIN storage_strides: " << node->func.name() << " (stage = " << stage->index << ") loading from " << storage_node->func.name() << "\n";
+        aslog(0) << "\nstorage_strides: " << node->func.name() << " (stage = " << stage->index << ") loading from " << storage_node->func.name() << " ->\n";
     }
 
     // The node's storage dimensions (from innermost outward)
@@ -937,7 +937,7 @@ StorageStrides LoopNest::storage_strides(const LoadJacobian &jac, int innermost_
     }
 
     if (verbose) {
-        aslog(0) << "END storage_strides\n\n";
+        aslog(0) << "<- storage_strides\n\n";
     }
 
     return strides;
@@ -1092,10 +1092,12 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
     }
 
     if (consumer_site.gpu_store_memory_type == GPUMemoryType::global) {
-        if (stage->index > 0 && verbose) {
+        if (verbose) {
+            std::string type = stage->index == 0 ? "store" : "load_and_store";
             std::string consumer_name = node->func.name();
             sanitize_names(consumer_name);
-            aslog(0) << "BEGIN global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << consumer_name <<"\n";
+            aslog(0) << "BEGIN GLOBAL ACCESS global_mem_" << type;
+            aslog(0) << ". consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << consumer_name << "\n";
         }
 
         auto store_jac = jac * inner_serial_loop_extents;
@@ -1108,23 +1110,24 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             total_serial_loop_extents,
             jac.count(),
             root,
-            stage->index > 0 && verbose
+            verbose
         );
 
         feat.num_global_mem_stores_per_block = global_mem_info.num_transactions();
         if (stage->index > 0) {
             global_mem_loads.add(global_mem_info);
-            if (verbose) {
-                aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
-                std::string consumer_name = node->func.name();
-                sanitize_names(consumer_name);
-                aslog(0) << "END global_mem_load. consumer: " << consumer_name << "_s" << stage->index << "; producer: " << consumer_name;
-                if (!store_jac.all_coeffs_exist()) {
-                    aslog(0) << " (not all coeffs exist)";
+        }
+        if (verbose) {
+            aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
+            std::string type = stage->index == 0 ? "store" : "load_and_store";
+            std::string consumer_name = node->func.name();
+            sanitize_names(consumer_name);
+            aslog(0) << "END GLOBAL ACCESS global_mem_" << type << ". consumer: " << consumer_name << "_s" << stage->index << "; producer: " << consumer_name;
+            if (!store_jac.all_coeffs_exist()) {
+                aslog(0) << " (not all coeffs exist)";
 
-                }
-                aslog(0) << "\n\n";
             }
+            aslog(0) << "\n\n";
         }
         feat.global_mem_store_efficiency = global_mem_info.efficiency();
 
@@ -1204,7 +1207,8 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
             num_requests,
             access_count,
             amortization,
-            global_mem_info
+            global_mem_info,
+            false
         );
 
         if (verbose) {
@@ -1230,7 +1234,8 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
         num_requests,
         access_count,
         amortization,
-        global_mem_info
+        global_mem_info,
+        true
     );
 
     if (verbose) {
@@ -2596,7 +2601,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     sanitize_names(consumer_name);
                                     std::string producer_name = e->producer->func.name();
                                     sanitize_names(producer_name);
-                                    aslog(0) << "BEGIN global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
+                                    aslog(0) << "BEGIN GLOBAL ACCESS global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                                 }
 
                                 double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, e->producer, jac.first, parent, grandparent, n, feat, verbose);
@@ -2618,7 +2623,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                                 if (verbose) {
                                     aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
-                                    aslog(0) << "END global_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
+                                    aslog(0) << "END GLOBAL ACCESS global_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
                                     if (!jac.first.all_coeffs_exist()) {
                                         aslog(0) << " (not all coeffs exist)";
                                     }

@@ -144,10 +144,13 @@ struct GlobalAccessAccumulator {
         }
     }
 
-    void add_access_info(int num_requests, double access_count, double amortization, GlobalMemInfo& global_mem_info) const {
+    void add_access_info(int num_requests, double access_count, double amortization, GlobalMemInfo& global_mem_info, bool is_tail_warp) const {
         int num_transactions_per_request = sectors_accessed.size() + unknown_sectors;
 
         if (verbose) {
+            if (is_tail_warp) {
+                aslog(0) << "tail_";
+            }
             aslog(0) << "num_transactions_per_request = " << num_transactions_per_request << "\n";
         }
 
@@ -159,6 +162,9 @@ struct GlobalAccessAccumulator {
         num_bytes_used_per_request += unknown_sectors * bytes_per_access;
 
         if (verbose) {
+            if (is_tail_warp) {
+                aslog(0) << "tail_";
+            }
             aslog(0) << "num_requests_per_block = " << num_requests << "\n";
         }
 
