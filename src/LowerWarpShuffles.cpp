@@ -819,7 +819,7 @@ class LowerWarpShufflesInEachKernel : public IRMutator {
 }  // namespace
 
 Stmt lower_warp_shuffles(Stmt s) {
-    s = loop_invariant_code_motion(s);
+    s = hoist_loop_invariant_values(s);
     s = SubstituteInLaneVar().mutate(s);
     s = simplify(s);
     s = LowerWarpShufflesInEachKernel().mutate(s);

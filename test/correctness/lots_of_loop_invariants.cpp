@@ -6,7 +6,7 @@ int main(int argc, char **argv) {
     // Stress-test LICM by hoisting lots of loop invariants
     Var x, y, c;
 
-    const int N = 500;
+    const int N = 100;
 
     Expr e = 0;
     for (int i = 0; i < N; i++) {

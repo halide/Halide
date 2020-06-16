@@ -52,12 +52,12 @@ int main(int argc, char **argv) {
         f(x) *= select(x > 20 && x < 30, 2, 1);
         f(x) = select(x >= 60 && x <= 100, 100 - f(x), f(x));
 
-        // There should be no selects after trim_no_ops runs
+        // There should be no selects or ifs after trim_no_ops runs
         Module m = f.compile_to_module({});
         CountConditionals s;
         m.functions().front().body.accept(&s);
         if (s.count != 0) {
-            std::cerr << "There were selects in the lowered code: \n"
+            std::cerr << "There were conditionals in the lowered code: \n"
                       << m.functions().front().body << "\n";
             return -1;
         }
