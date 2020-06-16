@@ -222,6 +222,9 @@ class LICM : public IRMutator {
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
             return IRMutator::visit(op);
+        } else if (op->device_api == DeviceAPI::GLSL) {
+            // GLSL uses magic names for varying things. Just skip LICM.
+            return IRMutator::visit(op);
         } else {
 
             // Lift invariants
