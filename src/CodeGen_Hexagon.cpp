@@ -1423,8 +1423,7 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
 
         if (result_elements == native_elements &&
             (element_bits == 8 || element_bits == 16)) {
-            llvm::Type *native_ty =
-                llvm::VectorType::get(element_ty, native_elements);
+            llvm::Type *native_ty = get_vector_type(element_ty, native_elements);
             // This is an interleave of two half native vectors, use
             // vshuff.
             IdPair vshuff = element_bits == 8 ? MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffb) : MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffh);
@@ -1433,8 +1432,7 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
         } else {
             // Break them into native vectors, use vshuffvdd, and
             // concatenate the shuffled results.
-            llvm::Type *native2_ty =
-                llvm::VectorType::get(element_ty, native_elements * 2);
+            llvm::Type *native2_ty = get_vector_type(element_ty, native_elements * 2);
             Value *bytes = codegen(-static_cast<int>(element_bits / 8));
             vector<Value *> ret;
             for (int i = 0; i < result_elements / 2; i += native_elements) {
@@ -1549,13 +1547,12 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     internal_assert(element_ty);
     int element_bits = element_ty->getScalarSizeInBits();
     int native_elements = native_vector_bits() / element_bits;
-    llvm::Type *native_ty = llvm::VectorType::get(element_ty, native_elements);
-    llvm::Type *native2_ty =
-        llvm::VectorType::get(element_ty, native_elements * 2);
+    llvm::Type *native_ty = get_vector_type(element_ty, native_elements);
+    llvm::Type *native2_ty = get_vector_type(element_ty, native_elements * 2);
 
     int result_elements = static_cast<int>(indices.size());
     internal_assert(result_elements > 0);
-    llvm::Type *result_ty = VectorType::get(element_ty, result_elements);
+    llvm::Type *result_ty = get_vector_type(element_ty, result_elements);
 
     // Try to rewrite shuffles that only access the elements of b.
     int min = indices[0];
@@ -1753,7 +1750,7 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
     }
     internal_assert(!lut_slices.empty());
 
-    llvm::Type *native_result_ty = llvm::VectorType::get(
+    llvm::Type *native_result_ty = get_vector_type(
         get_vector_element_type(lut_ty), native_idx_elements);
 
     // The result will have the same number of elements as idx.
@@ -1912,8 +1909,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     if (element_bits != 8) {
         int replicate = element_bits / 8;
         internal_assert(replicate != 0);
-        llvm::Type *new_lut_ty =
-            llvm::VectorType::get(i8_t, lut_elements * replicate);
+        llvm::Type *new_lut_ty = get_vector_type(i8_t, lut_elements * replicate);
         Value *i8_lut = builder->CreateBitCast(lut, new_lut_ty);
         vector<int> i8_indices(indices.size() * replicate);
         for (size_t i = 0; i < indices.size(); i++) {
@@ -2015,13 +2011,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
 static Value *create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
     Constant *value = ConstantInt::get(scalar_ty, val);
-    const int e = get_vector_num_elements(ty);
-#if LLVM_VERSION >= 110
-    const llvm::ElementCount elem_count(e, /*scalable*/ false);
-#else
-    const int elem_count = e;
-#endif
-    return ConstantVector::getSplat(elem_count, value);
+    return ConstantVector::getSplat(element_count(get_vector_num_elements(ty)), value);
 }
 
 Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_index) {
@@ -2029,14 +2019,14 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     internal_assert(idx_elem_size <= 16)
         << "Index element for lookup tables must be <= 16 bits in size.\n";
     llvm::Type *lut_ty = lut->getType();
-    llvm::Type *result_ty = VectorType::get(get_vector_element_type(lut_ty),
+    llvm::Type *result_ty = get_vector_type(get_vector_element_type(lut_ty),
                                             get_vector_num_elements(idx->getType()));
     const unsigned idx_elems = get_vector_num_elements(idx->getType());
 
     // Construct a new index with 16-bit elements.
     unsigned idx16_elems = idx_elems;
     Value *idx16 = (idx_elem_size == 8) ?
-                       call_intrin(VectorType::get(i16_t, idx16_elems),
+                       call_intrin(get_vector_type(i16_t, idx_elems),
                                    "halide.hexagon.unpack.vub", {idx}) :
                        idx;
 
@@ -2062,13 +2052,13 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         max_index = (max_index + 1) * replicate - 1;
         internal_assert(max_index <= 32676)
             << "Index range for lookup table must be <= 32676\n";
-        lut_ty = VectorType::get(i16_t,
+        lut_ty = get_vector_type(i16_t,
                                  get_vector_num_elements(lut_ty) * replicate);
         lut = builder->CreateBitCast(lut, lut_ty);
     }
 
-    llvm::Type *i8x_t = VectorType::get(i8_t, idx16_elems);
-    llvm::Type *i16x_t = VectorType::get(i16_t, idx16_elems);
+    llvm::Type *i8x_t = get_vector_type(i8_t, idx16_elems);
+    llvm::Type *i16x_t = get_vector_type(i16_t, idx16_elems);
     Value *minus_one = create_vector(i16x_t, -1);
 
     // If we can do this with one vlut, do it now.
