@@ -2,6 +2,7 @@
 #include <sstream>
 
 #include "CodeGen_ARM.h"
+#include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
 #include "IREquality.h"
@@ -519,12 +520,7 @@ void CodeGen_ARM::visit(const Sub *op) {
         Value *b = codegen(op->b);
 
         if (op->type.lanes() > 1) {
-#if LLVM_VERSION >= 110
-            const llvm::ElementCount elem_count(op->type.lanes(), /*scalable*/ false);
-#else
-            const int elem_count = op->type.lanes();
-#endif
-            a = ConstantVector::getSplat(elem_count, a);
+            a = ConstantVector::getSplat(element_count(op->type.lanes()), a);
         }
         value = builder->CreateFSub(a, b);
         return;

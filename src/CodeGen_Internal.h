@@ -18,6 +18,7 @@
 
 namespace llvm {
 class ConstantFolder;
+class ElementCount;
 class Function;
 class IRBuilderDefaultInserter;
 class LLVMContext;
@@ -68,6 +69,14 @@ int get_vector_num_elements(llvm::Type *);
 /** Get the scalar type of an llvm vector type. Returns the argument
  * if it's not a vector type. */
 llvm::Type *get_vector_element_type(llvm::Type *);
+
+#if LLVM_VERSION >= 110
+const llvm::ElementCount element_count(int e);
+#else
+int element_count(int e);
+#endif
+
+llvm::Type *get_vector_type(llvm::Type *, int);
 
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
