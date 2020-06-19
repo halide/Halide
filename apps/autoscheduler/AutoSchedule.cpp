@@ -58,6 +58,9 @@
   If set, is used for the debug log level for auto-schedule generation (overriding the
   value of HL_DEBUG_CODEGEN, if any).
 
+  HL_MEMORY_LIMIT
+  If set, only consider schedules that allocate at most this much memory (measured in bytes).
+
   TODO: expose these settings by adding some means to pass args to
   generator plugins instead of environment vars.
 */
@@ -328,7 +331,8 @@ struct State {
         }
     }
 
-    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, CostModel *cost_model, bool verbose = false) {
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params,
+                        CostModel *cost_model, int64_t memory_limit, bool verbose = false) {
         StageMap<ScheduleFeatures> features;
         compute_featurization(dag, params, &features);
 
@@ -362,6 +366,22 @@ struct State {
             return false;
         }
 
+        // Apply the hard limit on memory use
+        if (memory_limit >= 0) {
+            int64_t mem_used = (int64_t)features.begin().value().working_set_at_root;
+            for (auto it = features.begin(); it != features.end(); it++) {
+                if (it.key()->node->is_output ||
+                    it.key()->node->is_input) {
+                    // Not allocated by this pipeline
+                    mem_used -= it.value().bytes_at_production;
+                }
+            }
+            if (mem_used > memory_limit) {
+                cost = 1e50;
+                return false;
+            }
+        }
+
         // Tell the cost model about this state. It won't actually
         // evaluate it until we call evaluate_costs (or if it runs out
         // of internal buffer space), so that the evaluations can be
@@ -389,6 +409,7 @@ struct State {
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
                            CostModel *cost_model,
+                           int64_t memory_limit,
                            std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
         internal_assert(root.defined() && root->is_root());
 
@@ -453,7 +474,7 @@ struct State {
                     new_root->inline_func(node);
                     child->root = new_root;
                     child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (child->calculate_cost(dag, params, cost_model, memory_limit)) {
                         num_children++;
                         accept_child(std::move(child));
                     }
@@ -535,7 +556,7 @@ struct State {
                     auto child = make_child();
                     child->root = std::move(n);
                     child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (child->calculate_cost(dag, params, cost_model, memory_limit)) {
                         num_children++;
                         accept_child(std::move(child));
                     }
@@ -687,7 +708,7 @@ struct State {
                     }
                     child->root = new_root;
                     child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (child->calculate_cost(dag, params, cost_model, memory_limit)) {
                         num_children++;
                         accept_child(std::move(child));
                     }
@@ -939,6 +960,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           CostModel *cost_model,
                                           std::mt19937 &rng,
                                           int beam_size,
+                                          int64_t memory_limit,
                                           int pass_idx,
                                           int num_passes,
                                           ProgressBar &tick,
@@ -997,6 +1019,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                              cost_model,
                                              rng,
                                              beam_size * 2,
+                                             memory_limit,
                                              pass_idx,
                                              num_passes,
                                              tick,
@@ -1086,7 +1109,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 return best;
             }
 
-            state->generate_children(dag, params, cost_model, enqueue_new_children);
+            state->generate_children(dag, params, cost_model, memory_limit, enqueue_new_children);
             expanded++;
         }
 
@@ -1109,7 +1132,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 auto state = q[choice_label];
                 aslog(0) << "\n[" << choice_label << "]:\n";
                 state->dump();
-                state->calculate_cost(dag, params, cost_model, true);
+                state->calculate_cost(dag, params, cost_model, memory_limit, true);
             }
             cost_model->evaluate_costs();
 
@@ -1134,7 +1157,8 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      const MachineParams &params,
                                      CostModel *cost_model,
                                      std::mt19937 &rng,
-                                     int beam_size) {
+                                     int beam_size,
+                                     int64_t memory_limit) {
 
     IntrusivePtr<State> best;
 
@@ -1160,7 +1184,8 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         ProgressBar tick;
 
         auto pass = optimal_schedule_pass(dag, outputs, params, cost_model,
-                                          rng, beam_size, i, num_passes, tick, permitted_hashes);
+                                          rng, beam_size, memory_limit,
+                                          i, num_passes, tick, permitted_hashes);
 
         tick.clear();
 
@@ -1219,6 +1244,9 @@ void generate_schedule(const std::vector<Function> &outputs,
     string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
 
+    string memory_limit_str = get_env_variable("HL_MEMORY_LIMIT");
+    int64_t memory_limit = memory_limit_str.empty() ? (uint64_t)(-1) : std::atoll(memory_limit_str.c_str());
+
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, params, target);
     if (aslog::aslog_level() > 0) {
@@ -1234,7 +1262,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     IntrusivePtr<State> optimal;
 
     // Run beam search
-    optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size);
+    optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size, memory_limit);
 
     HALIDE_TOC;
 
@@ -1244,7 +1272,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0);
+    optimal->calculate_cost(dag, params, cost_model.get(), memory_limit, aslog::aslog_level() > 0);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
@@ -1313,10 +1341,11 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              const MachineParams &params,
                              CostModel *cost_model,
                              int beam_size,
+                             int64_t memory_limit,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
     std::mt19937 rng(12345);
-    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size);
+    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size, memory_limit);
 
     // Apply the schedules
     optimal->apply_schedule(dag, params);
