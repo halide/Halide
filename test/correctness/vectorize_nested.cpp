@@ -73,13 +73,6 @@ int vectorize_2d_inlined_with_update() {
 
     Buffer<int> result = f.realize(width, height);
 
-    // for (int iy = 0; iy < height; iy++) {
-    //     for (int ix = 0; ix < width; ix++) {
-    //         printf("%2d/%2d ", result(ix, iy), ix + iy + 45);
-    //     }
-    //     printf("\n");
-    // }
-
     auto cmp_func = [](int x, int y) {
         return x + 2 * y + 45;
     };
@@ -106,16 +99,6 @@ int vectorize_2d_with_inner_for() {
 
     Buffer<int> result = f.realize(width, height, 3);
 
-    // for (int ic = 0; ic < 3; ic++) {
-    //     for (int iy = 0; iy < height; iy++) {
-    //         for (int ix = 0; ix < width; ix++) {
-    //             printf("%2d ", result(ix, iy, ic));
-    //         }
-    //         printf("\n");
-    //     }
-    //     printf("\n");
-    // }
-
     auto cmp_func = [](int x, int y, int c) {
         return 3 * x + y + 7 * c;
     };
@@ -141,12 +124,6 @@ int vectorize_2d_with_compute_at_vectorized() {
 
     Buffer<int> result = g.realize(width, height);
 
-    // for (int iy = 0; iy < height; iy++) {
-    //     for (int ix = 0; ix < width; ix++) {
-    //         printf("%2d/%2d ", result(ix, iy), 2 * ix + 1 + 2 * iy);
-    //     }
-    //     printf("\n");
-    // }
     auto cmp_func = [](int x, int y) {
         return 6 * x + 3 + 2 * y;
     };
@@ -175,12 +152,6 @@ int vectorize_2d_with_compute_at() {
 
     Buffer<int> result = g.realize(width, height);
 
-    // for (int iy = 0; iy < height; iy++) {
-    //     for (int ix = 0; ix < width; ix++) {
-    //         printf("%2d/%2d ", result(ix, iy), 2 * ix + 1 + 2 * iy);
-    //     }
-    //     printf("\n");
-    // }
     auto cmp_func = [](int x, int y) {
         return 6 * x + 3 + 2 * y;
     };
