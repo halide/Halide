@@ -386,11 +386,16 @@ struct VectorizedVar {
 // Substitutes a vector for a scalar var in a Stmt. Used on the
 // body of every vectorized loop.
 class VectorSubs : public IRMutator {
+    // A list of vectorized loop vars encountered so far. The last
+    // element corresponds to the most inner vectorized loop.
     std::vector<VectorizedVar> vectorized_vars;
 
-    // What we're replacing it with. Usually a ramp.
+    // What we're replacing it with. Usually a combination of ramps
+    // and broadcast. It depends on the current loop level and
+    // is updated when vectorized_vars list is updated.
     std::map<string, Expr> replacements;
 
+    // Widened vars for different loop levels.
     std::map<string, std::map<string, Expr>> widened_vars;
 
     const Target &target;
@@ -1027,8 +1032,7 @@ class VectorSubs : public IRMutator {
     Expr scalarize(Expr e) {
         // This method returns a select tree that produces a vector lanes
         // result expression
-        // Q: How do I trigger this?
-        user_assert(replacements.size() == 1) << "Cannot scalarize nested vectorization\n";
+        user_assert(replacements.size() == 1) << "Can't scalarize nested vectorization\n";
         string var = replacements.begin()->first;
         Expr replacement = replacements.begin()->second;
 
@@ -1061,10 +1065,14 @@ class VectorSubs : public IRMutator {
         return result;
     }
 
+    // Recompute all replacements for vectorized vars based on
+    // the current stack of vectorized loops.
     void update_replacements() {
         replacements.clear();
 
         for (const auto &var : vectorized_vars) {
+            // Two different replacements are needed for each loop var
+            // one starting from zero and another starting from loop.min.
             replacements[var.name] = var.min;
             replacements[var.name + ".from_zero"] = 0;
         }
@@ -1129,7 +1137,7 @@ class VectorizeLoops : public IRMutator {
 
             vectorized_vars.push_back({for_loop->name, for_loop->min, (int)extent->value});
             stmt = VectorSubs(vectorized_vars, in_hexagon, target).mutate(for_loop->body);
-            vectorized_vars.clear();
+            vectorized_vars.pop_back();
         } else {
             stmt = IRMutator::visit(for_loop);
         }
