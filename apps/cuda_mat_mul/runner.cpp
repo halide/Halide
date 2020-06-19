@@ -100,6 +100,10 @@ int main(int argc, char **argv) {
     fflush(stderr);
 
     // Benchmark cublas
+#ifdef _MSC_VER
+    // https://github.com/halide/Halide/issues/5053
+    printf("Skipping cublas on Windows; see https://github.com/halide/Halide/issues/5053\n");
+#else
     {
         float *A, *B, *C;
         cudaMalloc((void **)&A, size * size * 4);
@@ -123,6 +127,7 @@ int main(int argc, char **argv) {
         cublasDestroy(handle);
         printf("cublas time: %f\n", t);
     }
+#endif
 
     fprintf(stderr, "%d\n", __LINE__);
     fflush(stderr);
