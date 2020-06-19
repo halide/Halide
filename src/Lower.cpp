@@ -426,7 +426,6 @@ Module lower(const vector<Function> &output_funcs,
     s = remove_dead_allocations(s);
     s = simplify(s);
     s = loop_invariant_code_motion(s);
-
     debug(2) << "Lowering after removing dead allocations and moving loop invariant code:\n"
              << s << "\n\n";
 
