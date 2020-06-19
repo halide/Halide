@@ -132,7 +132,7 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
         }
     } else {
         llvm::Type *element_type = llvm_type_of(c, t.element_of());
-        return VectorType::get(element_type, t.lanes());
+        return get_vector_type(element_type, t.lanes());
     }
 }
 
@@ -150,6 +150,20 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
     } else {
         return t;
     }
+}
+
+#if LLVM_VERSION >= 110
+const llvm::ElementCount element_count(int e) {
+    return llvm::ElementCount(e, /*scalable*/ false);
+}
+#else
+int element_count(int e) {
+    return e;
+}
+#endif
+
+llvm::Type *get_vector_type(llvm::Type *t, int n) {
+    return VectorType::get(t, element_count(n));
 }
 
 // Returns true if the given function name is one of the Halide runtime

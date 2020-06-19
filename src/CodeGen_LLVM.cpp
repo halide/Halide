@@ -451,22 +451,22 @@ void CodeGen_LLVM::init_context() {
     f32_t = llvm::Type::getFloatTy(*context);
     f64_t = llvm::Type::getDoubleTy(*context);
 
-    i8x8 = VectorType::get(i8_t, 8);
-    i8x16 = VectorType::get(i8_t, 16);
-    i8x32 = VectorType::get(i8_t, 32);
-    i16x4 = VectorType::get(i16_t, 4);
-    i16x8 = VectorType::get(i16_t, 8);
-    i16x16 = VectorType::get(i16_t, 16);
-    i32x2 = VectorType::get(i32_t, 2);
-    i32x4 = VectorType::get(i32_t, 4);
-    i32x8 = VectorType::get(i32_t, 8);
-    i64x2 = VectorType::get(i64_t, 2);
-    i64x4 = VectorType::get(i64_t, 4);
-    f32x2 = VectorType::get(f32_t, 2);
-    f32x4 = VectorType::get(f32_t, 4);
-    f32x8 = VectorType::get(f32_t, 8);
-    f64x2 = VectorType::get(f64_t, 2);
-    f64x4 = VectorType::get(f64_t, 4);
+    i8x8 = get_vector_type(i8_t, 8);
+    i8x16 = get_vector_type(i8_t, 16);
+    i8x32 = get_vector_type(i8_t, 32);
+    i16x4 = get_vector_type(i16_t, 4);
+    i16x8 = get_vector_type(i16_t, 8);
+    i16x16 = get_vector_type(i16_t, 16);
+    i32x2 = get_vector_type(i32_t, 2);
+    i32x4 = get_vector_type(i32_t, 4);
+    i32x8 = get_vector_type(i32_t, 8);
+    i64x2 = get_vector_type(i64_t, 2);
+    i64x4 = get_vector_type(i64_t, 4);
+    f32x2 = get_vector_type(f32_t, 2);
+    f32x4 = get_vector_type(f32_t, 4);
+    f32x8 = get_vector_type(f32_t, 8);
+    f64x2 = get_vector_type(f64_t, 2);
+    f64x4 = get_vector_type(f64_t, 4);
 }
 
 void CodeGen_LLVM::init_module() {
@@ -2124,15 +2124,10 @@ void CodeGen_LLVM::visit(const Ramp *op) {
 }
 
 llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
-    Constant *undef = UndefValue::get(VectorType::get(v->getType(), lanes));
+    Constant *undef = UndefValue::get(get_vector_type(v->getType(), lanes));
     Constant *zero = ConstantInt::get(i32_t, 0);
     v = builder->CreateInsertElement(undef, v, zero);
-#if LLVM_VERSION >= 110
-    const llvm::ElementCount elem_count(lanes, /*scalable*/ false);
-#else
-    const int elem_count = lanes;
-#endif
-    Constant *zeros = ConstantVector::getSplat(elem_count, zero);
+    Constant *zeros = ConstantVector::getSplat(element_count(lanes), zero);
     return builder->CreateShuffleVector(v, undef, zeros);
 }
 
@@ -2360,7 +2355,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
         Expr slice_base = simplify(ramp->base + i);
         Expr slice_stride = make_one(slice_base.type());
         Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
-        llvm::Type *slice_type = VectorType::get(llvm_type_of(load->type.element_of()), slice_lanes);
+        llvm::Type *slice_type = get_vector_type(llvm_type_of(load->type.element_of()), slice_lanes);
         Value *elt_ptr = codegen_buffer_pointer(load->name, load->type.element_of(), slice_base);
         Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
 
@@ -3350,7 +3345,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                     // individual lanes will be extracted below.
                     if (halide_arg.type().is_vector() &&
                         !t->isVectorTy()) {
-                        t = VectorType::get(t, halide_arg.type().lanes());
+                        t = get_vector_type(t, halide_arg.type().lanes());
                     }
 
                     if (t != args[i]->getType()) {
@@ -4320,7 +4315,7 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
             }
 
             llvm::Type *result_slice_type =
-                llvm::VectorType::get(result_type->getScalarType(), intrin_lanes);
+                get_vector_type(result_type->getScalarType(), intrin_lanes);
 
             results.push_back(call_intrin(result_slice_type, intrin_lanes, name, args));
         }
@@ -4336,7 +4331,7 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
     llvm::Function *fn = module->getFunction(name);
 
     if (!fn) {
-        llvm::Type *intrinsic_result_type = VectorType::get(result_type->getScalarType(), intrin_lanes);
+        llvm::Type *intrinsic_result_type = get_vector_type(result_type->getScalarType(), intrin_lanes);
         FunctionType *func_t = FunctionType::get(intrinsic_result_type, arg_types, false);
         fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
         fn->setCallingConv(CallingConv::C);
