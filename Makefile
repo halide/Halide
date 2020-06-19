@@ -292,14 +292,6 @@ LLVM_STATIC_LIBS += -L $(LLVM_LIBDIR) \
 	$(shell $(LLVM_CONFIG) --link-static --libfiles lto option)
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 110))
-# We have to insert MLPolicies.a just after Passes.a -- this is highly unfortunate,
-# but it's not a 'component' by the standards of the llvm-config tool, and simply
-# inserting somewhere with --whole-archive will leave out other things. This is a
-# fragile fix, but it will get us unstuck for now.
-LLVM_STATIC_LIBS := $(subst libLLVMPasses.a,libLLVMPasses.a $(LLVM_LIBDIR)/libLLVMMLPolicies.a,$(LLVM_STATIC_LIBS))
-endif
-
 # Add a rpath to the llvm used for linking, in case multiple llvms are
 # installed. Bakes a path on the build system into the .so, so don't
 # use this config for distributions.
