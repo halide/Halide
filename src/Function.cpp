@@ -275,7 +275,7 @@ public:
 
 // A counter to use in tagging random variables
 namespace {
-static std::atomic<int> rand_counter;
+static std::atomic<int> rand_counter{0};
 }
 
 Function::Function() {

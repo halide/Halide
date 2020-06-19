@@ -77,6 +77,13 @@ class LiftLoopInvariants : public IRMutator {
                 return false;
             }
         }
+        if (const Add *add = e.as<Add>()) {
+            if (add->type == Int(32) &&
+                is_const(add->b)) {
+                // Don't lift constant integer offsets. They're often free.
+                return false;
+            }
+        }
         return true;
     }
 
@@ -215,9 +222,8 @@ class LICM : public IRMutator {
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
             return IRMutator::visit(op);
-        } else if (op->device_api == DeviceAPI::GLSL ||
-                   op->device_api == DeviceAPI::OpenGLCompute) {
-            // Don't lift anything out of OpenGL loops
+        } else if (op->device_api == DeviceAPI::GLSL) {
+            // GLSL uses magic names for varying things. Just skip LICM.
             return IRMutator::visit(op);
         } else {
 
@@ -244,7 +250,7 @@ class LICM : public IRMutator {
             }
 
             // Jointly CSE the lifted exprs put putting them together into a dummy Expr
-            Expr dummy_call = Call::make(Int(32), "dummy", exprs, Call::Extern);
+            Expr dummy_call = Call::make(Int(32), Call::bundle, exprs, Call::PureIntrinsic);
             dummy_call = common_subexpression_elimination(dummy_call, true);
 
             // Peel off containing lets. These will be lifted.
@@ -268,7 +274,7 @@ class LICM : public IRMutator {
 
             // Now consider substituting back in each use
             const Call *call = dummy_call.as<Call>();
-            internal_assert(call);
+            internal_assert(call->is_intrinsic(Call::bundle));
             bool converged;
             do {
                 converged = true;

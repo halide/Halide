@@ -86,9 +86,9 @@ private:
         user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n"
                                                    << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-        if (allocate->name == "__shared") {
-            internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
-            shared_mem_size = allocate->extents[0];
+        if (allocate->memory_type == MemoryType::GPUShared) {
+            internal_assert(allocate->extents.size() == 1);
+            shared_mem_size += allocate->extents[0] * allocate->type.bytes();
             found_shared = true;
         }
         allocate->body.accept(this);
@@ -293,7 +293,15 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                       if (a.is_buffer == b.is_buffer) {
                           return a.type.bits() > b.type.bits();
                       } else {
-                          return a.is_buffer < b.is_buffer;
+                          // Ensure that buffer arguments come first:
+                          // for many OpenGL/Compute systems, the
+                          // legal indices for buffer args are much
+                          // more restrictive than for scalar args,
+                          // and scalar args can be 'grown' by
+                          // LICM. Putting buffers first makes it much
+                          // more likely we won't fail on some
+                          // hardware.
+                          return a.is_buffer > b.is_buffer;
                       }
                   });
 

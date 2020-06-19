@@ -11,6 +11,7 @@ tests(GROUPS correctness
       async.cpp
       async_copy_chain.cpp
       async_device_copy.cpp
+      atomic_tuples.cpp
       atomics.cpp
       autodiff.cpp
       autoschedule_small_pure_update.cpp
@@ -190,6 +191,7 @@ tests(GROUPS correctness
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
       lots_of_dimensions.cpp
+      lots_of_loop_invariants.cpp
       make_struct.cpp
       many_dimensions.cpp
       many_small_extern_stages.cpp
@@ -322,6 +324,7 @@ tests(GROUPS correctness
       vector_extern.cpp
       vector_math.cpp
       vector_print_bug.cpp
+      vector_tile.cpp
       vectorize_guard_with_if.cpp
       vectorize_mixed_widths.cpp
       vectorize_nested.cpp
@@ -335,19 +338,6 @@ tests(GROUPS correctness
 
 # Make sure the test that needs image_io has it
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
-
-# Some tests explicitly need threads.
-foreach (TEST IN ITEMS
-         correctness_boundary_conditions
-         correctness_gpu_allocation_cache
-         correctness_mul_div_mod
-         correctness_simd_op_check
-         correctness_simd_op_check_hvx
-         correctness_thread_safety
-         correctness_vector_cast
-         correctness_vector_math)
-    target_link_libraries(${TEST} PRIVATE Threads::Threads)
-endforeach ()
 
 # Tests which use external funcs need to enable exports.
 foreach (TEST IN ITEMS

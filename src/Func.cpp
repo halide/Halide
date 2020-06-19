@@ -1067,16 +1067,11 @@ Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVa
 }
 
 Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused) {
-    if (inner.is_rvar) {
-        user_assert(outer.is_rvar) << "Can't fuse RVar " << inner.name()
-                                   << " with Var " << outer.name() << "\n";
-        user_assert(fused.is_rvar) << "Can't fuse RVar " << inner.name()
-                                   << "into Var " << fused.name() << "\n";
-    } else {
-        user_assert(!outer.is_rvar) << "Can't fuse Var " << inner.name()
-                                    << " with RVar " << outer.name() << "\n";
-        user_assert(!fused.is_rvar) << "Can't fuse Var " << inner.name()
-                                    << "into RVar " << fused.name() << "\n";
+    if (!fused.is_rvar) {
+        user_assert(!outer.is_rvar) << "Can't fuse Var " << fused.name()
+                                    << " from RVar " << outer.name() << "\n";
+        user_assert(!inner.is_rvar) << "Can't fuse Var " << inner.name()
+                                    << " from RVar " << inner.name() << "\n";
     }
 
     debug(4) << "In schedule for " << name() << ", fuse " << outer.name()
@@ -1111,13 +1106,14 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
             fused_name = inner_name + "." + fused.name();
             dims[i].var = fused_name;
 
-            internal_assert(
-                (dims[i].is_rvar() && ((outer_type == DimType::PureRVar) ||
-                                       (outer_type == DimType::ImpureRVar))) ||
-                (!dims[i].is_rvar() && (outer_type == DimType::PureVar)));
-
-            if (dims[i].is_rvar()) {
-                dims[i].dim_type = (dims[i].dim_type == DimType::PureRVar) && (outer_type == DimType::PureRVar) ? DimType::PureRVar : DimType::ImpureRVar;
+            if (dims[i].dim_type == DimType::ImpureRVar ||
+                outer_type == DimType::ImpureRVar) {
+                dims[i].dim_type = DimType::ImpureRVar;
+            } else if (dims[i].dim_type == DimType::PureRVar ||
+                       outer_type == DimType::PureRVar) {
+                dims[i].dim_type = DimType::PureRVar;
+            } else {
+                dims[i].dim_type = DimType::PureVar;
             }
         }
     }
@@ -1505,6 +1501,35 @@ Stage &Stage::tile(const VarOrRVar &x, const VarOrRVar &y,
     return *this;
 }
 
+Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
+                   const std::vector<VarOrRVar> &outers,
+                   const std::vector<VarOrRVar> &inners,
+                   const std::vector<Expr> &factors,
+                   const std::vector<TailStrategy> &tails) {
+    if (previous.size() != outers.size() || previous.size() != inners.size() || previous.size() != factors.size() || previous.size() != tails.size())
+        user_error << "Vectors passed to Stage::tile must all be the same length.\n";
+    for (unsigned int i = 0; i < previous.size(); i++) {
+        split(previous[i], outers[i], inners[i], factors[i], tails[i]);
+    }
+    std::vector<VarOrRVar> new_order;
+    new_order.insert(new_order.end(), inners.begin(), inners.end());
+    new_order.insert(new_order.end(), outers.begin(), outers.end());
+    reorder(new_order);
+    return *this;
+}
+
+Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
+                   const std::vector<VarOrRVar> &outers,
+                   const std::vector<VarOrRVar> &inners,
+                   const std::vector<Expr> &factors,
+                   TailStrategy tail) {
+    std::vector<TailStrategy> tails;
+    for (unsigned int i = 0; i < previous.size(); i++) {
+        tails.push_back(tail);
+    }
+    return tile(previous, outers, inners, factors, tails);
+}
+
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
@@ -1622,10 +1647,11 @@ Stage &Stage::gpu_blocks(const VarOrRVar &bx, const VarOrRVar &by, const VarOrRV
 }
 
 Stage &Stage::gpu_single_thread(DeviceAPI device_api) {
-    Var block;
+    Var block, thread;
+    split(Var::outermost(), Var::outermost(), thread, 1);
     split(Var::outermost(), Var::outermost(), block, 1);
-    set_dim_device_api(block, device_api);
-    set_dim_type(block, ForType::GPUBlock);
+    gpu_blocks(block, device_api);
+    gpu_threads(thread, device_api);
     return *this;
 }
 
@@ -2202,6 +2228,24 @@ Func &Func::tile(const VarOrRVar &x, const VarOrRVar &y,
                  TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).tile(x, y, xi, yi, xfactor, yfactor, tail);
+    return *this;
+}
+
+Func &Func::tile(const std::vector<VarOrRVar> &previous,
+                 const std::vector<VarOrRVar> &outers,
+                 const std::vector<VarOrRVar> &inners,
+                 const std::vector<Expr> &factors,
+                 TailStrategy tail) {
+    Stage(func, func.definition(), 0).tile(previous, outers, inners, factors, tail);
+    return *this;
+}
+
+Func &Func::tile(const std::vector<VarOrRVar> &previous,
+                 const std::vector<VarOrRVar> &outers,
+                 const std::vector<VarOrRVar> &inners,
+                 const std::vector<Expr> &factors,
+                 const std::vector<TailStrategy> &tails) {
+    Stage(func, func.definition(), 0).tile(previous, outers, inners, factors, tails);
     return *this;
 }
 

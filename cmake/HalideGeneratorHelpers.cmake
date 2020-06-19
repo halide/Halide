@@ -133,7 +133,9 @@ function(add_halide_library TARGET)
     # On Linux, RPATH allows the generator to find Halide, but we need to add it to the PATH on Windows.
     set(generatorCommand ${ARG_FROM})
     if (WIN32)
-        set(generatorCommand ${CMAKE_COMMAND} -E env "PATH=$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Halide>>" "$<TARGET_FILE:${ARG_FROM}>")
+        set(newPath "$<TARGET_FILE_DIR:Halide::Halide>" $ENV{PATH})
+        string(REPLACE ";" "$<SEMICOLON>" newPath "${newPath}")
+        set(generatorCommand ${CMAKE_COMMAND} -E env "PATH=$<SHELL_PATH:${newPath}>" "$<TARGET_FILE:${ARG_FROM}>")
     endif ()
 
     # The output file name might not match the host when cross compiling.

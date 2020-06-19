@@ -61,15 +61,18 @@ public:
 
 protected:
     using CodeGen_C::visit;
+
+    void visit(const Cast *) override;
+
     void visit(const FloatImm *) override;
     void visit(const UIntImm *) override;
     void visit(const IntImm *) override;
 
     void visit(const Max *op) override;
     void visit(const Min *op) override;
-    void visit(const Div *op) override;
-    void visit(const Mod *op) override;
     void visit(const Call *op) override;
+
+    void visit(const Mod *) override;
 
     // these have specific functions
     // in GLSL that operate on vectors
@@ -81,6 +84,8 @@ protected:
     void visit(const GE *) override;
 
     void visit(const Shuffle *) override;
+
+    Type map_type(const Type &);
 
     std::map<std::string, std::string> builtin;
 };
@@ -97,9 +102,8 @@ public:
     static void test();
 
 protected:
-    using CodeGen_C::visit;
+    using CodeGen_GLSLBase::visit;
 
-    void visit(const Cast *) override;
     void visit(const Let *) override;
     void visit(const For *) override;
     void visit(const Select *) override;

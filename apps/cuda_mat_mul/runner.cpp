@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     assert(interface->compute_capability != nullptr);
     int major, minor;
     int err = interface->compute_capability(nullptr, &major, &minor);
-    assert(err != 0);
+    assert(err == 0);
     int ver = major * 10 + minor;
     if (ver < 50) {
         printf("[SKIP] This system supports only Cuda compute capability %d.%d, but compute capability 5.0+ is required.\n", major, minor);
@@ -62,6 +62,10 @@ int main(int argc, char **argv) {
     }
 
     // Benchmark cublas
+#ifdef _MSC_VER
+    // https://github.com/halide/Halide/issues/5053
+    printf("Skipping cublas on Windows; see https://github.com/halide/Halide/issues/5053\n");
+#else
     {
         float *A, *B, *C;
         cudaMalloc((void **)&A, size * size * 4);
@@ -81,5 +85,8 @@ int main(int argc, char **argv) {
         cublasDestroy(handle);
         printf("cublas time: %f\n", t);
     }
+#endif
+
+    printf("Success!\n");
     return 0;
 }

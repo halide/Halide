@@ -109,17 +109,6 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         return visit_let<LetStmt, Stmt>(op);
     }
 
-    Stmt visit(const Store *op) override {
-        // We only care about the expressions that determine the sizes
-        // of allocations and loop extents, so no need to look inside
-        // stores.
-        return op;
-    }
-
-    Stmt visit(const Provide *op) override {
-        return op;
-    }
-
     Stmt visit(const For *op) override {
         Stmt s = op;
         // This is unfortunately quadratic in maximum loop nesting depth
