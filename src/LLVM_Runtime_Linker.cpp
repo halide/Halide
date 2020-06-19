@@ -344,6 +344,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         } else {  // 64-bit
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
+            } else if (target.os == Target::Windows) {
+                return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128");
             } else {
                 return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128");
             }
@@ -447,8 +449,21 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
             triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else if (target.os == Target::Windows) {
+            user_assert(target.bits == 64) << "Windows ARM targets must be 64-bit.\n";
+            triple.setVendor(llvm::Triple::PC);
+            triple.setOS(llvm::Triple::Win32);
+            triple.setEnvironment(llvm::Triple::MSVC);
+            if (target.has_feature(Target::JIT)) {
+                // TODO(shoaibkamil): figure out a way to test this.
+                // Currently blocked by https://github.com/halide/Halide/issues/5040
+                user_error << "No JIT support for this OS/CPU combination yet.\n";
+            }
         } else if (target.os == Target::Fuchsia) {
             triple.setOS(llvm::Triple::Fuchsia);
+        } else if (target.os == Target::NoOS) {
+            // For bare-metal environments
+
         } else {
             user_error << "No arm support for this OS\n";
         }

@@ -80,6 +80,9 @@ std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
 /** Emit a halide linkage value in a human readable format */
 std::ostream &operator<<(std::ostream &stream, const LinkageType &);
 
+/** Emit a halide dimension type in human-readable format */
+std::ostream &operator<<(std::ostream &stream, const DimType &);
+
 struct Indentation {
     int indent;
 };
@@ -91,14 +94,15 @@ std::ostream &operator<<(std::ostream &stream, const Indentation &);
  */
 class IRPrinter : public IRVisitor {
 public:
-    ~IRPrinter() override;
-
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
-    IRPrinter(std::ostream &);
+    explicit IRPrinter(std::ostream &);
 
     /** emit an expression on the output stream */
     void print(const Expr &);
+
+    /** Emit an expression on the output stream without enclosing parens */
+    void print_no_parens(const Expr &);
 
     /** emit a statement on the output stream */
     void print(const Stmt &);
@@ -119,7 +123,18 @@ protected:
 
     /** The current indentation level, useful for pretty-printing
      * statements */
-    int indent;
+    int indent = 0;
+
+    /** Certain expressions do not need parens around them, e.g. the
+     * args to a call are already separated by commas and a
+     * surrounding set of parens. */
+    bool implicit_parens = false;
+
+    /** Either emits "(" or "", depending on the value of implicit_parens */
+    void open();
+
+    /** Either emits ")" or "", depending on the value of implicit_parens */
+    void close();
 
     /** The symbols whose types can be inferred from values printed
      * already. */

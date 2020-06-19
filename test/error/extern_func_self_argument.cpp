@@ -12,6 +12,6 @@ int main(int argc, char **argv) {
     f.define_extern("extern_func", {f}, Int(32), 2);
     f.infer_arguments();
 
-    printf("There should have been an error\n");
+    printf("Success!\n");
     return 0;
 }

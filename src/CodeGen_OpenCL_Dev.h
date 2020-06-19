@@ -64,6 +64,8 @@ protected:
 
         std::string get_memory_space(const std::string &);
 
+        std::string shared_name;
+
         void visit(const For *) override;
         void visit(const Ramp *op) override;
         void visit(const Broadcast *op) override;

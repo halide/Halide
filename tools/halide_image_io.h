@@ -71,7 +71,7 @@ typedef bool (*CheckFunc)(bool condition, const char *msg);
 inline bool CheckFail(bool condition, const char *msg) {
     if (!condition) {
         fprintf(stderr, "%s\n", msg);
-        exit(-1);
+        abort();
     }
     return condition;
 }
@@ -2289,6 +2289,9 @@ public:
         using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
         DynamicImageType im_d;
         (void)load<DynamicImageType, Internal::CheckFail>(filename, &im_d);
+        Internal::CheckFail(ImageType::can_convert_from(im_d),
+                            "Type mismatch assigning the result of load_image. "
+                            "Did you mean to use load_and_convert_image?");
         return im_d.template as<typename ImageType::ElemType>();
     }
 

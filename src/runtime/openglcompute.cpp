@@ -309,10 +309,13 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) {
         return 1;
     }
-    // OpenGLCompute only supports int32 and float data types, both of which are 4 bytes.
-    size_t size_in_bytes = buf->number_of_elements() * 4;
-    halide_assert(user_context, size_in_bytes != 0);
-    global_state.BufferData(GL_ARRAY_BUFFER, size_in_bytes, NULL, GL_DYNAMIC_COPY);
+
+    // OpenGLCompute only supports int32, uint32, and float data
+    // types, all of which are 4 bytes. We'll inflate the size for
+    // smaller types.
+    size *= (4 / buf->type.bytes());
+    halide_assert(user_context, size != 0);
+    global_state.BufferData(GL_ARRAY_BUFFER, size, NULL, GL_DYNAMIC_COPY);
     if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) {
         return 1;
     }
@@ -433,14 +436,14 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
 
     if (buf->type.code == halide_type_int) {
         if (buf->type.bits == 8) {
-            converting_copy_memory_helper<int8_t, float>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
+            converting_copy_memory_helper<int8_t, int32_t>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 16) {
             // Convert chunk_size in bytes to the number of items to be copied.
             // This doesn't happen for the 8-bit case because it would be a division by one,
             // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
             // is used.
             dev_copy.chunk_size /= 2;
-            converting_copy_memory_helper<int16_t, float>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
+            converting_copy_memory_helper<int16_t, int32_t>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 32) {
             copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else {
@@ -449,14 +452,14 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
         }
     } else if (buf->type.code == halide_type_uint) {
         if (buf->type.bits == 8) {
-            converting_copy_memory_helper<uint8_t, float>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
+            converting_copy_memory_helper<uint8_t, uint32_t>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 16) {
             // Convert chunk_size in bytes to the number of items to be copied.
             // This doesn't happen for the 8-bit case because it would be a division by one,
             // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
             // is used.
             dev_copy.chunk_size /= 2;
-            converting_copy_memory_helper<uint16_t, float>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
+            converting_copy_memory_helper<uint16_t, uint32_t>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 32) {
             copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else {
@@ -522,14 +525,14 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
 
     if (buf->type.code == halide_type_int) {
         if (buf->type.bits == 8) {
-            converting_copy_memory_helper<float, int8_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
+            converting_copy_memory_helper<int32_t, int8_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 16) {
             // Convert chunk_size in bytes to the number of items to be copied.
             // This doesn't happen for the 8-bit case because it would be a division by one,
             // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
             // is used.
             dev_copy.chunk_size /= 2;
-            converting_copy_memory_helper<float, int16_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
+            converting_copy_memory_helper<int32_t, int16_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 32) {
             copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else {
@@ -538,14 +541,14 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
         }
     } else if (buf->type.code == halide_type_uint) {
         if (buf->type.bits == 8) {
-            converting_copy_memory_helper<float, uint8_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
+            converting_copy_memory_helper<uint32_t, uint8_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 16) {
             // Convert chunk_size in bytes to the number of items to be copied.
             // This doesn't happen for the 8-bit case because it would be a division by one,
             // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
             // is used.
             dev_copy.chunk_size /= 2;
-            converting_copy_memory_helper<float, uint16_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
+            converting_copy_memory_helper<uint32_t, uint16_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 32) {
             copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else {
@@ -645,51 +648,42 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                 } else if (arg_types[i].bits == 32) {
                     value = *((int32_t *)args[i]);
                 } else {
-                    // error
+                    error(user_context) << "Cannot pass argument of type "
+                                        << arg_types[i]
+                                        << " to GL shader\n";
                     return -1;
                 }
-                if (arg_types[i].bits <= 16) {
-                    float fp_val = value;
-                    global_state.Uniform1f(i, fp_val);
-                    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1f (int case)")) {
-                        return -1;
-                    }
-                } else {
-                    global_state.Uniform1i(i, value);
-                    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1i")) {
-                        return -1;
-                    }
+                global_state.Uniform1i(i, value);
+                if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1i")) {
+                    return -1;
                 }
             } else if (arg_types[i].code == halide_type_uint) {
                 unsigned value;
-                if (arg_types[i].bits == 8) {
+                if (arg_types[i].bits == 8 ||
+                    arg_types[i].bits == 1) {
                     value = *((uint8_t *)args[i]);
                 } else if (arg_types[i].bits == 16) {
                     value = *((uint16_t *)args[i]);
                 } else if (arg_types[i].bits == 32) {
                     value = *((uint32_t *)args[i]);
                 } else {
-                    // error
+                    error(user_context) << "Cannot pass argument of type "
+                                        << arg_types[i]
+                                        << " to GL shader\n";
                     return -1;
                 }
-                if (arg_types[i].bits <= 16) {
-                    float fp_val = value;
-                    global_state.Uniform1f(i, fp_val);
-                    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1f (uint case)")) {
-                        return -1;
-                    }
-                } else {
-                    global_state.Uniform1ui(i, value);
-                    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1ui")) {
-                        return -1;
-                    }
+                global_state.Uniform1ui(i, value);
+                if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1ui")) {
+                    return -1;
                 }
             } else if (arg_types[i].code == halide_type_float) {
                 float value;
                 if (arg_types[i].bits == 32) {
                     value = *((float *)args[i]);
                 } else {
-                    // error
+                    error(user_context) << "Cannot pass argument of type "
+                                        << arg_types[i]
+                                        << " to GL shader\n";
                     return -1;
                 }
                 global_state.Uniform1f(i, value);
@@ -697,7 +691,9 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                     return -1;
                 }
             } else {
-                // error
+                error(user_context) << "Cannot pass argument of type "
+                                    << arg_types[i]
+                                    << " to GL shader\n";
                 return -1;
             }
         } else {

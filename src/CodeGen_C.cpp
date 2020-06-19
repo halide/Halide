@@ -183,9 +183,12 @@ inline T halide_cpp_max(const T &a, const T &b) {return (a > b) ? a : b;}
 template<typename T>
 inline T halide_cpp_min(const T &a, const T &b) {return (a < b) ? a : b;}
 
+template<typename T>
+inline void halide_unused(const T&) {}
+
 template<typename A, typename B>
 const B &return_second(const A &a, const B &b) {
-    (void) a;
+    halide_unused(a);
     return b;
 }
 
@@ -291,9 +294,6 @@ protected:
             for (auto &a : op->args) {
                 include_lerp_types(a.type());
             }
-        } else if (op->is_intrinsic(Call::absd)) {
-            // absd() can synthesize a new type
-            include_type(op->type.with_code(op->type.is_int() ? Type::UInt : op->type.code()));
         }
 
         IRGraphVisitor::visit(op);
@@ -2097,8 +2097,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         Expr a = op->args[0];
         Expr b = op->args[1];
-        Type t = op->type.with_code(op->type.is_int() ? Type::UInt : op->type.code());
-        Expr e = cast(t, select(a < b, b - a, a - b));
+        Expr e = cast(op->type, select(a < b, b - a, a - b));
         rhs << print_expr(e);
     } else if (op->is_intrinsic(Call::return_second)) {
         internal_assert(op->args.size() == 2);
@@ -2803,7 +2802,7 @@ void CodeGen_C::visit(const IfThenElse *op) {
 void CodeGen_C::visit(const Evaluate *op) {
     if (is_const(op->value)) return;
     string id = print_expr(op->value);
-    stream << get_indent() << "(void)" << id << ";\n";
+    stream << get_indent() << "halide_unused(" << id << ");\n";
 }
 
 void CodeGen_C::visit(const Shuffle *op) {

@@ -172,7 +172,7 @@ public:
         if (iter != gvn.output_numbering.end()) {
             gvn.entries[iter->second]->use_count++;
         } else {
-            internal_error << "Expr not in shallow numbering!\n";
+            internal_error << "Expr not in shallow numbering: " << e << "\n";
         }
 
         // Visit the children if we haven't been here before.
@@ -228,6 +228,31 @@ class RemoveLets : public IRGraphMutator {
 
 class CSEEveryExprInStmt : public IRMutator {
     bool lift_all;
+    using IRMutator::visit;
+
+    Stmt visit(const Store *op) override {
+        // It's important to do CSE jointly on the index and value in
+        // a store to stop:
+        // f[x] = f[x] + y
+        // from turning into
+        // f[x] = f[z] + y
+        // due to the two equal x's indices being CSE'd differently due to the presence of y.
+        Expr dummy = Call::make(Int(32), Call::bundle, {op->value, op->index}, Call::PureIntrinsic);
+        dummy = common_subexpression_elimination(dummy, lift_all);
+        vector<pair<string, Expr>> lets;
+        while (const Let *let = dummy.as<Let>()) {
+            lets.emplace_back(let->name, let->value);
+            dummy = let->body;
+        }
+        const Call *c = dummy.as<Call>();
+        internal_assert(c && c->is_intrinsic(Call::bundle) && c->args.size() == 2);
+        Stmt s = Store::make(op->name, c->args[0], c->args[1],
+                             op->param, mutate(op->predicate), op->alignment);
+        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            s = LetStmt::make(it->first, it->second, s);
+        }
+        return s;
+    }
 
 public:
     using IRMutator::mutate;

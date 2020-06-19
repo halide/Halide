@@ -317,6 +317,12 @@ class MonotonicVisitor : public IRVisitor {
             return;
         }
 
+        if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
+            op->is_intrinsic(Call::promise_clamped)) {
+            op->args[0].accept(this);
+            return;
+        }
+
         if (op->is_intrinsic(Call::require)) {
             // require() returns the value of the second arg in all non-failure cases
             op->args[1].accept(this);

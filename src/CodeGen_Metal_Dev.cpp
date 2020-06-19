@@ -168,6 +168,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
+    user_assert(loop->for_type != ForType::GPULane)
+        << "The Metal backend does not support the gpu_lanes() scheduling directive.";
+
     if (is_gpu_var(loop->name)) {
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))
@@ -211,7 +214,28 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        stream << get_indent() << "threadgroup_barrier(mem_flags::mem_threadgroup);\n";
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
+
+        auto fence_type_ptr = as_const_int(op->args[0]);
+        internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
+        auto fence_type = *fence_type_ptr;
+
+        // This is quite annoying: even though the MSL docs claim these flags can be combined,
+        // Metal compilers prior to Metal 1.2 give compiler errors.  So, we do not combine them,
+        // and rather use a preprocessor definition to do the right thing.
+
+        stream << get_indent() << "threadgroup_barrier(";
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device &&
+            fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
+            stream << "_halide_mem_fence_device_and_threadgroup";
+        } else if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
+            stream << "mem_flags::mem_device";
+        } else if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
+            stream << "mem_flags::mem_threadgroup";
+        } else {
+            stream << "mem_flags::mem_none";
+        }
+        stream << ");\n";
         print_assignment(op->type, "0");
     } else {
         CodeGen_C::visit(op);
@@ -236,7 +260,11 @@ Expr is_ramp_one(const Expr &e) {
 }  // namespace
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
-    return "__address_space_" + print_name(buf);
+    if (buf == shared_name) {
+        return "threadgroup";
+    } else {
+        return "__address_space_" + print_name(buf);
+    }
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
@@ -377,7 +405,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Select *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
 
-    if (op->name == "__shared") {
+    if (op->memory_type == MemoryType::GPUShared) {
         // Already handled
         op->body.accept(this);
     } else {
@@ -413,7 +441,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Free *op) {
-    if (op->name == "__shared") {
+    if (op->name == shared_name) {
         return;
     } else {
         // Should have been freed internally
@@ -559,10 +587,33 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
             allocations.push(args[i].name, alloc);
         }
     }
-    stream << ",\n"
-           << " threadgroup int16_t* __shared [[ threadgroup(0) ]]";
 
-    stream << ")\n";
+    class FindShared : public IRVisitor {
+        using IRVisitor::visit;
+        void visit(const Allocate *op) override {
+            if (op->memory_type == MemoryType::GPUShared) {
+                internal_assert(alloc == nullptr)
+                    << "Found multiple shared allocations in metal kernel\n";
+                alloc = op;
+            }
+        }
+
+    public:
+        const Allocate *alloc = nullptr;
+    } find_shared;
+    s.accept(&find_shared);
+
+    if (find_shared.alloc) {
+        shared_name = find_shared.alloc->name;
+    } else {
+        shared_name = "__shared";
+    }
+    // Note that int4 below is an int32x4, not an int4_t. The type
+    // is chosen to be large to maximize alignment.
+    stream << ",\n"
+           << " threadgroup int4* "
+           << print_name(shared_name) << " [[ threadgroup(0) ]]"
+           << ")\n";
 
     open_scope();
 
@@ -634,12 +685,19 @@ void CodeGen_Metal_Dev::init_module() {
                << "#define tanh_f32 tanh\n"
                << "#define atanh_f32 atanh\n"
                << "#define fast_inverse_sqrt_f32 rsqrt\n"
+               // This is quite annoying: even though the MSL docs claim
+               // all versions of Metal support the same memory fence
+               // names, the truth is that 1.0 does not.
+               << "#if __METAL_VERSION__ >= 120\n"
+               << "#define _halide_mem_fence_device_and_threadgroup (mem_flags::mem_device | mem_flags::mem_threadgroup)\n"
+               << "#else\n"
+               << "#define _halide_mem_fence_device_and_threadgroup mem_flags::mem_device_and_threadgroup\n"
+               << "#endif\n"
                << "}\n";  // close namespace
 
     metal_c.add_common_macros(src_stream);
 
-    // __shared always has address space threadgroup.
-    src_stream << "#define __address_space___shared threadgroup\n";
+    src_stream << "#define halide_unused(x) (void)(x)\n";
 
     src_stream << "\n";
 

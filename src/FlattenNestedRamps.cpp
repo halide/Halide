@@ -27,12 +27,7 @@ class FlattenRamps : public IRMutator {
     Expr visit(const Broadcast *op) override {
         if (op->value.type().is_vector()) {
             Expr value = mutate(op->value);
-            std::vector<Expr> broadcast_elems;
-            for (int ix = 0; ix < op->lanes; ix++) {
-                broadcast_elems.push_back(value);
-            }
-
-            return Shuffle::make_concat(broadcast_elems);
+            return Shuffle::make_broadcast(value, op->lanes);
         }
 
         return IRMutator::visit(op);

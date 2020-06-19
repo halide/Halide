@@ -1,6 +1,7 @@
 #include "SimplifyCorrelatedDifferences.h"
 
 #include "CSE.h"
+#include "CompilerLogger.h"
 #include "ExprUsesVar.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -108,17 +109,6 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         return visit_let<LetStmt, Stmt>(op);
     }
 
-    Stmt visit(const Store *op) override {
-        // We only care about the expressions that determine the sizes
-        // of allocations and loop extents, so no need to look inside
-        // stores.
-        return op;
-    }
-
-    Stmt visit(const Provide *op) override {
-        return op;
-    }
-
     Stmt visit(const For *op) override {
         Stmt s = op;
         // This is unfortunately quadratic in maximum loop nesting depth
@@ -218,9 +208,13 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             e = PartiallyCancelDifferences().mutate(e);
             e = simplify(e);
 
-            if ((debug::debug_level() > 0) &&
+            const bool check_non_monotonic = debug::debug_level() > 0 || get_compiler_logger() != nullptr;
+            if (check_non_monotonic &&
                 is_monotonic(e, loop_var) == Monotonic::Unknown) {
                 // Might be a missed simplification opportunity. Log to help improve the simplifier.
+                if (get_compiler_logger()) {
+                    get_compiler_logger()->record_non_monotonic_loop_var(loop_var, e);
+                }
                 debug(1) << "Warning: expression is non-monotonic in loop variable "
                          << loop_var << ": " << e << "\n";
             }

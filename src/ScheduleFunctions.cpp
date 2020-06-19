@@ -191,7 +191,13 @@ Stmt build_loop_nest(
     // Put all the reduction domain predicates into the containers vector.
     for (Expr pred : predicates) {
         pred = qualify(prefix, pred);
-        pred_container.emplace_back(Container::If, 0, "", likely(pred));
+        // Add a likely qualifier if there isn't already one
+        const Call *c = pred.as<Call>();
+        if (!(c && (c->is_intrinsic(Call::likely) ||
+                    c->is_intrinsic(Call::likely_if_innermost)))) {
+            pred = likely(pred);
+        }
+        pred_container.emplace_back(Container::If, 0, "", pred);
     }
     int n_predicates = (int)(pred_container.size());
 
@@ -217,7 +223,9 @@ Stmt build_loop_nest(
 
     // Sort the predicate guards for the fused loops so they are as far outwards
     // as possible. IfInnner should not be reordered to outside of a for loop.
-    for (int i = (int)nest.size() - n_predicates_inner - n_predicates; i < (int)nest.size() - n_predicates; i++) {
+    for (int i = (int)nest.size() - n_predicates_inner - n_predicates;
+         i < (int)nest.size() - n_predicates;
+         i++) {
         // Only push up IfThenElse.
         internal_assert(nest[i].value.defined());
         internal_assert(nest[i].type == Container::IfInner);

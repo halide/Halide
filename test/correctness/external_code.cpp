@@ -1,10 +1,11 @@
 #include "Halide.h"
-#include <cassert>
+#include "halide_test_dirs.h"
+
 #include <fstream>
 #include <iostream>
-#include <stdio.h>
 
-#include "test/common/halide_test_dirs.h"
+#include <cassert>
+#include <cstdio>
 
 using namespace Halide;
 

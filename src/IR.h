@@ -500,6 +500,7 @@ struct Call : public ExprNode<Call> {
         bitwise_or,
         bitwise_xor,
         bool_to_mask,
+        bundle,  // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
         call_cached_indirect_function,
         cast_mask,
         count_leading_zeros,
@@ -744,6 +745,10 @@ struct Shuffle : public ExprNode<Shuffle> {
     /** Convenience constructor for making a shuffle representing a
      * concatenation of the vectors. */
     static Expr make_concat(const std::vector<Expr> &vectors);
+
+    /** Convenience constructor for making a shuffle representing a
+     * broadcast of a vector. */
+    static Expr make_broadcast(Expr vector, int lanes);
 
     /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */

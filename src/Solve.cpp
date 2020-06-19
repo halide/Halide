@@ -362,6 +362,7 @@ private:
                 expr = a * b;
             }
         }
+
         return expr;
     }
 
@@ -425,8 +426,8 @@ private:
         }
     }
 
-    template<typename T>
-    Expr visit_min_max_op(const T *op, bool is_min) {
+    template<typename T, typename Other>
+    Expr visit_min_max_op(const T *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
         bool old_failed = failed;
@@ -488,29 +489,30 @@ private:
                 // op(f(x), f(x) + a) -> f(x) + op(a, 0)
                 expr = mutate(a + T::make(add_b->b, make_zero(op->type)));
             } else if (sub_a && sub_b && equal(sub_a->a, sub_b->a)) {
-                // op(f(x) - a, f(x) - b) -> f(x) - op(a, b)
-                expr = mutate(sub_a->a - T::make(sub_a->b, sub_b->b));
+                // min(f(x) - a, f(x) - b) -> f(x) - max(a, b)
+                expr = mutate(sub_a->a - Other::make(sub_a->b, sub_b->b));
+            } else if (sub_a && add_b && equal(sub_a->a, add_b->a)) {
+                // min(f(x) - a, f(x) + b) -> f(x) + min(0 - a, b)
+                expr = mutate(sub_a->a + T::make(make_zero(op->type) - sub_a->b, add_b->b));
+            } else if (add_a && sub_b && equal(add_a->a, sub_b->a)) {
+                // min(f(x) + a, f(x) - b) -> f(x) + min(a, 0 - b)
+                expr = mutate(add_a->a + T::make(add_a->b, make_zero(op->type) - sub_b->b));
             } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b)) {
                 // op(f(x) - a, g(x) - a) -> op(f(x), g(x)) - a
                 expr = mutate(T::make(sub_a->a, sub_b->a)) - sub_a->b;
             } else if (sub_a && equal(sub_a->a, b)) {
                 // op(f(x) - a, f(x)) -> f(x) - op(a, 0)
-                expr = mutate(b - T::make(sub_a->b, make_zero(op->type)));
+                expr = mutate(b - Other::make(sub_a->b, make_zero(op->type)));
             } else if (sub_b && equal(sub_b->a, a)) {
                 // op(f(x), f(x) - a) -> f(x) - op(a, 0)
-                expr = mutate(a - T::make(sub_b->b, make_zero(op->type)));
+                expr = mutate(a - Other::make(sub_b->b, make_zero(op->type)));
             } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b) && is_positive_const(mul_a->b)) {
                 // Positive a: min(f(x)*a, g(x)*a) -> min(f(x), g(x))*a
                 //             max(f(x)*a, g(x)*a) -> max(f(x), g(x))*a
                 expr = mutate(T::make(mul_a->a, mul_b->a)) * mul_a->b;
             } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b) && is_negative_const(mul_a->b)) {
-                if (is_min) {
-                    // Negative a: min(f(x)*a, g(x)*a) -> max(f(x), g(x))*a
-                    expr = mutate(Max::make(mul_a->a, mul_b->a)) * mul_a->b;
-                } else {
-                    // Negative a: max(f(x)*a, g(x)*a) -> min(f(x), g(x))*a
-                    expr = mutate(Min::make(mul_a->a, mul_b->a)) * mul_a->b;
-                }
+                // Negative a: min(f(x)*a, g(x)*a) -> max(f(x), g(x))*a
+                expr = mutate(Other::make(mul_a->a, mul_b->a)) * mul_a->b;
             } else {
                 expr = fail(T::make(a, b));
             }
@@ -532,11 +534,11 @@ private:
     }
 
     Expr visit(const Min *op) override {
-        return visit_min_max_op(op, true);
+        return visit_min_max_op<Min, Max>(op);
     }
 
     Expr visit(const Max *op) override {
-        return visit_min_max_op(op, false);
+        return visit_min_max_op<Max, Min>(op);
     }
 
     template<typename T>
@@ -1674,6 +1676,21 @@ void solve_test() {
     // This case was incorrect due to canonicalization of the multiply
     // occuring after unpacking the LHS.
     check_solve((y - z) * x, x * (y - z));
+
+    // These cases were incorrectly not flipping min/max when moving
+    // it out of the RHS of a subtract.
+    check_solve(min(x - y, x - z), x - max(y, z));
+    check_solve(min(x - y, x), x - max(y, 0));
+    check_solve(min(x, x - y), x - max(y, 0));
+    check_solve(max(x - y, x - z), x - min(y, z));
+    check_solve(max(x - y, x), x - min(y, 0));
+    check_solve(max(x, x - y), x - min(y, 0));
+
+    // Check mixed add/sub
+    check_solve(min(x - y, x + z), x + min(0 - y, z));
+    check_solve(max(x - y, x + z), x + max(0 - y, z));
+    check_solve(min(x + y, x - z), x + min(y, 0 - z));
+    check_solve(max(x + y, x - z), x + max(y, 0 - z));
 
     debug(0) << "Solve test passed\n";
 }

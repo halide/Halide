@@ -1,5 +1,5 @@
 #include "Halide.h"
-#include "test/common/check_call_graphs.h"
+#include "check_call_graphs.h"
 
 using namespace Halide;
 
@@ -10,7 +10,7 @@ int vectorize_2d_round_up() {
     Func f("f");
     Var x("x"), y("y"), xi("xi"), yi("yi");
 
-    f(x, y) = x + y;
+    f(x, y) = 3 * x + y;
 
     f.compute_root()
         .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::RoundUp)
@@ -20,7 +20,7 @@ int vectorize_2d_round_up() {
     Buffer<int> result = f.realize(width, height);
 
     auto cmp_func = [](int x, int y) {
-        return x + y;
+        return 3 * x + y;
     };
     if (check_image(result, cmp_func)) {
         return -1;
@@ -36,7 +36,7 @@ int vectorize_2d_guard_with_if() {
     Func f("f");
     Var x("x"), y("y"), xi("xi"), yi("yi");
 
-    f(x, y) = x + y;
+    f(x, y) = 3 * x + y;
 
     f.compute_root()
         .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::GuardWithIf)
@@ -46,7 +46,7 @@ int vectorize_2d_guard_with_if() {
     Buffer<int> result = f.realize(width, height);
 
     auto cmp_func = [](int x, int y) {
-        return x + y;
+        return 3 * x + y;
     };
     if (check_image(result, cmp_func)) {
         return -1;
@@ -64,7 +64,7 @@ int vectorize_2d_inlined_with_update() {
     RDom r(0, 10, "r");
     inlined(x) = x;
     inlined(x) += r;
-    f(x, y) = inlined(x) + y;
+    f(x, y) = inlined(x) + 2 * y;
 
     f.compute_root()
         .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::GuardWithIf)
@@ -81,7 +81,7 @@ int vectorize_2d_inlined_with_update() {
     // }
 
     auto cmp_func = [](int x, int y) {
-        return x + y + 45;
+        return x + 2 * y + 45;
     };
     if (check_image(result, cmp_func)) {
         return -1;
@@ -96,7 +96,7 @@ int vectorize_2d_with_inner_for() {
 
     Func f;
     Var x("x"), y("y"), c("c"), xi("xi"), yi("yi");
-    f(x, y, c) = x + y + c;
+    f(x, y, c) = 3 * x + y + 7 * c;
 
     f.compute_root()
         .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::GuardWithIf)
@@ -117,7 +117,7 @@ int vectorize_2d_with_inner_for() {
     // }
 
     auto cmp_func = [](int x, int y, int c) {
-        return x + y + c;
+        return 3 * x + y + 7 * c;
     };
     if (check_image(result, cmp_func)) {
         return -1;
@@ -132,7 +132,7 @@ int vectorize_2d_with_compute_at_vectorized() {
 
     Func f("f"), g("g");
     Var x("x"), y("y");
-    f(x, y) = x + y;
+    f(x, y) = 3 * x + y;
     g(x, y) = f(x, y) + f(x + 1, y);
 
     Var xi("xi");
@@ -148,7 +148,7 @@ int vectorize_2d_with_compute_at_vectorized() {
     //     printf("\n");
     // }
     auto cmp_func = [](int x, int y) {
-        return 2 * x + 1 + 2 * y;
+        return 6 * x + 3 + 2 * y;
     };
     if (check_image(result, cmp_func)) {
         return -1;
@@ -163,7 +163,7 @@ int vectorize_2d_with_compute_at() {
 
     Func f("f"), g("g");
     Var x("x"), y("y");
-    f(x, y) = x + y;
+    f(x, y) = 3 * x + y;
     g(x, y) = f(x, y) + f(x + 1, y);
 
     Var xi("xi"), xii("xii");
@@ -182,7 +182,7 @@ int vectorize_2d_with_compute_at() {
     //     printf("\n");
     // }
     auto cmp_func = [](int x, int y) {
-        return 2 * x + 1 + 2 * y;
+        return 6 * x + 3 + 2 * y;
     };
     if (check_image(result, cmp_func)) {
         return -1;
@@ -198,7 +198,7 @@ int vectorize_all_d() {
     Func f("f");
     Var x("x"), y("y"), xi("xi"), yi("yi");
 
-    f(x, y) = x + y;
+    f(x, y) = 3 * x + y;
 
     f.compute_root()
         .tile(x, y, x, y, xi, yi, 4, 2, TailStrategy::GuardWithIf)
@@ -211,7 +211,7 @@ int vectorize_all_d() {
     Buffer<int> result = f.realize(width, height);
 
     auto cmp_func = [](int x, int y) {
-        return x + y;
+        return 3 * x + y;
     };
     if (check_image(result, cmp_func)) {
         return -1;
