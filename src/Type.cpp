@@ -315,7 +315,7 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
         case 1:
             // bool vectors are always emitted as uint8 in the C++ backend
             if (type.is_vector()) {
-                oss << "uint8x" << type.lanes() << "_t";
+                oss << "uint1x" << type.lanes() << "_t";
             } else {
                 oss << "bool";
             }
