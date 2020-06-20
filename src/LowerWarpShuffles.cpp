@@ -786,11 +786,6 @@ class HasLaneLoop : public IRVisitor {
         IRVisitor::visit(op);
     }
 
-    void visit(const Allocate *op) override {
-        result = result || op->memory_type == MemoryType::Register;
-        IRVisitor::visit(op);
-    }
-
 public:
     bool result = false;
 };
