@@ -562,7 +562,7 @@ public:
     }
 
     template<typename RT, typename... Args>
-    ExternSignature(RT (*f)(Args... args))
+    explicit ExternSignature(RT (*f)(Args... args))
         : ret_type_(type_of<RT>()),
           is_void_return_(std::is_void<RT>::value),
           arg_types_({type_of<Args>()...}) {
@@ -579,6 +579,23 @@ public:
 
     const std::vector<Type> &arg_types() const {
         return arg_types_;
+    }
+
+    friend std::ostream &operator<<(std::ostream &stream, const ExternSignature &sig) {
+        if (sig.is_void_return_) {
+            stream << "void";
+        } else {
+            stream << sig.ret_type_;
+        }
+        stream << " (*)(";
+        bool comma = false;
+        for (const auto &t : sig.arg_types_) {
+            if (comma) stream << ", ";
+            stream << t;
+            comma = true;
+        }
+        stream << ")";
+        return stream;
     }
 };
 
@@ -615,12 +632,12 @@ private:
     ExternCFunction extern_c_function_;
 
 public:
-    JITExtern(Pipeline pipeline);
-    JITExtern(const Func &func);
-    JITExtern(const ExternCFunction &extern_c_function);
+    explicit JITExtern(Pipeline pipeline);
+    explicit JITExtern(const Func &func);
+    explicit JITExtern(const ExternCFunction &extern_c_function);
 
     template<typename RT, typename... Args>
-    JITExtern(RT (*f)(Args... args))
+    explicit JITExtern(RT (*f)(Args... args))
         : JITExtern(ExternCFunction(f)) {
     }
 

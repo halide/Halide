@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     g(x, y) = my_func(x, cast<float>(y));
 
     Pipeline p(g);
-    p.set_jit_externs({{"my_func", my_func2}});
+    p.set_jit_externs({{"my_func", JITExtern{my_func2}}});
     Buffer<float> imf2 = p.realize(32, 32);
 
     // Check the result was what we expected
@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
     }
 
     // Switch from my_func2 to my_func and verify a recompile happens.
-    p.set_jit_externs({{"my_func", my_func3}});
+    p.set_jit_externs({{"my_func", JITExtern{my_func3}}});
     Buffer<float> imf3 = p.realize(32, 32);
 
     // Check the result was what we expected
