@@ -25,6 +25,7 @@ Buffer<float> make_replicated_buffer(int w, int h) {
 
 struct Test {
     const char *name;
+    ImageParam input;
     Func f;
     double time;
 
@@ -47,6 +48,11 @@ struct Test {
             g.realize(out);
             out.device_sync();
         });
+
+        g.compile_to_lowered_stmt("/dev/stdout", {input}, Text,
+                                  Target{"host-no_asserts-no_runtime-no_bounds_query"});
+        g.compile_to_assembly("/dev/stdout", {input},
+                              Target{"host-no_asserts-no_runtime-no_bounds_query"});
 
         printf("%-20s: %f us\n", name, time * 1e6);
     }
@@ -74,6 +80,11 @@ struct Test {
             out.device_sync();
         });
 
+        g.compile_to_lowered_stmt("/dev/stdout", {input, blur_radius}, Text,
+                                  Target{"host-no_asserts-no_runtime-no_bounds_query"});
+        g.compile_to_assembly("/dev/stdout", {input, blur_radius},
+                              Target{"host-no_asserts-no_runtime-no_bounds_query"});
+
         printf("%-20s: %f us\n", name, time * 1e6);
     }
 };
@@ -99,13 +110,13 @@ int main(int argc, char **argv) {
 
     // Apply several different boundary conditions.
     Test tests[] = {
-        {"unbounded", lambda(x, y, padded_input(x + 8, y + 8)), 0.0},
-        {"constant_exterior", constant_exterior(input, 0.0f), 0.0},
-        {"repeat_edge", repeat_edge(input), 0.0},
-        {"repeat_image", repeat_image(input), 0.0},
-        {"mirror_image", mirror_image(input), 0.0},
-        {"mirror_interior", mirror_interior(input), 0.0},
-        {nullptr, Func(), 0.0}};  // Sentinel
+        {"unbounded", padded_input, lambda(x, y, padded_input(x + 8, y + 8)), 0.0},
+        {"constant_exterior", input, constant_exterior(input, 0.0f), 0.0},
+        {"repeat_edge", input, repeat_edge(input), 0.0},
+        {"repeat_image", input, repeat_image(input), 0.0},
+        {"mirror_image", input, mirror_image(input), 0.0},
+        {"mirror_interior", input, mirror_interior(input), 0.0},
+        {nullptr, input, Func(), 0.0}};  // Sentinel
 
     // Time each
     for (int i = 0; tests[i].name; i++) {
