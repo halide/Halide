@@ -19,10 +19,10 @@ HalideExtern_2(float, my_func, int, float);
 int main(int argc, char **argv) {
     // set_jit_externs() implicitly adds a user_context arg to the externs, which
     // we can't yet support
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support passing arbitrary pointers to/from HalideExtern code.\n");
-        return 0;
-    }
+    // if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    //     printf("[SKIP] WebAssembly JIT does not support passing arbitrary pointers to/from HalideExtern code.\n");
+    //     return 0;
+    // }
 
     std::vector<ExternFuncArgument> args;
     args.push_back(user_context_value());
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     f.define_extern("extern_func", args, Float(32), 2);
 
     Pipeline p(f);
-    p.set_jit_externs({{"extern_func", monitor}});
+    p.set_jit_externs({{"extern_func", JITExtern{monitor}}});
     Buffer<float> imf = p.realize(32, 32);
 
     // Check the result was what we expected
