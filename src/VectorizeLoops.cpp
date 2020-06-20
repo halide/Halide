@@ -1104,8 +1104,9 @@ class VectorSubs : public IRMutator {
     }
 
 public:
-    VectorSubs(const std::vector<VectorizedVar> &vv, bool in_hexagon, const Target &t)
-        : vectorized_vars(vv), target(t), in_hexagon(in_hexagon) {
+    VectorSubs(const VectorizedVar &vv, bool in_hexagon, const Target &t)
+        : target(t), in_hexagon(in_hexagon) {
+        vectorized_vars.push_back(vv);
         update_replacements();
     }
 };
@@ -1114,8 +1115,6 @@ public:
 class VectorizeLoops : public IRMutator {
     const Target &target;
     bool in_hexagon;
-
-    std::vector<VectorizedVar> vectorized_vars;
 
     using IRMutator::visit;
 
@@ -1135,9 +1134,8 @@ class VectorizeLoops : public IRMutator {
                            << "constant extent > 1\n";
             }
 
-            vectorized_vars.push_back({for_loop->name, for_loop->min, (int)extent->value});
-            stmt = VectorSubs(vectorized_vars, in_hexagon, target).mutate(for_loop->body);
-            vectorized_vars.pop_back();
+            VectorizedVar vectorized_var = {for_loop->name, for_loop->min, (int)extent->value};
+            stmt = VectorSubs(vectorized_var, in_hexagon, target).mutate(for_loop->body);
         } else {
             stmt = IRMutator::visit(for_loop);
         }
