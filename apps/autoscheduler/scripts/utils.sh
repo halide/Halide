@@ -401,7 +401,7 @@ function format_metrics() {
     fi
 
     for stage in ${stages}; do
-        grep -A 6 "kernel_${stage}" "${metrics_file}" | tail -n +2 | awk -v s="${stage}" '{printf("%s %s %f\n", s, $2, $NF);}' >> "${formatted_metrics_file}"
+        grep -A 10 "kernel_${stage}" "${metrics_file}" | tail -n +2 | awk -v s="${stage}" '{printf("%s %s %f\n", s, $2, $NF);}' >> "${formatted_metrics_file}"
         grep "kernel_${stage}" "${trace_64_file}" | tail -n 1 | awk -v s="${stage}" '{printf("%s registers_64 %d\n", s, $9);}' >> "${formatted_metrics_file}"
         grep "kernel_${stage}" "${trace_256_file}" | tail -n 1 | awk -v s="${stage}" '{printf("%s registers_256 %d\n", s, $9);}' >> "${formatted_metrics_file}"
     done
@@ -410,27 +410,12 @@ function format_metrics() {
 }
 
 function format_features() {
-    local -r halide_root=$1
-    local -r dir=$2
-
-    get_autoscheduler_dir ${HALIDE_ROOT} autoscheduler_dir
-    local -r num_features=$(grep head2_w "${autoscheduler_dir}"/NetworkSize.h | cut -d" " -f 8 | cut -d";" -f 1)
+    local -r dir=$1
 
     local -r compile_err_file="${dir}/compile_err.txt"
-    local -r stages=$(grep "features" "${compile_err_file}" | cut -d" " -f 4)
     local -r formatted_features_file="${dir}/formatted_features.txt"
 
-    if [ -f "${formatted_features_file}" ]; then
-        echo "Formatted features found in ${formatted_features_file}"
-        return
-    fi
-
-    for stage in ${stages}; do
-        grep -A ${num_features} "features for ${stage}" "${compile_err_file}" | tail -n +2 | sed -e 's/://g' | awk -v s="${stage}" '{printf("%s %s %f\n", s, $1, $2);}' >> "${formatted_features_file}"
-    done
-
     python3 $(dirname $0)/extract_features.py --filename "${compile_err_file}"
-    echo "Formatted features saved to ${formatted_features_file}"
 }
 
 function compare_with_profiler() {
@@ -438,7 +423,7 @@ function compare_with_profiler() {
     local -r dir=$2
 
     format_metrics "${dir}"
-    format_features "${halide_root}" "${dir}"
+    format_features "${dir}"
 }
 
 function reautoschedule() {
