@@ -501,6 +501,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     // Print out the schedule
     if (aslog::aslog_level() > 0) {
         optimal->dump();
+        optimal->print_compute_locations();
     }
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");

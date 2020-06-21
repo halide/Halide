@@ -550,9 +550,9 @@ struct LoopNest {
     void collect_nodes_that_should_be_inlined(const NodeMap<bool>& nodes_to_freeze, NodeMap<bool>& inlined_nodes) const;
 
     int64_t product_of_descendants(int loop_index) const;
-};
 
-void sanitize_names(std::string& str);
+    void get_stages_computed_in_each_compute_root_loop(StageMap<StageMap<bool>> &descendants, const LoopNest *compute_root_loop_nest=nullptr) const;
+};
 
 }  // namespace Autoscheduler
 }  // namespace Internal

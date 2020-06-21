@@ -494,6 +494,8 @@ struct FunctionDAG {
             // The name for scheduling (e.g. "foo.update(3)")
             string name;
 
+            string sanitized_name;
+
             // Ids for perfect hashing on stages.
             int id, max_id;
 
@@ -662,6 +664,8 @@ public:
 
     int compute(const Function& f);
 };
+
+void sanitize_names(std::string& str);
 
 }  // namespace Autoscheduler
 }  // namespace Internal

@@ -1096,7 +1096,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             std::string type = stage->index == 0 ? "store" : "load_and_store";
             std::string consumer_name = node->func.name();
             sanitize_names(consumer_name);
-            aslog(0) << "BEGIN GLOBAL ACCESS global_mem_" << type;
+            aslog(0) << "BEGIN MEM ACCESS global_mem_" << type;
             aslog(0) << ". consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << consumer_name << "\n";
         }
 
@@ -1122,7 +1122,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             std::string type = stage->index == 0 ? "store" : "load_and_store";
             std::string consumer_name = node->func.name();
             sanitize_names(consumer_name);
-            aslog(0) << "END GLOBAL ACCESS global_mem_" << type << ". consumer: " << consumer_name << "_s" << stage->index << "; producer: " << consumer_name;
+            aslog(0) << "END MEM ACCESS global_mem_" << type << ". consumer: " << consumer_name << "_s" << stage->index << "; producer: " << consumer_name;
             if (!store_jac.all_coeffs_exist()) {
                 aslog(0) << " (not all coeffs exist)";
 
@@ -2601,7 +2601,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     sanitize_names(consumer_name);
                                     std::string producer_name = e->producer->func.name();
                                     sanitize_names(producer_name);
-                                    aslog(0) << "BEGIN GLOBAL ACCESS global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
+                                    aslog(0) << "BEGIN MEM ACCESS global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                                 }
 
                                 double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, e->producer, jac.first, parent, grandparent, n, feat, verbose);
@@ -2623,7 +2623,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                                 if (verbose) {
                                     aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
-                                    aslog(0) << "END GLOBAL ACCESS global_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
+                                    aslog(0) << "END MEM ACCESS global_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
                                     if (!jac.first.all_coeffs_exist()) {
                                         aslog(0) << " (not all coeffs exist)";
                                     }
@@ -3591,6 +3591,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
     }
 
     bool stop_here = is_root() && !search_space_options.compute_at_block() && !search_space_options.compute_at_thread();
+    stop_here = stop_here || (in_threads_loop && !search_space_options.compute_at_thread());
     if (stop_here || f->is_output || is_pre_pass) {
         // Outputs must be compute_root, so we're done.
         return result;
@@ -3935,6 +3936,26 @@ bool LoopNest::producer_computed_here_or_further_in(const FunctionDAG::Node* pro
     }
 
     return false;
+}
+
+void LoopNest::get_stages_computed_in_each_compute_root_loop(StageMap<StageMap<bool>> &descendants, const LoopNest *compute_root_loop_nest) const {
+    if (is_root()) {
+        for (auto &c : children) {
+            descendants.emplace(c->stage, {});
+        }
+
+        for (auto &c : children) {
+            c->get_stages_computed_in_each_compute_root_loop(descendants, c.get());
+        }
+
+        return;
+    }
+
+    descendants.get(compute_root_loop_nest->stage).emplace(stage, true);
+
+    for (auto &c : children) {
+        c->get_stages_computed_in_each_compute_root_loop(descendants, compute_root_loop_nest);
+    }
 }
 
 // Apply the schedule represented by this loop nest to a Halide pipeline.
@@ -4307,14 +4328,6 @@ void LoopNest::collect_nodes_that_should_be_inlined(const NodeMap<bool>& nodes_t
 
     for (const auto& c : children) {
         c->collect_nodes_that_should_be_inlined(nodes_to_freeze, inlined_nodes);
-    }
-}
-
-void sanitize_names(std::string& str) {
-    bool in_quotes = false;
-    for (auto &c : str) {
-        in_quotes ^= (c == '"');
-        if (!in_quotes && c == '$') c = '_';
     }
 }
 

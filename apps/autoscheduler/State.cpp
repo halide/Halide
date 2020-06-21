@@ -650,6 +650,23 @@ void State::dump() const {
     aslog(0) << schedule_source;
 }
 
+void State::print_compute_locations() const {
+    StageMap<StageMap<bool>> descendants;
+    root->get_stages_computed_in_each_compute_root_loop(descendants);
+
+    aslog(0) << "BEGIN compute locations\n";
+    for (const auto& d : descendants) {
+        aslog(0) << d.first->sanitized_name << " -> ";
+
+        for (const auto& descendant : d.second) {
+            aslog(0) << descendant.first->sanitized_name << " ";
+        }
+
+        aslog(0) << "\n";
+    }
+    aslog(0) << "END compute locations\n";
+}
+
 void State::fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents) const {
     if (parallel_vars.empty() || parallel_extents.empty()) {
         return;
@@ -804,7 +821,6 @@ bool State::can_fuse_gpu(const vector<int64_t>& parallel_extents) const {
 void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, const Target &target) {
     StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
     std::vector<LoopNest::StageScheduleState*> ancestors;
-
     root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr, target, ancestors);
 
     std::ostringstream src;

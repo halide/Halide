@@ -640,6 +640,10 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 stage.name += ".update(" + std::to_string(s - 1) + ")";
             }
 
+            stage.sanitized_name = node.func.name();
+            sanitize_names(stage.sanitized_name);
+            stage.sanitized_name += "_s" + std::to_string(s);
+
             const Definition &def = (s == 0) ? consumer.definition() : consumer.update(s - 1);
             const StageSchedule &sched = def.schedule();
 
@@ -1257,6 +1261,14 @@ int ExprBranching::compute(const Function& f) {
     }
 
     return std::max(branching, visit_nary(args));
+}
+
+void sanitize_names(std::string& str) {
+    bool in_quotes = false;
+    for (auto &c : str) {
+        in_quotes ^= (c == '"');
+        if (!in_quotes && c == '$') c = '_';
+    }
 }
 
 }  // namespace Autoscheduler
