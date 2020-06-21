@@ -262,7 +262,7 @@ benchmark_sample() {
 
     METRICS_CMD="HL_NUM_THREADS=${NUM_CORES} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
-        nvprof --metrics gld_transactions,gst_transactions,gld_efficiency,gst_efficiency,gld_transactions_per_request,gst_transactions_per_request \
+        nvprof --metrics gld_transactions,gst_transactions,gld_efficiency,gst_efficiency,gld_transactions_per_request,gst_transactions_per_request,shared_load_transactions,shared_load_transactions_per_request,shared_store_transactions,shared_store_transactions_per_request \
         --log-file ${D}/metrics.log \
         ${D}/bench \
         --output_extents=estimate \

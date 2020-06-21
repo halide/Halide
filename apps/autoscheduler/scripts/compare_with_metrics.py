@@ -50,6 +50,12 @@ class Features(Enum):
   GLOBAL_STORE_REQUESTS = "global store requests"
   GLOBAL_STORE_TRANSACTIONS_PER_REQUEST = "global store transactions per request"
   GLOBAL_STORE_TRANSACTIONS = "global store transactions"
+  SHARED_LOAD_REQUESTS = "shared load requests"
+  SHARED_LOAD_TRANSACTIONS_PER_REQUEST = "shared load transactions per request"
+  SHARED_LOAD_TRANSACTIONS = "shared load transactions"
+  SHARED_STORE_REQUESTS = "shared store requests"
+  SHARED_STORE_TRANSACTIONS_PER_REQUEST = "shared store transactions per request"
+  SHARED_STORE_TRANSACTIONS = "shared store transactions"
   GLOBAL_LOAD_EFFICIENCY = "global load efficiency"
   GLOBAL_STORE_EFFICIENCY = "global store efficiency"
 
@@ -74,6 +80,12 @@ class Sample:
     self.comparisons[Features.GLOBAL_STORE_TRANSACTIONS_PER_REQUEST] = self.global_store_transactions_per_request
     self.comparisons[Features.GLOBAL_LOAD_EFFICIENCY] = self.global_load_efficiency
     self.comparisons[Features.GLOBAL_STORE_EFFICIENCY] = self.global_store_efficiency
+    self.comparisons[Features.SHARED_LOAD_TRANSACTIONS] = self.shared_load_transactions
+    self.comparisons[Features.SHARED_LOAD_REQUESTS] = self.shared_load_requests
+    self.comparisons[Features.SHARED_LOAD_TRANSACTIONS_PER_REQUEST] = self.shared_load_transactions_per_request
+    self.comparisons[Features.SHARED_STORE_TRANSACTIONS] = self.shared_store_transactions
+    self.comparisons[Features.SHARED_STORE_REQUESTS] = self.shared_store_requests
+    self.comparisons[Features.SHARED_STORE_TRANSACTIONS_PER_REQUEST] = self.shared_store_transactions_per_request
 
     self.extract_data = {}
 
@@ -125,12 +137,12 @@ class Sample:
 
   def global_load_transactions(self, metrics, features):
     actual = metrics["gld_transactions"]
-    predicted = features["num_global_mem_loads_per_block"] * features["num_blocks"]
+    predicted = features["num_global_mem_load_transactions"]
     return IntResult(actual, predicted)
 
   def global_store_transactions(self, metrics, features):
     actual = metrics["gst_transactions"]
-    predicted = features["num_global_mem_stores_per_block"] * features["num_blocks"]
+    predicted = features["num_global_mem_store_transactions"]
     return IntResult(actual, predicted)
 
   def global_load_requests(self, metrics, features):
@@ -164,6 +176,58 @@ class Sample:
     actual = metrics["gst_transactions_per_request"]
     try:
       predicted = features["num_global_store_transactions_per_request"]
+    except:
+      return Result(0, 0)
+
+    return Result(actual, predicted)
+
+  def get(self, metrics, key, default):
+    if key in metrics:
+      return metrics[key]
+
+    return default
+
+  def shared_load_transactions(self, metrics, features):
+    actual = self.get(metrics, "shared_load_transactions", 0)
+    predicted = features["num_shared_mem_load_transactions"]
+    return IntResult(actual, predicted)
+
+  def shared_store_transactions(self, metrics, features):
+    actual = self.get(metrics, "shared_store_transactions", 0)
+    predicted = features["num_shared_mem_store_transactions"]
+    return IntResult(actual, predicted)
+
+  def shared_load_requests(self, metrics, features):
+    if self.get(metrics, "shared_load_transactions_per_request", 0) == 0:
+      return IntResult(0, 0)
+
+    actual = metrics["shared_load_transactions"] / metrics["shared_load_transactions_per_request"]
+    predicted = features["num_shared_load_requests"]
+
+    return IntResult(actual, predicted)
+
+  def shared_load_transactions_per_request(self, metrics, features):
+    actual = self.get(metrics, "shared_load_transactions_per_request", 0)
+    try:
+      predicted = features["num_shared_load_transactions_per_request"]
+    except:
+      return Result(0, 0)
+
+    return Result(actual, predicted)
+
+  def shared_store_requests(self, metrics, features):
+    if self.get(metrics, "shared_store_transactions_per_request", 0) == 0:
+      return IntResult(0, 0)
+
+    actual = metrics["shared_store_transactions"] / metrics["shared_store_transactions_per_request"]
+    predicted = features["num_shared_store_requests"]
+
+    return IntResult(actual, predicted)
+
+  def shared_store_transactions_per_request(self, metrics, features):
+    actual = self.get(metrics, "shared_store_transactions_per_request", 0)
+    try:
+      predicted = features["num_shared_store_transactions_per_request"]
     except:
       return Result(0, 0)
 
