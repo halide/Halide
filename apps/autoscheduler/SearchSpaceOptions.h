@@ -29,7 +29,7 @@ struct SearchSpaceOptions {
     }
 
     bool compute_root() const {
-        return options.test(SearchSpaceOptions::option_compute_root);
+        return options.test(SearchSpaceOptions::option_compute_root) || compute_at_block() || compute_at_thread();
     }
 
     bool compute_root_only() const {
