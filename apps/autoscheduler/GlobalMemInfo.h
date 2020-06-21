@@ -22,10 +22,8 @@ struct GlobalMemInfo {
         return total_num_transactions;
     }
 
-    void add_access_info(double num_requests, double num_transactions_per_request, double num_bytes_used_per_request, int N, double amortization) {
+    void add_access_info(double num_requests, double num_transactions_per_request, double num_bytes_used_per_request) {
         internal_assert(num_bytes_used_per_request > 0);
-
-        num_requests /= amortization;
 
         double total_transactions = num_requests * num_transactions_per_request;
         double total_bytes = total_transactions * 32.0;
@@ -33,9 +31,7 @@ struct GlobalMemInfo {
 
         internal_assert(total_bytes_used <= total_bytes);
 
-        for (int i = 0; i < N; ++i) {
-            add_access_info(total_transactions, total_bytes_used, total_bytes);
-        }
+        update_totals(total_transactions, total_bytes_used, total_bytes);
     }
 
     void add(const GlobalMemInfo& other) {
@@ -55,7 +51,7 @@ struct GlobalMemInfo {
     }
 
 private:
-    void add_access_info(double num_transactions, double num_bytes_used, double num_bytes) {
+    void update_totals(double num_transactions, double num_bytes_used, double num_bytes) {
         total_num_transactions += num_transactions;
         total_num_bytes_used += num_bytes_used;
         total_num_bytes += num_bytes;
@@ -144,7 +140,7 @@ struct GlobalAccessAccumulator {
         }
     }
 
-    void add_access_info(int num_requests, double access_count, double amortization, GlobalMemInfo& global_mem_info, bool is_tail_warp) const {
+    void add_access_info(int num_requests, GlobalMemInfo& global_mem_info, bool is_tail_warp) const {
         int num_transactions_per_request = sectors_accessed.size() + unknown_sectors;
 
         if (verbose) {
@@ -171,9 +167,7 @@ struct GlobalAccessAccumulator {
         global_mem_info.add_access_info(
             num_requests,
             num_transactions_per_request,
-            num_bytes_used_per_request,
-            access_count,
-            amortization
+            num_bytes_used_per_request
         );
     }
 

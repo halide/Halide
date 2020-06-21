@@ -1108,7 +1108,6 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             consumer_store_bounds,
             thread_info,
             total_serial_loop_extents,
-            jac.count(),
             root,
             verbose
         );
@@ -1183,7 +1182,7 @@ double LoopNest::min_global_mem_accesses(const FunctionDAG::Node *node, const Th
     return num_accesses;
 }
 
-void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double serial_loop_extents, double access_count, GlobalMemInfo &global_mem_info, const LoopNest &root, double amortization, bool verbose) const {
+void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double serial_loop_extents, GlobalMemInfo &global_mem_info, const LoopNest &root, bool verbose) const {
     StorageStrides strides = storage_strides(jac, innermost_dim, node, store_bounds, root, thread_info, verbose);
 
     size_t dimensions = thread_info.loop_indices.size();
@@ -1205,8 +1204,6 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
 
         accumulator.add_access_info(
             num_requests,
-            access_count,
-            amortization,
             global_mem_info,
             false
         );
@@ -1232,8 +1229,6 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
 
     accumulator.add_access_info(
         num_requests,
-        access_count,
-        amortization,
         global_mem_info,
         true
     );
@@ -1257,16 +1252,16 @@ std::pair<double, double> LoopNest::compute_local_mem_store_features(const LoadJ
     return {accesses, 1.0 / stride};
 }
 
-GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, double store_count, const LoopNest& root, bool verbose) const {
+GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root, bool verbose) const {
     GlobalMemInfo global_mem_info;
 
-    compute_num_global_mem_accesses_per_block(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, store_count, global_mem_info, root, 1, verbose);
+    compute_num_global_mem_accesses_per_block(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, global_mem_info, root, verbose);
     return global_mem_info;
 }
 
-void LoopNest::compute_global_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, GlobalMemInfo &global_mem_info, double serial_loop_extents, double load_count, const LoopNest &root, double amortization, bool verbose) const {
+void LoopNest::compute_global_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, GlobalMemInfo &global_mem_info, double serial_loop_extents, const LoopNest &root, bool verbose) const {
     if (producer_has_been_scheduled) {
-        compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, serial_loop_extents, load_count, global_mem_info, root, amortization, verbose);
+        compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, serial_loop_extents, global_mem_info, root, verbose);
 
         return;
     }
@@ -1278,7 +1273,7 @@ void LoopNest::compute_global_mem_load_features(const LoadJacobian &jac, int pro
 
     for (int i = 0; i < node->dimensions; i++) {
         GlobalMemInfo info;
-        compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, i, serial_loop_extents, load_count, info, root, amortization, verbose);
+        compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, i, serial_loop_extents, info, root, verbose);
         if (i == 0 || info.num_transactions() < min_required_accesses) {
             min_info = info;
             min_required_accesses = info.num_transactions();
@@ -2615,9 +2610,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     *gpu_loop_info.thread_info,
                                     global_mem_loads,
                                     points_accessed,
-                                    1,
                                     root,
-                                    1,
                                     verbose
                                 );
 
