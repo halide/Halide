@@ -662,6 +662,7 @@ void CodeGen_Metal_Dev::init_module() {
                << "constexpr float neg_inf_f32() { return float_from_bits(0xff800000); }\n"
                << "constexpr float inf_f32() { return float_from_bits(0x7f800000); }\n"
                << "float fast_inverse_f32(float x) { return 1.0f / x; }\n"
+               << "#define is_nan_f32 isnan\n"
                << "#define sqrt_f32 sqrt\n"
                << "#define sin_f32 sin\n"
                << "#define cos_f32 cos\n"
