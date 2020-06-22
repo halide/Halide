@@ -1203,6 +1203,7 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
         );
 
         if (verbose) {
+            aslog(0) << "num_requests_per_warp = " << points_accessed_per_thread << "\n";
             aslog(0) << "num_regular_warps = " << thread_info.num_regular_active_warps_per_block << "\n";
         }
     }

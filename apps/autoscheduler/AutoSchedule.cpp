@@ -500,6 +500,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // Print out the schedule
     if (aslog::aslog_level() > 0) {
+        aslog(0) << "Final generated loop nest and schedule:\n";
         optimal->dump();
         optimal->print_compute_locations();
     }
