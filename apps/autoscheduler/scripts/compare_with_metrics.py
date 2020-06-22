@@ -265,6 +265,9 @@ class Sample:
   def max_ratio(self):
     ratios = []
     for stage in self.results:
+      if self.should_ignore(stage):
+        continue
+
       for label in self.results[stage]:
         ratios.append(abs(self.results[stage][label].ratio))
 

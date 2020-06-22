@@ -155,6 +155,7 @@ make_featurization() {
         HL_SHARED_MEMORY_SM_LIMIT=${shared_memory_sm_limit} \
         HL_MACHINE_PARAMS=${HL_MACHINE_PARAMS} \
         HL_DEBUG_AUTOSCHEDULE=1 \
+        HL_DEBUG_CODEGEN=1 \
         time -f 'Compile time (s): %e' ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
