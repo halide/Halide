@@ -77,6 +77,13 @@ class LiftLoopInvariants : public IRMutator {
                 return false;
             }
         }
+        if (const Add *add = e.as<Add>()) {
+            if (add->type == Int(32) &&
+                is_const(add->b)) {
+                // Don't lift constant integer offsets. They're often free.
+                return false;
+            }
+        }
         return true;
     }
 
@@ -214,6 +221,9 @@ class LICM : public IRMutator {
 
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
+            return IRMutator::visit(op);
+        } else if (op->device_api == DeviceAPI::GLSL) {
+            // GLSL uses magic names for varying things. Just skip LICM.
             return IRMutator::visit(op);
         } else {
 

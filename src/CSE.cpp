@@ -172,7 +172,7 @@ public:
         if (iter != gvn.output_numbering.end()) {
             gvn.entries[iter->second]->use_count++;
         } else {
-            internal_error << "Expr not in shallow numbering!\n";
+            internal_error << "Expr not in shallow numbering: " << e << "\n";
         }
 
         // Visit the children if we haven't been here before.
