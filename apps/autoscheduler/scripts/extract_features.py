@@ -258,11 +258,16 @@ class FeatureParser:
     for stage in processed_features:
       transactions_used = processed_features[stage]["num_global_mem_load_transactions_used"]
       transactions = processed_features[stage]["num_global_mem_load_transactions"]
-      processed_features[stage]["global_mem_load_efficiency"] = transactions_used / transactions
+
+      processed_features[stage]["global_mem_load_efficiency"] = 1
+      if transactions > 0:
+        processed_features[stage]["global_mem_load_efficiency"] = transactions_used / transactions
 
       transactions_used = processed_features[stage]["num_global_mem_store_transactions_used"]
       transactions = processed_features[stage]["num_global_mem_store_transactions"]
-      processed_features[stage]["global_mem_store_efficiency"] = transactions_used / transactions
+      processed_features[stage]["global_mem_store_efficiency"] = 1
+      if transactions > 0:
+        processed_features[stage]["global_mem_store_efficiency"] = transactions_used / transactions
 
       processed_features[stage].pop("num_global_mem_load_transactions_used")
       processed_features[stage].pop("num_global_mem_store_transactions_used")
