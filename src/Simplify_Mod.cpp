@@ -87,7 +87,7 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
                rewrite((y - x * c0) % c1, y % c1, c0 % c1 == 0) ||
                rewrite((x - y) % 2, (x + y) % 2) || // Addition and subtraction are the same modulo 2, because -1 == 1
 
-               rewrite(ramp(x, c0) % broadcast(c1), broadcast(x) % c1, is_same_type(x, c1) && (c0 % c1 == 0)) ||
+               rewrite(ramp(x, c0) % broadcast(c1), broadcast(x) % broadcast(c1), is_same_type(x, c1) && (c0 % c1 == 0)) ||
                rewrite(ramp(x, c0) % broadcast(c1), ramp(x % c1, c0),
                        // First and last lanes are the same when...
                        is_scalar(x) && is_same_type(x, c1) &&
