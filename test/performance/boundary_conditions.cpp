@@ -44,15 +44,15 @@ struct Test {
         g.compile_jit();
 
         Buffer<float> out = make_replicated_buffer(W, H);
-        time = benchmark([&]() {
+        time = benchmark(3, 3, [&]() {
             g.realize(out);
             out.device_sync();
         });
 
         g.compile_to_lowered_stmt("/dev/stdout", {input}, Text,
-                                  Target{"host-no_asserts-no_runtime-no_bounds_query"});
+                                  Target{"host-disable_llvm_loop_opt-no_asserts-no_runtime-no_bounds_query"});
         g.compile_to_assembly("/dev/stdout", {input},
-                              Target{"host-no_asserts-no_runtime-no_bounds_query"});
+                              Target{"host-disable_llvm_loop_opt-no_asserts-no_runtime-no_bounds_query"});
 
         printf("%-20s: %f us\n", name, time * 1e6);
     }
@@ -75,22 +75,22 @@ struct Test {
         g.compile_jit();
 
         Buffer<float> out = make_replicated_buffer(W, H);
-        time = benchmark([&]() {
+        time = benchmark(3, 3, [&]() {
             g.realize(out);
             out.device_sync();
         });
 
         g.compile_to_lowered_stmt("/dev/stdout", {input, blur_radius}, Text,
-                                  Target{"host-no_asserts-no_runtime-no_bounds_query"});
+                                  Target{"host-disable_llvm_loop_opt-no_asserts-no_runtime-no_bounds_query"});
         g.compile_to_assembly("/dev/stdout", {input, blur_radius},
-                              Target{"host-no_asserts-no_runtime-no_bounds_query"});
+                              Target{"host-disable_llvm_loop_opt-no_asserts-no_runtime-no_bounds_query"});
 
         printf("%-20s: %f us\n", name, time * 1e6);
     }
 };
 
 int main(int argc, char **argv) {
-    target = get_jit_target_from_environment();
+    target = get_jit_target_from_environment().with_feature(Target::DisableLLVMLoopOpt);
 
     ImageParam input(Float(32), 2);
     ImageParam padded_input(Float(32), 2);

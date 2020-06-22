@@ -543,11 +543,12 @@ void Pipeline::compile_jit(const Target &target_arg) {
             }
         }
         if (contents->jit_module.compiled()) {
-            debug(2) << "Reusing old jit module compiled for :\n"
+            debug(0) << "Reusing old jit module compiled for :\n"
                      << contents->jit_target << "\n";
             return;
         }
     }
+    debug(0) << "Compiling new jit module\n";
 
     // Clear all cached info in case there is an error.
     contents->invalidate_cache();
