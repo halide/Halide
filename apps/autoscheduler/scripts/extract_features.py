@@ -158,7 +158,7 @@ class FeatureParser:
     ]
 
     for op in options:
-      if access_type.endswith(op.value):
+      if access_type.endswith("mem_" + op.value):
         return op
 
     assert(False)
