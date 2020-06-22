@@ -144,6 +144,7 @@ tests(GROUPS correctness
       gpu_param_allocation.cpp
       gpu_reuse_shared_memory.cpp
       gpu_specialize.cpp
+      gpu_store_in_register_with_no_lanes_loop.cpp
       gpu_sum_scan.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
@@ -191,6 +192,7 @@ tests(GROUPS correctness
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
       lots_of_dimensions.cpp
+      lots_of_loop_invariants.cpp
       make_struct.cpp
       many_dimensions.cpp
       many_small_extern_stages.cpp
