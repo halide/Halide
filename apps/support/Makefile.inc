@@ -4,11 +4,15 @@ MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
 
 HALIDE_DISTRIB_PATH ?= $(realpath ../../distrib)
+$(echo $HALIDE_DISTRIB_PATH)
+ifeq (,$(HALIDE_DISTRIB_PATH))
+$(error Could not find a Halide distribution. Before building an app, run "make distrib" at the root level, or set HALIDE_DISTRIB_PATH to the root of an existing Halide distribution)
+endif
+
 LDFLAGS ?=
 IMAGES ?= ../images
 UNAME ?= $(shell uname)
 SHELL = bash
-
 PYTHON ?= python3
 
 # TODO(srj): the python bindings need to be put into the distrib folders;
