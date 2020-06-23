@@ -1141,41 +1141,6 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
     }
 }
 
-int LoopNest::word_stride(const FunctionDAG::Node *node) const {
-    double bytes = node->bytes_per_point;
-    return std::max(1.0, bytes / 4);
-}
-
-int LoopNest::num_words_per_access(const FunctionDAG::Node *node) const {
-    double bytes = node->bytes_per_point;
-    return std::max(1.0, bytes / 4);
-}
-
-double LoopNest::min_global_mem_accesses(const FunctionDAG::Node *node, const ThreadInfo &thread_info, double serial_loop_extents, double stride) const {
-    if (stride == 0) {
-        // Only need a single access (optimistically assume that it remains
-        // cached across warps)
-        return 1;
-    }
-
-    double bytes = node->bytes_per_point;
-
-    // Each word is 4 bytes so adjust the stride based
-    // on width of data being accessed
-    double word_stride = (bytes / 4);
-    int words_per_access = std::max(1.0, word_stride);
-    stride *= words_per_access;
-
-    // If the stride is larger than 8 words (32 bytes), it is guaranteed to
-    // traverse at least one segment each iteration. Any stride larger than
-    // 2 segments will just traverse empty segments so we reduce it here to
-    // avoid potential overflow below
-    stride = std::min(8.0, std::max(1.0, stride));
-
-    int num_accesses = serial_loop_extents * std::ceil(stride * thread_info.num_threads / 8.0);
-    return num_accesses;
-}
-
 template <typename T>
 void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfo<T> &mem_info, const LoopNest &root, bool verbose) const {
     StorageStrides strides = storage_strides(jac, innermost_dim, node, store_bounds, root, thread_info, verbose);

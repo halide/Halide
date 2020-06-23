@@ -298,12 +298,6 @@ struct LoopNest {
 
     int vectorized_access_size(bool verbose=false) const;
 
-    int word_stride(const FunctionDAG::Node* node) const;
-
-    int num_words_per_access(const FunctionDAG::Node* node) const;
-
-    double min_global_mem_accesses(const FunctionDAG::Node* node, const ThreadInfo& thread_info, double serial_loop_extents, double stride) const;
-
     template <typename T>
     void compute_num_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfo<T> &mem_info, const LoopNest &root, bool verbose=false) const;
 
