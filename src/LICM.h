@@ -14,7 +14,12 @@ namespace Internal {
  * important in cases where LLVM would not do it for us
  * automatically. For example, it hoists loop invariants out of cuda
  * kernels. */
-Stmt loop_invariant_code_motion(Stmt);
+Stmt hoist_loop_invariant_values(Stmt);
+
+/** Just hoist loop-invariant if statements as far up as
+ * possible. Does not lift other values. It's useful to run this
+ * earlier in lowering to simplify the IR. */
+Stmt hoist_loop_invariant_if_statements(Stmt);
 
 }  // namespace Internal
 }  // namespace Halide

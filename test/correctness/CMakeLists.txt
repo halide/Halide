@@ -157,6 +157,7 @@ tests(GROUPS correctness
       hexagon_scatter.cpp
       histogram.cpp
       histogram_equalize.cpp
+      hoist_loop_invariant_if_statements.cpp
       host_alignment.cpp
       image_io.cpp
       image_of_lists.cpp
