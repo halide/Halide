@@ -18,24 +18,31 @@ namespace Internal {
 namespace Autoscheduler {
 
 struct GlobalMem;
+struct GlobalAccessAccumulator;
 struct SharedMem;
+struct SharedAccessAccumulator;
 
 template <typename T>
-struct BytesPerTransaction;
+struct MemTraits;
 
 template <>
-struct BytesPerTransaction<GlobalMem> {
-    static constexpr double value = 32;
+struct MemTraits<GlobalMem> {
+    static constexpr double bytes_per_transaction = 32;
+    using Accumulator = GlobalAccessAccumulator;
 };
 
 template <>
-struct BytesPerTransaction<SharedMem> {
-    static constexpr double value = 128;
+struct MemTraits<SharedMem> {
+    static constexpr double bytes_per_transaction = 128;
+    using Accumulator = SharedAccessAccumulator;
 };
+
+template <typename T>
+using Accumulator = typename MemTraits<T>::Accumulator;
 
 template <typename T>
 struct MemInfo {
-    static constexpr double bytes_per_transaction = BytesPerTransaction<T>::value;
+    static constexpr double bytes_per_transaction = MemTraits<T>::bytes_per_transaction;
 
     double num_transactions() const {
         return total_num_transactions;

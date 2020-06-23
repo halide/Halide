@@ -1017,7 +1017,7 @@ bool LoopNest::all_strides_exist(const LoadJacobian &jac, const FunctionDAG::Nod
 SharedMemInfo LoopNest::compute_shared_mem_stores(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root, bool verbose) const {
     SharedMemInfo shared_mem_info;
 
-    compute_num_shared_mem_accesses_per_block(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, shared_mem_info, root, verbose);
+    compute_num_mem_accesses_per_block<SharedMem>(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, shared_mem_info, root, verbose);
     return shared_mem_info;
 }
 
@@ -1176,7 +1176,8 @@ double LoopNest::min_global_mem_accesses(const FunctionDAG::Node *node, const Th
     return num_accesses;
 }
 
-void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double points_accessed_per_thread, GlobalMemInfo &global_mem_info, const LoopNest &root, bool verbose) const {
+template <typename T>
+void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfo<T> &mem_info, const LoopNest &root, bool verbose) const {
     StorageStrides strides = storage_strides(jac, innermost_dim, node, store_bounds, root, thread_info, verbose);
 
     size_t dimensions = thread_info.loop_indices.size();
@@ -1192,18 +1193,18 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
     int bytes_per_access = node->bytes_per_point;
 
     {
-        int num_requests = thread_info.num_regular_active_warps_per_block * points_accessed_per_thread;
-        GlobalAccessAccumulator accumulator(bytes_per_access, dimensions, strides, verbose);
+        int num_requests = thread_info.num_regular_active_warps_per_block * num_requests_per_warp;
+        Accumulator<T> accumulator(bytes_per_access, dimensions, strides, verbose);
         thread_info.for_each_thread_id_in_first_warp(accumulator);
 
         accumulator.add_access_info(
             num_requests,
-            global_mem_info,
+            mem_info,
             false
         );
 
         if (verbose) {
-            aslog(0) << "num_requests_per_warp = " << points_accessed_per_thread << "\n";
+            aslog(0) << "num_num_requests_per_warp = " << num_requests_per_warp << "\n";
             aslog(0) << "num_regular_warps = " << thread_info.num_regular_active_warps_per_block << "\n";
         }
     }
@@ -1217,14 +1218,12 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
         aslog(0) << "# threads in tail warp: " << thread_info.num_threads_in_final_warp << "\n";
     }
 
-    int num_requests = points_accessed_per_thread;
-
-    GlobalAccessAccumulator accumulator(bytes_per_access, dimensions, strides, verbose);
+    Accumulator<T> accumulator(bytes_per_access, dimensions, strides, verbose);
     thread_info.for_each_thread_id_in_tail_warp(accumulator);
 
     accumulator.add_access_info(
-        num_requests,
-        global_mem_info,
+        num_requests_per_warp,
+        mem_info,
         true
     );
 
@@ -1233,61 +1232,11 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
     }
 }
 
-void LoopNest::compute_num_shared_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double points_accessed_per_thread, SharedMemInfo &shared_mem_info, const LoopNest &root, bool verbose) const {
-    StorageStrides strides = storage_strides(jac, innermost_dim, node, store_bounds, root, thread_info, verbose);
+template
+void LoopNest::compute_num_mem_accesses_per_block<GlobalMem>(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfo<GlobalMem> &mem_info, const LoopNest &root, bool verbose) const;
 
-    size_t dimensions = thread_info.loop_indices.size();
-    if (verbose) {
-        for (size_t i = 0; i < dimensions; ++i) {
-            if (!strides.valid(i)) {
-                aslog(0) << "stride " << i << ": invalid\n";
-            }
-            aslog(0) << "stride " << i << ": " << strides[i] << "\n";
-        }
-    }
-
-    int bytes_per_access = node->bytes_per_point;
-
-    {
-        int num_requests = thread_info.num_regular_active_warps_per_block * points_accessed_per_thread;
-        SharedAccessAccumulator accumulator(bytes_per_access, dimensions, strides, verbose);
-        thread_info.for_each_thread_id_in_first_warp(accumulator);
-
-        accumulator.add_access_info(
-            num_requests,
-            shared_mem_info,
-            false
-        );
-
-        if (verbose) {
-            aslog(0) << "num_regular_warps = " << thread_info.num_regular_active_warps_per_block << "\n";
-        }
-    }
-
-    if (!thread_info.has_tail_warp) {
-        return;
-    }
-
-    if (verbose) {
-        aslog(0) << "\nBEGIN tail warp\n";
-        aslog(0) << "# threads in tail warp: " << thread_info.num_threads_in_final_warp << "\n";
-    }
-
-    int num_requests = points_accessed_per_thread;
-
-    SharedAccessAccumulator accumulator(bytes_per_access, dimensions, strides, verbose);
-    thread_info.for_each_thread_id_in_tail_warp(accumulator);
-
-    accumulator.add_access_info(
-        num_requests,
-        shared_mem_info,
-        true
-    );
-
-    if (verbose) {
-        aslog(0) << "END tail warp\n\n";
-    }
-}
+template
+void LoopNest::compute_num_mem_accesses_per_block<SharedMem>(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfo<SharedMem> &mem_info, const LoopNest &root, bool verbose) const;
 
 std::pair<double, double> LoopNest::compute_local_mem_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const LoopNest &root, double serial_loop_extents) const {
     // Assume worst case serialized loads if the stride is unknown
@@ -1306,13 +1255,13 @@ std::pair<double, double> LoopNest::compute_local_mem_store_features(const LoadJ
 GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root, bool verbose) const {
     GlobalMemInfo global_mem_info;
 
-    compute_num_global_mem_accesses_per_block(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, global_mem_info, root, verbose);
+    compute_num_mem_accesses_per_block<GlobalMem>(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, global_mem_info, root, verbose);
     return global_mem_info;
 }
 
 void LoopNest::compute_global_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, GlobalMemInfo &global_mem_info, double points_accessed_per_thread, const LoopNest &root, bool verbose) const {
     if (producer_has_been_scheduled) {
-        compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, points_accessed_per_thread, global_mem_info, root, verbose);
+        compute_num_mem_accesses_per_block<GlobalMem>(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, points_accessed_per_thread, global_mem_info, root, verbose);
 
         return;
     }
@@ -1324,7 +1273,7 @@ void LoopNest::compute_global_mem_load_features(const LoadJacobian &jac, int pro
 
     for (int i = 0; i < node->dimensions; i++) {
         GlobalMemInfo info;
-        compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, i, points_accessed_per_thread, info, root, verbose);
+        compute_num_mem_accesses_per_block<GlobalMem>(jac, node, producer_store_bounds, thread_info, i, points_accessed_per_thread, info, root, verbose);
         if (i == 0 || info.num_transactions() < min_required_accesses) {
             min_info = info;
             min_required_accesses = info.num_transactions();
@@ -1336,7 +1285,7 @@ void LoopNest::compute_global_mem_load_features(const LoadJacobian &jac, int pro
 
 void LoopNest::compute_shared_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, SharedMemInfo &shared_mem_info, double points_accessed_per_thread, const LoopNest &root, bool verbose) const {
     if (producer_has_been_scheduled) {
-        compute_num_shared_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, points_accessed_per_thread, shared_mem_info, root, verbose);
+        compute_num_mem_accesses_per_block<SharedMem>(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, points_accessed_per_thread, shared_mem_info, root, verbose);
 
         return;
     }
@@ -1348,7 +1297,7 @@ void LoopNest::compute_shared_mem_load_features(const LoadJacobian &jac, int pro
 
     for (int i = 0; i < node->dimensions; i++) {
         SharedMemInfo info;
-        compute_num_shared_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, i, points_accessed_per_thread, info, root, verbose);
+        compute_num_mem_accesses_per_block<SharedMem>(jac, node, producer_store_bounds, thread_info, i, points_accessed_per_thread, info, root, verbose);
         if (i == 0 || info.num_transactions() < min_required_accesses) {
             min_info = info;
             min_required_accesses = info.num_transactions();

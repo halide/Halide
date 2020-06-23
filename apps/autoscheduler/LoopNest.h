@@ -304,7 +304,8 @@ struct LoopNest {
 
     double min_global_mem_accesses(const FunctionDAG::Node* node, const ThreadInfo& thread_info, double serial_loop_extents, double stride) const;
 
-    void compute_num_global_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double points_accessed_per_thread, GlobalMemInfo &global_mem_info, const LoopNest &root, bool verbose=false) const;
+    template <typename T>
+    void compute_num_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfo<T> &mem_info, const LoopNest &root, bool verbose=false) const;
 
     void compute_num_shared_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double points_accessed_per_thread, SharedMemInfo &shared_mem_info, const LoopNest &root, bool verbose) const;
 
