@@ -1014,13 +1014,6 @@ bool LoopNest::all_strides_exist(const LoadJacobian &jac, const FunctionDAG::Nod
     return true;
 }
 
-SharedMemInfo LoopNest::compute_shared_mem_stores(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root, bool verbose) const {
-    SharedMemInfo shared_mem_info;
-
-    compute_num_mem_accesses_per_block<SharedMem>(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, shared_mem_info, root, verbose);
-    return shared_mem_info;
-}
-
 void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root, GlobalMemInfo& global_mem_loads, SharedMemInfo& shared_mem_loads, bool verbose) const {
     const ThreadInfo &thread_info = *gpu_loop_info.thread_info;
     bool is_shared_mem = consumer_site.gpu_store_memory_type == GPUMemoryType::shared;
@@ -1066,7 +1059,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             aslog(0) << "vector_size = " << vector_size << "\n";
         }
         auto store_jac = jac * inner_serial_loop_extents;
-        auto shared_mem_info = compute_shared_mem_stores(
+        auto shared_mem_info = compute_mem_store_info<SharedMem>(
             store_jac,
             consumer_innermost_dim,
             node,
@@ -1090,7 +1083,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             aslog(0) << "vector_size = " << vector_size << "\n";
         }
         auto store_jac = jac * inner_serial_loop_extents;
-        auto global_mem_info = compute_global_mem_store_features(
+        auto global_mem_info = compute_mem_store_info<GlobalMem>(
             store_jac,
             consumer_innermost_dim,
             node,
@@ -1217,12 +1210,19 @@ std::pair<double, double> LoopNest::compute_local_mem_store_features(const LoadJ
     return {accesses, 1.0 / stride};
 }
 
-GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root, bool verbose) const {
-    GlobalMemInfo global_mem_info;
+template <typename T>
+MemInfo<T> LoopNest::compute_mem_store_info(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root, bool verbose) const {
+    MemInfo<T> mem_info;
 
-    compute_num_mem_accesses_per_block<GlobalMem>(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, global_mem_info, root, verbose);
-    return global_mem_info;
+    compute_num_mem_accesses_per_block<T>(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, mem_info, root, verbose);
+    return mem_info;
 }
+
+template
+MemInfo<GlobalMem> LoopNest::compute_mem_store_info<GlobalMem>(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root, bool verbose) const;
+
+template
+MemInfo<SharedMem> LoopNest::compute_mem_store_info<SharedMem>(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root, bool verbose) const;
 
 template <typename T>
 void LoopNest::compute_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfo<T> &mem_info, double points_accessed_per_thread, const LoopNest &root, bool verbose) const {
