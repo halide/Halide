@@ -491,7 +491,7 @@ void ComputeModulusRemainder::visit(const Let *op) {
 
 void ComputeModulusRemainder::visit(const Shuffle *op) {
     // It's possible that scalar expressions are extracting a lane of
-    // a vector - don't faiql in this case, but stop
+    // a vector - don't fail in this case, but stop
     internal_assert(op->indices.size() == 1) << "modulus_remainder of vector\n";
     result = ModulusRemainder{};
 }

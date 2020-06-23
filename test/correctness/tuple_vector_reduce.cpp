@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
             return -1;
         }
 
-        if (!checker.atomics) {
+        if (!checker.vector_reduces) {
             printf("Expected VectorReduce nodes\n");
             return -1;
         }

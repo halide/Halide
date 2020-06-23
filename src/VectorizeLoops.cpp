@@ -183,6 +183,9 @@ Interval bounds_of_lanes(const Expr &e) {
 };
 
 // A ramp with the lanes repeated (e.g. <0 0 2 2 4 4 6 6>)
+// TODO(vksnk): With nested vectorization, this will be representable
+// as a ramp(broadcast(a, repetitions), broadcast(b, repetitions,
+// lanes)
 struct InterleavedRamp {
     Expr base, stride;
     int lanes, repetitions;

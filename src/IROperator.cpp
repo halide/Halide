@@ -464,23 +464,30 @@ Expr lossless_cast(Type t, Expr e) {
             }
         }
 
-        if (const VectorReduce *red = e.as<VectorReduce>()) {
-            const int factor = red->value.type().lanes() / red->type.lanes();
-            switch (red->op) {
+        if (const VectorReduce *reduce = e.as<VectorReduce>()) {
+            const int factor = reduce->value.type().lanes() / reduce->type.lanes();
+            switch (reduce->op) {
             case VectorReduce::Add:
-                if (t.bits() >= 16 && factor < (1 << (t.bits() / 2))) {
-                    Type narrower = red->value.type().with_bits(t.bits() / 2);
-                    Expr val = lossless_cast(narrower, red->value);
+                // A horizontal add requires one extra bit per factor
+                // of two in the reduction factor. E.g. a reduction of
+                // 8 vector lanes down to 2 requires 2 extra bits in
+                // the output. We only deal with power-of-two types
+                // though, so just make sure the reduction factor
+                // isn't so large that it will more than double the
+                // number of bits required.
+                if (factor < (1 << (t.bits() / 2))) {
+                    Type narrower = reduce->value.type().with_bits(t.bits() / 2);
+                    Expr val = lossless_cast(narrower, reduce->value);
                     if (val.defined()) {
-                        return VectorReduce::make(red->op, val, red->type.lanes());
+                        return VectorReduce::make(reduce->op, val, reduce->type.lanes());
                     }
                 }
                 break;
             case VectorReduce::Max:
             case VectorReduce::Min: {
-                Expr val = lossless_cast(t, red->value);
+                Expr val = lossless_cast(t, reduce->value);
                 if (val.defined()) {
-                    return VectorReduce::make(red->op, val, red->type.lanes());
+                    return VectorReduce::make(reduce->op, val, reduce->type.lanes());
                 }
                 break;
             }

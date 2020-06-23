@@ -37,6 +37,8 @@ int main(int argc, char **argv) {
                         Expr rhs2 = cast(dst_type, in(x * reduce_factor + r + 32));
 
                         if (op == 4 || op == 5) {
+                            // Test cases 4 and 5 in the switch
+                            // statement below require a Bool rhs.
                             rhs = rhs > cast(rhs.type(), 5);
                         }
 
