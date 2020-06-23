@@ -288,8 +288,6 @@ struct LoopNest {
 
     SharedMemInfo compute_shared_mem_stores(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root, bool verbose) const;
 
-    void compute_shared_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, SharedMemInfo &shared_mem_info, double points_accessed_per_thread, const LoopNest &root, bool verbose) const;
-
     void compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root, GlobalMemInfo& global_mem_loads, SharedMemInfo& shared_mem_loads, bool verbose=false) const;
 
     bool can_vectorize_access_for_innermost_dim(const LoadJacobian &jac, const FunctionDAG::Node *accessed, int innermost_dim) const;
@@ -301,13 +299,12 @@ struct LoopNest {
     template <typename T>
     void compute_num_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfo<T> &mem_info, const LoopNest &root, bool verbose=false) const;
 
-    void compute_num_shared_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double points_accessed_per_thread, SharedMemInfo &shared_mem_info, const LoopNest &root, bool verbose) const;
-
     std::pair<double, double> compute_local_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const LoopNest& root, double serial_loop_extents) const;
 
     GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root, bool verbose=false) const;
 
-    void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem_info, double serial_loop_extents, const LoopNest& root, bool verbose=false) const;
+    template <typename T>
+    void compute_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, MemInfo<T>& mem_info, double serial_loop_extents, const LoopNest& root, bool verbose=false) const;
 
     double compute_local_mem_stride(double stride, double bytes) const;
 

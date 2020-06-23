@@ -1224,9 +1224,10 @@ GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian& ja
     return global_mem_info;
 }
 
-void LoopNest::compute_global_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, GlobalMemInfo &global_mem_info, double points_accessed_per_thread, const LoopNest &root, bool verbose) const {
+template <typename T>
+void LoopNest::compute_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfo<T> &mem_info, double points_accessed_per_thread, const LoopNest &root, bool verbose) const {
     if (producer_has_been_scheduled) {
-        compute_num_mem_accesses_per_block<GlobalMem>(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, points_accessed_per_thread, global_mem_info, root, verbose);
+        compute_num_mem_accesses_per_block<T>(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, points_accessed_per_thread, mem_info, root, verbose);
 
         return;
     }
@@ -1234,43 +1235,25 @@ void LoopNest::compute_global_mem_load_features(const LoadJacobian &jac, int pro
     // Assume best case if producer has not been scheduled: try all the
     // possible innermost dimensions and take the best
     int min_required_accesses = 0;
-    GlobalMemInfo min_info;
+    MemInfo<T> min_info;
 
     for (int i = 0; i < node->dimensions; i++) {
-        GlobalMemInfo info;
-        compute_num_mem_accesses_per_block<GlobalMem>(jac, node, producer_store_bounds, thread_info, i, points_accessed_per_thread, info, root, verbose);
+        MemInfo<T> info;
+        compute_num_mem_accesses_per_block<T>(jac, node, producer_store_bounds, thread_info, i, points_accessed_per_thread, info, root, verbose);
         if (i == 0 || info.num_transactions() < min_required_accesses) {
             min_info = info;
             min_required_accesses = info.num_transactions();
         }
     }
 
-    global_mem_info.add(min_info);
+    mem_info.add(min_info);
 }
 
-void LoopNest::compute_shared_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, SharedMemInfo &shared_mem_info, double points_accessed_per_thread, const LoopNest &root, bool verbose) const {
-    if (producer_has_been_scheduled) {
-        compute_num_mem_accesses_per_block<SharedMem>(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, points_accessed_per_thread, shared_mem_info, root, verbose);
+template
+void LoopNest::compute_mem_load_features<GlobalMem>(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfo<GlobalMem> &mem_info, double points_accessed_per_thread, const LoopNest &root, bool verbose) const;
 
-        return;
-    }
-
-    // Assume best case if producer has not been scheduled: try all the
-    // possible innermost dimensions and take the best
-    int min_required_accesses = 0;
-    SharedMemInfo min_info;
-
-    for (int i = 0; i < node->dimensions; i++) {
-        SharedMemInfo info;
-        compute_num_mem_accesses_per_block<SharedMem>(jac, node, producer_store_bounds, thread_info, i, points_accessed_per_thread, info, root, verbose);
-        if (i == 0 || info.num_transactions() < min_required_accesses) {
-            min_info = info;
-            min_required_accesses = info.num_transactions();
-        }
-    }
-
-    shared_mem_info.add(min_info);
-}
+template
+void LoopNest::compute_mem_load_features<SharedMem>(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfo<SharedMem> &mem_info, double points_accessed_per_thread, const LoopNest &root, bool verbose) const;
 
 double LoopNest::compute_local_mem_stride(double stride, double bytes) const {
     // Each word is 4 bytes so adjust the stride based
@@ -2575,7 +2558,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                                 double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, e->producer, jac.first, parent, grandparent, n, feat, verbose);
 
-                                compute_shared_mem_load_features(
+                                compute_mem_load_features<SharedMem>(
                                     jac.first,
                                     producer_innermost_dim,
                                     e->producer,
@@ -2608,7 +2591,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                                 double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, e->producer, jac.first, parent, grandparent, n, feat, verbose);
 
-                                compute_global_mem_load_features(
+                                compute_mem_load_features<GlobalMem>(
                                     jac.first,
                                     producer_innermost_dim,
                                     e->producer,
