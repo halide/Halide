@@ -1171,6 +1171,9 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "float nan_f32()     { return  1.#IND; } \n"  // Quiet NaN with minimum fractional value.
         << "float neg_inf_f32() { return -1.#INF; } \n"
         << "float inf_f32()     { return +1.#INF; } \n"
+        << "#define is_inf_f32     isinf    \n"
+        << "#define is_finite_f32  isfinite \n"
+        << "#define is_nan_f32     isnan    \n"
         << "#define float_from_bits asfloat \n"
         << "#define sqrt_f32    sqrt   \n"
         << "#define sin_f32     sin    \n"
