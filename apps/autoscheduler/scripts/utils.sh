@@ -390,11 +390,6 @@ function format_metrics() {
         bash "${dir}/metrics_command.txt"
     fi
 
-    if [ -f "${formatted_metrics_file}" ]; then
-        echo "Formatted metrics found in ${formatted_metrics_file}"
-        return
-    fi
-
     if [ ! -s "${metrics_file}" ]; then
         echo "No metrics found in ${metrics_file}"
         return
