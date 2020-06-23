@@ -49,7 +49,7 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
 
 // These need to inline, otherwise the extern call with the ptr
 // parameter breaks a lot of optimizations.
-ALWAYS_INLINE int _halide_prefetch_2d(const void *ptr, int width_bytes, int height, int stride_bytes) {
+WEAK_INLINE int _halide_prefetch_2d(const void *ptr, int width_bytes, int height, int stride_bytes) {
     // Notes:
     //  - Prefetches can be queued up to 3 deep (MAX_PREFETCH)
     //  - If 3 are already pending, the oldest request is dropped
@@ -69,7 +69,7 @@ ALWAYS_INLINE int _halide_prefetch_2d(const void *ptr, int width_bytes, int heig
     return 0;
 }
 
-ALWAYS_INLINE int _halide_prefetch(const void *ptr, int size) {
+WEAK_INLINE int _halide_prefetch(const void *ptr, int size) {
     _halide_prefetch_2d(ptr, size, 1, 1);
     return 0;
 }
@@ -79,11 +79,11 @@ struct hexagon_buffer_t_arg {
     uint8_t *host;
 };
 
-ALWAYS_INLINE uint8_t *_halide_hexagon_buffer_get_host(const hexagon_buffer_t_arg *buf) {
+WEAK_INLINE uint8_t *_halide_hexagon_buffer_get_host(const hexagon_buffer_t_arg *buf) {
     return buf->host;
 }
 
-ALWAYS_INLINE uint64_t _halide_hexagon_buffer_get_device(const hexagon_buffer_t_arg *buf) {
+WEAK_INLINE uint64_t _halide_hexagon_buffer_get_device(const hexagon_buffer_t_arg *buf) {
     return buf->device;
 }
 }
