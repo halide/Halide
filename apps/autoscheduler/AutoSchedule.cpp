@@ -58,7 +58,7 @@
   If set, is used for the debug log level for auto-schedule generation (overriding the
   value of HL_DEBUG_CODEGEN, if any).
 
-  HL_MEMORY_LIMIT
+  HL_AUTOSCHEDULE_MEMORY_LIMIT
   If set, only consider schedules that allocate at most this much memory (measured in bytes).
 
   TODO: expose these settings by adding some means to pass args to
@@ -1244,7 +1244,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
 
-    string memory_limit_str = get_env_variable("HL_MEMORY_LIMIT");
+    string memory_limit_str = get_env_variable("HL_AUTOSCHEDULE_MEMORY_LIMIT");
     int64_t memory_limit = memory_limit_str.empty() ? (uint64_t)(-1) : std::atoll(memory_limit_str.c_str());
 
     // Analyse the Halide algorithm and construct our abstract representation of it
