@@ -99,23 +99,23 @@ struct thread_parker {
     thread_parker(const thread_parker &) = delete;
 #endif
 
-    __attribute__((always_inline)) thread_parker()
+    ALWAYS_INLINE thread_parker()
         : should_park(false) {
         pthread_mutex_init(&mutex, NULL);
         pthread_cond_init(&condvar, NULL);
         should_park = false;
     }
 
-    __attribute__((always_inline)) ~thread_parker() {
+    ALWAYS_INLINE ~thread_parker() {
         pthread_cond_destroy(&condvar);
         pthread_mutex_destroy(&mutex);
     }
 
-    __attribute__((always_inline)) void prepare_park() {
+    ALWAYS_INLINE void prepare_park() {
         should_park = true;
     }
 
-    __attribute__((always_inline)) void park() {
+    ALWAYS_INLINE void park() {
         pthread_mutex_lock(&mutex);
         while (should_park) {
             pthread_cond_wait(&condvar, &mutex);
@@ -123,16 +123,16 @@ struct thread_parker {
         pthread_mutex_unlock(&mutex);
     }
 
-    __attribute__((always_inline)) void unpark_start() {
+    ALWAYS_INLINE void unpark_start() {
         pthread_mutex_lock(&mutex);
     }
 
-    __attribute__((always_inline)) void unpark() {
+    ALWAYS_INLINE void unpark() {
         should_park = false;
         pthread_cond_signal(&condvar);
     }
 
-    __attribute__((always_inline)) void unpark_finish() {
+    ALWAYS_INLINE void unpark_finish() {
         pthread_mutex_unlock(&mutex);
     }
 };

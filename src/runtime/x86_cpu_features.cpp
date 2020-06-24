@@ -7,10 +7,14 @@ namespace Internal {
 
 extern "C" void x86_cpuid_halide(int32_t *);
 
-static __attribute__((always_inline)) void cpuid(int32_t fn_id, int32_t *info) {
+namespace {
+
+ALWAYS_INLINE void cpuid(int32_t fn_id, int32_t *info) {
     info[0] = fn_id;
     x86_cpuid_halide(info);
 }
+
+}  // namespace
 
 WEAK CpuFeatures halide_get_cpu_features() {
     CpuFeatures features;

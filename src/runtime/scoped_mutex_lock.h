@@ -11,12 +11,12 @@ namespace Internal {
 struct ScopedMutexLock {
     halide_mutex *mutex;
 
-    ScopedMutexLock(halide_mutex *mutex) __attribute__((always_inline))
-    : mutex(mutex) {
+    ALWAYS_INLINE ScopedMutexLock(halide_mutex *mutex)
+        : mutex(mutex) {
         halide_mutex_lock(mutex);
     }
 
-    ~ScopedMutexLock() __attribute__((always_inline)) {
+    ALWAYS_INLINE ~ScopedMutexLock() {
         halide_mutex_unlock(mutex);
     }
 };

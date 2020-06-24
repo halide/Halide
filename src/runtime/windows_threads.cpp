@@ -93,23 +93,23 @@ struct thread_parker {
     thread_parker(const thread_parker &) = delete;
 #endif
 
-    __attribute__((always_inline)) thread_parker()
+    ALWAYS_INLINE thread_parker()
         : should_park(false) {
         InitializeCriticalSection(&critical_section);
         InitializeConditionVariable(&condvar);
         should_park = false;
     }
 
-    __attribute__((always_inline)) ~thread_parker() {
+    ALWAYS_INLINE ~thread_parker() {
         // Windows ConditionVariable objects do not need to be deleted. There is no API to do so.
         DeleteCriticalSection(&critical_section);
     }
 
-    __attribute__((always_inline)) void prepare_park() {
+    ALWAYS_INLINE void prepare_park() {
         should_park = true;
     }
 
-    __attribute__((always_inline)) void park() {
+    ALWAYS_INLINE void park() {
         EnterCriticalSection(&critical_section);
         while (should_park) {
             SleepConditionVariableCS(&condvar, &critical_section, -1);
@@ -117,16 +117,16 @@ struct thread_parker {
         LeaveCriticalSection(&critical_section);
     }
 
-    __attribute__((always_inline)) void unpark_start() {
+    ALWAYS_INLINE void unpark_start() {
         EnterCriticalSection(&critical_section);
     }
 
-    __attribute__((always_inline)) void unpark() {
+    ALWAYS_INLINE void unpark() {
         should_park = false;
         WakeConditionVariable(&condvar);
     }
 
-    __attribute__((always_inline)) void unpark_finish() {
+    ALWAYS_INLINE void unpark_finish() {
         LeaveCriticalSection(&critical_section);
     }
 };

@@ -90,10 +90,10 @@ WEAK const char *gl_error_name(int32_t err) {
 }
 
 struct HalideMalloc {
-    __attribute__((always_inline)) HalideMalloc(void *user_context, size_t size)
+    ALWAYS_INLINE HalideMalloc(void *user_context, size_t size)
         : user_context(user_context), ptr(halide_malloc(user_context, size)) {
     }
-    __attribute__((always_inline)) ~HalideMalloc() {
+    ALWAYS_INLINE ~HalideMalloc() {
         halide_free(user_context, ptr);
     }
     void *const user_context;
@@ -373,7 +373,7 @@ WEAK int halide_openglcompute_device_free(void *user_context, halide_buffer_t *b
 namespace {
 
 template<typename Source, typename Dest>
-__attribute__((always_inline)) void converting_copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
+ALWAYS_INLINE void converting_copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
     // Skip size-1 dimensions
     while (d >= 0 && copy.extent[d] == 1)
         d--;
