@@ -6,7 +6,7 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-WEAK __attribute__((always_inline)) void halide_abort() {
+WEAK_INLINE void halide_abort() {
     abort();
 }
 
