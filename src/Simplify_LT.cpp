@@ -98,6 +98,18 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(x + y < x, y < 0) ||
               rewrite(y + x < x, y < 0) ||
 
+              // 1 < 3
+              rewrite(x < (x + y) + z, 0 < y + z) ||
+              rewrite(x < (y + x) + z, 0 < y + z) ||
+              rewrite(x < z + (x + y), 0 < z + y) ||
+              rewrite(x < z + (y + x), 0 < z + y) ||
+
+              // 3 < 1
+              rewrite((x + y) + z < x, y + z < 0) ||
+              rewrite((y + x) + z < x, y + z < 0) ||
+              rewrite(z + (x + y) < x, z + y < 0) ||
+              rewrite(z + (y + x) < x, z + y < 0) ||
+
               // 2 < 2
               rewrite(x + y < x + z, y < z) ||
               rewrite(x + y < z + x, y < z) ||
