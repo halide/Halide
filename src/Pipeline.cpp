@@ -1020,7 +1020,7 @@ Pipeline::make_externs_jit_module(const Target &target,
                 arg_types.push_back(type_of<struct halide_buffer_t *>());
             }
             ExternSignature signature(Int(32), false, arg_types);
-            iter->second = ExternCFunction(address, signature);
+            iter->second = JITExtern(ExternCFunction(address, signature));
         } else {
             free_standing_jit_externs.add_extern_for_export(iter->first, iter->second.extern_c_function());
         }

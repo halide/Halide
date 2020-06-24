@@ -1,6 +1,6 @@
 #ifdef COMPILING_HALIDE_RUNTIME
 #include "HalideRuntime.h"
-#define HALIDE_BUFFER_HELPER_ATTRS __attribute__((always_inline, weak))
+#define HALIDE_BUFFER_HELPER_ATTRS WEAK_INLINE
 #else
 #define HALIDE_BUFFER_HELPER_ATTRS inline
 #endif

@@ -376,10 +376,10 @@ public:
     mtl_command_queue *queue;
     int error;
 
-    __attribute__((always_inline)) MetalContextHolder(void *user_context, bool create) {
+    ALWAYS_INLINE MetalContextHolder(void *user_context, bool create) {
         save(user_context, create);
     }
-    __attribute__((always_inline)) ~MetalContextHolder() {
+    ALWAYS_INLINE ~MetalContextHolder() {
         restore();
     }
 };

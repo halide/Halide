@@ -36,7 +36,7 @@ class SharedExclusiveSpinLock {
     const static uint32_t shared_mask = 0x3fffffff;
 
 public:
-    __attribute__((always_inline)) void acquire_shared() {
+    ALWAYS_INLINE void acquire_shared() {
         while (1) {
             uint32_t x = lock & shared_mask;
             if (__sync_bool_compare_and_swap(&lock, x, x + 1)) {
@@ -45,11 +45,11 @@ public:
         }
     }
 
-    __attribute__((always_inline)) void release_shared() {
+    ALWAYS_INLINE void release_shared() {
         __sync_fetch_and_sub(&lock, 1);
     }
 
-    __attribute__((always_inline)) void acquire_exclusive() {
+    ALWAYS_INLINE void acquire_exclusive() {
         while (1) {
             // If multiple threads are trying to acquire exclusive
             // ownership, we may need to rerequest exclusive waiting
@@ -62,11 +62,11 @@ public:
         }
     }
 
-    __attribute__((always_inline)) void release_exclusive() {
+    ALWAYS_INLINE void release_exclusive() {
         __sync_fetch_and_and(&lock, ~exclusive_held_mask);
     }
 
-    __attribute__((always_inline)) void init() {
+    ALWAYS_INLINE void init() {
         lock = 0;
     }
 
@@ -84,7 +84,7 @@ class TraceBuffer {
 
     // Attempt to atomically acquire space in the buffer to write a
     // packet. Returns NULL if the buffer was full.
-    __attribute__((always_inline)) halide_trace_packet_t *try_acquire_packet(void *user_context, uint32_t size) {
+    ALWAYS_INLINE halide_trace_packet_t *try_acquire_packet(void *user_context, uint32_t size) {
         lock.acquire_shared();
         halide_assert(user_context, size <= buffer_size);
         uint32_t my_cursor = __sync_fetch_and_add(&cursor, size);
@@ -104,7 +104,7 @@ class TraceBuffer {
 public:
     // Wait for all writers to finish with their packets, stall any
     // new writers, and flush the buffer to the fd.
-    __attribute__((always_inline)) void flush(void *user_context, int fd) {
+    ALWAYS_INLINE void flush(void *user_context, int fd) {
         lock.acquire_exclusive();
         bool success = true;
         if (cursor) {
@@ -122,7 +122,7 @@ public:
     // if necessary. The region acquired is protected from other
     // threads writing or reading to it, so it must be released before
     // a flush can occur.
-    __attribute__((always_inline)) halide_trace_packet_t *acquire_packet(void *user_context, int fd, uint32_t size) {
+    ALWAYS_INLINE halide_trace_packet_t *acquire_packet(void *user_context, int fd, uint32_t size) {
         halide_trace_packet_t *packet = NULL;
         while (!(packet = try_acquire_packet(user_context, size))) {
             // Couldn't acquire space to write a packet. Flush and try again.
@@ -132,13 +132,13 @@ public:
     }
 
     // Release a packet, allowing it to be written out with flush
-    __attribute__((always_inline)) void release_packet(halide_trace_packet_t *) {
+    ALWAYS_INLINE void release_packet(halide_trace_packet_t *) {
         // Need a memory barrier to guarantee all the writes are done.
         __sync_synchronize();
         lock.release_shared();
     }
 
-    __attribute__((always_inline)) void init() {
+    ALWAYS_INLINE void init() {
         cursor = 0;
         overage = 0;
         lock.init();

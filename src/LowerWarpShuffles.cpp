@@ -786,11 +786,6 @@ class HasLaneLoop : public IRVisitor {
         IRVisitor::visit(op);
     }
 
-    void visit(const Allocate *op) override {
-        result = result || op->memory_type == MemoryType::Register;
-        IRVisitor::visit(op);
-    }
-
 public:
     bool result = false;
 };
@@ -819,7 +814,7 @@ class LowerWarpShufflesInEachKernel : public IRMutator {
 }  // namespace
 
 Stmt lower_warp_shuffles(Stmt s) {
-    s = loop_invariant_code_motion(s);
+    s = hoist_loop_invariant_values(s);
     s = SubstituteInLaneVar().mutate(s);
     s = simplify(s);
     s = LowerWarpShufflesInEachKernel().mutate(s);
