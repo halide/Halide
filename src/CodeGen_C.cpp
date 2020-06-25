@@ -1222,7 +1222,7 @@ public:
     friend Vec operator&(const Vec &a, const Vec &b) {
         return Vec(from_native_vector,
                       a.native_vector[0] & b.native_vector[0],
-                      b.native_vector[1] & b.native_vector[1]);
+                      a.native_vector[1] & b.native_vector[1]);
     }
 
     friend Vec operator>>(const Vec &a, const Vec &b) {
@@ -1601,7 +1601,7 @@ public:
     friend Vec operator&(const Vec &a, const Vec &b) {
         return Vec(from_native_vector,
                       a.native_vector[0] & b.native_vector[0],
-                      b.native_vector[1] & b.native_vector[1]);
+                      a.native_vector[1] & b.native_vector[1]);
     }
 
     template <typename OtherVec>
@@ -1611,16 +1611,27 @@ public:
     }
 
     friend Mask operator<(const Vec &a, const Vec &b) {
-        /*
-        vboolN_2 mask[2];
-        mask[0] = a.native_vector[0] < b.native_vector[0];
-        mask[1] = a.native_vector[1] < b.native_vector[1];
-
-        return *((vboolN*)mask);
-        */
         return IVP_JOINBN_2(
-                    a.native_vector[0] < b.native_vector[0],
-                    a.native_vector[1] < b.native_vector[1]);
+                    IVP_LTN_2X32(a.native_vector[1], b.native_vector[1]),
+                    IVP_LTN_2X32(a.native_vector[0], b.native_vector[0]));
+    }
+
+    friend Mask operator<=(const Vec &a, const Vec &b) {
+        return IVP_JOINBN_2(
+                    IVP_LEN_2X32(a.native_vector[1], b.native_vector[1]),
+                    IVP_LEN_2X32(a.native_vector[0], b.native_vector[0]));
+    }
+
+    friend Mask operator==(const Vec &a, const Vec &b) {
+        return IVP_JOINBN_2(
+                    IVP_EQN_2X32(a.native_vector[1], b.native_vector[1]),
+                    IVP_EQN_2X32(a.native_vector[0], b.native_vector[0]));
+    }
+
+    static Vec select(const Mask &cond, const Vec &true_value, const Vec &false_value) {
+        return Vec(from_native_vector,
+                    IVP_MOVN_2X32T(true_value.native_vector[0], false_value.native_vector[0], IVP_EXTRACTBLN(cond)),
+                    IVP_MOVN_2X32T(true_value.native_vector[1], false_value.native_vector[1], IVP_EXTRACTBHN(cond)));
     }
 
     static Vec max(const Vec &a, const Vec &b) {
@@ -1686,16 +1697,9 @@ class uint32x32_t {
     }
 
     friend Mask operator<(const Vec &a, const Vec &b) {
-        /*
-        vboolN_2 mask[2];
-        mask[0] = a.native_vector[0] < b.native_vector[0];
-        mask[1] = a.native_vector[1] < b.native_vector[1];
-
-        return *((vboolN*)mask);
-        */
         return IVP_JOINBN_2(
-                    a.native_vector[0] < b.native_vector[0],
-                    a.native_vector[1] < b.native_vector[1]);
+                    a.native_vector[1] < b.native_vector[1],
+                    a.native_vector[0] < b.native_vector[0]);
     }
 
     static Vec max(const Vec &a, const Vec &b) {
@@ -1859,6 +1863,23 @@ HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_sat_add_i32(const int32x32_t& a,
   xb_vecN_2x64w l1 = a.native_vector[1] * one;
   IVP_MULAN_2X32(l1, b.native_vector[1], one);
   return int32x32_t(int32x32_t::from_native_vector, IVP_PACKVN_2X64W(l0, zero), IVP_PACKVN_2X64W(l1, zero));
+  //return a + b;
+  /*
+  // determine the lower or upper bound of the result
+  //int64_t ret =  (x < 0) ? INT64_MIN : INT64_MAX;
+  int32x32_t ret = int32x32_t::select(a < int32x32_t::broadcast(0),
+                                      int32x32_t::broadcast(INT32_MIN),
+                                      int32x32_t::broadcast(INT32_MAX));
+  // this is always well defined:
+  // if x < 0 this adds a positive value to INT64_MIN
+  // if x > 0 this subtracts a positive value from INT64_MAX
+  int32x32_t comp = ret - a;
+  // the condition is equivalent to
+  // ((x < 0) && (y > comp)) || ((x >=0) && (y <= comp))
+  //if ((x < 0) == (y > comp)) ret = x + y;
+  ret = int32x32_t::select(IVP_NOTBN(IVP_XORBN(a < int32x32_t::broadcast(0), comp <= b)), a + b, ret);
+  return ret;
+  */
 }
 
 HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_widen_mul_i32(const int16x32_t& a, const int16x32_t& b) {
@@ -2548,12 +2569,18 @@ void CodeGen_C::visit(const Sub *op) {
 }
 
 void CodeGen_C::visit(const Mul *op) {
-    if (op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-      string sa = print_expr(op->a);
-      string sb = print_expr(op->b);
-      print_assignment(op->type, "IVP_MULNX16PACKL(" + sa + ", " + sb + ")");
+    int bits;
+    if (is_const_power_of_two_integer(op->b, &bits)) {
+      visit_binop(op->type, op->a, make_const(op->a.type(), bits), "<<");
+
     } else {
-      visit_binop(op->type, op->a, op->b, "*");
+      if (op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
+        string sa = print_expr(op->a);
+        string sb = print_expr(op->b);
+        print_assignment(op->type, "IVP_MULNX16PACKL(" + sa + ", " + sb + ")");
+      } else {
+        visit_binop(op->type, op->a, op->b, "*");
+      }
     }
 }
 
