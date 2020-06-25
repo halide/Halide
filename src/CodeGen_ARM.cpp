@@ -1244,6 +1244,8 @@ string CodeGen_ARM::mcpu() const {
     } else {
         if (target.os == Target::IOS) {
             return "cyclone";
+        } else if (target.os == Target::OSX) {
+            return "apple-a12";
         } else {
             return "generic";
         }
