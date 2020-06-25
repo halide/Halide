@@ -369,19 +369,19 @@ private:
     }
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::lerp) && op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-          internal_assert(op->args.size() == 3);
-          // debug(0) << "Lerp - " << op->args[0] << " " << op->args[1] << " " << op->args[2] << "\n";
-          // debug(0) << "Lerp types - " << op->args[0].type() << " " << op->args[1].type() << " " << op->args[2].type() << "\n";
-          Expr weight = mutate(op->args[2]);
-          const Broadcast* maybe_bc = weight.as<Broadcast>();
-          if (maybe_bc) {
-            weight = maybe_bc->value;
-          }
-          return Call::make(op->type, "halide_xtensa_lerp_i16",
-                            {mutate(op->args[0]), mutate(op->args[1]), weight},
-                            Call::PureExtern);
-        } else
+        // if (op->is_intrinsic(Call::lerp) && op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
+        //   internal_assert(op->args.size() == 3);
+        //   // debug(0) << "Lerp - " << op->args[0] << " " << op->args[1] << " " << op->args[2] << "\n";
+        //   // debug(0) << "Lerp types - " << op->args[0].type() << " " << op->args[1].type() << " " << op->args[2].type() << "\n";
+        //   Expr weight = mutate(op->args[2]);
+        //   const Broadcast* maybe_bc = weight.as<Broadcast>();
+        //   if (maybe_bc) {
+        //     weight = maybe_bc->value;
+        //   }
+        //   return Call::make(op->type, "halide_xtensa_lerp_i16",
+        //                     {mutate(op->args[0]), mutate(op->args[1]), weight},
+        //                     Call::PureExtern);
+        // } else
         if (op->is_intrinsic(Call::absd) && op->type.is_vector()
                    && op->type.is_uint() && (op->type.bits() == 16)) {
             // debug(0) << "Found absd " << op->type.is_vector() << " " << op->type.is_uint() << " " << (op->type.bits() == 16) << "\n";
