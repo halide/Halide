@@ -358,7 +358,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_args_arr =
             create_alloca_at_entry(
                 gpu_args_arr_type,
-                num_args + 1, false,
+                1, false,
                 kernel_name + "_args");
 
         // nullptr-terminated list of size_t's
@@ -375,7 +375,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             gpu_arg_sizes_arr =
                 create_alloca_at_entry(
                     gpu_arg_sizes_arr_type,
-                    num_args + 1, false,
+                    1, false,
                     kernel_name + "_arg_sizes");
         }
 
@@ -383,7 +383,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_arg_is_buffer_arr =
             create_alloca_at_entry(
                 gpu_arg_is_buffer_arr_type,
-                num_args + 1, false,
+                1, false,
                 kernel_name + "_arg_is_buffer");
 
         for (int i = 0; i < num_args; i++) {
