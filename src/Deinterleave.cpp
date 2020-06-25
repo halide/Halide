@@ -194,6 +194,18 @@ private:
 
     using IRMutator::visit;
 
+    Expr visit(const VectorReduce *op) override {
+        std::vector<int> input_lanes;
+        int factor = op->value.type().lanes() / op->type.lanes();
+        for (int i = starting_lane; i < op->type.lanes(); i += lane_stride) {
+            for (int j = 0; j < factor; j++) {
+                input_lanes.push_back(i * factor + j);
+            }
+        }
+        Expr in = Shuffle::make({op->value}, input_lanes);
+        return VectorReduce::make(op->op, in, new_lanes);
+    }
+
     Expr visit(const Broadcast *op) override {
         if (new_lanes == 1) {
             return op->value;

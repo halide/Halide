@@ -282,6 +282,16 @@ public:
             result = false;
         }
     }
+
+    void visit(const VectorReduce *op) override {
+        const VectorReduce *e = expr.as<VectorReduce>();
+        if (result && e && op->op == e->op && types_match(op->type, e->type)) {
+            expr = e->value;
+            op->value.accept(this);
+        } else {
+            result = false;
+        }
+    }
 };
 
 bool expr_match(const Expr &pattern, const Expr &expr, vector<Expr> &matches) {
@@ -354,7 +364,10 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::StringImm:
         return ((const StringImm &)a).value == ((const StringImm &)b).value;
     case IRNodeType::Cast:
-        return equal_helper(((const Cast &)a).value, ((const Cast &)b).value);
+        // While we know a and b have matching type, we don't know
+        // that the types of the values match, so use equal rather
+        // than equal_helper.
+        return equal(((const Cast &)a).value, ((const Cast &)b).value);
     case IRNodeType::Variable:
         return ((const Variable &)a).name == ((const Variable &)b).name;
     case IRNodeType::Add:
@@ -413,6 +426,15 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::Shuffle:
         return (equal_helper(((const Shuffle &)a).vectors, ((const Shuffle &)b).vectors) &&
                 equal_helper(((const Shuffle &)a).indices, ((const Shuffle &)b).indices));
+    case IRNodeType::VectorReduce:
+        // As with Cast above, we use equal instead of equal_helper
+        // here, because while we know a.type == b.type, we don't know
+        // if the types of the value fields also match. We could be
+        // comparing a reduction of an 8-vector down to a 4 vector to
+        // a reduction of a 16-vector down to a 4-vector.
+        return (((const VectorReduce &)a).op == ((const VectorReduce &)b).op &&
+                equal(((const VectorReduce &)a).value, ((const VectorReduce &)b).value));
+
     // Explicitly list all the Stmts instead of using a default
     // clause so that if new Exprs are added without being handled
     // here we get a compile-time error.
