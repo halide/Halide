@@ -3410,7 +3410,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
         const auto &p = parent_bounds->loops(stage->index, i);
         int64_t min = p.min();
         int64_t extent = p.extent();
-        extent = (extent + outer_extent - 1) / outer_extent;
+        extent = inner->product_of_self_and_descendants(i);
 
         // Pick a better representative loop iteration for the
         // inner loops.
@@ -3647,8 +3647,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                     outer->size[i] = outer_extent;
                     const auto &p = parent_bounds->loops(stage->index, i);
                     int64_t min = p.min();
-                    int64_t original_extent = p.extent();
-                    int64_t inner_extent = (original_extent + outer_extent - 1) / outer_extent;
+                    int64_t inner_extent = inner->product_of_self_and_descendants(i);
                     // Pick a more representative loop iteration
                     min += (outer_extent / 2) * inner_extent;
                     bool compile_time_constant_bounds = p.constant_extent() || stage->loop[i].pure;
@@ -3829,6 +3828,10 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
     }
 
     return result;
+}
+
+int64_t LoopNest::product_of_self_and_descendants(int loop_index) const {
+    return size[loop_index] * product_of_descendants(loop_index);
 }
 
 int64_t LoopNest::product_of_descendants(int loop_index) const {
