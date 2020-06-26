@@ -393,9 +393,10 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule(int beam_size) {
     }
 
     bool use_pre_pass = get_env_variable("HL_FREEZE_INLINE_COMPUTE_ROOT") == "1";
-    int pass_idx = use_pre_pass ? -1 : 0;
+    int pass_idx = 0;
 
     if (use_pre_pass && num_passes > 1) {
+        pass_idx = -1;
         --num_passes;
     }
 
