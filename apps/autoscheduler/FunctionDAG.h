@@ -592,6 +592,8 @@ struct FunctionDAG {
     vector<Node> nodes;
     vector<Edge> edges;
 
+    int num_non_input_nodes{0};
+
     // We're going to be querying this DAG a lot while searching for
     // an optimal schedule, so we'll also create a variety of
     // auxiliary data structures.

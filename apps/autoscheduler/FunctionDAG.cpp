@@ -1002,6 +1002,13 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
     // Compute the algorithm-specific features for the neural net
     featurize();
+
+    for (Node &node : nodes) {
+        if (node.is_input) {
+            continue;
+        }
+        ++num_non_input_nodes;
+    }
 }
 
 void FunctionDAG::featurize() {

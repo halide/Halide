@@ -273,7 +273,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
                 continue;
             }
 
-            if (state->num_decisions_made == 2 * (int)dag.nodes.size()) {
+            if (state->num_decisions_made == 2 * (int)dag.num_non_input_nodes) {
                 // We've reached the end of the pass. The first state
                 // must be the best, because we're pulling off a
                 // priority queue.
