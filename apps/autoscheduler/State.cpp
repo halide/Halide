@@ -826,6 +826,8 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
     std::ostringstream src;
     std::unordered_set<std::string> new_serial_vars;
 
+    src << "auto pipeline = get_pipeline();\n";
+
     // Print handles for all the Funcs
     int i = (int)(dag.nodes.size() - 1);
     for (const auto &n : dag.nodes) {
