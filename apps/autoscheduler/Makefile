@@ -1,6 +1,8 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
+TEST_DIR=$(AUTOSCHED_SRC)/test
+
 # A sample generator to autoschedule. Note that if it statically links
 # to libHalide, then it must be build with $(USE_EXPORT_DYNAMIC), or the
 # autoscheduler can't find the libHalide symbols that it needs.
@@ -81,6 +83,13 @@ build: $(BIN)/$(HL_TARGET)/test \
 	$(AUTOSCHED_BIN)/libauto_schedule.so
 
 test: run_test test_perfect_hash_map test_function_dag demo included_schedule_file autotune
+
+$(BIN)/test_tiling: $(TEST_DIR)/tiling.cpp Tiling.h Tiling.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(AUTOSCHED_SRC)
+
+test_tiling: $(BIN)/test_tiling
+	$^
 
 clean:
 	rm -rf $(BIN)
