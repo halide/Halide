@@ -352,7 +352,6 @@ bool equal_to_existing_size(const std::vector<int64_t>& s, const std::vector<int
     return true;
 }
 
-// used for creating default serial loop tiling options inside gpu threads loop
 vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                                                 int last_d,
                                                 int vectorized_index,
@@ -367,6 +366,7 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
         v = generate_serial_tilings(s, d - 1, last_d, vectorized_index, vec_dim_serial_sizes, filter_small_outer_extents, allow_inner_ones);
         for (auto t : v) {
             t.push_back(0);
+            bool used_full_extent = false;
             // include odd serial sizes that encourage multiples of 16 as thread tile size
             if (vec_dim_serial_sizes.size() > 0 && d == vectorized_index) {
                 for (int inner : vec_dim_serial_sizes) {
@@ -379,13 +379,21 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                     if (d == last_d && (equal_to_existing_size(s, t) || all_ones(t))) {
                         continue;
                     }
+                    used_full_extent = inner == s[d];
                     result.push_back(t);
                 }
             }
+
+            int max = s[d] == 3 ? s[d] : 8;
+            int factor = s[d] == 3 ? s[d] : 2;
+
             // always consider the even tile sizes: 1, 2, 4, 8
-            for (int inner = 1; inner <= 8; inner *= 2) {
+            for (int inner = 1; inner <= max; inner *= factor) {
                 if (inner > s[d]) {
                     break;
+                }
+                if (inner == s[d] && used_full_extent) {
+                    continue;
                 }
                 int outer = (s[d] + inner - 1) / inner;
                 if (d == vectorized_index && filter_small_outer_extents && outer < 16) {
