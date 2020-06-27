@@ -611,6 +611,15 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
                 convert_weak_to_linkonce(f);
             }
         }
+
+        // Windows requires every symbol that's going to get merged
+        // has a comdat that specifies how. The linkage type alone
+        // isn't enough.
+        if (t.os == Target::Windows && f.isWeakForLinker()) {
+            llvm::Comdat *comdat = modules[0]->getOrInsertComdat(f_name);
+            comdat->setSelectionKind(llvm::Comdat::Any);
+            f.setComdat(comdat);
+        }
     }
 
     // Now remove the force-usage global that prevented clang from
