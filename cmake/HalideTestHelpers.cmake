@@ -23,15 +23,6 @@ if (NOT TARGET Halide::Test)
                                INTERFACE
                                ${Halide_SOURCE_DIR}/test/common
                                ${Halide_SOURCE_DIR}/tools)
-
-    # Tests are built with the equivalent of OPTIMIZE_FOR_BUILD_TIME (-O0 or /Od).
-    # Also allow tests, via conditional compilation, to use the entire
-    # capability of the CPU being compiled on via -march=native. This
-    # presumes tests are run on the same machine they are compiled on.
-    target_compile_options(Halide_test INTERFACE
-                           $<$<CXX_COMPILER_ID:MSVC>:/Od>
-                           $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-O0>
-                           $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-march=native>)
 endif ()
 
 if (NOT TARGET Halide::ExpectAbort)
