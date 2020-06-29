@@ -61,7 +61,7 @@ void expr_match_test();
  * BaseExprNode &).
  *
  * Pattern elements that are fully specified by their pattern can be
- * built into an expression using the ::make method. Some patterns,
+ * built into an expression using the make method. Some patterns,
  * such as a broadcast that matches any number of lanes, don't have
  * enough information to recreate an Expr.
  */
