@@ -54,8 +54,8 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                 }
             }
 
-            int max = s[d] == 3 ? s[d] : 8;
-            int factor = s[d] == 3 ? s[d] : 2;
+            int max = (s[d] == 3 || s[d] == 5) ? s[d] : 8;
+            int factor = (s[d] == 3 || s[d] == 5) ? s[d] : 2;
 
             // always consider the even tile sizes: 1, 2, 4, 8
             for (int inner = 1; inner <= max; inner *= factor) {
