@@ -3782,11 +3782,12 @@ void LoopNest::apply(LoopLevel here,
                      const LoopNest *parent,
                      const LoopNest *compute_site,
                      const Target &target,
-                     std::vector<StageScheduleState *> &ancestors) const {
+                     std::vector<StageScheduleState *> &ancestors,
+                     const NodeMap<bool>& all_inlined) const {
     if (is_root()) {
         for (auto &c : children) {
             Func(c->node->func).compute_root();
-            c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get(), target, ancestors);
+            c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get(), target, ancestors, all_inlined);
             if (c->stage->index == 0) {
                 auto &state = state_map.get(c->stage);
                 state->schedule_source << "\n    .compute_root()";
@@ -4064,7 +4065,7 @@ void LoopNest::apply(LoopLevel here,
                 Func(c->node->func).compute_at(here);
             }
             ancestors.push_back(state_map.get(stage).get());
-            c->apply(here, state_map, num_cores, depth + 1, this, compute_site, target, ancestors);
+            c->apply(here, state_map, num_cores, depth + 1, this, compute_site, target, ancestors, all_inlined);
             ancestors.pop_back();
             if (c->node != node && c->stage->index == 0) {
                 auto &state = *(state_map.get(c->stage));
@@ -4074,6 +4075,10 @@ void LoopNest::apply(LoopLevel here,
 
         if (gpu_label == thread && state.all_innermost_unrolled && num_serial_loops() <= 1) {
             for (const auto *e : stage->incoming_edges) {
+                if (all_inlined.contains(e->producer)) {
+                    continue;
+                }
+
                 if (e->producer->is_input || !has_constant_region_required(e->producer)) {
                     continue;
                 }
@@ -4144,6 +4149,19 @@ void LoopNest::collect_nodes_that_should_be_inlined(const NodeMap<bool>& nodes_t
 
     for (const auto& c : children) {
         c->collect_nodes_that_should_be_inlined(nodes_to_freeze, inlined_nodes);
+    }
+}
+
+void LoopNest::collect_all_inlined(NodeMap<bool>& all_inlined) const {
+    if (innermost) {
+        for (auto it = inlined.begin(); it != inlined.end(); it++) {
+            const auto *f = it.key();
+            all_inlined.insert(f, true);
+        }
+    }
+
+    for (const auto& c : children) {
+        c->collect_all_inlined(all_inlined);
     }
 }
 

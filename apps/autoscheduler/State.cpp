@@ -821,7 +821,10 @@ bool State::can_fuse_gpu(const vector<int64_t>& parallel_extents) const {
 void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, const Target &target) {
     StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
     std::vector<LoopNest::StageScheduleState*> ancestors;
-    root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr, target, ancestors);
+
+    NodeMap<bool> all_inlined;
+    root->collect_all_inlined(all_inlined);
+    root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr, target, ancestors, all_inlined);
 
     std::ostringstream src;
     std::unordered_set<std::string> new_serial_vars;

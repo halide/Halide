@@ -511,13 +511,16 @@ struct LoopNest {
                const LoopNest *parent,
                const LoopNest *compute_site,
                const Target& target,
-               std::vector<StageScheduleState*>& ancestors) const;
+               std::vector<StageScheduleState*>& ancestors,
+               const NodeMap<bool>& all_inlined) const;
 
     double max_idle_lane_wastage(const Target& target, GPULoopInfo gpu_loop_info) const;
 
     bool has_valid_thread_extents() const;
 
     void collect_nodes_that_should_be_inlined(const NodeMap<bool>& nodes_to_freeze, NodeMap<bool>& inlined_nodes) const;
+
+    void collect_all_inlined(NodeMap<bool>& all_inlined) const;
 
     int64_t product_of_self_and_descendants(int loop_index) const;
     int64_t product_of_descendants(int loop_index) const;
