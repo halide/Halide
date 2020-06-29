@@ -403,7 +403,8 @@ struct LoopNest {
                                                       const Target& target,
                                                       bool inner_tiling,
                                                       bool adjust_tiling,
-                                                      bool move_rvars_inward=true) const;
+                                                      bool move_all_rvars_inward=true,
+                                                      const vector<int> &rvars_to_move_inward={}) const;
 
     int64_t get_total_local_mem_alloc_size(bool constant_allocs_only=false, bool in_threads_loop=false) const;
     int64_t get_total_constant_local_mem_alloc_size() const;

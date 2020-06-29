@@ -1303,6 +1303,7 @@ double LoopNest::points_accessed_per_thread(const MachineParams& params, const T
     innermost_parent_clone->copy_from(*parent);
     double unrolled_loop_extent = feat.unrolled_loop_extent;
     vector<int64_t> tiling(node->dimensions, 1);
+    vector<int> rvars_to_move_inward(parent->size.size(), 0);
 
     // There are 3 cases to consider when computing the number of unique points
     // accessed:
@@ -1338,7 +1339,11 @@ double LoopNest::points_accessed_per_thread(const MachineParams& params, const T
             product_of_non_licm_extents *= parent->size[idx];
             if (pure_and_unrolled) {
                 // Case 2
-                tiling[stage->loop[idx].pure_dim] = parent->size[idx];
+                if (stage->loop[idx].pure_dim >= 0) {
+                    tiling[stage->loop[idx].pure_dim] = parent->size[idx];
+                } else {
+                    rvars_to_move_inward[idx] = 1;
+                }
                 if (verbose) {
                     aslog(0) << "loop idx = " << idx << ": non_licm_unrolled = " << parent->size[idx] << "\n";
                 }
@@ -1355,7 +1360,7 @@ double LoopNest::points_accessed_per_thread(const MachineParams& params, const T
         }
     }
 
-    IntrusivePtr<const LoopNest> innermost_parent = innermost_parent_clone->parallelize_in_tiles(params, tiling, grandparent, target, true, false, false);
+    IntrusivePtr<const LoopNest> innermost_parent = innermost_parent_clone->parallelize_in_tiles(params, tiling, grandparent, target, true, false, false, rvars_to_move_inward);
 
     const auto& bounds = innermost_parent->get_bounds(producer);
     int64_t num_points = 1;
@@ -3152,7 +3157,8 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
                                                             const Target &target,
                                                             bool inner_tiling,
                                                             bool adjust_tiling,
-                                                            bool move_rvars_inward) const {
+                                                            bool move_all_rvars_inward,
+                                                            const vector<int> &rvars_to_move_inward) const {
 
     // Split this loop and move factors to the inner loop
     LoopNest *inner = new LoopNest, *outer = new LoopNest;
@@ -3214,7 +3220,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
                 internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
                 outer_extent = (outer->size[i] + tiling[l] - 1) / tiling[l];
                 inner->size[i] = tiling[l];
-            } else if (move_rvars_inward) {
+            } else if (move_all_rvars_inward || (i < rvars_to_move_inward.size() && rvars_to_move_inward[i])) {
                 // RVars are moved inwards
                 outer_extent = 1;
                 inner->size[i] = outer->size[i];
@@ -3230,7 +3236,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
                 internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
                 inner->size[i] = (outer->size[i] + tiling[l] - 1) / tiling[l];
                 outer_extent = tiling[l];
-            } else if (move_rvars_inward) {
+            } else if (move_all_rvars_inward || (i < rvars_to_move_inward.size() && rvars_to_move_inward[i])) {
                 outer_extent = 1;
                 inner->size[i] = outer->size[i];
             } else {
