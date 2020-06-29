@@ -1,4 +1,5 @@
 #include "XtensaOptimize.h"
+#include "Bounds.h"
 #include "ConciseCasts.h"
 #include "CSE.h"
 #include "ExprUsesVar.h"
@@ -394,53 +395,6 @@ private:
         return IRMutator::visit(op);
     }
 
-    Expr visit(const Load *op) {
-      Expr index = mutate(op->index);
-      std::vector<Expr> matches;
-      Expr x = Max::make(Min::make(wild_i32x, bc(wild_i32)), bc(wild_i32)) + bc(wild_i32);
-      if (expr_match(x, index, matches)) {
-        const Ramp* maybe_ramp = matches[0].as<Ramp>();
-        if (maybe_ramp && is_one(maybe_ramp->stride) && (maybe_ramp->lanes == 32)) {
-          for (int ix = 0; ix < matches.size(); ix++) {
-            matches[ix] = mutate(matches[ix]);
-          }
-          return Call::make(op->type, "halide_xtensa_clamped_dense_load_i16",
-                  {op->name, matches[0].as<Ramp>()->base, matches[1], matches[2], matches[3]},
-                  Call::PureExtern);
-        }
-      }
-
-      return IRMutator::visit(op);
-    }
-
-//     Stmt visit(const Store *op) {
-//       const Shuffle* maybe_shuffle = op->value.as<Shuffle>();
-//       if (maybe_shuffle && maybe_shuffle->is_interleave()
-//           && maybe_shuffle->type.is_int()
-//           && (maybe_shuffle->type.bits() == 16)
-//           && (maybe_shuffle->type.lanes() == 64)) {
-//           debug(0) << "Recognized supported interleave and store\n";
-//           return Call::make(op->type, "halide_xtensa_interleave_and_store_i16",
-//                             {mutate(op->vectors[0]), mutate(op->vectors[1])},
-//                               Call::PureExtern);
-//       }
-//       // vector<Expr> matches;
-//       // Expr x = Max::make(Min::make(wild_i32x, bc(wild_i32)), bc(wild_i32)) + bc(wild_i32);
-//       // if (expr_match(x, index, matches)) {
-//       //   const Ramp* maybe_ramp = matches[0].as<Ramp>();
-//       //   if (maybe_ramp && is_one(maybe_ramp->stride) && (maybe_ramp->lanes == 32)) {
-//       //     for (int ix = 0; ix < matches.size(); ix++) {
-//       //       matches[ix] = mutate(matches[ix]);
-//       //     }
-//       //     return Call::make(op->type, "halide_xtensa_clamped_dense_load_i16",
-//       //             {op->name, matches[0].as<Ramp>()->base, matches[1], matches[2], matches[3]},
-//       //             Call::PureExtern);
-//       //   }
-//       // }
-
-//       return IRMutator::visit(op);
-//     }
-
     int loop_depth_ = 0;
 
     Stmt visit(const For* op) {
@@ -468,6 +422,130 @@ public:
     MatchXtensaPatterns() {}
 };
 
+// Find an upper bound of bounds.max - bounds.min.
+Expr span_of_bounds(const Interval &bounds) {
+    internal_assert(bounds.is_bounded());
+
+    const Min *min_min = bounds.min.as<Min>();
+    const Max *min_max = bounds.min.as<Max>();
+    const Min *max_min = bounds.max.as<Min>();
+    const Max *max_max = bounds.max.as<Max>();
+    const Add *min_add = bounds.min.as<Add>();
+    const Add *max_add = bounds.max.as<Add>();
+    const Sub *min_sub = bounds.min.as<Sub>();
+    const Sub *max_sub = bounds.max.as<Sub>();
+
+    if (min_min && max_min && equal(min_min->b, max_min->b)) {
+        return span_of_bounds({min_min->a, max_min->a});
+    } else if (min_max && max_max && equal(min_max->b, max_max->b)) {
+        return span_of_bounds({min_max->a, max_max->a});
+    } else if (min_add && max_add && equal(min_add->b, max_add->b)) {
+        return span_of_bounds({min_add->a, max_add->a});
+    } else if (min_sub && max_sub && equal(min_sub->b, max_sub->b)) {
+        return span_of_bounds({min_sub->a, max_sub->a});
+    } else {
+        return bounds.max - bounds.min;
+    }
+}
+
+// Replace indirect loads with dynamic_shuffle intrinsics where
+// possible.
+class OptimizeShuffles : public IRMutator {
+    int lut_alignment;
+    Scope<Interval> bounds;
+    std::vector<std::pair<std::string, Expr>> lets;
+
+    using IRMutator::visit;
+
+    template<typename NodeType, typename T>
+    NodeType visit_let(const T *op) {
+        // We only care about vector lets.
+        if (op->value.type().is_vector()) {
+            bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        }
+        NodeType node = IRMutator::visit(op);
+        if (op->value.type().is_vector()) {
+            bounds.pop(op->name);
+        }
+        return node;
+    }
+
+    Expr visit(const Let *op) override {
+        lets.emplace_back(op->name, op->value);
+        Expr expr = visit_let<Expr>(op);
+        lets.pop_back();
+        return expr;
+    }
+    Stmt visit(const LetStmt *op) override {
+        return visit_let<Stmt>(op);
+    }
+
+    Expr visit(const Load *op) override {
+        if (!is_one(op->predicate)) {
+            // TODO(psuriana): We shouldn't mess with predicated load for now.
+            return IRMutator::visit(op);
+        }
+        if (!op->type.is_vector() || op->index.as<Ramp>()) {
+            // Don't handle scalar or simple vector loads.
+            return IRMutator::visit(op);
+        }
+
+        Expr index = mutate(op->index);
+        Interval unaligned_index_bounds = bounds_of_expr_in_scope(index, bounds);
+        if (unaligned_index_bounds.is_bounded()) {
+            // We want to try both the unaligned and aligned
+            // bounds. The unaligned bounds might fit in 64 elements,
+            // while the aligned bounds do not.
+            int align = lut_alignment / op->type.bytes();
+            Interval aligned_index_bounds = {
+                (unaligned_index_bounds.min / align) * align,
+                ((unaligned_index_bounds.max + align) / align) * align - 1};
+            ModulusRemainder alignment(align, 0);
+
+            for (Interval index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
+                Expr index_span = span_of_bounds(index_bounds);
+                index_span = common_subexpression_elimination(index_span);
+                index_span = simplify(index_span);
+
+                if (can_prove(index_span < 64)) {
+                    // This is a lookup within an up to 64 element array. We
+                    // can use dynamic_shuffle for this.
+                    // TODO(vksnk): original code doesn't align/pad here, why?
+                    int const_extent = as_const_int(index_span) ? (((*as_const_int(index_span) + align) / align) * align) : 64;
+                    Expr base = simplify(index_bounds.min);
+
+                    debug(0) << "const_extent - " << const_extent << "\n";
+                    // Load all of the possible indices loaded from the
+                    // LUT. Note that for clamped ramps, this loads up to 1
+                    // vector past the max. CodeGen_Hexagon::allocation_padding
+                    // returns a native vector size to account for this.
+                    Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
+                                          Ramp::make(base, 1, const_extent),
+                                          op->image, op->param, const_true(const_extent), alignment);
+
+                    // We know the size of the LUT is not more than 64, so we
+                    // can safely cast the index to 16 bit, which
+                    // dynamic_shuffle requires.
+                    index = simplify(cast(Int(16).with_lanes(op->type.lanes()), index - base));
+                    return Call::make(op->type, "halide_xtensa_dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureExtern);
+                }
+                // Only the first iteration of this loop is aligned.
+                alignment = ModulusRemainder();
+            }
+        }
+        if (!index.same_as(op->index)) {
+            return Load::make(op->type, op->name, index, op->image, op->param, op->predicate, op->alignment);
+        } else {
+            return op;
+        }
+    }
+
+public:
+    OptimizeShuffles(int lut_alignment)
+        : lut_alignment(lut_alignment) {
+    }
+};
+
 // class CollectSimilarOps : public IRVisitor {
 //  public:
 //   std::vector<Expr>* leaves;
@@ -492,6 +570,35 @@ public:
 
 //   }
 // };
+
+// bool try_to_add_expr(int v, const vector<vector<int>>& g,
+//                        vector<bool>& visited, vector<int>& match) {
+//   visited[v] = true;
+//   for (int j = 0; j < g[v].size(); j++) {
+//     int t = g[v][j];
+//     debug(0) << v << " " << t << "\n";
+//     if ((match[t] == -1) || (!visited[match[t]] && try_to_add_expr(match[t], g, visited, match))) {
+//       match[t] = v;
+//       return true;
+//     }
+//   }
+//   return false;
+// }
+
+// bool commutative_expr_match(const Expr &pattern, const Expr &expr, vector<Expr> &matches) {
+//   // matches.clear();
+//   // if (!pattern.defined() && !expr.defined()) return true;
+//   // if (!pattern.defined() || !expr.defined()) return false;
+
+//   if (const Add *add = pattern.as<Add>()) {
+//   } else if (const Cast *cast = pattern.as<Cast>()) {
+
+//   } else {
+//     return expr_match(pattern, expr, matches);
+//   }
+
+//   return true;
+// }
 
 Stmt match_xtensa_patterns(Stmt s) {
 //     Expr test_pattern1 = wild_i16x + ((wild_i16x + wild_i16x) * wild_i16x
@@ -518,14 +625,33 @@ Stmt match_xtensa_patterns(Stmt s) {
 //       }
 //     }
 
-//     for (int i = 0; i < leaves1.size(); i++) {
-//       for (int j = 0; j < leaves2.size(); j++) {
+//     int n = leaves1.size();
+//     int k = leaves2.size();
+//     vector<vector<int>> g(n);
+//     for (int i = 0; i < n; i++) {
+//       for (int j = 0; j < k; j++) {
 //         std::vector<Expr> matches;
-//         debug(0) << expr_match(leaves1[i], leaves2[j], matches) << " ";
+//         bool is_matching = expr_match(leaves1[i], leaves2[j], matches);
+//         if (is_matching) {
+//           g[i].push_back(j);
+//         }
+//         debug(0) << is_matching << " ";
 //       }
 //       debug(0) << "\n";
 //     }
-    // s = substitute_in_all_lets(s);
+
+//     std::vector<int> match(n, -1);
+//     for (int v = 0; v < n; v++) {
+//       std::vector<bool> visited(n);
+//       debug(0) << "Starting - " << v << "\n";
+//       try_to_add_expr(v, g, visited, match);
+//     }
+
+//     for (int v = 0; v < n; v++) {
+//       debug(0) << match[v] << " -> " << v << "\n";
+//     }
+
+    s = OptimizeShuffles(64).mutate(s);
     // debug(0) << s << "\n";
     for (int ix = 0; ix < 10; ix++) {
       s = MatchXtensaPatterns().mutate(s);

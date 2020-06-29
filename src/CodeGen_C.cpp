@@ -1737,6 +1737,12 @@ public:
         native_vector[1] = src2;
     }
 
+   static int16x64_t load(const void *base, int32_t offset) {
+        int16x64_t r(empty);
+        memcpy(&r.native_vector[0], ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
+        return r;
+    }
+
     void aligned_store(void *base, int32_t offset) const {
         memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
     }
@@ -1766,6 +1772,10 @@ HALIDE_ALWAYS_INLINE int16x32_t int16x32_t_load(const void *base, const int32x32
     }
 
     return *((int16x32_t*)tmp);
+}
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x32_t uint16x32_t_aligned_load(const void *base, int32_t offset) {
+    return *((const uint16x32_t *)((uint16_t*)base + offset));
 }
 
 HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_load(const void *base, const int32x32_t& offset) {
@@ -1814,11 +1824,15 @@ HALIDE_ALWAYS_INLINE void store(const int16x64_t& a, void *base, int32_t offset)
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x32_t int32x32_t_aligned_load(const void *base, int32_t offset) {
     return int32x32_t::aligned_load(base, offset);
 }
-/*
-HALIDE_ALWAYS_INLINE int32x32_t int32x32_t_load(const void *base, int32_t offset) {
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x32_t int32x32_t_load(const void *base, int32_t offset) {
     return int32x32_t::load(base, offset);
 }
-*/
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t int16x64_t_load(const void *base, int32_t offset) {
+    return int16x64_t::load(base, offset);
+}
+
 HALIDE_ALWAYS_INLINE void aligned_store(const int32x32_t& a, void *base, int32_t offset) {
    a.aligned_store(base, offset);
 }
@@ -1848,9 +1862,20 @@ HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_interleave_i16(const int16x32_t& a
                                 );
 }
 
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_dynamic_shuffle(const int16x32_t& a, const int16x32_t& b, int min_range, int max_range) {
+  return IVP_SHFLNX16(a, b);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_dynamic_shuffle(const int16x64_t& a, const int16x32_t& b, int min_range, int max_range) {
+  return IVP_SELNX16(a.native_vector[1], a.native_vector[0], b);
+}
+
 HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_shift_right(const uint16x32_t &a, const uint16x32_t &b) {
-    // Is it proper instruction?
     return IVP_SRLNX16(a, b);
+}
+
+HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_shift_left(const uint16x32_t &a, const uint16x32_t &b) {
+    return IVP_SLLNX16(a, b);
 }
 
 HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_sat_add_i32(const int32x32_t& a,
@@ -2571,8 +2596,12 @@ void CodeGen_C::visit(const Sub *op) {
 void CodeGen_C::visit(const Mul *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
-      visit_binop(op->type, op->a, make_const(op->a.type(), bits), "<<");
-
+      if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
+          string sa = print_expr(op->a);
+          print_assignment(op->type, "uint16x32_t_shift_left(" + sa + ", " + std::to_string(bits) + ")");
+      } else {
+        visit_binop(op->type, op->a, make_const(op->a.type(), bits), "<<");
+      }
     } else {
       if (op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
         string sa = print_expr(op->a);
@@ -2626,6 +2655,8 @@ void CodeGen_C::visit(const Max *op) {
         ostringstream rhs;
         if (op->type.is_int() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
           rhs << "IVP_MAXNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        } else if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
+          rhs << "IVP_MAXUNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else {
           rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         }
@@ -2642,6 +2673,8 @@ void CodeGen_C::visit(const Min *op) {
         ostringstream rhs;
         if (op->type.is_int() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
           rhs << "IVP_MINNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        } else if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
+          rhs << "IVP_MINUNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else {
           rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         }
@@ -2788,7 +2821,11 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
-        rhs << a0 << " << " << a1;
+        if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
+           rhs << "uint16x32_t_shift_left(" << a0 << ", " << a1 << ")";
+        } else {
+          rhs << a0 << " << " << a1;
+        }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
@@ -3549,7 +3586,7 @@ void CodeGen_C::visit(const Allocate *op) {
         stream << get_indent() << op_type;
 
         if (on_stack) {
-            stream << op_name
+            stream << "__attribute__((aligned(64))) " << op_name
                    << "[" << size_id << "];\n";
         } else {
             stream << "*"
