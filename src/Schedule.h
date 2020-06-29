@@ -289,7 +289,7 @@ struct Split {
 /** Each Dim below has a dim_type, which tells you what
  * transformations are legal on it. When you combine two Dims of
  * distinct DimTypes (e.g. with Stage::fuse), the combined result has
- * the greater of the two types. */
+ * the greater enum value of the two types. */
 enum class DimType {
     /** This dim originated from a Var. You can evaluate a Func at
      * distinct values of this Var in any order over an interval
