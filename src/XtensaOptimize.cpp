@@ -10,7 +10,7 @@
 #include "Lerp.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "third_party/halide/halide/src/Expr.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
@@ -358,7 +358,7 @@ private:
         return IRMutator::visit(op);
     }
 
-    Expr visit(const Shuffle* op) {
+    Expr visit(const Shuffle* op) override {
       if (op->is_interleave() && op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 64)) {
           debug(0) << "Recognized supported interleave\n";
           return Call::make(op->type, "halide_xtensa_interleave_i16",
@@ -397,14 +397,14 @@ private:
 
     int loop_depth_ = 0;
 
-    Stmt visit(const For* op) {
+    Stmt visit(const For* op) override {
       loop_depth_++;
       Stmt body = IRMutator::visit(op);
       loop_depth_--;
       return body;
     }
 
-    Stmt visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
       if (loop_depth_ < 1) {
         return IRMutator::visit(op);
       }
