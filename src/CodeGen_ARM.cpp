@@ -1060,7 +1060,10 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     if (neon_intrinsics_disabled() ||
         op->op == VectorReduce::Or ||
         op->op == VectorReduce::And ||
-        op->op == VectorReduce::Mul) {
+        op->op == VectorReduce::Mul ||
+        // LLVM 9 has bugs in the arm backend for vector reduce
+        // ops. See https://github.com/halide/Halide/issues/5081
+        !(LLVM_VERSION >= 100)) {
         CodeGen_Posix::codegen_vector_reduce(op, init);
         return;
     }
