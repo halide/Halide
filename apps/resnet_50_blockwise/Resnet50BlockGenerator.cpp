@@ -1,7 +1,6 @@
 #include <unordered_map>
 #include <tuple>
 #include "Halide.h"
-#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 

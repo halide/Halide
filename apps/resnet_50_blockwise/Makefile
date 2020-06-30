@@ -7,9 +7,9 @@ HL_TARGET=host-cuda
 
 all: $(BIN)/process
 
-$(BIN)/resnet50block.generator: Resnet50BlockGenerator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp $(GENERATOR_DEPS)
+$(BIN)/resnet50block.generator: Resnet50BlockGenerator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/resnet50block_manual%.a: $(BIN)/resnet50block.generator
 	@mkdir -p $(@D)
@@ -68,10 +68,14 @@ clean:
 # supplied as the sixth argument.
 AUTOTUNE_ARG_SETS ?= $(foreach block,0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15,block_id=$(block))
 
+BATCH_ID ?= 0
+TRAIN_ONLY ?= 0
+SAMPLES_DIR ?= autotuned_samples
 autotune: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	HL_MACHINE_PARAMS=80,1,1 \
+	SAMPLES_DIR=$(SAMPLES_DIR) \
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
-	HL_DEBUG_CODEGEN=1 \
+	HL_DEBUG_CODEGEN=0 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/resnet50block.generator \
@@ -79,4 +83,6 @@ autotune: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/featurization_to_sampl
 		$(HL_TARGET) \
 		$(AUTOSCHED_SRC)/gpu.weights \
 		$(AUTOSCHED_BIN) \
+		$(BATCH_ID) \
+		$(TRAIN_ONLY) \
 		"${AUTOTUNE_ARG_SETS}"
