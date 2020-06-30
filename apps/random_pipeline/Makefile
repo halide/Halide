@@ -26,12 +26,12 @@ AUTO_SCHEDULE=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019
 endif
 
 
-$(BIN)/runtime.a: $(BIN)/random_pipeline.generator
+$(BIN)/runtime.a: $(GENERATOR_BIN)/random_pipeline.generator
 	$^ -r runtime target=$(HL_TARGET) -o $(BIN)
 
 $(GENERATOR_BIN)/random_pipeline.generator: random_pipeline_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -fno-rtti -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/$(ID)/random_pipeline.a: $(GENERATOR_BIN)/random_pipeline.generator
 	@mkdir -p $(@D)
