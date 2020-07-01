@@ -344,6 +344,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         } else {  // 64-bit
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
+            } else if (target.os == Target::OSX) {
+                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
             } else if (target.os == Target::Windows) {
                 return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128");
             } else {
@@ -461,6 +463,10 @@ llvm::Triple get_triple_for_target(const Target &target) {
             }
         } else if (target.os == Target::Fuchsia) {
             triple.setOS(llvm::Triple::Fuchsia);
+        } else if (target.os == Target::OSX) {
+            triple.setVendor(llvm::Triple::Apple);
+            triple.setOS(llvm::Triple::MacOSX);
+            triple.setArchName("arm64");
         } else if (target.os == Target::NoOS) {
             // For bare-metal environments
 
