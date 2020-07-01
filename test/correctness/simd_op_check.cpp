@@ -938,6 +938,7 @@ public:
             // VORR     X       -       Bitwise OR
             // check("vorr", bool1 | bool2);
 
+#if LLVM_VERSION >= 100
             for (int f : {2, 4}) {
                 RDom r(0, f);
 
@@ -1045,7 +1046,7 @@ public:
                     }
                 }
             }
-
+#endif
             // VPOP     X       F, D    Pop from Stack
             // VPUSH    X       F, D    Push to Stack
             // Not used by us
