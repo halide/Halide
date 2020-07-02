@@ -4347,8 +4347,9 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         return;
     }
 
-#if LLVM_VERSION >= 100
-    if (output_lanes == 1) {
+#if LLVM_VERSION >= 90
+    if (output_lanes == 1 &&
+        (target.arch != Target::ARM || LLVM_VERSION >= 100)) {
         const int input_lanes = val.type().lanes();
         const int input_bytes = input_lanes * val.type().bytes();
         const bool llvm_has_intrinsic =
