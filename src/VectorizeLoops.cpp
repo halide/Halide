@@ -191,7 +191,7 @@ struct InterleavedRamp {
     int lanes, repetitions;
 };
 
-bool is_interleaved_ramp(const Expr &e, const std::map<string, Expr>& widened_vars, InterleavedRamp *result) {
+bool is_interleaved_ramp(const Expr &e, const std::map<string, Expr> &widened_vars, InterleavedRamp *result) {
     if (const Ramp *r = e.as<Ramp>()) {
         result->base = r->base;
         result->stride = r->stride;
@@ -517,11 +517,11 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    string get_widened_var_name(const string& name) {
+    string get_widened_var_name(const string &name) {
         return name + ".widened." + vectorized_vars.back().name;
     }
 
-    Expr get_mutated_var_from_scope(const string& name) {
+    Expr get_mutated_var_from_scope(const string &name) {
         string widened_name = get_widened_var_name(name);
         Expr mutated;
         // Depending on the current loop level, we may need to
@@ -834,7 +834,7 @@ class VectorSubs : public IRMutator {
         InterleavedRamp ir;
         if (is_interleaved_ramp(mutated_value, widened_vars_list, &ir)) {
             for (const auto &widened_var : widened_vars[op->name]) {
-                mutated_body = substitute(widened_var.first, widened_var.second, mutated_body);   
+                mutated_body = substitute(widened_var.first, widened_var.second, mutated_body);
             }
             widened_vars[op->name].clear();
             return mutated_body;
