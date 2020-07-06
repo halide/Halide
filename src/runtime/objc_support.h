@@ -10,8 +10,26 @@ extern objc_sel sel_getUid(const char *string);
 // Recent versions of macOS have changed the signature
 // for objc_msgSend(), since its implementation is ABI-dependent.
 // With this signature, users must always cast the call to the
-// correct function type, and any misuses will be caught at
-// compile time.
+// correct function type, and any calls without casting to the right
+// function type will be caught at compile time.
+//
+// A good explanation of why is here: https://www.mikeash.com/pyblog/objc_msgsends-new-prototype.html
+//
+// The TL;DR is that objc_msgSend is special in that what it does is not touch
+// the registers at all and 1) loads the ObjC class corresponding to the object, 2)
+// looks up the selector in the class’s method cache, and 3) jumps to the location of
+// the method if it’s in the cache. objc_msgSend takes as parameters an object,
+// the method selector, then all the other parameters to the method; when it
+// jumps to the method implementation, it's as if the method implementation was called
+// directly.
+// C doesn’t have a way to express this kind of function: the method implementation (usually) uses the ABI
+// calling convention for a normal non-variadic function, but the C prototype for
+// this has to be variadic. That used to be okay(ish) on x64 because the variadic and
+// normal conventions are basically the same, but on ARM a variadic function passes
+// all params on the stack, which would be a huge amount of overhead given how many
+// times its called (every single method invocation in ObjC).
+// The other problem with using a variadic signature is that C does type promotion on a variadic
+// call.
 extern void objc_msgSend(void);
 
 void NSLog(objc_id /* NSString * */ format, ...);
