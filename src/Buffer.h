@@ -4,7 +4,6 @@
 #include "DeviceInterface.h"
 #include "Expr.h"
 #include "IntrusivePtr.h"
-#include "Util.h"
 #include "runtime/HalideBuffer.h"
 
 namespace Halide {
@@ -79,6 +78,29 @@ std::vector<int> get_shape_from_start_of_parameter_pack(Args &&... args) {
 template<typename T, typename T2>
 using add_const_if_T_is_const = typename std::conditional<std::is_const<T>::value, const T2, T2>::type;
 
+// Helpers to produce the name of a Buffer element type (a Halide
+// scalar type, or void, possibly with const). Useful for an error
+// messages.
+template<typename T>
+void buffer_type_name_non_const(std::ostream &s) {
+    s << type_to_c_type(type_of<T>(), false);
+}
+
+template<>
+inline void buffer_type_name_non_const<void>(std::ostream &s) {
+    s << "void";
+}
+
+template<typename T>
+std::string buffer_type_name() {
+    std::ostringstream oss;
+    if (std::is_const<T>::value) {
+        oss << "const ";
+    }
+    buffer_type_name_non_const<typename std::remove_const<T>::type>(oss);
+    return oss.str();
+}
+
 }  // namespace Internal
 
 /** A Halide::Buffer is a named shared reference to a
@@ -108,7 +130,17 @@ class Buffer {
                               std::is_void<T2>::value,
                           "type mismatch constructing Buffer");
         } else {
-            Runtime::Buffer<T>::assert_can_convert_from(*(other.get()));
+            // Don't delegate to
+            // Runtime::Buffer<T>::assert_can_convert_from. It might
+            // not assert is NDEBUG is defined. user_assert is
+            // friendlier anyway because it reports line numbers when
+            // debugging symbols are found, it throws an exception
+            // when exceptions are enabled, and we can print the
+            // actual types in question.
+            user_assert(Runtime::Buffer<T>::can_convert_from(*(other.get())))
+                << "Type mismatch constructing Buffer. Can't construct Buffer<"
+                << Internal::buffer_type_name<T>() << "> from Buffer<"
+                << type_to_c_type(other.type(), false) << ">\n";
         }
     }
 
@@ -128,6 +160,9 @@ public:
     /** Trivial copy assignment operator. */
     Buffer &operator=(const Buffer &that) = default;
 
+    /** Trivial move assignment operator. */
+    Buffer &operator=(Buffer &&) noexcept = default;
+
     /** Make a Buffer from a Buffer of a different type */
     template<typename T2>
     Buffer(const Buffer<T2> &other)
@@ -137,7 +172,7 @@ public:
 
     /** Move construct from a Buffer of a different type */
     template<typename T2>
-    Buffer(Buffer<T2> &&other) {
+    Buffer(Buffer<T2> &&other) noexcept {
         assert_can_convert_from(other);
         contents = std::move(other.contents);
     }
@@ -168,11 +203,6 @@ public:
     }
 
     explicit Buffer(const halide_buffer_t &buf,
-                    const std::string &name = "")
-        : Buffer(Runtime::Buffer<T>(buf), name) {
-    }
-
-    explicit Buffer(const buffer_t &buf,
                     const std::string &name = "")
         : Buffer(Runtime::Buffer<T>(buf), name) {
     }
@@ -421,7 +451,7 @@ public:
     HALIDE_BUFFER_FORWARD(translate)
     HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(translate, std::vector<int>)
     HALIDE_BUFFER_FORWARD(transpose)
-    HALIDE_BUFFER_FORWARD(transposed)
+    HALIDE_BUFFER_FORWARD_CONST(transposed)
     HALIDE_BUFFER_FORWARD(add_dimension)
     HALIDE_BUFFER_FORWARD(copy_to_host)
     HALIDE_BUFFER_FORWARD(copy_to_device)
@@ -536,7 +566,7 @@ public:
     /** Make an Expr that loads from this concrete buffer at a computed coordinate. */
     // @{
     template<typename... Args>
-    Expr operator()(Expr first, Args... rest) const {
+    Expr operator()(const Expr &first, Args... rest) const {
         std::vector<Expr> args = {first, rest...};
         return (*this)(args);
     };

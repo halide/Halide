@@ -1,7 +1,9 @@
 #include "IR.h"
+
 #include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -258,7 +260,7 @@ Expr Ramp::make(Expr base, Expr stride, int lanes) {
     node->type = base.type().with_lanes(lanes);
     node->base = std::move(base);
     node->stride = std::move(stride);
-    node->lanes = std::move(lanes);
+    node->lanes = lanes;
     return node;
 }
 
@@ -494,8 +496,8 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     node->types = types;
     node->bounds = bounds;
     node->prefetch = prefetch;
-    node->condition = condition;
-    node->body = body;
+    node->condition = std::move(condition);
+    node->body = std::move(body);
     return node;
 }
 
@@ -565,7 +567,7 @@ Stmt Evaluate::make(Expr v) {
     return node;
 }
 
-Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
+Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx) {
     internal_assert(idx >= 0 &&
                     idx < func.outputs())
         << "Value index out of range in call to halide function\n";
@@ -580,16 +582,19 @@ namespace {
 const char *const intrinsic_op_names[] = {
     "abs",
     "absd",
+    "add_image_checks_marker",
     "alloca",
     "bitwise_and",
     "bitwise_not",
     "bitwise_or",
     "bitwise_xor",
     "bool_to_mask",
+    "bundle",
     "call_cached_indirect_function",
     "cast_mask",
     "count_leading_zeros",
     "count_trailing_zeros",
+    "declare_box_touched",
     "debug_to_file",
     "div_round_to_zero",
     "dynamic_shuffle",
@@ -603,7 +608,6 @@ const char *const intrinsic_op_names[] = {
     "if_then_else_mask",
     "image_load",
     "image_store",
-    "indeterminate_expression",
     "lerp",
     "likely",
     "likely_if_innermost",
@@ -613,8 +617,7 @@ const char *const intrinsic_op_names[] = {
     "mulhi_shr",
     "popcount",
     "prefetch",
-    "quiet_div",
-    "quiet_mod",
+    "promise_clamped",
     "random",
     "register_destructor",
     "reinterpret",
@@ -648,9 +651,9 @@ const char *Call::get_intrinsic_name(IntrinsicOp op) {
 
 Expr Call::make(Type type, Call::IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
                 FunctionPtr func, int value_index,
-                Buffer<> image, Parameter param) {
+                const Buffer<> &image, Parameter param) {
     internal_assert(call_type == Call::Intrinsic || call_type == Call::PureIntrinsic);
-    return Call::make(type, intrinsic_op_names[op], args, call_type, func, value_index, image, param);
+    return Call::make(type, intrinsic_op_names[op], args, call_type, std::move(func), value_index, image, std::move(param));
 }
 
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
@@ -821,6 +824,28 @@ Stmt Atomic::make(const std::string &producer_name,
     return node;
 }
 
+Expr VectorReduce::make(VectorReduce::Operator op,
+                        Expr vec,
+                        int lanes) {
+    if (vec.type().is_bool()) {
+        internal_assert(op == VectorReduce::And || op == VectorReduce::Or)
+            << "The only legal operators for VectorReduce on a Bool"
+            << "vector are VectorReduce::And and VectorReduce::Or\n";
+    }
+    internal_assert(!vec.type().is_handle()) << "VectorReduce of handle type";
+    // Check the output lanes is a factor of the input lanes. They can
+    // also both be zero if we're constructing a wildcard expression.
+    internal_assert((lanes == 0 && vec.type().lanes() == 0) ||
+                    (lanes != 0 && (vec.type().lanes() % lanes == 0)))
+        << "Vector reduce output lanes must be a divisor of the number of lanes in the argument "
+        << lanes << " " << vec.type().lanes() << "\n";
+    VectorReduce *node = new VectorReduce;
+    node->type = vec.type().with_lanes(lanes);
+    node->op = op;
+    node->value = std::move(vec);
+    return node;
+}
+
 namespace {
 
 // Helper function to determine if a sequence of indices is a
@@ -973,6 +998,10 @@ void ExprNode<Call>::accept(IRVisitor *v) const {
 template<>
 void ExprNode<Shuffle>::accept(IRVisitor *v) const {
     v->visit((const Shuffle *)this);
+}
+template<>
+void ExprNode<VectorReduce>::accept(IRVisitor *v) const {
+    v->visit((const VectorReduce *)this);
 }
 template<>
 void ExprNode<Let>::accept(IRVisitor *v) const {
@@ -1154,6 +1183,10 @@ Expr ExprNode<Call>::mutate_expr(IRMutator *v) const {
 template<>
 Expr ExprNode<Shuffle>::mutate_expr(IRMutator *v) const {
     return v->visit((const Shuffle *)this);
+}
+template<>
+Expr ExprNode<VectorReduce>::mutate_expr(IRMutator *v) const {
+    return v->visit((const VectorReduce *)this);
 }
 template<>
 Expr ExprNode<Let>::mutate_expr(IRMutator *v) const {

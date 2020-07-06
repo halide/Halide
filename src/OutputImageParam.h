@@ -116,7 +116,7 @@ public:
      * at once; this is equivalent to calling `dim(n).set_estimate(min, extent)`
      * repeatedly, but slightly terser. The size of the estimates vector
      * must match the dimensionality of the ImageParam. */
-    OutputImageParam &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates);
+    OutputImageParam &set_estimates(const Region &estimates);
 };
 
 }  // namespace Halide

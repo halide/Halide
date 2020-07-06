@@ -1,14 +1,20 @@
 #include "HalideRuntime.h"
 #include "cpu_features.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 extern "C" void x86_cpuid_halide(int32_t *);
 
-static inline void cpuid(int32_t fn_id, int32_t *info) {
+namespace {
+
+ALWAYS_INLINE void cpuid(int32_t fn_id, int32_t *info) {
     info[0] = fn_id;
     x86_cpuid_halide(info);
 }
+
+}  // namespace
 
 WEAK CpuFeatures halide_get_cpu_features() {
     CpuFeatures features;
@@ -25,11 +31,11 @@ WEAK CpuFeatures halide_get_cpu_features() {
     int32_t info[4];
     cpuid(1, info);
 
-    const bool have_sse41  = (info[2] & (1 << 19)) != 0;
-    const bool have_avx    = (info[2] & (1 << 28)) != 0;
-    const bool have_f16c   = (info[2] & (1 << 29)) != 0;
+    const bool have_sse41 = (info[2] & (1 << 19)) != 0;
+    const bool have_avx = (info[2] & (1 << 28)) != 0;
+    const bool have_f16c = (info[2] & (1 << 29)) != 0;
     const bool have_rdrand = (info[2] & (1 << 30)) != 0;
-    const bool have_fma    = (info[2] & (1 << 12)) != 0;
+    const bool have_fma = (info[2] & (1 << 12)) != 0;
     if (have_sse41) {
         features.set_available(halide_target_feature_sse41);
     }
@@ -59,7 +65,7 @@ WEAK CpuFeatures halide_get_cpu_features() {
         const uint32_t avx512 = avx512f | avx512cd;
         const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
         const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
-        const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma; // Assume ifma => vbmi
+        const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma;  // Assume ifma => vbmi
         if ((info2[1] & avx2) == avx2) {
             features.set_available(halide_target_feature_avx2);
         }
@@ -79,4 +85,6 @@ WEAK CpuFeatures halide_get_cpu_features() {
     return features;
 }
 
-}}}  // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide

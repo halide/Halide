@@ -318,7 +318,8 @@ Stmt IRMutator::visit(const Prefetch *op) {
         condition.same_as(op->condition)) {
         return op;
     }
-    return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
+    return Prefetch::make(op->name, op->types, new_bounds, op->prefetch,
+                          std::move(condition), std::move(body));
 }
 
 Stmt IRMutator::visit(const Block *op) {
@@ -366,6 +367,14 @@ Expr IRMutator::visit(const Shuffle *op) {
         return op;
     }
     return Shuffle::make(new_vectors, op->indices);
+}
+
+Expr IRMutator::visit(const VectorReduce *op) {
+    Expr value = mutate(op->value);
+    if (value.same_as(op->value)) {
+        return op;
+    }
+    return VectorReduce::make(op->op, std::move(value), op->type.lanes());
 }
 
 Stmt IRMutator::visit(const Fork *op) {

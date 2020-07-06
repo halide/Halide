@@ -5,6 +5,8 @@
  * Defines the code-generator for producing ARM machine code
  */
 
+#include <utility>
+
 #include "CodeGen_Posix.h"
 
 namespace Halide {
@@ -22,7 +24,6 @@ protected:
     /** Nodes for which we want to emit specific neon intrinsics */
     // @{
     void visit(const Cast *) override;
-    void visit(const Add *) override;
     void visit(const Sub *) override;
     void visit(const Div *) override;
     void visit(const Mul *) override;
@@ -31,6 +32,9 @@ protected:
     void visit(const Store *) override;
     void visit(const Load *) override;
     void visit(const Call *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
     // @}
 
     /** Various patterns to peephole match against */
@@ -49,7 +53,7 @@ protected:
         Pattern(const std::string &i32, const std::string &i64, int l, Expr p, PatternType t = Simple)
             : intrin32("llvm.arm.neon." + i32),
               intrin64("llvm.aarch64.neon." + i64),
-              intrin_lanes(l), pattern(p), type(t) {
+              intrin_lanes(l), pattern(std::move(p)), type(t) {
         }
     };
     std::vector<Pattern> casts, averagings, negations, multiplies;

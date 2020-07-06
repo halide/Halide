@@ -6,25 +6,25 @@
  * generated halide pipeline
  */
 
-#include "Buffer.h"
-#include "Error.h"
 #include "Expr.h"
 #include "Type.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
 
+template<typename T>
+class Buffer;
+
 struct ArgumentEstimates {
     /** If this is a scalar argument, then these are its default, min, max, and estimated values.
      * For buffer arguments, all should be undefined. */
     Expr scalar_def, scalar_min, scalar_max, scalar_estimate;
 
-    /** If this is a buffer argument, these are the estimated min and extent for each dimension.
-     * If there are no estimates, buffer_estimates.size() can be zero; otherwise, it must always equal the dimensions */
-    struct MinAndExtent {
-        Expr min, extent;
-    };
-    std::vector<MinAndExtent> buffer_estimates;
+    /** If this is a buffer argument, these are the estimated min and
+     * extent for each dimension.  If there are no estimates,
+     * buffer_estimates.size() can be zero; otherwise, it must always
+     * equal the dimensions */
+    Region buffer_estimates;
 
     bool operator==(const ArgumentEstimates &rhs) const;
 };

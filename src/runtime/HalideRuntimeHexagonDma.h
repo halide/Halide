@@ -5,9 +5,19 @@
  *  Routines specific to the Halide Hexagon DMA host-side runtime.
  */
 
+// Don't include HalideRuntime.h if the contents of it were already pasted into a generated header above this one
+#ifndef HALIDE_HALIDERUNTIME_H
+
 #include "HalideRuntime.h"
+
+#endif
+
+// Don't include HalideRuntimeHexagonHost.h if the contents of it were already pasted into a generated header above this one
+#ifndef HALIDE_HALIDERUNTIMEHEXAGONHOST_H
+
 #include "HalideRuntimeHexagonHost.h"
 
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,7 +42,6 @@ typedef enum {
     halide_hexagon_fmt_NV124R_UV
 } halide_hexagon_image_fmt_t;
 
-
 extern const struct halide_device_interface_t *halide_hexagon_dma_device_interface();
 
 /** This API is used to set up the DMA device interface to be used for DMA transfer. This also internally 
@@ -50,7 +59,7 @@ extern int halide_hexagon_dma_device_detach_native(void *user_context, struct ha
 /** This API will allocate a DMA Engine needed for DMA read/write. This is the first step Before
  * a buffer can be used in a copy operation (i.e. a DMA read/write operation).
  */
-extern int halide_hexagon_dma_allocate_engine(void *user_context, void ** dma_engine);
+extern int halide_hexagon_dma_allocate_engine(void *user_context, void **dma_engine);
 
 /** This API free up the allocated DMA engine. This need to be called after a user program ends 
  * all the DMA Operations and make it available for subsequent DMA transfers */
@@ -66,7 +75,8 @@ extern int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struc
  * Will also make necessary adjustments to the DMA frame parameters based on Image format provided.
  */
 extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
-                                                       void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
+                                                         void *dma_engine, bool is_ubwc,
+                                                         halide_hexagon_image_fmt_t fmt);
 
 /** This API is used to frees up the DMA Resources associated with the buffer. 
  * TODO: Currently this API is a dummy as all the necessary freeing is done in an another API.
@@ -83,7 +93,7 @@ extern int halide_hexagon_dma_power_mode_voting(void *user_context, halide_hexag
 ///@}
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEHEXAGONDMA_H
+#endif  // HALIDE_HALIDERUNTIMEHEXAGONDMA_H

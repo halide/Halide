@@ -57,7 +57,7 @@ protected:
 
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
-    virtual void visit(const Call *) override;
+    void visit(const Call *) override;
     void visit(const For *) override;
     void visit(const Allocate *) override;
     void visit(const Free *) override;
@@ -65,6 +65,7 @@ protected:
     void visit(const Load *) override;
     void visit(const Store *) override;
     void visit(const Atomic *) override;
+    void codegen_vector_reduce(const VectorReduce *op, const Expr &init) override;
     // @}
 
     std::string march() const;

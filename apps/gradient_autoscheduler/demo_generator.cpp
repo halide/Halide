@@ -6,9 +6,9 @@ using namespace Halide;
 
 class ConvRelu : public Halide::Generator<ConvRelu> {
 public:
-    Input<Buffer<float>>  input{"input", 4};
-    Input<Buffer<float>>  filter{"filter", 4};
-    Input<Buffer<float>>  bias{"bias", 1};
+    Input<Buffer<float>> input{"input", 4};
+    Input<Buffer<float>> filter{"filter", 4};
+    Input<Buffer<float>> bias{"bias", 1};
     Output<Buffer<float>> relu{"relu", 4};
 
     void generate() {
@@ -27,20 +27,20 @@ public:
             .bound(y, 0, H)
             .bound(n, 0, N);
 
-        relu.dim(0).set_bounds(0, CO).set_stride(1)
-            .dim(1).set_bounds(0, W).set_stride(CO)
-            .dim(2).set_bounds(0, H).set_stride(CO * W)
-            .dim(3).set_bounds(0, N).set_stride(CO * H * W);
+        relu.dim(0).set_bounds(0, CO).set_stride(1);
+        relu.dim(1).set_bounds(0, W).set_stride(CO);
+        relu.dim(2).set_bounds(0, H).set_stride(CO * W);
+        relu.dim(3).set_bounds(0, N).set_stride(CO * H * W);
 
-        input.dim(0).set_bounds(0, CI).set_stride(1)
-            .dim(1).set_bounds(0, W + 2).set_stride(CI)
-            .dim(2).set_bounds(0, H + 2).set_stride(CI * (W + 2))
-            .dim(3).set_bounds(0, N).set_stride(CI * (W + 2) * (H + 2));
+        input.dim(0).set_bounds(0, CI).set_stride(1);
+        input.dim(1).set_bounds(0, W + 2).set_stride(CI);
+        input.dim(2).set_bounds(0, H + 2).set_stride(CI * (W + 2));
+        input.dim(3).set_bounds(0, N).set_stride(CI * (W + 2) * (H + 2));
 
-        filter.dim(0).set_bounds(0, CO).set_stride(1)
-            .dim(1).set_bounds(0, 3).set_stride(CO)
-            .dim(2).set_bounds(0, 3).set_stride(CO * 3)
-            .dim(3).set_bounds(0, CI).set_stride(CO * 3 * 3);
+        filter.dim(0).set_bounds(0, CO).set_stride(1);
+        filter.dim(1).set_bounds(0, 3).set_stride(CO);
+        filter.dim(2).set_bounds(0, 3).set_stride(CO * 3);
+        filter.dim(3).set_bounds(0, CI).set_stride(CO * 3 * 3);
 
         bias.dim(0).set_bounds(0, CO).set_stride(1);
     }

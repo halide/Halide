@@ -2,6 +2,7 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
+#include "CompilerLogger.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
 
@@ -45,7 +46,7 @@ size_t emit_padded(std::ostream &out, T data, size_t size) {
     size_t written = (size_t)out.tellp() - pos;
     internal_assert(written <= size);
     while (written < size) {
-        out << ' ';
+        out.put(' ');
         written++;
     }
     return pos;
@@ -105,13 +106,14 @@ std::map<std::string, size_t> write_string_table(std::ostream &out,
             start_offset = out.tellp();
         }
         string_to_offset_map[name] = (size_t)out.tellp() - start_offset;
-        out << name << '\0';
+        out << name;
+        out.put('\0');
     }
     // If all strings are short enough, we skip the string table entirely
     if (start_offset != 0) {
         size_t member_end = out.tellp();
         if (out.tellp() % 2) {
-            out << '\x0A';
+            out.put('\x0A');
         }
         size_t final_offset = out.tellp();
         out.seekp(start_offset - 12);
@@ -155,7 +157,15 @@ void write_symbol_table(std::ostream &out,
         }
         llvm::object::SymbolicFile &obj = *obj_or_err.get();
         for (const auto &sym : obj.symbols()) {
+#if LLVM_VERSION >= 110
+            auto flags = sym.getFlags();
+            if (!flags) {
+                internal_error << llvm::toString(flags.takeError()) << "\n";
+            }
+            const uint32_t sym_flags = flags.get();
+#else
             const uint32_t sym_flags = sym.getFlags();
+#endif
             if (sym_flags & llvm::object::SymbolRef::SF_FormatSpecific) {
                 continue;
             }
@@ -214,14 +224,15 @@ void write_symbol_table(std::ostream &out,
 
     // Symbol table goes at the end for both variants.
     for (auto &it : name_to_member_index) {
-        out << it.first << '\0';
+        out << it.first;
+        out.put('\0');
     }
 
     size_t member_end = out.tellp();
 
     // lib.exe pads to 2-byte align with 0x0a
     if (out.tellp() % 2) {
-        out << '\x0A';
+        out.put('\x0A');
     }
     size_t final_offset = out.tellp();
 
@@ -265,7 +276,7 @@ void write_coff_archive(std::ostream &out,
         std::string name = member_name(m);
         auto it = string_to_offset_map.find(name);
         if (it != string_to_offset_map.end()) {
-            out << '/';
+            out.put('/');
             emit_padded(out, it->second, 15);
         } else {
             emit_padded(out, name + "/", 16);
@@ -276,7 +287,7 @@ void write_coff_archive(std::ostream &out,
         out << m.Buf->getMemBufferRef().getBuffer().str();
 
         if (out.tellp() % 2) {
-            out << '\x0A';
+            out.put('\x0A');
         }
     }
 
@@ -325,9 +336,17 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
 
 }  // namespace
 
-void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out, llvm::TargetMachine::CodeGenFileType file_type) {
+void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
+#if LLVM_VERSION >= 100
+               llvm::CodeGenFileType file_type
+#else
+               llvm::TargetMachine::CodeGenFileType file_type
+#endif
+) {
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
+
+    auto time_start = std::chrono::high_resolution_clock::now();
 
     // Work on a copy of the module to avoid modifying the original.
     std::unique_ptr<llvm::Module> module = clone_module(module_in);
@@ -367,6 +386,14 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out, llvm::
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
 
     pass_manager.run(*module);
+
+    auto *logger = Internal::get_compiler_logger();
+    if (logger) {
+        auto time_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = time_end - time_start;
+        logger->record_compilation_time(Internal::CompilerLogger::Phase::LLVM, diff.count());
+    }
+
     // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
     llvm::reportAndResetTimings();
 }
@@ -376,11 +403,19 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
 }
 
 void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
+#if LLVM_VERSION >= 100
+    emit_file(module, out, llvm::CGFT_ObjectFile);
+#else
     emit_file(module, out, llvm::TargetMachine::CGFT_ObjectFile);
+#endif
 }
 
 void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
+#if LLVM_VERSION >= 100
+    emit_file(module, out, llvm::CGFT_AssemblyFile);
+#else
     emit_file(module, out, llvm::TargetMachine::CGFT_AssemblyFile);
+#endif
 }
 
 void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream &out) {

@@ -22,7 +22,7 @@ namespace {
 /** If an integer expression varies linearly with the variables in the
  * scope, return the linear term. Otherwise return an undefined
  * Expr. */
-Expr is_linear(Expr e, const Scope<Expr> &linear) {
+Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     if (e.type() != Int(32)) {
         return Expr();
     }
@@ -105,7 +105,7 @@ public:
 };
 
 /** A helper for block_to_vector below. */
-void block_to_vector(Stmt s, vector<Stmt> &v) {
+void block_to_vector(const Stmt &s, vector<Stmt> &v) {
     const Block *b = s.as<Block>();
     if (!b) {
         v.push_back(s);
@@ -116,7 +116,7 @@ void block_to_vector(Stmt s, vector<Stmt> &v) {
 }
 
 /** Unpack a block into its component Stmts. */
-vector<Stmt> block_to_vector(Stmt s) {
+vector<Stmt> block_to_vector(const Stmt &s) {
     vector<Stmt> result;
     block_to_vector(s, result);
     return result;
@@ -202,7 +202,7 @@ class LoopCarryOverLoop : public IRMutator {
         Expr step = is_linear(value, linear);
         ScopedBinding<Expr> bind(linear, op->name, step);
 
-        containing_lets.push_back({op->name, value});
+        containing_lets.emplace_back(op->name, value);
 
         Stmt stmt;
         Stmt body = mutate(op->body);
@@ -406,7 +406,7 @@ class LoopCarryOverLoop : public IRMutator {
                                                         Parameter(), const_true(orig_load->type.lanes()), ModulusRemainder());
                     not_first_iteration_scratch_stores.push_back(store_to_scratch);
                 } else {
-                    initial_scratch_values.push_back(orig_load);
+                    initial_scratch_values.emplace_back(orig_load);
                 }
                 if (i > 0) {
                     Stmt shuffle = Store::make(scratch, load_from_scratch,
@@ -426,7 +426,7 @@ class LoopCarryOverLoop : public IRMutator {
             call = simplify(common_subexpression_elimination(call));
             // Peel off lets
             while (const Let *l = call.as<Let>()) {
-                initial_lets.push_back({l->name, l->value});
+                initial_lets.emplace_back(l->name, l->value);
                 call = l->body;
             }
             internal_assert(call.as<Call>());

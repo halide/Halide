@@ -13,6 +13,6 @@ int main(int argc, char **argv) {
 
     out.infer_input_bounds();
 
+    printf("Success!\n");
     return 0;
 }
-

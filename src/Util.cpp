@@ -108,8 +108,9 @@ namespace {
 const int num_unique_name_counters = (1 << 14);
 
 // We want to init these to zero, but cannot use = {0} because that
-// would invoke a (deleted) copy ctor; this syntax should force
-// the correct behavior.
+// would invoke a (deleted) copy ctor. The default initialization for
+// atomics doesn't guarantee any actual initialization. Fortunately
+// this is a global, which is always zero-initialized.
 std::atomic<int> unique_name_counters[num_unique_name_counters] = {};
 
 int unique_count(size_t h) {
@@ -395,7 +396,7 @@ std::string dir_make_temp() {
             break;
         }
     }
-    internal_assert(false) << "Unable to create temp directory in " << tmp_dir << "\n";
+    internal_error << "Unable to create temp directory in " << tmp_dir << "\n";
     return "";
 #else
     std::string templ = "/tmp/XXXXXX";
@@ -496,12 +497,12 @@ std::string c_print_name(const std::string &name) {
 
     // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
     if (isalpha(name[0])) {
-        oss << '_';
+        oss << "_";
     }
 
     for (size_t i = 0; i < name.size(); i++) {
         if (name[i] == '.') {
-            oss << '_';
+            oss << "_";
         } else if (name[i] == '$') {
             oss << "__";
         } else if (name[i] != '_' && !isalnum(name[i])) {

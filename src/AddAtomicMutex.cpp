@@ -1,10 +1,12 @@
 #include "AddAtomicMutex.h"
+
 #include "ExprUsesVar.h"
 #include "Func.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "OutputImageParam.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -19,7 +21,8 @@ namespace {
 class CollectProducerStoreNames : public IRGraphVisitor {
 public:
     CollectProducerStoreNames(const std::string &producer_name)
-        : producer_name(producer_name) {}
+        : producer_name(producer_name) {
+    }
 
     Scope<void> store_names;
 
@@ -42,16 +45,17 @@ protected:
 class FindProducerStoreIndex : public IRGraphVisitor {
 public:
     FindProducerStoreIndex(const std::string &producer_name)
-        : producer_name(producer_name) {}
+        : producer_name(producer_name) {
+    }
 
-    Expr index; // The returned index.
+    Expr index;  // The returned index.
 
 protected:
     using IRGraphVisitor::visit;
 
     // Need to also extract the let bindings of a Store index.
     void visit(const Let *op) override {
-        IRGraphVisitor::visit(op); // Make sure we visit the Store first.
+        IRGraphVisitor::visit(op);  // Make sure we visit the Store first.
         if (index.defined()) {
             if (expr_uses_var(index, op->name)) {
                 index = Let::make(op->name, op->value, index);
@@ -59,7 +63,7 @@ protected:
         }
     }
     void visit(const LetStmt *op) override {
-        IRGraphVisitor::visit(op); // Make sure we visit the Store first.
+        IRGraphVisitor::visit(op);  // Make sure we visit the Store first.
         if (index.defined()) {
             if (expr_uses_var(index, op->name)) {
                 index = Let::make(op->name, op->value, index);
@@ -120,7 +124,8 @@ protected:
 class FindAtomicLetBindings : public IRGraphVisitor {
 public:
     FindAtomicLetBindings(const Scope<void> &store_names)
-        : store_names(store_names) {}
+        : store_names(store_names) {
+    }
 
     bool found = false;
 
@@ -186,6 +191,8 @@ protected:
         // Search for let bindings that access the producers.
         FindAtomicLetBindings finder(collector.store_names);
         op->body.accept(&finder);
+        // Each individual Store that remains can be done as a CAS
+        // loop or an actual atomic RMW of some form.
         if (finder.found) {
             // Can't remove mutex lock. Leave the Stmt as is.
             return IRMutator::visit(op);
@@ -205,7 +212,8 @@ public:
     using IRGraphVisitor::visit;
 
     FindStoreInAtomicMutex(const std::set<std::string> &store_names)
-        : store_names(store_names) {}
+        : store_names(store_names) {
+    }
 
     bool found = false;
     string producer_name;
@@ -243,8 +251,9 @@ protected:
 /** Replace the indices in the Store nodes with the specified variable. */
 class ReplaceStoreIndexWithVar : public IRMutator {
 public:
-    ReplaceStoreIndexWithVar(const std::string &producer_name, Expr var) :
-        producer_name(producer_name), var(var) {}
+    ReplaceStoreIndexWithVar(const std::string &producer_name, Expr var)
+        : producer_name(producer_name), var(std::move(var)) {
+    }
 
 protected:
     using IRMutator::visit;
@@ -268,7 +277,8 @@ protected:
 class AddAtomicMutex : public IRMutator {
 public:
     AddAtomicMutex(const map<string, Function> &env)
-        : env(env) {}
+        : env(env) {
+    }
 
 protected:
     using IRMutator::visit;
@@ -280,7 +290,7 @@ protected:
     Stmt allocate_mutex(const string &mutex_name, Expr extent, Stmt body) {
         Expr mutex_array = Call::make(type_of<halide_mutex_array *>(),
                                       "halide_mutex_array_create",
-                                      {extent},
+                                      {std::move(extent)},
                                       Call::Extern);
         // Allocate a scalar of halide_mutex_array.
         // This generates halide_mutex_array mutex[1];
@@ -395,7 +405,7 @@ protected:
         Stmt body = op->body;
 
         Expr index = find.index;
-        Expr index_let; // If defined, represents the value of the lifted let binding.
+        Expr index_let;  // If defined, represents the value of the lifted let binding.
         if (!index.defined()) {
             // Scalar output.
             index = Expr(0);

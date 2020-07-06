@@ -1,3 +1,6 @@
+#ifndef _WEIGHTS
+#define _WEIGHTS
+
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -48,3 +51,4 @@ struct Weights {
 }  // namespace Internal
 }  // namespace Halide
 
+#endif  // _WEIGHTS

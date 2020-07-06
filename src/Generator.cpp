@@ -1,7 +1,11 @@
 #include <cmath>
 #include <fstream>
 #include <unordered_map>
+#include <utility>
 
+#include "BoundaryConditions.h"
+#include "CompilerLogger.h"
+#include "Derivative.h"
 #include "Generator.h"
 #include "IRPrinter.h"
 #include "Module.h"
@@ -171,7 +175,7 @@ void ValueTracker::track_values(const std::string &name, const std::vector<Expr>
 std::vector<Expr> parameter_constraints(const Parameter &p) {
     internal_assert(p.defined());
     std::vector<Expr> values;
-    values.push_back(Expr(p.host_alignment()));
+    values.emplace_back(p.host_alignment());
     if (p.is_buffer()) {
         for (int i = 0; i < p.dimensions(); ++i) {
             values.push_back(p.min_constraint(i));
@@ -635,12 +639,12 @@ void StubEmitter::emit() {
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             GeneratorFactory generator_factory)
+                             const GeneratorFactory &generator_factory)
     : generator(generator_factory(context)) {
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             GeneratorFactory generator_factory,
+                             const GeneratorFactory &generator_factory,
                              const GeneratorParamsMap &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
     : GeneratorStub(context, generator_factory) {
@@ -732,6 +736,8 @@ std::string halide_type_to_c_type(const Type &t) {
         {encode(UInt(16)), "uint16_t"},
         {encode(UInt(32)), "uint32_t"},
         {encode(UInt(64)), "uint64_t"},
+        {encode(BFloat(16)), "uint16_t"},  // TODO: see Issues #3709, #3967
+        {encode(Float(16)), "uint16_t"},   // TODO: see Issues #3709, #3967
         {encode(Float(32)), "float"},
         {encode(Float(64)), "double"},
         {encode(Handle(64)), "void*"}};
@@ -742,14 +748,18 @@ std::string halide_type_to_c_type(const Type &t) {
 int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] =
         "gengen \n"
-        "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]\n"
+        "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-d 1|0]\n"
         "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME]\n"
         "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
         "\n"
+        " -d  Build a module that is suitable for using for gradient descent calculationn\n"
+        "     in TensorFlow or PyTorch. See Generator::build_gradient_module() documentation.\n"
+        "\n"
         " -e  A comma separated list of files to emit. Accepted values are:\n"
-        "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
-        "      stmt, cpp_stub, schedule, registration, featurization, pytorch_wrapper].\n"
-        "     If omitted, default value is [static_library, h, registration].\n"
+        "     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,\n"
+        "      llvm_assembly, object, python_extension, pytorch_wrapper, registration,\n"
+        "      schedule, static_library, stmt, stmt_html, compiler_log].\n"
+        "     If omitted, default value is [c_header, static_library, registration].\n"
         "\n"
         " -p  A comma-separated list of shared libraries that will be loaded before the\n"
         "     generator is run. Useful for custom auto-schedulers. The generator must\n"
@@ -758,15 +768,16 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         "     (Note that this does not change the default autoscheduler; use the -s flag\n"
         "     to set that value.)"
         "\n"
-        " -s  The name of an autoscheduler to set as the default.\n"
-        "\n"
-        "-r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'\n"
+        " -r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'\n"
         "     and 'static_library'. When multiple targets are specified, it picks a\n"
         "     runtime that is compatible with all of the targets, or fails if it cannot\n"
         "     find one. Flags across all of the targets that do not affect runtime code\n"
-        "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n";
+        "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n"
+        "\n"
+        " -s  The name of an autoscheduler to set as the default.\n";
 
     std::map<std::string, std::string> flags_info = {
+        {"-d", "0"},
         {"-e", ""},
         {"-f", ""},
         {"-g", ""},
@@ -811,6 +822,13 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
     }
 
+    if (flags_info["-d"] != "1" && flags_info["-d"] != "0") {
+        cerr << "-d must be 0 or 1\n";
+        cerr << kUsage;
+        return 1;
+    }
+    const int build_gradient_module = flags_info["-d"] == "1";
+
     std::string autoscheduler_name = flags_info["-s"];
     if (!autoscheduler_name.empty()) {
         Pipeline::set_default_autoscheduler_name(autoscheduler_name);
@@ -839,6 +857,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
         return 1;
     }
+
     std::string function_name = flags_info["-f"];
     if (function_name.empty()) {
         // If -f isn't specified, assume function name = generator name.
@@ -903,7 +922,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 for (auto iter = output_info.cbegin(); iter != end; ++iter) {
                     cerr << iter->second.name;
                     if (iter != last) {
-                        cerr << ' ';
+                        cerr << " ";
                     }
                 }
                 cerr << "], ignoring.\n";
@@ -914,6 +933,42 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
     }
 
+    // Allow quick-n-dirty use of compiler logging via HL_DEBUG_COMPILER_LOGGER env var
+    const bool do_compiler_logging = outputs.count(Output::compiler_log) ||
+                                     (get_env_variable("HL_DEBUG_COMPILER_LOGGER") == "1");
+
+    const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
+
+    const CompilerLoggerFactory no_compiler_logger_factory =
+        [](const std::string &, const Target &) -> std::unique_ptr<CompilerLogger> {
+        return nullptr;
+    };
+
+    const CompilerLoggerFactory json_compiler_logger_factory =
+        [&](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
+        // rebuild generator_args from the map so that they are always canonical
+        std::string generator_args_string;
+        std::string sep;
+        for (const auto &it : generator_args) {
+            if (it.first == "target") continue;
+            std::string quote = it.second.string_value.find(" ") != std::string::npos ? "\\\"" : "";
+            generator_args_string += sep + it.first + "=" + quote + it.second.string_value + quote;
+            sep = " ";
+        }
+        std::unique_ptr<JSONCompilerLogger> t(new JSONCompilerLogger(
+            obfuscate_compiler_logging ? "" : generator_name,
+            obfuscate_compiler_logging ? "" : function_name,
+            obfuscate_compiler_logging ? "" : autoscheduler_name,
+            obfuscate_compiler_logging ? Target() : target,
+            obfuscate_compiler_logging ? "" : generator_args_string,
+            obfuscate_compiler_logging));
+        return t;
+    };
+
+    const CompilerLoggerFactory compiler_logger_factory = do_compiler_logging ?
+                                                              json_compiler_logger_factory :
+                                                              no_compiler_logger_factory;
+
     if (!runtime_name.empty()) {
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
 
@@ -923,7 +978,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 user_error << "Failed to find compatible runtime target for "
                            << gcd_target.to_string()
                            << " and "
-                           << targets[i].to_string() << '\n';
+                           << targets[i].to_string() << "\n";
             }
         }
 
@@ -932,6 +987,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
 
         auto output_files = compute_output_files(gcd_target, base_path, outputs);
+        // Runtime doesn't get to participate in the CompilerLogger party
         compile_standalone_runtime(output_files, gcd_target);
     }
 
@@ -940,6 +996,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
         if (outputs.count(Output::cpp_stub)) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
+            // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
             auto stub_file_path = base_path + output_info[Output::cpp_stub].extension;
             gen->emit_cpp_stub(stub_file_path);
@@ -948,21 +1005,15 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             auto output_files = compute_output_files(targets[0], base_path, outputs);
-            auto module_producer = [&generator_name, &generator_args](const std::string &name, const Target &target) -> Module {
+            auto module_factory = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
                 auto sub_generator_args = generator_args;
                 sub_generator_args.erase("target");
                 // Must re-create each time since each instance will have a different Target.
                 auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
                 gen->set_generator_param_values(sub_generator_args);
-                return gen->build_module(name);
+                return build_gradient_module ? gen->build_gradient_module(name) : gen->build_module(name);
             };
-            if (targets.size() > 1) {
-                compile_multitarget(function_name, output_files, targets, module_producer);
-            } else {
-                // compile_multitarget() will fail if we request anything but library and/or header,
-                // so defer directly to Module::compile if there is a single target.
-                module_producer(function_name, targets[0]).compile(output_files);
-            }
+            compile_multitarget(function_name, output_files, targets, module_factory, compiler_logger_factory);
         }
     }
 
@@ -1027,7 +1078,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
     std::lock_guard<std::mutex> lock(registry.mutex);
     internal_assert(registry.factories.find(name) == registry.factories.end())
         << "Duplicate Generator name: " << name;
-    registry.factories[name] = generator_factory;
+    registry.factories[name] = std::move(generator_factory);
 }
 
 /* static */
@@ -1397,22 +1448,21 @@ Module GeneratorBase::build_module(const std::string &function_name,
         auto_schedule_results = pipeline.auto_schedule(get_target(), get_machine_params());
     }
 
-    GeneratorParamInfo &pi = param_info();
+    const GeneratorParamInfo &pi = param_info();
     std::vector<Argument> filter_arguments;
-    for (auto *input : pi.inputs()) {
+    for (const auto *input : pi.inputs()) {
         for (const auto &p : input->parameters_) {
             filter_arguments.push_back(to_argument(p, p.is_buffer() ? Expr() : input->get_def_expr()));
         }
     }
 
-    Module result = pipeline.compile_to_module(filter_arguments, function_name, target, linkage_type);
+    Module result = pipeline.compile_to_module(filter_arguments, function_name, get_target(), linkage_type);
     std::shared_ptr<ExternsMap> externs_map = get_externs_map();
     for (const auto &map_entry : *externs_map) {
         result.append(map_entry.second);
     }
 
-    auto outputs = pipeline.outputs();
-    for (auto *output : pi.outputs()) {
+    for (const auto *output : pi.outputs()) {
         for (size_t i = 0; i < output->funcs().size(); ++i) {
             auto from = output->funcs()[i].name();
             auto to = output->array_name(i);
@@ -1423,6 +1473,167 @@ Module GeneratorBase::build_module(const std::string &function_name,
             }
         }
     }
+
+    result.set_auto_scheduler_results(auto_schedule_results);
+
+    return result;
+}
+
+Module GeneratorBase::build_gradient_module(const std::string &function_name) {
+    constexpr int DBG = 1;
+
+    // I doubt these ever need customizing; if they do, we can make them arguments to this function.
+    const std::string grad_input_pattern = "_grad_loss_for_$OUT$";
+    const std::string grad_output_pattern = "_grad_loss_$OUT$_wrt_$IN$";
+    const LinkageType linkage_type = LinkageType::ExternalPlusMetadata;
+
+    user_assert(!function_name.empty()) << "build_gradient_module(): function_name cannot be empty\n";
+
+    call_configure();
+    Pipeline original_pipeline = build_pipeline();
+    std::vector<Func> original_outputs = original_pipeline.outputs();
+
+    // Construct the adjoint pipeline, which has:
+    // - All the same inputs as the original, in the same order
+    // - Followed by one grad-input for each original output
+    // - Followed by one output for each unique pairing of original-output + original-input.
+
+    const GeneratorParamInfo &pi = param_info();
+
+    // Even though propagate_adjoints() supports Funcs-of-Tuples just fine,
+    // we aren't going to support them here (yet); AFAICT, neither PyTorch nor
+    // TF support Tensors with Tuples-as-values, so we'd have to split the
+    // tuples up into separate Halide inputs and outputs anyway; since Generator
+    // doesn't support Tuple-valued Inputs at all, and Tuple-valued Outputs
+    // are quite rare, we're going to just fail up front, with the assumption
+    // that the coder will explicitly adapt their code as needed. (Note that
+    // support for Tupled outputs could be added with some effort, so if this
+    // is somehow deemed critical, go for it)
+    for (const auto *input : pi.inputs()) {
+        const size_t tuple_size = input->types_defined() ? input->types().size() : 1;
+        // Note: this should never happen
+        internal_assert(tuple_size == 1) << "Tuple Inputs are not yet supported by build_gradient_module()";
+    }
+    for (const auto *output : pi.outputs()) {
+        const size_t tuple_size = output->types_defined() ? output->types().size() : 1;
+        internal_assert(tuple_size == 1) << "Tuple Outputs are not yet supported by build_gradient_module";
+    }
+
+    std::vector<Argument> gradient_inputs;
+
+    // First: the original inputs. Note that scalar inputs remain scalar,
+    // rather being promoted into zero-dimensional buffers.
+    for (const auto *input : pi.inputs()) {
+        // There can be multiple Funcs/Parameters per input if the input is an Array
+        internal_assert(input->parameters_.size() == input->funcs_.size());
+        for (const auto &p : input->parameters_) {
+            gradient_inputs.push_back(to_argument(p, p.is_buffer() ? Expr() : input->get_def_expr()));
+            debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";
+        }
+    }
+
+    // Next: add a grad-input for each *original* output; these will
+    // be the same shape as the output (so we should copy estimates from
+    // those outputs onto these estimates).
+    // - If an output is an Array, we'll have a separate input for each array element.
+
+    std::vector<ImageParam> d_output_imageparams;
+    for (const auto *output : pi.outputs()) {
+        for (size_t i = 0; i < output->funcs().size(); ++i) {
+            const Func &f = output->funcs()[i];
+            const std::string output_name = output->array_name(i);
+            // output_name is something like "funcname_i"
+            const std::string grad_in_name = replace_all(grad_input_pattern, "$OUT$", output_name);
+            // TODO(srj): does it make sense for gradient to be a non-float type?
+            // For now, assume it's always float32 (unless the output is already some float).
+            const Type grad_in_type = output->type().is_float() ? output->type() : Float(32);
+            const int grad_in_dimensions = f.dimensions();
+            const ArgumentEstimates grad_in_estimates = f.output_buffer().parameter().get_argument_estimates();
+            internal_assert((int)grad_in_estimates.buffer_estimates.size() == grad_in_dimensions);
+
+            ImageParam d_im(grad_in_type, grad_in_dimensions, grad_in_name);
+            for (int d = 0; d < grad_in_dimensions; d++) {
+                d_im.parameter().set_min_constraint_estimate(d, grad_in_estimates.buffer_estimates[i].min);
+                d_im.parameter().set_extent_constraint_estimate(d, grad_in_estimates.buffer_estimates[i].extent);
+            }
+            d_output_imageparams.push_back(d_im);
+            gradient_inputs.push_back(to_argument(d_im.parameter(), Expr()));
+
+            debug(DBG) << "    gradient synthesized input is: " << gradient_inputs.back().name << "\n";
+        }
+    }
+
+    // Finally: define the output Func(s), one for each unique output/input pair.
+    // Note that original_outputs.size() != pi.outputs().size() if any outputs are arrays.
+    internal_assert(original_outputs.size() == d_output_imageparams.size());
+    std::vector<Func> gradient_outputs;
+    for (size_t i = 0; i < original_outputs.size(); ++i) {
+        const Func &original_output = original_outputs.at(i);
+        const ImageParam &d_output = d_output_imageparams.at(i);
+        Region bounds;
+        for (int i = 0; i < d_output.dimensions(); i++) {
+            bounds.emplace_back(d_output.dim(i).min(), d_output.dim(i).extent());
+        }
+        Func adjoint_func = BoundaryConditions::constant_exterior(d_output, make_zero(d_output.type()));
+        Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
+
+        const std::string &output_name = original_output.name();
+        for (const auto *input : pi.inputs()) {
+            for (size_t i = 0; i < input->funcs_.size(); ++i) {
+                const std::string input_name = input->array_name(i);
+                const auto &f = input->funcs_[i];
+                const auto &p = input->parameters_[i];
+
+                Func d_f = d(f);
+
+                std::string grad_out_name = replace_all(replace_all(grad_output_pattern, "$OUT$", output_name), "$IN$", input_name);
+                if (!d_f.defined()) {
+                    grad_out_name = "_dummy" + grad_out_name;
+                }
+
+                Func d_out_wrt_in(grad_out_name);
+                if (d_f.defined()) {
+                    d_out_wrt_in(Halide::_) = d_f(Halide::_);
+                } else {
+                    debug(DBG) << "    No Derivative found for output " << output_name << " wrt input " << input_name << "\n";
+                    // If there was no Derivative found, don't skip the output;
+                    // just replace with a dummy Func that is all zeros. This ensures
+                    // that the signature of the Pipeline we produce is always predictable.
+                    std::vector<Var> vars;
+                    for (int i = 0; i < d_output.dimensions(); i++) {
+                        vars.push_back(Var::implicit(i));
+                    }
+                    d_out_wrt_in(vars) = make_zero(d_output.type());
+                }
+
+                d_out_wrt_in.set_estimates(p.get_argument_estimates().buffer_estimates);
+
+                // Useful for debugging; ordinarily better to leave out
+                // debug(0) << "\n\n"
+                //          << "output:\n" << FuncWithDependencies(original_output) << "\n"
+                //          << "d_output:\n" << FuncWithDependencies(adjoint_func) << "\n"
+                //          << "input:\n" << FuncWithDependencies(f) << "\n"
+                //          << "d_out_wrt_in:\n" << FuncWithDependencies(d_out_wrt_in) << "\n";
+
+                gradient_outputs.push_back(d_out_wrt_in);
+                debug(DBG) << "    gradient output is: " << d_out_wrt_in.name() << "\n";
+            }
+        }
+    }
+
+    Pipeline grad_pipeline = Pipeline(gradient_outputs);
+
+    AutoSchedulerResults auto_schedule_results;
+    if (get_auto_schedule()) {
+        auto_schedule_results = grad_pipeline.auto_schedule(get_target(), get_machine_params());
+    } else {
+        user_warning << "Autoscheduling is not enabled in build_gradient_module(), so the resulting "
+                        "gradient module will be unscheduled; this is very unlikely to be what you want.\n";
+    }
+
+    Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, get_target(), linkage_type);
+    user_assert(get_externs_map()->empty())
+        << "Building a gradient-descent module for a Generator with ExternalCode is not supported.\n";
 
     result.set_auto_scheduler_results(auto_schedule_results);
 
@@ -1738,7 +1949,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     verify_internals();
 }
 
-void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
+void GeneratorInputBase::set_estimate_impl(const Var &var, const Expr &min, const Expr &extent) {
     internal_assert(exprs_.empty() && !funcs_.empty() && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
@@ -1760,7 +1971,7 @@ void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
     }
 }
 
-void GeneratorInputBase::set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates) {
+void GeneratorInputBase::set_estimates_impl(const Region &estimates) {
     internal_assert(exprs_.empty() && !funcs_.empty() && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
@@ -1769,8 +1980,9 @@ void GeneratorInputBase::set_estimates_impl(const std::vector<std::pair<Expr, Ex
         // we end up compiling this for toplevel.
         for (size_t dim = 0; dim < estimates.size(); ++dim) {
             Parameter &p = parameters_[i];
-            p.set_min_constraint_estimate(dim, estimates[dim].first);
-            p.set_extent_constraint_estimate(dim, estimates[dim].second);
+            const Range &r = estimates[dim];
+            p.set_min_constraint_estimate(dim, r.min);
+            p.set_extent_constraint_estimate(dim, r.extent);
         }
     }
 }
@@ -1801,7 +2013,7 @@ void GeneratorOutputBase::init_internals() {
     funcs_.clear();
     if (array_size_defined()) {
         for (size_t i = 0; i < array_size(); ++i) {
-            funcs_.push_back(Func(array_name(i)));
+            funcs_.emplace_back(array_name(i));
         }
     }
 }

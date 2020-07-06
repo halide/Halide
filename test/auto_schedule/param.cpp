@@ -114,13 +114,13 @@ void run_test_4() {
 }
 
 int main(int argc, char **argv) {
-    std::cout << "Test 1:" << std::endl;
+    std::cout << "Test 1:\n";
     run_test_1();
-    std::cout << "Test 2:" << std::endl;
+    std::cout << "Test 2:\n";
     run_test_2();
-    std::cout << "Test 3:" << std::endl;
+    std::cout << "Test 3:\n";
     run_test_3();
-    std::cout << "Test 4:" << std::endl;
+    std::cout << "Test 4:\n";
     run_test_4();
     printf("Success!\n");
     return 0;

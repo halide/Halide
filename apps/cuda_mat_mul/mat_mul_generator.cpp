@@ -6,16 +6,17 @@ namespace {
 
 void set_alignment_and_bounds(OutputImageParam p, int size) {
     p.set_host_alignment(16)
-        .dim(0).set_bounds(0, size)
-        .dim(1).set_stride(size);
+        .dim(0)
+        .set_bounds(0, size)
+        .dim(1)
+        .set_stride(size);
 }
 
 class MatMul : public Halide::Generator<MatMul> {
 public:
-
-    GeneratorParam<int>   size {"size", 1024};
-    Input<Buffer<float>>  A{"A", 2};
-    Input<Buffer<float>>  B{"B", 2};
+    GeneratorParam<int> size{"size", 1024};
+    Input<Buffer<float>> A{"A", 2};
+    Input<Buffer<float>> B{"B", 2};
 
     Output<Buffer<float>> out{"out", 2};
 
@@ -36,6 +37,9 @@ public:
 
         Var xi, yi, xio, xii, yii, xo, yo, x_pair, xiio, ty;
         RVar rxo, rxi;
+
+        // This schedule requires CUDA, due to use of gpu_lanes()
+        assert(get_target().has_feature(Target::CUDA));
 
         out.bound(x, 0, size)
             .bound(y, 0, size)
@@ -76,21 +80,27 @@ public:
             .compute_at(prod, ty)
             .split(Bx, xo, xi, warp_size)
             .gpu_lanes(xi)
-            .unroll(xo).unroll(By);
+            .unroll(xo)
+            .unroll(By);
 
         A.in()
             .compute_at(prod, rxo)
             .vectorize(Ax, vec_size)
             .split(Ax, xo, xi, warp_size)
             .gpu_lanes(xi)
-            .unroll(xo).split(Ay, yo, yi, y_tile)
-            .gpu_threads(yi).unroll(yo);
+            .unroll(xo)
+            .split(Ay, yo, yi, y_tile)
+            .gpu_threads(yi)
+            .unroll(yo);
 
-        A.in().in().compute_at(prod, rxi)
+        A.in()
+            .in()
+            .compute_at(prod, rxi)
             .vectorize(Ax, vec_size)
             .split(Ax, xo, xi, warp_size)
             .gpu_lanes(xi)
-            .unroll(xo).unroll(Ay);
+            .unroll(xo)
+            .unroll(Ay);
 
         set_alignment_and_bounds(A, size);
         set_alignment_and_bounds(B, size);

@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "CSE.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "Lerp.h"
 #include "Simplify.h"
@@ -9,7 +10,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
+Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight) {
 
     Expr result;
 

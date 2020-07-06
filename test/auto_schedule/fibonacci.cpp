@@ -10,9 +10,9 @@ double run_test(bool auto_schedule) {
     RDom r(2, 298, "r");
 
     fib(x) = 1;
-    fib(r) = fib(r-2) + fib(r-1);
+    fib(r) = fib(r - 2) + fib(r - 1);
 
-    g(x) = fib(x+10);
+    g(x) = fib(x + 10);
 
     // Provide estimates on the pipeline output
     g.set_estimate(x, 0, 300);
@@ -34,18 +34,17 @@ double run_test(bool auto_schedule) {
         p.realize(out);
     });
 
-    return t*1000;
+    return t * 1000;
 }
-
 
 int main(int argc, char **argv) {
     double manual_time = run_test(false);
     double auto_time = run_test(true);
 
-    std::cout << "======================" << std::endl;
-    std::cout << "Manual time: " << manual_time << "ms" << std::endl;
-    std::cout << "Auto time: " << auto_time << "ms" << std::endl;
-    std::cout << "======================" << std::endl;
+    std::cout << "======================\n"
+              << "Manual time: " << manual_time << "ms\n"
+              << "Auto time: " << auto_time << "ms\n"
+              << "======================\n";
 
     printf("Success!\n");
     return 0;

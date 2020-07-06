@@ -1,156 +1,144 @@
-# weights
-file(GLOB WF baseline.weights)
-get_filename_component(BASENAME_WF ${WF} NAME_WE)
-set(WF_CPP ${BASENAME_WF}.cpp)
+# ================================================================================
+# Halide autoscheduler plugins rely on weak linking to work with static libraries.
+# This is not standard C++ and only works on Linux / macOS. Nothing special needs
+# to be done when linking to a shared version of Halide, however.
 
+if (NOT BUILD_SHARED_LIBS)
+    if (MSVC)
+        message(FATAL_ERROR "Autoscheduler plugins cannot be built against static Halide on Windows")
+    endif()
+
+    # Need to enable exports for the plugins to find Halide's symbols.
+    set(CMAKE_ENABLE_EXPORTS ON)
+endif ()
+
+
+# weights
+set(WF_CPP baseline.cpp)
+configure_file(baseline.weights baseline.weights COPYONLY)
 add_custom_command(OUTPUT ${WF_CPP}
-                   DEPENDS ${WF} binary2cpp
-                   COMMAND binary2cpp ${BASENAME_WF}_weights < ${WF} > ${WF_CPP}
-                   COMMENT "${WF} -> ${WF_CPP}"
+                   DEPENDS baseline.weights binary2cpp
+                   COMMAND binary2cpp baseline_weights < baseline.weights > ${WF_CPP}
                    VERBATIM)
 
-# =======================================================
-
 # cost_model, train_cost_model
-set(COST_MODEL_GENERATOR_FILES cost_model_generator.cpp)
-halide_generator(cost_model.generator SRCS ${COST_MODEL_GENERATOR_FILES})
-halide_generator(train_cost_model.generator SRCS ${COST_MODEL_GENERATOR_FILES})
-halide_library_from_generator(cost_model
-                              FUNCTION_NAME cost_model
-                              GENERATOR cost_model.generator)
-halide_library_from_generator(train_cost_model
-                              FUNCTION_NAME train_cost_model
-                              GENERATOR train_cost_model.generator)
+add_executable(cost_model.generator cost_model_generator.cpp)
+target_link_libraries(cost_model.generator PRIVATE Halide::Generator)
 
-# =======================================================
+add_halide_library(cost_model FROM cost_model.generator)
+add_halide_library(train_cost_model FROM cost_model.generator
+                   USE_RUNTIME cost_model.runtime)
 
 # retrain_cost_model
-add_executable(retrain_cost_model_process
+add_executable(retrain_cost_model
                ASLog.cpp
                DefaultCostModel.cpp
                Weights.cpp
                retrain_cost_model.cpp
                ${WF_CPP})
-set_target_properties(retrain_cost_model_process
-                      PROPERTIES OUTPUT_NAME retrain_cost_model)
-target_include_directories(retrain_cost_model_process
-                           PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../support)
-target_link_libraries(retrain_cost_model_process
-                      PRIVATE cost_model train_cost_model)
-
-# =======================================================
+target_include_directories(retrain_cost_model PRIVATE ${PROJECT_SOURCE_DIR}/apps/support) # TODO(#4053): relocate. just for cmdline.h
+target_link_libraries(retrain_cost_model PRIVATE cost_model train_cost_model Halide::Halide)
 
 # libauto_schedule
-add_library(auto_schedule
-            SHARED
+# Note: must use MODULE here (not SHARED) to get .so (instead of .dylib) on OSX.
+# This means that this can only be opened dynamically (not linked directly), but that's ok.
+add_library(Halide_Adams2019
+            MODULE
             ASLog.cpp
             AutoSchedule.cpp
             DefaultCostModel.cpp
             FunctionDAG.cpp
+            LoopNest.cpp
             Weights.cpp
             ${WF_CPP})
+add_library(Halide::Adams2019 ALIAS Halide_Adams2019)
+set_target_properties(Halide_Adams2019 PROPERTIES
+                      EXPORT_NAME Adams2019
+                      OUTPUT_NAME auto_schedule)
 
-if(HALIDE_LIBRARY_TYPE STREQUAL STATIC)
-  target_link_libraries(auto_schedule PRIVATE cost_model train_cost_model)
-else()
-  target_link_libraries(auto_schedule
-                        PRIVATE cost_model train_cost_model Halide)
-endif()
+target_link_libraries(Halide_Adams2019 PRIVATE cost_model train_cost_model Halide::Plugin)
 
-if(NOT MSVC)
-  set_target_properties(auto_schedule PROPERTIES LINK_FLAGS "-rdynamic")
-elseif(APPLE)
-  set_target_properties(auto_schedule
-                        PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
-endif()
+if (NOT HALIDE_ENABLE_RTTI)
+    target_compile_options(Halide_Adams2019 PRIVATE
+                           $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
+                           $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fno-rtti>)
+endif ()
 
-if(NOT HALIDE_ENABLE_RTTI)
-  if(NOT MSVC)
-    target_compile_options(auto_schedule PUBLIC "-fno-rtti")
-  else()
-    target_compile_options(auto_schedule PUBLIC "/GR-")
-  endif()
-endif()
+# =================================================================
+# TODO(#4053): move this to a separate folder since it's a demo/app
 
-install(TARGETS auto_schedule LIBRARY DESTINATION bin)
+add_executable(demo.generator demo_generator.cpp)
+target_link_libraries(demo.generator PRIVATE Halide::Generator)
 
-# =======================================================
+add_halide_library(demo FROM demo.generator
+                   PARAMS auto_schedule=true
+                   AUTOSCHEDULER Halide::Adams2019
+                   REGISTRATION DEMO_REGISTRATION_FILE)
 
-# demo_apps_autoscheduler
-halide_library(demo
-               SRCS demo_generator.cpp
-               FUNCTION_NAME demo
-               GENERATOR_ARGS auto_schedule=true -p $<TARGET_FILE:auto_schedule> -s Adams2019)
-add_dependencies(demo auto_schedule)
+add_executable(demo_apps_autoscheduler ${DEMO_REGISTRATION_FILE})
+target_link_libraries(demo_apps_autoscheduler PRIVATE demo Halide::RunGenMain)
 
-_halide_genfiles_dir(demo GENFILES_DIR)
-set(DEMO_REGISTRATION_FILE ${GENFILES_DIR}/demo.registration.cpp)
+add_test(NAME demo_apps_autoscheduler
+         COMMAND demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
 
-add_executable(demo_apps_autoscheduler ${HALIDE_TOOLS_DIR}/RunGenMain.cpp
-               ${DEMO_REGISTRATION_FILE})
-target_include_directories(
-  demo_apps_autoscheduler
-  PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
-halide_use_image_io(demo_apps_autoscheduler)
-target_link_libraries(demo_apps_autoscheduler PRIVATE demo)
-add_dependencies(demo_apps_autoscheduler demo auto_schedule)
+set_tests_properties(demo_apps_autoscheduler PROPERTIES LABELS Adams2019)
 
-add_custom_command(TARGET demo_apps_autoscheduler POST_BUILD
-                   COMMAND demo_apps_autoscheduler
-                           --benchmarks=all
-                           --benchmark_min_time=1
-                           --estimate_all
-                   WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+# =================================================================
+# TODO(#4053): move this to a separate folder since it's a demo/app
 
-# =======================================================
+add_executable(included_schedule_file.generator included_schedule_file_generator.cpp)
+target_link_libraries(included_schedule_file.generator PRIVATE Halide::Generator)
 
-# demo_included_schedule_file
-halide_library(included_schedule_file
-               SRCS included_schedule_file_generator.cpp
-               FUNCTION_NAME included_schedule_file
-               GENERATOR_ARGS auto_schedule=true -p $<TARGET_FILE:auto_schedule> -s Adams2019)
-add_dependencies(included_schedule_file auto_schedule)
+add_halide_library(included_schedule_file FROM included_schedule_file.generator
+                   PARAMS auto_schedule=true
+                   AUTOSCHEDULER Halide::Adams2019
+                   REGISTRATION INCLUDED_SCHEDULE_FILE_REGISTRATION_FILE)
 
-_halide_genfiles_dir(included_schedule_file GENFILES_DIR)
-set(INCLUDED_SCHEDULE_FILE_REGISTRATION_FILE
-    ${GENFILES_DIR}/included_schedule_file.registration.cpp)
+add_executable(demo_included_schedule_file ${INCLUDED_SCHEDULE_FILE_REGISTRATION_FILE})
+target_link_libraries(demo_included_schedule_file PRIVATE included_schedule_file Halide::RunGenMain)
 
-add_executable(demo_included_schedule_file ${HALIDE_TOOLS_DIR}/RunGenMain.cpp
-               ${INCLUDED_SCHEDULE_FILE_REGISTRATION_FILE})
-target_include_directories(
-  demo_included_schedule_file
-  PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
-halide_use_image_io(demo_included_schedule_file)
-target_link_libraries(demo_included_schedule_file
-                      PRIVATE included_schedule_file)
-add_dependencies(demo_included_schedule_file included_schedule_file
-                 auto_schedule)
+add_test(NAME demo_included_schedule_file
+         COMMAND demo_included_schedule_file --benchmarks=all --benchmark_min_time=1 --estimate_all)
 
-add_custom_command(TARGET demo_included_schedule_file POST_BUILD
-                   COMMAND demo_included_schedule_file
-                           --benchmarks=all
-                           --benchmark_min_time=1
-                           --estimate_all
-                   WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+set_tests_properties(demo_included_schedule_file PROPERTIES LABELS Adams2019)
 
-# =======================================================
+# ====================================================
+# Auto-tuning support utilities.
+# TODO(#4053): implement auto-tuning support in CMake?
 
 add_executable(featurization_to_sample featurization_to_sample.cpp)
 
 add_executable(get_host_target get_host_target.cpp)
-target_include_directories(get_host_target PRIVATE "${HALIDE_INCLUDE_DIR}")
-target_link_libraries(get_host_target PRIVATE Halide)
+target_link_libraries(get_host_target PRIVATE Halide::Halide)
+
+add_executable(weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp Weights.cpp)
+target_link_libraries(weightsdir_to_weightsfile PRIVATE Halide::Runtime)
+
+# =================================================================
+# TODO(#4053): move these to a separate folder since they're tests.
 
 add_executable(test_apps_autoscheduler test.cpp)
-target_include_directories(
-  test_apps_autoscheduler
-  PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
-target_link_libraries(test_apps_autoscheduler PRIVATE Halide)
-if (NOT WIN32)
-  target_link_libraries(test_apps_autoscheduler PRIVATE dl)
-endif()
+target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
+
+add_test(NAME test_apps_autoscheduler
+         COMMAND test_apps_autoscheduler
+         WORKING_DIRECTORY $<TARGET_FILE_DIR:Halide_Adams2019>)
+
+set_tests_properties(test_apps_autoscheduler PROPERTIES
+                     LABELS Adams2019
+                     ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>")
+
+##
 
 add_executable(test_perfect_hash_map test_perfect_hash_map.cpp)
 
-add_executable(weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp
-               Weights.cpp)
+add_test(NAME test_perfect_hash_map COMMAND test_perfect_hash_map)
+set_tests_properties(test_perfect_hash_map PROPERTIES LABELS Adams2019)
+
+##
+
+add_executable(test_function_dag test_function_dag.cpp FunctionDAG.cpp ASLog.cpp)
+target_link_libraries(test_function_dag PRIVATE Halide::Halide Halide::Tools)
+
+add_test(NAME test_function_dag COMMAND test_function_dag)
+set_tests_properties(test_function_dag PROPERTIES LABELS Adams2019)

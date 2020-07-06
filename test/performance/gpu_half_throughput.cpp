@@ -7,9 +7,17 @@ int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
     if (!(t.has_feature(Target::CUDA) ||
           t.has_feature(Target::Metal))) {
-        printf("No half-supporting GPU API enabled. Skipping test\n");
+        printf("[SKIP] No GPU target enabled supporting half-precision.\n");
         return 0;
     }
+
+    std::vector<Target::Feature> cuda_capabilities{Target::CUDACapability30, Target::CUDACapability32, Target::CUDACapability35, Target::CUDACapability50, Target::CUDACapability61};
+    if (t.has_feature(Target::CUDA) && !(t.features_any_of(cuda_capabilities))) {
+        printf("[SKIP] Need CUDA Capability 30 or greater.\n");
+        return 0;
+    }
+
+    std::cout << t.to_string() << "\n";
 
     // Test three variants, in increasing order of speed.
     // 1) Store as float, math as float
@@ -41,11 +49,11 @@ int main(int argc, char **argv) {
     f1.compile_jit(t);
     f2.compile_jit(t);
 
-    double t1 = Tools::benchmark([&]() {f1.realize(f32_out); f32_out.device_sync();});
-    double t2 = Tools::benchmark([&]() {f2.realize(f16_out); f16_out.device_sync();});
+    double t1 = Tools::benchmark([&]() {f1.realize(f32_out); f32_out.device_sync(); });
+    double t2 = Tools::benchmark([&]() {f2.realize(f16_out); f16_out.device_sync(); });
 
     printf("Times: %f %f\n", t1, t2);
-    printf("Speed-up from using half type: %f x\n", t1/t2);
+    printf("Speed-up from using half type: %f x\n", t1 / t2);
 
     if (t2 > t1) {
         printf("Half should not have been slower than float\n");
@@ -66,4 +74,5 @@ int main(int argc, char **argv) {
     }
 
     printf("Success!\n");
+    return 0;
 }

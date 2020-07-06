@@ -22,6 +22,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
     if (may_simplify(op->type)) {
         auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type);
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(select(IRMatcher::intrin(Call::likely, true), x, y), x) ||
              rewrite(select(IRMatcher::intrin(Call::likely, false), x, y), y) ||
@@ -30,25 +31,16 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(1, x, y), x) ||
              rewrite(select(0, x, y), y) ||
              rewrite(select(x, y, y), y) ||
-             rewrite(select(x, intrin(Call::likely, y), y), true_value) ||
-             rewrite(select(x, y, intrin(Call::likely, y)), false_value) ||
-             rewrite(select(x, intrin(Call::likely_if_innermost, y), y), true_value) ||
-             rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), false_value) ||
-
-             // Select evaluates both sides, so if we have an
-             // unreachable expression on one side we can't use a
-             // signalling error. Call it UB and assume it can't
-             // happen. The tricky case to consider is:
-             // select(x > 0, a/x, select(x < 0, b/x, indeterminate()))
-             // If we use a signalling error and x > 0, then this will
-             // evaluate indeterminate(), because the top-level select
-             // evaluates both sides.
-
-             rewrite(select(x, y, IRMatcher::Indeterminate()), y) ||
-             rewrite(select(x, IRMatcher::Indeterminate(), y), y))) {
+             rewrite(select(x, intrin(Call::likely, y), y), false_value) ||
+             rewrite(select(x, y, intrin(Call::likely, y)), true_value) ||
+             rewrite(select(x, intrin(Call::likely_if_innermost, y), y), false_value) ||
+             rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), true_value) ||
+             false)) {
             return rewrite.result;
         }
+        // clang-format on
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(select(broadcast(x), y, z), select(x, y, z)) ||
              rewrite(select(x != y, z, w), select(x == y, w, z)) ||
@@ -109,6 +101,13 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x < 0, x * y, 0), min(x, 0) * y) ||
              rewrite(select(x < 0, 0, x * y), max(x, 0) * y) ||
 
+             // Note that in the rules below we know y is not a
+             // constant because it appears on the LHS of an
+             // addition. These rules therefore trade a non-constant
+             // for a constant.
+             rewrite(select(x, y + z, y), y + select(x, z, 0)) ||
+             rewrite(select(x, y, y + z), y + select(x, 0, z)) ||
+
              (no_overflow_int(op->type) &&
               (rewrite(select(x, y * c0, c1), select(x, y, fold(c1 / c0)) * c0, c1 % c0 == 0) ||
                rewrite(select(x, c0, y * c1), select(x, fold(c0 / c1), y) * c1, c0 % c1 == 0) ||
@@ -131,8 +130,9 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
                rewrite(select(x, y, true), !x || y) ||
                rewrite(select(x, false, y), !x && y) ||
                rewrite(select(x, true, y), x || y))))) {
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         }
+        // clang-format on
     }
 
     if (condition.same_as(op->condition) &&

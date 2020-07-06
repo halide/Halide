@@ -58,11 +58,11 @@ LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name,
     : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar, stage_index, locked)) {
 }
 
-LoopLevel::LoopLevel(const Internal::Function &f, VarOrRVar v, int stage_index)
+LoopLevel::LoopLevel(const Internal::Function &f, const VarOrRVar &v, int stage_index)
     : LoopLevel(f.name(), v.name(), v.is_rvar, stage_index, false) {
 }
 
-LoopLevel::LoopLevel(const Func &f, VarOrRVar v, int stage_index)
+LoopLevel::LoopLevel(const Func &f, const VarOrRVar &v, int stage_index)
     : LoopLevel(f.function().name(), v.name(), v.is_rvar, stage_index, false) {
 }
 
@@ -287,7 +287,8 @@ struct StageScheduleContents {
     StageScheduleContents()
         : fuse_level(FuseLoopLevel()), touched(false),
           allow_race_conditions(false), atomic(false),
-          override_atomic_associativity_test(false) {};
+          override_atomic_associativity_test(false) {
+    }
 
     // Pass an IRMutator through to all Exprs referenced in the StageScheduleContents
     void mutate(IRMutator *mutator) {

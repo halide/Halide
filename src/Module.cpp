@@ -3,10 +3,12 @@
 #include <array>
 #include <fstream>
 #include <future>
+#include <utility>
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_PyTorch.h"
+#include "CompilerLogger.h"
 #include "Debug.h"
 #include "HexagonOffload.h"
 #include "IROperator.h"
@@ -16,7 +18,6 @@
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
-#include "WrapExternStages.h"
 
 using Halide::Internal::debug;
 
@@ -36,13 +37,13 @@ namespace Internal {
 // and in practice, it's extremely unlikely that anyone needs to rely on this
 // being pure C output (vs possibly C++).
 std::map<Output, OutputInfo> get_output_info(const Target &target) {
-    const bool is_windows_coff = target.os == Target::Windows &&
-                                 !target.has_feature(Target::MinGW);
+    const bool is_windows_coff = target.os == Target::Windows;
     std::map<Output, OutputInfo> ext = {
         {Output::assembly, {"assembly", ".s"}},
         {Output::bitcode, {"bitcode", ".bc"}},
         {Output::c_header, {"c_header", ".h"}},
         {Output::c_source, {"c_source", ".halide_generated.cpp"}},
+        {Output::compiler_log, {"compiler_log", ".halide_compiler_log"}},
         {Output::cpp_stub, {"cpp_stub", ".stub.h"}},
         {Output::featurization, {"featurization", ".featurization"}},
         {Output::llvm_assembly, {"llvm_assembly", ".ll"}},
@@ -73,11 +74,10 @@ public:
         debug(1) << "dir_rmdir: " << dir_path << "\n";
         dir_rmdir(dir_path);
     }
-    std::string add_temp_object_file(const std::string &base_path_name,
-                                     const std::string &suffix,
-                                     const Target &target,
-                                     bool in_front = false) {
-        const char *ext = (target.os == Target::Windows && !target.has_feature(Target::MinGW)) ? ".obj" : ".o";
+    std::string add_temp_file(const std::string &base_path_name,
+                              const std::string &suffix,
+                              const Target &target,
+                              bool in_front = false) {
         size_t slash_idx = base_path_name.rfind('/');
         size_t backslash_idx = base_path_name.rfind('\\');
         if (slash_idx == std::string::npos) {
@@ -91,7 +91,7 @@ public:
             backslash_idx++;
         }
         std::string base_name = base_path_name.substr(std::max(slash_idx, backslash_idx));
-        std::string name = dir_path + "/" + base_name + suffix + ext;
+        std::string name = dir_path + "/" + base_name + suffix;
         debug(1) << "add_temp_object_file: " << name << "\n";
         if (in_front) {
             dir_files.insert(dir_files.begin(), name);
@@ -99,6 +99,14 @@ public:
             dir_files.push_back(name);
         }
         return name;
+    }
+
+    std::string add_temp_object_file(const std::string &base_path_name,
+                                     const std::string &suffix,
+                                     const Target &target,
+                                     bool in_front = false) {
+        const char *ext = (target.os == Target::Windows) ? ".obj" : ".o";
+        return add_temp_file(base_path_name, suffix + ext, target, in_front);
     }
 
     const std::vector<std::string> &files() {
@@ -280,7 +288,6 @@ $NAMESPACECLOSE$
     // certainly irrelevant to scheduling issues, to make for easier reading
     const Target::Feature irrelevant_features[] = {
         Target::CPlusPlusMangling,
-        Target::LegacyBufferWrappers,
         Target::NoRuntime,
         Target::UserContext,
     };
@@ -343,7 +350,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          Stmt body,
                          LinkageType linkage,
                          NameMangling name_mangling)
-    : name(name), args(args), body(body), linkage(linkage), name_mangling(name_mangling) {
+    : name(name), args(args), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
 }
 
 LoweredFunc::LoweredFunc(const std::string &name,
@@ -351,9 +358,9 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          Stmt body,
                          LinkageType linkage,
                          NameMangling name_mangling)
-    : name(name), body(body), linkage(linkage), name_mangling(name_mangling) {
+    : name(name), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
-        this->args.push_back(LoweredArgument(i));
+        this->args.emplace_back(i);
     }
 }
 
@@ -530,7 +537,10 @@ Module Module::resolve_submodules() const {
         auto buf = copy.compile_to_buffer();
         lowered_module.append(buf);
     }
-
+    // Copy the autoscheduler results back into the lowered module after resolving the submodules.
+    if (auto *r = contents->auto_scheduler_results.get()) {
+        lowered_module.set_auto_scheduler_results(*r);
+    }
     return lowered_module;
 }
 
@@ -566,13 +576,12 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
     if (!submodules().empty()) {
         std::map<Output, std::string> output_files_copy = output_files;
         output_files_copy.erase(Output::stmt);
-        ;
         output_files_copy.erase(Output::stmt_html);
-        ;
         resolve_submodules().compile(output_files_copy);
         return;
     }
 
+    auto *logger = get_compiler_logger();
     if (contains(output_files, Output::object) || contains(output_files, Output::assembly) ||
         contains(output_files, Output::bitcode) || contains(output_files, Output::llvm_assembly) ||
         contains(output_files, Output::static_library)) {
@@ -580,9 +589,14 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
         if (contains(output_files, Output::object)) {
-            debug(1) << "Module.compile(): object " << output_files.at(Output::object) << "\n";
-            auto out = make_raw_fd_ostream(output_files.at(Output::object));
+            const auto &f = output_files.at(Output::object);
+            debug(1) << "Module.compile(): object " << f << "\n";
+            auto out = make_raw_fd_ostream(f);
             compile_llvm_module_to_object(*llvm_module, *out);
+            if (logger) {
+                out->flush();
+                logger->record_object_code_size(file_stat(f).file_size);
+            }
         }
         if (contains(output_files, Output::static_library)) {
             // To simplify the code, we always create a temporary object output
@@ -597,6 +611,10 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
                 auto out = make_raw_fd_ostream(object);
                 compile_llvm_module_to_object(*llvm_module, *out);
                 out->flush();  // create_static_library() is happier if we do this
+                if (logger && !contains(output_files, Output::object)) {
+                    // Don't double-record object-code size if we already recorded it for object
+                    logger->record_object_code_size(file_stat(object).file_size);
+                }
             }
             debug(1) << "Module.compile(): static_library " << output_files.at(Output::static_library) << "\n";
             Target base_target(target().os, target().arch, target().bits);
@@ -673,6 +691,20 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
         std::ofstream file(output_files.at(Output::pytorch_wrapper));
         Internal::CodeGen_PyTorch cg(file);
         cg.compile(*this);
+        file.close();
+        internal_assert(!file.fail());
+    }
+    if (contains(output_files, Output::compiler_log)) {
+        debug(1) << "Module.compile(): compiler_log " << output_files.at(Output::compiler_log) << "\n";
+        std::ofstream file(output_files.at(Output::compiler_log));
+        internal_assert(get_compiler_logger() != nullptr);
+        get_compiler_logger()->emit_to_stream(file);
+        file.close();
+        internal_assert(!file.fail());
+    }
+    // If HL_DEBUG_COMPILER_LOGGER is set, dump the log (if any) to stderr now, whether or it is required
+    if (get_env_variable("HL_DEBUG_COMPILER_LOGGER") == "1" && get_compiler_logger() != nullptr) {
+        get_compiler_logger()->emit_to_stream(std::cerr);
     }
 }
 
@@ -697,20 +729,35 @@ void compile_standalone_runtime(const std::string &object_filename, Target t) {
     compile_standalone_runtime({{Output::object, object_filename}}, t);
 }
 
+namespace {
+
+class ScopedCompilerLogger {
+public:
+    ScopedCompilerLogger(const CompilerLoggerFactory &compiler_logger_factory, const std::string &fn_name, const Target &target) {
+        internal_assert(!get_compiler_logger());
+        if (compiler_logger_factory) {
+            set_compiler_logger(compiler_logger_factory(fn_name, target));
+        } else {
+            set_compiler_logger(nullptr);
+        }
+    }
+
+    ~ScopedCompilerLogger() {
+        set_compiler_logger(nullptr);
+    }
+};
+
+}  // namespace
+
 void compile_multitarget(const std::string &fn_name,
                          const std::map<Output, std::string> &output_files,
                          const std::vector<Target> &targets,
-                         ModuleProducer module_producer) {
+                         const ModuleFactory &module_factory,
+                         const CompilerLoggerFactory &compiler_logger_factory) {
     validate_outputs(output_files);
 
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";
     user_assert(!targets.empty()) << "Must specify at least one target.\n";
-
-    // You can't ask for .o files when doing this; it's not really useful,
-    // and would complicate output (we might have to do multiple passes
-    // if different values for NoRuntime are specified)... so just forbid
-    // it up front.
-    user_assert(!contains(output_files, Output::object)) << "Cannot request object for compile_multitarget.\n";
 
     // The final target in the list is considered "baseline", and is used
     // for (e.g.) the runtime and shared code. It is often just os-arch-bits
@@ -724,9 +771,16 @@ void compile_multitarget(const std::string &fn_name,
     const bool needs_wrapper = (targets.size() > 1);
     if (targets.size() == 1) {
         debug(1) << "compile_multitarget: single target is " << base_target.to_string() << "\n";
-        module_producer(fn_name, base_target).compile(output_files);
+        ScopedCompilerLogger activate(compiler_logger_factory, fn_name, base_target);
+        module_factory(fn_name, base_target).compile(output_files);
         return;
     }
+
+    // You can't ask for .o files when doing this; it's not really useful,
+    // and would complicate output (we might have to do multiple passes
+    // if different values for NoRuntime are specified)... so just forbid
+    // it up front.
+    user_assert(!contains(output_files, Output::object)) << "Cannot request object for compile_multitarget.\n";
 
     // For safety, the runtime must be built only with features common to all
     // of the targets; given an unusual ordering like
@@ -744,7 +798,7 @@ void compile_multitarget(const std::string &fn_name,
     constexpr int kFeaturesWordCount = (Target::FeatureEnd + 63) / (sizeof(uint64_t) * 8);
     uint64_t runtime_features[kFeaturesWordCount] = {(uint64_t)-1LL};
 
-    TemporaryObjectFileDir temp_dir;
+    TemporaryObjectFileDir temp_obj_dir, temp_compiler_log_dir;
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
@@ -756,9 +810,10 @@ void compile_multitarget(const std::string &fn_name,
             user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
         }
         // Some features must match across all targets.
-        static const std::array<Target::Feature, 8> must_match_features = {{
+        static const std::array<Target::Feature, 9> must_match_features = {{
             Target::ASAN,
             Target::CPlusPlusMangling,
+            Target::Debug,
             Target::JIT,
             Target::Matlab,
             Target::MSAN,
@@ -768,7 +823,7 @@ void compile_multitarget(const std::string &fn_name,
         }};
         for (auto f : must_match_features) {
             if (target.has_feature(f) != base_target.has_feature(f)) {
-                user_error << "All Targets must have feature " << f << " set identically for compile_multitarget.\n";
+                user_error << "All Targets must have feature '" << Target::feature_to_name(f) << "'' set identically for compile_multitarget.\n";
                 break;
             }
         }
@@ -784,22 +839,26 @@ void compile_multitarget(const std::string &fn_name,
             sub_fn_target = sub_fn_target.without_feature(Target::Matlab);
         }
 
-        Module sub_module = module_producer(sub_fn_name, sub_fn_target);
-        // Re-assign every time -- should be the same across all targets anyway,
-        // but base_target is always the last one we encounter.
-        base_target_args = sub_module.get_function_by_name(sub_fn_name).args;
+        {
+            ScopedCompilerLogger activate(compiler_logger_factory, sub_fn_name, sub_fn_target);
+            Module sub_module = module_factory(sub_fn_name, sub_fn_target);
+            // Re-assign every time -- should be the same across all targets anyway,
+            // but base_target is always the last one we encounter.
+            base_target_args = sub_module.get_function_by_name(sub_fn_name).args;
 
-        auto sub_out = add_suffixes(output_files, suffix);
-        internal_assert(contains(output_files, Output::static_library));
-        sub_out[Output::object] = temp_dir.add_temp_object_file(output_files.at(Output::static_library), suffix, target);
-        sub_out.erase(Output::registration);
-        ;
-        sub_out.erase(Output::schedule);
-        ;
-        debug(1) << "compile_multitarget: compile_sub_target " << sub_out[Output::object] << "\n";
-        sub_module.compile(sub_out);
-        auto *r = sub_module.get_auto_scheduler_results();
-        auto_scheduler_results.push_back(r ? *r : AutoSchedulerResults());
+            auto sub_out = add_suffixes(output_files, suffix);
+            internal_assert(contains(output_files, Output::static_library));
+            sub_out[Output::object] = temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), suffix, target);
+            sub_out.erase(Output::registration);
+            sub_out.erase(Output::schedule);
+            if (contains(sub_out, Output::compiler_log)) {
+                sub_out[Output::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(Output::static_library), suffix, target);
+            }
+            debug(1) << "compile_multitarget: compile_sub_target " << sub_out[Output::object] << "\n";
+            sub_module.compile(sub_out);
+            auto *r = sub_module.get_auto_scheduler_results();
+            auto_scheduler_results.push_back(r ? *r : AutoSchedulerResults());
+        }
 
         uint64_t cur_target_features[kFeaturesWordCount] = {0};
         for (int i = 0; i < Target::FeatureEnd; ++i) {
@@ -812,7 +871,7 @@ void compile_multitarget(const std::string &fn_name,
         if (target != base_target) {
             std::vector<Expr> features_struct_args;
             for (int i = 0; i < kFeaturesWordCount; ++i) {
-                features_struct_args.push_back(UIntImm::make(UInt(64), cur_target_features[i]));
+                features_struct_args.emplace_back(UIntImm::make(UInt(64), cur_target_features[i]));
             }
             can_use = Call::make(Int(32), "halide_can_use_target_features",
                                  {kFeaturesWordCount, Call::make(type_of<uint64_t *>(), Call::make_struct, features_struct_args, Call::Intrinsic)},
@@ -826,7 +885,7 @@ void compile_multitarget(const std::string &fn_name,
         }
 
         wrapper_args.push_back(can_use != 0);
-        wrapper_args.push_back(sub_fn_name);
+        wrapper_args.emplace_back(sub_fn_name);
     }
 
     // If we haven't specified "no runtime", build a runtime with the base target
@@ -847,7 +906,7 @@ void compile_multitarget(const std::string &fn_name,
         }
         std::map<Output, std::string> runtime_out =
             {{Output::object,
-              temp_dir.add_temp_object_file(output_files.at(Output::static_library), "_runtime", runtime_target)}};
+              temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), "_runtime", runtime_target)}};
         debug(1) << "compile_multitarget: compile_standalone_runtime " << runtime_out.at(Output::object) << "\n";
         compile_standalone_runtime(runtime_out, runtime_target);
     }
@@ -864,10 +923,7 @@ void compile_multitarget(const std::string &fn_name,
         // Always build with NoBoundsQuery: underlying code will implement that (or not).
         //
         // Always build *without* NoAsserts (ie, with Asserts enabled): that's the
-        // only way to propagate a nonzero result code to our caller. (Note that this
-        // does mean we get redundant check-for-null tests in the wrapper code for buffer_t*
-        // arguments; this is regrettable but fairly minor in terms of both code size and speed,
-        // at least for real-world code.)
+        // only way to propagate a nonzero result code to our caller.
         Target wrapper_target = base_target
                                     .with_feature(Target::NoRuntime)
                                     .with_feature(Target::NoBoundsQuery)
@@ -882,11 +938,8 @@ void compile_multitarget(const std::string &fn_name,
         Module wrapper_module(fn_name, wrapper_target);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
-        // Add a wrapper to accept old buffer_ts
-        add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
-
         std::map<Output, std::string> wrapper_out = {{Output::object,
-                                                      temp_dir.add_temp_object_file(output_files.at(Output::static_library), "_wrapper", base_target, /* in_front*/ true)}};
+                                                      temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), "_wrapper", base_target, /* in_front*/ true)}};
         debug(1) << "compile_multitarget: wrapper " << wrapper_out.at(Output::object) << "\n";
         wrapper_module.compile(wrapper_out);
     }
@@ -894,8 +947,6 @@ void compile_multitarget(const std::string &fn_name,
     if (contains(output_files, Output::c_header)) {
         Module header_module(fn_name, base_target);
         header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
-        // Add a wrapper to accept old buffer_ts
-        add_legacy_wrapper(header_module, header_module.functions().back());
         std::map<Output, std::string> header_out = {{Output::c_header, output_files.at(Output::c_header)}};
         debug(1) << "compile_multitarget: c_header " << header_out.at(Output::c_header) << "\n";
         header_module.compile(header_out);
@@ -964,7 +1015,25 @@ void compile_multitarget(const std::string &fn_name,
 
     if (contains(output_files, Output::static_library)) {
         debug(1) << "compile_multitarget: static_library " << output_files.at(Output::static_library) << "\n";
-        create_static_library(temp_dir.files(), base_target, output_files.at(Output::static_library));
+        create_static_library(temp_obj_dir.files(), base_target, output_files.at(Output::static_library));
+    }
+
+    if (contains(output_files, Output::compiler_log)) {
+        debug(1) << "compile_multitarget: compiler_log " << output_files.at(Output::compiler_log) << "\n";
+
+        std::ofstream compiler_log_file(output_files.at(Output::compiler_log));
+        compiler_log_file << "[\n";
+        const auto &f = temp_compiler_log_dir.files();
+        for (size_t i = 0; i < f.size(); i++) {
+            auto d = read_entire_file(f[i]);
+            compiler_log_file.write(d.data(), d.size());
+            if (i < f.size() - 1) {
+                compiler_log_file << ",\n";
+            }
+        }
+        compiler_log_file << "]\n";
+        compiler_log_file.close();
+        internal_assert(!compiler_log_file.fail());
     }
 }
 

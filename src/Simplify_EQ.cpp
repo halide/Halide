@@ -23,12 +23,15 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     if (op->a.type().is_bool()) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
+        if (should_commute(a, b)) {
+            std::swap(a, b);
+        }
         const int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type);
         if (rewrite(x == 1, x)) {
             return rewrite.result;
         } else if (rewrite(x == 0, !x)) {
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         } else if (rewrite(x == x, const_true(lanes))) {
             return rewrite.result;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -65,10 +68,17 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
 
     if (rewrite(broadcast(x) == 0, broadcast(x == 0, lanes)) ||
         (no_overflow(delta.type()) && rewrite(x * y == 0, (x == 0) || (y == 0))) ||
+
         rewrite(select(x, 0, y) == 0, x || (y == 0)) ||
         rewrite(select(x, c0, y) == 0, !x && (y == 0), c0 != 0) ||
         rewrite(select(x, y, 0) == 0, !x || (y == 0)) ||
         rewrite(select(x, y, c0) == 0, x && (y == 0), c0 != 0) ||
+
+        rewrite(select(x, c0, y) + c1 == 0, x || (y == fold(-c1)), c0 + c1 == 0) ||
+        rewrite(select(x, y, c0) + c1 == 0, !x || (y == fold(-c1)), c0 + c1 == 0) ||
+        rewrite(select(x, c0, y) + c1 == 0, !x && (y == fold(-c1)), c0 + c1 != 0) ||
+        rewrite(select(x, y, c0) + c1 == 0, x && (y == fold(-c1)), c0 + c1 != 0) ||
+
         rewrite(max(x, y) - y == 0, x <= y) ||
         rewrite(min(x, y) - y == 0, y <= x) ||
         rewrite(max(y, x) - y == 0, x <= y) ||
@@ -79,12 +89,21 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(y - min(y, x) == 0, y <= x) ||
         rewrite(max(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 < 0) ||
         rewrite(min(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 > 0) ||
+        rewrite(max(x, c0) + c1 == 0, false, c0 + c1 > 0) ||
+        rewrite(min(x, c0) + c1 == 0, false, c0 + c1 < 0) ||
         rewrite(max(x, c0) + c1 == 0, x <= c0, c0 + c1 == 0) ||
         rewrite(min(x, c0) + c1 == 0, c0 <= x, c0 + c1 == 0) ||
+        // Special case the above where c1 == 0
+        rewrite(max(x, c0) == 0, x == 0, c0 < 0) ||
+        rewrite(min(x, c0) == 0, x == 0, c0 > 0) ||
+        rewrite(max(x, c0) == 0, false, c0 > 0) ||
+        rewrite(min(x, c0) == 0, false, c0 < 0) ||
         rewrite(max(x, 0) == 0, x <= 0) ||
-        rewrite(min(x, 0) == 0, 0 <= x)) {
+        rewrite(min(x, 0) == 0, 0 <= x) ||
 
-        return mutate(std::move(rewrite.result), bounds);
+        false) {
+
+        return mutate(rewrite.result, bounds);
     }
 
     if (rewrite(c0 == 0, fold(c0 == 0)) ||
@@ -95,10 +114,14 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     }
 
     if (const Sub *s = delta.as<Sub>()) {
-        if (s->a.same_as(op->a) && s->b.same_as(op->b)) {
+        Expr a = s->a, b = s->b;
+        if (should_commute(a, b)) {
+            std::swap(a, b);
+        }
+        if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
-            return EQ::make(s->a, s->b);
+            return EQ::make(a, b);
         }
     }
 

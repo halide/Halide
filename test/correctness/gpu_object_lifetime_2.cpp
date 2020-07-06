@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <iostream>
+#include "gpu_object_lifetime_tracker.h"
 
-#include "test/common/gpu_object_lifetime_tracker.h"
+#include <iostream>
 
 using namespace Halide;
 
@@ -52,6 +52,6 @@ int main(int argc, char *argv[]) {
         return ret;
     }
 
-    std::cout << "Success!" << std::endl;
+    printf("Success!\n");
     return 0;
 }

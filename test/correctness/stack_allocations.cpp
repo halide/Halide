@@ -4,21 +4,21 @@
 using namespace Halide;
 
 extern "C" {
-    void *my_malloc(void *ctx, size_t sz) {
-        printf("There weren't supposed to be heap allocations!\n");
-        exit(-1);
-        return nullptr;
-    }
+void *my_malloc(void *ctx, size_t sz) {
+    printf("There weren't supposed to be heap allocations!\n");
+    exit(-1);
+    return nullptr;
+}
 
-    void my_free(void *ctx, void *ptr) {
-        printf("There weren't supposed to be heap allocations!\n");
-        exit(-1);
-    }
+void my_free(void *ctx, void *ptr) {
+    printf("There weren't supposed to be heap allocations!\n");
+    exit(-1);
+}
 }
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator.\n");
+        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
         return 0;
     }
 
@@ -26,8 +26,8 @@ int main(int argc, char **argv) {
     Var x, y;
 
     f(x, y) = x + y;
-    g(x, y) = f(x-1, y+1) * f(x+1, y-1);
-    h(x, y) = g(x+1, y+1) + g(x-1, y-1);
+    g(x, y) = f(x - 1, y + 1) * f(x + 1, y - 1);
+    h(x, y) = g(x + 1, y + 1) + g(x - 1, y - 1);
 
     f.compute_at(h, x);
     g.compute_at(h, x);

@@ -6,7 +6,9 @@ namespace Halide {
 namespace Internal {
 
 template<>
-RefCount &ref_count<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) noexcept {return t->ref_count;}
+RefCount &ref_count<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) noexcept {
+    return t->ref_count;
+}
 
 template<>
 void destroy<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) {
@@ -155,7 +157,7 @@ class Featurizer : public IRVisitor {
         } else if (op->call_type == Call::Image) {
             visit_memory_access(op->name, op->type, op->args, PipelineFeatures::AccessType::LoadImage);
             op_bucket(PipelineFeatures::OpType::ImageCall, op->type)++;
-        } // TODO: separate out different math calls a little better (sqrt vs sin vs lerp)
+        }  // TODO: separate out different math calls a little better (sqrt vs sin vs lerp)
     }
 
     // Take the derivative of an integer index expression. If it's
@@ -289,12 +291,13 @@ class Featurizer : public IRVisitor {
     }
 
 public:
-    Featurizer(Function &func, FunctionDAG::Node::Stage &stage) :
-        func(func), stage(stage) {}
+    Featurizer(Function &func, FunctionDAG::Node::Stage &stage)
+        : func(func), stage(stage) {
+    }
 
     void visit_store_args(const std::string &name, Type t, vector<Expr> args) {
         for (auto &e : args) {
-            e = common_subexpression_elimination(simplify(e)); // Get things into canonical form
+            e = common_subexpression_elimination(simplify(e));  // Get things into canonical form
         }
         visit_memory_access(name, t, args, PipelineFeatures::AccessType::Store);
     }
@@ -330,8 +333,11 @@ void BoundContents::validate() const {
         if (p.max() < p.min()) {
             aslog(0) << "Bad bounds object:\n";
             for (int j = 0; j < layout->total_size; j++) {
-                if (i == j) aslog(0) << "=> ";
-                else aslog(0) << "   ";
+                if (i == j) {
+                    aslog(0) << "=> ";
+                } else {
+                    aslog(0) << "   ";
+                }
                 aslog(0) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
             }
             internal_error << "Aborting";
@@ -353,7 +359,7 @@ BoundContents::Layout::~Layout() {
 
 void BoundContents::Layout::allocate_some_more() const {
     size_t size_of_one = sizeof(BoundContents) + total_size * sizeof(Span);
-    const size_t number_per_block = std::max((size_t)8, 4096 / size_of_one); // Make a page of them, or 8, whichever is larger.
+    const size_t number_per_block = std::max((size_t)8, 4096 / size_of_one);  // Make a page of them, or 8, whichever is larger.
     const size_t bytes_to_allocate = std::max(size_of_one * number_per_block, (size_t)4096);
     unsigned char *mem = (unsigned char *)malloc(bytes_to_allocate);
 
@@ -390,8 +396,8 @@ void FunctionDAG::Node::loop_nest_for_region(int stage_idx, const Span *computed
     map<string, Expr> computed_map;
     if (!s.loop_nest_all_common_cases) {
         for (int i = 0; i < func.dimensions(); i++) {
-            computed_map[region_required[i].min.as<Variable>()->name] = (int)computed[i].min();
-            computed_map[region_required[i].max.as<Variable>()->name] = (int)computed[i].max();
+            computed_map[region_required[i].min.name()] = (int)computed[i].min();
+            computed_map[region_required[i].max.name()] = (int)computed[i].max();
         }
     }
 
@@ -406,7 +412,7 @@ void FunctionDAG::Node::loop_nest_for_region(int stage_idx, const Span *computed
             Expr max = simplify(substitute(computed_map, l.max));
             const int64_t *imin = as_const_int(min);
             const int64_t *imax = as_const_int(max);
-            internal_assert(imin && imax) << min << ", " << max << '\n';
+            internal_assert(imin && imax) << min << ", " << max << "\n";
             loop[i] = Span(*imin, *imax, false);
         }
     }
@@ -417,8 +423,8 @@ void FunctionDAG::Node::required_to_computed(const Span *required, Span *compute
     if (!region_computed_all_common_cases) {
         // Make a binding for the value of each symbolic variable
         for (int i = 0; i < func.dimensions(); i++) {
-            required_map[region_required[i].min.as<Variable>()->name] = (int)required[i].min();
-            required_map[region_required[i].max.as<Variable>()->name] = (int)required[i].max();
+            required_map[region_required[i].min.name()] = (int)required[i].min();
+            required_map[region_required[i].max.name()] = (int)required[i].max();
         }
     }
     for (int i = 0; i < func.dimensions(); i++) {
@@ -434,13 +440,14 @@ void FunctionDAG::Node::required_to_computed(const Span *required, Span *compute
             Expr max = simplify(substitute(required_map, comp.in.max));
             const int64_t *imin = as_const_int(min);
             const int64_t *imax = as_const_int(max);
-            internal_assert(imin && imax) << min << ", " << max << '\n';
+            internal_assert(imin && imax) << min << ", " << max << "\n";
             computed[i] = Span(*imin, *imax, false);
         }
     }
 }
 
-FunctionDAG::Edge::BoundInfo::BoundInfo(const Expr &e, const Node::Stage &consumer) : expr(e) {
+FunctionDAG::Edge::BoundInfo::BoundInfo(const Expr &e, const Node::Stage &consumer)
+    : expr(e) {
     // Do the analysis to detect if this is a simple case
     // that can be evaluated more cheaply. Currently this
     // acceleration recognises affine expressions. In the
@@ -451,9 +458,11 @@ FunctionDAG::Edge::BoundInfo::BoundInfo(const Expr &e, const Node::Stage &consum
     const Mul *mul = add ? add->a.as<Mul>() : expr.as<Mul>();
     const IntImm *coeff_imm = mul ? mul->b.as<IntImm>() : nullptr;
     const IntImm *constant_imm = add ? add->b.as<IntImm>() : nullptr;
+    // clang-format off
     Expr v = (mul ? mul->a :
               add ? add->a :
-              expr);
+                    expr);
+    // clang-format on
     const Variable *var = v.as<Variable>();
 
     if (const IntImm *c = e.as<IntImm>()) {
@@ -527,7 +536,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
                 Expr substituted = substitute(s, b.expr);
                 Expr e = simplify(substituted);
                 const int64_t *i = as_const_int(e);
-                internal_assert(i) << "Should be constant: " << b.expr << " -> " << substituted << " -> " << e << '\n';
+                internal_assert(i) << "Should be constant: " << b.expr << " -> " << substituted << " -> " << e << "\n";
                 bounds_are_constant = false;
                 return *i;
             }
@@ -563,7 +572,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                         }
                     }
                 }
-                internal_assert(expr.defined()) << "Missing estimate for " << op->name << '\n';
+                internal_assert(expr.defined()) << "Missing estimate for " << op->name << "\n";
                 return expr;
             } else {
                 return op;
@@ -576,6 +585,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
     // Construct the mapping from Funcs to Nodes
     nodes.resize(order.size());
+    map<Function, Node *, Function::Compare> node_map;
     for (size_t i = 0; i < order.size(); i++) {
         Function f = env[order[order.size() - i - 1]];
         nodes[i].func = f;
@@ -588,32 +598,28 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
     int stage_count = 0;
 
     for (size_t i = order.size(); i > 0; i--) {
-        Function consumer = env[order[i-1]];
-
         Node &node = nodes[order.size() - i];
+        Function consumer = node.func;
         Scope<Interval> scope;
-        node.func = consumer;
 
         // Create a symbolic region for this Func.
         for (int j = 0; j < consumer.dimensions(); j++) {
-            Expr min_var = Variable::make(Int(32), consumer.name() + "." + consumer.args()[j] + ".min");
-            Expr max_var = Variable::make(Int(32), consumer.name() + "." + consumer.args()[j] + ".max");
-            Expr extent = max_var - min_var + 1;
+            Halide::Var min_var(consumer.name() + "." + consumer.args()[j] + ".min");
+            Halide::Var max_var(consumer.name() + "." + consumer.args()[j] + ".max");
             Interval interval(min_var, max_var);
             scope.push(consumer.args()[j], interval);
-            node.region_required.push_back(interval);
+            node.region_required.emplace_back(SymbolicInterval{min_var, max_var});
         }
 
         auto pure_args = node.func.args();
 
         for (int s = 0; s <= (int)consumer.updates().size(); s++) {
             stage_count++;
-            Halide::Stage halide_stage = Func(consumer);
-            if (s > 0) {
-                halide_stage = Func(consumer).update(s-1);
+            if (s == 0) {
+                node.stages.emplace_back(Stage(consumer, consumer.definition(), 0));
+            } else {
+                node.stages.emplace_back(Stage(consumer, consumer.update(s - 1), s));
             }
-            Node::Stage stage(halide_stage);
-            node.stages.emplace_back(std::move(stage));
         }
 
         for (int s = 0; s <= (int)consumer.updates().size(); s++) {
@@ -643,9 +649,11 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             if (s == 0) {
                 node.region_computed.resize(consumer.dimensions());
             }
+
+            FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
             for (int j = 0; j < consumer.dimensions(); j++) {
                 // The region computed always uses the full extent of the rvars
-                Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope_with_concrete_rvar_bounds);
+                Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope_with_concrete_rvar_bounds, func_value_bounds);
                 internal_assert(in.is_bounded())
                     << "Region computed of " << consumer.name()
                     << " is unbounded: [" << in.min << " " << in.max << "]\n";
@@ -793,12 +801,15 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                     }
                 }
                 Function func;
+
             public:
                 bool is_pointwise = true;
                 int leaves = 0;
                 Type narrowest_type;
                 map<string, int> calls;
-                CheckTypes(Function f) : func(f) {}
+                CheckTypes(Function f)
+                    : func(f) {
+                }
             };
             CheckTypes checker(consumer);
             exprs.accept(&checker);
@@ -817,7 +828,6 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             }
 
             stage.vector_size = target.natural_vector_size(checker.narrowest_type);
-            stage.output_vector_size = target.natural_vector_size(widest_output_type);
 
             if (s == 0) {
                 node.vector_size = stage.vector_size;
@@ -837,7 +847,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                     int64_t i_min = *as_const_int(b.min);
                     int64_t i_extent = *as_const_int(b.extent);
 
-                    if ((false)) { // Intentional dead code. Extra parens to pacify clang-tidy.
+                    if ((false)) {  // Intentional dead code. Extra parens to pacify clang-tidy.
                         // Some methods we compare to compile for
                         // statically known input/output sizes. We
                         // don't need to - we take estimates but
@@ -852,8 +862,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                         // it affects the scheduling space.
                         Func(node.func).bound(b.var, b.min, b.extent);
                         estimates[b.var] = Span(i_min, i_min + i_extent - 1, true);
-                    } else
-                    {
+                    } else {
                         estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
                     }
                 }
@@ -878,7 +887,6 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
             exprs = apply_param_estimates.mutate(exprs);
 
-            FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
             for (auto &p : func_value_bounds) {
                 p.second.min = apply_param_estimates.mutate(p.second.min);
                 p.second.max = apply_param_estimates.mutate(p.second.max);
@@ -958,7 +966,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
     // Compute transitive dependencies
     for (size_t i = nodes.size(); i > 0; i--) {
-        auto &n = nodes[i-1];
+        auto &n = nodes[i - 1];
         for (auto &s : n.stages) {
             s.dependencies.resize(nodes.size(), false);
             for (auto *e : s.incoming_edges) {
@@ -981,70 +989,84 @@ void FunctionDAG::featurize() {
         for (size_t stage_idx = 0; stage_idx < node.stages.size(); stage_idx++) {
             Node::Stage &stage = node.stages[stage_idx];
 
-            // Pick a dimension to vectorize over - the innermost pure loop
-            size_t vector_dim = 0;
-            while (vector_dim < stage.loop.size() && !stage.loop[vector_dim].pure) vector_dim++;
-            // bool vectorized = vector_dim < stage.loop.size();
-
             Featurizer featurizer(node.func, stage);
 
-            Definition def = node.func.definition();
-            if (stage_idx > 0) def = node.func.updates()[stage_idx - 1];
-
-            stage.features = PipelineFeatures();
-
-            for (auto v : def.values()) {
-                featurizer.visit_store_args(node.func.name(), v.type(), def.args());
-                v = common_subexpression_elimination(simplify(v)); // Get things into canonical form
+            if (node.func.extern_definition_proxy_expr().get()) {
+                // Extern function call with a proxy implementation specified: generate the featurization from the proxy
+                Expr v = simplify(node.func.extern_definition_proxy_expr());
+                v = common_subexpression_elimination(v);
                 v.accept(&featurizer);
-            }
-            for (auto v : def.args()) {
-                v = common_subexpression_elimination(simplify(v)); // Get things into canonical form
-                v.accept(&featurizer);
+            } else {
+                Definition def = node.func.definition();
+                if (stage_idx > 0) {
+                    def = node.func.updates()[stage_idx - 1];
+                }
+                stage.features = PipelineFeatures();
+
+                for (auto v : def.values()) {
+                    featurizer.visit_store_args(node.func.name(), v.type(), def.args());
+                    v = common_subexpression_elimination(simplify(v));  // Get things into canonical form
+                    v.accept(&featurizer);
+                }
+                for (auto v : def.args()) {
+                    v = common_subexpression_elimination(simplify(v));  // Get things into canonical form
+                    v.accept(&featurizer);
+                }
             }
         }
     }
 }
 
-void FunctionDAG::dump() const {
+template<typename OS>
+void FunctionDAG::dump_internal(OS &os) const {
     for (const Node &n : nodes) {
-        aslog(0) << "Node: " << n.func.name() << '\n'
-                 << "  Symbolic region required: \n";
-        for (const Interval &i : n.region_required) {
-            aslog(0) << "    " << i.min << ", " << i.max << '\n';
+        os << "Node: " << n.func.name() << "\n"
+           << "  Symbolic region required: \n";
+        for (const SymbolicInterval &i : n.region_required) {
+            os << "    " << i.min << ", " << i.max << "\n";
         }
-        aslog(0) << "  Region computed: \n";
+        os << "  Region computed: \n";
         for (const auto &i : n.region_computed) {
-            aslog(0) << "    " << i.in.min << ", " << i.in.max << '\n';
+            os << "    " << i.in.min << ", " << i.in.max << "\n";
         }
         for (size_t i = 0; i < n.stages.size(); i++) {
-            aslog(0) << "  Stage " << i << ":\n";
+            os << "  Stage " << i << ":\n";
             for (const auto &l : n.stages[i].loop) {
-                aslog(0) << "    " << l.var << " " << l.min << " " << l.max << '\n';
+                os << "    " << l.var << " " << l.min << " " << l.max << "\n";
             }
-            n.stages[i].features.dump();
+            n.stages[i].features.dump(os);
         }
-        aslog(0) << "  pointwise: " << n.is_pointwise
-                 << " boundary condition: " << n.is_boundary_condition
-                 << " wrapper: " << n.is_wrapper
-                 << " input: " << n.is_input
-                 << " output: " << n.is_output << "\n";
+        os << "  pointwise: " << n.is_pointwise
+           << " boundary condition: " << n.is_boundary_condition
+           << " wrapper: " << n.is_wrapper
+           << " input: " << n.is_input
+           << " output: " << n.is_output << "\n";
     }
     for (const Edge &e : edges) {
-        aslog(0) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->name << '\n'
-                 << "  Footprint: \n";
+        os << "Edge: " << e.producer->func.name() << " -> " << e.consumer->name << "\n"
+           << "  Footprint: \n";
         int j = 0;
         for (const auto &i : e.bounds) {
-            aslog(0) << "    Min " << j << ": " << i.first.expr << '\n';
-            aslog(0) << "    Max " << j << ": " << i.second.expr << '\n';
+            os << "    Min " << j << ": " << i.first.expr << "\n";
+            os << "    Max " << j << ": " << i.second.expr << "\n";
             j++;
         }
 
-        aslog(0) << "  Load Jacobians:\n";
+        os << "  Load Jacobians:\n";
         for (const auto &jac : e.load_jacobians) {
             jac.dump("  ");
         }
     }
+}
+
+void FunctionDAG::dump() const {
+    auto os = aslog(0);
+    dump_internal(os);
+}
+
+std::ostream &FunctionDAG::dump(std::ostream &os) const {
+    dump_internal(os);
+    return os;
 }
 
 }  // namespace Autoscheduler

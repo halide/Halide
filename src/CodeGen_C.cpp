@@ -35,6 +35,24 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Comput
 
 namespace {
 
+// HALIDE_MUST_USE_RESULT defined here is intended to exactly
+// duplicate the definition in HalideRuntime.h (so that either or
+// both can be present, in any order).
+const char *const kDefineMustUseResult = R"INLINE_CODE(#ifndef HALIDE_MUST_USE_RESULT
+#ifdef __has_attribute
+#if __has_attribute(nodiscard)
+#define HALIDE_MUST_USE_RESULT [[nodiscard]]
+#elif __has_attribute(warn_unused_result)
+#define HALIDE_MUST_USE_RESULT __attribute__((warn_unused_result))
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#endif
+)INLINE_CODE";
+
 const string headers =
     "#include <iostream>\n"
     "#include <math.h>\n"
@@ -165,20 +183,13 @@ inline T halide_cpp_max(const T &a, const T &b) {return (a > b) ? a : b;}
 template<typename T>
 inline T halide_cpp_min(const T &a, const T &b) {return (a < b) ? a : b;}
 
+template<typename T>
+inline void halide_unused(const T&) {}
+
 template<typename A, typename B>
 const B &return_second(const A &a, const B &b) {
-    (void) a;
+    halide_unused(a);
     return b;
-}
-
-template<typename A, typename B>
-inline auto quiet_div(const A &a, const B &b) -> decltype(a / b) {
-    return b == 0 ? static_cast<decltype(a / b)>(0) : (a / b);
-}
-
-template<typename A, typename B>
-inline auto quiet_mod(const A &a, const B &b) -> decltype(a % b) {
-    return b == 0 ? static_cast<decltype(a % b)>(0) : (a % b);
 }
 
 namespace {
@@ -283,9 +294,6 @@ protected:
             for (auto &a : op->args) {
                 include_lerp_types(a.type());
             }
-        } else if (op->is_intrinsic(Call::absd)) {
-            // absd() can synthesize a new type
-            include_type(op->type.with_code(op->type.is_int() ? Type::UInt : op->type.code()));
         }
 
         IRGraphVisitor::visit(op);
@@ -302,8 +310,8 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
 
     if (is_header()) {
         // If it's a header, emit an include guard.
-        stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
-               << "#define HALIDE_" << print_name(guard) << '\n'
+        stream << "#ifndef HALIDE_" << print_name(guard) << "\n"
+               << "#define HALIDE_" << print_name(guard) << "\n"
                << "#include <stdint.h>\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
@@ -327,12 +335,6 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         // We just forward declared the following types:
         forward_declared.insert(type_of<halide_buffer_t *>().handle_type);
         forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type);
-        if (t.has_feature(Target::LegacyBufferWrappers)) {
-            stream << "// The legacy buffer type. Do not use in new code.\n"
-                   << "struct buffer_t;\n"
-                   << "\n";
-            forward_declared.insert(type_of<buffer_t *>().handle_type);
-        }
     } else if (is_extern_decl()) {
         // Extern decls to be wrapped inside other code (eg python extensions);
         // emit the forward decls with a minimum of noise. Note that we never
@@ -347,11 +349,13 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         stream
             << headers
             << globals
-            << halide_internal_runtime_header_HalideRuntime_h << '\n'
-            << halide_internal_initmod_inlined_c << '\n';
+            << halide_internal_runtime_header_HalideRuntime_h << "\n"
+            << halide_internal_initmod_inlined_c << "\n";
         add_common_macros(stream);
-        stream << '\n';
+        stream << "\n";
     }
+
+    stream << kDefineMustUseResult << "\n";
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
     // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
@@ -392,28 +396,28 @@ CodeGen_C::~CodeGen_C() {
                    << "// use the -r flag with any Halide generator binary, e.g.:\n"
                    << "// $ ./my_generator -r halide_runtime -o . target=host\n"
                    << "\n"
-                   << halide_internal_runtime_header_HalideRuntime_h << '\n';
+                   << halide_internal_runtime_header_HalideRuntime_h << "\n";
             if (target.has_feature(Target::CUDA)) {
-                stream << halide_internal_runtime_header_HalideRuntimeCuda_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeCuda_h << "\n";
             }
             if (target.has_feature(Target::HVX_128) ||
                 target.has_feature(Target::HVX_64)) {
-                stream << halide_internal_runtime_header_HalideRuntimeHexagonHost_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeHexagonHost_h << "\n";
             }
             if (target.has_feature(Target::Metal)) {
-                stream << halide_internal_runtime_header_HalideRuntimeMetal_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeMetal_h << "\n";
             }
             if (target.has_feature(Target::OpenCL)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenCL_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeOpenCL_h << "\n";
             }
             if (target.has_feature(Target::OpenGLCompute)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h << "\n";
             }
             if (target.has_feature(Target::OpenGL)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << "\n";
             }
             if (target.has_feature(Target::D3D12Compute)) {
-                stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << "\n";
             }
         }
         stream << "#endif\n";
@@ -422,7 +426,7 @@ CodeGen_C::~CodeGen_C() {
 
 void CodeGen_C::add_common_macros(std::ostream &dest) {
     const char *macros = R"INLINE_CODE(
-// ll suffix in OpenCL is reserver for 128-bit integers.
+// ll suffix in OpenCL is reserved for 128-bit integers.
 #if defined __OPENCL_VERSION__
 #define ADD_INT64_T_SUFFIX(x) x##l
 #define ADD_UINT64_T_SUFFIX(x) x##ul
@@ -1357,7 +1361,7 @@ string CodeGen_C::print_type(Type type, AppendSpaceIfNeeded space_option) {
     return type_to_c_type(type, space_option == AppendSpace);
 }
 
-string CodeGen_C::print_reinterpret(Type type, Expr e) {
+string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     ostringstream oss;
     if (type.is_handle() || e.type().is_handle()) {
         // Use a c-style cast if either src or dest is a handle --
@@ -1665,6 +1669,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
+    stream << "HALIDE_FUNCTION_ATTRS\n";
     stream << "int " << simple_name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
@@ -1680,9 +1685,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     if (is_header_or_extern_decl()) {
-        stream << ") HALIDE_FUNCTION_ATTRS;\n";
+        stream << ");\n";
     } else {
-        stream << ") HALIDE_FUNCTION_ATTRS {\n";
+        stream << ") {\n";
         indent += 1;
 
         if (uses_gpu_for_loops) {
@@ -1711,10 +1716,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
     if (is_header_or_extern_decl() && f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the argv version
-        stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
+        stream << "\nHALIDE_FUNCTION_ATTRS\nint " << simple_name << "_argv(void **args);\n";
 
         // And also the metadata.
-        stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
+        stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << simple_name << "_metadata();\n";
     }
 
     if (!namespaces.empty()) {
@@ -1799,13 +1804,13 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     stream << "static halide_buffer_t * const " << name << "_buffer = &" << name << "_buffer_;\n";
 }
 
-string CodeGen_C::print_expr(Expr e) {
+string CodeGen_C::print_expr(const Expr &e) {
     id = "$$ BAD ID $$";
     e.accept(this);
     return id;
 }
 
-string CodeGen_C::print_cast_expr(const Type &t, Expr e) {
+string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
     string value = print_expr(e);
     string type = print_type(t);
     if (t.is_vector() &&
@@ -1817,7 +1822,7 @@ string CodeGen_C::print_cast_expr(const Type &t, Expr e) {
     }
 }
 
-void CodeGen_C::print_stmt(Stmt s) {
+void CodeGen_C::print_stmt(const Stmt &s) {
     s.accept(this);
 }
 
@@ -1859,7 +1864,7 @@ void CodeGen_C::visit(const Cast *op) {
     id = print_cast_expr(op->type, op->value);
 }
 
-void CodeGen_C::visit_binop(Type t, Expr a, Expr b, const char *op) {
+void CodeGen_C::visit_binop(Type t, const Expr &a, const Expr &b, const char *op) {
     string sa = print_expr(a);
     string sb = print_expr(b);
     print_assignment(t, sa + " " + op + " " + sb);
@@ -2092,8 +2097,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         Expr a = op->args[0];
         Expr b = op->args[1];
-        Type t = op->type.with_code(op->type.is_int() ? Type::UInt : op->type.code());
-        Expr e = cast(t, select(a < b, b - a, a - b));
+        Expr e = cast(op->type, select(a < b, b - a, a - b));
         rhs << print_expr(e);
     } else if (op->is_intrinsic(Call::return_second)) {
         internal_assert(op->args.size() == 2);
@@ -2161,6 +2165,38 @@ void CodeGen_C::visit(const Call *op) {
             internal_assert(op->type.handle_type);
             // Add explicit cast so that different structs can't cache to the same value
             rhs << "(" << print_type(op->type) << ")(NULL)";
+        } else if (op->type == type_of<halide_dimension_t *>()) {
+            // Emit a shape
+
+            // Get the args
+            vector<string> values;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                values.push_back(print_expr(op->args[i]));
+            }
+
+            static_assert(sizeof(halide_dimension_t) == 4 * sizeof(int32_t),
+                          "CodeGen_C assumes a halide_dimension_t is four densely-packed int32_ts");
+
+            internal_assert(values.size() % 4 == 0);
+            int dimension = values.size() / 4;
+
+            string shape_name = unique_name('s');
+            stream
+                << get_indent() << "struct halide_dimension_t " << shape_name
+                << "[" << dimension << "] = {\n";
+            indent++;
+            for (int i = 0; i < dimension; i++) {
+                stream
+                    << get_indent() << "{"
+                    << values[i * 4 + 0] << ", "
+                    << values[i * 4 + 1] << ", "
+                    << values[i * 4 + 2] << ", "
+                    << values[i * 4 + 3] << "},\n";
+            }
+            indent--;
+            stream << get_indent() << "};\n";
+
+            rhs << shape_name;
         } else {
             // Emit a declaration like:
             // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
@@ -2188,7 +2224,12 @@ void CodeGen_C::visit(const Call *op) {
             }
             indent--;
             stream << get_indent() << "};\n";
+
             // Return a pointer to it of the appropriate type
+
+            // TODO: This is dubious type-punning. We really need to
+            // find a better way to do this. We dodge the problem for
+            // the specific case of buffer shapes in the case above.
             if (op->type.handle_type) {
                 rhs << "(" << print_type(op->type) << ")";
             }
@@ -2250,22 +2291,6 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"
                       " Halide.\n";
-    } else if (op->is_intrinsic(Call::quiet_div)) {
-        internal_assert(op->args.size() == 2);
-        // Don't bother checking for zero denominator here; the quiet_div
-        // implementation will always do a runtime check and return zero
-        // (rather than failing at runtime).
-        string a = print_expr(op->args[0]);
-        string b = print_expr(op->args[1]);
-        rhs << "::quiet_div(" << a << ", " << b << ")";
-    } else if (op->is_intrinsic(Call::quiet_mod)) {
-        internal_assert(op->args.size() == 2);
-        // Don't bother checking for zero denominator here; the quiet_mod
-        // implementation will always do a runtime check and return zero
-        // (rather than failing at runtime).
-        string a = print_expr(op->args[0]);
-        string b = print_expr(op->args[1]);
-        rhs << "::quiet_mod(" << a << ", " << b << ")";
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_assert((op->args.size() == 4) && is_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
@@ -2274,8 +2299,6 @@ void CodeGen_C::visit(const Call *op) {
         rhs << "__builtin_prefetch("
             << "((" << print_type(op->type) << " *)" << print_name(base->name)
             << " + " << print_expr(op->args[1]) << "), 1)";
-    } else if (op->is_intrinsic(Call::indeterminate_expression)) {
-        user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
     } else if (op->is_intrinsic(Call::strict_float)) {
@@ -2284,7 +2307,7 @@ void CodeGen_C::visit(const Call *op) {
         rhs << "(" << arg0 << ")";
     } else if (op->is_intrinsic()) {
         // TODO: other intrinsics
-        internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
+        internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
     } else {
         // Generic extern calls
         rhs << print_extern_call(op);
@@ -2303,7 +2326,7 @@ void CodeGen_C::visit(const Call *op) {
     }
 }
 
-string CodeGen_C::print_scalarized_expr(Expr e) {
+string CodeGen_C::print_scalarized_expr(const Expr &e) {
     Type t = e.type();
     internal_assert(t.is_vector());
     string v = unique_name('_');
@@ -2497,7 +2520,7 @@ void CodeGen_C::create_assertion(const string &id_cond, const string &id_msg) {
     close_scope("");
 }
 
-void CodeGen_C::create_assertion(const string &id_cond, Expr message) {
+void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
     internal_assert(!message.defined() || message.type() == Int(32))
         << "Assertion result is not an int: " << message;
 
@@ -2512,7 +2535,7 @@ void CodeGen_C::create_assertion(const string &id_cond, Expr message) {
     close_scope("");
 }
 
-void CodeGen_C::create_assertion(Expr cond, Expr message) {
+void CodeGen_C::create_assertion(const Expr &cond, const Expr &message) {
     create_assertion(print_expr(cond), message);
 }
 
@@ -2523,9 +2546,9 @@ void CodeGen_C::visit(const AssertStmt *op) {
 void CodeGen_C::visit(const ProducerConsumer *op) {
     stream << get_indent();
     if (op->is_producer) {
-        stream << "// produce " << op->name << '\n';
+        stream << "// produce " << op->name << "\n";
     } else {
-        stream << "// consume " << op->name << '\n';
+        stream << "// consume " << op->name << "\n";
     }
     print_stmt(op->body);
 }
@@ -2779,7 +2802,7 @@ void CodeGen_C::visit(const IfThenElse *op) {
 void CodeGen_C::visit(const Evaluate *op) {
     if (is_const(op->value)) return;
     string id = print_expr(op->value);
-    stream << get_indent() << "(void)" << id << ";\n";
+    stream << get_indent() << "halide_unused(" << id << ");\n";
 }
 
 void CodeGen_C::visit(const Shuffle *op) {
@@ -2854,7 +2877,7 @@ void CodeGen_C::test() {
         globals +
         string((const char *)halide_internal_runtime_header_HalideRuntime_h) + '\n' +
         string((const char *)halide_internal_initmod_inlined_c) + '\n' +
-        macros.str() + R"GOLDEN_CODE(
+        macros.str() + '\n' + kDefineMustUseResult + R"GOLDEN_CODE(
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
 #endif
@@ -2865,7 +2888,8 @@ void CodeGen_C::test() {
 extern "C" {
 #endif
 
-int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {
+HALIDE_FUNCTION_ATTRS
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
  void * const _ucon = const_cast<void *>(__user_context);
  void *_0 = _halide_buffer_get_host(_buf_buffer);
  void * _buf = _0;

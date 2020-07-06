@@ -171,37 +171,37 @@ private:
 
     void visit(const StringImm *op) override {
         stream << open_span("StringImm");
-        stream << '"';
+        stream << "\"";
         for (size_t i = 0; i < op->value.size(); i++) {
             unsigned char c = op->value[i];
             if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
                 stream << c;
             } else {
-                stream << '\\';
+                stream << "\\";
                 switch (c) {
                 case '"':
-                    stream << '"';
+                    stream << "\"";
                     break;
                 case '\\':
-                    stream << '\\';
+                    stream << "\\";
                     break;
                 case '\t':
-                    stream << 't';
+                    stream << "t";
                     break;
                 case '\r':
-                    stream << 'r';
+                    stream << "r";
                     break;
                 case '\n':
-                    stream << 'n';
+                    stream << "n";
                     break;
                 default:
                     string hex_digits = "0123456789ABCDEF";
-                    stream << 'x' << hex_digits[c >> 4] << hex_digits[c & 0xf];
+                    stream << "x" << hex_digits[c >> 4] << hex_digits[c & 0xf];
                 }
             }
         }
-        stream << '"';
-        stream << close_span();
+        stream << "\""
+               << close_span();
     }
 
     void visit(const Variable *op) override {
@@ -221,7 +221,7 @@ private:
         stream << close_span();
     }
 
-    void visit_binary_op(Expr a, Expr b, const char *op) {
+    void visit_binary_op(const Expr &a, const Expr &b, const char *op) {
         stream << open_span("BinaryOp");
 
         stream << matched("(");
@@ -285,7 +285,7 @@ private:
     }
     void visit(const Not *op) override {
         stream << open_span("Not");
-        stream << '!';
+        stream << "!";
         print(op->a);
         stream << close_span();
     }
@@ -405,7 +405,7 @@ private:
         } else if (op->for_type == ForType::GPULane) {
             stream << keyword("gpu_lane");
         } else {
-            internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
+            internal_error << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
         stream << " (";
         stream << close_span();
@@ -569,7 +569,7 @@ private:
     }
 
     // To avoid generating ridiculously deep DOMs, we flatten blocks here.
-    void visit_block_stmt(Stmt stmt) {
+    void visit_block_stmt(const Stmt &stmt) {
         if (const Block *b = stmt.as<Block>()) {
             visit_block_stmt(b->first);
             visit_block_stmt(b->rest);
@@ -585,7 +585,7 @@ private:
     }
 
     // We also flatten forks
-    void visit_fork_stmt(Stmt stmt) {
+    void visit_fork_stmt(const Stmt &stmt) {
         if (const Fork *f = stmt.as<Fork>()) {
             visit_fork_stmt(f->first);
             visit_fork_stmt(f->rest);
@@ -676,21 +676,28 @@ private:
             print_list(symbol("interleave_vectors("), op->vectors, ")");
         } else if (op->is_extract_element()) {
             std::vector<Expr> args = op->vectors;
-            args.push_back(op->slice_begin());
+            args.emplace_back(op->slice_begin());
             print_list(symbol("extract_element("), args, ")");
         } else if (op->is_slice()) {
             std::vector<Expr> args = op->vectors;
-            args.push_back(op->slice_begin());
-            args.push_back(op->slice_stride());
-            args.push_back(static_cast<int>(op->indices.size()));
+            args.emplace_back(op->slice_begin());
+            args.emplace_back(op->slice_stride());
+            args.emplace_back(static_cast<int>(op->indices.size()));
             print_list(symbol("slice_vectors("), args, ")");
         } else {
             std::vector<Expr> args = op->vectors;
             for (int i : op->indices) {
-                args.push_back(i);
+                args.emplace_back(i);
             }
             print_list(symbol("shuffle("), args, ")");
         }
+        stream << close_span();
+    }
+
+    void visit(const VectorReduce *op) override {
+        stream << open_span("VectorReduce");
+        stream << open_span("Type") << op->type << close_span();
+        print_list(symbol("vector_reduce") + "(", {op->op, op->value}, ")");
         stream << close_span();
     }
 
@@ -714,11 +721,11 @@ private:
     }
 
 public:
-    void print(Expr ir) {
+    void print(const Expr &ir) {
         ir.accept(this);
     }
 
-    void print(Stmt ir) {
+    void print(const Stmt &ir) {
         ir.accept(this);
     }
 
@@ -786,7 +793,7 @@ public:
         scope.pop(m.name());
     }
 
-    StmtToHtml(string filename)
+    StmtToHtml(const string &filename)
         : id_count(0), context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
@@ -848,12 +855,12 @@ function toggle(id) { \n \
 }";
 }  // namespace
 
-void print_to_html(string filename, Stmt s) {
+void print_to_html(const string &filename, const Stmt &s) {
     StmtToHtml sth(filename);
     sth.print(s);
 }
 
-void print_to_html(string filename, const Module &m) {
+void print_to_html(const string &filename, const Module &m) {
     StmtToHtml sth(filename);
     sth.print(m);
 }

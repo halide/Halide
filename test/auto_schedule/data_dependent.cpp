@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     f(x, y, c) = print_when(x < 0, input(x, y) * input(c, c));
 
     Func g("g");
-    g(x, y) = (f(x, y, input(x, y)%10) + f(x + 1, y, (input(x, y) - 1)%10))/2;
+    g(x, y) = (f(x, y, input(x, y) % 10) + f(x + 1, y, (input(x, y) - 1) % 10)) / 2;
 
     // Provide estimates on the pipeline output
     g.set_estimate(x, 0, input.width() - 1).set_estimate(y, 0, input.height());
@@ -36,5 +36,6 @@ int main(int argc, char **argv) {
     // Run the schedule
     Buffer<uint16_t> out = p.realize(input.width() - 1, input.height());
 
+    printf("Success!\n");
     return 0;
 }

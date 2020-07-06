@@ -29,15 +29,15 @@ int main(int argc, char **argv) {
     if (1) {
         // In a pipeline with huge expensive stencils and low memory costs, nothing should be fused
         Func f("f"), g("g"), h("h");
-        f(x, y) = (x + y) * (x + 2*y) * (x + 3*y) * (x + 4*y) * (x + 5*y);
+        f(x, y) = (x + y) * (x + 2 * y) * (x + 3 * y) * (x + 4 * y) * (x + 5 * y);
         Expr e = 0;
         for (int i = 0; i < 100; i++) {
-            e += f(x + i*10, y + i*10);
+            e += f(x + i * 10, y + i * 10);
         }
         g(x, y) = e;
         e = 0;
         for (int i = 0; i < 100; i++) {
-            e += g(x + i*10, y + i*10);
+            e += g(x + i * 10, y + i * 10);
         }
         h(x, y) = e;
 
@@ -49,11 +49,10 @@ int main(int argc, char **argv) {
     if (1) {
         // In a pipeline with moderate isotropic stencils, there should be some square tiling
         Func f("f"), h("h");
-        f(x, y) = (x + y) * (x + 2*y) * (x + 3*y);
-        h(x, y) = (f(x-9, y-9) + f(x, y-9) + f(x+9, y-9) +
-                   f(x-9, y  ) + f(x, y  ) + f(x+9, y  ) +
-                   f(x-9, y+9) + f(x, y+9) + f(x+9, y-9));
-
+        f(x, y) = (x + y) * (x + 2 * y) * (x + 3 * y);
+        h(x, y) = (f(x - 9, y - 9) + f(x, y - 9) + f(x + 9, y - 9) +
+                   f(x - 9, y) + f(x, y) + f(x + 9, y) +
+                   f(x - 9, y + 9) + f(x, y + 9) + f(x + 9, y - 9));
 
         h.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
@@ -63,10 +62,10 @@ int main(int argc, char **argv) {
     // Smaller footprint stencil -> smaller tiles
     if (1) {
         Func f("f"), g("g"), h("h");
-        f(x, y) = (x + y) * (x + 2*y) * (x + 3*y);
-        h(x, y) = (f(x-1, y-1) + f(x, y-1) + f(x+1, y-1) +
-                   f(x-1, y  ) + f(x, y  ) + f(x+1, y  ) +
-                   f(x-1, y+1) + f(x, y+1) + f(x+1, y-1));
+        f(x, y) = (x + y) * (x + 2 * y) * (x + 3 * y);
+        h(x, y) = (f(x - 1, y - 1) + f(x, y - 1) + f(x + 1, y - 1) +
+                   f(x - 1, y) + f(x, y) + f(x + 1, y) +
+                   f(x - 1, y + 1) + f(x, y + 1) + f(x + 1, y - 1));
 
         h.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
@@ -77,19 +76,19 @@ int main(int argc, char **argv) {
     if (1) {
         const int N = 8;
         Func f[N];
-        f[0](x, y) = (x + y) * (x + 2*y) * (x + 3*y);
+        f[0](x, y) = (x + y) * (x + 2 * y) * (x + 3 * y);
         for (int i = 1; i < N; i++) {
             Expr e = 0;
             for (int dy = -2; dy <= 2; dy++) {
                 for (int dx = -2; dx <= 2; dx++) {
-                    e += f[i-1](x + dx, y + dy);
+                    e += f[i - 1](x + dx, y + dy);
                 }
             }
             f[i](x, y) = e;
         }
-        f[N-1].set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
+        f[N - 1].set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-        Pipeline(f[N-1]).auto_schedule(target, params);
+        Pipeline(f[N - 1]).auto_schedule(target, params);
     }
 
     // An outer product
@@ -115,8 +114,8 @@ int main(int argc, char **argv) {
         }
         orig(x, y) = e;
         expensive(x, y, k) = orig(x, y) * orig(x, y) + (x + orig(x, y)) * (1 + orig(x, y)) + sqrt(k + orig(x, y));
-        downy(x, y, k) = expensive(x, 2*y - 1, k) + expensive(x, 2*y, k) + expensive(x, 2*y+1, k) + expensive(x, 2*y + 2, k);
-        downx(x, y, k) = downy(2*x-1, y, k) + downy(2*x, y, k) + downy(2*x + 1, y, k) + downy(2*x + 2, y, k);
+        downy(x, y, k) = expensive(x, 2 * y - 1, k) + expensive(x, 2 * y, k) + expensive(x, 2 * y + 1, k) + expensive(x, 2 * y + 2, k);
+        downx(x, y, k) = downy(2 * x - 1, y, k) + downy(2 * x, y, k) + downy(2 * x + 1, y, k) + downy(2 * x + 2, y, k);
         downx.set_estimate(x, 1, 1022).set_estimate(y, 1, 1022).set_estimate(k, 0, 256);
 
         Pipeline(downx).auto_schedule(target, params);
@@ -150,21 +149,20 @@ int main(int argc, char **argv) {
         Var x, y;
         before[0](x, y) = x + y;
         for (int i = 1; i < 5; i++) {
-            before[i](x, y) = before[i-1](x, y) + 1;
+            before[i](x, y) = before[i - 1](x, y) + 1;
         }
         RDom r(1, 1023);
         s(x, y) = before[4](x, y);
-        s(r, y) += s(r-1, y);
-        after[0](x, y) = s(y, x) + s(y, x+100);
+        s(r, y) += s(r - 1, y);
+        after[0](x, y) = s(y, x) + s(y, x + 100);
         for (int i = 1; i < 5; i++) {
-            after[i](x, y) = after[i-1](x, y) + 1;
+            after[i](x, y) = after[i - 1](x, y) + 1;
         }
 
         after[4].set_estimate(x, 0, 1024).set_estimate(y, 0, 1024);
 
         Pipeline(after[4]).auto_schedule(target, params);
     }
-
 
     if (1) {
         Func f_u8("f_u8");
@@ -173,7 +171,7 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> a(1024 * 1024 + 2);
 
         Var x;
-        f_u8(x) = (min(a(x) + 1, 17) * a(x+1) + a(x+2)) * a(x) * a(x) * a(x + 1) * a(x + 1);
+        f_u8(x) = (min(a(x) + 1, 17) * a(x + 1) + a(x + 2)) * a(x) * a(x) * a(x + 1) * a(x + 1);
         f_u64_1(x) = cast<uint64_t>(f_u8(x)) + 1;
         f_u64_2(x) = f_u64_1(x) * 3;
 
@@ -214,25 +212,25 @@ int main(int argc, char **argv) {
         Var x, y;
         p1[0](x, y) = x + y;
         for (int i = 1; i < N; i++) {
-            p1[i](x, y) = p1[i-1](x, y) + 1;
+            p1[i](x, y) = p1[i - 1](x, y) + 1;
         }
         RDom r(1, 1023);
-        s(x, y) = p1[N-1](x, y);
-        s(r, y) += s(r-1, y);
+        s(x, y) = p1[N - 1](x, y);
+        s(r, y) += s(r - 1, y);
         p2[0](x, y) = s(x, y);
         for (int i = 1; i < N; i++) {
-            p2[i](x, y) = p2[i-1](x, y) + 1;
+            p2[i](x, y) = p2[i - 1](x, y) + 1;
         }
         Func down("downsample");
-        down(x, y) = p2[N-1](x, 2*y);
+        down(x, y) = p2[N - 1](x, 2 * y);
         p3[0](x, y) = down(x, y);
         for (int i = 1; i < N; i++) {
-            p3[i](x, y) = p3[i-1](x, y) + 1;
+            p3[i](x, y) = p3[i - 1](x, y) + 1;
         }
 
-        p3[N-1].set_estimate(x, 0, 1024).set_estimate(y, 0, 1024);
+        p3[N - 1].set_estimate(x, 0, 1024).set_estimate(y, 0, 1024);
 
-        Pipeline(p3[N-1]).auto_schedule(target, params);
+        Pipeline(p3[N - 1]).auto_schedule(target, params);
     }
 
     if (1) {
@@ -263,7 +261,7 @@ int main(int argc, char **argv) {
 
         RDom r(0, 100);
         g(x, y) = 0;
-        g(x, y) += f(x, 1000*(y+r));
+        g(x, y) += f(x, 1000 * (y + r));
 
         g.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
@@ -273,7 +271,7 @@ int main(int argc, char **argv) {
     if (1) {
         // A pipeline where the vectorized dimension should alternate index
         Func f("f"), g("g"), h("h");
-        f(x, y) = x*y;
+        f(x, y) = x * y;
 
         RDom r(-50, 100, -50, 100);
         g(x, y) += f(y + r.y, x + r.x);
@@ -291,17 +289,16 @@ int main(int argc, char **argv) {
         // scheduled.
         Func in("in"), a("a"), b("b");
 
-        in(x, y) = sqrt(sqrt(sqrt(sqrt(x*y))));
+        in(x, y) = sqrt(sqrt(sqrt(sqrt(x * y))));
 
         RDom r(-50, 100, -50, 100);
-        a(x, y) += in(x+r.x, y+r.y);
-        b(x, y) += in(y+r.y, x+r.x);
+        a(x, y) += in(x + r.x, y + r.y);
+        b(x, y) += in(y + r.y, x + r.x);
 
         a.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
         b.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
         Pipeline({a, b}).auto_schedule(target, params);
-
     }
 
     if (1) {
@@ -347,9 +344,9 @@ int main(int argc, char **argv) {
         ImageParam im(Float(32), 2);
         Func f("f"), g("g"), h("h");
 
-        f(x, y) = im(clamp(y*x, 0, 999), x);
-        g(x, y) = f(clamp(y*x, 0, 999), x);
-        h(x, y) = g(clamp(y*x, 0, 999), x);
+        f(x, y) = im(clamp(y * x, 0, 999), x);
+        g(x, y) = f(clamp(y * x, 0, 999), x);
+        h(x, y) = g(clamp(y * x, 0, 999), x);
 
         // Force everything to be compute root by accessing them in two separate outputs
         Func out1("out1"), out2("out2");
@@ -359,7 +356,6 @@ int main(int argc, char **argv) {
         out1.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
         out2.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
         Pipeline({out1, out2}).auto_schedule(target, params);
-
     }
 
     if (1) {
@@ -368,12 +364,12 @@ int main(int argc, char **argv) {
         const int N = 8;
         Func f[N];
         f[0] = Func("inline_me");
-        f[0](x, y) = im(x, y); // inline me!
+        f[0](x, y) = im(x, y);  // inline me!
         for (int i = 1; i < N; i++) {
             Expr e = 0;
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dx = -1; dx <= 1; dx++) {
-                    e += f[i-1](x + dx, y + dy);
+                    e += f[i - 1](x + dx, y + dy);
                 }
             }
             f[i](x, y) = e;
@@ -381,7 +377,7 @@ int main(int argc, char **argv) {
 
         Func g("output");
         // Access it in a way that makes it insane not to inline.
-        g(x, y) = f[N-1](x, y) + f[0](clamp(cast<int>(sin(x) * 10000), 0, 100000), clamp(cast<int>(sin(x*y) * 10000), 0, 100000));
+        g(x, y) = f[N - 1](x, y) + f[0](clamp(cast<int>(sin(x) * 10000), 0, 100000), clamp(cast<int>(sin(x * y) * 10000), 0, 100000));
         g.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
         Pipeline(g).auto_schedule(target, params);
@@ -390,7 +386,8 @@ int main(int argc, char **argv) {
     if (1) {
         Func f("f"), g("g"), h("h");
 
-        f(x, y) = x + y;;
+        f(x, y) = x + y;
+        ;
         g() = f(3, 2);
         RDom r(0, 100);
         g() += r;
@@ -429,14 +426,14 @@ int main(int argc, char **argv) {
         for (int i = 0; i < N; i++) {
             up[i] = Func("up" + std::to_string(i));
             down[i] = Func("down" + std::to_string(i));
-            down[i](x, y) = prev(2*x-10, 2*y-10) + prev(2*x + 10, 2*y + 10);
+            down[i](x, y) = prev(2 * x - 10, 2 * y - 10) + prev(2 * x + 10, 2 * y + 10);
             prev = BoundaryConditions::repeat_edge(down[i], {{0, sz}, {0, sz}});
             // prev = down[i];
             sz /= 2;
         }
 
-        for (int i = N-1; i >= 0; i--) {
-            up[i](x, y) = prev(x/2 + 10, y/2 + 10) + prev(x/2 - 10, y/2 - 10) + down[i](x, y);
+        for (int i = N - 1; i >= 0; i--) {
+            up[i](x, y) = prev(x / 2 + 10, y / 2 + 10) + prev(x / 2 - 10, y / 2 - 10) + down[i](x, y);
             prev = up[i];
         }
 
@@ -456,13 +453,29 @@ int main(int argc, char **argv) {
         Func scan("scan");
         scan(x, y) = f(x, y);
         RDom r(1, 1999);
-        scan(x, r) += scan(x, r-1);
-        scan(x, 1999-r) += scan(x, 2000-r);
+        scan(x, r) += scan(x, r - 1);
+        scan(x, 1999 - r) += scan(x, 2000 - r);
         Func casted("casted");
         casted(x, y) = scan(x, y);
 
         casted.set_estimate(x, 0, 2000).set_estimate(y, 0, 2000);
         Pipeline(casted).auto_schedule(target, params);
+    }
+
+    if (1) {
+        ImageParam im(Int(32), 2);
+
+        Func f("f"), hist("hist"), output("output");
+        Var i("i");
+        f(x, y) = clamp(im(x, y), 0, 255);
+        RDom r(0, 2000, 0, 2000);
+        hist(i) = cast<uint32_t>(0);
+        hist(f(r.x, r.y)) += cast<uint32_t>(1);
+        output(i) = hist(i);
+
+        f.set_estimate(x, 0, 2000).set_estimate(y, 0, 2000);
+        output.set_estimate(i, 0, 256);
+        Pipeline(output).auto_schedule(target, params);
     }
 
     return 0;

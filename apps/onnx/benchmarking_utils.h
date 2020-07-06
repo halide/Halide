@@ -1,7 +1,6 @@
 #ifndef BENCHMARKING_UTILS_H_
 #define BENCHMARKING_UTILS_H_
 
-
 // Flush the content of all the CPU caches by updating more data than what would fit in cache. This is simply needed when benchmarking in order to get more reliable performance numbers.
 class CacheEvictor {
 public:

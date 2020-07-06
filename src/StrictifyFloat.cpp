@@ -1,5 +1,6 @@
 #include "StrictifyFloat.h"
 
+#include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 

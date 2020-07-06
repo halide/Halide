@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+
 # Halide tutorial lesson 5
 
 # This lesson demonstrates how to manipulate the order in which you
@@ -6,22 +7,10 @@
 # parallelization, unrolling, and tiling.
 
 # This lesson can be built by invoking the command:
-#    make tutorial_lesson_05_scheduling_1
-# in a shell with the current directory at the top of the halide source tree.
-# Otherwise, see the platform-specific compiler invocations below.
-
-# On linux, you can compile and run it like so:
-# g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_05 -std=c++11
-# LD_LIBRARY_PATH=../bin ./lesson_05
-
-# On os x:
-# g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -o lesson_05 -std=c++11
-# DYLD_LIBRARY_PATH=../bin ./lesson_05
-
-#include "Halide.h"
-#include <stdio.h>
-#using namespace Halide
+#    make test_tutorial_lesson_05_scheduling_1
+# in a shell with the current directory at python_bindings/
 import halide as hl
+
 
 def main():
 
@@ -29,7 +18,7 @@ def main():
     # several different ways, and see what order pixels are computed
     # in.
 
-    x, y = hl.Var("x"), hl.Var ("y")
+    x, y = hl.Var("x"), hl.Var("y")
 
     # First we observe the default ordering.
     if True:
@@ -50,7 +39,6 @@ def main():
             for xx in range(4):
                 print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
-
         print("\n")
 
         # Tracing is one useful way to understand what a schedule is
@@ -66,11 +54,9 @@ def main():
         #     for x:
         #       gradient(...) = ...
 
-
     # Reorder variables.
     if True:
         gradient = hl.Func("gradient_col_major")
-        print("x, y", x, y)
         gradient[x, y] = x + y
         gradient.trace_stores()
 
@@ -80,7 +66,6 @@ def main():
         # generated. The arguments are specified from the innermost
         # loop out, so the following call puts y in the inner loop:
         gradient.reorder(y, x)
-        #gradient.reorder((y, x))
 
         # This means y (the row) will vary quickly, and x (the
         # column) will vary slowly, so this is a column-major
@@ -101,7 +86,6 @@ def main():
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-
 
     # Split a variable into two.
     if True:
@@ -145,7 +129,6 @@ def main():
         # up all of the scheduling possibilities that we will explore
         # below.
 
-
     # Fuse two variables into one.
     if True:
         gradient = hl.Func("gradient_fused")
@@ -164,7 +147,7 @@ def main():
         output = gradient.realize(4, 4)
 
         print("Equivalent C:")
-        for fused in range(4*4):
+        for fused in range(4 * 4):
             yy = fused / 4
             xx = fused % 4
             print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
@@ -174,7 +157,6 @@ def main():
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-
 
     # Evaluating in tiles.
     if True:
@@ -217,7 +199,6 @@ def main():
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-
 
     # Evaluating in vectors.
     if True:
@@ -264,24 +245,21 @@ def main():
                 # expression. On x86 processors, Halide generates SSE
                 # for all of this.
                 x_vec = [x_outer * 4 + 0,
-                               x_outer * 4 + 1,
-                               x_outer * 4 + 2,
-                               x_outer * 4 + 3]
+                         x_outer * 4 + 1,
+                         x_outer * 4 + 2,
+                         x_outer * 4 + 3]
                 val = [x_vec[0] + yy,
-                             x_vec[1] + yy,
-                             x_vec[2] + yy,
-                             x_vec[3] + yy]
+                       x_vec[1] + yy,
+                       x_vec[2] + yy,
+                       x_vec[3] + yy]
                 print("Evaluating at <%d, %d, %d, %d>, <%d, %d, %d, %d>: <%d, %d, %d, %d>" % (
-                       x_vec[0], x_vec[1], x_vec[2], x_vec[3],
-                       yy, yy, yy, yy,
-                       val[0], val[1], val[2], val[3]))
+                    x_vec[0], x_vec[1], x_vec[2], x_vec[3], yy, yy, yy, yy, val[0], val[1], val[2], val[3]))
 
         print()
 
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-
 
     # Unrolling a loop.
     if True:
@@ -305,7 +283,6 @@ def main():
         print("Evaluating gradient unrolled by a factor of two")
         result = gradient.realize(4, 4)
 
-
         print("Equivalent C:")
         for yy in range(4):
             for x_outer in range(2):
@@ -326,7 +303,6 @@ def main():
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-
 
     # Splitting by factors that don't divide the extent.
     if True:
@@ -349,7 +325,7 @@ def main():
 
         print("Equivalent C:")
         for yy in range(4):
-            for x_outer in range(3): # Now runs from 0 to 3
+            for x_outer in range(3):  # Now runs from 0 to 3
                 for x_inner in range(2):
                     xx = x_outer * 2
                     # Before we add x_inner, make sure we don't
@@ -390,7 +366,6 @@ def main():
         # trick. Instead the range of values computed will be rounded
         # up to the next multiple of the split factor.
 
-
     # Fusing, tiling, and parallelizing.
     if True:
         # We saw in the previous lesson that we can parallelize
@@ -427,7 +402,6 @@ def main():
         #     .fuse(x_outer, y_outer, tile_index)
         #     .parallel(tile_index)
 
-
         print("Evaluating gradient tiles in parallel")
         output = gradient.realize(4, 4)
 
@@ -435,7 +409,8 @@ def main():
         # tile the pixels will be traversed in row-major order.
 
         print("Equivalent (serial) C:")
-        # This outermost loop should be a parallel for loop, but that's hard in C.
+        # This outermost loop should be a parallel for loop, but that's hard in
+        # C.
         for tile_index in range(4):
             y_outer = tile_index / 2
             x_outer = tile_index % 2
@@ -450,7 +425,6 @@ def main():
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-
 
     # Putting it all together.
     if True:
@@ -472,7 +446,8 @@ def main():
         # express this is to recursively tile again within each tile
         # into 4x2 subtiles, then vectorize the subtiles across x and
         # unroll them across y:
-        x_inner_outer, y_inner_outer = hl.Var("x_inner_outer"), hl.Var("y_inner_outer")
+        x_inner_outer, y_inner_outer = hl.Var(
+            "x_inner_outer"), hl.Var("y_inner_outer")
         x_vectors, y_pairs = hl.Var("x_vectors"), hl.Var("y_pairs")
         gradient_fast \
             .tile(x_inner, y_inner, x_inner_outer, y_inner_outer, x_vectors, y_pairs, 4, 2) \
@@ -493,54 +468,48 @@ def main():
         result = gradient_fast.realize(800, 600)
 
         print("Checking Halide result against equivalent C...")
-        for tile_index in range(4*3):
+        for tile_index in range(4 * 3):
             y_outer = tile_index // 4
             x_outer = tile_index % 4
-            for y_inner_outer in range(256//2):
-                for x_inner_outer in range(256//4):
+            for y_inner_outer in range(256 // 2):
+                for x_inner_outer in range(256 // 4):
                     # We're vectorized across x
-                    xx = min(x_outer * 256, 800-256) + x_inner_outer*4
+                    xx = min(x_outer * 256, 800 - 256) + x_inner_outer * 4
                     x_vec = [xx + 0,
-                                    xx + 1,
-                                    xx + 2,
-                                    xx + 3]
+                             xx + 1,
+                             xx + 2,
+                             xx + 3]
 
                     # And we unrolled across y
-                    y_base = min(y_outer * 256, 600-256) + y_inner_outer*2
+                    y_base = min(y_outer * 256, 600 - 256) + y_inner_outer * 2
 
                     if True:
                         # y_pairs = 0
                         yy = y_base + 0
                         y_vec = [yy, yy, yy, yy]
                         val = [x_vec[0] + y_vec[0],
-                                      x_vec[1] + y_vec[1],
-                                      x_vec[2] + y_vec[2],
-                                      x_vec[3] + y_vec[3]]
+                               x_vec[1] + y_vec[1],
+                               x_vec[2] + y_vec[2],
+                               x_vec[3] + y_vec[3]]
 
                         # Check the result.
                         for i in range(4):
-                            #print("x_vec[%i], y_vec[%i]" % (i, i),
-                            #      x_vec[i], y_vec[i])
-                            if result[x_vec[i], y_vec[i]] != val[i]:
-                                print("There was an error at %d %d!" % (x_vec[i], y_vec[i]))
-                                return -1
-
-
+                            assert result[x_vec[i], y_vec[i]] == val[i], \
+                                "There was an error at %d %d!" % (x_vec[i], y_vec[i])
 
                     if True:
                         # y_pairs = 1
                         yy = y_base + 1
                         y_vec = [yy, yy, yy, yy]
                         val = [x_vec[0] + y_vec[0],
-                                      x_vec[1] + y_vec[1],
-                                      x_vec[2] + y_vec[2],
-                                      x_vec[3] + y_vec[3]]
+                               x_vec[1] + y_vec[1],
+                               x_vec[2] + y_vec[2],
+                               x_vec[3] + y_vec[3]]
 
                         # Check the result.
                         for i in range(4):
-                            if result[x_vec[i], y_vec[i]] != val[i]:
-                                print("There was an error at %d %d!" % (x_vec[i], y_vec[i]))
-
+                            assert result[x_vec[i], y_vec[i]] == val[i], \
+                                "There was an error at %d %d!" % (x_vec[i], y_vec[i])
 
         print()
 

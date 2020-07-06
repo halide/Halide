@@ -10,7 +10,7 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-WEAK __attribute__((always_inline)) void halide_abort() {
+WEAK_INLINE void halide_abort() {
     char *s = getenv("HL_DISABLE_WINDOWS_ABORT_DIALOG");
     if (s && atoi(s)) {
         // Debug variants of the MSVC runtime will present an "Abort, Retry, Ignore"
@@ -25,4 +25,6 @@ WEAK __attribute__((always_inline)) void halide_abort() {
     abort();
 }
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide

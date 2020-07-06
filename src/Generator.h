@@ -162,7 +162,7 @@
  * \endcode
  *
  * Note that the Inputs and Outputs will appear in the C function call in the order
- * they are declared. All Input<Func> and Output<Func> are represented as buffer_t;
+ * they are declared. All Input<Func> and Output<Func> are represented as halide_buffer_t;
  * all other Input<> are the appropriate C++ scalar type. (GeneratorParams are
  * always referenced by name, not position, so their order is irrelevant.)
  *
@@ -266,6 +266,7 @@
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "ExternalCode.h"
@@ -787,7 +788,9 @@ public:
         } else if (std::is_same<T, double>::value) {
             return "double";
         } else if (std::is_integral<T>::value) {
-            if (std::is_unsigned<T>::value) oss << 'u';
+            if (std::is_unsigned<T>::value) {
+                oss << "u";
+            }
             oss << "int" << (sizeof(T) * 8) << "_t";
             return oss.str();
         } else {
@@ -1010,11 +1013,11 @@ public:
  * Returns type of underlying operator+. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 + (T)0) operator+(const Other &a, const GeneratorParam<T> &b) {
+auto operator+(const Other &a, const GeneratorParam<T> &b) -> decltype(a + (T)b) {
     return a + (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, const Other &b) {
+auto operator+(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a + b) {
     return (T)a + b;
 }
 // @}
@@ -1023,11 +1026,11 @@ decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator-. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 - (T)0) operator-(const Other &a, const GeneratorParam<T> &b) {
+auto operator-(const Other &a, const GeneratorParam<T> &b) -> decltype(a - (T)b) {
     return a - (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 - (Other)0) operator-(const GeneratorParam<T> &a, const Other &b) {
+auto operator-(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a - b) {
     return (T)a - b;
 }
 // @}
@@ -1036,11 +1039,11 @@ decltype((T)0 - (Other)0) operator-(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator*. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 * (T)0) operator*(const Other &a, const GeneratorParam<T> &b) {
+auto operator*(const Other &a, const GeneratorParam<T> &b) -> decltype(a * (T)b) {
     return a * (T)b;
 }
 template<typename Other, typename T>
-decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, const Other &b) {
+auto operator*(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a * b) {
     return (T)a * b;
 }
 // @}
@@ -1049,11 +1052,11 @@ decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator/. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 / (T)1) operator/(const Other &a, const GeneratorParam<T> &b) {
+auto operator/(const Other &a, const GeneratorParam<T> &b) -> decltype(a / (T)b) {
     return a / (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, const Other &b) {
+auto operator/(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a / b) {
     return (T)a / b;
 }
 // @}
@@ -1062,11 +1065,11 @@ decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator%. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 % (T)1) operator%(const Other &a, const GeneratorParam<T> &b) {
+auto operator%(const Other &a, const GeneratorParam<T> &b) -> decltype(a % (T)b) {
     return a % (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, const Other &b) {
+auto operator%(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a % b) {
     return (T)a % b;
 }
 // @}
@@ -1075,11 +1078,11 @@ decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator>. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 > (T)1) operator>(const Other &a, const GeneratorParam<T> &b) {
+auto operator>(const Other &a, const GeneratorParam<T> &b) -> decltype(a > (T)b) {
     return a > (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, const Other &b) {
+auto operator>(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a > b) {
     return (T)a > b;
 }
 // @}
@@ -1088,11 +1091,11 @@ decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator<. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 < (T)1) operator<(const Other &a, const GeneratorParam<T> &b) {
+auto operator<(const Other &a, const GeneratorParam<T> &b) -> decltype(a < (T)b) {
     return a < (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, const Other &b) {
+auto operator<(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a < b) {
     return (T)a < b;
 }
 // @}
@@ -1101,11 +1104,11 @@ decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator>=. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 >= (T)1) operator>=(const Other &a, const GeneratorParam<T> &b) {
+auto operator>=(const Other &a, const GeneratorParam<T> &b) -> decltype(a >= (T)b) {
     return a >= (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, const Other &b) {
+auto operator>=(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a >= b) {
     return (T)a >= b;
 }
 // @}
@@ -1114,11 +1117,11 @@ decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator<=. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 <= (T)1) operator<=(const Other &a, const GeneratorParam<T> &b) {
+auto operator<=(const Other &a, const GeneratorParam<T> &b) -> decltype(a <= (T)b) {
     return a <= (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, const Other &b) {
+auto operator<=(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a <= b) {
     return (T)a <= b;
 }
 // @}
@@ -1127,11 +1130,11 @@ decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator==. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 == (T)1) operator==(const Other &a, const GeneratorParam<T> &b) {
+auto operator==(const Other &a, const GeneratorParam<T> &b) -> decltype(a == (T)b) {
     return a == (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, const Other &b) {
+auto operator==(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a == b) {
     return (T)a == b;
 }
 // @}
@@ -1140,11 +1143,11 @@ decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator!=. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 != (T)1) operator!=(const Other &a, const GeneratorParam<T> &b) {
+auto operator!=(const Other &a, const GeneratorParam<T> &b) -> decltype(a != (T)b) {
     return a != (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, const Other &b) {
+auto operator!=(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a != b) {
     return (T)a != b;
 }
 // @}
@@ -1153,15 +1156,15 @@ decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator&&. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 && (T)1) operator&&(const Other &a, const GeneratorParam<T> &b) {
+auto operator&&(const Other &a, const GeneratorParam<T> &b) -> decltype(a && (T)b) {
     return a && (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 && (Other)1) operator&&(const GeneratorParam<T> &a, const Other &b) {
+auto operator&&(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a && b) {
     return (T)a && b;
 }
 template<typename T>
-decltype((T)0 && (T)1) operator&&(const GeneratorParam<T> &a, const GeneratorParam<T> &b) {
+auto operator&&(const GeneratorParam<T> &a, const GeneratorParam<T> &b) -> decltype((T)a && (T)b) {
     return (T)a && (T)b;
 }
 // @}
@@ -1170,15 +1173,15 @@ decltype((T)0 && (T)1) operator&&(const GeneratorParam<T> &a, const GeneratorPar
  * Returns type of underlying operator||. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 || (T)1) operator||(const Other &a, const GeneratorParam<T> &b) {
+auto operator||(const Other &a, const GeneratorParam<T> &b) -> decltype(a || (T)b) {
     return a || (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 || (Other)1) operator||(const GeneratorParam<T> &a, const Other &b) {
+auto operator||(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a || b) {
     return (T)a || b;
 }
 template<typename T>
-decltype((T)0 || (T)1) operator||(const GeneratorParam<T> &a, const GeneratorParam<T> &b) {
+auto operator||(const GeneratorParam<T> &a, const GeneratorParam<T> &b) -> decltype((T)a || (T)b) {
     return (T)a || (T)b;
 }
 // @}
@@ -1194,20 +1197,20 @@ using std::max;
 using std::min;
 
 template<typename Other, typename T>
-decltype(min((Other)0, (T)1)) min_forward(const Other &a, const GeneratorParam<T> &b) {
+auto min_forward(const Other &a, const GeneratorParam<T> &b) -> decltype(min(a, (T)b)) {
     return min(a, (T)b);
 }
 template<typename Other, typename T>
-decltype(min((T)0, (Other)1)) min_forward(const GeneratorParam<T> &a, const Other &b) {
+auto min_forward(const GeneratorParam<T> &a, const Other &b) -> decltype(min((T)a, b)) {
     return min((T)a, b);
 }
 
 template<typename Other, typename T>
-decltype(max((Other)0, (T)1)) max_forward(const Other &a, const GeneratorParam<T> &b) {
+auto max_forward(const Other &a, const GeneratorParam<T> &b) -> decltype(max(a, (T)b)) {
     return max(a, (T)b);
 }
 template<typename Other, typename T>
-decltype(max((T)0, (Other)1)) max_forward(const GeneratorParam<T> &a, const Other &b) {
+auto max_forward(const GeneratorParam<T> &a, const Other &b) -> decltype(max((T)a, b)) {
     return max((T)a, b);
 }
 
@@ -1242,7 +1245,7 @@ auto max(const GeneratorParam<T> &a, const Other &b) -> decltype(Internal::Gener
 
 /** Not operator for GeneratorParam */
 template<typename T>
-decltype(!(T)0) operator!(const GeneratorParam<T> &a) {
+auto operator!(const GeneratorParam<T> &a) -> decltype(!(T)a) {
     return !(T)a;
 }
 
@@ -1311,14 +1314,14 @@ protected:
     Target get_target() const;
 
     explicit StubOutputBufferBase(const Func &f, std::shared_ptr<GeneratorBase> generator)
-        : f(f), generator(generator) {
+        : f(f), generator(std::move(generator)) {
     }
     StubOutputBufferBase() = default;
 
 public:
     Realization realize(std::vector<int32_t> sizes) {
         check_scheduled("realize");
-        return f.realize(sizes, get_target());
+        return f.realize(std::move(sizes), get_target());
     }
 
     template<typename... Args>
@@ -1351,7 +1354,7 @@ class StubOutputBuffer : public StubOutputBufferBase {
     template<typename T2>
     friend class GeneratorOutput_Buffer;
     friend class GeneratorStub;
-    explicit StubOutputBuffer(const Func &f, std::shared_ptr<GeneratorBase> generator)
+    explicit StubOutputBuffer(const Func &f, const std::shared_ptr<GeneratorBase> &generator)
         : StubOutputBufferBase(f, generator) {
     }
 
@@ -1374,13 +1377,13 @@ public:
     // *not* explicit.
     template<typename T2>
     StubInput(const StubInputBuffer<T2> &b)
-        : kind_(IOKind::Buffer), parameter_(b.parameter_) {
+        : kind_(IOKind::Buffer), parameter_(b.parameter_), func_(), expr_() {
     }
     StubInput(const Func &f)
-        : kind_(IOKind::Function), parameter_(), func_(f) {
+        : kind_(IOKind::Function), parameter_(), func_(f), expr_() {
     }
     StubInput(const Expr &e)
-        : kind_(IOKind::Scalar), parameter_(), expr_(e) {
+        : kind_(IOKind::Scalar), parameter_(), func_(), expr_(e) {
     }
 
 private:
@@ -1548,8 +1551,8 @@ protected:
         return "Input";
     }
 
-    void set_estimate_impl(Var var, Expr min, Expr extent);
-    void set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates);
+    void set_estimate_impl(const Var &var, const Expr &min, const Expr &extent);
+    void set_estimates_impl(const Region &estimates);
 
 public:
     ~GeneratorInputBase() override;
@@ -1689,7 +1692,7 @@ public:
 
     Expr operator()(std::vector<Expr> args) const {
         this->check_gio_access();
-        return Func(*this)(args);
+        return Func(*this)(std::move(args));
     }
 
     template<typename T2>
@@ -1715,11 +1718,11 @@ public:
     }
 
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorInput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorInput_Buffer<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
         return set_estimate(var, min, extent);
     }
 
-    GeneratorInput_Buffer<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorInput_Buffer<T> &set_estimates(const Region &estimates) {
         this->check_gio_access();
         this->set_estimates_impl(estimates);
         return *this;
@@ -1730,7 +1733,7 @@ public:
         return Func(*this).in();
     }
 
-    Func in(Func other) {
+    Func in(const Func &other) {
         this->check_gio_access();
         return Func(*this).in(other);
     }
@@ -1857,7 +1860,7 @@ public:
         return this->funcs().at(0)(std::forward<Args>(args)...);
     }
 
-    Expr operator()(std::vector<Expr> args) const {
+    Expr operator()(const std::vector<Expr> &args) const {
         this->check_gio_access();
         return this->funcs().at(0)(args);
     }
@@ -1879,11 +1882,11 @@ public:
     }
 
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorInput_Func<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
         return set_estimate(var, min, extent);
     }
 
-    GeneratorInput_Func<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorInput_Func<T> &set_estimates(const Region &estimates) {
         this->check_gio_access();
         this->set_estimates_impl(estimates);
         return *this;
@@ -1894,7 +1897,7 @@ public:
         return Func(*this).in();
     }
 
-    Func in(Func other) {
+    Func in(const Func &other) {
         this->check_gio_access();
         return Func(*this).in(other);
     }
@@ -2193,7 +2196,7 @@ protected:
 
 public:
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorOutputBase &estimate(Var var, Expr min, Expr extent) {
+    GeneratorOutputBase &estimate(const Var &var, const Expr &min, const Expr &extent) {
         this->as<Func>().set_estimate(var, min, extent);
         return *this;
     }
@@ -2518,7 +2521,7 @@ public:
     // 'perfect forwarding' won't work with initializer lists,
     // so hand-roll our own forwarding method for set_estimates,
     // rather than using HALIDE_FORWARD_METHOD.
-    GeneratorOutput_Buffer<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorOutput_Buffer<T> &set_estimates(const Region &estimates) {
         this->as<OutputImageParam>().set_estimates(estimates);
         return *this;
     }
@@ -2594,7 +2597,7 @@ public:
         return Super::operator[](i);
     }
 
-    GeneratorOutput_Func<T> &set_estimate(Var var, Expr min, Expr extent) {
+    GeneratorOutput_Func<T> &set_estimate(const Var &var, const Expr &min, const Expr &extent) {
         this->check_gio_access();
         internal_assert(this->exprs_.empty() && !this->funcs_.empty());
         for (Func &f : this->funcs_) {
@@ -2604,11 +2607,11 @@ public:
     }
 
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorOutput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorOutput_Func<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
         return set_estimate(var, min, extent);
     }
 
-    GeneratorOutput_Func<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorOutput_Func<T> &set_estimates(const Region &estimates) {
         this->check_gio_access();
         internal_assert(this->exprs_.empty() && !this->funcs_.empty());
         for (Func &f : this->funcs_) {
@@ -2943,7 +2946,7 @@ protected:
         return Halide::cast<T>(e);
     }
     static inline Expr cast(Halide::Type t, Expr e) {
-        return Halide::cast(t, e);
+        return Halide::cast(t, std::move(e));
     }
     template<typename T>
     using GeneratorParam = Halide::GeneratorParam<T>;
@@ -3041,7 +3044,7 @@ public:
 
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
-    virtual ~GeneratorBase();
+    ~GeneratorBase() override;
 
     void set_generator_param_values(const GeneratorParamsMap &params);
 
@@ -3066,6 +3069,22 @@ public:
                         const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
     /**
+     * Build a module that is suitable for using for gradient descent calculation in TensorFlow or PyTorch.
+     *
+     * Essentially:
+     *   - A new Pipeline is synthesized from the current Generator (according to the rules below)
+     *   - The new Pipeline is autoscheduled (if autoscheduling is requested, but it would be odd not to do so)
+     *   - The Pipeline is compiled to a Module and returned
+     *
+     * The new Pipeline is adjoint to the original; it has:
+     *   - All the same inputs as the original, in the same order
+     *   - Followed by one grad-input for each original output
+     *   - Followed by one output for each unique pairing of original-output + original-input.
+     *     (For the common case of just one original-output, this amounts to being one output for each original-input.)
+     */
+    Module build_gradient_module(const std::string &function_name);
+
+    /**
      * set_inputs is a variadic wrapper around set_inputs_vector, which makes usage much simpler
      * in many cases, as it constructs the relevant entries for the vector for you, which
      * is often a bit unintuitive at present. The arguments are passed in Input<>-declaration-order,
@@ -3087,7 +3106,7 @@ public:
 
     Realization realize(std::vector<int32_t> sizes) {
         this->check_scheduled("realize");
-        return get_pipeline().realize(sizes, get_target());
+        return get_pipeline().realize(std::move(sizes), get_target());
     }
 
     // Only enable if none of the args are Realization; otherwise we can incorrectly
@@ -3344,7 +3363,7 @@ private:
         auto *in = param_info().inputs().at(i);
         check_input_kind(in, Internal::IOKind::Function);
         check_input_is_singular(in);
-        Halide::Func f = arg;
+        const Halide::Func &f = arg;
         StubInput si(f);
         return {si};
     }
@@ -3662,17 +3681,17 @@ namespace Internal {
 class RegisterGenerator {
 public:
     RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
-        Internal::GeneratorRegistry::register_factory(registered_name, generator_factory);
+        Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
     }
 };
 
 class GeneratorStub : public NamesInterface {
 public:
     GeneratorStub(const GeneratorContext &context,
-                  GeneratorFactory generator_factory);
+                  const GeneratorFactory &generator_factory);
 
     GeneratorStub(const GeneratorContext &context,
-                  GeneratorFactory generator_factory,
+                  const GeneratorFactory &generator_factory,
                   const GeneratorParamsMap &generator_params,
                   const std::vector<std::vector<Internal::StubInput>> &inputs);
     std::vector<std::vector<Func>> generate(const GeneratorParamsMap &generator_params,

@@ -1,6 +1,7 @@
 #include "StorageFlattening.h"
 
 #include "Bounds.h"
+#include "Function.h"
 #include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -39,7 +40,7 @@ private:
     Scope<> realizations, shader_scope_realizations;
     bool in_shader = false;
 
-    Expr make_shape_var(string name, string field, size_t dim,
+    Expr make_shape_var(string name, const string &field, size_t dim,
                         const Buffer<> &buf, const Parameter &param) {
         ReductionDomain rdom;
         name = name + "." + field + "." + std::to_string(dim);
@@ -128,7 +129,7 @@ private:
 
         // The allocation extents of the function taken into account of
         // the align_storage directives. It is only used to determine the
-        // host allocation size and the strides in buffer_t objects (which
+        // host allocation size and the strides in halide_buffer_t objects (which
         // also affects the device allocation in some backends).
         vector<Expr> allocation_extents(extents.size());
         vector<int> storage_permutation;
@@ -175,7 +176,7 @@ private:
             stride_var[i] = Variable::make(Int(32), stride_name[i]);
         }
 
-        // Create a buffer_t object for this allocation.
+        // Create a halide_buffer_t object for this allocation.
         BufferBuilder builder;
         builder.host = Variable::make(Handle(), op->name);
         builder.type = op->types[0];
@@ -276,8 +277,8 @@ private:
                     args.push_back(extent);
                 }
                 for (size_t i = op->args.size(); i < 3; i++) {
-                    args.push_back(0);
-                    args.push_back(1);
+                    args.emplace_back(0);
+                    args.emplace_back(1);
                 }
 
                 return Call::make(op->type,

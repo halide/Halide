@@ -1,10 +1,12 @@
 #ifndef HALIDE_RUNTIME_PRINTER_H
 #define HALIDE_RUNTIME_PRINTER_H
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
-enum PrinterType {BasicPrinter = 0,
-                  ErrorPrinter = 1,
-                  StringStreamPrinter = 2};
+enum PrinterType { BasicPrinter = 0,
+                   ErrorPrinter = 1,
+                   StringStreamPrinter = 2 };
 
 // A class for constructing debug messages from the runtime. Dumps
 // items into a stack array, then prints them when the object leaves
@@ -30,12 +32,21 @@ public:
     char *buf, *dst, *end;
     void *user_context;
     bool own_mem;
+    char scratch[length <= 256 ? length : 1];
 
-    Printer(void *ctx, char *mem = NULL) : user_context(ctx), own_mem(mem == NULL) {
-        buf = mem ? mem : (char *)halide_malloc(user_context, length);
+    Printer(void *ctx, char *mem = NULL)
+        : user_context(ctx), own_mem(mem == NULL) {
+        if (mem != NULL) {
+            buf = mem;
+        } else if (length <= sizeof(scratch)) {
+            buf = scratch;
+        } else {
+            buf = (char *)malloc(length);
+        }
+
         dst = buf;
         if (dst) {
-            end = buf + (length-1);
+            end = buf + (length - 1);
             *end = 0;
         } else {
             // Pointers equal ensures no writes to buffer via formatting code
@@ -88,7 +99,7 @@ public:
         return *this;
     }
 
-    Printer & write_float16_from_bits(const uint16_t arg) {
+    Printer &write_float16_from_bits(const uint16_t arg) {
         double value = halide_float16_bits_to_double(arg);
         dst = halide_double_to_string(dst, end, value, 1);
         return *this;
@@ -129,6 +140,10 @@ public:
         return (uint64_t)(dst - buf);
     }
 
+    uint64_t capacity() const {
+        return length;
+    }
+
     // Delete the last N characters
     void erase(int n) {
         if (dst) {
@@ -145,7 +160,7 @@ public:
     }
 
     void msan_annotate_is_initialized() {
-        (void) halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
+        (void)halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
     }
 
     ~Printer() {
@@ -162,8 +177,8 @@ public:
             }
         }
 
-        if (own_mem) {
-            halide_free(user_context, buf);
+        if (own_mem && buf != scratch) {
+            free(buf);
         }
     }
 };
@@ -172,7 +187,8 @@ public:
 // does nothing and should compile to a no-op.
 class SinkPrinter {
 public:
-    SinkPrinter(void *user_context) {}
+    SinkPrinter(void *user_context) {
+    }
 };
 template<typename T>
 SinkPrinter operator<<(const SinkPrinter &s, T) {
@@ -188,8 +204,9 @@ typedef Printer<BasicPrinter> debug;
 #else
 typedef SinkPrinter debug;
 #endif
-}
+}  // namespace
 
-
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 #endif

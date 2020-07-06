@@ -281,7 +281,7 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
             oss << type.handle_type->inner_name.name;
             if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
                 oss << " &";
-            } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
+            } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::RValueReference) {
                 oss << " &&";
             }
             for (auto modifier : type.handle_type->cpp_type_modifiers) {
@@ -325,7 +325,7 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
         case 32:
         case 64:
             if (type.is_uint()) {
-                oss << 'u';
+                oss << "u";
             }
             oss << "int" << type.bits();
             if (type.is_vector()) {

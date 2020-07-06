@@ -1,7 +1,12 @@
 #ifndef HALIDE_HALIDERUNTIMEMETAL_H
 #define HALIDE_HALIDERUNTIMEMETAL_H
 
+// Don't include HalideRuntime.h if the contents of it were already pasted into a generated header above this one
+#ifndef HALIDE_HALIDERUNTIME_H
+
 #include "HalideRuntime.h"
+
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,7 +36,7 @@ extern int halide_metal_run(void *user_context,
                             void *args[],
                             int8_t arg_is_buffer[],
                             int num_attributes,
-                            float* vertex_buffer,
+                            float *vertex_buffer,
                             int num_coords_dim0,
                             int num_coords_dim1);
 // @}
@@ -92,7 +97,7 @@ extern int halide_metal_acquire_context(void *user_context, struct halide_metal_
 extern int halide_metal_release_context(void *user_context);
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEMETAL_H
+#endif  // HALIDE_HALIDERUNTIMEMETAL_H

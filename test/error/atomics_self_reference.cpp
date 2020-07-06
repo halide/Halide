@@ -12,10 +12,12 @@ int main(int argc, char **argv) {
 
     f.compute_root();
     f.update()
-     .atomic(true /* override_associativity_test */)
-     .parallel(r);
+        .atomic(true /* override_associativity_test */)
+        .parallel(r);
 
     // f references itself on the index, making the atomic illegal.
     Realization out = f.realize(100);
+
+    printf("Success!\n");
     return 0;
 }

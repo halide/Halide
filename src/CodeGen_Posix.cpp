@@ -22,7 +22,7 @@ CodeGen_Posix::CodeGen_Posix(Target t)
     : CodeGen_LLVM(t) {
 }
 
-Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, Expr condition) {
+Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, const Expr &condition) {
     // Compute size from list of extents checking for overflow.
 
     Expr overflow = make_zero(UInt(64));
@@ -82,8 +82,8 @@ int CodeGen_Posix::allocation_padding(Type type) const {
 }
 
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, MemoryType memory_type,
-                                                           const std::vector<Expr> &extents, Expr condition,
-                                                           Expr new_expr, std::string free_function) {
+                                                           const std::vector<Expr> &extents, const Expr &condition,
+                                                           const Expr &new_expr, std::string free_function) {
     Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
     int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);

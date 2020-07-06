@@ -1,7 +1,9 @@
 #include "HalideRuntime.h"
 #include "cpu_features.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK CpuFeatures halide_get_cpu_features() {
     CpuFeatures features;
@@ -18,7 +20,11 @@ WEAK CpuFeatures halide_get_cpu_features() {
     //    features.set_available(halide_target_feature_armv7s);
     // }
 
+    // TODO: add runtime detection for ARMDotProd extension
+    // https://github.com/halide/Halide/issues/4727
     return features;
 }
 
-}}} // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide

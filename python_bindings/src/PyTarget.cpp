@@ -37,7 +37,7 @@ void define_target(py::module &m) {
             .def("__str__", &Target::to_string)
             .def("to_string", &Target::to_string)
 
-            .def("has_feature", (bool (Target::*)(Target::Feature) const) &Target::has_feature)
+            .def("has_feature", (bool (Target::*)(Target::Feature) const) & Target::has_feature)
             .def("features_any_of", &Target::features_any_of, py::arg("features"))
             .def("features_all_of", &Target::features_all_of, py::arg("features"))
 
@@ -54,12 +54,16 @@ void define_target(py::module &m) {
             .def("maximum_buffer_size", &Target::maximum_buffer_size)
             .def("supported", &Target::supported)
             .def_static("validate_target_string", &Target::validate_target_string, py::arg("name"));
-        ;
+    ;
 
     m.def("get_host_target", &get_host_target);
     m.def("get_target_from_environment", &get_target_from_environment);
     m.def("get_jit_target_from_environment", &get_jit_target_from_environment);
     m.def("target_feature_for_device_api", &target_feature_for_device_api);
+
+    // TODO: this really belong in PyDeviceInterface.cpp (once it exists);
+    // it's here as an expedient to make our tutorials work more cleanly.
+    m.def("host_supports_target_device", &host_supports_target_device);
 }
 
 }  // namespace PythonBindings

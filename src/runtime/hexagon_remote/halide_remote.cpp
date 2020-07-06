@@ -1,11 +1,11 @@
-#include "halide_hexagon_remote.h"
 #include "HalideRuntime.h"
 #include "HalideRuntimeHexagonHost.h"
+#include "halide_hexagon_remote.h"
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <dlfcn.h>
 #include <qurt.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 extern "C" {
 #include "HAP_farf.h"
@@ -13,9 +13,9 @@ extern "C" {
 }
 
 #include "dlib.h"
-#include "pipeline_context.h"
-#include "log.h"
 #include "known_symbols.h"
+#include "log.h"
+#include "pipeline_context.h"
 
 const int stack_alignment = 128;
 const int stack_size = 1024 * 1024;
@@ -43,7 +43,7 @@ void halide_error(void *user_context, const char *str) {
     }
 }
 
-__attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
+__attribute__((weak)) void *dlopenbuf(const char *filename, const char *data, int size, int perms);
 
 static bool use_dlopenbuf() {
     return dlopenbuf != NULL;
@@ -93,7 +93,7 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
     if (use_dlopenbuf()) {
         // We need to use RTLD_NOW, the libraries we build for Hexagon
         // offloading do not support lazy binding.
-        lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_GLOBAL | RTLD_NOW);
+        lib = dlopenbuf(soname, (const char *)code, codeLen, RTLD_GLOBAL | RTLD_NOW);
         if (!lib) {
             log_printf("dlopenbuf failed: %s\n", dlerror());
             return -1;
@@ -165,14 +165,14 @@ int halide_hexagon_remote_set_performance(
     }
 
     request.type = HAP_power_set_mips_bw;
-    request.mips_bw.set_mips        = set_mips;
-    request.mips_bw.mipsPerThread   = mipsPerThread;
-    request.mips_bw.mipsTotal       = mipsTotal;
-    request.mips_bw.set_bus_bw      = set_bus_bw;
-    request.mips_bw.bwBytePerSec    = ((uint64_t) bwMegabytesPerSec) << 20;
+    request.mips_bw.set_mips = set_mips;
+    request.mips_bw.mipsPerThread = mipsPerThread;
+    request.mips_bw.mipsTotal = mipsTotal;
+    request.mips_bw.set_bus_bw = set_bus_bw;
+    request.mips_bw.bwBytePerSec = ((uint64_t)bwMegabytesPerSec) << 20;
     request.mips_bw.busbwUsagePercentage = busbwUsagePercentage;
-    request.mips_bw.set_latency     = set_latency;
-    request.mips_bw.latency         = latency;
+    request.mips_bw.set_latency = set_latency;
+    request.mips_bw.latency = latency;
     retval = HAP_power_set(NULL, &request);
     if (0 != retval) {
         log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
@@ -183,14 +183,22 @@ int halide_hexagon_remote_set_performance(
 
 HAP_dcvs_voltage_corner_t halide_power_mode_to_voltage_corner(int mode) {
     switch (mode) {
-    case halide_hexagon_power_low: return HAP_DCVS_VCORNER_SVS;
-    case halide_hexagon_power_nominal: return HAP_DCVS_VCORNER_NOM;
-    case halide_hexagon_power_turbo: return HAP_DCVS_VCORNER_TURBO;
-    case halide_hexagon_power_default: return HAP_DCVS_VCORNER_DISABLE;
-    case halide_hexagon_power_low_plus: return HAP_DCVS_VCORNER_SVSPLUS;
-    case halide_hexagon_power_low_2: return HAP_DCVS_VCORNER_SVS2;
-    case halide_hexagon_power_nominal_plus: return HAP_DCVS_VCORNER_NOMPLUS;
-    default: return HAP_DCVS_VCORNER_DISABLE;
+    case halide_hexagon_power_low:
+        return HAP_DCVS_VCORNER_SVS;
+    case halide_hexagon_power_nominal:
+        return HAP_DCVS_VCORNER_NOM;
+    case halide_hexagon_power_turbo:
+        return HAP_DCVS_VCORNER_TURBO;
+    case halide_hexagon_power_default:
+        return HAP_DCVS_VCORNER_DISABLE;
+    case halide_hexagon_power_low_plus:
+        return HAP_DCVS_VCORNER_SVSPLUS;
+    case halide_hexagon_power_low_2:
+        return HAP_DCVS_VCORNER_SVS2;
+    case halide_hexagon_power_nominal_plus:
+        return HAP_DCVS_VCORNER_NOMPLUS;
+    default:
+        return HAP_DCVS_VCORNER_DISABLE;
     }
 }
 
@@ -246,27 +254,27 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
         }
     }
 
-    set_mips    = TRUE;
-    set_bus_bw  = TRUE;
+    set_mips = TRUE;
+    set_bus_bw = TRUE;
     set_latency = TRUE;
     switch (mode) {
     case halide_hexagon_power_low:
-        mipsPerThread          = max_mips / 4;
-        bwBytePerSec           = max_bus_bw / 2;
-        busbwUsagePercentage   = 25;
-        latency                = 1000;
+        mipsPerThread = max_mips / 4;
+        bwBytePerSec = max_bus_bw / 2;
+        busbwUsagePercentage = 25;
+        latency = 1000;
         break;
     case halide_hexagon_power_nominal:
-        mipsPerThread          = (3 * max_mips) / 8;
-        bwBytePerSec           = max_bus_bw;
-        busbwUsagePercentage   = 50;
-        latency                = 100;
+        mipsPerThread = (3 * max_mips) / 8;
+        bwBytePerSec = max_bus_bw;
+        busbwUsagePercentage = 50;
+        latency = 100;
         break;
     case halide_hexagon_power_turbo:
-        mipsPerThread          = max_mips;
-        bwBytePerSec           = max_bus_bw * 4;
-        busbwUsagePercentage   = 100;
-        latency                = 10;
+        mipsPerThread = max_mips;
+        bwBytePerSec = max_bus_bw * 4;
+        busbwUsagePercentage = 100;
+        latency = 10;
         break;
     case halide_hexagon_power_default:
     default:
@@ -316,11 +324,11 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     }
 }
 
-int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, int nameLen, handle_t *sym_ptr) {
+int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char *name, int nameLen, handle_t *sym_ptr) {
     if (use_dlopenbuf()) {
-       *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void*>(module_ptr), name));
+        *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void *>(module_ptr), name));
     } else {
-        *sym_ptr= reinterpret_cast<handle_t>(mmap_dlsym(reinterpret_cast<void*>(module_ptr), name));
+        *sym_ptr = reinterpret_cast<handle_t>(mmap_dlsym(reinterpret_cast<void *>(module_ptr), name));
     }
     return *sym_ptr != 0 ? 0 : -1;
 }
@@ -344,7 +352,7 @@ int halide_hexagon_runtime_set_thread_priority(int priority) {
 
     // Find the halide_set_default_thread_priority function in the shared runtime,
     // which we loaded with RTLD_GLOBAL.
-    void (*set_priority)(int) = (void (*)(int)) halide_get_symbol("halide_set_default_thread_priority");
+    void (*set_priority)(int) = (void (*)(int))halide_get_symbol("halide_set_default_thread_priority");
 
     if (set_priority) {
         set_priority(priority);
@@ -364,28 +372,23 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
         run_context.set_priority(saved_thread_priority);
         // Future threads
         halide_hexagon_runtime_set_thread_priority(saved_thread_priority);
-        saved_thread_priority = -1;   // Only do this once
+        saved_thread_priority = -1;  // Only do this once
     }
 
     // Get a pointer to the argv version of the pipeline.
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
-    // Construct a list of arguments. This is only part of a
-    // buffer_t. We know that the only field of buffer_t that the
-    // generated code should access is the host field (any other
-    // fields should be passed as their own scalar parameters) so we
-    // can just make this dummy buffer_t type.
-    struct buffer_t {
+    // Construct a list of arguments.
+    struct hexagon_device_pointer {
         uint64_t dev;
-        uint8_t* host;
+        uint8_t *host;
     };
 
-
     void **args = NULL;
-    buffer_t *buffers = NULL;
+    hexagon_device_pointer *buffers = NULL;
 
     size_t args_size = (input_buffersLen + scalarsLen + output_buffersLen) * sizeof(void *);
-    size_t buffers_size = (input_buffersLen + output_buffersLen) * sizeof(buffer_t);
+    size_t buffers_size = (input_buffersLen + output_buffersLen) * sizeof(hexagon_device_pointer);
 
     // Threshold to allocate on heap vs stack.
     const size_t heap_allocation_threshold = 1024;
@@ -393,14 +396,15 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
 
     if (allocated_on_heap) {
         args = (void **)malloc(args_size);
-        buffers = (buffer_t *)malloc(buffers_size);
+        buffers = (hexagon_device_pointer *)malloc(buffers_size);
     } else {
         args = (void **)__builtin_alloca(args_size);
-        buffers = (buffer_t *)__builtin_alloca(buffers_size);
+        buffers = (hexagon_device_pointer *)__builtin_alloca(buffers_size);
     }
+    memset(buffers, 0, buffers_size);
 
     void **next_arg = &args[0];
-    buffer_t *next_buffer_t = &buffers[0];
+    hexagon_device_pointer *next_buffer_t = &buffers[0];
     // Input buffers come first.
     for (int i = 0; i < input_buffersLen; i++, next_arg++, next_buffer_t++) {
         next_buffer_t->host = input_buffersPtrs[i].data;
@@ -442,9 +446,9 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
 
 int halide_hexagon_remote_release_library(handle_t module_ptr) {
     if (use_dlopenbuf()) {
-        dlclose(reinterpret_cast<void*>(module_ptr));
+        dlclose(reinterpret_cast<void *>(module_ptr));
     } else {
-        mmap_dlclose(reinterpret_cast<void*>(module_ptr));
+        mmap_dlclose(reinterpret_cast<void *>(module_ptr));
     }
     return 0;
 }

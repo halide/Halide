@@ -1,5 +1,6 @@
 #include "Memoization.h"
 #include "Error.h"
+#include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Param.h"
@@ -145,6 +146,7 @@ public:
 };
 
 typedef std::pair<FindParameterDependencies::DependencyKey, FindParameterDependencies::DependencyInfo> DependencyKeyInfoPair;
+typedef std::pair<const FindParameterDependencies::DependencyKey, FindParameterDependencies::DependencyInfo> ConstDependencyKeyInfoPair;
 
 class KeyInfo {
     FindParameterDependencies dependencies;
@@ -156,7 +158,7 @@ class KeyInfo {
     size_t parameters_alignment() {
         int32_t max_alignment = 0;
         // Find maximum natural alignment needed.
-        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+        for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
             int alignment = i.second.type.bytes();
             if (alignment > max_alignment) {
                 max_alignment = alignment;
@@ -199,7 +201,7 @@ public:
         }
         key_size_expr = (int32_t)size_so_far;
 
-        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+        for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
             key_size_expr += i.second.size_expr;
         }
     }
@@ -213,7 +215,7 @@ public:
     // Code to fill in the Allocation named key_name with the byte of
     // the key. The Allocation is guaranteed to be 1d, of type uint8_t
     // and of the size returned from key_size
-    Stmt generate_key(std::string key_name) {
+    Stmt generate_key(const std::string &key_name) {
         std::vector<Stmt> writes;
         Expr index = Expr(0);
 
@@ -246,7 +248,7 @@ public:
             }
         }
 
-        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+        for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
             writes.push_back(Store::make(key_name,
                                          i.second.value_expr,
                                          (index / i.second.size_expr),
@@ -262,13 +264,13 @@ public:
     // in which case the Allocation named by storage will be computed,
     // or false, in which case it will be assumed the buffer was populated
     // by the code in this call.
-    Expr generate_lookup(std::string key_allocation_name, std::string computed_bounds_name,
-                         int32_t tuple_count, std::string storage_base_name) {
+    Expr generate_lookup(const std::string &key_allocation_name, const std::string &computed_bounds_name,
+                         int32_t tuple_count, const std::string &storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
-        args.push_back(tuple_count);
+        args.emplace_back(tuple_count);
         std::vector<Expr> buffers;
         if (tuple_count == 1) {
             buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));
@@ -283,13 +285,13 @@ public:
     }
 
     // Returns a statement which will store the result of a computation under this key
-    Stmt store_computation(std::string key_allocation_name, std::string computed_bounds_name,
-                           int32_t tuple_count, std::string storage_base_name) {
+    Stmt store_computation(const std::string &key_allocation_name, const std::string &computed_bounds_name,
+                           int32_t tuple_count, const std::string &storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
-        args.push_back(tuple_count);
+        args.emplace_back(tuple_count);
         std::vector<Expr> buffers;
         if (tuple_count == 1) {
             buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));
@@ -373,7 +375,7 @@ private:
             BufferBuilder builder;
             builder.dimensions = f.dimensions();
             std::string max_stage_num = std::to_string(f.updates().size());
-            for (const std::string arg : f.args()) {
+            for (const std::string &arg : f.args()) {
                 std::string prefix = op->name + ".s" + max_stage_num + "." + arg;
                 Expr min = Variable::make(Int(32), prefix + ".min");
                 Expr max = Variable::make(Int(32), prefix + ".max");
@@ -430,7 +432,7 @@ private:
     }
 };
 
-Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
+Stmt inject_memoization(const Stmt &s, const std::map<std::string, Function> &env,
                         const std::string &name,
                         const std::vector<Function> &outputs) {
     // Cache keys use the addresses of names of Funcs. For JIT, a
@@ -532,7 +534,7 @@ private:
     }
 };
 
-Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> &env) {
+Stmt rewrite_memoized_allocations(const Stmt &s, const std::map<std::string, Function> &env) {
 
     RewriteMemoizedAllocations rewriter(env);
 

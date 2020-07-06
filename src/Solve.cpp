@@ -1,4 +1,5 @@
 #include "Solve.h"
+
 #include "CSE.h"
 #include "ConciseCasts.h"
 #include "ExprUsesVar.h"
@@ -86,7 +87,7 @@ private:
 
     // Return the negative of an expr. Does some eager simplification
     // to avoid injecting pointless -1s.
-    Expr negate(Expr e) {
+    Expr negate(const Expr &e) {
         internal_assert(!e.type().is_uint()) << "Negating unsigned is not legal\n";
         const Mul *mul = e.as<Mul>();
         if (mul && is_const(mul->b)) {
@@ -105,7 +106,7 @@ private:
     using IRMutator::visit;
 
     // Admit defeat. Isolated in a method for ease of debugging.
-    Expr fail(Expr e) {
+    Expr fail(const Expr &e) {
         debug(3) << "Failed to solve: " << e << "\n";
         failed = true;
         return Expr();
@@ -140,6 +141,8 @@ private:
         const Sub *sub_b = b.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+        const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
 
         Expr expr;
 
@@ -178,6 +181,12 @@ private:
             } else if (mul_b && equal(mul_b->a, a)) {
                 // f(x) + f(x)*a -> f(x) * (a + 1)
                 expr = mutate(a * (mul_b->b + 1));
+            } else if (div_a && !a_failed) {
+                // f(x)/a + g(x) -> (f(x) + g(x) * a) / b
+                expr = mutate((div_a->a + b * div_a->b) / div_a->b);
+            } else if (div_b && !b_failed) {
+                // f(x) + g(x)/b -> (f(x) * b + g(x)) / b
+                expr = mutate((a * div_b->b + div_b->a) / div_b->b);
             } else {
                 expr = fail(a + b);
             }
@@ -221,6 +230,7 @@ private:
         const Sub *sub_b = b.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+        const Div *div_a = a.as<Div>();
 
         Expr expr;
 
@@ -270,6 +280,9 @@ private:
             } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b)) {
                 // f(x)*a - g(x)*a -> (f(x) - g(x))*a;
                 expr = mutate((mul_a->a - mul_b->a) * mul_a->b);
+            } else if (div_a && !a_failed) {
+                // f(x)/a - g(x) -> (f(x) - g(x) * a) / b
+                expr = mutate((div_a->a - b * div_a->b) / div_a->b);
             } else {
                 expr = fail(a - b);
             }
@@ -309,15 +322,15 @@ private:
         uses_var = old_uses_var || a_uses_var || b_uses_var;
         failed = old_failed || a_failed || b_failed;
 
-        const Add *add_a = a.as<Add>();
-        const Sub *sub_a = a.as<Sub>();
-        const Mul *mul_a = a.as<Mul>();
-
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
             std::swap(a_failed, b_failed);
         }
+
+        const Add *add_a = a.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Mul *mul_a = a.as<Mul>();
 
         Expr expr;
         if (a_uses_var && !b_uses_var) {
@@ -349,6 +362,7 @@ private:
                 expr = a * b;
             }
         }
+
         return expr;
     }
 
@@ -412,8 +426,8 @@ private:
         }
     }
 
-    template<typename T>
-    Expr visit_min_max_op(const T *op, bool is_min) {
+    template<typename T, typename Other>
+    Expr visit_min_max_op(const T *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
         bool old_failed = failed;
@@ -475,29 +489,30 @@ private:
                 // op(f(x), f(x) + a) -> f(x) + op(a, 0)
                 expr = mutate(a + T::make(add_b->b, make_zero(op->type)));
             } else if (sub_a && sub_b && equal(sub_a->a, sub_b->a)) {
-                // op(f(x) - a, f(x) - b) -> f(x) - op(a, b)
-                expr = mutate(sub_a->a - T::make(sub_a->b, sub_b->b));
+                // min(f(x) - a, f(x) - b) -> f(x) - max(a, b)
+                expr = mutate(sub_a->a - Other::make(sub_a->b, sub_b->b));
+            } else if (sub_a && add_b && equal(sub_a->a, add_b->a)) {
+                // min(f(x) - a, f(x) + b) -> f(x) + min(0 - a, b)
+                expr = mutate(sub_a->a + T::make(make_zero(op->type) - sub_a->b, add_b->b));
+            } else if (add_a && sub_b && equal(add_a->a, sub_b->a)) {
+                // min(f(x) + a, f(x) - b) -> f(x) + min(a, 0 - b)
+                expr = mutate(add_a->a + T::make(add_a->b, make_zero(op->type) - sub_b->b));
             } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b)) {
                 // op(f(x) - a, g(x) - a) -> op(f(x), g(x)) - a
                 expr = mutate(T::make(sub_a->a, sub_b->a)) - sub_a->b;
             } else if (sub_a && equal(sub_a->a, b)) {
                 // op(f(x) - a, f(x)) -> f(x) - op(a, 0)
-                expr = mutate(b - T::make(sub_a->b, make_zero(op->type)));
+                expr = mutate(b - Other::make(sub_a->b, make_zero(op->type)));
             } else if (sub_b && equal(sub_b->a, a)) {
                 // op(f(x), f(x) - a) -> f(x) - op(a, 0)
-                expr = mutate(a - T::make(sub_b->b, make_zero(op->type)));
+                expr = mutate(a - Other::make(sub_b->b, make_zero(op->type)));
             } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b) && is_positive_const(mul_a->b)) {
                 // Positive a: min(f(x)*a, g(x)*a) -> min(f(x), g(x))*a
                 //             max(f(x)*a, g(x)*a) -> max(f(x), g(x))*a
                 expr = mutate(T::make(mul_a->a, mul_b->a)) * mul_a->b;
             } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b) && is_negative_const(mul_a->b)) {
-                if (is_min) {
-                    // Negative a: min(f(x)*a, g(x)*a) -> max(f(x), g(x))*a
-                    expr = mutate(Max::make(mul_a->a, mul_b->a)) * mul_a->b;
-                } else {
-                    // Negative a: max(f(x)*a, g(x)*a) -> min(f(x), g(x))*a
-                    expr = mutate(Min::make(mul_a->a, mul_b->a)) * mul_a->b;
-                }
+                // Negative a: min(f(x)*a, g(x)*a) -> max(f(x), g(x))*a
+                expr = mutate(Other::make(mul_a->a, mul_b->a)) * mul_a->b;
             } else {
                 expr = fail(T::make(a, b));
             }
@@ -519,11 +534,11 @@ private:
     }
 
     Expr visit(const Min *op) override {
-        return visit_min_max_op(op, true);
+        return visit_min_max_op<Min, Max>(op);
     }
 
     Expr visit(const Max *op) override {
-        return visit_min_max_op(op, false);
+        return visit_min_max_op<Max, Min>(op);
     }
 
     template<typename T>
@@ -830,7 +845,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    Interval interval_union(Interval ia, Interval ib) {
+    Interval interval_union(Interval ia, Interval ib) const {
         if (outer) {
             // The regular union is already conservative in the right direction
             return Interval::make_union(ia, ib);
@@ -953,7 +968,7 @@ class SolveForInterval : public IRVisitor {
     std::map<Expr, Interval, IRDeepCompare> cache_f, cache_t;
 
     // Solve an expression, or set result to the previously found solution.
-    void cached_solve(Expr cond) {
+    void cached_solve(const Expr &cond) {
         auto &cache = target ? cache_t : cache_f;
         auto it = cache.find(cond);
         if (it == cache.end()) {
@@ -1142,7 +1157,7 @@ class AndConditionOverDomain : public IRMutator {
     // tracks that.
     bool flipped = false;
 
-    Interval get_bounds(Expr a) {
+    Interval get_bounds(const Expr &a) {
         Interval bounds = bounds_of_expr_in_scope(a, scope);
         if (!bounds.is_single_point() ||
             !bounds.has_lower_bound() ||
@@ -1152,11 +1167,11 @@ class AndConditionOverDomain : public IRMutator {
         return bounds;
     }
 
-    Expr make_bigger(Expr a) {
+    Expr make_bigger(const Expr &a) {
         return get_bounds(a).max;
     }
 
-    Expr make_smaller(Expr a) {
+    Expr make_smaller(const Expr &a) {
         return get_bounds(a).min;
     }
 
@@ -1164,7 +1179,7 @@ class AndConditionOverDomain : public IRMutator {
         return mutate(op->value);
     }
 
-    Expr fail() {
+    Expr fail() const {
         if (flipped) {
             // True is a necessary condition for anything. Any
             // predicate implies true.
@@ -1367,7 +1382,7 @@ public:
 
 }  // Anonymous namespace
 
-SolverResult solve_expression(Expr e, const std::string &variable, const Scope<Expr> &scope) {
+SolverResult solve_expression(const Expr &e, const std::string &variable, const Scope<Expr> &scope) {
     SolveExpression solver(variable, scope);
     Expr new_e = solver.mutate(e);
     // The process has expanded lets. Re-collect them.
@@ -1378,7 +1393,7 @@ SolverResult solve_expression(Expr e, const std::string &variable, const Scope<E
     return {new_e, !solver.failed};
 }
 
-Interval solve_for_inner_interval(Expr c, const std::string &var) {
+Interval solve_for_inner_interval(const Expr &c, const std::string &var) {
     SolveForInterval s(var, false);
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
@@ -1392,7 +1407,7 @@ Interval solve_for_inner_interval(Expr c, const std::string &var) {
     return s.result;
 }
 
-Interval solve_for_outer_interval(Expr c, const std::string &var) {
+Interval solve_for_outer_interval(const Expr &c, const std::string &var) {
     SolveForInterval s(var, true);
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
@@ -1406,7 +1421,7 @@ Interval solve_for_outer_interval(Expr c, const std::string &var) {
     return s.result;
 }
 
-Expr and_condition_over_domain(Expr e, const Scope<Interval> &varying) {
+Expr and_condition_over_domain(const Expr &e, const Scope<Interval> &varying) {
     AndConditionOverDomain r(varying);
     return simplify(r.mutate(e));
 }
@@ -1415,7 +1430,7 @@ Expr and_condition_over_domain(Expr e, const Scope<Interval> &varying) {
 
 namespace {
 
-void check_solve(Expr a, Expr b) {
+void check_solve(const Expr &a, const Expr &b) {
     SolverResult solved = solve_expression(a, "x");
     internal_assert(equal(solved.result, b))
         << "Expression: " << a << "\n"
@@ -1423,7 +1438,7 @@ void check_solve(Expr a, Expr b) {
         << " instead of " << b << "\n";
 }
 
-void check_interval(Expr a, Interval i, bool outer) {
+void check_interval(const Expr &a, const Interval &i, bool outer) {
     Interval result =
         outer ? solve_for_outer_interval(a, "x") : solve_for_inner_interval(a, "x");
     result.min = simplify(result.min);
@@ -1437,15 +1452,15 @@ void check_interval(Expr a, Interval i, bool outer) {
         << "  max: " << i.max << "\n";
 }
 
-void check_outer_interval(Expr a, Expr min, Expr max) {
+void check_outer_interval(const Expr &a, const Expr &min, const Expr &max) {
     check_interval(a, Interval(min, max), true);
 }
 
-void check_inner_interval(Expr a, Expr min, Expr max) {
+void check_inner_interval(const Expr &a, const Expr &min, const Expr &max) {
     check_interval(a, Interval(min, max), false);
 }
 
-void check_and_condition(Expr orig, Expr result, Interval i) {
+void check_and_condition(const Expr &orig, const Expr &result, const Interval &i) {
     Scope<Interval> s;
     s.push("x", i);
     Expr cond = and_condition_over_domain(orig, s);
@@ -1480,6 +1495,10 @@ void solve_test() {
     check_solve(x + (z - (x * 2 + -3)) / 2, x * 0 + (z - (-3)) / 2);
     check_solve(x + (y * 16 + (z - (x * 2 + -1))) / 2,
                 (x * 0) + (((z - -1) + (y * 16)) / 2));
+
+    check_solve((x * 9 + 3) / 4 - x * 2, (x * 1 + 3) / 4);
+    check_solve((x * 9 + 3) / 4 + x * 2, (x * 17 + 3) / 4);
+    check_solve(x * 2 + (x * 9 + 3) / 4, (x * 17 + 3) / 4);
 
     // Check the solver doesn't perform transformations that change integer overflow behavior.
     check_solve(i16(x + y) * i16(2) / i16(2), i16(x + y) * i16(2) / i16(2));
@@ -1653,6 +1672,25 @@ void solve_test() {
         Expr expr = Add::make(z, Sub::make(x, y));
         SolverResult solved = solve_expression(expr, "y");
     }
+
+    // This case was incorrect due to canonicalization of the multiply
+    // occuring after unpacking the LHS.
+    check_solve((y - z) * x, x * (y - z));
+
+    // These cases were incorrectly not flipping min/max when moving
+    // it out of the RHS of a subtract.
+    check_solve(min(x - y, x - z), x - max(y, z));
+    check_solve(min(x - y, x), x - max(y, 0));
+    check_solve(min(x, x - y), x - max(y, 0));
+    check_solve(max(x - y, x - z), x - min(y, z));
+    check_solve(max(x - y, x), x - min(y, 0));
+    check_solve(max(x, x - y), x - min(y, 0));
+
+    // Check mixed add/sub
+    check_solve(min(x - y, x + z), x + min(0 - y, z));
+    check_solve(max(x - y, x + z), x + max(0 - y, z));
+    check_solve(min(x + y, x - z), x + min(y, 0 - z));
+    check_solve(max(x + y, x - z), x + max(y, 0 - z));
 
     debug(0) << "Solve test passed\n";
 }

@@ -17,10 +17,6 @@ CodeGen_PyTorch::CodeGen_PyTorch(std::ostream &s)
 void CodeGen_PyTorch::compile(const Module &module) {
     const Target target = module.target();
 
-    stream << "#include \"torch/extension.h\"\n";
-    stream << "#include \"HalideBuffer.h\"\n";
-    stream << "#include \"HalidePyTorchHelpers.h\"\n";
-
     if (target.has_feature(Target::CUDA)) {
         if (!target.has_feature(Target::UserContext)) {
             user_error << "Compile a PyTorch wrapper for a CUDA op requires the "
@@ -28,7 +24,14 @@ void CodeGen_PyTorch::compile(const Module &module) {
                           "Please add \"-user_context\" to the generator's target options.\n";
         }
         stream << "#include \"ATen/cuda/CUDAContext.h\"\n";
+        stream << "#include \"HalideBuffer.h\"\n";
         stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
+        stream << "#include \"HalidePyTorchHelpers.h\"\n";
+        stream << "#include \"torch/extension.h\"\n";
+    } else {
+        stream << "#include \"HalideBuffer.h\"\n";
+        stream << "#include \"HalidePyTorchHelpers.h\"\n";
+        stream << "#include \"torch/extension.h\"\n";
     }
 
     stream << "\n";
@@ -45,10 +48,6 @@ void CodeGen_PyTorch::compile(const Module &module) {
     }
 
     for (const auto &f : module.functions()) {
-        if (f.name.find("old_buffer_t") != std::string::npos) {
-            debug(1) << "ignoring " << f.name;
-            continue;
-        }
         if (target.has_feature(Target::CUDA)) {
             compile(f, true);
         } else {
@@ -71,7 +70,8 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     const std::vector<LoweredArgument> &args = f.args;
     std::vector<LoweredArgument> buffer_args;
 
-    stream << "int " << simple_name << "_th_(";
+    stream << "HALIDE_FUNCTION_ATTRS\n";
+    stream << "inline int " << simple_name << "_th_(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].name == "__user_context") {
             continue;
@@ -217,8 +217,31 @@ void CodeGen_PyTorch::test() {
     Expr buf = Variable::make(Handle(), "buf.buffer");
     s = LetStmt::make("buf", Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern), s);
 
-    std::ostringstream source;
-    std::ostringstream source_cuda;
+    const auto compare_src = [&](const std::string &src, const std::string &correct_src) {
+        if (src != correct_src) {
+            int diff = 0;
+            while (src[diff] == correct_src[diff]) {
+                diff++;
+            }
+            int diff_end = diff + 1;
+            while (diff > 0 && src[diff] != '\n') {
+                diff--;
+            }
+            while (diff_end < (int)src.size() && src[diff_end] != '\n') {
+                diff_end++;
+            }
+
+            internal_error
+                << "Correct source code:\n"
+                << correct_src
+                << "Actual source code:\n"
+                << src
+                << "Difference starts at:" << diff << "\n"
+                << "Correct: " << correct_src.substr(diff, diff_end - diff) << "\n"
+                << "Actual: " << src.substr(diff, diff_end - diff) << "\n";
+        }
+    };
+
     {
         // TODO(mgharbi): test that Target("host-cuda") raises an exception since
         // we require the "user_context" feature when using CUDA
@@ -226,24 +249,30 @@ void CodeGen_PyTorch::test() {
         Module m("", Target("host"));
         m.append(LoweredFunc("test1", args, s, LinkageType::External));
 
-        CodeGen_PyTorch(source).compile(m);
-    }
-    {
-        Module m("", Target("host-cuda-user_context"));
-        m.append(LoweredFunc("test1", args, s, LinkageType::External));
+        std::ostringstream src;
+        CodeGen_PyTorch(src).compile(m);
 
-        CodeGen_PyTorch(source_cuda).compile(m);
-    }
-    std::string src = source.str() + "\n" + source_cuda.str();
-
-    // The correct source concatenates CPU and GPU headers
-    std::string correct_src =
-        R"GOLDEN_CODE(#include "torch/extension.h"
-#include "HalideBuffer.h"
+        std::string correct_src =
+            R"GOLDEN_CODE(#include "HalideBuffer.h"
 #include "HalidePyTorchHelpers.h"
+#include "torch/extension.h"
 
 struct halide_buffer_t;
 struct halide_filter_metadata_t;
+
+#ifndef HALIDE_MUST_USE_RESULT
+#ifdef __has_attribute
+#if __has_attribute(nodiscard)
+#define HALIDE_MUST_USE_RESULT [[nodiscard]]
+#elif __has_attribute(warn_unused_result)
+#define HALIDE_MUST_USE_RESULT __attribute__((warn_unused_result))
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#endif
 
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
@@ -255,13 +284,15 @@ struct halide_filter_metadata_t;
 extern "C" {
 #endif
 
-int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALIDE_FUNCTION_ATTRS;
+HALIDE_FUNCTION_ATTRS
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
+HALIDE_FUNCTION_ATTRS
+inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Check tensors have contiguous memory and are on the correct device
     HLPT_CHECK_CONTIGUOUS(_buf);
 
@@ -274,15 +305,42 @@ int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     AT_ASSERTM(err == 0, "Halide call failed");
     return 0;
 }
+)GOLDEN_CODE";
 
-#include "torch/extension.h"
+        compare_src(src.str(), correct_src);
+    }
+
+    Target host_cuda("host-cuda-user_context");
+    if (host_supports_target_device(host_cuda)) {
+        Module m("", host_cuda);
+        m.append(LoweredFunc("test1", args, s, LinkageType::External));
+
+        std::ostringstream src;
+        CodeGen_PyTorch(src).compile(m);
+
+        std::string correct_src =
+            R"GOLDEN_CODE(#include "ATen/cuda/CUDAContext.h"
 #include "HalideBuffer.h"
-#include "HalidePyTorchHelpers.h"
-#include "ATen/cuda/CUDAContext.h"
 #include "HalidePyTorchCudaHelpers.h"
+#include "HalidePyTorchHelpers.h"
+#include "torch/extension.h"
 
 struct halide_buffer_t;
 struct halide_filter_metadata_t;
+
+#ifndef HALIDE_MUST_USE_RESULT
+#ifdef __has_attribute
+#if __has_attribute(nodiscard)
+#define HALIDE_MUST_USE_RESULT [[nodiscard]]
+#elif __has_attribute(warn_unused_result)
+#define HALIDE_MUST_USE_RESULT __attribute__((warn_unused_result))
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#endif
 
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
@@ -294,13 +352,15 @@ struct halide_filter_metadata_t;
 extern "C" {
 #endif
 
-int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALIDE_FUNCTION_ATTRS;
+HALIDE_FUNCTION_ATTRS
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
+HALIDE_FUNCTION_ATTRS
+inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Setup CUDA
     int device_id = at::cuda::current_device();
     CUcontext ctx = 0;
@@ -329,27 +389,9 @@ int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
 }
 )GOLDEN_CODE";
 
-    if (src != correct_src) {
-        int diff = 0;
-        while (src[diff] == correct_src[diff]) {
-            diff++;
-        }
-        int diff_end = diff + 1;
-        while (diff > 0 && src[diff] != '\n') {
-            diff--;
-        }
-        while (diff_end < (int)src.size() && src[diff_end] != '\n') {
-            diff_end++;
-        }
-
-        internal_error
-            << "Correct source code:\n"
-            << correct_src
-            << "Actual source code:\n"
-            << src
-            << "Difference starts at:" << diff << "\n"
-            << "Correct: " << correct_src.substr(diff, diff_end - diff) << "\n"
-            << "Actual: " << src.substr(diff, diff_end - diff) << "\n";
+        compare_src(src.str(), correct_src);
+    } else {
+        user_warning << "Host does not support " << host_cuda << ", skipping part of test";
     }
 
     std::cout << "CodeGen_PyTorch test passed\n";

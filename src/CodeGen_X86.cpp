@@ -56,7 +56,7 @@ namespace {
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
 // interleaving a, c, and b, d, and then using pmaddwd. We
 // recognize it here, and implement it in the initial module.
-bool should_use_pmaddwd(Expr a, Expr b, vector<Expr> &result) {
+bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
     Type t = a.type();
     internal_assert(b.type() == t);
 
@@ -105,6 +105,33 @@ void CodeGen_X86::visit(const Sub *op) {
     } else {
         CodeGen_Posix::visit(op);
     }
+}
+
+void CodeGen_X86::visit(const Mul *op) {
+
+#if LLVM_VERSION < 110
+    // Widening integer multiply of non-power-of-two vector sizes is
+    // broken in older llvms for older x86:
+    // https://bugs.llvm.org/show_bug.cgi?id=44976
+    const int lanes = op->type.lanes();
+    if (!target.has_feature(Target::SSE41) &&
+        (lanes & (lanes - 1)) &&
+        (op->type.bits() >= 32) &&
+        !op->type.is_float()) {
+        // Any fancy shuffles to pad or slice into smaller vectors
+        // just gets undone by LLVM and retriggers the bug. Just
+        // scalarize.
+        vector<Expr> result;
+        for (int i = 0; i < lanes; i++) {
+            result.emplace_back(Shuffle::make_extract_element(op->a, i) *
+                                Shuffle::make_extract_element(op->b, i));
+        }
+        codegen(Shuffle::make_concat(result));
+        return;
+    }
+#endif
+
+    return CodeGen_Posix::visit(op);
 }
 
 void CodeGen_X86::visit(const GT *op) {
@@ -281,11 +308,15 @@ void CodeGen_X86::visit(const Cast *op) {
          i16((wild_i32x_ * wild_i32x_) / 65536)},
         {Target::AVX2, true, UInt(16, 16), 9, "llvm.x86.avx2.pmulhu.w",
          u16((wild_u32x_ * wild_u32x_) / 65536)},
+        {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmul.hr.sw",
+         i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
 
         {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.pmulh.w",
          i16((wild_i32x_ * wild_i32x_) / 65536)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
          u16((wild_u32x_ * wild_u32x_) / 65536)},
+        {Target::SSE41, true, Int(16, 8), 0, "llvm.x86.ssse3.pmul.hr.sw.128",
+         i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
         // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
         {Target::AVX2, true, UInt(8, 32), 17, "pavgbx32",
          u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
@@ -386,6 +417,35 @@ void CodeGen_X86::visit(const Call *op) {
     CodeGen_Posix::visit(op);
 }
 
+void CodeGen_X86::visit(const VectorReduce *op) {
+    const int factor = op->value.type().lanes() / op->type.lanes();
+
+    // Match pmaddwd. X86 doesn't have many horizontal reduction ops,
+    // and the ones that exist are hit by llvm automatically using the
+    // base class lowering of VectorReduce (see
+    // test/correctness/simd_op_check.cpp).
+    if (const Mul *mul = op->value.as<Mul>()) {
+        Type narrower = Int(16, mul->type.lanes());
+        Expr a = lossless_cast(narrower, mul->a);
+        Expr b = lossless_cast(narrower, mul->b);
+        if (op->type.is_int() &&
+            op->type.bits() == 32 &&
+            a.defined() &&
+            b.defined() &&
+            factor == 2 &&
+            op->op == VectorReduce::Add) {
+            if (target.has_feature(Target::AVX2) && op->type.lanes() > 4) {
+                value = call_intrin(op->type, 8, "llvm.x86.avx2.pmadd.wd", {a, b});
+            } else {
+                value = call_intrin(op->type, 4, "llvm.x86.sse2.pmadd.wd", {a, b});
+            }
+            return;
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
 string CodeGen_X86::mcpu() const {
     if (target.has_feature(Target::AVX512_Cannonlake)) return "cannonlake";
     if (target.has_feature(Target::AVX512_Skylake)) return "skylake-avx512";
@@ -457,9 +517,11 @@ int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
     // type if we can.
     int vec_bits = t.lanes() * t.bits();
     int natural_vec_bits = target.natural_vector_size(t) * t.bits();
+    // clang-format off
     int slice_bits = ((vec_bits > 256 && natural_vec_bits > 256) ? 512 :
-                                                                   (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
-                                                                                                                128);
+                      (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
+                                                                   128);
+    // clang-format on
     return slice_bits / t.bits();
 }
 

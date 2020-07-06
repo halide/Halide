@@ -1,4 +1,4 @@
-"""Wrap our operator (and gradient) in autograd.""" 
+"""Wrap our operator (and gradient) in autograd."""
 
 # We need to import torch before loading the custom modules
 import torch as th
@@ -11,7 +11,7 @@ def _dispatch(opname, optype=th.float32, cuda=False):
     """
     Helper function that matches an opname and type to the Halide backend.
 
-    This is based on the naming convention we use in this example. Functions are 
+    This is based on the naming convention we use in this example. Functions are
     named: <opname>[_cuda]_<optype>.
 
     Args:
@@ -34,64 +34,89 @@ def _dispatch(opname, optype=th.float32, cuda=False):
     elif optype == th.float64:
         opname += "_float64"
     else:
-        raise ValueError("Optype %s not recognized %s" % optype)  
+        raise ValueError("Optype %s not recognized %s" % optype)
     op = getattr(ops, opname)
     if not hasattr(ops, opname):
-        raise ValueError("Module has no operator %s" % opname)  
+        raise ValueError("Module has no operator %s" % opname)
     return op
 
+def _forward_common(ctx, input_a, input_b):
+    tp = input_a.dtype
+    cuda = input_a.is_cuda
+    assert tp == input_b.dtype, "inputs should have the same type"
+    assert cuda == input_b.is_cuda, "inputs should be on the same device (cpu/gpu)"
 
-class AddFunction(th.autograd.Function):
-  """Registers our ops with autograd so we can backprop through it"""
+    ctx.save_for_backward(input_a, input_b)
+
+    fn_ = _dispatch("add", optype=tp, cuda=cuda)
+
+    # Create an output tensor with the proper dimensions
+    out = input_a.new()
+    out.resize_(input_a.shape)
+
+    fn_(input_a, input_b, out)
+    return out
+
+def _backward_common(ctx, d_out, backward_op):
+    tp = d_out.dtype
+    cuda = d_out.is_cuda
+
+    input_a = ctx.saved_tensors[0]
+    input_b = ctx.saved_tensors[1]
+
+    # Fetch the correct Halide operator for the type/device used
+    fn_ = _dispatch(backward_op, optype=tp, cuda=cuda)
+
+    d_input_a = d_out.new()
+    d_input_b = d_out.new()
+    d_input_a.resize_(d_out.shape)
+    d_input_b.resize_(d_out.shape)
+
+    fn_(input_a, input_b, d_out.contiguous(), d_input_a, d_input_b)
+    return d_input_a, d_input_b
+
+# TODO(srj): surely there's a better way to do this,
+# but PyTorch seems to make it tricky to pass in
+# extra info to the backward() method.
+class AddFunction_Grad(th.autograd.Function):
+  """Version using the manually-written backprop"""
   def __init__(self):
-      super(AddFunction, self).__init__()
+      super(AddFunction_Grad, self).__init__()
 
   @staticmethod
   def forward(ctx, input_a, input_b):
-      tp = input_a.dtype
-      cuda = input_a.is_cuda
-      assert tp == input_b.dtype, "inputs should have the same type"
-      assert cuda == input_b.is_cuda, "inputs should be on the same device (cpu/gpu)"
-
-      ctx.save_for_backward(input_a, input_b)
-
-      fn_ = _dispatch("add", optype=tp, cuda=cuda)
-
-      # Create an output tensor with the proper dimensions
-      out = input_a.new()
-      out.resize_(input_a.shape)
-
-      fn_(input_a, input_b, out)
-      return out
+      return _forward_common(ctx, input_a, input_b)
 
   @staticmethod
   def backward(ctx, d_out):
-      tp = d_out.dtype
-      cuda = d_out.is_cuda
+      return _backward_common(ctx, d_out, "add_grad")
 
-      input_a = ctx.saved_tensors[0]
-      input_b = ctx.saved_tensors[1]
+class AddFunction_HalideGrad(th.autograd.Function):
+  """Version using the Halide-generated backprop"""
+  def __init__(self):
+      super(AddFunction_HalideGrad, self).__init__()
 
-      # Fetch the correct Halide operator for the type/device used
-      fn_ = _dispatch("add_grad", optype=tp, cuda=cuda)
+  @staticmethod
+  def forward(ctx, input_a, input_b):
+      return _forward_common(ctx, input_a, input_b)
 
-      d_input_a = d_out.new()
-      d_input_b = d_out.new()
-      d_input_a.resize_(d_out.shape)
-      d_input_b.resize_(d_out.shape)
-
-      fn_(input_a, input_b, d_out.contiguous(), d_input_a, d_input_b)
-      return d_input_a, d_input_b
-
+  @staticmethod
+  def backward(ctx, d_out):
+      return _backward_common(ctx, d_out, "add_halidegrad")
 
 class Add(th.nn.Module):
     """Defines a module that uses our autograd function.
 
     This is so we can use it as an operator.
     """
-    def __init__(self):
+    def __init__(self, backward_op):
         super(Add, self).__init__()
-        self._adder = AddFunction()
+        if backward_op == "add_grad":
+          self._adder = AddFunction_Grad()
+        elif backward_op == "add_halidegrad":
+          self._adder = AddFunction_HalideGrad()
+        else:
+          assert False
 
     def forward(self, a, b):
         return self._adder.apply(a, b)

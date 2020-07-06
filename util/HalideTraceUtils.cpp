@@ -1,6 +1,6 @@
 #include "HalideTraceUtils.h"
-#include <stdint.h>
 #include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -11,7 +11,7 @@ bool Packet::read_from_stdin() {
     return read_from_filedesc(stdin);
 }
 
-bool Packet::read_from_filedesc(FILE *fdesc){
+bool Packet::read_from_filedesc(FILE *fdesc) {
     size_t header_size = sizeof(halide_trace_packet_t);
     if (!Packet::read(this, header_size, fdesc)) {
         return false;
@@ -38,7 +38,7 @@ bool Packet::read(void *d, size_t size, FILE *fdesc) {
             perror("Failed during read");
             exit(-1);
         }
-        return false; //EOF
+        return false;  //EOF
     }
 
     return true;
@@ -49,5 +49,5 @@ void bad_type_error(halide_type_t type) {
     exit(-1);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

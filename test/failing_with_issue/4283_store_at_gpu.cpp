@@ -13,7 +13,7 @@ int main(int argc, char *argv[]) {
     Var x, y;
     RDom r(0, img_size);
 
-    im(x) = (x*x) % hist_size;
+    im(x) = (x * x) % hist_size;
 
     hist(x) = cast<T>(0);
     hist(im(r)) += cast<T>(1);
@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
     correct_hist.fill(T(0));
     correct_final.fill(T(0));
     for (int i = 0; i < img_size; i++) {
-        int idx = (i*i) % hist_size;
+        int idx = (i * i) % hist_size;
         correct_hist(idx) = correct_hist(idx) + T(1);
     }
     for (int i = 0; i < 10; i++) {

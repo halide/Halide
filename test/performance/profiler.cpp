@@ -24,13 +24,13 @@ int main(int argc, char **argv) {
         if (i == 0) {
             f[i](c, x) = cast<float>(x + c);
         } else if (i == 13) {
-            Expr e = f[i-1](c, x);
+            Expr e = f[i - 1](c, x);
             for (int j = 0; j < 200; j++) {
                 e = sin(e);
             }
             f[i](c, x) = e;
         } else {
-            f[i](c, x) = f[i-1](c, x)*2.0f;
+            f[i](c, x) = f[i - 1](c, x) * 2.0f;
         }
     }
 
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     out(c, x) = 0.0f;
     const int iters = 100;
     RDom r(0, iters);
-    out(c, x) += r*f[29](c, x);
+    out(c, x) += r * f[29](c, x);
 
     out.set_custom_print(&my_print);
     out.compute_root();

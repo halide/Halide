@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-    { // Simple 1D pointwise operations. Should inline.
+    {  // Simple 1D pointwise operations. Should inline.
         Func in("in");
         in(x) = cast<float>(x);
         Func f0("f0");
@@ -27,12 +27,11 @@ int main(int argc, char **argv) {
 
         AutoSchedulerResults result =
             Pipeline(f2).auto_schedule(target, params);
-        std::cout << "Schedule for 1D pointwise operations:" << std::endl;
-        std::cout << result.schedule_source << std::endl;
-        std::cout << std::endl;
+        std::cout << "Schedule for 1D pointwise operations:\n"
+                  << result.schedule_source << "\n\n";
     }
 
-    { // Simple 2D pointwise operations. Should inline.
+    {  // Simple 2D pointwise operations. Should inline.
         Func in("in");
         in(x, y) = cast<float>(x + y);
         Func f0("f0");
@@ -43,16 +42,15 @@ int main(int argc, char **argv) {
         f2(x, y) = f1(x, y) * f1(x, y);
 
         f2.set_estimate(x, 0, 1000)
-          .set_estimate(y, 0, 1000);
+            .set_estimate(y, 0, 1000);
 
         AutoSchedulerResults result =
             Pipeline(f2).auto_schedule(target, params);
-        std::cout << "Schedule for 2D pointwise operations:" << std::endl;
-        std::cout << result.schedule_source << std::endl;
-        std::cout << std::endl;
+        std::cout << "Schedule for 2D pointwise operations:\n"
+                  << result.schedule_source << "\n\n";
     }
 
-    { // 1D Convolution.
+    {  // 1D Convolution.
         Func in("in");
         in(x) = cast<float>(x);
         RDom r(0, 5);
@@ -63,12 +61,11 @@ int main(int argc, char **argv) {
 
         AutoSchedulerResults result =
             Pipeline(f0).auto_schedule(target, params);
-        std::cout << "Schedule for 1D convolution:" << std::endl;
-        std::cout << result.schedule_source << std::endl;
-        std::cout << std::endl;
+        std::cout << "Schedule for 1D convolution:\n"
+                  << result.schedule_source << "\n\n";
     }
 
-    { // 2D Convolution.
+    {  // 2D Convolution.
         Func in("in");
         in(x, y) = cast<float>(x + y);
         RDom r(0, 5, 0, 5);
@@ -76,16 +73,15 @@ int main(int argc, char **argv) {
         f0(x, y) += in(x + r.x, y + r.y) / 25.f;
 
         f0.set_estimate(x, 0, 1000)
-          .set_estimate(y, 0, 1000);
+            .set_estimate(y, 0, 1000);
 
         AutoSchedulerResults result =
             Pipeline(f0).auto_schedule(target, params);
-        std::cout << "Schedule for 2D convolution:" << std::endl;
-        std::cout << result.schedule_source << std::endl;
-        std::cout << std::endl;
+        std::cout << "Schedule for 2D convolution:\n"
+                  << result.schedule_source << "\n\n";
     }
 
-    { // 1D Histogram.
+    {  // 1D Histogram.
         Func in("in");
         in(x) = x % 10;
         RDom r(0, 1000);
@@ -97,12 +93,11 @@ int main(int argc, char **argv) {
 
         AutoSchedulerResults result =
             Pipeline(hist).auto_schedule(target, params);
-        std::cout << "Schedule for 1D histogram:" << std::endl;
-        std::cout << result.schedule_source << std::endl;
-        std::cout << std::endl;
+        std::cout << "Schedule for 1D histogram:\n"
+                  << result.schedule_source << "\n\n";
     }
 
-    { // 2D Histogram.
+    {  // 2D Histogram.
         Func in("in");
         in(x, y) = (x + y) % 10;
         RDom r(0, 1000, 0, 1000);
@@ -114,12 +109,11 @@ int main(int argc, char **argv) {
 
         AutoSchedulerResults result =
             Pipeline(hist).auto_schedule(target, params);
-        std::cout << "Schedule for 2D histogram:" << std::endl;
-        std::cout << result.schedule_source << std::endl;
-        std::cout << std::endl;
+        std::cout << "Schedule for 2D histogram:\n"
+                  << result.schedule_source << "\n\n";
     }
 
-    { // 2D Histogram, but the domain is much larger.
+    {  // 2D Histogram, but the domain is much larger.
         Func in("in");
         in(x, y) = (x + y) % 10000;
         RDom r(0, 1000, 0, 1000);
@@ -131,10 +125,29 @@ int main(int argc, char **argv) {
 
         AutoSchedulerResults result =
             Pipeline(hist).auto_schedule(target, params);
-        std::cout << "Schedule for 2D histogram with larger domain:" << std::endl;
-        std::cout << result.schedule_source << std::endl;
-        std::cout << std::endl;
+        std::cout << "Schedule for 2D histogram with larger domain:\n"
+                  << result.schedule_source << "\n\n";
     }
 
+    {  // Test for conjunction use of bound and estimates.
+        Func in("in");
+        in(x, y) = cast<float>(x + y);
+        Func f0("f0");
+        f0(x, y) = 2.f * in(x, y);
+        Func f1("f1");
+        f1(x, y) = sin(f0(x, y));
+        Func f2("f2");
+        f2(x, y) = f1(x, y) * f1(x, y);
+
+        f2.bound(x, 0, 4);
+        // make sure it also works if we reverse the estimate order
+        f2.set_estimate(y, 0, 1024)
+            .set_estimate(x, 0, 4);
+
+        AutoSchedulerResults result =
+            Pipeline(f2).auto_schedule(target, params);
+        std::cout << "Schedule for 2D pointwise operations with small x dimension:\n"
+                  << result.schedule_source << "\n\n";
+    }
     return 0;
 }

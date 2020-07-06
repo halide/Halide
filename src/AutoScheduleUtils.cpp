@@ -5,6 +5,7 @@
 #include "ImageParam.h"
 #include "Inline.h"
 #include "Param.h"
+#include "RegionCosts.h"
 #include "Simplify.h"
 #include "Var.h"
 
@@ -115,7 +116,7 @@ Definition get_stage_definition(const Function &f, int stage_num) {
 
 vector<Dim> &get_stage_dims(const Function &f, int stage_num) {
     static vector<Dim> outermost_only =
-        {{Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar}};
+        {{Var::outermost().name(), ForType::Serial, DeviceAPI::None, DimType::PureVar}};
     if (f.has_extern_definition()) {
         return outermost_only;
     }
@@ -124,7 +125,7 @@ vector<Dim> &get_stage_dims(const Function &f, int stage_num) {
     return def.schedule().dims();
 }
 
-DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_bounds) {
+DimBounds get_stage_bounds(const Function &f, int stage_num, const DimBounds &pure_bounds) {
     DimBounds bounds;
     // Assume that the domain of the pure vars across all the update
     // definitions is the same. This may not be true and can result in
@@ -145,7 +146,7 @@ DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_boun
     return bounds;
 }
 
-vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds) {
+vector<DimBounds> get_stage_bounds(const Function &f, const DimBounds &pure_bounds) {
     vector<DimBounds> stage_bounds;
     size_t num_stages = f.updates().size() + 1;
     for (size_t s = 0; s < num_stages; s++) {
@@ -188,7 +189,7 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
         // inlining works.
         for (const auto &call : calls) {
             if (inlines.find(call) != inlines.end()) {
-                Function prod_func = env.at(call);
+                const Function &prod_func = env.at(call);
                 // Impure functions cannot be inlined.
                 internal_assert(prod_func.is_pure());
                 // Inline the function call and set the flag to check for
@@ -236,22 +237,152 @@ set<string> get_parents(Function f, int stage) {
 
 void disp_regions(const map<string, Box> &regions) {
     for (const auto &reg : regions) {
-        debug(0) << reg.first << " -> ";
-        debug(0) << reg.second;
-        debug(0) << "\n";
+        debug(0) << reg.first
+                 << " -> "
+                 << reg.second
+                 << "\n";
     }
 }
 
+// If the cost of computing a Func is about the same as calling the Func,
+// inline the Func. Return true of any of the Funcs is inlined.
+bool inline_all_trivial_functions(const vector<Function> &outputs,
+                                  const vector<string> &order,
+                                  const map<string, Function> &env) {
+    bool inlined = false;
+    // The very last few functions in 'order' are the last to be realized in the
+    // pipeline (the final producers) so there is no point in checking it.
+    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
+        bool is_output = false;
+        for (const Function &f : outputs) {
+            if (order[i] == f.name()) {
+                is_output = true;
+                break;
+            }
+        }
+        if (is_output) {
+            // Should not inline output Func
+            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
+            continue;
+        }
+        const Function &f1 = env.at(order[i]);
+        if (is_func_trivial_to_inline(f1)) {
+            inlined = true;
+            debug(4) << "Function \"" << order[i] << "\" is trivial to inline\n";
+            for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
+                internal_assert(order[i] != order[j]);
+                const Function &f2 = env.at(order[j]);
+
+                if (f2.has_extern_definition() && !f1.is_wrapper()) {
+                    debug(5) << "Skip inlining of function \"" << f1.name()
+                             << "\" inside \"" << f2.name() << "\", because "
+                             << "non-wrapper functions cannot be inlined inside "
+                             << "extern functions.\n";
+                } else {
+                    debug(5) << "Inline trivial function \"" << f1.name()
+                             << "\" inside \"" << f2.name() << "\"\n";
+                    inline_function(f2, f1);
+                }
+            }
+        }
+    }
+    return inlined;
+}
+
+// Determine if a Func (order[index]) is only consumed by another single Func
+// in element-wise manner. If it is, return the name of the consumer Func;
+// otherwise, return an empty string.
+string is_func_called_element_wise(const vector<string> &order, size_t index,
+                                   const map<string, Function> &env) {
+    const Function &f1 = env.at(order[index]);
+    if (f1.has_extern_definition() || !f1.can_be_inlined()) {
+        return "";
+    }
+    internal_assert(index < order.size());
+
+    string caller = "";
+    for (size_t i = index + 1; i < order.size(); ++i) {
+        const Function &f2 = env.at(order[i]);
+        if (f2.has_extern_definition()) {
+            continue;
+        }
+        int num_stages = f2.updates().size() + 1;
+        for (int s = 0; s < num_stages; ++s) {
+            Definition def = get_stage_definition(f2, s);
+            FindAllCalls find;
+            def.accept(&find);
+
+            if (find.funcs_called.count(f1.name())) {
+                if (caller.empty()) {
+                    caller = f2.name();
+                } else {
+                    // Found another caller of 'f1'
+                    return "";
+                }
+            }
+            for (const auto &iter : find.call_args) {
+                if (iter.first != f1.name()) {
+                    continue;
+                }
+                if (def.args().size() != iter.second.size()) {
+                    // It's not an element-wise access
+                    return "";
+                }
+                for (size_t j = 0; j < iter.second.size(); ++j) {
+                    if (!equal(def.args()[j], iter.second[j])) {
+                        // It's not an element-wise access
+                        return "";
+                    }
+                }
+            }
+        }
+    }
+    return caller;
+}
+
+// Inline a Func if its values are only consumed by another single Func in
+// element-wise manner.
+bool inline_all_element_wise_functions(const vector<Function> &outputs,
+                                       const vector<string> &order,
+                                       const map<string, Function> &env) {
+    bool inlined = false;
+    // The very last few functions in 'order' are the last to be realized in the
+    // pipeline (the final producers) so there is no point in checking it.
+    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
+        bool is_output = false;
+        for (const Function &f : outputs) {
+            if (order[i] == f.name()) {
+                is_output = true;
+                break;
+            }
+        }
+        if (is_output) {
+            // Should not inline output Func
+            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
+            continue;
+        }
+        string caller = is_func_called_element_wise(order, i, env);
+        if (!caller.empty()) {
+            inlined = true;
+            debug(4) << "Inline function \"" << order[i] << "\" since it is called only by "
+                     << caller << " in element-wise manner\n";
+            internal_assert(order[i] != caller);
+            inline_function(env.at(caller), get_element(env, order[i]));
+        }
+    }
+    return inlined;
+}
+
 namespace {
-void check(Expr input, Expr expected) {
+void check(const Expr &input, Expr expected) {
     Expr result = simplify(substitute_var_estimates(input));
     expected = simplify(expected);
     if (!equal(result, expected)) {
         internal_error
             << "\nsubstitute_var_estimates() failure:\n"
-            << "Input: " << input << '\n'
-            << "Result: " << result << '\n'
-            << "Expected result: " << expected << '\n';
+            << "Input: " << input << "\n"
+            << "Result: " << result << "\n"
+            << "Expected result: " << expected << "\n";
     }
 }
 }  // anonymous namespace

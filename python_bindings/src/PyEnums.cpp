@@ -23,35 +23,30 @@ void define_enums(py::module &m) {
     py::enum_<LinkageType>(m, "LinkageType")
         .value("External", LinkageType::External)
         .value("ExternalPlusMetadata", LinkageType::ExternalPlusMetadata)
-        .value("Internal", LinkageType::Internal)
-    ;
+        .value("Internal", LinkageType::Internal);
 
     py::enum_<LoopAlignStrategy>(m, "LoopAlignStrategy")
         .value("AlignStart", LoopAlignStrategy::AlignStart)
         .value("AlignEnd", LoopAlignStrategy::AlignEnd)
         .value("NoAlign", LoopAlignStrategy::NoAlign)
-        .value("Auto", LoopAlignStrategy::Auto)
-    ;
+        .value("Auto", LoopAlignStrategy::Auto);
 
     py::enum_<MemoryType>(m, "MemoryType")
         .value("Auto", MemoryType::Auto)
         .value("Heap", MemoryType::Heap)
         .value("Stack", MemoryType::Stack)
         .value("Register", MemoryType::Register)
-        .value("GPUShared", MemoryType::GPUShared)
-    ;
+        .value("GPUShared", MemoryType::GPUShared);
 
     py::enum_<NameMangling>(m, "NameMangling")
         .value("Default", NameMangling::Default)
         .value("C", NameMangling::C)
-        .value("CPlusPlus", NameMangling::CPlusPlus)
-    ;
+        .value("CPlusPlus", NameMangling::CPlusPlus);
 
     py::enum_<PrefetchBoundStrategy>(m, "PrefetchBoundStrategy")
         .value("Clamp", PrefetchBoundStrategy::Clamp)
         .value("GuardWithIf", PrefetchBoundStrategy::GuardWithIf)
-        .value("NonFaulting", PrefetchBoundStrategy::NonFaulting)
-    ;
+        .value("NonFaulting", PrefetchBoundStrategy::NonFaulting);
 
     py::enum_<StmtOutputFormat>(m, "StmtOutputFormat")
         .value("Text", StmtOutputFormat::Text)
@@ -61,8 +56,7 @@ void define_enums(py::module &m) {
         .value("RoundUp", TailStrategy::RoundUp)
         .value("GuardWithIf", TailStrategy::GuardWithIf)
         .value("ShiftInwards", TailStrategy::ShiftInwards)
-        .value("Auto", TailStrategy::Auto)
-    ;
+        .value("Auto", TailStrategy::Auto);
 
     py::enum_<Target::OS>(m, "TargetOS")
         .value("OSUnknown", Target::OS::OSUnknown)
@@ -117,7 +111,6 @@ void define_enums(py::module &m) {
         .value("Profile", Target::Feature::Profile)
         .value("NoRuntime", Target::Feature::NoRuntime)
         .value("Metal", Target::Feature::Metal)
-        .value("MinGW", Target::Feature::MinGW)
         .value("CPlusPlusMangling", Target::Feature::CPlusPlusMangling)
         .value("LargeBuffers", Target::Feature::LargeBuffers)
         .value("HVX_64", Target::Feature::HVX_64)
@@ -138,7 +131,6 @@ void define_enums(py::module &m) {
         .value("TraceRealizations", Target::Feature::TraceRealizations)
         .value("D3D12Compute", Target::Feature::D3D12Compute)
         .value("StrictFloat", Target::Feature::StrictFloat)
-        .value("LegacyBufferWrappers", Target::Feature::LegacyBufferWrappers)
         .value("TSAN", Target::Feature::TSAN)
         .value("ASAN", Target::Feature::ASAN)
         .value("CheckUnsafePromises", Target::Feature::CheckUnsafePromises)
@@ -150,6 +142,7 @@ void define_enums(py::module &m) {
         .value("WasmSignExt", Target::Feature::WasmSignExt)
         .value("SVE", Target::Feature::SVE)
         .value("SVE2", Target::Feature::SVE2)
+        .value("ARMDotProd", Target::Feature::ARMDotProd)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")
@@ -173,7 +166,8 @@ void define_enums(py::module &m) {
         .value("schedule", Output::schedule)
         .value("static_library", Output::static_library)
         .value("stmt", Output::stmt)
-        .value("stmt_html", Output::stmt_html);
+        .value("stmt_html", Output::stmt_html)
+        .value("compiler_log", Output::compiler_log);
 }
 
 }  // namespace PythonBindings

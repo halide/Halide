@@ -65,6 +65,54 @@ Expr make_min_helper(const Expr &a, const Expr &b) {
 
 }  // namespace
 
+Interval Interval::everything() {
+    return Interval(neg_inf(), pos_inf());
+}
+
+Interval Interval::nothing() {
+    return Interval(pos_inf(), neg_inf());
+}
+
+Interval Interval::single_point(const Expr &e) {
+    return Interval(e, e);
+}
+
+bool Interval::is_empty() const {
+    return min.same_as(pos_inf()) || max.same_as(neg_inf());
+}
+
+bool Interval::is_everything() const {
+    return min.same_as(neg_inf()) && max.same_as(pos_inf());
+}
+
+bool Interval::is_single_point() const {
+    return min.same_as(max);
+}
+
+bool Interval::is_single_point(const Expr &e) const {
+    return min.same_as(e) && max.same_as(e);
+}
+
+bool Interval::has_upper_bound() const {
+    return !max.same_as(pos_inf()) && !is_empty();
+}
+
+bool Interval::has_lower_bound() const {
+    return !min.same_as(neg_inf()) && !is_empty();
+}
+
+bool Interval::is_bounded() const {
+    return has_upper_bound() && has_lower_bound();
+}
+
+bool Interval::same_as(const Interval &other) const {
+    return min.same_as(other.min) && max.same_as(other.max);
+}
+
+bool Interval::operator==(const Interval &other) const {
+    return (min.same_as(other.min)) && (max.same_as(other.max));
+}
+
 // This is called repeatedly by bounds inference and the solver to
 // build large expressions, so we want to simplify eagerly to avoid
 // monster expressions.
@@ -81,7 +129,7 @@ void Interval::include(const Interval &i) {
     min = Interval::make_min(min, i.min);
 }
 
-void Interval::include(Expr e) {
+void Interval::include(const Expr &e) {
     max = Interval::make_max(max, e);
     min = Interval::make_min(min, e);
 }

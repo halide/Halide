@@ -1,4 +1,5 @@
 #include "UnrollLoops.h"
+#include "Bounds.h"
 #include "CSE.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -112,7 +113,7 @@ public:
     }
 };
 
-Stmt unroll_loops(Stmt s) {
+Stmt unroll_loops(const Stmt &s) {
     return UnrollLoops().mutate(s);
 }
 

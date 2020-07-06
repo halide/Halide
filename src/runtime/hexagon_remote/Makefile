@@ -3,13 +3,13 @@
 # in the Halide repo; this is intended to allow end users to compile for
 # Hexagon targets without requiring the Hexagon SDK to be present on the build
 # system. (The Hexagon SDK is of course required to build the glue code itself.)
-# At present, only Linux systems are supported for building and testing; this
-# could probably be made to work on Windows (via MinGW) with a little effort.
+# At present, only Linux systems are supported for building and testing.
 #
 # In order to build this, you'll need to ensure that the following
 # env vars are set correctly:
 #
-# HEXAGON_SDK_ROOT   : path to Qualcom Hexagon SDK
+# SDK_ROOT           : path to Qualcomm SDK storage
+# HEXAGON_SDK_ROOT   : path to Qualcomm Hexagon SDK
 # HEXAGON_TOOLS_ROOT : path to Qualcomm Hexagon Tools
 # HEXAGON_QAIC       : path to Qualcomm qaic compiler
 #
@@ -23,7 +23,8 @@
 # from the SDK that cannot be redistributed with Halide).
 #
 
-HEXAGON_SDK_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.3.3
+SDK_ROOT ?= ${HOME}/Qualcomm
+HEXAGON_SDK_ROOT ?= ${SDK_ROOT}/Hexagon_SDK/3.3.3
 HEXAGON_TOOLS_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/HEXAGON_Tools/8.1.05
 
 ANDROID_NDK_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/android-ndk-r10d
@@ -47,9 +48,9 @@ BIN ?= bin
 CC-host = ${CXX}
 CXX-host = ${CXX}
 
-CC-v60 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang
-CXX-v60 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang++
-LD-v60 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-link
+CC-v62 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang
+CXX-v62 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang++
+LD-v62 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-link
 
 CC-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc
 CXX-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-g++
@@ -62,12 +63,12 @@ CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch
 CCFLAGS-host := ${CCFLAGS} -I../ -I ${HEXAGON_TOOLS_ROOT}/Tools/include/iss/ -fPIC \
 	-L${HEXAGON_TOOLS_ROOT}/Tools/lib/iss/ -lwrapper
 
-CCFLAGS-v60 := $(CCFLAGS-v60) -I ${HEXAGON_SDK_LIBS}/common/rtld/ship/hexagon_Release_toolv80_v62 ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
+CCFLAGS-v62 := $(CCFLAGS-v62) -I ${HEXAGON_SDK_LIBS}/common/rtld/ship/hexagon_Release_toolv80_v62 ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv62MP/include
 
 CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie
 CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS} -llog -fPIE -pie
 
-AR-v60 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-ar
+AR-v62 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-ar
 
 .PHONY: all
 all: hosts remotes
@@ -80,11 +81,11 @@ hosts: \
 
 .PHONY: remotes
 remotes: \
-	$(BIN)/v60/libhalide_hexagon_remote_skel.so \
-	$(BIN)/v60/signed_by_debug/libhalide_hexagon_remote_skel.so \
-	$(BIN)/v60/hexagon_sim_remote \
-	$(BIN)/v60/libsim_qurt.a \
-	$(BIN)/v60/libsim_qurt_vtcm.a
+	$(BIN)/v62/libhalide_hexagon_remote_skel.so \
+	$(BIN)/v62/signed_by_debug/libhalide_hexagon_remote_skel.so \
+	$(BIN)/v62/hexagon_sim_remote \
+	$(BIN)/v62/libsim_qurt.a \
+	$(BIN)/v62/libsim_qurt_vtcm.a
 
 $(BIN)/src/halide_hexagon_remote.h $(BIN)/src/halide_hexagon_remote_skel.c $(BIN)/src/halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $(@D)
@@ -174,14 +175,14 @@ $(BIN)/%/libsim_qurt_vtcm.a: $(BIN)/%/sim_qurt_vtcm.o
 	mkdir -p $(@D)
 	$(AR-$*) rcs $@ $^
 
-CRT0_STANDALONE=$(shell $(CXX-v60) -G0 -print-file-name=crt0_standalone.o)
-CRT0           =$(shell $(CXX-v60) -G0 -print-file-name=crt0.o)
-INIT           =$(shell $(CXX-v60) -G0 -print-file-name=init.o)
-LIB_STANDALONE =$(shell $(CXX-v60) -G0 -print-file-name=libstandalone.a)
-LIB_C          =$(shell $(CXX-v60) -G0 -print-file-name=libc.a)
-LIB_GCC        =$(shell $(CXX-v60) -G0 -print-file-name=libgcc.a)
-FINI           =$(shell $(CXX-v60) -G0 -print-file-name=fini.o)
-LIBDL          =$(HEXAGON_TOOLS_ROOT)/Tools/target/hexagon/lib/v60/G0/libdl.a
+CRT0_STANDALONE=$(shell $(CXX-v62) -G0 -print-file-name=crt0_standalone.o)
+CRT0           =$(shell $(CXX-v62) -G0 -print-file-name=crt0.o)
+INIT           =$(shell $(CXX-v62) -G0 -print-file-name=init.o)
+LIB_STANDALONE =$(shell $(CXX-v62) -G0 -print-file-name=libstandalone.a)
+LIB_C          =$(shell $(CXX-v62) -G0 -print-file-name=libc.a)
+LIB_GCC        =$(shell $(CXX-v62) -G0 -print-file-name=libgcc.a)
+FINI           =$(shell $(CXX-v62) -G0 -print-file-name=fini.o)
+LIBDL          =$(HEXAGON_TOOLS_ROOT)/Tools/target/hexagon/lib/v62/G0/libdl.a
 
 $(BIN)/%/hexagon_sim_remote: $(BIN)/%/sim_remote.o $(BIN)/%/dlib.o $(BIN)/%/known_symbols.o $(BIN)/%/libsim_qurt.a $(BIN)/%/libsim_qurt_vtcm.a
 	mkdir -p $(@D)

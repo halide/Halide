@@ -23,7 +23,7 @@
 #include "runtime/HalideRuntime.h"
 
 #ifndef HALIDE_EXPORT
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(Halide_STATIC_DEFINE)
 // Halide_EXPORTS is quietly defined by CMake when building a shared library
 #ifdef Halide_EXPORTS
 #define HALIDE_EXPORT __declspec(dllexport)
@@ -192,19 +192,6 @@ T fold_right(const std::vector<T> &vec, Fn f) {
     return result;
 }
 
-template<typename T1, typename T2, typename T3, typename T4>
-inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                                           const T3 &a1, const T4 &a2) {
-    collected_args.push_back(std::pair<T1, T2>(a1, a2));
-}
-
-template<typename T1, typename T2, typename T3, typename T4, typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                                           const T3 &a1, const T4 &a2, Args &&... args) {
-    collected_args.push_back(std::pair<T1, T2>(a1, a2));
-    collect_paired_args(collected_args, std::forward<Args>(args)...);
-}
-
 template<typename... T>
 struct meta_and : std::true_type {};
 
@@ -335,7 +322,7 @@ bool mul_would_overflow(int bits, int64_t a, int64_t b);
 template<typename T>
 struct ScopedValue {
     T &var;
-    const T old_value;
+    T old_value;
     /** Preserve the old value, restored at dtor time */
     ScopedValue(T &var)
         : var(var), old_value(var) {
@@ -353,7 +340,7 @@ struct ScopedValue {
     }
     // allow move but not copy
     ScopedValue(const ScopedValue &that) = delete;
-    ScopedValue(ScopedValue &&that) = default;
+    ScopedValue(ScopedValue &&that) noexcept = default;
 };
 
 // Wrappers for some C++14-isms that are useful and trivially implementable

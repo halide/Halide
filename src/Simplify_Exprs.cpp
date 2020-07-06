@@ -42,6 +42,141 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
     }
 }
 
+Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
+    Expr value = mutate(op->value, bounds);
+    if (bounds && op->type.is_int()) {
+        int factor = op->value.type().lanes() / op->type.lanes();
+        switch (op->op) {
+        case VectorReduce::Add:
+            // Alignment of result is the alignment of the arg. Bounds
+            // of the result can grow according to the reduction
+            // factor.
+            if (bounds->min_defined) {
+                bounds->min *= factor;
+            }
+            if (bounds->max_defined) {
+                bounds->max *= factor;
+            }
+            break;
+        case VectorReduce::Mul:
+            // Don't try to infer anything about bounds. Leave the
+            // alignment unchanged even though we could theoretically
+            // upgrade it.
+            bounds->min_defined = bounds->max_defined = false;
+            break;
+        case VectorReduce::Min:
+        case VectorReduce::Max:
+            // Bounds and alignment of the result are just the bounds and alignment of the arg.
+            break;
+        case VectorReduce::And:
+        case VectorReduce::Or:
+            // For integer types this is a bitwise operator. Don't try
+            // to infer anything for now.
+            bounds->min_defined = bounds->max_defined = false;
+            bounds->alignment = ModulusRemainder{};
+            break;
+        }
+    };
+
+    // We can pull multiplications by a broadcast out of horizontal
+    // additions and do the horizontal addition earlier. This means we
+    // do the multiplication on a vector with fewer lanes. This
+    // approach applies whenever we have a distributive law. We'll
+    // exploit the following distributive laws here:
+    // - Multiplication distributes over addition
+    // - min/max distributes over min/max
+    // - and/or distributes over and/or
+
+    // Further, we can collapse min/max/and/or of a broadcast down to
+    // a narrower broadcast.
+
+    // TODO: There are other rules we could apply here if they ever
+    // come up in practice:
+    // - a horizontal min/max/add of a ramp is a different ramp
+    // - horizontal add of a broadcast is a broadcast + multiply
+    // - horizontal reduce of an shuffle_vectors may be simplifiable to the
+    //   underlying op on different shuffle_vectors calls
+
+    const int lanes = op->type.lanes();
+    const int arg_lanes = op->value.type().lanes();
+    switch (op->op) {
+    case VectorReduce::Add: {
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
+        if (rewrite(h_add(x * broadcast(y)), h_add(x, lanes) * broadcast(y, lanes)) ||
+            rewrite(h_add(broadcast(x) * y), h_add(y, lanes) * broadcast(x, lanes))) {
+            return mutate(rewrite.result, bounds);
+        }
+        break;
+    }
+    case VectorReduce::Min: {
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_min(value, lanes), op->type);
+        if (rewrite(h_min(min(x, broadcast(y))), min(h_min(x, lanes), broadcast(y, lanes))) ||
+            rewrite(h_min(min(broadcast(x), y)), min(h_min(y, lanes), broadcast(x, lanes))) ||
+            rewrite(h_min(max(x, broadcast(y))), max(h_min(x, lanes), broadcast(y, lanes))) ||
+            rewrite(h_min(max(broadcast(x), y)), max(h_min(y, lanes), broadcast(x, lanes))) ||
+            rewrite(h_min(broadcast(x)), broadcast(x, lanes)) ||
+            rewrite(h_min(ramp(x, y)), x + min(y * (arg_lanes - 1), 0)) ||
+            false) {
+            return mutate(rewrite.result, bounds);
+        }
+        break;
+    }
+    case VectorReduce::Max: {
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_max(value, lanes), op->type);
+        if (rewrite(h_max(min(x, broadcast(y))), min(h_max(x, lanes), broadcast(y, lanes))) ||
+            rewrite(h_max(min(broadcast(x), y)), min(h_max(y, lanes), broadcast(x, lanes))) ||
+            rewrite(h_max(max(x, broadcast(y))), max(h_max(x, lanes), broadcast(y, lanes))) ||
+            rewrite(h_max(max(broadcast(x), y)), max(h_max(y, lanes), broadcast(x, lanes))) ||
+            rewrite(h_max(broadcast(x)), broadcast(x, lanes)) ||
+            rewrite(h_max(ramp(x, y)), x + max(y * (arg_lanes - 1), 0)) ||
+            false) {
+            return mutate(rewrite.result, bounds);
+        }
+        break;
+    }
+    case VectorReduce::And: {
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_and(value, lanes), op->type);
+        if (rewrite(h_and(x || broadcast(y)), h_and(x, lanes) || broadcast(y, lanes)) ||
+            rewrite(h_and(broadcast(x) || y), h_and(y, lanes) || broadcast(x, lanes)) ||
+            rewrite(h_and(x && broadcast(y)), h_and(x, lanes) && broadcast(y, lanes)) ||
+            rewrite(h_and(broadcast(x) && y), h_and(y, lanes) && broadcast(x, lanes)) ||
+            rewrite(h_and(broadcast(x)), broadcast(x, lanes)) ||
+            rewrite(h_and(ramp(x, y) < broadcast(z)), x + max(y * (arg_lanes - 1), 0) < z) ||
+            rewrite(h_and(ramp(x, y) <= broadcast(z)), x + max(y * (arg_lanes - 1), 0) <= z) ||
+            rewrite(h_and(broadcast(x) < ramp(y, z)), x < y + min(z * (arg_lanes - 1), 0)) ||
+            rewrite(h_and(broadcast(x) < ramp(y, z)), x <= y + min(z * (arg_lanes - 1), 0)) ||
+            false) {
+            return mutate(rewrite.result, bounds);
+        }
+        break;
+    }
+    case VectorReduce::Or: {
+        auto rewrite = IRMatcher::rewriter(IRMatcher::h_or(value, lanes), op->type);
+        if (rewrite(h_or(x || broadcast(y)), h_or(x, lanes) || broadcast(y, lanes)) ||
+            rewrite(h_or(broadcast(x) || y), h_or(y, lanes) || broadcast(x, lanes)) ||
+            rewrite(h_or(x && broadcast(y)), h_or(x, lanes) && broadcast(y, lanes)) ||
+            rewrite(h_or(broadcast(x) && y), h_or(y, lanes) && broadcast(x, lanes)) ||
+            rewrite(h_or(broadcast(x)), broadcast(x, lanes)) ||
+            rewrite(h_or(ramp(x, y) < broadcast(z)), x + min(y * (arg_lanes - 1), 0) < z) ||
+            rewrite(h_or(ramp(x, y) <= broadcast(z)), x + min(y * (arg_lanes - 1), 0) <= z) ||
+            rewrite(h_or(broadcast(x) < ramp(y, z)), x < y + max(z * (arg_lanes - 1), 0)) ||
+            rewrite(h_or(broadcast(x) < ramp(y, z)), x <= y + max(z * (arg_lanes - 1), 0)) ||
+            false) {
+            return mutate(rewrite.result, bounds);
+        }
+        break;
+    }
+    default:
+        break;
+    }
+
+    if (value.same_as(op->value)) {
+        return op;
+    } else {
+        return VectorReduce::make(op->op, value, op->type.lanes());
+    }
+}
+
 Expr Simplify::visit(const Variable *op, ExprInfo *bounds) {
     if (bounds_and_alignment_info.contains(op->name)) {
         const ExprInfo &b = bounds_and_alignment_info.get(op->name);

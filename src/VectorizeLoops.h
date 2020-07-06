@@ -5,7 +5,7 @@
  * Defines the lowering pass that vectorizes loops marked as such
  */
 
-#include "IR.h"
+#include "Expr.h"
 #include "Target.h"
 
 namespace Halide {
@@ -15,7 +15,7 @@ namespace Internal {
  * them into single statements that operate on vectors. The loops in
  * question must have constant extent.
  */
-Stmt vectorize_loops(Stmt s, const Target &t);
+Stmt vectorize_loops(const Stmt &s, const std::map<std::string, Function> &env, const Target &t);
 
 }  // namespace Internal
 }  // namespace Halide

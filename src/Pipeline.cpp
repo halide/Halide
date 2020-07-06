@@ -1,11 +1,13 @@
 #include <algorithm>
+#include <atomic>
+#include <utility>
 
 #include "Argument.h"
+#include "AutoSchedule.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "IRVisitor.h"
 #include "InferArguments.h"
-#include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Module.h"
@@ -145,7 +147,7 @@ bool Pipeline::defined() const {
     return contents.defined();
 }
 
-Pipeline::Pipeline(Func output)
+Pipeline::Pipeline(const Func &output)
     : contents(new PipelineContents) {
     output.function().freeze();
     contents->outputs.push_back(output.function());
@@ -161,14 +163,14 @@ Pipeline::Pipeline(const vector<Func> &outputs)
 
 vector<Func> Pipeline::outputs() const {
     vector<Func> funcs;
-    for (Function f : contents->outputs) {
-        funcs.push_back(Func(f));
+    for (const Function &f : contents->outputs) {
+        funcs.emplace_back(f);
     }
     return funcs;
 }
 
 /* static */
-void Pipeline::auto_schedule_Mullapudi2016(Pipeline pipeline, const Target &target,
+void Pipeline::auto_schedule_Mullapudi2016(const Pipeline &pipeline, const Target &target,
                                            const MachineParams &arch_params, AutoSchedulerResults *outputs) {
     AutoSchedulerResults results;
     results.target = target;
@@ -187,8 +189,7 @@ void Pipeline::auto_schedule_Mullapudi2016(Pipeline pipeline, const Target &targ
 /* static */
 std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
     static std::map<std::string, AutoSchedulerFn> autoschedulers = {
-        { "Mullapudi2016", auto_schedule_Mullapudi2016 }
-    };
+        {"Mullapudi2016", auto_schedule_Mullapudi2016}};
     return autoschedulers;
 }
 
@@ -230,7 +231,7 @@ AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const Machine
 }
 
 /* static */
-void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn autoscheduler) {
+void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler) {
     auto &m = get_autoscheduler_map();
     user_assert(m.find(autoscheduler_name) == m.end()) << "'" << autoscheduler_name << "' is already registered as an autoscheduler.\n";
     m[autoscheduler_name] = autoscheduler;
@@ -238,7 +239,7 @@ void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const Au
 
 /* static */
 void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_name) {
-    (void) find_autoscheduler(autoscheduler_name);  // ensure it's valid
+    (void)find_autoscheduler(autoscheduler_name);  // ensure it's valid
     get_default_autoscheduler_name() = autoscheduler_name;
 }
 
@@ -358,7 +359,7 @@ void Pipeline::compile_to_file(const string &filename_prefix,
     m.compile(outputs);
 }
 
-vector<Argument> Pipeline::infer_arguments(Stmt body) {
+vector<Argument> Pipeline::infer_arguments(const Stmt &body) {
     Stmt s = body;
     if (!contents->requirements.empty()) {
         s = Block::make(contents->requirements);
@@ -666,7 +667,7 @@ const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
 void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->invalidate_cache();
-    CustomLoweringPass p = {pass, deleter};
+    CustomLoweringPass p = {pass, std::move(deleter)};
     contents->custom_lowering_passes.push_back(p);
 }
 
@@ -756,7 +757,7 @@ Realization Pipeline::realize(const Target &target,
     return realize(vector<int32_t>(), target, param_map);
 }
 
-void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
+void Pipeline::add_requirement(const Expr &condition, std::vector<Expr> &error_args) {
     user_assert(defined()) << "Pipeline is undefined\n";
 
     // It is an error for a requirement to reference a Func or a Var
@@ -799,11 +800,7 @@ namespace {
 struct ErrorBuffer {
     enum { MaxBufSize = 4096 };
     char buf[MaxBufSize];
-    int end;
-
-    ErrorBuffer() {
-        end = 0;
-    }
+    std::atomic<size_t> end{0};
 
     void concat(const char *message) {
         size_t len = strlen(message);
@@ -814,11 +811,7 @@ struct ErrorBuffer {
         }
 
         // Atomically claim some space in the buffer
-#ifdef _MSC_VER
-        int old_end = _InterlockedExchangeAdd((volatile long *)(&end), len);
-#else
-        int old_end = __sync_fetch_and_add(&end, len);
-#endif
+        size_t old_end = end.fetch_add(len);
 
         if (old_end + len >= MaxBufSize - 1) {
             // Out of space
@@ -863,13 +856,13 @@ struct JITFuncCallContext {
         }
         JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
 
-        debug(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << '\n'
-                 << "custom_malloc: " << (void *)jit_context.handlers.custom_malloc << '\n'
-                 << "custom_free: " << (void *)jit_context.handlers.custom_free << '\n'
-                 << "custom_do_task: " << (void *)jit_context.handlers.custom_do_task << '\n'
-                 << "custom_do_par_for: " << (void *)jit_context.handlers.custom_do_par_for << '\n'
-                 << "custom_error: " << (void *)jit_context.handlers.custom_error << '\n'
-                 << "custom_trace: " << (void *)jit_context.handlers.custom_trace << '\n';
+        debug(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << "\n"
+                 << "custom_malloc: " << (void *)jit_context.handlers.custom_malloc << "\n"
+                 << "custom_free: " << (void *)jit_context.handlers.custom_free << "\n"
+                 << "custom_do_task: " << (void *)jit_context.handlers.custom_do_task << "\n"
+                 << "custom_do_par_for: " << (void *)jit_context.handlers.custom_do_par_for << "\n"
+                 << "custom_error: " << (void *)jit_context.handlers.custom_error << "\n"
+                 << "custom_trace: " << (void *)jit_context.handlers.custom_trace << "\n";
     }
 
     void report_if_error(int exit_status) {
@@ -1020,14 +1013,14 @@ Pipeline::make_externs_jit_module(const Target &target,
                 // in current trunk Halide, but may be in some side branches that
                 // have not yet landed, e.g. JavaScript). Forcing it to be
                 // the correct type here, just in case.
-                arg_types.push_back(arg.arg.is_buffer() ? type_of<struct buffer_t *>() : arg.arg.type);
+                arg_types.push_back(arg.arg.is_buffer() ? type_of<struct halide_buffer_t *>() : arg.arg.type);
             }
             // Add the outputs of the pipeline
             for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
-                arg_types.push_back(type_of<struct buffer_t *>());
+                arg_types.push_back(type_of<struct halide_buffer_t *>());
             }
             ExternSignature signature(Int(32), false, arg_types);
-            iter->second = ExternCFunction(address, signature);
+            iter->second = JITExtern(ExternCFunction(address, signature));
         } else {
             free_standing_jit_externs.add_extern_for_export(iter->first, iter->second.extern_c_function());
         }
@@ -1184,7 +1177,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
 
     struct TrackedBuffer {
         // The query buffer, and a backup to check for changes. We
-        // want wrappers around actual buffer_ts so that we can copy
+        // want wrappers around actual halide_buffer_ts so that we can copy
         // the metadata, not shared pointers to a single buffer, so
         // it's simpler to use the runtime buffer class.
         Runtime::Buffer<> query, orig;
@@ -1299,15 +1292,38 @@ void Pipeline::invalidate_cache() {
 }
 
 JITExtern::JITExtern(Pipeline pipeline)
-    : pipeline_(pipeline) {
+    : pipeline_(std::move(pipeline)) {
 }
 
-JITExtern::JITExtern(Func func)
+JITExtern::JITExtern(const Func &func)
     : pipeline_(func) {
 }
 
 JITExtern::JITExtern(const ExternCFunction &extern_c_function)
     : extern_c_function_(extern_c_function) {
+}
+
+MachineParams MachineParams::generic() {
+    std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
+    if (params.empty()) {
+        return MachineParams(16, 16 * 1024 * 1024, 40);
+    } else {
+        return MachineParams(params);
+    }
+}
+
+std::string MachineParams::to_string() const {
+    std::ostringstream o;
+    o << parallelism << "," << last_level_cache_size << "," << balance;
+    return o.str();
+}
+
+MachineParams::MachineParams(const std::string &s) {
+    std::vector<std::string> v = Internal::split_string(s, ",");
+    user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
+    parallelism = std::atoi(v[0].c_str());
+    last_level_cache_size = std::atoll(v[1].c_str());
+    balance = std::atof(v[2].c_str());
 }
 
 }  // namespace Halide

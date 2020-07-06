@@ -46,20 +46,19 @@ protected:
     class CodeGen_OpenGLCompute_C : public CodeGen_GLSLBase {
     public:
         CodeGen_OpenGLCompute_C(std::ostream &s, Target t);
-        void add_kernel(Stmt stmt,
+        void add_kernel(const Stmt &stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
 
     protected:
         std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
 
-        using CodeGen_C::visit;
+        using CodeGen_GLSLBase::visit;
         void visit(const For *) override;
         void visit(const Ramp *op) override;
         void visit(const Broadcast *op) override;
         void visit(const Load *op) override;
         void visit(const Store *op) override;
-        void visit(const Cast *op) override;
         void visit(const Call *op) override;
         void visit(const Allocate *op) override;
         void visit(const Free *op) override;

@@ -46,12 +46,11 @@ void check(MemoryType t1, MemoryType t2, MemoryType t3) {
                   << "Expected " << expected_mallocs << " got " << mallocs << "\n";
         exit(-1);
     }
-
 }
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator.\n");
+        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
         return 0;
     }
 
