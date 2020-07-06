@@ -6,7 +6,7 @@ typedef void *objc_id;
 typedef void *objc_sel;
 extern objc_id objc_getClass(const char *name);
 extern objc_sel sel_getUid(const char *string);
-extern objc_id objc_msgSend(void);
+extern void objc_msgSend(void);
 
 void NSLog(objc_id /* NSString * */ format, ...);
 }
