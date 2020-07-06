@@ -6,6 +6,12 @@ typedef void *objc_id;
 typedef void *objc_sel;
 extern objc_id objc_getClass(const char *name);
 extern objc_sel sel_getUid(const char *string);
+
+// Recent versions of macOS have changed the signature
+// for objc_msgSend(), since its implementation is ABI-dependent.
+// With this signature, users must always cast the call to the
+// correct function type, and any misuses will be caught at
+// compile time.
 extern void objc_msgSend(void);
 
 void NSLog(objc_id /* NSString * */ format, ...);
