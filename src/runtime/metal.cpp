@@ -46,7 +46,7 @@ WEAK mtl_command_queue *new_command_queue(mtl_device *device) {
 
 WEAK mtl_command_buffer *new_command_buffer(mtl_command_queue *queue, const char *label, size_t label_len) {
     objc_id label_str = wrap_string_as_ns_string(label, label_len);
-    
+
     typedef mtl_command_buffer *(*new_command_buffer_method)(objc_id queue, objc_sel sel);
     new_command_buffer_method method = (new_command_buffer_method)&objc_msgSend;
     mtl_command_buffer *command_buffer = (mtl_command_buffer *)(*method)(queue, sel_getUid("commandBuffer"));
@@ -144,7 +144,7 @@ WEAK void buffer_to_buffer_1d_copy(mtl_blit_command_encoder *encoder,
                                    mtl_buffer *to, size_t to_offset,
                                    size_t size) {
     typedef void (*copy_from_buffer_method)(objc_id obj, objc_sel sel, objc_id src_buf, size_t s_offset,
-                                           objc_id dst_buf, size_t d_offset, size_t s);
+                                            objc_id dst_buf, size_t d_offset, size_t s);
     copy_from_buffer_method method = (copy_from_buffer_method)&objc_msgSend;
     (*method)(encoder, sel_getUid("copyFromBuffer:sourceOffset:toBuffer:destinationOffset:size:"),
               from, from_offset, to, to_offset, size);
@@ -153,7 +153,8 @@ WEAK void buffer_to_buffer_1d_copy(mtl_blit_command_encoder *encoder,
 WEAK void end_encoding(mtl_blit_command_encoder *encoder) {
     typedef void (*end_encoding_method)(objc_id encoder, objc_sel sel);
     end_encoding_method method = (end_encoding_method)&objc_msgSend;
-    (*method)(encoder, sel_getUid("endEncoding"));}
+    (*method)(encoder, sel_getUid("endEncoding"));
+}
 
 WEAK bool buffer_supports_set_bytes(mtl_compute_command_encoder *encoder) {
     typedef bool (*responds_to_selector_method)(objc_id obj, objc_sel sel_1, objc_sel sel_2);
@@ -168,7 +169,7 @@ WEAK mtl_library *new_library_with_source(mtl_device *device, const char *source
 
     typedef objc_id (*options_method)(objc_id obj, objc_sel sel);
     options_method method = (options_method)&objc_msgSend;
-    
+
     objc_id options = (*method)(objc_getClass("MTLCompileOptions"), sel_getUid("alloc"));
     options = (*method)(options, sel_getUid("init"));
     typedef void (*set_fast_math_method)(objc_id options, objc_sel sel, uint8_t flag);
