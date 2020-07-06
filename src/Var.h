@@ -56,10 +56,10 @@ public:
      f(x, y) = 3;
      \endcode
      *
-     * A call to f with the placeholder symbol \ref _
-     * will have implicit arguments injected automatically, so f(2, \ref _)
-     * is equivalent to f(2, \ref _0), where \ref _0 = Var::implicit(0), and f(\ref _)
-     * (and indeed f when cast to an Expr) is equivalent to f(\ref _0, \ref _1).
+     * A call to f with the placeholder symbol _
+     * will have implicit arguments injected automatically, so f(2, _)
+     * is equivalent to f(2, _0), where _0 = ImplicitVar<0>(), and f(_)
+     * (and indeed f when cast to an Expr) is equivalent to f(_0, _1).
      * The following definitions are all equivalent, differing only in the
      * variable names.
      *
@@ -132,7 +132,7 @@ public:
     //}
 
     /** Return the argument index for a placeholder argument given its
-     *  name. Returns 0 for \ref _0, 1 for \ref _1, etc. Returns -1 if
+     *  name. Returns 0 for _0, 1 for _1, etc. Returns -1 if
      *  the variable is not of implicit form.
      */
     //{
@@ -144,7 +144,7 @@ public:
     }
     //}
 
-    /** Test if a var is the placeholder variable \ref _ */
+    /** Test if a var is the placeholder variable _ */
     //{
     static bool is_placeholder(const std::string &name) {
         return name == "_";

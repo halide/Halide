@@ -88,6 +88,9 @@ protected:
     void visit(const Shuffle *op) override {
         internal_error << "Encounter unexpected expression \"Shuffle\" when differentiating.";
     }
+    void visit(const VectorReduce *op) override {
+        internal_error << "Encounter unexpected expression \"VectorReduce\" when differentiating.";
+    }
     void visit(const LetStmt *op) override {
         internal_error << "Encounter unexpected statement \"LetStmt\" when differentiating.";
     }

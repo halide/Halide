@@ -265,6 +265,12 @@ Module lower(const vector<Function> &output_funcs,
                  << s << "\n";
     }
 
+    debug(1) << "Bounding small realizations...\n";
+    s = simplify_correlated_differences(s);
+    s = bound_small_allocations(s);
+    debug(2) << "Lowering after bounding small realizations:\n"
+             << s << "\n\n";
+
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n"
@@ -336,7 +342,7 @@ Module lower(const vector<Function> &output_funcs,
              << s << "\n\n";
 
     debug(1) << "Vectorizing...\n";
-    s = vectorize_loops(s, t);
+    s = vectorize_loops(s, env, t);
     s = simplify(s);
     debug(2) << "Lowering after vectorizing:\n"
              << s << "\n\n";
@@ -364,6 +370,11 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Trimming loops to the region over which they do something...\n";
     s = trim_no_ops(s);
     debug(2) << "Lowering after loop trimming:\n"
+             << s << "\n\n";
+
+    debug(1) << "Hoisting loop invariant if statements...\n";
+    s = hoist_loop_invariant_if_statements(s);
+    debug(2) << "Lowering after hoisting loop invariant if statements:\n"
              << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
@@ -425,8 +436,8 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);
     s = simplify(s);
-    s = loop_invariant_code_motion(s);
-    debug(2) << "Lowering after removing dead allocations and moving loop invariant code:\n"
+    s = hoist_loop_invariant_values(s);
+    debug(2) << "Lowering after removing dead allocations and hoisting loop invariant values:\n"
              << s << "\n\n";
 
     debug(1) << "Flattening nested ramps...\n";

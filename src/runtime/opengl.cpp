@@ -125,10 +125,10 @@ WEAK const char *gl_error_name(int32_t err) {
 }
 
 struct HalideMalloc {
-    __attribute__((always_inline)) HalideMalloc(void *user_context, size_t size)
+    ALWAYS_INLINE HalideMalloc(void *user_context, size_t size)
         : user_context(user_context), ptr(halide_malloc(user_context, size)) {
     }
-    __attribute__((always_inline)) ~HalideMalloc() {
+    ALWAYS_INLINE ~HalideMalloc() {
         halide_free(user_context, ptr);
     }
     void *const user_context;
@@ -225,10 +225,10 @@ WEAK GlobalState global_state;
 // Saves & restores OpenGL state
 class GLStateSaver {
 public:
-    __attribute__((always_inline)) GLStateSaver() {
+    ALWAYS_INLINE GLStateSaver() {
         save();
     }
-    __attribute__((always_inline)) ~GLStateSaver() {
+    ALWAYS_INLINE ~GLStateSaver() {
         restore();
     }
 
@@ -1004,11 +1004,11 @@ WEAK int halide_opengl_device_free(void *user_context, halide_buffer_t *buf) {
 
 // Can't use std::min, std::max in Halide runtime.
 template<typename T>
-__attribute__((always_inline)) T std_min(T a, T b) {
+ALWAYS_INLINE T std_min(T a, T b) {
     return (a < b) ? a : b;
 }
 template<typename T>
-__attribute__((always_inline)) T std_max(T a, T b) {
+ALWAYS_INLINE T std_max(T a, T b) {
     return (a > b) ? a : b;
 }
 
@@ -1016,7 +1016,7 @@ __attribute__((always_inline)) T std_max(T a, T b) {
 // halide_buffer_t to the packed interleaved format needed by GL. It is assumed that
 // src and dst have the same number of channels.
 template<class T>
-__attribute__((always_inline)) void halide_to_interleaved(const halide_buffer_t *src_buf, T *dst) {
+ALWAYS_INLINE void halide_to_interleaved(const halide_buffer_t *src_buf, T *dst) {
     const T *src = reinterpret_cast<const T *>(src_buf->host);
     int width = (src_buf->dimensions > 0) ? src_buf->dim[0].extent : 1;
     int height = (src_buf->dimensions > 1) ? src_buf->dim[1].extent : 1;
@@ -1042,7 +1042,7 @@ __attribute__((always_inline)) void halide_to_interleaved(const halide_buffer_t 
 // channels than dst, the excess in dst will be left untouched; if src has
 // more channels than dst, the excess will be ignored.
 template<class T>
-__attribute__((always_inline)) void interleaved_to_halide(void *user_context, const T *src, int src_channels, halide_buffer_t *dst_buf) {
+ALWAYS_INLINE void interleaved_to_halide(void *user_context, const T *src, int src_channels, halide_buffer_t *dst_buf) {
     T *dst = reinterpret_cast<T *>(dst_buf->host);
     int width = (dst_buf->dimensions > 0) ? dst_buf->dim[0].extent : 1;
     int height = (dst_buf->dimensions > 1) ? dst_buf->dim[1].extent : 1;

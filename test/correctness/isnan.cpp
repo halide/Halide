@@ -188,6 +188,131 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (get_jit_target_from_environment().has_gpu_feature()) {
+        // ---- is_nan()
+        {
+            Func f;
+            Var x;
+            Var y;
+            Var tx, ty;
+
+            Expr e = sqrt(x - y);
+            f(x, y) = strict_float(select(is_nan(e), 0.0f, 1.0f));
+            f.gpu_tile(x, y, tx, ty, 8, 8);
+
+            Buffer<float> im = f.realize(w, h);
+            if (check_nans(im) != 0) {
+                return -1;
+            }
+        }
+
+        {
+            Buffer<float> non_halide_produced(w, h);
+            for (int x = 0; x < w; x++) {
+                for (int y = 0; y < h; y++) {
+                    non_halide_produced(x, y) = sqrt(x - y);
+                }
+            }
+
+            ImageParam in(Float(32), 2);
+            Func f;
+            Var x;
+            Var y;
+            Var tx, ty;
+
+            f(x, y) = select(is_nan(in(x, y)), 0.0f, 1.0f);
+            f.gpu_tile(x, y, tx, ty, 8, 8);
+
+            in.set(non_halide_produced);
+            Buffer<float> im = f.realize(w, h);
+            if (check_nans(im) != 0) {
+                return -1;
+            }
+        }
+
+        // ---- is_inf()
+        {
+            Func f;
+            Var x;
+            Var y;
+            Var tx, ty;
+
+            Expr e = cast<float>(x - w / 2) / cast<float>(y - h / 2);
+            f(x, y) = strict_float(select(is_inf(e), 1.0f, 0.0f));
+            f.gpu_tile(x, y, tx, ty, 8, 8);
+
+            Buffer<float> im = f.realize(w, h);
+            if (check_infs(im) != 0) {
+                return -1;
+            }
+        }
+
+        {
+            Buffer<float> non_halide_produced(w, h);
+            for (int x = 0; x < w; x++) {
+                for (int y = 0; y < h; y++) {
+                    non_halide_produced(x, y) = (float)(x - w / 2) / (float)(y - h / 2);
+                }
+            }
+
+            ImageParam in(Float(32), 2);
+            Func f;
+            Var x;
+            Var y;
+            Var tx, ty;
+
+            f(x, y) = select(is_inf(in(x, y)), 1.0f, 0.0f);
+            f.gpu_tile(x, y, tx, ty, 8, 8);
+
+            in.set(non_halide_produced);
+            Buffer<float> im = f.realize(w, h);
+            if (check_infs(im) != 0) {
+                return -1;
+            }
+        }
+
+        // ---- is_finite()
+        {
+            Func f;
+            Var x;
+            Var y;
+            Var tx, ty;
+
+            Expr e = cast<float>(x - w / 2) / cast<float>(y - h / 2);
+            f(x, y) = strict_float(select(is_finite(e), 1.0f, 0.0f));
+            f.gpu_tile(x, y, tx, ty, 8, 8);
+
+            Buffer<float> im = f.realize(w, h);
+            if (check_finites(im) != 0) {
+                return -1;
+            }
+        }
+
+        {
+            Buffer<float> non_halide_produced(w, h);
+            for (int x = 0; x < w; x++) {
+                for (int y = 0; y < h; y++) {
+                    non_halide_produced(x, y) = (float)(x - w / 2) / (float)(y - h / 2);
+                }
+            }
+
+            ImageParam in(Float(32), 2);
+            Func f;
+            Var x;
+            Var y;
+            Var tx, ty;
+
+            f(x, y) = select(is_finite(in(x, y)), 1.0f, 0.0f);
+            f.gpu_tile(x, y, tx, ty, 8, 8);
+
+            in.set(non_halide_produced);
+            Buffer<float> im = f.realize(w, h);
+            if (check_finites(im) != 0) {
+                return -1;
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

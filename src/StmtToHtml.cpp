@@ -694,6 +694,13 @@ private:
         stream << close_span();
     }
 
+    void visit(const VectorReduce *op) override {
+        stream << open_span("VectorReduce");
+        stream << open_span("Type") << op->type << close_span();
+        print_list(symbol("vector_reduce") + "(", {op->op, op->value}, ")");
+        stream << close_span();
+    }
+
     void visit(const Atomic *op) override {
         stream << open_div("Atomic");
         int id = unique_id();

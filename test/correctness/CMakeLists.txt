@@ -67,6 +67,7 @@ tests(GROUPS correctness
       convolution.cpp
       convolution_multiple_kernels.cpp
       cross_compilation.cpp
+      cuda_8_bit_dot_product.cpp
       custom_allocator.cpp
       custom_auto_scheduler.cpp
       custom_error_reporter.cpp
@@ -144,6 +145,7 @@ tests(GROUPS correctness
       gpu_param_allocation.cpp
       gpu_reuse_shared_memory.cpp
       gpu_specialize.cpp
+      gpu_store_in_register_with_no_lanes_loop.cpp
       gpu_sum_scan.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
@@ -156,6 +158,7 @@ tests(GROUPS correctness
       hexagon_scatter.cpp
       histogram.cpp
       histogram_equalize.cpp
+      hoist_loop_invariant_if_statements.cpp
       host_alignment.cpp
       image_io.cpp
       image_of_lists.cpp
@@ -309,6 +312,7 @@ tests(GROUPS correctness
       tuple_select.cpp
       tuple_undef.cpp
       tuple_update_ops.cpp
+      tuple_vector_reduce.cpp
       two_vector_args.cpp
       undef.cpp
       uninitialized_read.cpp
@@ -324,6 +328,7 @@ tests(GROUPS correctness
       vector_extern.cpp
       vector_math.cpp
       vector_print_bug.cpp
+      vector_reductions.cpp
       vector_tile.cpp
       vectorize_guard_with_if.cpp
       vectorize_mixed_widths.cpp

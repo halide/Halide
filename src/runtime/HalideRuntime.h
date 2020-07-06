@@ -21,13 +21,15 @@ struct halide_handle_traits;
 extern "C" {
 #endif
 
-// Note that you should not use "inline" along with HALIDE_ALWAYS_INLINE;
-// it is not necessary, and may produce warnings for some build configurations.
 #ifdef _MSC_VER
+// Note that (for MSVC) you should not use "inline" along with HALIDE_ALWAYS_INLINE;
+// it is not necessary, and may produce warnings for some build configurations.
 #define HALIDE_ALWAYS_INLINE __forceinline
 #define HALIDE_NEVER_INLINE __declspec(noinline)
 #else
-#define HALIDE_ALWAYS_INLINE __attribute__((always_inline)) inline
+// Note that (for Posixy compilers) you should always use "inline" along with HALIDE_ALWAYS_INLINE;
+// otherwise some corner-case scenarios may erroneously report link errors.
+#define HALIDE_ALWAYS_INLINE inline __attribute__((always_inline))
 #define HALIDE_NEVER_INLINE __attribute__((noinline))
 #endif
 
@@ -1313,7 +1315,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
     halide_target_feature_egl,                    ///< Force use of EGL support.
 
-    halide_target_feature_end  ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_arm_dot_prod,  ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
+    halide_target_feature_end            ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

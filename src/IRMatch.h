@@ -61,7 +61,7 @@ void expr_match_test();
  * BaseExprNode &).
  *
  * Pattern elements that are fully specified by their pattern can be
- * built into an expression using the ::make method. Some patterns,
+ * built into an expression using the make method. Some patterns,
  * such as a broadcast that matches any number of lanes, don't have
  * enough information to recreate an Expr.
  */
@@ -1548,8 +1548,12 @@ struct BroadcastOp {
     Expr make(MatcherState &state, halide_type_t type_hint) const {
         const int l = known_lanes ? lanes : type_hint.lanes;
         type_hint.lanes = 1;
-        Expr ae = a.make(state, type_hint);
-        return Broadcast::make(a.make(state, type_hint), l / ae.type().lanes());
+        Expr val = a.make(state, type_hint);
+        if (l == 1) {
+            return val;
+        } else {
+            return Broadcast::make(std::move(val), l / val.type().lanes());
+        }
     }
 
     constexpr static bool foldable = false;
@@ -1658,6 +1662,109 @@ HALIDE_ALWAYS_INLINE auto ramp(A a, B b, int lanes) noexcept -> RampOp<decltype(
 template<typename A, typename B>
 HALIDE_ALWAYS_INLINE auto ramp(A a, B b) noexcept -> RampOp<decltype(pattern_arg(a)), decltype(pattern_arg(b)), false> {
     return {pattern_arg(a), pattern_arg(b), 0};
+}
+
+template<typename A, bool known_lanes, VectorReduce::Operator reduce_op>
+struct VectorReduceOp {
+    struct pattern_tag {};
+    A a;
+    int lanes;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::VectorReduce;
+    constexpr static IRNodeType max_node_type = IRNodeType::VectorReduce;
+    constexpr static bool canonical = A::canonical;
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+        if (e.node_type == VectorReduce::_node_type) {
+            const VectorReduce &op = (const VectorReduce &)e;
+            if (op.op == reduce_op &&
+                (!known_lanes || lanes == op.type.lanes()) &&
+                a.template match<bound>(*op.value.get(), state)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    template<uint32_t bound, typename A2, bool known_lanes_2, VectorReduce::Operator reduce_op_2>
+    HALIDE_ALWAYS_INLINE bool match(const VectorReduceOp<A2, known_lanes_2, reduce_op_2> &op, MatcherState &state) const noexcept {
+        return (reduce_op == reduce_op_2 &&
+                a.template match<bound>(unwrap(op.a), state) &&
+                (lanes == op.lanes || !known_lanes || !known_lanes_2));
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
+        const int l = known_lanes ? lanes : type_hint.lanes;
+        return VectorReduce::make(reduce_op, a.make(state, type_hint), l);
+    }
+
+    constexpr static bool foldable = false;
+};
+
+template<typename A, VectorReduce::Operator reduce_op>
+inline std::ostream &operator<<(std::ostream &s, const VectorReduceOp<A, true, reduce_op> &op) {
+    s << "vector_reduce(" << reduce_op << ", " << op.a << ", " << op.lanes << ")";
+    return s;
+}
+
+template<typename A, VectorReduce::Operator reduce_op>
+inline std::ostream &operator<<(std::ostream &s, const VectorReduceOp<A, false, reduce_op> &op) {
+    s << "vector_reduce(" << reduce_op << ", " << op.a << ")";
+    return s;
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto h_add(A a, int lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), true, VectorReduce::Add> {
+    return {pattern_arg(a), lanes};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto h_add(A a) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), false, VectorReduce::Add> {
+    return {pattern_arg(a), 0};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto h_min(A a, int lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), true, VectorReduce::Min> {
+    return {pattern_arg(a), lanes};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto h_min(A a) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), false, VectorReduce::Min> {
+    return {pattern_arg(a), 0};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto h_max(A a, int lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), true, VectorReduce::Max> {
+    return {pattern_arg(a), lanes};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto h_max(A a) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), false, VectorReduce::Max> {
+    return {pattern_arg(a), 0};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto h_and(A a, int lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), true, VectorReduce::And> {
+    return {pattern_arg(a), lanes};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto h_and(A a) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), false, VectorReduce::And> {
+    return {pattern_arg(a), 0};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto h_or(A a, int lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), true, VectorReduce::Or> {
+    return {pattern_arg(a), lanes};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto h_or(A a) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), false, VectorReduce::Or> {
+    return {pattern_arg(a), 0};
 }
 
 template<typename A>

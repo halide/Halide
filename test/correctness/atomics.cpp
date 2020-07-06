@@ -22,7 +22,9 @@ template<typename T,
          typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr>
 inline void check(int line_number, T x, T target, T threshold = T(1e-6)) {
     _halide_user_assert(std::fabs((x) - (target)) < threshold)
-        << "Line " << line_number << ": Expected " << (target) << " instead of " << (x) << "\n";
+        << "Line " << line_number
+        << ": Expected " << (target)
+        << " instead of " << (x) << "\n";
 }
 
 inline void check(int line_number, float16_t x, float16_t target) {
@@ -37,7 +39,9 @@ template<typename T,
          typename std::enable_if<std::is_integral<T>::value, int>::type * = nullptr>
 inline void check(int line_number, T x, T target) {
     _halide_user_assert(x == target)
-        << "Line " << line_number << ": Expected " << (target) << " instead of " << (x) << "\n";
+        << "Line " << line_number
+        << ": Expected " << (int64_t)(target)
+        << " instead of " << (int64_t)(x) << "\n";
 }
 
 template<typename T>
@@ -357,7 +361,7 @@ void test_predicated_hist(const Backend &backend) {
         case Backend::CUDAVectorize: {
             RVar ro, ri;
             RVar rio, rii;
-            hist.update()
+            hist.update(update_id)
                 .atomic(true /*override_assciativity_test*/)
                 .split(r, ro, ri, 32)
                 .split(ri, rio, rii, 4)
@@ -824,7 +828,7 @@ void test_hist_rfactor(const Backend &backend) {
 
     Func intermediate =
         hist.update()
-            .rfactor({{r.y, y}});
+            .rfactor(r.y, y);
     intermediate.compute_root();
     hist.compute_root();
     switch (backend) {
@@ -858,7 +862,13 @@ void test_hist_rfactor(const Backend &backend) {
     case Backend::CUDAVectorize: {
         RVar ro, ri;
         RVar rio, rii;
-        hist.update().atomic(true).split(r, ro, ri, 32).split(ri, rio, rii, 4).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(rio, DeviceAPI::CUDA).vectorize(rii);
+        intermediate.update()
+            .atomic(true)
+            .split(r.x, ro, ri, 32)
+            .split(ri, rio, rii, 4)
+            .gpu_blocks(ro, DeviceAPI::CUDA)
+            .gpu_threads(rio, DeviceAPI::CUDA)
+            .vectorize(rii);
     } break;
     default: {
         _halide_user_assert(false) << "Unsupported backend.\n";
