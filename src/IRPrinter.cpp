@@ -8,6 +8,7 @@
 #include "DerivativeUtils.h"
 #include "FindCalls.h"
 #include "Func.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "Module.h"
 #include "RealizationOrder.h"
@@ -174,63 +175,98 @@ ostream &operator<<(ostream &stream, const Target &target) {
 
 namespace {
 
-template<typename T>
-void emit_with_commas(ostream &stream, const std::vector<T> &v) {
-    stream << "(";
-    const char *sep = "";
-    for (const T &t : v) {
-        stream << sep << t;
-        sep = ", ";
-    }
-    stream << ")";
-};
-
 void print_func(ostream &stream, const Func &func, bool include_dependencies) {
-    using Internal::extract_rdom;
     using Internal::ReductionDomain;
-    using Internal::simplify;
 
-    stream << "func " << func.name() << " = {\n";
+    Internal::IRPrinter printer(stream);
+
+    stream << "Func " << func.name() << "; {\n";
 
     // Topologically sort the functions
-    std::map<std::string, Internal::Function> env = include_dependencies ? find_transitive_calls(func.function()) : std::map<std::string, Internal::Function>{{func.function().name(), func.function()}};
-    std::vector<std::string> order = include_dependencies ? realization_order({func.function()}, env).first : std::vector<std::string>{func.function().name()};
+    std::map<std::string, Internal::Function> env =
+        include_dependencies ?
+            find_transitive_calls(func.function()) :
+            std::map<std::string, Internal::Function>{{func.function().name(), func.function()}};
+    std::vector<std::string> order =
+        include_dependencies ?
+            realization_order({func.function()}, env).first :
+            std::vector<std::string>{func.function().name()};
 
     for (int i = (int)order.size() - 1; i >= 0; i--) {
         Func f(env[order[i]]);
+        std::set<string> rdoms_declared;
         for (int update_id = -1; update_id < f.num_update_definitions(); update_id++) {
-            std::vector<Expr> vals;
-            if (update_id >= 0) {
-                stream << "  " << f.name() << ".update[" << update_id << "]";
-                emit_with_commas(stream, f.update_args(update_id));
-                stream << " = ";
-                vals = f.update_values(update_id).as_vector();
-            } else {
-                stream << " " << f.name();
-                emit_with_commas(stream, f.args());
-                stream << " = ";
+            vector<Expr> args, vals;
+            if (update_id == -1) {
+                args.reserve(f.args().size());
+                for (Var v : f.args()) {
+                    args.push_back(v);
+                }
                 vals = f.values().as_vector();
+            } else {
+                args = f.update_args(update_id);
+                vals = f.update_values(update_id).as_vector();
             }
-            if (vals.size() > 1) {
-                stream << "tuple<" << vals.size() << ">";
+
+            class ExtractRDom : public Internal::IRMutator {
+                using Internal::IRMutator::visit;
+
+                Expr visit(const Internal::Variable *op) override {
+                    if (op->reduction_domain.defined()) {
+                        rdom = op->reduction_domain;
+                        int idx = 0;
+                        for (const auto &v : rdom.domain()) {
+                            if (v.var == op->name) {
+                                string new_name = rdom_name + "[" + std::to_string(idx) + "]";
+                                return Internal::Variable::make(op->type, new_name);
+                            }
+                            idx++;
+                        }
+                    }
+                    return op;
+                }
+
+            public:
+                ReductionDomain rdom;
+                string rdom_name;
+            } extract_rdom;
+            extract_rdom.rdom_name = "r" + std::to_string(update_id);
+            for (auto &v : vals) {
+                v = extract_rdom.mutate(v);
             }
-            emit_with_commas(stream, vals);
-            // Assume that Tuples have the same (or no) RDom across all values.
-            ReductionDomain rdom = extract_rdom(vals.at(0));
-            if (rdom.defined()) {
-                stream << " with RDom";
+            for (auto &v : args) {
+                v = extract_rdom.mutate(v);
+            }
+
+            if (extract_rdom.rdom.defined()) {
+                stream << "  RDom " << extract_rdom.rdom_name << "(";
                 std::vector<Expr> e;
-                for (const auto &d : rdom.domain()) {
+                for (const auto &d : extract_rdom.rdom.domain()) {
                     e.push_back(d.min);
                     e.push_back(d.extent);
                 }
-                emit_with_commas(stream, e);
-                Expr pred = rdom.predicate();
+                printer.print_list(e);
+                stream << ");\n";
+                Expr pred = extract_rdom.rdom.predicate();
                 if (pred.defined() && !is_one(pred)) {
-                    stream << ".where(" << pred << ")";
+                    pred = extract_rdom.mutate(pred);
+                    stream << "  " << extract_rdom.rdom_name << ".where(";
+                    printer.print_no_parens(pred);
+                    stream << ");\n";
                 }
             }
-            stream << "\n";
+            stream
+                << "  " << f.name() << "(";
+            printer.print_list(args);
+            stream << ") = ";
+            if (vals.size() > 1) {
+                stream << "{";
+                printer.print_list(vals);
+                stream << "}";
+            } else {
+                printer.print_list(vals);
+            }
+            stream << ";\n";
         }
     }
 
@@ -306,50 +342,38 @@ void IRPrinter::test() {
     std::string correct_source = R"GOLDEN(
 allocate buf[float32 * 1023] in Stack
 let y = 17
-assert((y >= 3), halide_error_param_too_small_i64("y", y, 3))
+assert(y >= 3, halide_error_param_too_small_i64("y", y, 3))
 produce buf {
- parallel (x, -2, (y + 2)) {
-  buf[(y - 1)] = ((x*17)/(x - 3))
+ parallel (x, -2, y + 2) {
+  buf[y - 1] = (x*17)/(x - 3)
  }
 }
 consume buf {
  vectorized (x, 0, y) {
-  out[x] = (buf((x % 3)) + 1)
+  out[x] = buf(x % 3) + 1
  }
 }
-func some_func = {
- some_func(xx) = (0)
-  some_func.update[0](rr$x) = ((some_func(rr$x) + rr$x)) with RDom(1, 99)
-  some_func.update[1](rr$x) = ((some_func(rr$x)*rr$x)) with RDom(1, 99)
+Func some_func; {
+  some_func(xx) = 0;
+  RDom r0(1, 99);
+  some_func(r0[0]) = some_func(r0[0]) + r0[0];
+  RDom r1(1, 99);
+  some_func(r1[0]) = some_func(r1[0])*r1[0];
 }
-func tuple_func = {
- tuple_func(xx) = tuple<2>(0, 0)
-  tuple_func.update[0](rr$x) = tuple<2>(tuple_func((rr$x - 1)), (tuple_func(rr$x) + 1)) with RDom(1, 99)
+Func tuple_func; {
+  tuple_func(xx) = {0, 0};
+  RDom r0(1, 99);
+  tuple_func(r0[0]) = {tuple_func(r0[0] - 1)[0], tuple_func(r0[0])[1] + 1};
 }
-func multi_func2 = {
- multi_func2(xx) = ((multi_func1(xx)/2))
+Func multi_func2; {
+  multi_func2(xx) = multi_func1(xx)/2;
 }
-func multi_func3 = {
- multi_func3(xx) = ((multi_func2(xx) % 3))
- multi_func2(xx) = ((multi_func1(xx)/2))
- multi_func1(xx) = ((xx + 1))
+Func multi_func3; {
+  multi_func3(xx) = multi_func2(xx) % 3;
+  multi_func2(xx) = multi_func1(xx)/2;
+  multi_func1(xx) = xx + 1;
 }
 )GOLDEN";
-
-    // std::string correct_source =
-    //     "allocate buf[float32 * 1023] in Stack\n"
-    //     "let y = 17\n"
-    //     "assert((y >= 3), halide_error_param_too_small_i64(\"y\", y, 3))\n"
-    //     "produce buf {\n"
-    //     " parallel (x, -2, (y + 2)) {\n"
-    //     "  buf[(y - 1)] = ((x*17)/(x - 3))\n"
-    //     " }\n"
-    //     "}\n"
-    //     "consume buf {\n"
-    //     " vectorized (x, 0, y) {\n"
-    //     "  out[x] = (buf((x % 3)) + 1)\n"
-    //     " }\n"
-    //     "}\n";
 
     if (source.str() != correct_source) {
         internal_error << "Correct output:\n"
@@ -534,7 +558,7 @@ void IRPrinter::print(const Stmt &ir) {
 void IRPrinter::print_list(const std::vector<Expr> &exprs) {
     for (size_t i = 0; i < exprs.size(); i++) {
         print_no_parens(exprs[i]);
-        if (i < exprs.size() - 1) {
+        if (i + 1 < exprs.size()) {
             stream << ", ";
         }
     }
@@ -816,6 +840,11 @@ void IRPrinter::visit(const Call *op) {
     stream << op->name << "(";
     print_list(op->args);
     stream << ")";
+    if (op->call_type == Call::Halide &&
+        op->func.defined() &&
+        Function(op->func).values().size() > 1) {
+        stream << "[" << std::to_string(op->value_index) << "]";
+    }
 }
 
 void IRPrinter::visit(const Let *op) {
