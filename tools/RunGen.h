@@ -793,13 +793,15 @@ struct ArgData {
             fail() << "Dimension mismatch; expected " << constrained_shape.size() << "dimensions";
         }
         for (size_t i = 0; i < constrained_shape.size(); ++i) {
-            // min of nonzero means "largest value for min"
-            if (constrained_shape[i].min != 0 && new_shape[i].min > constrained_shape[i].min) {
+            // If the constrained shape is not in bounds of the
+            // buffer's current shape we need to use the constrained
+            // shape.
+            int current_min = new_shape[i].min;
+            int current_max = new_shape[i].min + new_shape[i].extent - 1;
+            int constrained_min = constrained_shape[i].min;
+            int constrained_max = constrained_shape[i].min + constrained_shape[i].extent - 1;
+            if (constrained_min < current_min || constrained_max > current_max) {
                 new_shape[i].min = constrained_shape[i].min;
-                updated = true;
-            }
-            // extent of nonzero means "largest value for extent"
-            if (constrained_shape[i].extent != 0 && new_shape[i].extent > constrained_shape[i].extent) {
                 new_shape[i].extent = constrained_shape[i].extent;
                 updated = true;
             }
