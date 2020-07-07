@@ -6,9 +6,12 @@
 #include "HalideRuntime.h"
 
 #include "interpolate.h"
+#ifndef NO_AUTO_SCHEDULE
 #include "interpolate_auto_schedule.h"
+#include "interpolate_gradient_auto_schedule.h"
+#endif
 
-#include "halide_benchmark.h"
+#include "benchmark_util.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Tools;
@@ -22,17 +25,13 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<float> input = load_and_convert_image(argv[1]);
     Halide::Runtime::Buffer<float> output(input.width(), input.height(), 3);
 
-    double best_manual = benchmark([&]() {
-        interpolate(input, output);
-        output.device_sync();
+    multi_way_bench({
+        {"Manual", [&]() { interpolate(input, output); output.device_sync(); }},
+    #ifndef NO_AUTO_SCHEDULE
+        {"Auto-scheduled", [&]() { interpolate_auto_schedule(input, output); output.device_sync(); }},
+        {"Gradient auto-scheduled", [&]() { interpolate_gradient_auto_schedule(input, output); output.device_sync(); }}
+    #endif
     });
-    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
-
-    double best_auto = benchmark([&]() {
-        interpolate_auto_schedule(input, output);
-        output.device_sync();
-    });
-    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
 
     convert_and_save_image(output, argv[2]);
 

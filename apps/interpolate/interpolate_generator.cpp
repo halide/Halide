@@ -201,10 +201,12 @@ public:
             input.dim(0).set_estimate(0, 1536);
             input.dim(1).set_estimate(0, 2560);
             input.dim(2).set_estimate(0, 4);
-            output.dim(0).set_estimate(0, 1536);
-            output.dim(1).set_estimate(0, 2560);
-            output.dim(2).set_estimate(0, 3);
+            output
+                .bound(x, 0, 1536)
+                .bound(y, 0, 2560)
+                .bound(c, 0, 3);
         }
+
     }
 };
 

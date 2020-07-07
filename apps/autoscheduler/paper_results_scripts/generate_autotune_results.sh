@@ -72,7 +72,7 @@ function ctrl_c() {
 trap ctrl_c INT
 
 if [ -z $APP ]; then
-    APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator depthwise_separable_conv"
+    APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur_generator depthwise_separable_conv"
 else
     APPS=$APP
 fi
