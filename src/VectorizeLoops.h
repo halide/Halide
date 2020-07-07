@@ -6,7 +6,10 @@
  */
 
 #include "Expr.h"
+#include "Function.h"
 #include "Target.h"
+
+#include <map>
 
 namespace Halide {
 namespace Internal {
