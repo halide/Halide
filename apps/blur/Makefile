@@ -28,7 +28,7 @@ endif
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
 $(BIN)/%/test: $(BIN)/%/halide_blur.a $(BIN)/%/halide_blur_c.halide_generated.cpp test.cpp
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(OPENMP_FLAGS) -Wall -O2 -I$(BIN)/$* -I/usr/local/google/home/vksnk/Work/cstub/ test.cpp $(BIN)/$*/halide_blur_c.halide_generated.cpp $(BIN)/$*/halide_blur.a /usr/local/google/home/vksnk/Work/cstub/libcstub.a -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(OPENMP_FLAGS) -Wall -O2 -I$(BIN)/$* -I${XTENSA_CSTUBS_ROOT}  test.cpp $(BIN)/$*/halide_blur_c.halide_generated.cpp $(BIN)/$*/halide_blur.a ${XTENSA_CSTUBS_ROOT}/libcstub.a -o $@ $(LDFLAGS-$*)
 
 clean:
 	rm -rf $(BIN)
