@@ -13,6 +13,10 @@ $(BIN)/%/halide_blur.a: $(GENERATOR_BIN)/halide_blur.generator
 	@mkdir -p $(@D)
 	$^ -g halide_blur -e $(GENERATOR_OUTPUTS) -o $(@D) target=$*
 
+$(BIN)/%/halide_blur_c.halide_generated.cpp: $(GENERATOR_BIN)/halide_blur.generator
+	@mkdir -p $(@D)
+	$^ -g halide_blur -o $(@D) -f halide_blur_c -e c_source,c_header target=$*
+
 # g++ on OS X might actually be system clang without openmp
 CXX_VERSION=$(shell $(CXX) --version)
 ifeq (,$(findstring clang,$(CXX_VERSION)))
@@ -22,9 +26,9 @@ OPENMP_FLAGS=
 endif
 
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
-$(BIN)/%/test: $(BIN)/%/halide_blur.a test.cpp
+$(BIN)/%/test: $(BIN)/%/halide_blur.a $(BIN)/%/halide_blur_c.halide_generated.cpp test.cpp
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(OPENMP_FLAGS) -Wall -O2 -I$(BIN)/$* test.cpp $(BIN)/$*/halide_blur.a -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(OPENMP_FLAGS) -Wall -O2 -I$(BIN)/$* -I/usr/local/google/home/vksnk/Work/cstub/ test.cpp $(BIN)/$*/halide_blur_c.halide_generated.cpp $(BIN)/$*/halide_blur.a /usr/local/google/home/vksnk/Work/cstub/libcstub.a -o $@ $(LDFLAGS-$*)
 
 clean:
 	rm -rf $(BIN)

@@ -70,7 +70,6 @@
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
 #include "WrapCalls.h"
-#include "XtensaOptimize.h"
 
 namespace Halide {
 namespace Internal {
@@ -425,7 +424,6 @@ Module lower(const vector<Function> &output_funcs,
     s = remove_dead_allocations(s);
     s = simplify(s);
     s = loop_invariant_code_motion(s);
-    s = match_xtensa_patterns(s);
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 

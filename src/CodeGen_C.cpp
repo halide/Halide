@@ -12,6 +12,7 @@
 #include "Type.h"
 #include "Util.h"
 #include "Var.h"
+#include "XtensaOptimize.h"
 
 namespace Halide {
 namespace Internal {
@@ -1514,6 +1515,20 @@ typedef CppVector<uint8_t, 32> uint1x32_t;
 
         const char *native_typedef_decl = R"INLINE_CODE(
 
+/*
+#if defined(__XTENSA__)
+#include <xtensa/sim.h>
+#include <xtensa/tie/xt_ivpn.h>
+#include <xtensa/tie/xt_timer.h>
+#include <xtensa/xt_profiling.h>
+#endif
+// This inline function is needed by application to get the cycle count from ISS
+inline int GetCycleCount() {
+  return XT_RSR_CCOUNT();
+}
+*/
+#include <xtensa/tie/xt_ivpn.h>
+
 #define HALIDE_MAYBE_UNUSED __attribute__ ((unused))
 
 typedef xb_vecNx16 int16x32_t;
@@ -1810,6 +1825,10 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x32_t uint16x32_t_load(const void
     return r;
 }
 
+HALIDE_ALWAYS_INLINE void store(const uint16x32_t& a, void *base, int32_t offset) {
+    memcpy(((uint16_t*)base + offset), &a, sizeof(uint16_t) * 32);
+}
+
 HALIDE_ALWAYS_INLINE void aligned_store(const int16x64_t& a, void *base, int32_t offset) {
    a.aligned_store(base, offset);
    //xb_vecNx16* ptr = (int16x32_t *)((int16_t*)base + offset);
@@ -1853,9 +1872,6 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_clamped_dense_load_i16(
 }
 
 HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_interleave_i16(const int16x32_t& a, const int16x32_t& b) {
-  const int IVP_SELI_16B_INTERLEAVE_1_LO = 32;
-  const int IVP_SELI_16B_INTERLEAVE_1_HI = 33;
-
   return int16x64_t(int16x64_t::from_native_vector,
                                 IVP_SELNX16I(b, a, IVP_SELI_16B_INTERLEAVE_1_LO),
                                 IVP_SELNX16I(b, a, IVP_SELI_16B_INTERLEAVE_1_HI)
@@ -2012,45 +2028,32 @@ inline uint32x32_t convert_to_uint32x32_t_from_uint16x32_t(const uint16x32_t& sr
     return uint32x32_t(uint32x32_t::from_native_vector, IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
 }
 
-
-#if defined(__XTENSA__)
-#include <xtensa/sim.h>
-#include <xtensa/tie/xt_timer.h>
-#include <xtensa/xt_profiling.h>
-#include <xtensa/tie/xt_ivpn.h>
-#endif
-
-// This inline function is needed by application to get the cycle count from ISS
-inline int GetCycleCount() {
-  return XT_RSR_CCOUNT();
-}
-
 )INLINE_CODE";
-          stream << std::flush;
-          stream << native_typedef_decl;
-          stream << std::flush;
-          (void)cpp_vector_decl;
-//         // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
-//         // emitting this long text string was regularly garbled in a predictable pattern;
-//         // flushing the stream before or after heals it. Since C++ codegen is rarely
-//         // on a compilation critical path, we'll just band-aid it in this way.
-//         stream << std::flush;
-//         stream << cpp_vector_decl << native_vector_decl << vector_selection_decl;
-//         stream << std::flush;
+        stream << std::flush;
+        stream << native_typedef_decl;
+        stream << std::flush;
+        (void)cpp_vector_decl;
+        //         // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
+        //         // emitting this long text string was regularly garbled in a predictable pattern;
+        //         // flushing the stream before or after heals it. Since C++ codegen is rarely
+        //         // on a compilation critical path, we'll just band-aid it in this way.
+        //         stream << std::flush;
+        //         stream << cpp_vector_decl << native_vector_decl << vector_selection_decl;
+        //         stream << std::flush;
 
-//         for (const auto &t : vector_types) {
-//             string name = type_to_c_type(t, false, false);
-//             string scalar_name = type_to_c_type(t.element_of(), false, false);
-//             stream << "#if halide_cpp_use_native_vector(" << scalar_name << ", " << t.lanes() << ")\n";
-//             stream << "typedef NativeVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
-//             // Useful for debugging which Vector implementation is being selected
-//             // stream << "#pragma message \"using NativeVector for " << t << "\"\n";
-//             stream << "#else\n";
-//             stream << "typedef CppVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
-//             // Useful for debugging which Vector implementation is being selected
-//             // stream << "#pragma message \"using CppVector for " << t << "\"\n";
-//             stream << "#endif\n";
-//         }
+        //         for (const auto &t : vector_types) {
+        //             string name = type_to_c_type(t, false, false);
+        //             string scalar_name = type_to_c_type(t.element_of(), false, false);
+        //             stream << "#if halide_cpp_use_native_vector(" << scalar_name << ", " << t.lanes() << ")\n";
+        //             stream << "typedef NativeVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
+        //             // Useful for debugging which Vector implementation is being selected
+        //             // stream << "#pragma message \"using NativeVector for " << t << "\"\n";
+        //             stream << "#else\n";
+        //             stream << "typedef CppVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
+        //             // Useful for debugging which Vector implementation is being selected
+        //             // stream << "#pragma message \"using CppVector for " << t << "\"\n";
+        //             stream << "#endif\n";
+        //         }
     }
 }
 
@@ -2415,7 +2418,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                    << ";\n";
 
             // Emit the body
-            print(f.body);
+            Stmt body = f.body;
+            body = match_xtensa_patterns(body);
+            print(body);
+            // stream << get_indent() << "printf(\"C code executed\\n\");";
 
             // Return success.
             stream << get_indent() << "return 0;\n";
@@ -2529,8 +2535,8 @@ string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
         (t.bits() == 16) && (t.lanes() == 32)) {
         return print_assignment(t, "(" + type + ")(" + value + ")");
     } else if (t.is_vector() &&
-        t.lanes() == e.type().lanes() &&
-        t != e.type()) {
+               t.lanes() == e.type().lanes() &&
+               t != e.type()) {
         return print_assignment(t, "convert_to_" + type + "_from_" + print_type(e.type()) + "(" + value + ")");
     } else {
         return print_assignment(t, "(" + type + ")(" + value + ")");
@@ -2596,20 +2602,20 @@ void CodeGen_C::visit(const Sub *op) {
 void CodeGen_C::visit(const Mul *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
-      if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-          string sa = print_expr(op->a);
-          print_assignment(op->type, "uint16x32_t_shift_left(" + sa + ", " + std::to_string(bits) + ")");
-      } else {
-        visit_binop(op->type, op->a, make_const(op->a.type(), bits), "<<");
-      }
+        if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
+            string sa = print_expr(op->a);
+            print_assignment(op->type, "uint16x32_t_shift_left(" + sa + ", " + std::to_string(bits) + ")");
+        } else {
+            visit_binop(op->type, op->a, make_const(op->a.type(), bits), "<<");
+        }
     } else {
-      if (op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-        string sa = print_expr(op->a);
-        string sb = print_expr(op->b);
-        print_assignment(op->type, "IVP_MULNX16PACKL(" + sa + ", " + sb + ")");
-      } else {
-        visit_binop(op->type, op->a, op->b, "*");
-      }
+        if (op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
+            string sa = print_expr(op->a);
+            string sb = print_expr(op->b);
+            print_assignment(op->type, "IVP_MULNX16PACKL(" + sa + ", " + sb + ")");
+        } else {
+            visit_binop(op->type, op->a, op->b, "*");
+        }
     }
 }
 
@@ -2620,7 +2626,7 @@ void CodeGen_C::visit(const Div *op) {
             string sa = print_expr(op->a);
             print_assignment(op->type, "uint16x32_t_shift_right(" + sa + ", " + std::to_string(bits) + ")");
         } else {
-          visit_binop(op->type, op->a, make_const(op->a.type(), bits), ">>");
+            visit_binop(op->type, op->a, make_const(op->a.type(), bits), ">>");
         }
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_div(op->a, op->b));
@@ -2654,11 +2660,11 @@ void CodeGen_C::visit(const Max *op) {
     } else {
         ostringstream rhs;
         if (op->type.is_int() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-          rhs << "IVP_MAXNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+            rhs << "IVP_MAXNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-          rhs << "IVP_MAXUNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+            rhs << "IVP_MAXUNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else {
-          rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+            rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         }
         print_assignment(op->type, rhs.str());
     }
@@ -2672,11 +2678,11 @@ void CodeGen_C::visit(const Min *op) {
     } else {
         ostringstream rhs;
         if (op->type.is_int() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-          rhs << "IVP_MINNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+            rhs << "IVP_MINNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-          rhs << "IVP_MINUNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+            rhs << "IVP_MINUNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else {
-          rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+            rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         }
         print_assignment(op->type, rhs.str());
     }
@@ -2822,24 +2828,24 @@ void CodeGen_C::visit(const Call *op) {
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
         if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-           rhs << "uint16x32_t_shift_left(" << a0 << ", " << a1 << ")";
+            rhs << "uint16x32_t_shift_left(" << a0 << ", " << a1 << ")";
         } else {
-          rhs << a0 << " << " << a1;
+            rhs << a0 << " << " << a1;
         }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
         if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-           rhs << "uint16x32_t_shift_right(" << a0 << ", " << a1 << ")";
+            rhs << "uint16x32_t_shift_right(" << a0 << ", " << a1 << ")";
         } else {
-          rhs << a0 << " >> " << a1;
+            rhs << a0 << " >> " << a1;
         }
     } else if (op->is_intrinsic(Call::count_leading_zeros)) {
         internal_assert(op->args.size() == 1);
         if (op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
             // TODO(vksnk): it seems that what halide is always matching IVP_NSAUN*?
-            string intrins_name = op->type.is_int()?"IVP_NSAUNX16(":"IVP_NSAUNX16(";
+            string intrins_name = op->type.is_int() ? "IVP_NSAUNX16(" : "IVP_NSAUNX16(";
             rhs << intrins_name << print_expr(op->args[0]) << ")";
         } else if (op->args[0].type().is_vector()) {
             rhs << print_type(op->type) << "::count_leading_zeros(" << print_expr(op->args[0]) << ")";
@@ -2848,9 +2854,9 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "halide_" << op->name << "(" << a0 << ")";
         }
     } else if (
-              // op->is_intrinsic(Call::count_leading_zeros) ||
-               op->is_intrinsic(Call::count_trailing_zeros) ||
-               op->is_intrinsic(Call::popcount)) {
+        // op->is_intrinsic(Call::count_leading_zeros) ||
+        op->is_intrinsic(Call::count_trailing_zeros) ||
+        op->is_intrinsic(Call::popcount)) {
         internal_assert(op->args.size() == 1);
         if (op->args[0].type().is_vector()) {
             rhs << print_scalarized_expr(op);
@@ -2861,7 +2867,7 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
-        rhs  << "/*lerp = */" << print_expr(e);
+        rhs << "/*lerp = */" << print_expr(e);
     } else if (op->is_intrinsic(Call::absd)) {
         internal_assert(op->args.size() == 2);
         Expr a = op->args[0];
@@ -2906,7 +2912,7 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
         Expr a0 = op->args[0];
-        rhs << "/*abs = */"  << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
+        rhs << "/*abs = */" << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
     } else if (op->is_intrinsic(Call::memoize_expr)) {
         internal_assert(!op->args.empty());
         string arg = print_expr(op->args[0]);
@@ -2960,7 +2966,7 @@ void CodeGen_C::visit(const Call *op) {
                     << get_indent() << shape_name << "[" << i << "].min = " << values[i * 4 + 0] << ";\n"
                     << get_indent() << shape_name << "[" << i << "].extent = " << values[i * 4 + 1] << ";\n"
                     << get_indent() << shape_name << "[" << i << "].stride = " << values[i * 4 + 2] << ";\n"
-                    << get_indent() << shape_name << "[" << i << "].flags = "<< values[i * 4 + 3] << ";\n";
+                    << get_indent() << shape_name << "[" << i << "].flags = " << values[i * 4 + 3] << ";\n";
             }
             // indent--;
             // stream << get_indent() << "};\n";
@@ -3078,14 +3084,14 @@ void CodeGen_C::visit(const Call *op) {
         // TODO: other intrinsics
         internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
     } else if (op->name == "halide_xtensa_clamped_dense_load_i16") {
-      vector<string> args(op->args.size());
-      args[0] = print_name(op->args[0].as<StringImm>()->value);
-      for (size_t i = 1; i < op->args.size(); i++) {
-          args[i] = print_expr(op->args[i]);
-      }
-      rhs << op->name << "(" << with_commas(args) << ")";
+        vector<string> args(op->args.size());
+        args[0] = print_name(op->args[0].as<StringImm>()->value);
+        for (size_t i = 1; i < op->args.size(); i++) {
+            args[i] = print_expr(op->args[i]);
+        }
+        rhs << op->name << "(" << with_commas(args) << ")";
     } else if (op->name.find("halide_xtensa_") == 0) {
-       rhs << print_xtensa_call(op);
+        rhs << print_xtensa_call(op);
     } else {
         // Generic extern calls
         rhs << print_extern_call(op);
@@ -3149,15 +3155,15 @@ string CodeGen_C::print_xtensa_call(const Call *op) {
 
     string op_name = op->name;
     if (op->name == "halide_xtensa_sat_add_i16") {
-      op_name = "IVP_ADDSNX16";
+        op_name = "IVP_ADDSNX16";
     } else if (op->name == "halide_xtensa_sat_sub_i16") {
-      op_name = "IVP_SUBSNX16";
+        op_name = "IVP_SUBSNX16";
     } else if (op->name == "halide_xtensa_avg_round_i16") {
-      op_name = "IVP_AVGRNX16";
+        op_name = "IVP_AVGRNX16";
     } else if (op->name == "halide_xtensa_avg_round_u16") {
-      op_name = "IVP_AVGRUNX16";
+        op_name = "IVP_AVGRUNX16";
     } else if (op->name == "halide_xtensa_absd_i16") {
-      op_name = "IVP_ABSSUBNX16";
+        op_name = "IVP_ABSSUBNX16";
     }
     rhs << op_name << "(" << with_commas(args) << ")";
     return rhs.str();
@@ -3247,7 +3253,7 @@ void CodeGen_C::visit(const Store *op) {
         } else {
             // debug(0) << "Unaligned store " << op->alignment.modulus << " " << op->alignment.remainder
             //     << " " << op->value.type().lanes() << "\n";
-             op_name = "store(";
+            op_name = "store(";
         }
 
         string id_ramp_base = print_expr(dense_ramp_base);
@@ -3308,9 +3314,9 @@ void CodeGen_C::visit(const Select *op) {
             << ")";
     } else {
         if (op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-          rhs << "IVP_MOVNX16T(" << true_val << ", " << false_val << ", " << cond << ")";
+            rhs << "IVP_MOVNX16T(" << true_val << ", " << false_val << ", " << cond << ")";
         } else {
-          rhs << type << "::select(" << cond << ", " << true_val << ", " << false_val << ")";
+            rhs << type << "::select(" << cond << ", " << true_val << ", " << false_val << ")";
         }
     }
     print_assignment(op->type, rhs.str());
@@ -3350,8 +3356,8 @@ void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
         << "Assertion result is not an int: " << message;
 
     if (target.has_feature(Target::NoAsserts)) {
-      stream << get_indent() << "(void)" << id_cond << ";\n";
-      return;
+        stream << get_indent() << "(void)" << id_cond << ";\n";
+        return;
     }
 
     // don't call the create_assertion(string, string) version because
@@ -3469,7 +3475,6 @@ void CodeGen_C::visit(const For *op) {
     // }
 
     loop_level--;
-
 }
 
 void CodeGen_C::visit(const Ramp *op) {
@@ -3693,6 +3698,7 @@ void CodeGen_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_C::test() {
+    return;
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3, ArgumentEstimates{});
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0, ArgumentEstimates{});
     LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0, ArgumentEstimates{});
