@@ -39,13 +39,17 @@ WEAK mtl_buffer *new_buffer(mtl_device *device, size_t length) {
 }
 
 WEAK mtl_command_queue *new_command_queue(mtl_device *device) {
-    return (mtl_command_queue *)objc_msgSend(device, sel_getUid("newCommandQueue"));
+    typedef mtl_command_queue *(*new_command_queue_method)(objc_id dev, objc_sel sel);
+    new_command_queue_method method = (new_command_queue_method)&objc_msgSend;
+    return (mtl_command_queue *)(*method)(device, sel_getUid("newCommandQueue"));
 }
 
 WEAK mtl_command_buffer *new_command_buffer(mtl_command_queue *queue, const char *label, size_t label_len) {
     objc_id label_str = wrap_string_as_ns_string(label, label_len);
 
-    mtl_command_buffer *command_buffer = (mtl_command_buffer *)objc_msgSend(queue, sel_getUid("commandBuffer"));
+    typedef mtl_command_buffer *(*new_command_buffer_method)(objc_id queue, objc_sel sel);
+    new_command_buffer_method method = (new_command_buffer_method)&objc_msgSend;
+    mtl_command_buffer *command_buffer = (mtl_command_buffer *)(*method)(queue, sel_getUid("commandBuffer"));
 
     typedef void (*set_label_method)(objc_id command_buffer, objc_sel sel, objc_id label_string);
     set_label_method method1 = (set_label_method)&objc_msgSend;
@@ -62,15 +66,21 @@ WEAK void add_command_buffer_completed_handler(mtl_command_buffer *command_buffe
 }
 
 WEAK objc_id command_buffer_error(mtl_command_buffer *buffer) {
-    return objc_msgSend(buffer, sel_getUid("error"));
+    typedef objc_id (*error_method)(objc_id buf, objc_sel sel);
+    error_method method = (error_method)&objc_msgSend;
+    return (*method)(buffer, sel_getUid("error"));
 }
 
 WEAK mtl_compute_command_encoder *new_compute_command_encoder(mtl_command_buffer *buffer) {
-    return (mtl_compute_command_encoder *)objc_msgSend(buffer, sel_getUid("computeCommandEncoder"));
+    typedef mtl_compute_command_encoder *(*compute_command_encoder_method)(objc_id buf, objc_sel sel);
+    compute_command_encoder_method method = (compute_command_encoder_method)&objc_msgSend;
+    return (mtl_compute_command_encoder *)(*method)(buffer, sel_getUid("computeCommandEncoder"));
 }
 
 WEAK mtl_blit_command_encoder *new_blit_command_encoder(mtl_command_buffer *buffer) {
-    return (mtl_blit_command_encoder *)objc_msgSend(buffer, sel_getUid("blitCommandEncoder"));
+    typedef mtl_blit_command_encoder *(*blit_command_encoder_method)(objc_id buf, objc_sel sel);
+    blit_command_encoder_method method = (blit_command_encoder_method)&objc_msgSend;
+    return (mtl_blit_command_encoder *)(*method)(buffer, sel_getUid("blitCommandEncoder"));
 }
 
 WEAK mtl_compute_pipeline_state *new_compute_pipeline_state_with_function(mtl_device *device, mtl_function *function) {
@@ -94,7 +104,9 @@ WEAK void set_compute_pipeline_state(mtl_compute_command_encoder *encoder, mtl_c
 }
 
 WEAK void end_encoding(mtl_compute_command_encoder *encoder) {
-    objc_msgSend(encoder, sel_getUid("endEncoding"));
+    typedef void (*end_encoding_method)(objc_id encoder, objc_sel sel);
+    end_encoding_method method = (end_encoding_method)&objc_msgSend;
+    (*method)(encoder, sel_getUid("endEncoding"));
 }
 
 struct NSRange {
@@ -131,12 +143,17 @@ WEAK void buffer_to_buffer_1d_copy(mtl_blit_command_encoder *encoder,
                                    mtl_buffer *from, size_t from_offset,
                                    mtl_buffer *to, size_t to_offset,
                                    size_t size) {
-    objc_msgSend(encoder, sel_getUid("copyFromBuffer:sourceOffset:toBuffer:destinationOffset:size:"),
-                 from, from_offset, to, to_offset, size);
+    typedef void (*copy_from_buffer_method)(objc_id obj, objc_sel sel, objc_id src_buf, size_t s_offset,
+                                            objc_id dst_buf, size_t d_offset, size_t s);
+    copy_from_buffer_method method = (copy_from_buffer_method)&objc_msgSend;
+    (*method)(encoder, sel_getUid("copyFromBuffer:sourceOffset:toBuffer:destinationOffset:size:"),
+              from, from_offset, to, to_offset, size);
 }
 
 WEAK void end_encoding(mtl_blit_command_encoder *encoder) {
-    objc_msgSend(encoder, sel_getUid("endEncoding"));
+    typedef void (*end_encoding_method)(objc_id encoder, objc_sel sel);
+    end_encoding_method method = (end_encoding_method)&objc_msgSend;
+    (*method)(encoder, sel_getUid("endEncoding"));
 }
 
 WEAK bool buffer_supports_set_bytes(mtl_compute_command_encoder *encoder) {
@@ -150,8 +167,11 @@ WEAK mtl_library *new_library_with_source(mtl_device *device, const char *source
     objc_id error_return;
     objc_id source_str = wrap_string_as_ns_string(source, source_len);
 
-    objc_id options = objc_msgSend(objc_getClass("MTLCompileOptions"), sel_getUid("alloc"));
-    options = objc_msgSend(options, sel_getUid("init"));
+    typedef objc_id (*options_method)(objc_id obj, objc_sel sel);
+    options_method method = (options_method)&objc_msgSend;
+
+    objc_id options = (*method)(objc_getClass("MTLCompileOptions"), sel_getUid("alloc"));
+    options = (*method)(options, sel_getUid("init"));
     typedef void (*set_fast_math_method)(objc_id options, objc_sel sel, uint8_t flag);
     set_fast_math_method method1 = (set_fast_math_method)&objc_msgSend;
     (*method1)(options, sel_getUid("setFastMathEnabled:"), false);
@@ -205,15 +225,21 @@ WEAK void set_threadgroup_memory_length(mtl_compute_command_encoder *encoder, ui
 }
 
 WEAK void commit_command_buffer(mtl_command_buffer *buffer) {
-    objc_msgSend(buffer, sel_getUid("commit"));
+    typedef void (*commit_method)(objc_id buf, objc_sel sel);
+    commit_method method = (commit_method)&objc_msgSend;
+    (*method)(buffer, sel_getUid("commit"));
 }
 
 WEAK void wait_until_completed(mtl_command_buffer *buffer) {
-    objc_msgSend(buffer, sel_getUid("waitUntilCompleted"));
+    typedef void (*wait_until_completed_method)(objc_id buf, objc_sel sel);
+    wait_until_completed_method method = (wait_until_completed_method)&objc_msgSend;
+    (*method)(buffer, sel_getUid("waitUntilCompleted"));
 }
 
 WEAK void *buffer_contents(mtl_buffer *buffer) {
-    return objc_msgSend(buffer, sel_getUid("contents"));
+    typedef void *(*contents_method)(objc_id buf, objc_sel sel);
+    contents_method method = (contents_method)&objc_msgSend;
+    return (void *)(*method)(buffer, sel_getUid("contents"));
 }
 
 WEAK void *nsarray_first_object(objc_id arr) {
