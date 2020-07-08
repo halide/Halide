@@ -1552,7 +1552,8 @@ struct BroadcastOp {
         if (l == 1) {
             return val;
         } else {
-            return Broadcast::make(std::move(val), l / val.type().lanes());
+            int val_lanes = val.type().lanes();
+            return Broadcast::make(std::move(val), l / val_lanes);
         }
     }
 
