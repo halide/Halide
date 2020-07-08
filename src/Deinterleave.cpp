@@ -250,15 +250,9 @@ private:
             if (new_lanes == 1) {
                 int index = starting_lane / base_lanes;
                 Expr expr = op->base + cast(op->base.type(), index) * op->stride;
-
-                int old_starting_lane = starting_lane;
-                int old_lane_stride = lane_stride;
-                starting_lane = starting_lane % base_lanes;
-                lane_stride = base_lanes;
+                ScopedValue<int> old_starting_lane(starting_lane, starting_lane % base_lanes);
+                ScopedValue<int> old_lane_stride(lane_stride, base_lanes);
                 expr = mutate(expr);
-                starting_lane = old_starting_lane;
-                lane_stride = old_lane_stride;
-
                 return expr;
             } else {
                 // There is probably a more efficient way to this.

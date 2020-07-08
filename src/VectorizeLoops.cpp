@@ -605,12 +605,6 @@ class VectorSubs : public IRMutator {
         return mutate_binary_operator(op);
     }
 
-    Expr visit(const Ramp *op) override {
-        Expr base = mutate(op->base);
-        Expr stride = mutate(op->stride);
-        return Ramp::make(base, stride, op->lanes);
-    }
-
     Expr visit(const Select *op) override {
         Expr condition = mutate(op->condition);
         Expr true_value = mutate(op->true_value);
