@@ -554,7 +554,7 @@ private:
                                           const std::map<std::string, std::string> &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
-    llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
+    llvm::Constant *embed_constant_expr(const Expr &e, llvm::Type *t);
     llvm::Constant *embed_constant_scalar_value_t(const Expr &e);
 
     llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);

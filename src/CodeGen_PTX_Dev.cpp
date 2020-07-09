@@ -57,7 +57,7 @@ Type CodeGen_PTX_Dev::upgrade_type_for_storage(const Type &t) const {
     return CodeGen_LLVM::upgrade_type_for_storage(t);
 }
 
-void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
+void CodeGen_PTX_Dev::add_kernel(const Stmt &stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
     internal_assert(module != nullptr);

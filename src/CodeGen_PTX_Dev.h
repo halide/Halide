@@ -26,7 +26,7 @@ public:
     CodeGen_PTX_Dev(Target host);
     ~CodeGen_PTX_Dev() override;
 
-    void add_kernel(Stmt stmt,
+    void add_kernel(const Stmt &stmt,
                     const std::string &name,
                     const std::vector<DeviceArgument> &args) override;
 

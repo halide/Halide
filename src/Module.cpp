@@ -347,7 +347,7 @@ void destroy<ModuleContents>(const ModuleContents *t) {
 
 LoweredFunc::LoweredFunc(const std::string &name,
                          const std::vector<LoweredArgument> &args,
-                         Stmt body,
+                         const Stmt &body,
                          LinkageType linkage,
                          NameMangling name_mangling)
     : name(name), args(args), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
@@ -355,7 +355,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
 
 LoweredFunc::LoweredFunc(const std::string &name,
                          const std::vector<Argument> &args,
-                         Stmt body,
+                         const Stmt &body,
                          LinkageType linkage,
                          NameMangling name_mangling)
     : name(name), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {

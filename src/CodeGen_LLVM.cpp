@@ -1013,7 +1013,7 @@ Constant *CodeGen_LLVM::embed_constant_scalar_value_t(const Expr &e) {
         scalar_value_t_type->getPointerTo());
 }
 
-Constant *CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
+Constant *CodeGen_LLVM::embed_constant_expr(const Expr &e, llvm::Type *t) {
     internal_assert(t != scalar_value_t_type);
 
     if (!e.defined()) {
@@ -1866,13 +1866,13 @@ Expr promote_64(const Expr &e) {
 }
 }  // namespace
 
-Value *CodeGen_LLVM::codegen_buffer_pointer(const string &buffer, Halide::Type type, Expr index) {
+Value *CodeGen_LLVM::codegen_buffer_pointer(const string &buffer, Halide::Type type, const Expr &index) {
     // Find the base address from the symbol table
     Value *base_address = symbol_table.get(buffer);
     return codegen_buffer_pointer(base_address, type, std::move(index));
 }
 
-Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type type, Expr index) {
+Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type type, const Expr &index) {
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module.get());
     if (promote_indices() && d.getPointerSize() == 8) {
