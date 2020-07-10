@@ -2821,6 +2821,8 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
             // of the producer.
             e->expand_footprint(consumer_loop, &(bound->region_required(0)));
 
+            // Get the region_required of the producer for this individual
+            // consumer, instead of all of its consumers
             if (e->consumer == stage) {
                 e->expand_footprint(consumer_loop, &(bound->region_required_single(0)));
             }
@@ -2883,8 +2885,9 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
         aslog(0) << " t";
     }
     if (innermost) {
-        aslog(0) << " *\n";
-    } else if (gpu_label == block) {
+        aslog(0) << " *";
+    }
+    if (gpu_label == block) {
         aslog(0) << " gpu_block\n";
     } else if (gpu_label == serial) {
         aslog(0) << " gpu_serial\n";
@@ -3122,27 +3125,34 @@ bool LoopNest::compute_here(const FunctionDAG::Node *f,
             skip_vector_dim = !all_ones && node->size[v] == 1;
         }
 
+        // Split off the single vector as an inner loop nest.
+        node->innermost = false;
+
+        LoopNest *one_vector = new LoopNest;
+        one_vector->node = node->node;
+        one_vector->stage = node->stage;
+        one_vector->tileable = false;
+        one_vector->vectorized_loop_index = node->vectorized_loop_index;
+        one_vector->vector_dim = v;
+        one_vector->size.resize(loop_dim, 1);
+        one_vector->innermost = true;
+        one_vector->gpu_label = simd;
+        auto b = node->get_bounds(f)->make_copy();
+        // Set the region computed inside this node to be the first vector lane
         if (node->vectorized_loop_index >= 0) {
-            // Split off the single vector as an inner loop nest.
-            node->innermost = false;
-
-            LoopNest *one_vector = new LoopNest;
-            one_vector->node = node->node;
-            one_vector->stage = node->stage;
-            one_vector->tileable = false;
-            one_vector->vectorized_loop_index = node->vectorized_loop_index;
-            one_vector->vector_dim = v;
-            one_vector->size.resize(loop_dim, 1);
-            one_vector->innermost = true;
-            one_vector->gpu_label = simd;
-            auto b = node->get_bounds(f)->make_copy();
-            // Set the region computed inside this node to be the first vector lane
             b->loops(s, node->vectorized_loop_index).set_extent(1);
-            one_vector->set_bounds(f, b);
-            one_vector->size[node->vectorized_loop_index] = vector_size;
-
-            node->children.emplace_back(one_vector);
+        } else {
+            for (size_t i = 0; i < loop_dim; i++) {
+                internal_assert(b->loops(s, i).extent() == 1);
+            }
         }
+
+        one_vector->set_bounds(f, b);
+        if (node->vectorized_loop_index >= 0) {
+            one_vector->size[node->vectorized_loop_index] = vector_size;
+        }
+
+        node->children.emplace_back(one_vector);
 
         children.emplace_back(node);
     }
