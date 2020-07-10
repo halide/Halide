@@ -583,6 +583,8 @@ public:
             output.dim(0).set_estimate(0, 1536);
             output.dim(1).set_estimate(0, 2560);
             output.dim(2).set_estimate(0, 3);
+
+            slice.bound(c, 0, 3);
         }
     }
 };

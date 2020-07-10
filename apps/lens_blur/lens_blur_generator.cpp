@@ -165,6 +165,9 @@ public:
         // Provide estimates on the pipeline output
         final.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
 
+        cost_pyramid_push[0].bound(c, 0, 2);
+        final.bound(c, 0, 3);
+
         /* THE SCHEDULE */
         if (auto_schedule) {
             // nothing
