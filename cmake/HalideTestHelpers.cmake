@@ -54,15 +54,13 @@ function(add_halide_test TARGET)
     endif ()
 
     # Add a meta-target for each group, to allow us to build by group easily
-    if (args_GROUPS)
-        foreach (GROUP IN LISTS args_GROUPS)
-            set(META_TARGET build_${GROUP})
-            if (NOT TARGET ${META_TARGET})
-                add_custom_target(${META_TARGET})
-            endif ()
-            add_dependencies(${META_TARGET} ${TARGET})
-        endforeach ()
-    endif()
+    foreach (GROUP IN LISTS args_GROUPS)
+        set(META_TARGET build_${GROUP})
+        if (NOT TARGET ${META_TARGET})
+            add_custom_target(${META_TARGET})
+        endif ()
+        add_dependencies(${META_TARGET} ${TARGET})
+    endforeach ()
 
 endfunction()
 
