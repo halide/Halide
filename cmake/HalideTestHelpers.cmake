@@ -52,6 +52,18 @@ function(add_halide_test TARGET)
     if (${args_EXPECT_FAILURE})
         set_tests_properties(${TARGET} PROPERTIES WILL_FAIL true)
     endif ()
+
+    # Add a meta-target for each group, to allow us to build by group easily
+    if (args_GROUPS)
+        foreach (GROUP IN LISTS args_GROUPS)
+            set(META_TARGET build_${GROUP})
+            if (NOT TARGET ${META_TARGET})
+                add_custom_target(${META_TARGET})
+            endif ()
+            add_dependencies(${META_TARGET} ${TARGET})
+        endforeach ()
+    endif()
+
 endfunction()
 
 function(tests)
