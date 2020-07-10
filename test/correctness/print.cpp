@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
     {
         Func f, g;
 
-        const int N = 1000000;
+        const int N = 100000;
 
         Expr e = reinterpret(Float(32), random_uint());
         // Make sure we cover some special values.
