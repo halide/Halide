@@ -16,9 +16,18 @@
 
 name: Halide Presubmit Build + Test
 on:
-  # We don't want 'edited' (that's basically just the description, title, etc)
-  # We don't want 'review_requested' (that's redundant to the ones below for our purposes)
+  workflow_dispatch:
+    # inputs:
+    #   logLevel:
+    #     description: 'Log level'
+    #     required: true
+    #     default: 'warning'
+    #   tags:
+    #     description: 'Test scenario tags'
+
   # pull_request:
+  #   # We don't want 'edited' (that's basically just the description, title, etc)
+  #   # We don't want 'review_requested' (that's redundant to the ones below for our purposes)
   #   types: [opened, synchronize, reopened]
   #   # TODO: do we want to limit this to certain filetypes?
   #   # paths:
