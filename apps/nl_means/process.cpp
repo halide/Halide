@@ -31,10 +31,10 @@ int main(int argc, char **argv) {
     printf("Input size: %d by %d, patch size: %d, search area: %d, sigma: %f\n",
            input.width(), input.height(), patch_size, search_area, sigma);
 
-    multi_way_bench({{"Manual", [&]() { nl_means(input, patch_size, search_area, sigma, output); output.device_sync(); }},
+    multi_way_bench({{"nl_means Manual", [&]() { nl_means(input, patch_size, search_area, sigma, output); output.device_sync(); }},
 #ifndef NO_AUTO_SCHEDULE
-                     {"Auto-scheduled", [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }},
-                     {"Gradient auto-scheduled", [&]() { nl_means_gradient_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }}
+                     {"nl_means Auto-scheduled", [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }},
+                     {"nl_means Gradient auto-scheduled", [&]() { nl_means_gradient_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }}
 #endif
     });
 

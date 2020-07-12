@@ -30,10 +30,10 @@ int main(int argc, char **argv) {
     Buffer<uint16_t> output(input.width(), input.height(), 3);
 
     multi_way_bench({
-        {"Manual", [&]() { local_laplacian(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
+        {"local_laplacian Manual", [&]() { local_laplacian(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Auto-scheduled", [&]() { local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
-        {"Gradient auto-scheduled", [&]() { local_laplacian_gradient_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }}
+        {"local_laplacian Auto-scheduled", [&]() { local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
+        {"local_laplacian Gradient auto-scheduled", [&]() { local_laplacian_gradient_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }}
     #endif
         }
     );

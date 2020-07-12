@@ -3,7 +3,7 @@ include ../support/autoscheduler.inc
 
 MATRIX_SIZE ?= 1024
 
-CUDA_SDK ?= /usr/local/cuda-8.0
+CUDA_SDK ?= /usr/local/cuda
 
 CXXFLAGS += -I $(CUDA_SDK)/include -I../support/
 LDFLAGS += -L $(CUDA_SDK)/lib64

@@ -66,10 +66,10 @@ int main(int argc, char **argv) {
     // Timing code
 
     multi_way_bench({
-        {"Manual", [&]() { depthwise_separable_conv(input, depthwise_filter, pointwise_filter, bias, 1, 1, output); output.device_sync(); }},
+        {"depthwise_separable_conv Manual", [&]() { depthwise_separable_conv(input, depthwise_filter, pointwise_filter, bias, 1, 1, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Auto-schedule", [&]() { depthwise_separable_conv_auto_schedule(input, depthwise_filter, pointwise_filter, bias, 1, 1, output); output.device_sync(); }},
-        {"Gradient auto-schedule", [&]() { depthwise_separable_conv_gradient_auto_schedule(input, depthwise_filter, pointwise_filter, bias, 1, 1, output); output.device_sync(); }}
+        {"depthwise_separable_conv Auto-schedule", [&]() { depthwise_separable_conv_auto_schedule(input, depthwise_filter, pointwise_filter, bias, 1, 1, output); output.device_sync(); }},
+        {"depthwise_separable_conv Gradient auto-schedule", [&]() { depthwise_separable_conv_gradient_auto_schedule(input, depthwise_filter, pointwise_filter, bias, 1, 1, output); output.device_sync(); }}
     #endif
     });
 

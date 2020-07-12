@@ -63,22 +63,11 @@ int main(int argc, char **argv) {
     int blackLevel = 25;
     int whiteLevel = 1023;
 
-    three_way_bench(
-        [&]() { camera_pipe(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); },
-    #ifdef NO_AUTO_SCHEDULE
-        nullptr,
-        nullptr
-    #else
-        [&]() { camera_pipe_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); },
-        [&]() { camera_pipe_gradient_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }
-    #endif
-    );
-
     multi_way_bench({
-        {"Manual", [&]() { camera_pipe(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }},
+        {"camera_pipe Manual", [&]() { camera_pipe(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Auto-scheduled", [&]() { camera_pipe_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }},
-        {"Gradient auto-scheduled", [&]() { camera_pipe_gradient_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }}
+        {"camera_pipe Auto-scheduled", [&]() { camera_pipe_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }},
+        {"camera_pipe Gradient auto-scheduled", [&]() { camera_pipe_gradient_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }}
     #endif
         }
     );

@@ -28,10 +28,10 @@ int main(int argc, char **argv) {
     });
 
     multi_way_bench({
-        {"Manual", [&]() { iir_blur(input, alpha, output); output.device_sync(); }},
+        {"iir_blur_generator Manual", [&]() { iir_blur(input, alpha, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Auto-scheduled", [&]() { iir_blur_auto_schedule(input, alpha, output); output.device_sync(); }},
-        {"Gradient auto-scheduled", [&]() { iir_blur_gradient_auto_schedule(input, alpha, output); output.device_sync(); }}
+        {"iir_blur_generator Auto-scheduled", [&]() { iir_blur_auto_schedule(input, alpha, output); output.device_sync(); }},
+        {"iir_blur_generator Gradient auto-scheduled", [&]() { iir_blur_gradient_auto_schedule(input, alpha, output); output.device_sync(); }}
     #endif
     });
 

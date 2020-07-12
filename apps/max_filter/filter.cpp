@@ -26,10 +26,10 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<float> output(input.width(), input.height(), 3);
 
     multi_way_bench({
-        {"Manual", [&]() { max_filter(input, output); output.device_sync(); }},
+        {"max_filter Manual", [&]() { max_filter(input, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Auto-scheduler", [&]() { max_filter_auto_schedule(input, output); output.device_sync(); }},
-        {"Gradient auto-scheduler", [&]() { max_filter_gradient_auto_schedule(input, output); output.device_sync();}}
+        {"max_filter Auto-scheduler", [&]() { max_filter_auto_schedule(input, output); output.device_sync(); }},
+        {"max_filter Gradient auto-scheduler", [&]() { max_filter_gradient_auto_schedule(input, output); output.device_sync();}}
     #endif
         });
 

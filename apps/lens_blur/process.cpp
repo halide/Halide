@@ -37,10 +37,10 @@ int main(int argc, char **argv) {
 
     // Timing code
     multi_way_bench({
-        {"Manual", [&]() { lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
+        {"lens_blur Manual", [&]() { lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Auto-scheduled", [&]() { lens_blur_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
-        {"Gradient auto-scheduled", [&]() { lens_blur_gradient_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }}
+        {"lens_blur Auto-scheduled", [&]() { lens_blur_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
+        {"lens_blur Gradient auto-scheduled", [&]() { lens_blur_gradient_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }}
     #endif
         }
     );

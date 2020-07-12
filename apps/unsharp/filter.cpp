@@ -26,10 +26,10 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<float> output(input.width(), input.height(), 3);
 
     multi_way_bench({
-        {"Manual", [&]() { unsharp(input, output); output.device_sync(); }},
+        {"unsharp Manual", [&]() { unsharp(input, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Auto-scheduled", [&]() { unsharp_auto_schedule(input, output); output.device_sync(); }},
-        {"Gradient auto-scheduled", [&]() {unsharp_gradient_auto_schedule(input, output); output.device_sync(); }}
+        {"unsharp Auto-scheduled", [&]() { unsharp_auto_schedule(input, output); output.device_sync(); }},
+        {"unsharp Gradient auto-scheduled", [&]() {unsharp_gradient_auto_schedule(input, output); output.device_sync(); }}
     #endif
     });
 

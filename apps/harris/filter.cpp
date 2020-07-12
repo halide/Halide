@@ -31,16 +31,16 @@ int main(int argc, char **argv) {
 
     Halide::Runtime::Buffer<float> output(input.width(), input.height());
 
-    multi_way_bench({{"Manual", [&]() {
+    multi_way_bench({{"harris Manual", [&]() {
                           harris(padded_input, output);
                           output.device_sync();
                       }},
 #ifndef NO_AUTO_SCHEDULE
-                     {"Auto-scheduled", [&]() {
+                     {"harris Auto-scheduled", [&]() {
                           harris_auto_schedule(padded_input, output);
                           output.device_sync();
                       }},
-                     {"Gradient auto-scheduled", [&]() {
+                     {"harris Gradient auto-scheduled", [&]() {
                           harris_gradient_auto_schedule(padded_input, output);
                           output.device_sync();
                       }}

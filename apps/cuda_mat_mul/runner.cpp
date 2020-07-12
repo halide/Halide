@@ -62,10 +62,10 @@ int main(int argc, char **argv) {
     {
         Buffer<float> A(size, size), B(size, size), C(size, size);
         multi_way_bench({
-            {"Manual", [&]() { mat_mul(A, B, C); C.device_sync(); }},
+            {"cuda_mat_mul Manual", [&]() { mat_mul(A, B, C); C.device_sync(); }},
         #ifndef NO_AUTO_SCHEDULE
-            {"Auto-schedule", [&]() { mat_mul_auto_schedule(A, B, C); C.device_sync(); }},
-            {"Gradient auto-schedule", [&]() { mat_mul_gradient_auto_schedule(A, B, C); C.device_sync(); }}
+            {"cuda_mat_mul Auto-schedule", [&]() { mat_mul_auto_schedule(A, B, C); C.device_sync(); }},
+            {"cuda_mat_mul Gradient auto-schedule", [&]() { mat_mul_gradient_auto_schedule(A, B, C); C.device_sync(); }}
         #endif
         });
     }

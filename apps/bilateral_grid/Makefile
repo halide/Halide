@@ -65,7 +65,7 @@ $(BIN)/%/out.tiff: $(BIN)/%/filter
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/$(HL_TARGET)/out.png $(BIN)/$(HL_TARGET)/out.tiff
+test: $(BIN)/$(HL_TARGET)/out.png
 
 viz: $(BIN)/$(HL_TARGET)/bilateral_grid.mp4
 	$(HL_VIDEOPLAYER) $^

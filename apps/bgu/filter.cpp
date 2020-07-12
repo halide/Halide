@@ -95,10 +95,10 @@ int main(int argc, char **argv) {
     // convert_and_save_image(low_res_out, "test.png");
 
     multi_way_bench({
-        {"Manual", [&]() { bgu(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); high_res_out.device_sync(); }},
+        {"bgu Manual", [&]() { bgu(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); high_res_out.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Auto-scheduled", [&]() { bgu_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); high_res_out.device_sync(); }},
-        {"Gradient auto-scheduled", [&]() { bgu_gradient_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); high_res_out.device_sync(); }}
+        {"bgu Auto-scheduled", [&]() { bgu_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); high_res_out.device_sync(); }},
+        {"bgu Gradient auto-scheduled", [&]() { bgu_gradient_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); high_res_out.device_sync(); }}
     #endif
     });
 

@@ -61,10 +61,10 @@ int main(int argc, char **argv) {
     // Timing code
 
     multi_way_bench({
-        {"Manual", [&]() { conv_layer(input, filter, bias, output); output.device_sync(); }},
+        {"conv_layer Manual", [&]() { conv_layer(input, filter, bias, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Auto-schedule", [&]() { conv_layer_auto_schedule(input, filter, bias, output); output.device_sync(); }},
-        {"Gradient auto-schedule", [&]() { conv_layer_gradient_auto_schedule(input, filter, bias, output); output.device_sync(); }}
+        {"conv_layer Auto-schedule", [&]() { conv_layer_auto_schedule(input, filter, bias, output); output.device_sync(); }},
+        {"conv_layer Gradient auto-schedule", [&]() { conv_layer_gradient_auto_schedule(input, filter, bias, output); output.device_sync(); }}
     #endif
     });
 

@@ -30,10 +30,10 @@ int main(int argc, char **argv) {
     Buffer<uint16_t> output(input.width(), input.height());
 
     multi_way_bench({
-        {"Manual", [&]() { stencil_chain(input, output); output.device_sync(); }},
+        {"stencil_chain Manual", [&]() { stencil_chain(input, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Auto-scheduled", [&]() { stencil_chain_auto_schedule(input, output); output.device_sync(); }},
-        {"Gradient auto-scheduled", [&]() { stencil_chain_gradient_auto_schedule(input, output); output.device_sync();}}
+        {"stencil_chain Auto-scheduled", [&]() { stencil_chain_auto_schedule(input, output); output.device_sync(); }},
+        {"stencil_chain Gradient auto-scheduled", [&]() { stencil_chain_gradient_auto_schedule(input, output); output.device_sync();}}
     #endif
         }
     );

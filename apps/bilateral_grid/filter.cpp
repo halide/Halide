@@ -29,10 +29,10 @@ int main(int argc, char **argv) {
     Buffer<float> output(input.width(), input.height());
 
     multi_way_bench({
-        {"Manual", [&]() { bilateral_grid(input, r_sigma, output); output.device_sync(); }},
+        {"bilateral_grid Manual", [&]() { bilateral_grid(input, r_sigma, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Auto-scheduled", [&]() { bilateral_grid_auto_schedule(input, r_sigma, output); output.device_sync(); }},
-        {"Gradient auto-scheduled", [&]() { bilateral_grid_gradient_auto_schedule(input, r_sigma, output); output.device_sync(); }}
+        {"bilateral_grid Auto-scheduled", [&]() { bilateral_grid_auto_schedule(input, r_sigma, output); output.device_sync(); }},
+        {"bilateral_grid Gradient auto-scheduled", [&]() { bilateral_grid_gradient_auto_schedule(input, r_sigma, output); output.device_sync(); }}
     #endif
         }
     );
