@@ -280,7 +280,7 @@ function extract_sample_details() {
 
     local -r time=$(head -n 1 ${bench} | cut -d" " -f 8)
 
-    local -r time_ms=$(echo "${time} * 1000" | bc -l | awk '{printf "%.6f\n", $0}')
+    local -r time_ms=$(echo "${time}" | awk '{printf "%.6f\n", $0 * 1000}')
     echo "" >> ${output_file}
     echo "Run time (ms) = ${time_ms}" >> ${output_file}
 
@@ -334,9 +334,15 @@ function save_best_schedule_result() {
         return
     fi
 
-    local -r current_best_run_time=$(tail -n 1 $best_details_file | cut -d" " -f 5)
+    local current_best_run_time=$(tail -n 1 $best_details_file | cut -d" " -f 5)
 
-    local -r new_best=$(echo "$candidate_run_time < $current_best_run_time" | bc -l)
+    local new_best=1
+    if [ ${current_best_run_time} ]; then
+        new_best=$(echo "$candidate_run_time < $current_best_run_time" | bc -l)
+    else
+        current_best_run_time="?"
+    fi
+
     if [ $new_best -eq 1 ]; then
         echo "Candidate run time (${candidate_run_time} ms) is faster than the current best run time (${current_best_run_time} ms). Copying in candidate files as new best results..."
         cp $candidate_details_file $best_details_file
@@ -351,7 +357,7 @@ function save_best_schedule_result() {
 function print_best_schedule_times() {
     local -r dir=$1
 
-    local -r apps="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur_generator"
+    local -r apps="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur_generator depthwise_separable_conv"
 
     for app in $apps; do
         local file=$dir/$app.txt
