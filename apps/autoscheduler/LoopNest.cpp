@@ -2847,6 +2847,10 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
     return b;
 }
 
+void LoopNest::dump() const {
+    dump("", nullptr);
+}
+
 // Recursively print a loop nest representation to stderr
 void LoopNest::dump(string prefix, const LoopNest *parent) const {
     if (!is_root()) {
@@ -4179,6 +4183,17 @@ void LoopNest::collect_all_inlined(NodeMap<bool>& all_inlined) const {
     for (const auto& c : children) {
         c->collect_all_inlined(all_inlined);
     }
+}
+
+bool Filter::enable_filter_printing() {
+    static bool enabled = ([]() -> bool {
+        std::string var = get_env_variable("ENABLE_FILTER_PRINTING");
+        if (!var.empty()) {
+            return var == "1";
+        }
+        return false;
+    })();
+    return enabled;
 }
 
 }  // namespace Autoscheduler

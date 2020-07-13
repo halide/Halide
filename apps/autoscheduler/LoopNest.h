@@ -360,6 +360,8 @@ struct LoopNest {
     // and what its loop nest would be.
     const Bound &get_bounds(const FunctionDAG::Node *f) const;
 
+    void dump() const;
+
     // Recursively print a loop nest representation to stderr
     void dump(string prefix, const LoopNest *parent) const;
 
@@ -527,6 +529,32 @@ struct LoopNest {
     int64_t product_of_descendants(int loop_index) const;
 
     void get_stages_computed_in_each_compute_root_loop(StageMap<StageMap<bool>> &descendants, const LoopNest *compute_root_loop_nest=nullptr) const;
+};
+
+struct Filter {
+    const LoopNest* loop_nest;
+    bool logging = false;
+
+    Filter(const LoopNest* loop_nest)
+        : loop_nest{loop_nest}
+        , logging{enable_filter_printing()}
+    {
+        if (logging) {
+            std::cerr << "\nState filtered: \n";
+            loop_nest->dump();
+            std::cerr << "Reason: ";
+        }
+    }
+
+    template<typename T>
+    Filter &operator<<(T &&x) {
+        if (logging) {
+            std::cerr << std::forward<T>(x);
+        }
+        return *this;
+    }
+
+    static bool enable_filter_printing();
 };
 
 }  // namespace Autoscheduler

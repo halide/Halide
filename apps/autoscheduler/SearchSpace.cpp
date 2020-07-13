@@ -176,6 +176,7 @@ vector<ThreadTileOption> SearchSpace::filter_thread_tile_options(vector<Intrusiv
     vector<ThreadTileOption> options;
     for (const auto& loop_nest : loop_nests) {
         if (!loop_nest->has_valid_thread_extents()) {
+            Filter(loop_nest.get()) << "Invalid thread extents\n";
             continue;
         }
 
@@ -384,6 +385,8 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
 
             for (const auto& o : options) {
                 if (!randomize_tilings && num_children >= 1 && o.max_idle_lane_wastage > 0.5) {
+                    Filter(o.loop_nest.get()) << "Excess idle lane wastage\n"
+                        << "max_idle_lane_wastage = " << o.max_idle_lane_wastage << "\n";
                     break;
                 }
 
@@ -508,6 +511,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
 
                 LoopNest *new_root = new LoopNest;
                 new_root->copy_from(parallel_root);
+
                 for (auto &c : new_root->children) {
                     if (c->node == node) {
                         c = c->parallelize_in_tiles(params, o.inner_tiling, new_root, target, true, false);

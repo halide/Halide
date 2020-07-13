@@ -572,18 +572,22 @@ bool State::exceeds_local_memory_limit(const Target &target) const {
 bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, Statistics& stats, bool verbose) {
     Timer timer;
     if (!root->has_valid_thread_extents()) {
+        Filter(root.get()) << "Invalid thread extents\n";
         return false;
     }
 
     if (exceeds_shared_memory_limit(target)) {
+        Filter(root.get()) << "Exceeds shared memory limit\n";
         return false;
     }
 
     if (exceeds_local_memory_limit(target)) {
+        Filter(root.get()) << "Exceeds local memory limit\n";
         return false;
     }
 
     if (exceeds_serial_extents_limit(target)) {
+        Filter(root.get()) << "Exceeds serial loop extent limit\n";
         return false;
     }
 
@@ -613,6 +617,12 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
         if (!it.key()->node->is_wrapper) {  // It's OK to repeatedly stage data
             auto &feat = it.value();
             if (feat.points_computed_total + feat.inlined_calls > 8 * feat.points_computed_minimum) {
+                Filter(root.get()) << "Excess recompute for " << it.key()->node->func.name() << " stage " << it.key()->index << "\n"
+                    << "points_computed_total = " << feat.points_computed_total << "\n"
+                    << "inlined_calls = " << feat.inlined_calls << "\n"
+                    << "points_computed_total + inlined_calls = " << feat.points_computed_total + feat.inlined_calls << "\n"
+                    << "points_computed_minimum = " << feat.points_computed_minimum << "\n"
+                    << "8 * points_computed_minimum = " << 8 * feat.points_computed_minimum << "\n";
                 cost = 1e50;
                 return false;
             }
