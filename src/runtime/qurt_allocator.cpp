@@ -37,13 +37,14 @@ WEAK void aligned_free(void *ptr) {
 // which can cause a noticable performance impact on some workloads.
 // 'num_buffers' is the number of pre-allocated buffers and 'buffer_size' is
 // the size of each buffer. The pre-allocated buffers are shared among threads
-// and we use __sync_val_compare_and_swap primitive to synchronize the buffer
+// and we use __atomic_test_and_set primitive to synchronize the buffer
 // allocation.
 // TODO(psuriana): make num_buffers configurable by user
 static const int num_buffers = 10;
 static const int buffer_size = 1024 * 64;
 
-WEAK int buf_is_used[num_buffers];
+// __atomic_test_and_set() return char-sized elements.
+WEAK char buf_is_used[num_buffers];
 WEAK void *mem_buf[num_buffers] = {
     NULL,
 };
@@ -64,7 +65,9 @@ WEAK void *halide_default_malloc(void *user_context, size_t x) {
 
     if (x <= buffer_size) {
         for (int i = 0; i < num_buffers; ++i) {
-            if (__sync_val_compare_and_swap(buf_is_used + i, 0, 1) == 0) {
+            // return value is true iff the previous contents were true,
+            // so return value of false means we are claiming an unused slot
+            if (__atomic_test_and_set(&buf_is_used[i], __ATOMIC_ACQUIRE) == false) {
                 if (mem_buf[i] == NULL) {
                     mem_buf[i] = aligned_malloc(alignment, buffer_size);
                 }
@@ -79,7 +82,7 @@ WEAK void *halide_default_malloc(void *user_context, size_t x) {
 WEAK void halide_default_free(void *user_context, void *ptr) {
     for (int i = 0; i < num_buffers; ++i) {
         if (mem_buf[i] == ptr) {
-            buf_is_used[i] = 0;
+            __atomic_clear(&buf_is_used[i], __ATOMIC_RELEASE);
             return;
         }
     }
