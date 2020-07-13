@@ -2808,7 +2808,7 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
             // Ignore consumers outside of this loop nest
             if (!is_root() &&
                 (stage != e->consumer) &&
-                (!stage->downstream_of(*(e->consumer->node)) || !computes(e->consumer->node))) {
+                (!stage->downstream_of(*(e->consumer->node)))) {
                 continue;
             }
             const auto &c_bounds = get_bounds(e->consumer->node);
