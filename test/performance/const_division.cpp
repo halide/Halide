@@ -104,6 +104,12 @@ bool test(int w, bool div) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
     rng.seed(seed);
     std::cout << "const_division test seed: " << seed << std::endl;

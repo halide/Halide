@@ -5,6 +5,10 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    // Wasm JIT is substantially slower than others,
+    // so do fewer iterations to avoid timing out.
+    const bool is_wasm = get_jit_target_from_environment().arch == Target::WebAssembly;
+
     // Test if the compiler itself is thread-safe. This test is
     // intended to be run in a thread-sanitizer.
 
@@ -12,7 +16,7 @@ int main(int argc, char **argv) {
     // may refuse to create an arbitrary number. So let's create a smallish
     // number (8) and have each one do enough work that contention is likely
     // to be encountered.
-    constexpr int total_iters = 1024;
+    const int total_iters = is_wasm ? 256 : 1024;
     constexpr int num_threads = 8;
 
     std::vector<std::thread> threads;
