@@ -2783,8 +2783,7 @@ struct State {
                         vars.push_back(v.var);
                         if (!first) {
                             p.second->schedule_source << ", ";
-                        }
-                        else {
+                        } else {
                             p.second->schedule_source << "{";
                         }
                         first = false;
