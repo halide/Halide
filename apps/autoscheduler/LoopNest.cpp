@@ -3430,7 +3430,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         return result;
     }
 
-    if (tileable) {
+    if (search_space_options.serial_splits_after_compute_at() && tileable) {
         // The root node is not tileable, so all tileable nodes have parents.
         internal_assert(parent != nullptr);
 

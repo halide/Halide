@@ -14,8 +14,9 @@ struct SearchSpaceOptions {
     constexpr static size_t option_compute_inline = 1;
     constexpr static size_t option_compute_at_block = 2;
     constexpr static size_t option_compute_at_thread = 3;
+    constexpr static size_t option_serial_splits_after_compute_at = 4;
 
-    std::bitset<4> options;
+    std::bitset<5> options;
 
     SearchSpaceOptions(const std::string& bit_str)
         : options{bit_str}
@@ -26,6 +27,7 @@ struct SearchSpaceOptions {
         aslog(0) << "Compute inline: " << compute_inline() << "\n";
         aslog(0) << "Compute at block: " << compute_at_block() << "\n";
         aslog(0) << "Compute at thread: " << compute_at_thread() << "\n";
+        aslog(0) << "Serial splits afting compute_at: " << serial_splits_after_compute_at() << "\n";
     }
 
     bool compute_root() const {
@@ -58,6 +60,10 @@ struct SearchSpaceOptions {
 
     bool compute_at_thread_only() const {
         return options.count() == 1 && compute_at_thread();
+    }
+
+    bool serial_splits_after_compute_at() const {
+        return options.test(SearchSpaceOptions::option_serial_splits_after_compute_at);
     }
 };
 
