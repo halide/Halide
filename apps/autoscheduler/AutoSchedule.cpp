@@ -811,12 +811,14 @@ struct State {
                         vars.push_back(v.var);
                         if (!first) {
                             p.second->schedule_source << ", ";
+                        } else {
+                            p.second->schedule_source << "{";
                         }
                         first = false;
                         p.second->schedule_source << v.var.name();
                     }
                 }
-                p.second->schedule_source << ")";
+                p.second->schedule_source << "})";
                 stage.reorder(vars);
             }
 
