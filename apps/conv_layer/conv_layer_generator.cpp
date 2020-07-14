@@ -17,13 +17,21 @@ public:
 
         /* THE ALGORITHM */
 
-        Var x("x"), y("y"), c("c"), n("n");
+        Var x("x"), y("y"), c("c"), n("n"), ci("ci");
 
         Func conv("conv");
         RDom r(0, CI, 0, 3, 0, 3);
 
+        // The autoscheduler doesn't currently consider adding .in()
+        // to input Funcs, so do it manually in the algorithm for now.
+        Func input_tile("input_tile");
+        input_tile(c, x, y, n) = input(c, x, y, n);
+
+        Func filter_tile("filter_tile");
+        filter_tile(c, x, y, ci) = filter(c, x, y, ci);
+
         conv(c, x, y, n) = bias(c);
-        conv(c, x, y, n) += filter(c, r.y, r.z, r.x) * input(r.x, x + r.y, y + r.z, n);
+        conv(c, x, y, n) += filter_tile(c, r.y, r.z, r.x) * input_tile(r.x, x + r.y, y + r.z, n);
 
         relu(c, x, y, n) = max(0, conv(c, x, y, n));
 
@@ -108,14 +116,14 @@ public:
                 .unroll(r.z)
                 .unroll(rxii);
 
-            input.in()
+            input_tile
                 .compute_at(conv, rxo)
-                .vectorize(_0, 2)
-                .split(_1, xo, xi, 4)
-                .fuse(_0, xi, t)
+                .vectorize(c, 2)
+                .split(x, xo, xi, 4)
+                .fuse(x, xi, t)
                 .gpu_lanes(t)
                 .unroll(xo)
-                .unroll(_2);
+                .unroll(y);
 
         } else {
 
@@ -167,7 +175,7 @@ public:
                 tile_h = 4;
             }
 
-            Var co, ci, xo, xi, yo, yi, t;
+            Var co, xo, xi, yo, yi, t;
             relu.split(c, co, ci, vec * tile_w)
                 .split(x, xo, xi, tile_h)
                 .reorder(ci, xi, xo, y, n, co)
@@ -189,14 +197,14 @@ public:
                 .unroll(x)
                 .unroll(y)
                 .unroll(r.x, 2);
-            filter.in()
+            filter_tile
                 .compute_at(conv, r.x)
-                .vectorize(_0, vec)
-                .unroll(_0)
-                .unroll(_3);
-            input.in()
+                .vectorize(c, vec)
+                .unroll(c)
+                .unroll(ci);
+            input_tile
                 .compute_at(conv, x)
-                .unroll(_0);
+                .unroll(c);
         }
     }
 };
