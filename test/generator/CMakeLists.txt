@@ -176,7 +176,7 @@ add_custom_command(OUTPUT "${EC32}.cpp"
 
 set(EC64 "external_code_extern_bitcode_64")
 add_custom_command(OUTPUT "${EC64}.bc"
-                   DEPENDS "${EXTERNAL_CPP}" binary2cpp
+                   DEPENDS "${EXTERNAL_CPP}"
                    VERBATIM
                    COMMAND clang -O3 -c -m64 -target le64-unknown-unknown-unknown -emit-llvm "$<SHELL_PATH:${EXTERNAL_CPP}>" -o "${EC64}.bc")
 add_custom_command(OUTPUT "${EC64}.cpp"
