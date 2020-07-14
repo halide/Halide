@@ -37,7 +37,7 @@ on:
 
 jobs:
   test_halide:
-    name: HL-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}-${{matrix.build_tool}}
+    name: HL-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}
     runs-on: ${{matrix.host_os}}
     env:
       CC: ${{matrix.cc}}
@@ -57,9 +57,7 @@ jobs:
         target_bits: [32, 64]
         target_os: [linux, osx, windows]
         llvm_version: [11]
-        build_tool: [cmake_shared]
         # llvm_version: [9, 10, 11]  # TODO
-        # build_tool: [cmake_shared, make]  # TODO
 
         # This section basically allows us to define additional values for
         # each matrix entry, e.g. to map an llvm version number to the specific
@@ -98,14 +96,19 @@ jobs:
             python_version: '3.7'
             uses_python: true
             run_tests: true
+            test_wasm: true
 
           - target_bits: 32
             # We don't build/test Python bindings on any 32-bit targets
             uses_python: false
+            # We don't build/test Wasm code on any 32-bit targets
+            test_wasm: false
 
           - target_arch: arm
             # We don't build/test Python bindings on any ARM targets
             uses_python: false
+            # We don't build/test Wasm code on any 32-bit targets
+            test_wasm: false
             # Running our test suite (via e.g. QEMU) is too slow to be useful
             # at present (> 5 hours on current GHA VMs). That said, we'll leave
             # in the relevant code for now (disabled via this flag) in case
@@ -114,15 +117,11 @@ jobs:
 
         exclude:
           - target_os: osx
-            target_arch: arm    # OSX is x86-only
+            target_arch: arm    # OSX is x86-only (for now)
           - target_os: osx
             target_bits: 32     # OSX is 64-bit only
           - target_os: windows
-            target_arch: arm    # OSX is x86-only
-          - target_os: windows
-            build_tool: make    # Windows is CMake-only
-          - target_arch: arm
-            build_tool: make    # In this setup, all ARM builds require CMake
+            target_arch: arm    # Windows is x86-only
 
     steps:
     - uses: actions/checkout@v2
@@ -266,15 +265,16 @@ jobs:
         # This is the trick GitHub Actions uses to allow us to set env vars across all subsequent job steps
         echo ::set-env name=BUILD_TYPE::"Release"
         echo ::set-env name=LLVM_INSTALL_DIR::"${_ROOT}/llvm"
-        echo ::set-env name=LLVM_CONFIG::"${_ROOT}/llvm/bin/llvm-config"
         echo ::set-env name=HALIDE_SOURCE_DIR::"${_ROOT}/halide"
         echo ::set-env name=HALIDE_BUILD_DIR::"${_ROOT}/halide_build"
         echo ::set-env name=HALIDE_TEMP_DIR::"${_TEMP}"
         echo ::set-env name=PARALLEL_JOBS::"4"
         if [[ ${{matrix.host_os}} == windows* ]]; then
+          echo ::set-env name=CMAKE_GEN::"Visual Studio 16 2019"
           # On Windows, it's just 'python', apparently
           echo ::set-env name=PYTHON::"python"
         else
+          echo ::set-env name=CMAKE_GEN::"Ninja"
           echo ::set-env name=PYTHON::"python${{matrix.python_version}}"
         fi
 
@@ -284,7 +284,7 @@ jobs:
       run: |
         ${PYTHON} -m pip --version
         ${PYTHON} -m pip install --upgrade pip
-        ${PYTHON} -m pip install -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
+        ${PYTHON} -m pip install wheel -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
 
         echo ::set-env name=PYTHON::"${PYTHON}"
 
@@ -312,23 +312,7 @@ jobs:
         LLVM_COMMIT_HASH=`cat ${LLVM_INSTALL_DIR}/.halide_builder_llvm_commit`
         echo "Using LLVM v${{matrix.llvm_version}} commit=${LLVM_COMMIT_HASH}"
 
-    - name: Configure Halide (Make)
-      if: startsWith(matrix.build_tool, 'make')
-      shell: bash
-      run: |
-        # Configure Make
-        mkdir ${HALIDE_BUILD_DIR}
-
-        if [[ ${{matrix.target_arch}} == x86 && \
-              ${{matrix.target_os}} == linux && \
-              ${{matrix.target_bits}} == 32 ]]; then
-          echo ::set-env name=CC::"${CC} -m32"
-          echo ::set-env name=CXX::"${CXX} -m32"
-          echo ::set-env name=LD::"${LD} -melf_i386"
-        fi
-
     - name: Configure Halide (CMake)
-      if: startsWith(matrix.build_tool, 'cmake')
       shell: bash
       run: |
         # Configure CMake
@@ -336,11 +320,10 @@ jobs:
 
         mkdir ${HALIDE_BUILD_DIR}
 
-        CMAKE_GEN="Ninja"
         EXTRA_CMAKE_FLAGS=
 
+        # TODO: Ninja here too
         if [[ ${{matrix.host_os}} == windows* ]]; then
-          CMAKE_GEN="Visual Studio 16 2019"
 
           # CMAKE_TOOLCHAIN_FILE is necessary for CMake to find things installed by vcpkg
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
@@ -385,9 +368,6 @@ jobs:
           fi
         fi
 
-        REQUIRE_LLVM_VERSION="${{matrix.llvm_version}}0"
-        SHARED_LIBRARY=$([ ${{matrix.build_tool}} == "cmake_shared" ] && echo "ON" || echo "OFF")
-
         if [[ "${{matrix.uses_python}}" == "true" ]]; then
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
             -D WITH_PYTHON_BINDINGS=ON"
@@ -396,33 +376,26 @@ jobs:
             -D WITH_PYTHON_BINDINGS=OFF"
         fi
 
+        if [[ "${{matrix.test_wasm}}" == "true" ]]; then
+          EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+            -D WITH_WABT=ON \
+            -D WITH_WASM_SHELL=ON"
+        else
+          EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+            -D WITH_WABT=OFF \
+            -D WITH_WASM_SHELL=OFF"
+        fi
+
         cmake \
           -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
           -D LLVM_DIR="${LLVM_INSTALL_DIR}/lib/cmake/llvm" \
-          -D HALIDE_REQUIRE_LLVM_VERSION="${REQUIRE_LLVM_VERSION}" \
-          -D HALIDE_SHARED_LIBRARY=${SHARED_LIBRARY} \
+          -D Clang_DIR="${LLVM_INSTALL_DIR}/lib/cmake/clang" \
           -G "${CMAKE_GEN}" \
           ${EXTRA_CMAKE_FLAGS} \
           -S "${HALIDE_SOURCE_DIR}" \
           -B "${HALIDE_BUILD_DIR}"
 
-    - name: Build Halide (Make)
-      if: startsWith(matrix.build_tool, 'make')
-      shell: bash
-      run: |
-        # Build Halide
-        cd ${HALIDE_BUILD_DIR}
-
-        BUILD_TARGETS="distrib build_tests"
-        if [[ "${{matrix.uses_python}}" == "true" ]]; then
-          # build_apps requires the python bindings
-          BUILD_TARGETS="${BUILD_TARGETS} build_apps build_python_bindings"
-        fi
-
-        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} ${BUILD_TARGETS}
-
     - name: Build Halide (CMake)
-      if: startsWith(matrix.build_tool, 'cmake')
       shell: bash
       run: |
         # Build Halide
@@ -432,48 +405,7 @@ jobs:
           --config ${BUILD_TYPE} \
           -j ${PARALLEL_JOBS}
 
-    - name: Run Tests (Make)
-      if: matrix.run_tests && startsWith(matrix.build_tool, 'make')
-      shell: bash
-      run: |
-        # Test Halide
-        export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
-        cd ${HALIDE_BUILD_DIR}
-
-        TEST_GROUPS_PARALLEL="internal correctness error warning generator"
-        if [[ "${{matrix.uses_python}}" == "true" ]]; then
-          TEST_GROUPS_PARALLEL="${TEST_GROUPS_PARALLEL} python"
-        fi
-
-        # tutorial has some performance measurements that can be flaky if we run them in parallel
-        TEST_GROUPS_SERIAL="tutorial"
-
-        # performance is never going to be reliable on VMs.
-        # opengl won't work on the buildbots.
-        # auto_schedule is just flaky.
-        TEST_GROUPS_BROKEN="performance opengl auto_schedule"
-
-        if [[ ${{matrix.target_bits}} == 32 ]]; then
-          # TODO: Skip testing apps on 32-bit systems for now;
-          # in particular, apps/autoscheduler can time out, and also has build
-          # issues on ubuntu-32 at the moment (__udivdi3).
-          TEST_GROUPS_BROKEN="${TEST_GROUPS_BROKEN} apps"
-        else
-          TEST_GROUPS_PARALLEL="${TEST_GROUPS_PARALLEL} apps"
-        fi
-
-        # Parallel
-        for t in ${TEST_GROUPS_PARALLEL}; do
-          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
-        done
-
-        # Serial
-        for t in ${TEST_GROUPS_SERIAL}; do
-          make -f ${HALIDE_SOURCE_DIR}/Makefile test_$t
-        done
-
     - name: Run Tests (CMake)
-      if: matrix.run_tests && startsWith(matrix.build_tool, 'cmake')
       shell: bash
       run: |
         # Test Halide
@@ -506,4 +438,58 @@ jobs:
           -C ${BUILD_TYPE} \
           -L "${TEST_GROUPS_SERIAL}" \
           -E "${TEST_GROUPS_BROKEN}" \
+          --output-on-failure
+
+    - name: Run Tests (wasm-mvp)
+      if: matrix.test_wasm
+      shell: bash
+      run: |
+        export HL_JIT_TARGET=wasm-32-wasmrt
+
+        cmake \
+          -D HL_TARGET=${HL_JIT_TARGET} \
+          -G "${CMAKE_GEN}" \
+          -S "${HALIDE_SOURCE_DIR}" \
+          -B "${HALIDE_BUILD_DIR}"
+
+        cd ${HALIDE_BUILD_DIR}
+        cmake \
+          --build ${HALIDE_BUILD_DIR} \
+          --config ${BUILD_TYPE} \
+          -j ${PARALLEL_JOBS}
+
+        export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
+
+        # Parallel
+        ctest \
+          -C ${BUILD_TYPE} \
+          -j ${PARALLEL_JOBS} \
+          -L "internal|correctness|error|warning|generator" \
+          --output-on-failure
+
+    - name: Run Tests (wasm-all)
+      if: matrix.test_wasm
+      shell: bash
+      run: |
+        export HL_JIT_TARGET=wasm-32-wasmrt-wasm_simd128-wasm_signext-wasm_sat_float_to_int
+
+        cmake \
+          -D HL_TARGET=${HL_JIT_TARGET} \
+          -G "${CMAKE_GEN}" \
+          -S "${HALIDE_SOURCE_DIR}" \
+          -B "${HALIDE_BUILD_DIR}"
+
+        cd ${HALIDE_BUILD_DIR}
+        cmake \
+          --build ${HALIDE_BUILD_DIR} \
+          --config ${BUILD_TYPE} \
+          -j ${PARALLEL_JOBS}
+
+        export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
+
+        # Parallel
+        ctest \
+          -C ${BUILD_TYPE} \
+          -j ${PARALLEL_JOBS} \
+          -L "internal|correctness|error|warning|generator" \
           --output-on-failure
