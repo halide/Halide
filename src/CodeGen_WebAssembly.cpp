@@ -122,14 +122,10 @@ string CodeGen_WebAssembly::mattrs() const {
         sep = ",";
     }
 
-    // TODO: Emscripten doesn't seem to be able to validate wasm that contains this yet.
-    // We could only generate for JIT mode (where we know we can enable it), but that
-    // would mean the execution model for JIT vs AOT could be slightly different,
-    // so leave it out entirely until we can do it uniformly.
-    // if (target.has_feature(Target::JIT)) {
-    //    s << sep << "+nontrapping-fptoint";
-    //    sep = ",";
-    // }
+    if (target.has_feature(Target::WasmSatFloatToInt)) {
+        s << sep << "+nontrapping-fptoint";
+        sep = ",";
+    }
 
     user_assert(target.os == Target::WebAssemblyRuntime)
         << "wasmrt is the only supported 'os' for WebAssembly at this time.";
