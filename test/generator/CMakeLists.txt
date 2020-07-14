@@ -5,7 +5,7 @@
 function(halide_define_aot_test NAME)
     set(options OMIT_DEFAULT_GENERATOR)
     set(oneValueArgs)
-    set(multiValueArgs)
+    set(multiValueArgs EXTRA_LIBS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     set(TARGET "generator_aot_${NAME}")
@@ -13,6 +13,9 @@ function(halide_define_aot_test NAME)
     target_include_directories("${TARGET}" PRIVATE "${Halide_SOURCE_DIR}/test/common")
     if (NOT args_OMIT_DEFAULT_GENERATOR)
         target_link_libraries(${TARGET} PRIVATE ${NAME})
+    endif ()
+    if (args_EXTRA_LIBS)
+        target_link_libraries(${TARGET} PRIVATE ${args_EXTRA_LIBS})
     endif ()
 
     # TODO(#4938): remove need for these definitions
@@ -171,21 +174,21 @@ add_custom_command(OUTPUT "${EC32}.bc"
                    VERBATIM
                    COMMAND clang -O3 -c -m32 -target le32-unknown-nacl-unknown -emit-llvm "$<SHELL_PATH:${EXTERNAL_CPP}>" -o "${EC32}.bc")
 add_custom_command(OUTPUT "${EC32}.cpp"
-                   DEPENDS "${EC32}.bc"
+                   DEPENDS "${EC32}.bc" binary2cpp
                    COMMAND binary2cpp external_code_extern_bitcode_32 < "${EC32}.bc" > "${EC32}.cpp")
 
 set(EC64 "external_code_extern_bitcode_64")
 add_custom_command(OUTPUT "${EC64}.bc"
-                   DEPENDS "${EXTERNAL_CPP}"
+                   DEPENDS "${EXTERNAL_CPP}" binary2cpp
                    VERBATIM
                    COMMAND clang -O3 -c -m64 -target le64-unknown-unknown-unknown -emit-llvm "$<SHELL_PATH:${EXTERNAL_CPP}>" -o "${EC64}.bc")
 add_custom_command(OUTPUT "${EC64}.cpp"
-                   DEPENDS "${EC64}.bc"
+                   DEPENDS "${EC64}.bc" binary2cpp
                    COMMAND binary2cpp external_code_extern_bitcode_64 < "${EC64}.bc" > "${EC64}.cpp")
 
 set(ECCPP "external_code_extern_cpp_source")
 add_custom_command(OUTPUT "${ECCPP}.cpp"
-                   DEPENDS "${EXTERNAL_CPP}"
+                   DEPENDS "${EXTERNAL_CPP}" binary2cpp
                    VERBATIM
                    COMMAND binary2cpp external_code_extern_cpp_source < "$<SHELL_PATH:${EXTERNAL_CPP}>" > "${ECCPP}.cpp")
 
@@ -236,37 +239,42 @@ if (TARGET_PTX AND HL_TARGET MATCHES "opencl")
 endif ()
 
 # Alias generator test
-halide_define_aot_test(alias)
 add_halide_library(alias_with_offset_42
                    FROM alias.generator
                    GENERATOR alias_with_offset_42)
-target_link_libraries(generator_aot_alias PRIVATE alias_with_offset_42)
+halide_define_aot_test(alias EXTRA_LIBS alias_with_offset_42)
 
 # Autograd generator test
 halide_define_aot_test(autograd)
-add_halide_library(autograd_grad
-                   GRADIENT_DESCENT
-                   FROM autograd.generator
-                   GENERATOR autograd
-                   PARAMS "auto_schedule=true")
-target_link_libraries(generator_aot_autograd PRIVATE autograd_grad)
+if (TARGET generator_aot_autograd)
+    add_halide_library(autograd_grad
+                       GRADIENT_DESCENT
+                       FROM autograd.generator
+                       GENERATOR autograd
+                       PARAMS "auto_schedule=true")
+    target_link_libraries(generator_aot_autograd PRIVATE autograd_grad)
+endif()
 
 # CXX mangling generator test.
 halide_define_aot_test(cxx_mangling)
-target_link_libraries(cxx_mangling INTERFACE cxx_mangling_externs)
-if (TARGET_PTX AND HL_TARGET MATCHES "cuda")
-    add_halide_library(cxx_mangling_gpu
-                       FROM cxx_mangling.generator
-                       GENERATOR cxx_mangling
-                       FUNCTION_NAME HalideTest::cxx_mangling_gpu
-                       FEATURES c_plus_plus_name_mangling cuda)
-    target_link_libraries(generator_aot_cxx_mangling PRIVATE cxx_mangling_gpu)
+if (TARGET cxx_mangling)
+    target_link_libraries(cxx_mangling INTERFACE cxx_mangling_externs)
+    if (TARGET_PTX AND HL_TARGET MATCHES "cuda")
+        add_halide_library(cxx_mangling_gpu
+                           FROM cxx_mangling.generator
+                           GENERATOR cxx_mangling
+                           FUNCTION_NAME HalideTest::cxx_mangling_gpu
+                           FEATURES c_plus_plus_name_mangling cuda)
+        target_link_libraries(generator_aot_cxx_mangling PRIVATE cxx_mangling_gpu)
+    endif ()
 endif ()
 
 # CXX mangling with extern generator test
 halide_define_aot_test(cxx_mangling_define_extern)
-target_link_libraries(cxx_mangling_define_extern INTERFACE cxx_mangling_externs cxx_mangling_define_extern_externs)
-target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling_externs cxx_mangling)
+if (TARGET cxx_mangling_define_extern)
+    target_link_libraries(cxx_mangling_define_extern INTERFACE cxx_mangling_externs cxx_mangling_define_extern_externs)
+    target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling_externs cxx_mangling)
+endif ()
 
 # Define extern for OpenCL
 halide_define_aot_test(define_extern_opencl)
@@ -277,30 +285,26 @@ endif ()
 
 # Matlab generator test
 halide_define_aot_test(matlab)
-set_target_properties(generator_aot_matlab PROPERTIES ENABLE_EXPORTS True)
+if (TARGET generator_aot_matlab)
+  set_target_properties(generator_aot_matlab PROPERTIES ENABLE_EXPORTS True)
+endif ()
 
 # Metadata tester
-halide_define_aot_test(metadata_tester)
 add_halide_library(metadata_tester_ucon
                    FROM metadata_tester.generator
                    GENERATOR metadata_tester
                    FEATURES user_context
                    PARAMS ${PARAMS_metadata_tester})
-target_link_libraries(generator_aot_metadata_tester PRIVATE metadata_tester_ucon)
+halide_define_aot_test(metadata_tester EXTRA_LIBS metadata_tester_ucon)
 
 # Nested externs test
-halide_define_aot_test(nested_externs OMIT_DEFAULT_GENERATOR)
 add_halide_library(nested_externs_root FROM nested_externs.generator)
 add_halide_library(nested_externs_inner FROM nested_externs.generator)
 add_halide_library(nested_externs_combine FROM nested_externs.generator)
 add_halide_library(nested_externs_leaf FROM nested_externs.generator)
-target_link_libraries(generator_aot_nested_externs
-                      PRIVATE
-                      nested_externs_root
-                      nested_externs_inner
-                      nested_externs_combine
-                      nested_externs_leaf)
+halide_define_aot_test(nested_externs
+                       OMIT_DEFAULT_GENERATOR
+                       EXTRA_LIBS nested_externs_root nested_externs_inner nested_externs_combine nested_externs_leaf)
 
 # Tiled blur
-halide_define_aot_test(tiled_blur)
-target_link_libraries(generator_aot_tiled_blur PRIVATE blur2x2)
+halide_define_aot_test(tiled_blur EXTRA_LIBS blur2x2)
