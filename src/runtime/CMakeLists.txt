@@ -151,13 +151,10 @@ set(RUNTIME_CXX_FLAGS -O3
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
         if (${j} EQUAL 32)
-            if (${i} MATCHES "windows_.*")
-                # win32 uses the stdcall calling convention, which is x86-specific
-                set(TARGET "i386-unknown-unknown-unknown")
-            else ()
-                # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
-                set(TARGET "le32-unknown-nacl-unknown")
-            endif ()
+            # win32 uses the stdcall calling convention, which is x86-specific;
+            # it's as good as any, so we'll use it for all 32-bit here (and avoids
+            # using the long-deprecated nacl target).
+            set(TARGET "i386-unknown-unknown-unknown")
         else ()
             # generic 64-bit code
             set(TARGET "le64-unknown-unknown-unknown")
