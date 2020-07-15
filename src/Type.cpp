@@ -322,7 +322,9 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
             break;
         case 8:
         case 16:
+        case 24:
         case 32:
+        case 48:
         case 64:
             if (type.is_uint()) {
                 oss << "u";

@@ -1,7 +1,8 @@
 #include "XtensaOptimize.h"
 #include "Bounds.h"
-#include "ConciseCasts.h"
 #include "CSE.h"
+#include "ConciseCasts.h"
+#include "Expr.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -10,7 +11,6 @@
 #include "Lerp.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
@@ -46,16 +46,22 @@ struct Pattern {
         NarrowOp1 = 1 << 11,  // Same as above, but for operand 1.
         NarrowOp2 = 1 << 12,
         NarrowOp3 = 1 << 13,
-        NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2 | NarrowOp3,
+        NarrowOp4 = 1 << 14,
+        NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2 | NarrowOp3 | NarrowOp4,
 
         NarrowUnsignedOp0 = 1 << 15,  // Similar to the above, but narrow to an unsigned half width type.
         NarrowUnsignedOp1 = 1 << 16,
         NarrowUnsignedOp2 = 1 << 17,
-        NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2,
+        NarrowUnsignedOp3 = 1 << 18,
+        NarrowUnsignedOp4 = 1 << 19,
+
+        NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2 | NarrowUnsignedOp3 | NarrowUnsignedOp4,
+
+        AccumulatorOutput = 1 << 20,
     };
 
     std::string intrin;  // Name of the intrinsic
-    Expr pattern;   // The pattern to match against
+    Expr pattern;        // The pattern to match against
     int flags;
 
     Pattern() = default;
@@ -73,6 +79,7 @@ Expr wild_i16 = Variable::make(Int(16), "*");
 Expr wild_i32 = Variable::make(Int(32), "*");
 Expr wild_i64 = Variable::make(Int(64), "*");
 
+Expr wild_u1x = Variable::make(Type(Type::UInt, 1, 0), "*");
 Expr wild_u8x = Variable::make(Type(Type::UInt, 8, 0), "*");
 Expr wild_u16x = Variable::make(Type(Type::UInt, 16, 0), "*");
 Expr wild_u32x = Variable::make(Type(Type::UInt, 32, 0), "*");
@@ -80,6 +87,7 @@ Expr wild_u64x = Variable::make(Type(Type::UInt, 64, 0), "*");
 Expr wild_i8x = Variable::make(Type(Type::Int, 8, 0), "*");
 Expr wild_i16x = Variable::make(Type(Type::Int, 16, 0), "*");
 Expr wild_i32x = Variable::make(Type(Type::Int, 32, 0), "*");
+Expr wild_i48x = Variable::make(Type(Type::Int, 48, 0), "*");
 Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 
 // Broadcast to an unknown number of lanes, for making patterns.
@@ -174,7 +182,15 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
                 op = op_mutator->mutate(op);
             }
 
+            Type old_type = x.type();
+            if (p.flags & Pattern::AccumulatorOutput) {
+                x = cast(Type(Type::Int, 48, x.type().lanes()), x);
+            }
             x = replace_pattern(x, matches, p);
+            if (p.flags & Pattern::AccumulatorOutput) {
+                x = cast(old_type, x);
+            }
+
             debug(3) << "rewrote to: " << x << "\n";
             return x;
         }
@@ -199,44 +215,78 @@ class MatchXtensaPatterns : public IRMutator {
 private:
     using IRMutator::visit;
 
-    static Expr halide_xtensa_widen_mul_i32(Expr v0, Expr v1) {
-        Expr call = Call::make(wild_i32x.type(), "halide_xtensa_widen_mul_i32", {std::move(v0), std::move(v1)}, Call::PureExtern);
+    static Expr halide_xtensa_widen_mul_i48(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i48x.type(), "halide_xtensa_widen_mul_i48", {std::move(v0), std::move(v1)}, Call::PureExtern);
         return call;
     }
 
-    static Expr halide_xtensa_widen_mul_u32(Expr v0, Expr v1) {
-        Expr call = Call::make(wild_u32x.type(), "halide_xtensa_widen_mul_u32", {std::move(v0), std::move(v1)}, Call::PureExtern);
+    static Expr halide_xtensa_widen_mul_add_i48(Expr v0, Expr v1, Expr v2) {
+        Expr call = Call::make(wild_i48x.type(), "halide_xtensa_widen_mul_add_i48", {std::move(v0), std::move(v1), std::move(v2)}, Call::PureExtern);
         return call;
     }
 
-    static Expr halide_xtensa_widen_mul_add1(Expr v0, Expr v1, Expr v2) {
-        Expr call = Call::make(wild_i32x.type(), "halide_xtensa_widen_mul_add1", {std::move(v0), std::move(v1), std::move(v2)}, Call::PureExtern);
+    static Expr halide_xtensa_widen_add_i48(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i48x.type(), "halide_xtensa_widen_add_i48", {std::move(v0), std::move(v1)}, Call::PureExtern);
         return call;
     }
 
-    static Expr halide_xtensa_widen_mul_add2(Expr v0, Expr v1, Expr v2, Expr v3) {
-        Expr call = Call::make(wild_i32x.type(), "halide_xtensa_widen_mul_add2", {std::move(v0), std::move(v1), std::move(v2), std::move(v3)}, Call::PureExtern);
+    static Expr halide_xtensa_widen_add_u48(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i48x.type(), "halide_xtensa_widen_add_u48", {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_narrow_with_shift_i16(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_narrow_with_shift_i16", {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_narrow_with_shift_u16(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_u16x.type(), "halide_xtensa_narrow_with_shift_u16", {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_narrow_clz_i16(Expr v0) {
+        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_narrow_clz_i16", {std::move(v0)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_sat_add_i16(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_sat_add_i16", {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_sat_sub_i16(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_sat_sub_i16", {std::move(v0), std::move(v1)}, Call::PureExtern);
         return call;
     }
 
     Expr visit(const Add *op) override {
         if (op->type.is_vector()) {
             static const std::vector<Pattern> adds = {
-                // {"halide_xtensa_widen_mul_add_mul_u32", (halide_xtensa_widen_mul_u32(wild_u16x, wild_u16x) / 2)
-                //                                            + (halide_xtensa_widen_mul_u32(wild_u16x, wild_u16x) / 2)},
+                {"halide_xtensa_widen_pair_mul_i48", wild_i32x * wild_i32x + wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput},
+                {"halide_xtensa_widen_pair_mul_u48", wild_u32x * wild_u32x + wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput},
 
-                // {"halide_xtensa_widen_mul_add1", i32(wild_i16x) + halide_xtensa_widen_mul_i32(wild_i16x, wild_i16x)},
-                // {"halide_xtensa_widen_mul_add2", i32(wild_i16x) + halide_xtensa_widen_mul_add1(wild_i16x, wild_i16x, wild_i16)},
-                // {"halide_xtensa_widen_mul_add3", i32(wild_i16x) + halide_xtensa_widen_mul_add2(wild_i16x, wild_i16x, wild_i16x, wild_i16)},
+                // Multiply-add to accumulator type.
+                {"halide_xtensa_widen_pair_mul_add_i48", i32(halide_xtensa_widen_mul_add_i48(wild_i48x, wild_i16x, wild_i16x)) + i32(halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput},
+                {"halide_xtensa_widen_mul_add_i48", i32(wild_i48x) + i32(halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput},
+                // Add to accumulator type.
+                // Paired add.
+                {"halide_xtensa_widen_pair_add_i48", i32(halide_xtensa_widen_add_i48(wild_i48x, wild_i16x)) + wild_i16x, Pattern::AccumulatorOutput},
+                {"halide_xtensa_widen_pair_add_i48", i32(halide_xtensa_widen_add_i48(wild_i48x, wild_i16x)) + wild_i32x, Pattern::AccumulatorOutput | Pattern::NarrowOp2},
+                {"halide_xtensa_widen_pair_add_u48", u32(halide_xtensa_widen_add_u48(wild_i48x, wild_u16x)) + wild_u16x, Pattern::AccumulatorOutput},
+                {"halide_xtensa_widen_pair_add_u48", u32(halide_xtensa_widen_add_u48(wild_i48x, wild_u16x)) + wild_u32x, Pattern::AccumulatorOutput | Pattern::NarrowOp2},
+                // Single add.
+                {"halide_xtensa_widen_add_i48", i32(wild_i48x) + wild_i16x, Pattern::AccumulatorOutput},
+                {"halide_xtensa_widen_add_i48", i32(wild_i48x) + wild_i32x, Pattern::AccumulatorOutput | Pattern::NarrowOp1},
+                {"halide_xtensa_widen_add_u48", u32(wild_i48x) + wild_u16x, Pattern::AccumulatorOutput},
+                {"halide_xtensa_widen_add_u48", u32(wild_i48x) + wild_u32x, Pattern::AccumulatorOutput | Pattern::NarrowOp1},
 
                 // Widening addition
-                // {"halide_xtensa_widen_add_u32", wild_u32x + wild_u32x, Pattern::NarrowOp1},
-                // {"halide_xtensa_widen_add_i32", wild_i32x + wild_i32x, Pattern::NarrowOp1},
-                // {"halide_xtensa_widen_mul_add_i32", wild_i32x + wild_i32x * bc(wild_i32), Pattern::NarrowOps },
-                // {"halide_xtensa_widen_mul_add_i32", wild_i32x + bc(wild_i32) * wild_i32x, Pattern::NarrowOps | Pattern::SwapOps12},
+                {"halide_xtensa_widen_add_u48", wild_u32x + wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput},
+                {"halide_xtensa_widen_add_i48", wild_i32x + wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput},
 
-                // {"halide_xtensa_widen_mul_add_u32", wild_u32x + wild_u32x * bc(wild_u32), Pattern::NarrowOps },
-                // {"halide_xtensa_widen_mul_add_u32", wild_u32x + bc(wild_u32) * wild_u32x, Pattern::NarrowOps | Pattern::SwapOps12},
+                // Predicated addition
+                // {"halide_xtensa_pred_add_i16", wild_i16x + select(wild_u1x, wild_i16x, wild_i16x)}
             };
 
             Expr new_expr = apply_commutative_patterns(op, adds, this);
@@ -248,19 +298,30 @@ private:
         return IRMutator::visit(op);
     }
 
+    Expr visit(const Sub *op) override {
+        if (op->type.is_vector()) {
+            static const std::vector<Pattern> subs = {
+                // {"halide_xtensa_pred_sub_i16", wild_i16x - select(wild_u1x, wild_i16x, wild_i16x)}
+            };
+
+            Expr new_expr = apply_patterns(op, subs, this);
+            if (!new_expr.same_as(op)) {
+                return new_expr;
+            }
+        }
+
+        return IRMutator::visit(op);
+    }
+
     Expr visit(const Mul *op) override {
         if (op->type.is_vector()) {
-            static const std::vector<Pattern> scalar_muls = {
-            };
+            static const std::vector<Pattern> scalar_muls = {};
 
             static const std::vector<Pattern> muls = {
                 // Widening multiplication
-                {"halide_xtensa_widen_mul_i32", wild_i32x * bc(wild_i32), Pattern::NarrowOps},
-
-                {"halide_xtensa_widen_mul_u16", wild_u16x * wild_u16x, Pattern::NarrowOps},
-                {"halide_xtensa_widen_mul_u32", wild_u32x * wild_u32x, Pattern::NarrowOps},
-                {"halide_xtensa_widen_mul_i16", wild_i16x * wild_i16x, Pattern::NarrowOps},
-                {"halide_xtensa_widen_mul_i32", wild_i32x * wild_i32x, Pattern::NarrowOps},
+                {"halide_xtensa_widen_mul_i48", wild_i32x * bc(wild_i32), Pattern::NarrowOps | Pattern::AccumulatorOutput},
+                {"halide_xtensa_widen_mul_u48", wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput},
+                {"halide_xtensa_widen_mul_i48", wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput},
             };
 
             Expr new_expr = apply_commutative_patterns(op, scalar_muls, this);
@@ -277,51 +338,97 @@ private:
         return IRMutator::visit(op);
     }
 
-//     Expr visit(const Select* op) {
-//         if (op->type.is_vector()) {
-//           static const vector<Pattern> selects = {
-//             // {"halide_xtensa_amazing_select", select(0 < (((u32(wild_u16x) * u32(wild_u16x)) / 2) + ((u32(wild_u16x) * u32(wild_u16x)) / 2)), bc(wild_i16) - i16(count_leading_zeros(((u32(wild_u16x) * u32(wild_u16x)) / 2) + ((u32(wild_u16x) * u32(wild_u16x)) / 2))), bc(wild_i16))},
-//             // {"halide_xtensa_funny_select", select(0 < (i32(wild_i16x) * i32(wild_i16x)), bc(wild_i16) - i16(count_leading_zeros((i32(wild_i16x) * i32(wild_i16x)))), bc(wild_i16))},
-//           };
-//           vector<Expr> matches;
-//           for (const auto& p: selects) {
-//             if (expr_match(p.pattern, op, matches)) {
-//               debug(0) << "Matched select !! " << p.intrin << matches.size() << "\n";
+    Expr visit(const Div *op) override {
+        if (op->type.is_vector()) {
+            static const std::vector<Pattern> divs = {
+                // {"halide_xtensa_narrow_shift_qqq", i32(wild_i48x) / bc(wild_i32), Pattern::ExactLog2Op1}
+            };
 
-//               for (Expr &m : matches) {
-//                   m = mutate(m);
-//               }
+            Expr new_expr = apply_patterns(op, divs, this);
+            if (!new_expr.same_as(op)) {
+                return new_expr;
+            }
+        }
 
-//               debug(0) << matches[0].same_as(matches[1]) << " " << matches[3].same_as(matches[4]) << "\n";
-//               return Call::make(op->type, p.intrin,
-//                                 //{matches[0], matches[2], matches[5]},
-//                                 matches,
-//                     Call::PureExtern);
-//             }
+        return IRMutator::visit(op);
+    }
 
-//           }
-//         }
-//         return IRMutator::visit(op);
-//     }
+    Expr visit(const Max *op) override {
+        if (op->type.is_vector()) {
+            static const std::vector<Pattern> maxes = {
+                // {"halide_xtensa_pred_max_i16", max(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))}
+            };
 
-//     Expr visit(const LT *op) override {
-//         static const vector<Pattern> lts = {
-//           // {"halide_xtensa_nice_lt", 0 < ((u32(wild_u16x) * u32(wild_u16x)) / 2)},
-//         };
+            Expr new_expr = apply_commutative_patterns(op, maxes, this);
+            if (!new_expr.same_as(op)) {
+                return new_expr;
+            }
+        }
 
-//         if (op->type.is_vector()) {
-//             Expr lt = op;
+        return IRMutator::visit(op);
+    }
 
-//             std::vector<Expr> matches;
+    Expr visit(const Min *op) override {
+        if (op->type.is_vector()) {
+            static const std::vector<Pattern> maxes = {
+                // {"halide_xtensa_pred_min_i16", max(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))}
+            };
 
-//             Expr new_expr = apply_patterns(lt, lts, this);
-//             if (!new_expr.same_as(lt)) {
-//                 return new_expr;
-//             }
-//         }
+            Expr new_expr = apply_commutative_patterns(op, maxes, this);
+            if (!new_expr.same_as(op)) {
+                return new_expr;
+            }
+        }
 
-//         return IRMutator::visit(op);
-//     }
+        return IRMutator::visit(op);
+    }
+
+    //     Expr visit(const Select* op) {
+    //         if (op->type.is_vector()) {
+    //           static const vector<Pattern> selects = {
+    //             // {"halide_xtensa_amazing_select", select(0 < (((u32(wild_u16x) * u32(wild_u16x)) / 2) + ((u32(wild_u16x) * u32(wild_u16x)) / 2)), bc(wild_i16) - i16(count_leading_zeros(((u32(wild_u16x) * u32(wild_u16x)) / 2) + ((u32(wild_u16x) * u32(wild_u16x)) / 2))), bc(wild_i16))},
+    //             // {"halide_xtensa_funny_select", select(0 < (i32(wild_i16x) * i32(wild_i16x)), bc(wild_i16) - i16(count_leading_zeros((i32(wild_i16x) * i32(wild_i16x)))), bc(wild_i16))},
+    //           };
+    //           vector<Expr> matches;
+    //           for (const auto& p: selects) {
+    //             if (expr_match(p.pattern, op, matches)) {
+    //               debug(0) << "Matched select !! " << p.intrin << matches.size() << "\n";
+
+    //               for (Expr &m : matches) {
+    //                   m = mutate(m);
+    //               }
+
+    //               debug(0) << matches[0].same_as(matches[1]) << " " << matches[3].same_as(matches[4]) << "\n";
+    //               return Call::make(op->type, p.intrin,
+    //                                 //{matches[0], matches[2], matches[5]},
+    //                                 matches,
+    //                     Call::PureExtern);
+    //             }
+
+    //           }
+    //         }
+    //         return IRMutator::visit(op);
+    //     }
+
+    Expr visit(const LT *op) override {
+        static const vector<Pattern> lts = {
+            {"halide_xtensa_i48x_gt_zero", 0 < i32(wild_i48x)},
+            {"halide_xtensa_i48x_gt_zero", 0 < u32(wild_i48x)},
+        };
+
+        if (op->type.is_vector()) {
+            Expr lt = op;
+
+            std::vector<Expr> matches;
+
+            Expr new_expr = apply_patterns(lt, lts, this);
+            if (!new_expr.same_as(lt)) {
+                return new_expr;
+            }
+        }
+
+        return IRMutator::visit(op);
+    }
 
     Expr visit(const Cast *op) override {
         static const std::vector<Pattern> casts = {
@@ -341,6 +448,9 @@ private:
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
 
+            {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x >> wild_i32)},
+            {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
+
             {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_u32x))},
             {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_i32x))},
         };
@@ -358,15 +468,15 @@ private:
         return IRMutator::visit(op);
     }
 
-    Expr visit(const Shuffle* op) override {
-      if (op->is_interleave() && op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 64)) {
-          debug(0) << "Recognized supported interleave\n";
-          return Call::make(op->type, "halide_xtensa_interleave_i16",
-                            {mutate(op->vectors[0]), mutate(op->vectors[1])},
-                            Call::PureExtern);
-      } else {
-          return IRMutator::visit(op);
-      }
+    Expr visit(const Shuffle *op) override {
+        if (op->is_interleave() && op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 64)) {
+            debug(0) << "Recognized supported interleave\n";
+            return Call::make(op->type, "halide_xtensa_interleave_i16",
+                              {mutate(op->vectors[0]), mutate(op->vectors[1])},
+                              Call::PureExtern);
+        } else {
+            return IRMutator::visit(op);
+        }
     }
 
     Expr visit(const Call *op) override {
@@ -383,8 +493,12 @@ private:
         //                     {mutate(op->args[0]), mutate(op->args[1]), weight},
         //                     Call::PureExtern);
         // } else
-        if (op->is_intrinsic(Call::absd) && op->type.is_vector()
-                   && op->type.is_uint() && (op->type.bits() == 16)) {
+        if (op->is_intrinsic(Call::lerp)) {
+            // We need to lower lerps now to optimize the arithmetic
+            // that they generate.
+            internal_assert(op->args.size() == 3);
+            return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
+        } else if (op->is_intrinsic(Call::absd) && op->type.is_vector() && op->type.is_uint() && (op->type.bits() == 16)) {
             // debug(0) << "Found absd " << op->type.is_vector() << " " << op->type.is_uint() << " " << (op->type.bits() == 16) << "\n";
             internal_assert(op->args.size() == 2);
             return Call::make(op->type, "halide_xtensa_absd_i16",
@@ -392,34 +506,56 @@ private:
                               Call::PureExtern);
         }
 
+        static const std::vector<Pattern> calls = {
+            // Narrowing with shifting.
+            {"halide_xtensa_narrow_i48x_with_shift_i16", halide_xtensa_narrow_with_shift_i16(i32(wild_i48x), wild_i32)},
+            {"halide_xtensa_narrow_i48x_with_shift_u16", halide_xtensa_narrow_with_shift_u16(i32(wild_i48x), wild_i32)},
+            {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
+            {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
+            // Predicated saturated add/sub.
+            // {"halide_xtensa_pred_sat_add_i16", halide_xtensa_sat_add_i16(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))},
+            // {"halide_xtensa_pred_sat_sub_i16", halide_xtensa_sat_sub_i16(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))},
+        };
+        if (op->type.is_vector()) {
+            Expr call = op;
+
+            std::vector<Expr> matches;
+
+            Expr new_expr = apply_patterns(call, calls, this);
+            if (!new_expr.same_as(call)) {
+                return new_expr;
+            }
+        }
+
         return IRMutator::visit(op);
     }
 
     int loop_depth_ = 0;
 
-    Stmt visit(const For* op) override {
-      loop_depth_++;
-      Stmt body = IRMutator::visit(op);
-      loop_depth_--;
-      return body;
+    Stmt visit(const For *op) override {
+        loop_depth_++;
+        Stmt body = IRMutator::visit(op);
+        loop_depth_--;
+        return body;
     }
 
     Stmt visit(const LetStmt *op) override {
-      if (loop_depth_ < 1) {
-        return IRMutator::visit(op);
-      }
+        if (loop_depth_ < 1) {
+            return IRMutator::visit(op);
+        }
 
-      if (op->value.type().is_handle()) {
-          return IRMutator::visit(op);
-      }
+        if (op->value.type().is_handle()) {
+            return IRMutator::visit(op);
+        }
 
-      Stmt body = op->body;
-      body = substitute(op->name, op->value, body);
-      return mutate(body);
+        Stmt body = op->body;
+        body = substitute(op->name, op->value, body);
+        return mutate(body);
     }
 
 public:
-    MatchXtensaPatterns() {}
+    MatchXtensaPatterns() {
+    }
 };
 
 // Find an upper bound of bounds.max - bounds.min.
@@ -546,115 +682,11 @@ public:
     }
 };
 
-// class CollectSimilarOps : public IRVisitor {
-//  public:
-//   std::vector<Expr>* leaves;
-//   CollectSimilarOps(vector<Expr>* l) : leaves(l) {}
-
-//  private:
-//   using IRVisitor::visit;
-
-//   void visit(const Add* op) {
-//     debug(0) << "Found add - \n";// << op->a << " " << op->b << "\n";
-//     if (op->a.node_type() == IRNodeType::Add) {
-//       op->a->accept(this);
-//     } else {
-//       leaves->push_back(op->a);
-//     }
-
-//     if (op->b.node_type() == IRNodeType::Add) {
-//       op->b->accept(this);
-//     } else {
-//       leaves->push_back(op->b);
-//     }
-
-//   }
-// };
-
-// bool try_to_add_expr(int v, const vector<vector<int>>& g,
-//                        vector<bool>& visited, vector<int>& match) {
-//   visited[v] = true;
-//   for (int j = 0; j < g[v].size(); j++) {
-//     int t = g[v][j];
-//     debug(0) << v << " " << t << "\n";
-//     if ((match[t] == -1) || (!visited[match[t]] && try_to_add_expr(match[t], g, visited, match))) {
-//       match[t] = v;
-//       return true;
-//     }
-//   }
-//   return false;
-// }
-
-// bool commutative_expr_match(const Expr &pattern, const Expr &expr, vector<Expr> &matches) {
-//   // matches.clear();
-//   // if (!pattern.defined() && !expr.defined()) return true;
-//   // if (!pattern.defined() || !expr.defined()) return false;
-
-//   if (const Add *add = pattern.as<Add>()) {
-//   } else if (const Cast *cast = pattern.as<Cast>()) {
-
-//   } else {
-//     return expr_match(pattern, expr, matches);
-//   }
-
-//   return true;
-// }
-
 Stmt match_xtensa_patterns(Stmt s) {
-//     Expr test_pattern1 = wild_i16x + ((wild_i16x + wild_i16x) * wild_i16x
-//                         + i16_sat(wild_i16x * wild_i32x) + wild_i16x * bc(wild_i16));
-//     Expr test_pattern2 = wild_i16x * bc(wild_i16) +  wild_i16x
-//                         + i16_sat(wild_i16x * wild_i32x) + (wild_i16x + wild_i16x) * wild_i16x;
-//     std::vector<Expr> leaves1;
-//     std::vector<Expr> leaves2;
-//     {
-//       debug(0) << "Looking for ads\n";
-//       CollectSimilarOps collect_ops(&leaves1);
-//       test_pattern1.accept(&collect_ops);
-//       for(const auto& l: leaves1) {
-//         debug(0) << "Found: " << l << "\n";
-//       }
-//     }
-
-//     {
-//       debug(0) << "Looking for adds\n";
-//       CollectSimilarOps collect_ops(&leaves2);
-//       test_pattern2.accept(&collect_ops);
-//       for(const auto& l: leaves2) {
-//         debug(0) << "Found: " << l << "\n";
-//       }
-//     }
-
-//     int n = leaves1.size();
-//     int k = leaves2.size();
-//     vector<vector<int>> g(n);
-//     for (int i = 0; i < n; i++) {
-//       for (int j = 0; j < k; j++) {
-//         std::vector<Expr> matches;
-//         bool is_matching = expr_match(leaves1[i], leaves2[j], matches);
-//         if (is_matching) {
-//           g[i].push_back(j);
-//         }
-//         debug(0) << is_matching << " ";
-//       }
-//       debug(0) << "\n";
-//     }
-
-//     std::vector<int> match(n, -1);
-//     for (int v = 0; v < n; v++) {
-//       std::vector<bool> visited(n);
-//       debug(0) << "Starting - " << v << "\n";
-//       try_to_add_expr(v, g, visited, match);
-//     }
-
-//     for (int v = 0; v < n; v++) {
-//       debug(0) << match[v] << " -> " << v << "\n";
-//     }
-
     s = OptimizeShuffles(64).mutate(s);
     // debug(0) << s << "\n";
     for (int ix = 0; ix < 10; ix++) {
-      s = MatchXtensaPatterns().mutate(s);
+        s = MatchXtensaPatterns().mutate(s);
     }
 
     s = simplify(common_subexpression_elimination(s));

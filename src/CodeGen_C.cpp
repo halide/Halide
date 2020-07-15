@@ -1533,6 +1533,7 @@ inline int GetCycleCount() {
 
 typedef xb_vecNx16 int16x32_t;
 typedef xb_vecNx16U uint16x32_t;
+typedef xb_vecNx48 int48x32_t;
 typedef vboolN uint1x32_t;
 
 class int32x32_t {
@@ -1923,19 +1924,48 @@ HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_sat_add_i32(const int32x32_t& a,
   */
 }
 
-HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_widen_mul_i32(const int16x32_t& a, const int16x32_t& b) {
-  xb_vecNx48 r = a * b;
-  return int32x32_t(int32x32_t::from_native_vector,
-                                IVP_CVT32SNX48L(r),
-                                IVP_CVT32SNX48H(r));
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_add_i16(const int16x32_t& a, const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c) {
+  int16x32_t r = a;
+  IVP_ADDNX16T(r, b, c, p);
+  return r;
 }
 
-HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_widen_mul_add3(const int16x32_t& a,
-                                                              const int16x32_t& b,
-                                                              const int16x32_t& c,
-                                                              const int16x32_t& d,
-                                                              const int16x32_t& multiplier) {
-  xb_vecNx48 r = a * multiplier;
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_sub_i16(const int16x32_t& a, const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c) {
+  int16x32_t r = a;
+  IVP_SUBNX16T(r, b, c, p);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_max_i16(const int16x32_t& a, const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c) {
+  int16x32_t r = a;
+  IVP_MAXNX16T(r, b, c, p);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_min_i16(const int16x32_t& a, const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c) {
+  int16x32_t r = a;
+  IVP_MINNX16T(r, b, c, p);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_sat_add_i16(const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c, const int16x32_t& a) {
+  int16x32_t r = a;
+  IVP_ADDSNX16T(r, b, c, p);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_sat_sub_i16(const int16x32_t& a, const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c) {
+  int16x32_t r = a;
+  IVP_SUBSNX16T(r, b, c, p);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_i48(const int16x32_t& a, const int16x32_t& b) {
+  return a * b;
+}
+
+HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_widen_mul_i32(const int16x32_t& a, const int16x32_t& b) {
+  xb_vecNx48 r = a * b;
   return int32x32_t(int32x32_t::from_native_vector,
                                 IVP_CVT32SNX48L(r),
                                 IVP_CVT32SNX48H(r));
@@ -1948,19 +1978,71 @@ HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_widen_mul_u32(const uint16x32_t& 
                                 IVP_CVT32UNX48L(r),
                                 IVP_CVT32UNX48H(r));
 }
-/*
-HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_widen_mul_add_mul_u32(const uint16x32_t& a1,
-                                                                      const uint16x32_t& a2,
-                                                                      const uint16x32_t& b1,
-                                                                      const uint16x32_t& b2) {
-  //xb_vecNx48 r = IVP_MULUUPNX16(a1, a2, b1, b2);
-  xb_vecNx48 r = IVP_SQRUPNX16(a1, b1);
 
-  return uint32x32_t(uint32x32_t::from_native_vector,
-                                IVP_CVT32UNX48L(r) >> 1,
-                                IVP_CVT32UNX48H(r) >> 1);
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_add_i48(const int48x32_t& a, const int16x32_t& b, const int16x32_t& c) {
+  int48x32_t r = a;
+  IVP_MULANX16(r, b, c);
+  return r;
 }
-*/
+
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_i48(const int16x32_t& a, const int16x32_t& b,
+                                                                  const int16x32_t& c, const int16x32_t& d) {
+  return IVP_MULPNX16(a, b, c, d);
+}
+
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_add_i48(const int48x32_t& a, const int16x32_t& b,
+                                                                  const int16x32_t& c, const int16x32_t& d, const int16x32_t& e) {
+  int48x32_t r = a;
+  IVP_MULPANX16(r, b, c, d, e);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_u48(const uint16x32_t& a, const uint16x32_t& b,
+                                                                  const uint16x32_t& c, const uint16x32_t& d) {
+  return IVP_MULUUPNX16(a, b, c, d);
+}
+
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_i48(const int16x32_t& a, const int16x32_t& b) {
+  return IVP_ADDWNX16(a, b);
+}
+
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_i48(const int48x32_t& a, const int16x32_t& b) {
+  int48x32_t r = a;
+  IVP_ADDWANX16(r, b, int16x32_t(0));
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_add_i48(const int48x32_t& a, const int16x32_t& b, const int16x32_t& c) {
+  int48x32_t r = a;
+  IVP_ADDWANX16(r, b, c);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_u48(const int48x32_t& a, const uint16x32_t& b) {
+  int48x32_t r = a;
+  IVP_ADDWUANX16(r, b, uint16x32_t(0));
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_add_u48(const int48x32_t& a, const uint16x32_t& b, const uint16x32_t& c) {
+  int48x32_t r = a;
+  IVP_ADDWUANX16(r, b, c);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_i48x_with_shift_i16(const int48x32_t& a, int shift) {
+  return IVP_PACKVRNRNX48(a, shift);
+}
+
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_narrow_i48x_with_shift_u16(const int48x32_t& a, int shift) {
+  return IVP_PACKVRNRNX48(a, shift);
+}
+
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_u48(const uint16x32_t& a,
+                                                                         const uint16x32_t& b) {
+  return a * b;
+}
+
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_with_shift_i16(const int32x32_t& a, int shift) {
   xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
   return IVP_PACKVRNRNX48(wide, shift);
@@ -1974,6 +2056,17 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_clz_i16(const int32x32_t& a
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_clz_i16(const uint32x32_t& a) {
   xb_vec2Nx24 wide = IVP_CVT24UNX32L(IVP_NSAUN_2X32(a.native_vector[1]), IVP_NSAUN_2X32(a.native_vector[0]));
   return IVP_CVT16U2NX24L(wide);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_i48x_clz_i16(const int48x32_t& a) {
+  xb_vecNx16 clz_lo = IVP_NSAUNX16(IVP_PACKLNX48(a));
+  xb_vecNx16 clz_hi = IVP_NSAUNX16(IVP_PACKVRNRNX48(a, 16));
+  IVP_ADDNX16T(clz_hi, clz_hi, clz_lo, clz_hi == xb_vecNx16(16));
+  return clz_hi;
+}
+
+HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_i48x_gt_zero(const int48x32_t& b) {
+  return int16x32_t(0) < IVP_PACKVRNX48(b, 0);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_lerp_i16(const int16x32_t& a, const int16x32_t& b, uint16_t w) {
@@ -2023,9 +2116,21 @@ inline int32x32_t convert_to_int32x32_t_from_uint32x32_t(const uint32x32_t& src)
                       src.native_vector[0], src.native_vector[1]);
 }
 
+inline int32x32_t convert_to_int32x32_t_from_int48x32_t(const int48x32_t& src) {
+    return int32x32_t(int32x32_t::from_native_vector,
+                                IVP_CVT32SNX48L(src),
+                                IVP_CVT32SNX48H(src));
+}
+
 inline uint32x32_t convert_to_uint32x32_t_from_uint16x32_t(const uint16x32_t& src) {
     xb_vec2Nx24 wide = IVP_CVT24U2NX16(0, src);
     return uint32x32_t(uint32x32_t::from_native_vector, IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
+}
+
+inline uint32x32_t convert_to_uint32x32_t_from_int48x32_t(const int48x32_t& src) {
+    return uint32x32_t(uint32x32_t::from_native_vector,
+                                IVP_CVT32UNX48L(src),
+                                IVP_CVT32UNX48H(src));
 }
 
 )INLINE_CODE";
@@ -3165,6 +3270,7 @@ string CodeGen_C::print_xtensa_call(const Call *op) {
     } else if (op->name == "halide_xtensa_absd_i16") {
         op_name = "IVP_ABSSUBNX16";
     }
+
     rhs << op_name << "(" << with_commas(args) << ")";
     return rhs.str();
 }
