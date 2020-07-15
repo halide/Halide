@@ -50,6 +50,11 @@ struct Target {
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
 
+    /** The bit-width of a vector register for targets where this is configurable and
+     * targeting a fixed size is desired. The default of 0 indicates no assumption of
+     * fixed size is allowed. */
+    int vector_bits;
+
     /** Optional features a target can have.
      * Corresponds to feature_name_map in Target.cpp.
      * See definitions in HalideRuntime.h for full information.
@@ -123,10 +128,10 @@ struct Target {
         FeatureEnd = halide_target_feature_end
     };
     Target()
-        : os(OSUnknown), arch(ArchUnknown), bits(0) {
+      : os(OSUnknown), arch(ArchUnknown), bits(0), vector_bits(0) {
     }
-    Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
-        : os(o), arch(a), bits(b) {
+  Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>(), int vb = 0)
+    : os(o), arch(a), bits(b), vector_bits(vb)  {
         for (const auto &f : initial_features) {
             set_feature(f);
         }

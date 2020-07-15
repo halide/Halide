@@ -295,7 +295,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t)
 
       destructor_block(nullptr),
       strict_float(t.has_feature(Target::StrictFloat)) {
-    initialize_llvm();
+    initialize_llvm(target);
 }
 
 namespace {
@@ -378,14 +378,21 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
     return nullptr;
 }
 
-void CodeGen_LLVM::initialize_llvm() {
+void CodeGen_LLVM::initialize_llvm(const Target &target) {
     static std::once_flag init_llvm_once;
-    std::call_once(init_llvm_once, []() {
+    std::call_once(init_llvm_once, [&target]() {
         // You can hack in command-line args to llvm with the
         // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
         std::string args = get_env_variable("HL_LLVM_ARGS");
-        if (!args.empty()) {
-            vector<std::string> arg_vec = split_string(args, " ");
+        if (!args.empty() || target.vector_bits != 0) {
+            vector<std::string> arg_vec;
+            if (!args.empty()) {
+                arg_vec = split_string(args, " ");
+            }
+            if (target.vector_bits != 0) {
+                std::string min_vector_width_arg = "-aarch64-sve-vector-bits-min=" + std::to_string(target.vector_bits);
+                arg_vec.push_back(min_vector_width_arg);
+            }
             vector<const char *> c_arg_vec;
             c_arg_vec.push_back("llc");
             for (const std::string &s : arg_vec) {

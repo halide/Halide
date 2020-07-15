@@ -74,8 +74,12 @@ public:
     /** Tell the code generator which LLVM context to use. */
     void set_context(llvm::LLVMContext &context);
 
+    /* TODO(zalman): Passing a target here is a total hack to allow setting
+     * SVE vector register width for fixed size compilation. This will need
+     * to be fixed -- likely by a change to LLVM making the option part of
+     * the TargetMachine -- if this PR is to be merged to main. */
     /** Initialize internal llvm state for the enabled targets. */
-    static void initialize_llvm();
+    static void initialize_llvm(const Target &target = Target());
 
     static std::unique_ptr<llvm::Module> compile_trampolines(
         const Target &target,

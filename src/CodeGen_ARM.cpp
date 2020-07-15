@@ -1296,6 +1296,12 @@ bool CodeGen_ARM::use_soft_float_abi() const {
 }
 
 int CodeGen_ARM::native_vector_bits() const {
+    if (target.vector_bits != 0 &&
+        (target.has_feature(Target::SVE) ||
+         target.has_feature(Target::SVE2))) {
+      return target.vector_bits;
+    }
+
     return 128;
 }
 
