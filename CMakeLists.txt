@@ -8,9 +8,9 @@ enable_testing()
 ##
 
 if (NOT "$ENV{HL_TARGET}" STREQUAL "")
-    set(HL_TARGET "$ENV{HL_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
+    set(HALIDE_TARGET "$ENV{HL_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
 else ()
-    set(HL_TARGET "host" CACHE STRING "The target to use when compiling AOT tests")
+    set(HALIDE_TARGET "host" CACHE STRING "The target to use when compiling AOT tests")
 endif ()
 
 ##
