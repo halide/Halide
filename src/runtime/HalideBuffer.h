@@ -2010,6 +2010,19 @@ private:
     template<int N>
     HALIDE_NEVER_INLINE static bool for_each_value_prep(for_each_value_task_dim<N> *t,
                                                         const halide_buffer_t **buffers) {
+        // Check the buffers all have clean host allocations
+        for (int i = 0; i < N; i++) {
+            if (buffers[i]->device) {
+                assert(buffers[i]->host &&
+                       "Buffer passed to for_each_value has device allocation but no host allocation. Call allocate() and copy_to_host() first");
+                assert(!buffers[i]->device_dirty() &&
+                       "Buffer passed to for_each_value is dirty on device. Call copy_to_host() first");
+            } else {
+                assert(buffers[i]->host &&
+                       "Buffer passed to for_each_value has no host or device allocation");
+            }
+        }
+
         const int dimensions = buffers[0]->dimensions;
 
         // Extract the strides in all the dimensions

@@ -292,14 +292,6 @@ LLVM_STATIC_LIBS += -L $(LLVM_LIBDIR) \
 	$(shell $(LLVM_CONFIG) --link-static --libfiles lto option)
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 110))
-# We have to insert MLPolicies.a just after Passes.a -- this is highly unfortunate,
-# but it's not a 'component' by the standards of the llvm-config tool, and simply
-# inserting somewhere with --whole-archive will leave out other things. This is a
-# fragile fix, but it will get us unstuck for now.
-LLVM_STATIC_LIBS := $(subst libLLVMPasses.a,libLLVMPasses.a $(LLVM_LIBDIR)/libLLVMMLPolicies.a,$(LLVM_STATIC_LIBS))
-endif
-
 # Add a rpath to the llvm used for linking, in case multiple llvms are
 # installed. Bakes a path on the build system into the .so, so don't
 # use this config for distributions.
@@ -317,6 +309,9 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I
 ARCH_FOR_TESTS ?= native
 TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -march=${ARCH_FOR_TESTS}
 TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
+
+# In the tests, some of our expectations change depending on the llvm version
+TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
 # gcc 4.8 fires a bogus warning on old versions of png.h
 ifneq (,$(findstring g++,$(CXX_VERSION)))
@@ -980,7 +975,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
 	cd $(BUILD_DIR)/llvm_objects; \
-	cat list.all |  grep "libLLVM" | grep ")"  | sed "s/^[^/]*//" | sed 's/).(.*/)/' | egrep "^/|^\(" | sort | uniq > list.new; \
+	cat list.all | LANG=C sed -n 's/^[^\/]*\(\/[^ ()]*libLLVM.*[.]a\)[^a-zA-Z]*\([^ ()]*[.]o\).*$$/\1 \2/p' | sort | uniq > list.new; \
 	rm list.all; \
 	if cmp -s list.new list; \
 	then \
@@ -988,7 +983,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	touch list; \
 	else \
 	rm -f llvm_*.o*; \
-	cat list.new | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" | bash -; \
+	cat list.new | sed = | sed "N;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" | bash - ; \
 	mv list.new list; \
 	fi
 
@@ -1247,7 +1242,7 @@ GENERATOR_AOTWASM_TESTS := $(filter-out generator_aotwasm_memory_profiler_mandel
 test_aotwasm_generator: $(GENERATOR_AOTWASM_TESTS)
 
 # This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
-# not all will work directly (e.g. due to missing define_externs at link time), so we blacklist
+# not all will work directly (e.g. due to missing define_externs at link time), so we disable
 # those known to be broken for plausible reasons.
 GENERATOR_BUILD_RUNGEN_TESTS = $(GENERATOR_EXTERNAL_TEST_GENERATOR:$(ROOT_DIR)/test/generator/%_generator.cpp=$(FILTERS_DIR)/%.rungen)
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/async_parallel.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))

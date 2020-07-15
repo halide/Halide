@@ -971,9 +971,9 @@ int tuple_partial_reduction_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {intm1.name() + ".0", g.name() + ".0", g.name() + ".1"}},
-            {intm1.name(), {intm2.name() + ".0", intm1.name() + ".0", intm1.name() + ".1"}},
-            {intm2.name(), {f.name() + ".0", intm2.name() + ".0", intm2.name() + ".1"}},
+            {g.name(), {intm1.name() + ".0", g.name() + ".0"}},
+            {intm1.name(), {intm2.name() + ".0", intm1.name() + ".0"}},
+            {intm2.name(), {f.name() + ".0", intm2.name() + ".0"}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {

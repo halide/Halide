@@ -6,7 +6,6 @@ tests(GROUPS error
       atomics_gpu_8_bit.cpp
       atomics_gpu_mutex.cpp
       atomics_self_reference.cpp
-      atomics_vectorized_mutex.cpp
       auto_schedule_no_parallel.cpp
       auto_schedule_no_reorder.cpp
       autodiff_unbounded.cpp
@@ -83,6 +82,7 @@ tests(GROUPS error
       vectorize_too_little.cpp
       vectorize_too_much.cpp
       vectorized_extern.cpp
+      vector_tile.cpp
       wrap_custom_after_shared.cpp
       wrap_frozen.cpp
       wrapper_never_used.cpp

@@ -429,6 +429,74 @@ Expr lossless_cast(Type t, Expr e) {
         }
     }
 
+    if ((t.is_int() || t.is_uint()) && t.bits() >= 16) {
+        if (const Add *add = e.as<Add>()) {
+            // If we can losslessly narrow the args even more
+            // aggressively, we're good.
+            // E.g. lossless_cast(uint16, (uint32)(some_u8) + 37)
+            // = (uint16)(some_u8) + 37
+            Expr a = lossless_cast(t.with_bits(t.bits() / 2), add->a);
+            Expr b = lossless_cast(t.with_bits(t.bits() / 2), add->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) + cast(t, b);
+            } else {
+                return Expr();
+            }
+        }
+
+        if (const Sub *sub = e.as<Sub>()) {
+            Expr a = lossless_cast(t.with_bits(t.bits() / 2), sub->a);
+            Expr b = lossless_cast(t.with_bits(t.bits() / 2), sub->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) + cast(t, b);
+            } else {
+                return Expr();
+            }
+        }
+
+        if (const Mul *mul = e.as<Mul>()) {
+            Expr a = lossless_cast(t.with_bits(t.bits() / 2), mul->a);
+            Expr b = lossless_cast(t.with_bits(t.bits() / 2), mul->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) * cast(t, b);
+            } else {
+                return Expr();
+            }
+        }
+
+        if (const VectorReduce *reduce = e.as<VectorReduce>()) {
+            const int factor = reduce->value.type().lanes() / reduce->type.lanes();
+            switch (reduce->op) {
+            case VectorReduce::Add:
+                // A horizontal add requires one extra bit per factor
+                // of two in the reduction factor. E.g. a reduction of
+                // 8 vector lanes down to 2 requires 2 extra bits in
+                // the output. We only deal with power-of-two types
+                // though, so just make sure the reduction factor
+                // isn't so large that it will more than double the
+                // number of bits required.
+                if (factor < (1 << (t.bits() / 2))) {
+                    Type narrower = reduce->value.type().with_bits(t.bits() / 2);
+                    Expr val = lossless_cast(narrower, reduce->value);
+                    if (val.defined()) {
+                        return VectorReduce::make(reduce->op, val, reduce->type.lanes());
+                    }
+                }
+                break;
+            case VectorReduce::Max:
+            case VectorReduce::Min: {
+                Expr val = lossless_cast(t, reduce->value);
+                if (val.defined()) {
+                    return VectorReduce::make(reduce->op, val, reduce->type.lanes());
+                }
+                break;
+            }
+            default:
+                break;
+            }
+        }
+    }
+
     return Expr();
 }
 

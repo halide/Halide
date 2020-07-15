@@ -293,7 +293,15 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                       if (a.is_buffer == b.is_buffer) {
                           return a.type.bits() > b.type.bits();
                       } else {
-                          return a.is_buffer < b.is_buffer;
+                          // Ensure that buffer arguments come first:
+                          // for many OpenGL/Compute systems, the
+                          // legal indices for buffer args are much
+                          // more restrictive than for scalar args,
+                          // and scalar args can be 'grown' by
+                          // LICM. Putting buffers first makes it much
+                          // more likely we won't fail on some
+                          // hardware.
+                          return a.is_buffer > b.is_buffer;
                       }
                   });
 
@@ -350,7 +358,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_args_arr =
             create_alloca_at_entry(
                 gpu_args_arr_type,
-                num_args + 1, false,
+                1, false,
                 kernel_name + "_args");
 
         // nullptr-terminated list of size_t's
@@ -367,7 +375,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             gpu_arg_sizes_arr =
                 create_alloca_at_entry(
                     gpu_arg_sizes_arr_type,
-                    num_args + 1, false,
+                    1, false,
                     kernel_name + "_arg_sizes");
         }
 
@@ -375,7 +383,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_arg_is_buffer_arr =
             create_alloca_at_entry(
                 gpu_arg_is_buffer_arr_type,
-                num_args + 1, false,
+                1, false,
                 kernel_name + "_arg_is_buffer");
 
         for (int i = 0; i < num_args; i++) {

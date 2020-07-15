@@ -455,6 +455,11 @@ struct IsRoundtrippable {
 /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
 std::string c_print_name(const std::string &name);
 
+/** Return the LLVM_VERSION against which this libHalide is compiled. This is provided
+ * only for internal tests which need to verify behavior; please don't use this outside
+ * of Halide tests. */
+int get_llvm_version();
+
 }  // namespace Internal
 }  // namespace Halide
 

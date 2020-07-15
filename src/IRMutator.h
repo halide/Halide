@@ -69,6 +69,7 @@ protected:
     virtual Expr visit(const Call *);
     virtual Expr visit(const Let *);
     virtual Expr visit(const Shuffle *);
+    virtual Expr visit(const VectorReduce *);
 
     virtual Stmt visit(const LetStmt *);
     virtual Stmt visit(const AssertStmt *);

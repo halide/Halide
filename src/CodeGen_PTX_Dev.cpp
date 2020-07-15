@@ -157,6 +157,15 @@ void CodeGen_PTX_Dev::init_module() {
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        // Even though we always insert a __syncthreads equivalent
+        // (which has both a device and shared memory fence)
+        // check to make sure the intrinsic has the right number of
+        // arguments
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
+
+        auto fence_type_ptr = as_const_int(op->args[0]);
+        internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
+
         llvm::Function *barrier0 = module->getFunction("llvm.nvvm.barrier0");
         internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
         builder->CreateCall(barrier0);
@@ -329,6 +338,163 @@ void CodeGen_PTX_Dev::visit(const Atomic *op) {
     // Issue atomic stores.
     ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
     CodeGen_LLVM::visit(op);
+}
+
+void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
+    // Pattern match 8/16-bit dot products
+
+    const int input_lanes = op->value.type().lanes();
+    const int factor = input_lanes / op->type.lanes();
+    const Mul *mul = op->value.as<Mul>();
+    if (op->op == VectorReduce::Add &&
+        mul &&
+        (factor % 4 == 0) &&
+        (op->type.element_of() == Int(32) ||
+         op->type.element_of() == UInt(32))) {
+        Expr i = init;
+        if (!i.defined()) {
+            i = cast(mul->type, 0);
+        }
+        // Try to narrow the multiply args to 8-bit
+        Expr a = mul->a, b = mul->b;
+        if (op->type.is_uint()) {
+            a = lossless_cast(UInt(8, input_lanes), a);
+            b = lossless_cast(UInt(8, input_lanes), b);
+        } else {
+            a = lossless_cast(Int(8, input_lanes), a);
+            b = lossless_cast(Int(8, input_lanes), b);
+            if (!a.defined()) {
+                // try uint
+                a = lossless_cast(UInt(8, input_lanes), mul->a);
+            }
+            if (!b.defined()) {
+                b = lossless_cast(UInt(8, input_lanes), mul->b);
+            }
+        }
+        // If we only managed to narrow one of them, try to narrow the
+        // other to 16-bit. Swap the args so that it's always 'a'.
+        Expr a_orig = mul->a;
+        if (a.defined() && !b.defined()) {
+            std::swap(a, b);
+            a_orig = mul->b;
+        }
+        if (b.defined() && !a.defined()) {
+            // Try 16-bit instead
+            a = lossless_cast(UInt(16, input_lanes), a_orig);
+            if (!a.defined() && !op->type.is_uint()) {
+                a = lossless_cast(Int(16, input_lanes), a_orig);
+            }
+        }
+
+        if (a.defined() && b.defined()) {
+            std::ostringstream ss;
+            if (a.type().bits() == 8) {
+                ss << "dp4a";
+            } else {
+                ss << "dp2a";
+            }
+            if (a.type().is_int()) {
+                ss << "_s32";
+            } else {
+                ss << "_u32";
+            }
+            if (b.type().is_int()) {
+                ss << "_s32";
+            } else {
+                ss << "_u32";
+            }
+            const int a_32_bit_words_per_sum = (factor * a.type().bits()) / 32;
+            const int b_32_bit_words_per_sum = (factor * b.type().bits()) / 32;
+            // Reinterpret a and b as 32-bit values with fewer
+            // lanes. If they're aligned dense loads we should just do a
+            // different load.
+            for (Expr *e : {&a, &b}) {
+                int sub_lanes = 32 / e->type().bits();
+                const Load *load = e->as<Load>();
+                const Ramp *idx = load ? load->index.as<Ramp>() : nullptr;
+                if (idx &&
+                    is_one(idx->stride) &&
+                    load->alignment.modulus % sub_lanes == 0 &&
+                    load->alignment.remainder % sub_lanes == 0) {
+                    Expr new_idx = simplify(idx->base / sub_lanes);
+                    int load_lanes = input_lanes / sub_lanes;
+                    if (input_lanes > sub_lanes) {
+                        new_idx = Ramp::make(new_idx, 1, load_lanes);
+                    }
+                    *e = Load::make(Int(32, load_lanes),
+                                    load->name,
+                                    new_idx,
+                                    load->image,
+                                    load->param,
+                                    const_true(load_lanes),
+                                    load->alignment / sub_lanes);
+                } else {
+                    *e = reinterpret(Int(32, input_lanes / sub_lanes), *e);
+                }
+            }
+            string name = ss.str();
+            vector<Expr> result;
+            for (int l = 0; l < op->type.lanes(); l++) {
+                // To compute a single lane of the output, we'll
+                // extract the appropriate slice of the args, which
+                // have been reinterpreted as 32-bit vectors, then
+                // call either dp4a or dp2a the appropriate number of
+                // times, and finally sum the result.
+                Expr i_slice, a_slice, b_slice;
+                if (i.type().is_scalar()) {
+                    i_slice = i;
+                } else {
+                    i_slice = Shuffle::make_extract_element(i, l);
+                }
+                if (a.type().is_scalar()) {
+                    a_slice = a;
+                } else {
+                    a_slice = Shuffle::make_slice(a, l * a_32_bit_words_per_sum, 1, a_32_bit_words_per_sum);
+                }
+                if (b.type().is_scalar()) {
+                    b_slice = b;
+                } else {
+                    b_slice = Shuffle::make_slice(b, l * b_32_bit_words_per_sum, 1, b_32_bit_words_per_sum);
+                }
+                for (int i = 0; i < b_32_bit_words_per_sum; i++) {
+                    if (a_slice.type().lanes() == b_slice.type().lanes()) {
+                        Expr a_lane, b_lane;
+                        if (b_slice.type().is_scalar()) {
+                            a_lane = a_slice;
+                            b_lane = b_slice;
+                        } else {
+                            a_lane = Shuffle::make_extract_element(a_slice, i);
+                            b_lane = Shuffle::make_extract_element(b_slice, i);
+                        }
+                        i_slice = Call::make(i_slice.type(), name,
+                                             {a_lane, b_lane, i_slice},
+                                             Call::PureExtern);
+                    } else {
+                        internal_assert(a_slice.type().lanes() == 2 * b_slice.type().lanes());
+                        Expr a_lane_lo, a_lane_hi, b_lane;
+                        if (b_slice.type().is_scalar()) {
+                            b_lane = b_slice;
+                        } else {
+                            b_lane = Shuffle::make_extract_element(b_slice, i);
+                        }
+                        a_lane_lo = Shuffle::make_extract_element(a_slice, 2 * i);
+                        a_lane_hi = Shuffle::make_extract_element(a_slice, 2 * i + 1);
+                        i_slice = Call::make(i_slice.type(), name,
+                                             {a_lane_lo, a_lane_hi, b_lane, i_slice},
+                                             Call::PureExtern);
+                    }
+                }
+                i_slice = simplify(i_slice);
+                i_slice = common_subexpression_elimination(i_slice);
+                result.push_back(i_slice);
+            }
+            // Concatenate the per-lane results to get the full vector result
+            Expr equiv = Shuffle::make_concat(result);
+            equiv.accept(this);
+            return;
+        }
+    }
+    CodeGen_LLVM::codegen_vector_reduce(op, init);
 }
 
 string CodeGen_PTX_Dev::march() const {

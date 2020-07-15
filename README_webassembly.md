@@ -87,7 +87,7 @@ Note that while some of these limitations may be improved in the future, some
 are effectively intrinsic to the nature of this problem. Realistically, this JIT
 implementation is intended solely for running Halide self-tests (and even then,
 a number of them are fundamentally impractical to support in a hosted-Wasm
-environment and are blacklisted).
+environment and are disabled).
 
 In sum: don't plan on using Halide JIT mode with Wasm unless you are working on
 the Halide library itself.
@@ -155,7 +155,7 @@ will), you need to install Emscripten and a shell for running wasm+js code
 - To run the AOT tests, set `HL_TARGET=wasm-32-wasmrt` and build the
   `test_aotwasm_generator` target. (Note that the normal AOT tests won't run
   usefully with this target, as extra logic to run under a wasm-enabled shell is
-  required, and some tests are blacklisted.)
+  required, and some tests are disabled.)
 
 # Running benchmarks
 

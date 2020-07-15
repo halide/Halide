@@ -261,14 +261,24 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        // NOTE(marcos): adding both types of thread-group barriers here
-        // because Halide at the moment only has the concept of a general
-        // GPU sync point (gpu_thread_barrier); ideally, some distinction
-        // between shared memory and device memory is needed, and we could
-        // even go one step further and issue barriers that only affect
-        // memory loads/stores without synchronizing the threads...
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
+
+        auto fence_type_ptr = as_const_int(op->args[0]);
+        internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
+        auto fence_type = *fence_type_ptr;
+
+        // By default, we'll just issue a Group (aka Shared) memory barrier,
+        // since it seems there isn't a sync without a memory barrier
+        // available
+        // NOTE(shoaibkamil): should we replace with AllMemoryBarrierWithGroupSync()
+        // if both are required?
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device &&
+            !(fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared)) {
+            stream << get_indent() << "DeviceMemoryBarrierWithGroupSync();\n";
+        } else if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
+            stream << get_indent() << "DeviceMemoryBarrier();\n";
+        }
         stream << get_indent() << "GroupMemoryBarrierWithGroupSync();\n";
-        stream << get_indent() << "DeviceMemoryBarrierWithGroupSync();\n";
         print_assignment(op->type, "0");
     } else if (op->name == "pow_f32" && can_prove(op->args[0] > 0)) {
         // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
@@ -896,22 +906,82 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         constants[i].size += constants[i - 1].size;
     }
 
-    // Find all the shared allocations and declare them at global scope.
-    class FindSharedAllocations : public IRVisitor {
-        using IRVisitor::visit;
-        void visit(const Allocate *op) override {
-            op->body.accept(this);
+    // Find all the shared allocations, uniquify their names,
+    // and declare them at global scope.
+    class FindSharedAllocationsAndUniquify : public IRMutator {
+        using IRMutator::visit;
+        Stmt visit(const Allocate *op) override {
             if (is_shared_allocation(op)) {
-                allocs.push_back(op);
+                // Because these will go in global scope,
+                // we need to ensure they have unique names.
+                std::string new_name = unique_name(op->name);
+                replacements[op->name] = new_name;
+
+                std::vector<Expr> new_extents;
+                for (size_t i = 0; i < op->extents.size(); i++) {
+                    new_extents.push_back(mutate(op->extents[i]));
+                }
+                Stmt new_body = mutate(op->body);
+                Expr new_condition = mutate(op->condition);
+                Expr new_new_expr;
+                if (op->new_expr.defined()) {
+                    new_new_expr = mutate(op->new_expr);
+                }
+
+                Stmt new_alloc = Allocate::make(new_name, op->type, op->memory_type, new_extents,
+                                                std::move(new_condition), std::move(new_body),
+                                                std::move(new_new_expr), op->free_function);
+
+                allocs.push_back(new_alloc);
+                replacements.erase(op->name);
+                return new_alloc;
+            } else {
+                return IRMutator::visit(op);
             }
         }
+
+        Stmt visit(const Free *op) override {
+            auto it = replacements.find(op->name);
+            if (it != replacements.end()) {
+                return Free::make(it->second);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        Expr visit(const Load *op) override {
+            auto it = replacements.find(op->name);
+            if (it != replacements.end()) {
+                return Load::make(op->type, it->second,
+                                  mutate(op->index), op->image, op->param,
+                                  mutate(op->predicate), op->alignment);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        Stmt visit(const Store *op) override {
+            auto it = replacements.find(op->name);
+            if (it != replacements.end()) {
+                return Store::make(it->second, mutate(op->value),
+                                   mutate(op->index), op->param,
+                                   mutate(op->predicate), op->alignment);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        std::map<string, string> replacements;
         friend class CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
-        vector<const Allocate *> allocs;
+        vector<Stmt> allocs;
     };
-    FindSharedAllocations fsa;
-    s.accept(&fsa);
+
+    FindSharedAllocationsAndUniquify fsa;
+    s = fsa.mutate(s);
+
     uint32_t total_shared_bytes = 0;
-    for (const Allocate *op : fsa.allocs) {
+    for (Stmt sop : fsa.allocs) {
+        const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);
         // In D3D12/HLSL, only 32bit types (int/uint/float) are suppoerted (even
@@ -1101,6 +1171,9 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "float nan_f32()     { return  1.#IND; } \n"  // Quiet NaN with minimum fractional value.
         << "float neg_inf_f32() { return -1.#INF; } \n"
         << "float inf_f32()     { return +1.#INF; } \n"
+        << "#define is_inf_f32     isinf    \n"
+        << "#define is_finite_f32  isfinite \n"
+        << "#define is_nan_f32     isnan    \n"
         << "#define float_from_bits asfloat \n"
         << "#define sqrt_f32    sqrt   \n"
         << "#define sin_f32     sin    \n"

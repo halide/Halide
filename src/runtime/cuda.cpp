@@ -6,8 +6,6 @@
 #include "scoped_mutex_lock.h"
 #include "scoped_spin_lock.h"
 
-#define INLINE inline __attribute__((always_inline))
-
 namespace Halide {
 namespace Runtime {
 namespace Internal {
@@ -59,7 +57,7 @@ extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *nam
 }
 
 template<typename T>
-INLINE T get_cuda_symbol(void *user_context, const char *name, bool optional = false) {
+ALWAYS_INLINE T get_cuda_symbol(void *user_context, const char *name, bool optional = false) {
     T s = (T)halide_cuda_get_symbol(user_context, name);
     if (!optional && !s) {
         error(user_context) << "CUDA API not found: " << name << "\n";
@@ -208,7 +206,7 @@ public:
     int error;
 
     // Constructor sets 'error' if any occurs.
-    INLINE Context(void *user_context)
+    ALWAYS_INLINE Context(void *user_context)
         : user_context(user_context),
           context(NULL),
           error(CUDA_SUCCESS) {
@@ -231,7 +229,7 @@ public:
         error = cuCtxPushCurrent(context);
     }
 
-    INLINE ~Context() {
+    ALWAYS_INLINE ~Context() {
         if (error == 0) {
             CUcontext old;
             cuCtxPopCurrent(&old);
@@ -613,7 +611,7 @@ WEAK __attribute__((constructor)) void register_cuda_allocation_pool() {
     halide_register_device_allocation_pool(&cuda_allocation_pool);
 }
 
-WEAK __attribute__((always_inline)) uint64_t quantize_allocation_size(uint64_t sz) {
+ALWAYS_INLINE uint64_t quantize_allocation_size(uint64_t sz) {
     int z = __builtin_clzll(sz);
     if (z < 60) {
         sz--;

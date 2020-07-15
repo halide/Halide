@@ -191,7 +191,13 @@ Stmt build_loop_nest(
     // Put all the reduction domain predicates into the containers vector.
     for (Expr pred : predicates) {
         pred = qualify(prefix, pred);
-        pred_container.emplace_back(Container::If, 0, "", likely(pred));
+        // Add a likely qualifier if there isn't already one
+        const Call *c = pred.as<Call>();
+        if (!(c && (c->is_intrinsic(Call::likely) ||
+                    c->is_intrinsic(Call::likely_if_innermost)))) {
+            pred = likely(pred);
+        }
+        pred_container.emplace_back(Container::If, 0, "", pred);
     }
     int n_predicates = (int)(pred_container.size());
 
@@ -217,7 +223,9 @@ Stmt build_loop_nest(
 
     // Sort the predicate guards for the fused loops so they are as far outwards
     // as possible. IfInnner should not be reordered to outside of a for loop.
-    for (int i = (int)nest.size() - n_predicates_inner - n_predicates; i < (int)nest.size() - n_predicates; i++) {
+    for (int i = (int)nest.size() - n_predicates_inner - n_predicates;
+         i < (int)nest.size() - n_predicates;
+         i++) {
         // Only push up IfThenElse.
         internal_assert(nest[i].value.defined());
         internal_assert(nest[i].type == Container::IfInner);
@@ -363,9 +371,22 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     // Make the (multi-dimensional multi-valued) store node.
     Stmt body = Provide::make(func.name(), values, site);
     if (def.schedule().atomic()) {  // Add atomic node.
-        // If required, we will allocate a mutex buffer called func.name() + ".mutex"
-        // The buffer is added in the AddAtomicMutex pass.
-        body = Atomic::make(func.name(), func.name() + ".mutex", body);
+        bool any_unordered_parallel = false;
+        for (auto d : def.schedule().dims()) {
+            any_unordered_parallel |= is_unordered_parallel(d.for_type);
+        }
+        if (any_unordered_parallel) {
+            // If required, we will allocate a mutex buffer called func.name() + ".mutex"
+            // The buffer is added in the AddAtomicMutex pass.
+            body = Atomic::make(func.name(), func.name() + ".mutex", body);
+        } else {
+            // No mutex is required if there is no parallelism, and it
+            // wouldn't work if all parallelism is synchronous
+            // (e.g. vectorization). Vectorization and the like will
+            // need to handle atomic nodes specially, by either
+            // emitting VectorReduce ops or scalarizing.
+            body = Atomic::make(func.name(), std::string{}, body);
+        }
     }
 
     // Default schedule/values if there is no specialization

@@ -780,7 +780,8 @@ void compile_multitarget(const std::string &fn_name,
     // and would complicate output (we might have to do multiple passes
     // if different values for NoRuntime are specified)... so just forbid
     // it up front.
-    user_assert(!contains(output_files, Output::object)) << "Cannot request object for compile_multitarget.\n";
+    user_assert(!contains(output_files, Output::object))
+        << "Cannot request 'object' when using multiple Targets. Use 'static_library' instead.\n";
 
     // For safety, the runtime must be built only with features common to all
     // of the targets; given an unusual ordering like

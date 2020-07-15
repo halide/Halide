@@ -371,6 +371,24 @@ class MonotonicVisitor : public IRVisitor {
         result = Monotonic::Constant;
     }
 
+    void visit(const VectorReduce *op) override {
+        op->value.accept(this);
+        switch (op->op) {
+        case VectorReduce::Add:
+        case VectorReduce::Min:
+        case VectorReduce::Max:
+            // These reductions are monotonic in the arg
+            break;
+        case VectorReduce::Mul:
+        case VectorReduce::And:
+        case VectorReduce::Or:
+            // These ones are not
+            if (result != Monotonic::Constant) {
+                result = Monotonic::Unknown;
+            }
+        }
+    }
+
     void visit(const LetStmt *op) override {
         internal_error << "Monotonic of statement\n";
     }

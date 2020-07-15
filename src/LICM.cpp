@@ -77,6 +77,13 @@ class LiftLoopInvariants : public IRMutator {
                 return false;
             }
         }
+        if (const Add *add = e.as<Add>()) {
+            if (add->type == Int(32) &&
+                is_const(add->b)) {
+                // Don't lift constant integer offsets. They're often free.
+                return false;
+            }
+        }
         return true;
     }
 
@@ -214,6 +221,9 @@ class LICM : public IRMutator {
 
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
+            return IRMutator::visit(op);
+        } else if (op->device_api == DeviceAPI::GLSL) {
+            // GLSL uses magic names for varying things. Just skip LICM.
             return IRMutator::visit(op);
         } else {
 
@@ -493,11 +503,122 @@ class GroupLoopInvariants : public IRMutator {
     }
 };
 
-Stmt loop_invariant_code_motion(Stmt s) {
+Stmt hoist_loop_invariant_values(Stmt s) {
     s = GroupLoopInvariants().mutate(s);
     s = common_subexpression_elimination(s);
     s = LICM().mutate(s);
     s = simplify_exprs(s);
+    return s;
+}
+
+namespace {
+
+// Move IfThenElse nodes from the inside of a piece of Stmt IR to the
+// outside when legal.
+class HoistIfStatements : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const LetStmt *op) override {
+        Stmt body = mutate(op->body);
+        if (const IfThenElse *i = body.as<IfThenElse>()) {
+            if (!i->else_case.defined() &&
+                is_pure(op->value) &&
+                is_pure(i->condition) &&
+                !expr_uses_var(i->condition, op->name)) {
+                Stmt s = LetStmt::make(op->name, op->value, i->then_case);
+                return IfThenElse::make(i->condition, s);
+            }
+        }
+        return LetStmt::make(op->name, op->value, body);
+    }
+
+    Stmt visit(const For *op) override {
+        Stmt body = mutate(op->body);
+        if (const IfThenElse *i = body.as<IfThenElse>()) {
+            if (!i->else_case.defined() &&
+                is_pure(i->condition) &&
+                !expr_uses_var(i->condition, op->name)) {
+                Stmt s = For::make(op->name, op->min, op->extent,
+                                   op->for_type, op->device_api, i->then_case);
+                return IfThenElse::make(i->condition, s);
+            }
+        }
+        return For::make(op->name, op->min, op->extent,
+                         op->for_type, op->device_api, body);
+    }
+
+    Stmt visit(const ProducerConsumer *op) override {
+        Stmt body = mutate(op->body);
+        if (const IfThenElse *i = body.as<IfThenElse>()) {
+            if (!i->else_case.defined() &&
+                is_pure(i->condition)) {
+                Stmt s = ProducerConsumer::make(op->name, op->is_producer, i->then_case);
+                return IfThenElse::make(i->condition, s);
+            }
+        }
+        return ProducerConsumer::make(op->name, op->is_producer, body);
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        Stmt then_case = mutate(op->then_case);
+        if (!op->else_case.defined() &&
+            is_pure(op->condition)) {
+            if (const IfThenElse *i = then_case.as<IfThenElse>()) {
+                if (!i->else_case.defined() &&
+                    is_pure(i->condition)) {
+                    return IfThenElse::make(op->condition && i->condition, then_case);
+                }
+            }
+        }
+        return IfThenElse::make(op->condition, then_case, mutate(op->else_case));
+    }
+
+    Stmt visit(const Allocate *op) override {
+        Stmt body = mutate(op->body);
+        if (const IfThenElse *i = body.as<IfThenElse>()) {
+            if (!i->else_case.defined() &&
+                is_pure(i->condition)) {
+                Stmt s = Allocate::make(op->name, op->type, op->memory_type,
+                                        op->extents, op->condition, i->then_case,
+                                        op->new_expr, op->free_function);
+                return IfThenElse::make(i->condition, s);
+            }
+        }
+        return Allocate::make(op->name, op->type, op->memory_type,
+                              op->extents, op->condition, body,
+                              op->new_expr, op->free_function);
+    }
+
+    Stmt visit(const Block *op) override {
+        Stmt first = mutate(op->first);
+        Stmt rest = mutate(op->rest);
+
+        const IfThenElse *i1 = first.as<IfThenElse>();
+        const Block *b = rest.as<Block>();
+        const IfThenElse *i2 = b ? b->first.as<IfThenElse>() : rest.as<IfThenElse>();
+
+        if (i1 &&
+            i2 &&
+            !i1->else_case.defined() &&
+            !i2->else_case.defined() &&
+            is_pure(i1->condition) &&
+            can_prove(i1->condition == i2->condition)) {
+            Stmt s = Block::make(i1->then_case, i2->then_case);
+            s = IfThenElse::make(i1->condition, s);
+            if (b) {
+                s = Block::make(s, b->rest);
+            }
+            return s;
+        } else {
+            return Block::make(first, rest);
+        }
+    }
+};
+
+}  // namespace
+
+Stmt hoist_loop_invariant_if_statements(Stmt s) {
+    s = HoistIfStatements().mutate(s);
     return s;
 }
 

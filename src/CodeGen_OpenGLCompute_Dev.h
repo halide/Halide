@@ -53,13 +53,12 @@ protected:
     protected:
         std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
 
-        using CodeGen_C::visit;
+        using CodeGen_GLSLBase::visit;
         void visit(const For *) override;
         void visit(const Ramp *op) override;
         void visit(const Broadcast *op) override;
         void visit(const Load *op) override;
         void visit(const Store *op) override;
-        void visit(const Cast *op) override;
         void visit(const Call *op) override;
         void visit(const Allocate *op) override;
         void visit(const Free *op) override;

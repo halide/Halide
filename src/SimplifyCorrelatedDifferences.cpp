@@ -109,17 +109,6 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         return visit_let<LetStmt, Stmt>(op);
     }
 
-    Stmt visit(const Store *op) override {
-        // We only care about the expressions that determine the sizes
-        // of allocations and loop extents, so no need to look inside
-        // stores.
-        return op;
-    }
-
-    Stmt visit(const Provide *op) override {
-        return op;
-    }
-
     Stmt visit(const For *op) override {
         Stmt s = op;
         // This is unfortunately quadratic in maximum loop nesting depth
@@ -183,23 +172,14 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         }
     };
 
-    template<typename T>
-    Expr visit_add_or_sub(const T *op) {
-        if (op->type != Int(32) || loop_var.empty()) {
-            return IRMutator::visit(op);
-        }
-        Expr e = IRMutator::visit(op);
-        op = e.as<T>();
-        if (!op) {
-            return e;
-        }
-        auto ma = is_monotonic(op->a, loop_var, monotonic);
-        auto mb = is_monotonic(op->b, loop_var, monotonic);
+    Expr cancel_correlated_subexpression(Expr e, const Expr &a, const Expr &b, bool correlated) {
+        auto ma = is_monotonic(a, loop_var, monotonic);
+        auto mb = is_monotonic(b, loop_var, monotonic);
 
-        if ((ma == Monotonic::Increasing && mb == Monotonic::Increasing && std::is_same<T, Sub>::value) ||
-            (ma == Monotonic::Decreasing && mb == Monotonic::Decreasing && std::is_same<T, Sub>::value) ||
-            (ma == Monotonic::Increasing && mb == Monotonic::Decreasing && std::is_same<T, Add>::value) ||
-            (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && std::is_same<T, Add>::value)) {
+        if ((ma == Monotonic::Increasing && mb == Monotonic::Increasing && correlated) ||
+            (ma == Monotonic::Decreasing && mb == Monotonic::Decreasing && correlated) ||
+            (ma == Monotonic::Increasing && mb == Monotonic::Decreasing && !correlated) ||
+            (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && !correlated)) {
 
             for (auto it = lets.rbegin(); it != lets.rend(); it++) {
                 if (expr_uses_var(e, it->name)) {
@@ -233,12 +213,67 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         return e;
     }
 
-    Expr visit(const Sub *op) override {
-        return visit_add_or_sub(op);
+    template<typename T>
+    Expr visit_binop(const T *op, bool correlated) {
+        Expr e = IRMutator::visit(op);
+        op = e.as<T>();
+        if (op == nullptr ||
+            op->a.type() != Int(32) ||
+            loop_var.empty()) {
+            return e;
+        } else {
+            // Bury the logic that doesn't depend on the template
+            // parameter in a separate function to save code size and
+            // reduce stack frame size in the recursive path.
+            return cancel_correlated_subexpression(e, op->a, op->b, correlated);
+        }
     }
 
+    // Binary ops where it pays to cancel a correlated term on both
+    // sides. E.g. consider the x in:
+    //
+    // (x*3 + y)*2 - max(x*6, 0)))
+    //
+    // Both sides increase monotonically with x so interval arithmetic
+    // will overestimate the bounds. If we subtract x*6 from both
+    // sides we get:
+    //
+    // y*2 - max(0, x*-6)
+    //
+    // Now only one side depends on x and interval arithmetic becomes
+    // exact.
+    Expr visit(const Sub *op) override {
+        return visit_binop(op, true);
+    }
+
+    Expr visit(const LT *op) override {
+        return visit_binop(op, true);
+    }
+
+    Expr visit(const LE *op) override {
+        return visit_binop(op, true);
+    }
+
+    Expr visit(const GT *op) override {
+        return visit_binop(op, true);
+    }
+
+    Expr visit(const GE *op) override {
+        return visit_binop(op, true);
+    }
+
+    Expr visit(const EQ *op) override {
+        return visit_binop(op, true);
+    }
+
+    Expr visit(const NE *op) override {
+        return visit_binop(op, true);
+    }
+
+    // For add you actually want to cancel any anti-correlated term
+    // (e.g. x in (x*3 + y)*2 + max(x*-6, 0))
     Expr visit(const Add *op) override {
-        return visit_add_or_sub(op);
+        return visit_binop(op, false);
     }
 };
 

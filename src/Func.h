@@ -357,6 +357,16 @@ public:
                 const VarOrRVar &xi, const VarOrRVar &yi,
                 const Expr &xfactor, const Expr &yfactor,
                 TailStrategy tail = TailStrategy::Auto);
+    Stage &tile(const std::vector<VarOrRVar> &previous,
+                const std::vector<VarOrRVar> &outers,
+                const std::vector<VarOrRVar> &inners,
+                const std::vector<Expr> &factors,
+                const std::vector<TailStrategy> &tails);
+    Stage &tile(const std::vector<VarOrRVar> &previous,
+                const std::vector<VarOrRVar> &outers,
+                const std::vector<VarOrRVar> &inners,
+                const std::vector<Expr> &factors,
+                TailStrategy tail = TailStrategy::Auto);
     Stage &reorder(const std::vector<VarOrRVar> &vars);
 
     template<typename... Args>
@@ -983,7 +993,7 @@ public:
      extern "C" void *halide_malloc(void *, size_t)
      extern "C" void halide_free(void *, void *)
      \endcode
-     * These will clobber Halide's versions. See \file HalideRuntime.h
+     * These will clobber Halide's versions. See HalideRuntime.h
      * for declarations.
      */
     void set_custom_allocator(void *(*malloc)(void *, size_t),
@@ -1525,6 +1535,20 @@ public:
     Func &tile(const VarOrRVar &x, const VarOrRVar &y,
                const VarOrRVar &xi, const VarOrRVar &yi,
                const Expr &xfactor, const Expr &yfactor,
+               TailStrategy tail = TailStrategy::Auto);
+
+    /** A more general form of tile, which defines tiles of any dimensionality. */
+    Func &tile(const std::vector<VarOrRVar> &previous,
+               const std::vector<VarOrRVar> &outers,
+               const std::vector<VarOrRVar> &inners,
+               const std::vector<Expr> &factors,
+               const std::vector<TailStrategy> &tails);
+
+    /** The generalized tile, with a single tail strategy to apply to all vars. */
+    Func &tile(const std::vector<VarOrRVar> &previous,
+               const std::vector<VarOrRVar> &outers,
+               const std::vector<VarOrRVar> &inners,
+               const std::vector<Expr> &factors,
                TailStrategy tail = TailStrategy::Auto);
 
     /** Reorder variables to have the given nesting order, from
@@ -2101,7 +2125,7 @@ public:
 
     /** Schedule the iteration over the initial definition of this function
      *  to be fused with another stage 's' from outermost loop to a
-     * given LoopLevel. See \ref Stage::compute_with */
+     * given LoopLevel. */
     // @{
     Func &compute_with(const Stage &s, const VarOrRVar &var, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
     Func &compute_with(const Stage &s, const VarOrRVar &var, LoopAlignStrategy align = LoopAlignStrategy::Auto);

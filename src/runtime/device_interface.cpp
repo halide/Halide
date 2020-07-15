@@ -59,8 +59,8 @@ WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t 
 
 namespace {
 
-__attribute__((always_inline)) int debug_log_and_validate_buf(void *user_context, const halide_buffer_t *buf_arg,
-                                                              const char *routine) {
+ALWAYS_INLINE int debug_log_and_validate_buf(void *user_context, const halide_buffer_t *buf_arg,
+                                             const char *routine) {
     if (buf_arg == NULL) {
         return halide_error_buffer_is_null(user_context, routine);
     }
@@ -161,6 +161,7 @@ WEAK int copy_to_device_already_locked(void *user_context,
             debug(user_context) << "halide_copy_to_device " << buf << " dev_dirty is true error\n";
             return halide_error_code_copy_to_device_failed;
         } else {
+            debug(user_context) << "halide_copy_to_device " << buf << " calling copy_to_device()\n";
             result = device_interface->impl->copy_to_device(user_context, buf);
             if (result == 0) {
                 buf->set_host_dirty(false);
@@ -170,6 +171,8 @@ WEAK int copy_to_device_already_locked(void *user_context,
                 return halide_error_code_copy_to_device_failed;
             }
         }
+    } else {
+        debug(user_context) << "halide_copy_to_device " << buf << " skipped (host is not dirty)\n";
     }
 
     return 0;

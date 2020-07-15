@@ -1,6 +1,8 @@
 #include "AssociativeOpsTable.h"
 #include "IRPrinter.h"
 
+#include <mutex>
+
 namespace Halide {
 namespace Internal {
 
@@ -33,8 +35,9 @@ enum class ValType {
     Int16 = 6,
     Int32 = 7,
     Int64 = 8,
-    Float32 = 9,
-    Float64 = 10,
+    Float16 = 9,
+    Float32 = 10,
+    Float64 = 11,
     All = 11,  // General type (including all previous types)
 };
 
@@ -68,7 +71,9 @@ ValType convert_halide_type_to_val_type(const Type &halide_t) {
         }
     } else {
         internal_assert(halide_t.is_float());
-        if (halide_t.bits() == 32) {
+        if (halide_t.bits() == 16) {
+            val_t = ValType::Float16;
+        } else if (halide_t.bits() == 32) {
             val_t = ValType::Float32;
         } else {
             internal_assert(halide_t.bits() == 64);
@@ -319,7 +324,7 @@ std::string print_types(const vector<Type> &types) {
 const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     internal_assert(!exprs.empty());
 
-    static vector<AssociativePattern> empty;
+    static const vector<AssociativePattern> empty;
 
     if (exprs.size() > 2) {
         debug(5) << "Returning empty table since tuple size is larger than 2\n";
@@ -362,6 +367,11 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     }
 
     if (root != RootExpr::Unknown) {
+        // get_ops_table_helper() lazily initializes the table, so ensure
+        // that multiple threads can't try to do so at the same time.
+        static std::mutex ops_table_lock;
+        std::lock_guard<std::mutex> lock_guard(ops_table_lock);
+
         const vector<AssociativePattern> &table = get_ops_table_helper(types, root, exprs.size());
         debug(7) << "Table size: " << table.size() << "\n";
         for (const auto &p : table) {

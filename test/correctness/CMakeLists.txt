@@ -11,6 +11,7 @@ tests(GROUPS correctness
       async.cpp
       async_copy_chain.cpp
       async_device_copy.cpp
+      atomic_tuples.cpp
       atomics.cpp
       autodiff.cpp
       autoschedule_small_pure_update.cpp
@@ -66,6 +67,7 @@ tests(GROUPS correctness
       convolution.cpp
       convolution_multiple_kernels.cpp
       cross_compilation.cpp
+      cuda_8_bit_dot_product.cpp
       custom_allocator.cpp
       custom_auto_scheduler.cpp
       custom_error_reporter.cpp
@@ -143,6 +145,7 @@ tests(GROUPS correctness
       gpu_param_allocation.cpp
       gpu_reuse_shared_memory.cpp
       gpu_specialize.cpp
+      gpu_store_in_register_with_no_lanes_loop.cpp
       gpu_sum_scan.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
@@ -155,6 +158,7 @@ tests(GROUPS correctness
       hexagon_scatter.cpp
       histogram.cpp
       histogram_equalize.cpp
+      hoist_loop_invariant_if_statements.cpp
       host_alignment.cpp
       image_io.cpp
       image_of_lists.cpp
@@ -190,6 +194,7 @@ tests(GROUPS correctness
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
       lots_of_dimensions.cpp
+      lots_of_loop_invariants.cpp
       make_struct.cpp
       many_dimensions.cpp
       many_small_extern_stages.cpp
@@ -307,6 +312,7 @@ tests(GROUPS correctness
       tuple_select.cpp
       tuple_undef.cpp
       tuple_update_ops.cpp
+      tuple_vector_reduce.cpp
       two_vector_args.cpp
       undef.cpp
       uninitialized_read.cpp
@@ -322,6 +328,8 @@ tests(GROUPS correctness
       vector_extern.cpp
       vector_math.cpp
       vector_print_bug.cpp
+      vector_reductions.cpp
+      vector_tile.cpp
       vectorize_guard_with_if.cpp
       vectorize_mixed_widths.cpp
       vectorize_varying_allocation_size.cpp
@@ -334,19 +342,6 @@ tests(GROUPS correctness
 
 # Make sure the test that needs image_io has it
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
-
-# Some tests explicitly need threads.
-foreach (TEST IN ITEMS
-         correctness_boundary_conditions
-         correctness_gpu_allocation_cache
-         correctness_mul_div_mod
-         correctness_simd_op_check
-         correctness_simd_op_check_hvx
-         correctness_thread_safety
-         correctness_vector_cast
-         correctness_vector_math)
-    target_link_libraries(${TEST} PRIVATE Threads::Threads)
-endforeach ()
 
 # Tests which use external funcs need to enable exports.
 foreach (TEST IN ITEMS
