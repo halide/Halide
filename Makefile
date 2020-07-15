@@ -2140,6 +2140,10 @@ ifneq (,$(findstring clang version 11.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 12.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2160,7 +2164,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 90 100 110))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 90 100 110 120))
 LLVM_OK=yes
 endif
 
@@ -2171,7 +2175,7 @@ $(BUILD_DIR)/llvm_ok: $(BUILD_DIR)/rtti_ok
 	touch $(BUILD_DIR)/llvm_ok
 else
 $(BUILD_DIR)/llvm_ok:
-	@echo "Can't find llvm or version of llvm too old (we need 7.0 or greater):"
+	@echo "Can't find llvm or version of llvm too old (we need 9.0 or greater):"
 	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
 	@exit 1
