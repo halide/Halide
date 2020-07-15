@@ -192,10 +192,10 @@ Tuple argmax(const RDom &r, Expr e, const std::string &name) {
     f(v.free_vars) = initial_tup;
 
     Expr better;
-    if(name == "argmax_last_index")
-		better = e >= f(v.free_vars)[value_index];
+    if (name == "argmax_last_index")
+        better = e >= f(v.free_vars)[value_index];
     else
-		better = e > f(v.free_vars)[value_index];
+        better = e > f(v.free_vars)[value_index];
 
     Tuple update = tuple_select(better, update_tup, f(v.free_vars));
     f(v.free_vars) = update;
@@ -227,10 +227,10 @@ Tuple argmin(const RDom &r, Expr e, const std::string &name) {
     f(v.free_vars) = initial_tup;
 
     Expr better;
-    if(name == "argmin_last_index")
-		better = e <= f(v.free_vars)[value_index];
+    if (name == "argmin_last_index")
+        better = e <= f(v.free_vars)[value_index];
     else
-		better = e < f(v.free_vars)[value_index];
+        better = e < f(v.free_vars)[value_index];
 
     f(v.free_vars) = tuple_select(better, update_tup, f(v.free_vars));
     return f(v.call_args);
