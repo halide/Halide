@@ -2316,10 +2316,14 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 
 # Run clang-format on most of the source. The tutorials directory is
 # explicitly skipped, as those files are manually formatted to
-# maximize readability.
+# maximize readability. NB: clang-format is *not* stable across versions;
+# we are currently standardized on the formatting from clang-format-10.
+# If CLANG_FORMAT points to a different version, you may get incorrectly-formatted code.
+CLANG_FORMAT ?= ${CLANG}-format
+
 .PHONY: format
 format:
-	find "${ROOT_DIR}/apps" "${ROOT_DIR}/src" "${ROOT_DIR}/tools" "${ROOT_DIR}/test" "${ROOT_DIR}/util" "${ROOT_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file
+	find "${ROOT_DIR}/apps" "${ROOT_DIR}/src" "${ROOT_DIR}/tools" "${ROOT_DIR}/test" "${ROOT_DIR}/util" "${ROOT_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG_FORMAT} -i -style=file
 
 # run-clang-tidy.py is a script that comes with LLVM for running clang
 # tidy in parallel. Assume it's in the standard install path relative to clang.
