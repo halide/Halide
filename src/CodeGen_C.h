@@ -114,6 +114,8 @@ protected:
 
     std::string print_xtensa_call(const Call *op);
 
+    bool is_native_vector_type(Type t);
+
     /** Convert a vector Expr into a series of scalar Exprs, then reassemble into vector of original type.  */
     std::string print_scalarized_expr(const Expr &e);
 

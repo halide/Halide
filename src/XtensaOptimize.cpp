@@ -260,6 +260,35 @@ private:
         return call;
     }
 
+    static Expr halide_xtensa_avg_round_i16(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_avg_round_i16", {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_slice_to_native_i32(Expr v0, Expr v1, Expr v2, Expr v3) {
+        Expr call = Call::make(wild_i32x.type(), "halide_xtensa_slice_to_native",
+                               {std::move(v0), std::move(v1), std::move(v2), std::move(v3)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_slice_to_native_u32(Expr v0, Expr v1, Expr v2, Expr v3) {
+        Expr call = Call::make(wild_u32x.type(), "halide_xtensa_slice_to_native",
+                               {std::move(v0), std::move(v1), std::move(v2), std::move(v3)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_concat_from_native_i32(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i32x.type(), "halide_xtensa_concat_from_native",
+                               {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_concat_from_native_u32(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_u32x.type(), "halide_xtensa_concat_from_native",
+                               {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
     Expr visit(const Add *op) override {
         if (op->type.is_vector()) {
             static const std::vector<Pattern> adds = {
@@ -451,8 +480,12 @@ private:
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
 
-            {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_u32x))},
-            {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_i32x))},
+            // Concat and cast.
+            {"halide_xtensa_convert_concat_i32_to_i16", i16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x))},
+            {"halide_xtensa_convert_concat_u32_to_i16", i16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
+
+            // {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_u32x))},
+            // {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_i32x))},
         };
         if (op->type.is_vector()) {
             Expr cast = op;
@@ -499,7 +532,6 @@ private:
             internal_assert(op->args.size() == 3);
             return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
         } else if (op->is_intrinsic(Call::absd) && op->type.is_vector() && op->type.is_uint() && (op->type.bits() == 16)) {
-            // debug(0) << "Found absd " << op->type.is_vector() << " " << op->type.is_uint() << " " << (op->type.bits() == 16) << "\n";
             internal_assert(op->args.size() == 2);
             return Call::make(op->type, "halide_xtensa_absd_i16",
                               {mutate(op->args[0]), mutate(op->args[1])},
@@ -512,6 +544,15 @@ private:
             {"halide_xtensa_narrow_i48x_with_shift_u16", halide_xtensa_narrow_with_shift_u16(i32(wild_i48x), wild_i32)},
             {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
             {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
+            // Slice and convert
+            {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 0, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 1, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i48_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 0, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i48_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 1, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 0, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 1, wild_i32, wild_i32)},
+
+            // {"halide_xtensa_avg121_round_i16", halide_xtensa_avg_round_i16(halide_xtensa_avg_round_i16(wild_i16x, wild_i16x), wild_i16x)},
             // Predicated saturated add/sub.
             // {"halide_xtensa_pred_sat_add_i16", halide_xtensa_sat_add_i16(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))},
             // {"halide_xtensa_pred_sat_sub_i16", halide_xtensa_sat_sub_i16(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))},
@@ -682,12 +723,214 @@ public:
     }
 };
 
+class SplitVectorsToNativeSizes : public IRMutator {
+private:
+    std::vector<std::pair<Type, Type>> types_to_split;
+
+    using IRMutator::visit;
+
+    // Checks the list of types_to_split and returns native vector width for this
+    // type if found and 0 otherwise.
+    int get_native_vector_lanes_num(const Type &type) {
+        for (const auto &t : types_to_split) {
+            if (t.first == type) {
+                return t.second.lanes();
+            }
+        }
+        return 0;
+    }
+
+    Expr visit(const Broadcast *op) override {
+        int native_lanes = get_native_vector_lanes_num(op->type);
+        if (native_lanes > 0) {
+            int split_to = op->type.lanes() / native_lanes;
+            Expr value = mutate(op->value);
+
+            std::vector<Expr> concat_args;
+            for (int ix = 0; ix < split_to; ix++) {
+                Expr r = Broadcast::make(value, native_lanes);
+                concat_args.push_back(std::move(r));
+            }
+            return Call::make(op->type,
+                              "halide_xtensa_concat_from_native",
+                              concat_args, Call::PureExtern);
+        }
+
+        return IRMutator::visit(op);
+    }
+
+    template<typename Op>
+    Expr visit_binop(const Op *op) {
+        int native_lanes = get_native_vector_lanes_num(op->type);
+        if (native_lanes > 0) {
+            const int total_lanes = op->type.lanes();
+            int split_to = op->type.lanes() / native_lanes;
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+
+            std::vector<Expr> concat_args;
+            for (int ix = 0; ix < split_to; ix++) {
+                Expr sliced_a = Call::make(a.type().with_lanes(native_lanes),
+                                           "halide_xtensa_slice_to_native",
+                                           {a, ix, native_lanes, total_lanes},
+                                           Call::PureExtern);
+                Expr sliced_b = Call::make(b.type().with_lanes(native_lanes),
+                                           "halide_xtensa_slice_to_native",
+                                           {b, ix, native_lanes, total_lanes},
+                                           Call::PureExtern);
+                Expr r = Op::make(sliced_a, sliced_b);
+                concat_args.push_back(std::move(r));
+            }
+            return Call::make(op->type,
+                              "halide_xtensa_concat_from_native",
+                              concat_args, Call::PureExtern);
+        }
+
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Add *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const Sub *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const Mul *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const Div *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const Mod *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const Min *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const Max *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const EQ *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const NE *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const LT *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const LE *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const GT *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const GE *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const Or *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const And *op) override {
+        return visit_binop(op);
+    }
+
+    Expr visit(const Call *op) override {
+        int native_lanes = get_native_vector_lanes_num(op->type);
+        if (native_lanes > 0) {
+            if (op->is_intrinsic(Call::count_leading_zeros) || op->is_intrinsic(Call::shift_left) || op->is_intrinsic(Call::shift_right)) {
+                const int total_lanes = op->type.lanes();
+                int split_to = op->type.lanes() / native_lanes;
+                vector<Expr> args;
+                for (size_t arg_index = 0; arg_index < op->args.size(); arg_index++) {
+                    args.push_back(mutate(op->args[arg_index]));
+                }
+
+                std::vector<Expr> concat_args;
+                for (int ix = 0; ix < split_to; ix++) {
+                    std::vector<Expr> sliced_args;
+                    for (size_t arg_index = 0; arg_index < op->args.size(); arg_index++) {
+                        Expr sliced_arg = Call::make(args[arg_index].type().with_lanes(native_lanes),
+                                                     "halide_xtensa_slice_to_native",
+                                                     {args[arg_index], ix, native_lanes, total_lanes},
+                                                     Call::PureExtern);
+                        sliced_args.push_back(sliced_arg);
+                    }
+
+                    Expr r = Call::make(op->type.with_lanes(native_lanes), op->name, sliced_args, Internal::Call::PureIntrinsic);
+                    concat_args.push_back(std::move(r));
+                }
+                return Call::make(op->type,
+                                  "halide_xtensa_concat_from_native",
+                                  concat_args, Call::PureExtern);
+            }
+        }
+
+        return IRMutator::visit(op);
+    }
+
+public:
+    SplitVectorsToNativeSizes() {
+        types_to_split = {
+            {Type(Type::Int, 32, 32), Type(Type::Int, 32, 16)},
+            {Type(Type::UInt, 32, 32), Type(Type::UInt, 32, 16)},
+        };
+    }
+};
+
+class SimplifySliceConcat : public IRMutator {
+private:
+    using IRMutator::visit;
+
+    Expr visit(const Call *op) override {
+        if (op->name == "halide_xtensa_slice_to_native") {
+            Expr first_arg = mutate(op->args[0]);
+            const Call *maybe_concat = first_arg.as<Call>();
+            int slice_index = op->args[1].as<IntImm>()->value;
+            int native_lanes = op->args[2].as<IntImm>()->value;
+            int total_lanes = op->args[3].as<IntImm>()->value;
+            if (maybe_concat && (maybe_concat->name == "halide_xtensa_concat_from_native")
+                // Are these checks necessary?
+                && (maybe_concat->type.lanes() == total_lanes) && (maybe_concat->args[slice_index].type().lanes() == native_lanes)) {
+                return maybe_concat->args[slice_index];
+            }
+            return Call::make(op->type, op->name,
+                              {first_arg, op->args[1], op->args[2], op->args[3]},
+                              Call::PureExtern);
+        }
+
+        return IRMutator::visit(op);
+    }
+
+public:
+    SimplifySliceConcat() {
+    }
+};
+
 Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
-    // debug(0) << s << "\n";
     for (int ix = 0; ix < 10; ix++) {
         s = MatchXtensaPatterns().mutate(s);
     }
+    // Split to the native vectors sizes.
+    s = SplitVectorsToNativeSizes().mutate(s);
+    s = SimplifySliceConcat().mutate(s);
+    // Extra run to replace cast + concat, etc.
+    s = MatchXtensaPatterns().mutate(s);
 
     s = simplify(common_subexpression_elimination(s));
     return s;
