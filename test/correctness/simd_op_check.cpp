@@ -235,53 +235,51 @@ public:
                 check("pabsd", 2 * w, abs(i32_1));
             }
 
-            if (Halide::Internal::get_llvm_version() >= 90) {
-                // Horizontal ops. Our support for them uses intrinsics
-                // from LLVM 9+.
+            // Horizontal ops. Our support for them uses intrinsics
+            // from LLVM 9+.
 
-                // Paradoxically, haddps is a bad way to do horizontal
-                // adds down to a single scalar on most x86. A better
-                // sequence (according to Peter Cordes on stackoverflow)
-                // is movshdup, addps, movhlps, addss. haddps is still
-                // good if you're only partially reducing and your result
-                // is at least one native vector, if only to save code
-                // size, but LLVM really really tries to avoid it and
-                // replace it with shuffles whenever it can, so we won't
-                // test for it.
-                //
-                // See:
-                // https://stackoverflow.com/questions/6996764/fastest-way-to-do-horizontal-float-vector-sum-on-x86
+            // Paradoxically, haddps is a bad way to do horizontal
+            // adds down to a single scalar on most x86. A better
+            // sequence (according to Peter Cordes on stackoverflow)
+            // is movshdup, addps, movhlps, addss. haddps is still
+            // good if you're only partially reducing and your result
+            // is at least one native vector, if only to save code
+            // size, but LLVM really really tries to avoid it and
+            // replace it with shuffles whenever it can, so we won't
+            // test for it.
+            //
+            // See:
+            // https://stackoverflow.com/questions/6996764/fastest-way-to-do-horizontal-float-vector-sum-on-x86
 
-                // For reducing down to a scalar we expect to see addps
-                // and movshdup. We'll sniff for the movshdup.
-                check("movshdup", 1, sum(in_f32(RDom(0, 2) + 2 * x)));
-                check("movshdup", 1, sum(in_f32(RDom(0, 4) + 4 * x)));
-                check("movshdup", 1, sum(in_f32(RDom(0, 16) + 16 * x)));
+            // For reducing down to a scalar we expect to see addps
+            // and movshdup. We'll sniff for the movshdup.
+            check("movshdup", 1, sum(in_f32(RDom(0, 2) + 2 * x)));
+            check("movshdup", 1, sum(in_f32(RDom(0, 4) + 4 * x)));
+            check("movshdup", 1, sum(in_f32(RDom(0, 16) + 16 * x)));
 
-                // The integer horizontal add operations are pretty
-                // terrible on all x86 variants, and LLVM does its best to
-                // avoid generating those too, so we won't test that here
-                // either.
+            // The integer horizontal add operations are pretty
+            // terrible on all x86 variants, and LLVM does its best to
+            // avoid generating those too, so we won't test that here
+            // either.
 
-                // Min reductions should use phminposuw when
-                // possible. This only exists for u16. X86 is weird.
-                check("phminposuw", 1, minimum(in_u16(RDom(0, 8) + 8 * x)));
+            // Min reductions should use phminposuw when
+            // possible. This only exists for u16. X86 is weird.
+            check("phminposuw", 1, minimum(in_u16(RDom(0, 8) + 8 * x)));
 
-                // Max reductions can use the same instruction by first
-                // flipping the bits.
-                check("phminposuw", 1, maximum(in_u16(RDom(0, 8) + 8 * x)));
+            // Max reductions can use the same instruction by first
+            // flipping the bits.
+            check("phminposuw", 1, maximum(in_u16(RDom(0, 8) + 8 * x)));
 
-                // Reductions over signed ints can flip the sign bit
-                // before and after (equivalent to adding 128).
-                check("phminposuw", 1, minimum(in_i16(RDom(0, 8) + 8 * x)));
-                check("phminposuw", 1, maximum(in_i16(RDom(0, 8) + 8 * x)));
+            // Reductions over signed ints can flip the sign bit
+            // before and after (equivalent to adding 128).
+            check("phminposuw", 1, minimum(in_i16(RDom(0, 8) + 8 * x)));
+            check("phminposuw", 1, maximum(in_i16(RDom(0, 8) + 8 * x)));
 
-                // Reductions over 8-bit ints can widen first
-                check("phminposuw", 1, minimum(in_u8(RDom(0, 16) + 16 * x)));
-                check("phminposuw", 1, maximum(in_u8(RDom(0, 16) + 16 * x)));
-                check("phminposuw", 1, minimum(in_i8(RDom(0, 16) + 16 * x)));
-                check("phminposuw", 1, maximum(in_i8(RDom(0, 16) + 16 * x)));
-            }
+            // Reductions over 8-bit ints can widen first
+            check("phminposuw", 1, minimum(in_u8(RDom(0, 16) + 16 * x)));
+            check("phminposuw", 1, maximum(in_u8(RDom(0, 16) + 16 * x)));
+            check("phminposuw", 1, minimum(in_i8(RDom(0, 16) + 16 * x)));
+            check("phminposuw", 1, maximum(in_i8(RDom(0, 16) + 16 * x)));
         }
 
         // SSE 4.1
@@ -938,113 +936,110 @@ public:
             // VORR     X       -       Bitwise OR
             // check("vorr", bool1 | bool2);
 
-            if (Halide::Internal::get_llvm_version() >= 100) {
+            for (int f : {2, 4}) {
+                RDom r(0, f);
 
-                for (int f : {2, 4}) {
-                    RDom r(0, f);
+                // A summation reduction that starts at something
+                // non-trivial, to avoid llvm simplifying accumulating
+                // widening summations into just widening summations.
+                auto sum_ = [&](Expr e) {
+                    Func f;
+                    f(x) = cast(e.type(), 123);
+                    f(x) += e;
+                    return f(x);
+                };
 
-                    // A summation reduction that starts at something
-                    // non-trivial, to avoid llvm simplifying accumulating
-                    // widening summations into just widening summations.
-                    auto sum_ = [&](Expr e) {
-                        Func f;
-                        f(x) = cast(e.type(), 123);
-                        f(x) += e;
-                        return f(x);
-                    };
+                // VPADD    I, F    -       Pairwise Add
+                check(arm32 ? "vpadd.i8" : "addp", 16, sum_(in_i8(f * x + r)));
+                check(arm32 ? "vpadd.i8" : "addp", 16, sum_(in_u8(f * x + r)));
+                check(arm32 ? "vpadd.i16" : "addp", 8, sum_(in_i16(f * x + r)));
+                check(arm32 ? "vpadd.i16" : "addp", 8, sum_(in_u16(f * x + r)));
+                check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_i32(f * x + r)));
+                check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_u32(f * x + r)));
+                check(arm32 ? "vpadd.f32" : "addp", 4, sum_(in_f32(f * x + r)));
+                // In 32-bit, we don't have a pairwise op for doubles,
+                // and expect to just get vadd instructions on d
+                // registers.
+                check(arm32 ? "vadd.f64" : "addp", 4, sum_(in_f64(f * x + r)));
 
-                    // VPADD    I, F    -       Pairwise Add
-                    check(arm32 ? "vpadd.i8" : "addp", 16, sum_(in_i8(f * x + r)));
-                    check(arm32 ? "vpadd.i8" : "addp", 16, sum_(in_u8(f * x + r)));
-                    check(arm32 ? "vpadd.i16" : "addp", 8, sum_(in_i16(f * x + r)));
-                    check(arm32 ? "vpadd.i16" : "addp", 8, sum_(in_u16(f * x + r)));
-                    check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_i32(f * x + r)));
-                    check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_u32(f * x + r)));
-                    check(arm32 ? "vpadd.f32" : "addp", 4, sum_(in_f32(f * x + r)));
-                    // In 32-bit, we don't have a pairwise op for doubles,
-                    // and expect to just get vadd instructions on d
-                    // registers.
-                    check(arm32 ? "vadd.f64" : "addp", 4, sum_(in_f64(f * x + r)));
+                if (f == 2) {
+                    // VPADAL   I       -       Pairwise Add and Accumulate Long
 
-                    if (f == 2) {
-                        // VPADAL   I       -       Pairwise Add and Accumulate Long
+                    // If we're reducing by a factor of two, we can
+                    // use the forms with an accumulator
+                    check(arm32 ? "vpadal.s8" : "sadalp", 16, sum_(i16(in_i8(f * x + r))));
+                    check(arm32 ? "vpadal.u8" : "uadalp", 16, sum_(i16(in_u8(f * x + r))));
+                    check(arm32 ? "vpadal.u8" : "uadalp", 16, sum_(u16(in_u8(f * x + r))));
 
-                        // If we're reducing by a factor of two, we can
-                        // use the forms with an accumulator
-                        check(arm32 ? "vpadal.s8" : "sadalp", 16, sum_(i16(in_i8(f * x + r))));
-                        check(arm32 ? "vpadal.u8" : "uadalp", 16, sum_(i16(in_u8(f * x + r))));
-                        check(arm32 ? "vpadal.u8" : "uadalp", 16, sum_(u16(in_u8(f * x + r))));
+                    check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i16(f * x + r))));
+                    check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u16(f * x + r))));
+                    check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(u32(in_u16(f * x + r))));
 
-                        check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i16(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u16(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(u32(in_u16(f * x + r))));
+                    check(arm32 ? "vpadal.s32" : "sadalp", 4, sum_(i64(in_i32(f * x + r))));
+                    check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(i64(in_u32(f * x + r))));
+                    check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(u64(in_u32(f * x + r))));
+                } else {
+                    // VPADDL   I       -       Pairwise Add Long
 
-                        check(arm32 ? "vpadal.s32" : "sadalp", 4, sum_(i64(in_i32(f * x + r))));
-                        check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(i64(in_u32(f * x + r))));
-                        check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(u64(in_u32(f * x + r))));
-                    } else {
-                        // VPADDL   I       -       Pairwise Add Long
+                    // If we're reducing by more than that, that's not
+                    // possible.
+                    check(arm32 ? "vpaddl.s8" : "saddlp", 16, sum_(i16(in_i8(f * x + r))));
+                    check(arm32 ? "vpaddl.u8" : "uaddlp", 16, sum_(i16(in_u8(f * x + r))));
+                    check(arm32 ? "vpaddl.u8" : "uaddlp", 16, sum_(u16(in_u8(f * x + r))));
 
-                        // If we're reducing by more than that, that's not
-                        // possible.
-                        check(arm32 ? "vpaddl.s8" : "saddlp", 16, sum_(i16(in_i8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 16, sum_(i16(in_u8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 16, sum_(u16(in_u8(f * x + r))));
+                    check(arm32 ? "vpaddl.s16" : "saddlp", 8, sum_(i32(in_i16(f * x + r))));
+                    check(arm32 ? "vpaddl.u16" : "uaddlp", 8, sum_(i32(in_u16(f * x + r))));
+                    check(arm32 ? "vpaddl.u16" : "uaddlp", 8, sum_(u32(in_u16(f * x + r))));
 
-                        check(arm32 ? "vpaddl.s16" : "saddlp", 8, sum_(i32(in_i16(f * x + r))));
-                        check(arm32 ? "vpaddl.u16" : "uaddlp", 8, sum_(i32(in_u16(f * x + r))));
-                        check(arm32 ? "vpaddl.u16" : "uaddlp", 8, sum_(u32(in_u16(f * x + r))));
+                    check(arm32 ? "vpaddl.s32" : "saddlp", 4, sum_(i64(in_i32(f * x + r))));
+                    check(arm32 ? "vpaddl.u32" : "uaddlp", 4, sum_(i64(in_u32(f * x + r))));
+                    check(arm32 ? "vpaddl.u32" : "uaddlp", 4, sum_(u64(in_u32(f * x + r))));
 
-                        check(arm32 ? "vpaddl.s32" : "saddlp", 4, sum_(i64(in_i32(f * x + r))));
-                        check(arm32 ? "vpaddl.u32" : "uaddlp", 4, sum_(i64(in_u32(f * x + r))));
-                        check(arm32 ? "vpaddl.u32" : "uaddlp", 4, sum_(u64(in_u32(f * x + r))));
+                    // If we're widening the type by a factor of four
+                    // as well as reducing by a factor of four, we
+                    // expect vpaddl followed by vpadal
+                    check(arm32 ? "vpaddl.s8" : "saddlp", 8, sum_(i32(in_i8(f * x + r))));
+                    check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(i32(in_u8(f * x + r))));
+                    check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(u32(in_u8(f * x + r))));
+                    check(arm32 ? "vpaddl.s16" : "saddlp", 4, sum_(i64(in_i16(f * x + r))));
+                    check(arm32 ? "vpaddl.u16" : "uaddlp", 4, sum_(i64(in_u16(f * x + r))));
+                    check(arm32 ? "vpaddl.u16" : "uaddlp", 4, sum_(u64(in_u16(f * x + r))));
 
-                        // If we're widening the type by a factor of four
-                        // as well as reducing by a factor of four, we
-                        // expect vpaddl followed by vpadal
-                        check(arm32 ? "vpaddl.s8" : "saddlp", 8, sum_(i32(in_i8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(i32(in_u8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(u32(in_u8(f * x + r))));
-                        check(arm32 ? "vpaddl.s16" : "saddlp", 4, sum_(i64(in_i16(f * x + r))));
-                        check(arm32 ? "vpaddl.u16" : "uaddlp", 4, sum_(i64(in_u16(f * x + r))));
-                        check(arm32 ? "vpaddl.u16" : "uaddlp", 4, sum_(u64(in_u16(f * x + r))));
-
-                        // Note that when going from u8 to i32 like this,
-                        // the vpaddl is unsigned and the vpadal is a
-                        // signed, because the intermediate type is u16
-                        check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i8(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u8(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(u32(in_u8(f * x + r))));
-                        check(arm32 ? "vpadal.s32" : "sadalp", 4, sum_(i64(in_i16(f * x + r))));
-                        check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(i64(in_u16(f * x + r))));
-                        check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(u64(in_u16(f * x + r))));
-                    }
-
-                    // VPMAX    I, F    -       Pairwise Maximum
-                    check(arm32 ? "vpmax.s8" : "smaxp", 16, maximum(in_i8(f * x + r)));
-                    check(arm32 ? "vpmax.u8" : "umaxp", 16, maximum(in_u8(f * x + r)));
-                    check(arm32 ? "vpmax.s16" : "smaxp", 8, maximum(in_i16(f * x + r)));
-                    check(arm32 ? "vpmax.u16" : "umaxp", 8, maximum(in_u16(f * x + r)));
-                    check(arm32 ? "vpmax.s32" : "smaxp", 4, maximum(in_i32(f * x + r)));
-                    check(arm32 ? "vpmax.u32" : "umaxp", 4, maximum(in_u32(f * x + r)));
-
-                    // VPMIN    I, F    -       Pairwise Minimum
-                    check(arm32 ? "vpmin.s8" : "sminp", 16, minimum(in_i8(f * x + r)));
-                    check(arm32 ? "vpmin.u8" : "uminp", 16, minimum(in_u8(f * x + r)));
-                    check(arm32 ? "vpmin.s16" : "sminp", 8, minimum(in_i16(f * x + r)));
-                    check(arm32 ? "vpmin.u16" : "uminp", 8, minimum(in_u16(f * x + r)));
-                    check(arm32 ? "vpmin.s32" : "sminp", 4, minimum(in_i32(f * x + r)));
-                    check(arm32 ? "vpmin.u32" : "uminp", 4, minimum(in_u32(f * x + r)));
+                    // Note that when going from u8 to i32 like this,
+                    // the vpaddl is unsigned and the vpadal is a
+                    // signed, because the intermediate type is u16
+                    check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i8(f * x + r))));
+                    check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u8(f * x + r))));
+                    check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(u32(in_u8(f * x + r))));
+                    check(arm32 ? "vpadal.s32" : "sadalp", 4, sum_(i64(in_i16(f * x + r))));
+                    check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(i64(in_u16(f * x + r))));
+                    check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(u64(in_u16(f * x + r))));
                 }
 
-                // UDOT/SDOT
-                if (target.has_feature(Target::ARMDotProd)) {
-                    for (int f : {4, 8}) {
-                        RDom r(0, f);
-                        for (int v : {2, 4}) {
-                            check("udot", v, sum(u32(in_u8(f * x + r)) * in_u8(f * x + r + 32)));
-                            check("sdot", v, sum(i32(in_i8(f * x + r)) * in_i8(f * x + r + 32)));
-                        }
+                // VPMAX    I, F    -       Pairwise Maximum
+                check(arm32 ? "vpmax.s8" : "smaxp", 16, maximum(in_i8(f * x + r)));
+                check(arm32 ? "vpmax.u8" : "umaxp", 16, maximum(in_u8(f * x + r)));
+                check(arm32 ? "vpmax.s16" : "smaxp", 8, maximum(in_i16(f * x + r)));
+                check(arm32 ? "vpmax.u16" : "umaxp", 8, maximum(in_u16(f * x + r)));
+                check(arm32 ? "vpmax.s32" : "smaxp", 4, maximum(in_i32(f * x + r)));
+                check(arm32 ? "vpmax.u32" : "umaxp", 4, maximum(in_u32(f * x + r)));
+
+                // VPMIN    I, F    -       Pairwise Minimum
+                check(arm32 ? "vpmin.s8" : "sminp", 16, minimum(in_i8(f * x + r)));
+                check(arm32 ? "vpmin.u8" : "uminp", 16, minimum(in_u8(f * x + r)));
+                check(arm32 ? "vpmin.s16" : "sminp", 8, minimum(in_i16(f * x + r)));
+                check(arm32 ? "vpmin.u16" : "uminp", 8, minimum(in_u16(f * x + r)));
+                check(arm32 ? "vpmin.s32" : "sminp", 4, minimum(in_i32(f * x + r)));
+                check(arm32 ? "vpmin.u32" : "uminp", 4, minimum(in_u32(f * x + r)));
+            }
+
+            // UDOT/SDOT
+            if (target.has_feature(Target::ARMDotProd)) {
+                for (int f : {4, 8}) {
+                    RDom r(0, f);
+                    for (int v : {2, 4}) {
+                        check("udot", v, sum(u32(in_u8(f * x + r)) * in_u8(f * x + r + 32)));
+                        check("sdot", v, sum(i32(in_i8(f * x + r)) * in_i8(f * x + r + 32)));
                     }
                 }
             }

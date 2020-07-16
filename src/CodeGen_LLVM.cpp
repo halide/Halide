@@ -170,15 +170,9 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
 // A local helper to make an llvm value type representing
 // alignment. Can't be declared in a header without introducing a
 // dependence on the LLVM headers.
-#if LLVM_VERSION >= 100
 llvm::Align make_alignment(int a) {
     return llvm::Align(a);
 }
-#else
-int make_alignment(int a) {
-    return a;
-}
-#endif
 
 }  // namespace
 
@@ -4347,9 +4341,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         return;
     }
 
-#if LLVM_VERSION >= 90
-    if (output_lanes == 1 &&
-        (target.arch != Target::ARM || LLVM_VERSION >= 100)) {
+    if (output_lanes == 1) {
         const int input_lanes = val.type().lanes();
         const int input_bytes = input_lanes * val.type().bytes();
         const bool llvm_has_intrinsic =
@@ -4449,7 +4441,6 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             return;
         }
     }
-#endif
 
     if (output_lanes == 1 &&
         factor > native_lanes &&
