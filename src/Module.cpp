@@ -55,6 +55,7 @@ std::map<Output, OutputInfo> get_output_info(const Target &target) {
         {Output::static_library, {"static_library", is_windows_coff ? ".lib" : ".a"}},
         {Output::stmt, {"stmt", ".stmt"}},
         {Output::stmt_html, {"stmt_html", ".stmt.html"}},
+        {Output::stmt_json, {"stmt_json", ".stmt.json"}},
     };
     return ext;
 }
