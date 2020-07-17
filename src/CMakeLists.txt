@@ -146,6 +146,7 @@ set(HEADER_FILES
     Solve.h
     SplitTuples.h
     StmtToHtml.h
+    StmtToJson.h
     StorageFlattening.h
     StorageFolding.h
     StrictifyFloat.h
@@ -319,6 +320,7 @@ set(SOURCE_FILES
     Solve.cpp
     SplitTuples.cpp
     StmtToHtml.cpp
+    StmtToJson.cpp
     StorageFlattening.cpp
     StorageFolding.cpp
     StrictifyFloat.cpp

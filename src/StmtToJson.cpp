@@ -24,6 +24,7 @@ std::string to_string(T value) {
 
 
 using std::string;
+using std::vector;
 
 class StmtToJson : public IRVisitor {
     int indent;
@@ -269,8 +270,41 @@ class StmtToJson : public IRVisitor {
         internal_error() << "Should not see ProducerConsumer in backend\n";
     }
 
-    void visit(const For *);
-    void visit(const Store *);
+    void visit(const For *s) override {
+        open_obj("For");
+        stream << get_indent() << "name : "
+               << quoted_str(name) << "\n,";
+        stream << get_indent() << "min : ";
+        s->min.accept(this);
+        stream << get_indent() << "extent : ";
+        s->extent.accept(this);
+        stream << get_indent() << "for_type : "
+               << quoted_str(to_string(s->for_type)) << ",\n";
+        stream << get_indent() << "device_api : "
+               << quoted_str(to_string(s->device_api)) << ",\n";
+        stream << get_indent() << "body : ";
+        s->body.accept(this);
+        close_obj();
+    }
+
+    void visit(const Store *s) override {
+        open_obj("Store");
+        stream << get_indent() << "name : "
+               << quoted_str(s->name) << ",\n";
+        stream << get_indent() << "predicate : ";
+        s->predicate.accept(this);
+        stream << get_indent() << "value : ";
+        s->value.accept(this);
+        stream << get_indent() << "index : ";
+        s->index.accept(this);
+        // TODO(shoaibkamil): probably not the right thing to do here
+        stream << get_indent() << "param : "
+               << quoted_str(to_string(s->param)) << ",\n";
+        // TODO(shoaibkamil): probably not the right thing to do here
+        stream << get_indent() << "alignment : "
+               << quoted_str(to_string(s->alignment)) << ",\n";
+        close_obj();
+    }
     void visit(const Provide *) override {
         internal_error() << "Should not see Provide in backend\n";
     }
@@ -393,9 +427,36 @@ class StmtToJson : public IRVisitor {
         close_obj();
 
     }
-    void visit(const Fork *);
-    void visit(const Acquire *);
-    void visit(const Atomic *);
+
+    void visit(const Fork *s) override {
+        open_obj("Fork");
+        stream << get_indent() << "first : ";
+        s->first.accept(this);
+        stream << get_indent() << "rest : ";
+        s->rest.accept(this);
+        close_obj();
+    }
+
+    void visit(const Acquire *s) override {
+        open_obj("Acquire");
+        stream << get_indent() << "sempahore : ";
+        s->semaphore.accept(this);
+        stream << get_indent() << "count : ";
+        s->count.accept(this);
+        stream << get_indent() << "body : ";
+        s->body.accept(this);
+        close_obj();
+    }
+    void visit(const Atomic *s) override {
+        open_obj("Atomic");
+        stream << get_indent() << "producer_name : "
+               << quoted_str(s->producer_name) << ",\n";
+        stream << get_indent() << "mutex_name : "
+               << quoted_str(s->mutex_name) << ",\n";
+        stream << get_indent() << "body : ";
+        s->body.accept(this);
+        close_obj();
+    }
 };
 
 
