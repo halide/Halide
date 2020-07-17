@@ -304,7 +304,7 @@ struct LoopNest {
 
     std::pair<const LoopNest*, const LoopNest*> find_innermost_and_parent() const;
 
-    double points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const FunctionDAG::Node *producer, const LoadJacobian& jac, const LoopNest* parent, const LoopNest* grandparent, double n, const ScheduleFeatures &feat, bool verbose=false) const;
+    double points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge*>& edge_chain, const LoadJacobian& jac, const LoopNest* parent, const LoopNest* grandparent, double n, const ScheduleFeatures &feat, bool verbose=false) const;
     int64_t compute_licm_amortization(const LoopNest* innermost, const LoopNest* parent, const ScheduleFeatures& feat, const LoadJacobian& jac, int producer_dims) const;
 
     void memoize_points_computed_minimum(StageMap<ScheduleFeatures>& memoized_features, const StageMap<ScheduleFeatures> *features) const;
@@ -359,6 +359,12 @@ struct LoopNest {
     // know what region would be computed if it were scheduled here,
     // and what its loop nest would be.
     const Bound &get_bounds(const FunctionDAG::Node *f) const;
+
+    // Get the region required of a Func at this site (but only to satisfy the
+    // consumers along the given edge chain), from which we know what region
+    // would be computed if it were scheduled here and what its loop nest
+    // would be.
+    const Bound get_bounds_along_edge_chain(const FunctionDAG::Node *f, const vector<const FunctionDAG::Edge*>& edge_chain) const;
 
     void dump() const;
 

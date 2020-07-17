@@ -1298,7 +1298,7 @@ std::pair<const LoopNest *, const LoopNest *> LoopNest::find_innermost_and_paren
     return {child, parent};
 }
 
-double LoopNest::points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const FunctionDAG::Node* producer, const LoadJacobian& jac, const LoopNest* parent, const LoopNest* grandparent, double n, const ScheduleFeatures &feat, bool verbose) const {
+double LoopNest::points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge*>& edge_chain, const LoadJacobian& jac, const LoopNest* parent, const LoopNest* grandparent, double n, const ScheduleFeatures &feat, bool verbose) const {
     std::unique_ptr<LoopNest> innermost_parent_clone = make_unique<LoopNest>();
     innermost_parent_clone->copy_from(*parent);
     double unrolled_loop_extent = feat.unrolled_loop_extent;
@@ -1319,6 +1319,7 @@ double LoopNest::points_accessed_per_thread(const MachineParams& params, const T
     int64_t product_of_non_licm_non_unrolled_extents = 1;
     int64_t product_of_non_licm_extents = 1;
     int num_pure_loops = 0;
+    const FunctionDAG::Node* producer = edge_chain.back()->producer;
     for (size_t idx = 0; idx < parent->size.size(); idx++) {
         bool can_apply_licm = true;
         for (int i = 0; i < producer->dimensions; i++) {
@@ -1362,12 +1363,18 @@ double LoopNest::points_accessed_per_thread(const MachineParams& params, const T
 
     IntrusivePtr<const LoopNest> innermost_parent = innermost_parent_clone->parallelize_in_tiles(params, tiling, grandparent, target, true, false, false, rvars_to_move_inward);
 
-    const auto& bounds = innermost_parent->get_bounds(producer);
+    const auto& bounds = innermost_parent->get_bounds_along_edge_chain(producer, edge_chain);
     int64_t num_points = 1;
     for (int i = 0; i < producer->dimensions; i++) {
-        num_points *= bounds->region_required_single(i).extent();
+        num_points *= bounds->region_required(i).extent();
+
+        // If the min is >= 100000, there's a good chance that the bounds are
+        // uninitialized, indicating a bug
+        internal_assert(std::abs(bounds->region_required(i).min()) < 100000)
+            << "region_required min = " << std::abs(bounds->region_required(i).min())
+            << "; region_required max = " << std::abs(bounds->region_required(i).max());
         if (verbose) {
-            aslog(0) << "region_required(" << i << ") = " << bounds->region_required_single(i).extent() << "; ";
+            aslog(0) << "region_required(" << i << ") = " << bounds->region_required(i).extent() << "; ";
         }
     }
 
@@ -2160,14 +2167,19 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         int64_t consumer_instances = innermost ? instances : feat.num_realizations;
         internal_assert(consumer_instances != 0);
 
-        vector<const FunctionDAG::Node::Stage *> pending;
-        pending.emplace_back(stage);
+        vector<pair<const FunctionDAG::Node::Stage *, vector<const FunctionDAG::Edge*>>> pending;
+        vector<const FunctionDAG::Edge*> edge_chain;
+        pending.emplace_back(stage, edge_chain);
         vector<pair<LoadJacobian, FunctionDAG::Node *>> jacobians;
         vector<pair<LoadJacobian, FunctionDAG::Node *>> thread_jacobians;
         set<const FunctionDAG::Node *> done;
+
         while (!pending.empty()) {
-            auto p = pending.back();
+            auto p_pair = pending.back();
             pending.pop_back();
+
+            auto p = p_pair.first;
+
             const auto &next_edges = p->incoming_edges;
             for (const auto *e : next_edges) {
                 internal_assert(sites.contains(&(e->producer->stages[0])))
@@ -2176,6 +2188,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 const auto &site = sites.get(&(e->producer->stages[0]));
 
                 bool producer_has_been_scheduled = e->producer->is_input || (site.produce != nullptr);
+
+                std::vector<const FunctionDAG::Edge*> edge_chain = p_pair.second;
+                edge_chain.push_back(e);
 
                 if (innermost) {
                     if (e->consumer == stage) {
@@ -2220,7 +2235,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                 if (site.inlined) {
                     // Recursively examine the inputs
-                    pending.emplace_back(&(e->producer->stages[0]));
+                    pending.emplace_back(&(e->producer->stages[0]), edge_chain);
                     continue;
                 }
 
@@ -2394,7 +2409,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     aslog(0) << "BEGIN MEM ACCESS shared_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                                 }
 
-                                double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, e->producer, jac.first, parent, grandparent, n, feat, verbose);
+                                double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, verbose);
 
                                 compute_mem_load_features<SharedMem>(
                                     jac.first,
@@ -2426,7 +2441,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     aslog(0) << "BEGIN MEM ACCESS global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                                 }
 
-                                double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, e->producer, jac.first, parent, grandparent, n, feat, verbose);
+                                double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, verbose);
 
                                 compute_mem_load_features<GlobalMem>(
                                     jac.first,
@@ -2776,6 +2791,79 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     }
 }
 
+// Get the region required of a Func at this site (but only to satisfy the
+// consumers along the given edge chain), from which we know what region
+// would be computed if it were scheduled here and what its loop nest
+// would be.
+// This is useful for computing load memory features along a particular edge
+// e.g. if out(x) = f(x) + g(x)
+// and f(x) = g(x - 100) + g(x + 100)
+// and g(x) = x
+// we want to be able to compute load memory features by 'out' loading from 'g'.
+// For this we need the region required of 'g', but it should only include the
+// region required by the edge from 'g' -> 'out' and ignore the region required by the
+// edge 'g' -> 'f' (which is what get_bounds() would compute i.e. the region
+// required of 'g' should be 1 point for each point of 'out' but get_bounds()
+// will also include the edge 'g' -> 'f' and give the result 201 points for every point
+// of 'out')
+const Bound LoopNest::get_bounds_along_edge_chain(const FunctionDAG::Node *f, const vector<const FunctionDAG::Edge*>& edge_chain) const {
+    internal_assert(edge_chain.size() >= 1);
+
+    internal_assert(edge_chain[0]->consumer == stage)
+        << "get_bounds_along_edge_chain must be called with an edge chain that begins from the current loop nest's node. But the given edge chain begins with " << edge_chain[0]->consumer->node->func.name()
+        << " not " << node->func.name();
+
+    internal_assert(edge_chain.back()->producer == f)
+        << "get_bounds_along_edge_chain must be called with an edge chain that ends with the given node. But the given edge chain ends with " << edge_chain.back()->producer->func.name()
+        << " not " << f->func.name();
+
+    vector<Bound> bounds;
+    BoundContents* bound;
+
+    // For the final consumer, we rely on get_bounds() (i.e. on the bounds for it to
+    // satisfy all of its downstream consumers instead of just along a single edge). This should be
+    // okay because it is computed in the current loop nest so its bounds need
+    // to account for all its downstream consumers.
+    const auto& c_bounds = get_bounds(edge_chain[0]->consumer->node);
+    Bound cur_consumer_bounds = c_bounds;
+
+    for (const auto* e : edge_chain) {
+        const auto* producer = e->producer;
+
+        bound = producer->make_bound();
+        auto init = Span::empty_span();
+        for (int i = 0; i < producer->dimensions; i++) {
+            bound->region_required(i) = init;
+        }
+
+        // Get the concrete sizes of the consuming loop
+        const auto *consumer_loop = &(cur_consumer_bounds->loops(e->consumer->index, 0));
+
+        // Use the bounds relationship between the nodes to
+        // map from the consumer's loop to the required region
+        // of the producer.
+        e->expand_footprint(consumer_loop, &(bound->region_required(0)));
+
+        // Given a required region of this producer, use the bounds
+        // analysis to figure out what region actually gets
+        // computed. For most funcs, these are the same. Some things,
+        // like histograms or scans, you can only really compute all
+        // of at once.
+        producer->required_to_computed(&(bound->region_required(0)), &(bound->region_computed(0)));
+
+        // Finally, figure out what loop nests will be used to compute
+        // this region.
+        for (int i = 0; i < (int)producer->stages.size(); i++) {
+            producer->loop_nest_for_region(i, &(bound->region_computed(0)), &(bound->loops(i, 0)));
+        }
+
+        bounds.push_back(bound);
+        cur_consumer_bounds = bound;
+    }
+
+    return bounds.back();
+}
+
 // Get the region required of a Func at this site, from which we
 // know what region would be computed if it were scheduled here,
 // and what its loop nest would be.
@@ -2801,7 +2889,6 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
         auto init = Span::empty_span();
         for (int i = 0; i < f->dimensions; i++) {
             bound->region_required(i) = init;
-            bound->region_required_single(i) = init;
         }
 
         for (const auto *e : f->outgoing_edges) {
@@ -2820,12 +2907,6 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
             // map from the consumer's loop to the required region
             // of the producer.
             e->expand_footprint(consumer_loop, &(bound->region_required(0)));
-
-            // Get the region_required of the producer for this individual
-            // consumer, instead of all of its consumers
-            if (e->consumer == stage) {
-                e->expand_footprint(consumer_loop, &(bound->region_required_single(0)));
-            }
         }
     }
 
