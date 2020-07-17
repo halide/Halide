@@ -34,13 +34,15 @@ jobs:
         target_arch: [x86, arm]
         target_bits: [32, 64]
         target_os: [windows, linux, osx]
-        llvm_version: [9, 10, 11]
+        llvm_version: [9, 10, 11, 12]
         include:
           - llvm_version: 9
             llvm_branch: release/9.x
           - llvm_version: 10
             llvm_branch: release/10.x
           - llvm_version: 11
+            llvm_branch: release/11.x
+          - llvm_version: 12
             llvm_branch: master
 
           # map things to the necessary host cross-compiler host

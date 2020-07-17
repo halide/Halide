@@ -359,6 +359,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"enable_llvm_loop_opt", Target::EnableLLVMLoopOpt},
     {"wasm_simd128", Target::WasmSimd128},
     {"wasm_signext", Target::WasmSignExt},
+    {"wasm_sat_float_to_int", Target::WasmSatFloatToInt},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
