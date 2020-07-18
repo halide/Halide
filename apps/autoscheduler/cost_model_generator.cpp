@@ -413,29 +413,68 @@ public:
         compute_cost = print_wrap(compute_cost, "compute_cost_after_register_block_occupancy", n, w);
 
         // Next comes a long list of plausible terms to capture the cost of loads.
-        Expr load_cost = (num_realizations * unique_global_lines_read_per_realization * relu1(5, w, n) +
-                          num_realizations * unique_shared_lines_read_per_realization * relu1(16, w, n) +
-                          num_realizations * unique_local_lines_read_per_realization * relu1(17, w, n) +
-                          num_realizations * unique_global_bytes_read_per_realization * relu1(6, w, n) +
-                          num_realizations * unique_shared_bytes_read_per_realization * relu1(20, w, n) +
-                          num_realizations * unique_local_bytes_read_per_realization * relu1(21, w, n) +
-                          num_blocks * num_threads_per_block * unique_global_lines_read_per_thread * relu1(32, w, n) +
-                          num_blocks * num_threads_per_block * unique_shared_lines_read_per_thread * relu1(33, w, n) +
-                          num_blocks * num_threads_per_block * unique_local_lines_read_per_thread * relu1(34, w, n) +
-                          num_blocks * num_threads_per_block * unique_global_bytes_read_per_thread * relu1(35, w, n) +
-                          num_blocks * num_threads_per_block * unique_shared_bytes_read_per_thread * relu1(36, w, n) +
-                          num_blocks * num_threads_per_block * unique_local_bytes_read_per_thread * relu1(37, w, n) +
-                          num_vectors * vector_loads_per_vector * relu1(7, w, n) +
-                          num_scalars * scalar_loads_per_scalar * relu1(8, w, n) +
-                          num_vectors * scalar_loads_per_vector * relu1(9, w, n) +
-                          num_scalars * unique_bytes_read_per_vector * relu1(10, w, n) +
-                          num_vectors * unique_bytes_read_per_vector * relu1(11, w, n) +
-                          num_scalars * unique_lines_read_per_vector * relu1(12, w, n) +
-                          num_vectors * unique_lines_read_per_vector * relu1(13, w, n) +
-                          num_tasks * unique_bytes_read_per_task * relu1(14, w, n) +
-                          num_tasks * unique_lines_read_per_task * relu1(15, w, n));
+        Expr load_cost = num_realizations * unique_global_lines_read_per_realization * relu1(5, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_realizations * unique_global_lines_read_per_realization", n, w);
 
-        load_cost = print_wrap(load_cost, "load_cost_initial", n, w);
+        load_cost += num_realizations * unique_shared_lines_read_per_realization * relu1(16, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_realizations * unique_shared_lines_read_per_realization", n, w);
+
+        load_cost += num_realizations * unique_local_lines_read_per_realization * relu1(17, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_realizations * unique_local_lines_read_per_realization", n, w);
+
+        load_cost += num_realizations * unique_global_bytes_read_per_realization * relu1(6, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_realizations * unique_global_bytes_read_per_realization", n, w);
+
+        load_cost += num_realizations * unique_shared_bytes_read_per_realization * relu1(20, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_realizations * unique_shared_bytes_read_per_realization", n, w);
+
+        load_cost += num_realizations * unique_local_bytes_read_per_realization * relu1(21, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_realizations * unique_local_bytes_read_per_realization", n, w);
+
+        load_cost += num_blocks * num_threads_per_block * unique_global_lines_read_per_thread * relu1(32, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_global_lines_read_per_thread", n, w);
+
+        load_cost += num_blocks * num_threads_per_block * unique_shared_lines_read_per_thread * relu1(33, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_shared_lines_read_per_thread", n, w);
+
+        load_cost += num_blocks * num_threads_per_block * unique_local_lines_read_per_thread * relu1(34, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_local_lines_read_per_thread", n, w);
+
+        load_cost += num_blocks * num_threads_per_block * unique_global_bytes_read_per_thread * relu1(35, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_global_bytes_read_per_thread", n, w);
+
+        load_cost += num_blocks * num_threads_per_block * unique_shared_bytes_read_per_thread * relu1(36, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_shared_bytes_read_per_thread", n, w);
+
+        load_cost += num_blocks * num_threads_per_block * unique_local_bytes_read_per_thread * relu1(37, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_local_bytes_read_per_thread", n, w);
+
+        load_cost += num_vectors * vector_loads_per_vector * relu1(7, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_vectors * vector_loads_per_vector", n, w);
+
+        load_cost += num_scalars * scalar_loads_per_scalar * relu1(8, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_scalars * scalar_loads_per_scalar", n, w);
+
+        load_cost += num_vectors * scalar_loads_per_vector * relu1(9, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_vectors * scalar_loads_per_vector", n, w);
+
+        load_cost += num_scalars * unique_bytes_read_per_vector * relu1(10, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_scalars * unique_bytes_read_per_vector", n, w);
+
+        load_cost += num_vectors * unique_bytes_read_per_vector * relu1(11, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_vectors * unique_bytes_read_per_vector", n, w);
+
+        load_cost += num_scalars * unique_lines_read_per_vector * relu1(12, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_scalars * unique_lines_read_per_vector", n, w);
+
+        load_cost += num_vectors * unique_lines_read_per_vector * relu1(13, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_vectors * unique_lines_read_per_vector", n, w);
+
+        load_cost += num_tasks * unique_bytes_read_per_task * relu1(14, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_tasks * unique_bytes_read_per_task", n, w);
+
+        load_cost += num_tasks * unique_lines_read_per_task * relu1(15, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_tasks * unique_lines_read_per_task", n, w);
 
         Expr global_mem_load_cost = num_blocks * num_global_mem_loads_per_block * relu1(28, w, n);
 
