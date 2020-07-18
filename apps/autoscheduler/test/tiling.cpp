@@ -1,5 +1,3 @@
-#include "Halide.h"
-
 #include <set>
 
 #include "Tiling.h"
@@ -7,9 +5,6 @@
 using namespace Halide;
 using namespace Halide::Internal;
 using namespace Halide::Internal::Autoscheduler;
-
-#define user_assert(c) _halide_internal_assertion(c, Halide::Internal::ErrorReport::User)
-#define EXPECT_EQ(expected, actual) expect_eq(__LINE__, expected, actual)
 
 using tilings_t = vector<vector<int64_t>>;
 
