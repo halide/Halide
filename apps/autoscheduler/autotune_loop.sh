@@ -81,12 +81,21 @@ for F in disable_llvm_loop_opt; do
     fi
 done
 
+if [ $(uname -s) = "Darwin" ]; then
+    LOCAL_CORES=`sysctl -n hw.ncpu`
+else
+    LOCAL_CORES=`nproc`
+fi
+echo Local number of cores detected as ${LOCAL_CORES}
+
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
-BATCH_SIZE=32
+BATCH_SIZE=${LOCAL_CORES}
 NUM_CORES=80
 EPOCHS=100
 NUM_GPUS=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
+
+echo "# GPUs = ${NUM_GPUS}"
 
 # Latest git hash
 GIT_HASH=$(git rev-parse --verify HEAD)
@@ -326,13 +335,7 @@ else
     FIRST=$((BATCH_ID-1))
 fi
 
-if [ $(uname -s) = "Darwin" ]; then
-    LOCAL_CORES=`sysctl -n hw.ncpu`
-else
-    LOCAL_CORES=`nproc`
-fi
-echo Local number of cores detected as ${LOCAL_CORES}
-
+BATCH_ID=$((FIRST+1))
 NUM_BATCHES=1
 TOTAL_NUM_SAMPLES=$((NUM_BATCHES*BATCH_SIZE*${#GENERATOR_ARGS_SETS_ARRAY[@]}))
 
@@ -340,18 +343,17 @@ echo "Total number of samples to be generated: ${TOTAL_NUM_SAMPLES}"
 
 benchmark_loop() {
     TOTAL_BENCHMARK_TIME=0
+    sleep 1
+
+    echo "Starting benchmark loop for samples in ${SAMPLES}/batch_${BATCH_ID}_*"
     while [[ 1 ]]; do
         local num_completed=0
         local num_active=0
 
         unset waitlist
-        for COMPILE_ERR_FILE in $(find "${SAMPLES}" | grep "compile_err.txt$"); do
+
+        for COMPILE_ERR_FILE in $(find ${SAMPLES}/batch_${BATCH_ID}_* | grep "compile_err.txt$"); do
             SAMPLE_DIR=$(dirname "${COMPILE_ERR_FILE}")
-            if [ -f "${SAMPLE_DIR}/bench.txt" ] || grep -q "Autoschedule failed" ${SAMPLE_DIR}/compile_err.txt || grep -q "Compile failed" ${SAMPLE_DIR}/compile_err.txt; then
-                # Have already benchmarked this sample
-                num_completed=$((num_completed+1))
-                continue
-            fi
 
             SAMPLE_ID=$(basename "${SAMPLE_DIR}")
             BATCH_DIR=$(dirname "${SAMPLE_DIR}")
@@ -359,6 +361,18 @@ benchmark_loop() {
             BATCH_ID=$(echo "${BATCH}" | cut -d_ -f 2)
             EXTRA_ARGS_IDX=$(echo "${BATCH}" | cut -d_ -f 3)
             DIR=${SAMPLES}/${BATCH}
+
+            if [ -f "${SAMPLE_DIR}/bench.txt" ] || grep -q "Autoschedule failed" ${SAMPLE_DIR}/compile_err.txt || grep -q "Compile failed" ${SAMPLE_DIR}/compile_err.txt; then
+                # Either benchmarking has been completed or the sample failed to
+                # compile
+                num_completed=$((num_completed+1))
+                continue
+            fi
+
+            if [ ! -f "${SAMPLE_DIR}/bench" ]; then
+                # Sample is still compiling
+                continue
+            fi
 
             S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
             FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
@@ -370,6 +384,7 @@ benchmark_loop() {
                 break
             fi
         done
+
         CUR_SECONDS="$SECONDS"
         wait "${waitlist[@]}"
         BENCHMARK_TIME=$(("SECONDS"-CUR_SECONDS))
@@ -382,6 +397,15 @@ benchmark_loop() {
         fi
 
         if [[ num_completed -eq TOTAL_NUM_SAMPLES ]]; then
+            echo "Benchmarking complete."
+            break
+        fi
+
+        if [[ SECONDS -ge 600 ]]; then
+            echo "Benchmark queue has been active for more than 10 minutes. Exiting."
+            for pid in ${waitlist[@]}; do
+                kill $pid
+            done
             break
         fi
     done
@@ -392,7 +416,7 @@ benchmark_loop() {
 MAX_AUTOSCHEDULE_JOBS=${LOCAL_CORES}
 
 USE_BENCHMARK_QUEUE=1
-if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
+if [[ $USE_BENCHMARK_QUEUE == 1 ]] && [[ $TRAIN_ONLY != 1 ]]; then
     echo "Benchmark queue = ON"
     MAX_AUTOSCHEDULE_JOBS=$((LOCAL_CORES-NUM_GPUS))
     benchmark_loop &
@@ -403,91 +427,89 @@ fi
 
 echo "Max. autoschedule jobs = ${MAX_AUTOSCHEDULE_JOBS}"
 
-for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
-    SECONDS=0
+SECONDS=0
 
-    if [[ $TRAIN_ONLY != 1 ]]; then
-        for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
-            # Compile a batch of samples using the generator in parallel
-            BATCH=batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
-            DIR=${SAMPLES}/${BATCH}
+if [[ $TRAIN_ONLY != 1 ]]; then
+    for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
+        # Compile a batch of samples using the generator in parallel
+        BATCH=batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
+        DIR=${SAMPLES}/${BATCH}
 
-            # Copy the weights being used into the batch folder so that we can repro failures
-            mkdir -p ${DIR}/
-            cp ${WEIGHTS} ${DIR}/used.weights
+        # Copy the weights being used into the batch folder so that we can repro failures
+        mkdir -p ${DIR}/
+        cp ${WEIGHTS} ${DIR}/used.weights
 
-            EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
+        EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
 
-            if [ $PIPELINE == "random_pipeline" ]; then
-                EXTRA_GENERATOR_ARGS+=" pipeline_seed=${BATCH_ID}"
-            fi
+        if [ $PIPELINE == "random_pipeline" ]; then
+            EXTRA_GENERATOR_ARGS+=" pipeline_seed=${BATCH_ID}"
+        fi
 
-            if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
-                echo "Adding extra generator args (${EXTRA_GENERATOR_ARGS}) for batch_${BATCH_ID}"
-            fi
+        if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
+            echo "Adding extra generator args (${EXTRA_GENERATOR_ARGS}) for batch_${BATCH_ID}"
+        fi
 
-            echo ${EXTRA_GENERATOR_ARGS} > ${DIR}/extra_generator_args.txt
+        echo ${EXTRA_GENERATOR_ARGS} > ${DIR}/extra_generator_args.txt
 
-            # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
-            # don't get swamped and timeout unnecessarily
-            unset waitlist;
-            first=$(printf "%04d%04d" $BATCH_ID 0)
-            last=$(printf "%04d%04d" $BATCH_ID $(($BATCH_SIZE-1)))
-            echo Compiling ${BATCH_SIZE} samples from ${first} to ${last}
-            CUR_SECONDS="$SECONDS"
-            for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
-                while [[ 1 ]]; do
-                    RUNNING=$(jobs -r | wc -l)
-                    if [[ RUNNING -ge MAX_AUTOSCHEDULE_JOBS ]]; then
-                        sleep 1
-                    else
-                        break
-                    fi
-                done
-
-                RANDOM_DROPOUT_SEED=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
-                FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-                make_featurization "${DIR}/${SAMPLE_ID}" $RANDOM_DROPOUT_SEED $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID ${DIR}/used.weights &
-                waitlist+=("$!")
+        # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
+        # don't get swamped and timeout unnecessarily
+        unset waitlist;
+        first=$(printf "%04d%04d" $BATCH_ID 0)
+        last=$(printf "%04d%04d" $BATCH_ID $(($BATCH_SIZE-1)))
+        echo Compiling ${BATCH_SIZE} samples from ${first} to ${last}
+        CUR_SECONDS="$SECONDS"
+        for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
+            while [[ 1 ]]; do
+                RUNNING=$(jobs -r | wc -l)
+                if [[ RUNNING -ge MAX_AUTOSCHEDULE_JOBS ]]; then
+                    sleep 1
+                else
+                    break
+                fi
             done
 
-            wait "${waitlist[@]}"
-            COMPILE_TIME=$(("SECONDS"-CUR_SECONDS))
-            echo "Compile time for batch: ${COMPILE_TIME}"
-
-            # benchmark them serially using rungen
-            if [[ $USE_BENCHMARK_QUEUE == 0 ]]; then
-                CUR_SECONDS="$SECONDS"
-                for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID=SAMPLE_ID+NUM_GPUS)); do
-                    for ((INDEX=0;INDEX<NUM_GPUS;INDEX++)); do
-                        SAMPLE_ID_GPU=$((SAMPLE_ID + INDEX))
-                        S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID_GPU)
-                        FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID_GPU)
-                        benchmark_sample "${DIR}/${SAMPLE_ID_GPU}" $S $BATCH $SAMPLE_ID_GPU $EXTRA_ARGS_IDX $FNAME $BATCH_ID $INDEX &
-                    done
-                    wait
-                done
-                BENCHMARK_TIME=$(("SECONDS"-CUR_SECONDS))
-                echo "Benchmark time for batch: ${BENCHMARK_TIME}"
-            fi
+            RANDOM_DROPOUT_SEED=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
+            FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
+            make_featurization "${DIR}/${SAMPLE_ID}" $RANDOM_DROPOUT_SEED $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID ${DIR}/used.weights &
+            waitlist+=("$!")
         done
-    fi
 
-    if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
-        wait "${benchmark_loop_pid}"
-    fi
+        wait "${waitlist[@]}"
+        COMPILE_TIME=$(("SECONDS"-CUR_SECONDS))
+        echo "Compile time for batch: ${COMPILE_TIME}"
 
-    # retrain model weights on all samples seen so far
-    echo Retraining model...
+        # benchmark them serially using rungen
+        if [[ $USE_BENCHMARK_QUEUE == 0 ]]; then
+            CUR_SECONDS="$SECONDS"
+            for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID=SAMPLE_ID+NUM_GPUS)); do
+                for ((INDEX=0;INDEX<NUM_GPUS;INDEX++)); do
+                    SAMPLE_ID_GPU=$((SAMPLE_ID + INDEX))
+                    S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID_GPU)
+                    FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID_GPU)
+                    benchmark_sample "${DIR}/${SAMPLE_ID_GPU}" $S $BATCH $SAMPLE_ID_GPU $EXTRA_ARGS_IDX $FNAME $BATCH_ID $INDEX &
+                done
+                wait
+            done
+            BENCHMARK_TIME=$(("SECONDS"-CUR_SECONDS))
+            echo "Benchmark time for batch: ${BENCHMARK_TIME}"
+        fi
+    done
+fi
 
-    CUR_SECONDS="$SECONDS"
-    retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
-    TRAIN_TIME=$(("SECONDS"-CUR_SECONDS))
-    echo "Train time for batch: ${TRAIN_TIME}"
+if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
+    wait "${benchmark_loop_pid}"
+fi
 
-    if [[ $TRAIN_ONLY == 1 ]]; then
-        echo Batch ${BATCH_ID} took ${SECONDS} seconds to retrain
-    else
-        echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain
-    fi
-done
+# retrain model weights on all samples seen so far
+echo Retraining model...
+
+CUR_SECONDS="$SECONDS"
+retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
+TRAIN_TIME=$(("SECONDS"-CUR_SECONDS))
+echo "Train time for batch: ${TRAIN_TIME}"
+
+if [[ $TRAIN_ONLY == 1 ]]; then
+    echo Batch ${BATCH_ID} took ${SECONDS} seconds to retrain
+else
+    echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain
+fi
