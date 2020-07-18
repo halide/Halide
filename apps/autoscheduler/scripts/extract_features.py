@@ -91,6 +91,9 @@ class MemAccess:
     ]
 
     for k in expected_keys:
+      if k not in mem_access:
+        continue
+        pdb.set_trace()
       assert(k in mem_access)
 
     return MemAccess(**mem_access)
@@ -219,13 +222,12 @@ class FeatureParser:
   def process_features(self):
     processed_features = {}
     for stage in self.features:
-      compute_root_stage = self.stages[stage]
-
       num_blocks = int(self.features[stage]["num_blocks"])
       num_global_stores_per_block = int(self.features[stage]["num_global_mem_stores_per_block"])
       num_global_loads_per_block = int(self.features[stage]["num_global_mem_loads_per_block"])
       num_shared_stores_per_block = int(self.features[stage]["num_shared_mem_stores_per_block"])
       num_shared_loads_per_block = int(self.features[stage]["num_shared_mem_loads_per_block"])
+
       global_mem_load_efficiency = float(self.features[stage]["global_mem_load_efficiency"])
       global_mem_store_efficiency = float(self.features[stage]["global_mem_store_efficiency"])
 
@@ -234,9 +236,13 @@ class FeatureParser:
       num_shared_stores = num_blocks * num_shared_stores_per_block
       num_shared_loads = num_blocks * num_shared_loads_per_block
 
+      if num_global_loads == 0 and num_global_stores == 0 and num_shared_loads == 0 and num_shared_stores == 0:
+        continue
+
       global_mem_load_transactions_used = global_mem_load_efficiency * num_global_loads
       global_mem_store_transactions_used = global_mem_store_efficiency * num_global_stores
 
+      compute_root_stage = self.stages[stage]
       if not compute_root_stage in processed_features:
         processed_features[compute_root_stage] = {
           "num_blocks": num_blocks,
