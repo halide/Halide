@@ -382,6 +382,11 @@ target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,S
 
 add_dependencies(Halide HalideIncludes)
 
+if (WITH_WABT)
+    target_link_libraries(Halide PRIVATE wabt)
+    target_compile_definitions(Halide PRIVATE WITH_WABT)
+endif()
+
 ##
 # Include paths for libHalide
 ##

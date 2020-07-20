@@ -31,7 +31,9 @@ jobs:
           sudo apt-get remove llvm-8 clang-8 libclang-8-dev clang-tidy-8
       - name: Build Compilation DB
         run: |
-          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DLLVM_DIR=/usr/lib/llvm-10/lib/cmake/llvm -S . -B build
+          # Must disable WABT here because it requires that lld/Common/Driver.h
+          # be included, which isn't present in the LLVM we use here
+          cmake -DWITH_WABT=OFF -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DLLVM_DIR=/usr/lib/llvm-10/lib/cmake/llvm -S . -B build
           [ -a build/compile_commands.json ]
       - name: Run clang-tidy
         run: |

@@ -16,17 +16,12 @@ using namespace llvm;
 using std::string;
 using std::vector;
 
-/*
-    TODO:
-        - wasm only supports an i8x16 shuffle directly; we should sniff our Shuffle
-          nodes for (eg) i16x8 and synthesize the right thing
-*/
-
 CodeGen_WebAssembly::CodeGen_WebAssembly(Target t)
     : CodeGen_Posix(t) {
 #if !defined(WITH_WEBASSEMBLY)
     user_error << "llvm build not configured with WebAssembly target enabled.\n";
 #endif
+    user_assert(LLVM_VERSION >= 110) << "Generating WebAssembly is only supported under LLVM 11+.";
     user_assert(llvm_WebAssembly_enabled) << "llvm build not configured with WebAssembly target enabled.\n";
     user_assert(target.bits == 32) << "Only wasm32 is supported.";
 }
@@ -70,6 +65,18 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         {Target::WasmSimd128, true, UInt(8, 16), 0, "llvm.wasm.sub.saturate.unsigned.v16i8", u8_sat(wild_i16x_ - wild_i16x_)},
         {Target::WasmSimd128, true, Int(16, 8), 0, "llvm.wasm.sub.saturate.signed.v8i16", i16_sat(wild_i32x_ - wild_i32x_)},
         {Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.wasm.sub.saturate.unsigned.v8i16", u16_sat(wild_i32x_ - wild_i32x_)},
+
+        {Target::WasmSimd128, true, UInt(8, 16), 0, "llvm.wasm.avgr.unsigned.v16i8", u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
+        {Target::WasmSimd128, true, UInt(8, 16), 0, "llvm.wasm.avgr.unsigned.v16i8", u8(((wild_u16x_ + wild_u16x_) + 1) >> 1)},
+        {Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.wasm.avgr.unsigned.v8i16", u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
+        {Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.wasm.avgr.unsigned.v8i16", u16(((wild_u32x_ + wild_u32x_) + 1) >> 1)},
+
+        // TODO: LLVM should support this directly, but doesn't yet.
+        // To make this work, we need to be able to call the intrinsics with two vecs.
+        // {Target::WasmSimd128, false, Int(8, 16), 0, "llvm.wasm.narrow.signed.v16i8.v8i16", i8(wild_i16x_)},
+        // {Target::WasmSimd128, false, Int(16, 8), 0, "llvm.wasm.narrow.signed.v8i16.v4i32", i16(wild_i32x_)},
+        // {Target::WasmSimd128, false, UInt(8, 16), 0, "llvm.wasm.narrow.unsigned.v16i8.v8i16", u8(wild_u16x_)},
+        // {Target::WasmSimd128, false, UInt(16, 8), 0, "llvm.wasm.narrow.unsigned.v8i16.v4i32", u16(wild_u32x_)},
     };
 
     for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {

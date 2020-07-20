@@ -27,6 +27,11 @@ set_tests_properties(create_halide_distrib PROPERTIES
                      DEPENDS delete_halide_distrib)
 
 function(add_app_test NAME)
+    if (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm")
+        # Don't attempt to build these for wasm yet.
+        return()
+    endif()
+
     # Either add the apps to the build directly or add them as external tests
     if (APPS_INTERNAL)
         # Add a stubbed-out find module for Halide so that the apps can build as part of the parent build.
@@ -103,5 +108,9 @@ add_app_test(wavelet)
 
 # Add the autoschedulers.
 # TODO(#4053): refactor into separate modules
-add_subdirectory(autoscheduler)
-add_subdirectory(gradient_autoscheduler)
+if (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm")
+    # Don't attempt to build these for wasm yet.
+else ()
+    add_subdirectory(autoscheduler)
+    add_subdirectory(gradient_autoscheduler)
+endif ()

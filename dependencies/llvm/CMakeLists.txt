@@ -14,6 +14,8 @@ if ("${LLVM_PACKAGE_VERSION}" VERSION_GREATER 12.0)
     message(WARNING "Halide is not tested on LLVM versions beyond 12.0")
 endif ()
 
+set(LLVM_PACKAGE_VERSION "${LLVM_PACKAGE_VERSION}" CACHE INTERNAL "The version of the LLVM in use")
+
 ##
 # Promote executable targets from LLVM
 ##
@@ -116,7 +118,28 @@ endif ()
 option(TARGET_WEBASSEMBLY "Include WebAssembly target" ${WITH_WEBASSEMBLY})
 if (TARGET_WEBASSEMBLY)
     target_compile_definitions(Halide_LLVM INTERFACE WITH_WEBASSEMBLY)
-    list(APPEND LLVM_COMPONENTS WebAssembly)
+    # lto and options aren't needed to *generate* WebAssembly, but they
+    # are needed to link in LLDWasm.
+    list(APPEND LLVM_COMPONENTS WebAssembly lto option)
+
+
+    ##
+    # lld libraries -- inexplicably, LLVM doesn't put these in the CMake imports,
+    # but we need them, so let's fake it here:
+    ##
+    find_library(LLD_WASM lldWasm
+                 HINTS ${LLVM_LIBRARY_DIRS}
+                 REQUIRED)
+    add_library(LLDWasm STATIC IMPORTED)
+    set_target_properties(LLDWasm PROPERTIES IMPORTED_LOCATION ${LLD_WASM})
+
+    find_library(LLD_COMMON lldCommon
+                 HINTS ${LLVM_LIBRARY_DIRS}
+                 REQUIRED)
+    add_library(LLDCommon STATIC IMPORTED)
+    set_target_properties(LLDCommon PROPERTIES IMPORTED_LOCATION ${LLD_COMMON})
+
+    target_link_libraries(Halide_LLVM INTERFACE LLDWasm LLDCommon)
 endif ()
 
 option(TARGET_X86 "Include x86 target" ${WITH_X86})
