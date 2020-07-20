@@ -17,7 +17,7 @@ public:
 
         /* THE ALGORITHM */
 
-        Var x("x"), y("y"), c("c"), n("n"), ci("ci");
+        Var x("x"), y("y"), c("c"), n("n"), z("z");
 
         Func conv("conv");
         RDom r(0, CI, 0, 3, 0, 3);
@@ -28,7 +28,7 @@ public:
         input_tile(c, x, y, n) = input(c, x, y, n);
 
         Func filter_tile("filter_tile");
-        filter_tile(c, x, y, ci) = filter(c, x, y, ci);
+        filter_tile(c, x, y, z) = filter(c, x, y, z);
 
         conv(c, x, y, n) = bias(c);
         conv(c, x, y, n) += filter_tile(c, r.y, r.z, r.x) * input_tile(r.x, x + r.y, y + r.z, n);
@@ -120,7 +120,7 @@ public:
                 .compute_at(conv, rxo)
                 .vectorize(c, 2)
                 .split(x, xo, xi, 4)
-                .fuse(x, xi, t)
+                .fuse(c, xi, t)
                 .gpu_lanes(t)
                 .unroll(xo)
                 .unroll(y);
@@ -175,7 +175,7 @@ public:
                 tile_h = 4;
             }
 
-            Var co, xo, xi, yo, yi, t;
+            Var co, ci, xo, xi, yo, yi, t;
             relu.split(c, co, ci, vec * tile_w)
                 .split(x, xo, xi, tile_h)
                 .reorder(ci, xi, xo, y, n, co)
@@ -201,7 +201,7 @@ public:
                 .compute_at(conv, r.x)
                 .vectorize(c, vec)
                 .unroll(c)
-                .unroll(ci);
+                .unroll(z);
             input_tile
                 .compute_at(conv, x)
                 .unroll(c);
