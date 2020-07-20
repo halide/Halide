@@ -777,7 +777,7 @@ int LoopNest::vectorized_access_size(bool verbose) const {
 
 // Get the stride over "node's" storage for a unit increment in the vectorized loop's
 // (index)
-StorageStrides LoopNest::storage_strides(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const ThreadInfo& thread_info, bool verbose) const {
+Strides LoopNest::storage_strides(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const ThreadInfo& thread_info, bool verbose) const {
     internal_assert(innermost_storage_dim >= 0);
 
     if (verbose) {
@@ -797,36 +797,54 @@ StorageStrides LoopNest::storage_strides(const LoadJacobian &jac, int innermost_
 
     std::vector<int64_t> storage_strides;
     int64_t storage_stride = 1;
+    if (verbose) {
+        aslog(0) << "Storage stride: ";
+    }
     for (std::size_t i = 0; i < storage_dims.size(); i++) {
         storage_strides.push_back(storage_stride);
+        if (verbose) {
+            aslog(0) << storage_stride << " ";
+        }
         storage_stride *= store_bounds->region_required(storage_dims[i]).extent();
     }
+    if (verbose) {
+        aslog(0) << "\n";
+    }
 
-    StorageStrides strides;
+    Strides strides{storage_strides};
     for (int loop_index : thread_info.loop_indices) {
-        double stride = 0;
+        std::vector<double> index_strides;
         bool exists = true;
         for (std::size_t i = 0; i < storage_dims.size(); i++) {
             auto jac_stride = jac(storage_dims[i], loop_index);
             if (!jac_stride.exists()) {
+                if (verbose) {
+                    aslog(0) << "stride does not exist. loop_index = " << loop_index << "; i = " << i << "\n";
+                    jac.dump("");
+                }
                 exists = false;
                 break;
             }
 
             float s = (float)jac_stride.numerator / (float)jac_stride.denominator;
-            stride += s * storage_strides[i];
+            index_strides.push_back(s);
             if (verbose) {
                 aslog(0) << "loop_index = " << loop_index << "; storage_dim = " << i;
-                aslog(0) << "; s = " << s << "; stride = " << stride << "\n";
+                aslog(0) << "; s = " << s << "\n";
             }
         }
 
         if (exists) {
-            strides.add_valid(std::abs(stride));
+            strides.add_valid(index_strides);
+            if (verbose) {
+                aslog(0) << "adding valid stride\n";
+            }
         } else {
             strides.add_invalid();
+            if (verbose) {
+                aslog(0) << "adding invalid stride\n";
+            }
         }
-
     }
 
     if (verbose) {
@@ -969,17 +987,10 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
 
 template <typename T>
 void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfo<T> &mem_info, bool verbose) const {
-    StorageStrides strides = storage_strides(jac, innermost_dim, node, store_bounds, thread_info, verbose);
+    Strides strides = storage_strides(jac, innermost_dim, node, store_bounds, thread_info, verbose);
 
     size_t dimensions = thread_info.loop_indices.size();
-    if (verbose) {
-        for (size_t i = 0; i < dimensions; ++i) {
-            if (!strides.valid(i)) {
-                aslog(0) << "stride " << i << ": invalid\n";
-            }
-            aslog(0) << "stride " << i << ": " << strides[i] << "\n";
-        }
-    }
+    strides.dump(verbose);
 
     int bytes_per_access = node->bytes_per_point;
 
@@ -995,7 +1006,7 @@ void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac, const
         );
 
         if (verbose) {
-            aslog(0) << "num_num_requests_per_warp = " << num_requests_per_warp << "\n";
+            aslog(0) << "num_requests_per_warp = " << num_requests_per_warp << "\n";
             aslog(0) << "num_regular_warps = " << thread_info.num_regular_active_warps_per_block << "\n";
         }
     }

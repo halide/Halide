@@ -96,40 +96,67 @@ private:
 using GlobalMemInfo = MemInfo<GlobalMem>;
 using SharedMemInfo = MemInfo<SharedMem>;
 
-struct StorageStrides {
+struct Strides {
 public:
-    void add_valid(double stride) {
-        add(stride, true);
+    Strides(const std::vector<int64_t>& storage_strides)
+        : storage_strides{storage_strides}
+    {}
+
+    void add_valid(const std::vector<double>& strides) {
+        add(strides, true);
     }
 
     void add_invalid() {
-        add(0, false);
+        add({}, false);
     }
 
-    void multiply_by_scalar(double scalar) {
-        for (double& s : values) {
-            s *= scalar;
+    bool valid(size_t loop_index) const {
+        return is_valid[loop_index];
+    }
+
+    int64_t offset(size_t loop_index, int64_t point) const {
+        internal_assert(loop_index < is_valid.size() && valid(loop_index));
+        internal_assert(index_strides[loop_index].size() == storage_strides.size());
+
+        int64_t result = 0;
+        for (size_t i = 0; i < storage_strides.size(); ++i) {
+            result += (int64_t)(point * index_strides[loop_index][i]) * storage_strides[i];
+        }
+        return std::abs(result);
+    }
+
+    void dump(bool verbose=false) {
+        if (!verbose) {
+            return;
+        }
+
+        for (size_t i = 0; i < storage_strides.size(); ++i) {
+            if (!valid(i)) {
+                aslog(0) << "stride " << i << ": invalid\n";
+                continue;
+            }
+            aslog(0) << "storage_stride " << i << ": " << storage_strides[i] << "\n";
+
+            for (size_t j = 0; j < storage_strides.size(); ++j) {
+                aslog(0) << "index_stride " << j << ": " << index_strides[i][j] << " ";
+            }
+            aslog(0) << "\n";
         }
     }
 
-    bool valid(size_t i) const {
-        return is_valid[i];
-    }
-
-    double operator[](size_t i) const {
-        return values[i];
-    }
 private:
-    void add(double stride, bool e) {
-        values.push_back(stride);
+    void add(const std::vector<double>& strides, bool e) {
+        index_strides.push_back(strides);
         is_valid.push_back(e);
     }
-    std::vector<double> values;
+
+    std::vector<int64_t> storage_strides;
+    std::vector<std::vector<double>> index_strides;
     std::vector<bool> is_valid;
 };
 
 struct GlobalAccessAccumulator {
-    GlobalAccessAccumulator(int bytes_per_access, size_t dimensions, const StorageStrides& strides, bool verbose)
+    GlobalAccessAccumulator(int bytes_per_access, size_t dimensions, const Strides& strides, bool verbose)
         : bytes_per_access{bytes_per_access}
         , dimensions{dimensions}
         , strides{strides}
@@ -152,7 +179,7 @@ struct GlobalAccessAccumulator {
                 ++unknown_sectors;
                 return;
             }
-            byte += bytes_per_access * (int)(thread_ids[i] * strides[i]);
+            byte += bytes_per_access * strides.offset(i, thread_ids[i]);
         }
 
         if (verbose) {
@@ -208,14 +235,14 @@ struct GlobalAccessAccumulator {
 private:
     int bytes_per_access;
     size_t dimensions;
-    StorageStrides strides;
+    Strides strides;
     bool verbose;
     int unknown_sectors = 0;
     std::unordered_map<int64_t, std::unordered_set<int64_t>> sectors_accessed;
 };
 
 struct SharedAccessAccumulator {
-    SharedAccessAccumulator(int bytes_per_access, size_t dimensions, const StorageStrides& strides, bool verbose)
+    SharedAccessAccumulator(int bytes_per_access, size_t dimensions, const Strides& strides, bool verbose)
         : bytes_per_access{bytes_per_access}
         , dimensions{dimensions}
         , strides{strides}
@@ -238,7 +265,7 @@ struct SharedAccessAccumulator {
                 ++unknown_banks;
                 return;
             }
-            byte += bytes_per_access * (int)(thread_ids[i] * strides[i]);
+            byte += bytes_per_access * strides.offset(i, thread_ids[i]);
         }
 
         if (verbose) {
@@ -302,7 +329,7 @@ struct SharedAccessAccumulator {
 private:
     int bytes_per_access;
     size_t dimensions;
-    StorageStrides strides;
+    Strides strides;
     bool verbose;
     int unknown_banks = 0;
     std::unordered_set<int64_t> bytes_accessed;
