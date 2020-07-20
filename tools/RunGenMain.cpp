@@ -309,6 +309,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (registered_filters == nullptr) {
+        std::cerr << "No filters registered. Compile RunGenMain.cpp along with at least one 'registration' output from a generator.\n";
+        return -1;
+    }
+
     // Look for --name
     std::string filter_name;
     for (int i = 1; i < argc; ++i) {
