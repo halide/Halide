@@ -27,21 +27,25 @@ class Result:
     self.predicted = predicted
     if actual != 0:
       self.ratio = 100 * abs(predicted - actual) / actual
+      self.factor = max(predicted, actual) / min(predicted, actual)
+      if predicted > actual:
+        self.factor = -self.factor
     else:
       if predicted == 0:
         self.ratio = 0
       else:
         self.ratio = math.inf
+      self.factor = 0
 
   def __str__(self):
-    return "{:>14.2f} {:>14.2f} {:>7.2f}".format(self.actual, self.predicted, self.ratio)
+    return "{:>14.2f} {:>14.2f} {:>7.2f} {:>7.2f}".format(self.actual, self.predicted, self.ratio, self.factor)
 
 class IntResult(Result):
   def __init__(self, actual, predicted):
     super().__init__(actual, predicted)
 
   def __str__(self):
-    return "{:>14d} {:>14d} {:>7.2f}".format(int(self.actual), int(self.predicted), self.ratio)
+    return "{:>14d} {:>14d} {:>7.2f} {:>7.2f}".format(int(self.actual), int(self.predicted), self.ratio, self.factor)
 
 class Features(Enum):
   GLOBAL_LOAD_REQUESTS = "global load requests"
