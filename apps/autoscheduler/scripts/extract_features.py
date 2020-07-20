@@ -24,13 +24,15 @@ class MemAccessType(Enum):
   SHARED_MEM_STORE = "shared_mem_store"
 
 class MemAccess:
-  def __init__(self, mem_type, access_type, consumer, compute_root_stage, producer, num_requests_per_block, num_blocks, num_transactions_per_request, all_coeffs_exist):
+  def __init__(self, mem_type, access_type, consumer, compute_root_stage, producer, num_requests_per_block, num_blocks, num_transactions_per_request, tail_num_requests_per_block, tail_num_transactions_per_request, all_coeffs_exist):
     self.mem_type = mem_type
     self.access_type = access_type
     self.consumer = consumer
     self.compute_root_stage = compute_root_stage
     self.num_requests = num_blocks * num_requests_per_block
     self.num_transactions = self.num_requests * num_transactions_per_request
+    self.num_requests += num_blocks * tail_num_requests_per_block
+    self.num_transactions += num_blocks * tail_num_requests_per_block * tail_num_transactions_per_request
     self.all_coeffs_exist = all_coeffs_exist
     self.key = "{}_{}_{}".format(compute_root_stage, mem_type.value, access_type.value)
 
@@ -87,10 +89,17 @@ class MemAccess:
       "num_blocks",
       "num_requests_per_block",
       "num_transactions_per_request",
+      "tail_num_requests_per_block",
+      "tail_num_transactions_per_request",
       "all_coeffs_exist",
     ]
 
     for k in expected_keys:
+      if "tail_num_requests_per_block" not in mem_access:
+        mem_access["tail_num_requests_per_block"] = 0
+      if "tail_num_transactions_per_request" not in mem_access:
+        mem_access["tail_num_transactions_per_request"] = 0
+
       if k not in mem_access:
         continue
         pdb.set_trace()
@@ -121,8 +130,8 @@ class FeatureParser:
       "num_blocks",
       "num_transactions_per_request",
       "num_requests_per_block",
-      "tail_warp_num_requests_per_block",
-      "tail_warp_num_transactions_per_request",
+      "tail_num_requests_per_block",
+      "tail_num_transactions_per_request",
     ]
 
     self.feature_names = set([
