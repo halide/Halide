@@ -1349,6 +1349,8 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
                         internal_error
                             << "unhandled broadcast_scalar_word in define_hvx_intrinsic";
                     }
+                    internal_assert(fn)
+                        << "Unable to find scalar broadcast function. Did you forget to specify either hvx_64 or hvx_128?";
                     args[i] = builder->CreateCall(fn, {args[i]});
                 } else if (args[i]->getType()->isIntegerTy()) {
                     args[i] =
