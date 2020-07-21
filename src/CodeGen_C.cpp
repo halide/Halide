@@ -3373,6 +3373,10 @@ string CodeGen_C::print_xtensa_call(const Call *op) {
         op_name = "IVP_ADDSNX16";
     } else if (op->name == "halide_xtensa_sat_sub_i16") {
         op_name = "IVP_SUBSNX16";
+    } else if (op->name == "halide_xtensa_avg_i16") {
+        op_name = "IVP_AVGNX16";
+    } else if (op->name == "halide_xtensa_avg_u16") {
+        op_name = "IVP_AVGUNX16";
     } else if (op->name == "halide_xtensa_avg_round_i16") {
         op_name = "IVP_AVGRNX16";
     } else if (op->name == "halide_xtensa_avg_round_u16") {
