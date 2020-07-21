@@ -136,9 +136,11 @@ public:
                 continue;
             }
             aslog(0) << "storage_stride " << i << ": " << storage_strides[i] << "\n";
+        }
 
-            for (size_t j = 0; j < storage_strides.size(); ++j) {
-                aslog(0) << "index_stride " << j << ": " << index_strides[i][j] << " ";
+        for (size_t i = 0; i < index_strides.size(); ++i) {
+            for (size_t j = 0; j < index_strides[i].size(); ++j) {
+                aslog(0) << "index_stride " << i << ", storage_stride " << j << ": " << index_strides[i][j] << " ";
             }
             aslog(0) << "\n";
         }
