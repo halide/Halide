@@ -50,6 +50,9 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
     user_assert(!target.features_all_of(
         {Halide::Target::HVX_128, Halide::Target::HVX_64}))
         << "Cannot set both HVX_64 and HVX_128 at the same time.\n";
+    user_assert(!target.features_any_of(
+        {Halide::Target::HVX_128, Halide::Target::HVX_64}))
+        << "Must specify either HVX_64 or HVX_128 (but not both).\n";
 }
 
 namespace {
