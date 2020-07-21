@@ -60,7 +60,8 @@ public:
     void set_num_threads(size_t n) {
         num_threads = n;
     }
-    bool can_run_code() const {
+
+    virtual bool can_run_code() const {
         // Assume we are configured to run wasm if requested
         // (we'll fail further downstream if not)
         if (target.arch == Target::WebAssembly) {
@@ -85,6 +86,34 @@ public:
             }
         }
         return can_run_the_code;
+    }
+
+    virtual void compile_and_check(Func f, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) {
+        // Compile just the vector Func to assembly.
+        std::string asm_filename = output_directory + "check_" + name + ".s";
+        f.compile_to_assembly(asm_filename, arg_types, target);
+
+        std::ifstream asm_file;
+        asm_file.open(asm_filename);
+
+        bool found_it = false;
+
+        std::ostringstream msg;
+        msg << op << " did not generate for target=" << target.to_string() << " vector_width=" << vector_width << ". Instead we got:\n";
+
+        std::string line;
+        while (getline(asm_file, line)) {
+            msg << line << "\n";
+
+            // Check for the op in question
+            found_it |= wildcard_search(op, line) && !wildcard_search("_" + op, line);
+        }
+
+        if (!found_it) {
+            error_msg << "Failed: " << msg.str() << "\n";
+        }
+
+        asm_file.close();
     }
 
     // Check if pattern p matches str, allowing for wildcards (*).
@@ -148,33 +177,7 @@ public:
         error() = Halide::cast<double>(maximum(absd(f(r.x, r.y), f_scalar(r.x, r.y))));
 
         setup_images();
-        {
-            // Compile just the vector Func to assembly.
-            std::string asm_filename = output_directory + "check_" + name + ".s";
-            f.compile_to_assembly(asm_filename, arg_types, target);
-
-            std::ifstream asm_file;
-            asm_file.open(asm_filename);
-
-            bool found_it = false;
-
-            std::ostringstream msg;
-            msg << op << " did not generate for target=" << target.to_string() << " vector_width=" << vector_width << ". Instead we got:\n";
-
-            std::string line;
-            while (getline(asm_file, line)) {
-                msg << line << "\n";
-
-                // Check for the op in question
-                found_it |= wildcard_search(op, line) && !wildcard_search("_" + op, line);
-            }
-
-            if (!found_it) {
-                error_msg << "Failed: " << msg.str() << "\n";
-            }
-
-            asm_file.close();
-        }
+        compile_and_check(f, op, name, vector_width, error_msg);
 
         // Also compile the error checking Func (to be sure it compiles without error)
         std::string fn_name = "test_" + name;
