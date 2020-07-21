@@ -1341,19 +1341,20 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
                     // We know it is a scalar type. We can have 8 bit, 16 bit or 32 bit
                     // types only.
                     unsigned bits = arg_types[i].bits();
+                    const char *fn_name = "";
                     switch (bits) {
                     case 8:
-                        fn = module->getFunction("halide.hexagon.dup4.b");
+                        fn_name = "halide.hexagon.dup4.b";
                         break;
                     case 16:
-                        fn = module->getFunction("halide.hexagon.dup2.h");
+                        fn_name = "halide.hexagon.dup2.h";
                         break;
                     default:
                         internal_error
                             << "unhandled broadcast_scalar_word in define_hvx_intrinsic";
                     }
-                    internal_assert(fn)
-                        << "Unable to find scalar broadcast function. Did you forget to specify either hvx_64 or hvx_128?";
+                    fn = module->getFunction(fn_name);
+                    internal_assert(fn) << "Unable to find function " << fn_name << " in define_hvx_intrinsic.";
                     args[i] = builder->CreateCall(fn, {args[i]});
                 } else if (args[i]->getType()->isIntegerTy()) {
                     args[i] =
