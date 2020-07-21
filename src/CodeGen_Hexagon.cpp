@@ -50,9 +50,6 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
     user_assert(!target.features_all_of(
         {Halide::Target::HVX_128, Halide::Target::HVX_64}))
         << "Cannot set both HVX_64 and HVX_128 at the same time.\n";
-    user_assert(target.features_any_of(
-        {Halide::Target::HVX_128, Halide::Target::HVX_64}))
-        << "Must specify either HVX_64 or HVX_128 (but not both).\n";
 }
 
 namespace {
@@ -82,6 +79,10 @@ Stmt call_halide_qurt_hvx_unlock() {
 // Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
 // as a destructor if successful.
 Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
+    user_assert(target.features_any_of(
+        {Halide::Target::HVX_128, Halide::Target::HVX_64}))
+        << "Must specify either HVX_64 or HVX_128 (but not both).\n";
+
     // Modify the stmt to add a call to halide_qurt_hvx_lock, and
     // register a destructor to call halide_qurt_hvx_unlock.
     Stmt check_hvx_lock = call_halide_qurt_hvx_lock(target);
