@@ -88,7 +88,7 @@ public:
         return can_run_the_code;
     }
 
-    virtual void compile_and_check(Func f, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) {
+    virtual void compile_and_check(Func f, Func error, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) {
         // Compile just the vector Func to assembly.
         std::string asm_filename = output_directory + "check_" + name + ".s";
         f.compile_to_assembly(asm_filename, arg_types, target);
@@ -114,6 +114,10 @@ public:
         }
 
         asm_file.close();
+
+        // Also compile the error checking Func (to be sure it compiles without error)
+        std::string fn_name = "test_" + name;
+        error.compile_to_file(output_directory + fn_name, arg_types, fn_name, target);
     }
 
     // Check if pattern p matches str, allowing for wildcards (*).
@@ -177,11 +181,7 @@ public:
         error() = Halide::cast<double>(maximum(absd(f(r.x, r.y), f_scalar(r.x, r.y))));
 
         setup_images();
-        compile_and_check(f, op, name, vector_width, error_msg);
-
-        // Also compile the error checking Func (to be sure it compiles without error)
-        std::string fn_name = "test_" + name;
-        error.compile_to_file(output_directory + fn_name, arg_types, fn_name, target);
+        compile_and_check(f, error, op, name, vector_width, error_msg);
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {

@@ -24,12 +24,12 @@ public:
         return false;
     }
 
-    void compile_and_check(Func f, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) override {
+    void compile_and_check(Func f, Func error, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) override {
         // Compile just the vector Func to assembly.
-        std::string asm_filename = output_directory + "check_" + name + ".s";
-        f.compile_to_c(asm_filename, arg_types, "", target);
-        std::ifstream asm_file;
-        asm_file.open(asm_filename);
+        std::string cpp_filename = output_directory + "check_" + name + ".cpp";
+        f.compile_to_c(cpp_filename, arg_types, "", target);
+        std::ifstream cpp_file;
+        cpp_file.open(cpp_filename);
 
         bool found_it = false;
 
@@ -41,7 +41,7 @@ public:
         msg << "Skipping non-main function definitions..."
             << "\n";
         bool inside_the_function = false;
-        while (getline(asm_file, line)) {
+        while (getline(cpp_file, line)) {
             if (!inside_the_function && (line.find("int op_" + op) != std::string::npos)) {
                 inside_the_function = true;
             }
@@ -57,7 +57,14 @@ public:
             error_msg << "Failed: " << msg.str() << "\n";
         }
 
-        asm_file.close();
+        cpp_file.close();
+
+        // Also compile the error checking Func (to be sure it compiles without error)
+        std::string fn_name = "test_" + name;
+        std::string fn_cpp_name = fn_name + ".cpp";
+        std::string fn_h_name = fn_name + +".h";
+        error.compile_to_c(output_directory + fn_cpp_name, arg_types, fn_name, target);
+        error.compile_to_header(output_directory + fn_h_name, arg_types, fn_name, target);
     }
 
     void add_tests() override {
@@ -82,8 +89,8 @@ public:
         check("halide_xtensa_widen_pair_mul_i48", vector_width / 2, i32(i16_1) * i32(i16_2) + i32(i16_3) * i32(i16_4));
         check("halide_xtensa_widen_pair_mul_u48", vector_width / 2, u32(u16_1) * u32(u16_2) + u32(u16_3) * u32(u16_4));
 
-        check("halide_xtensa_widen_add_i48", vector_width / 2, i32(i16_1) + i32(i16_2));
-        check("halide_xtensa_widen_add_u48", vector_width / 2, u32(u16_1) + u32(u16_2));
+        // check("halide_xtensa_widen_add_i48", vector_width / 2, i32(i16_1) + i32(i16_2));
+        // check("halide_xtensa_widen_add_u48", vector_width / 2, u32(u16_1) + u32(u16_2));
 
         // Multiplications.
         check("IVP_MULNX16PACKL", vector_width / 2, i16_1 * i16_2);
@@ -102,9 +109,9 @@ public:
 
         // Casts.
         check("convert_to_int32x32_t_from_int16x32_t", vector_width / 2, i32(i16_1));
-        check("convert_to_int16x16_t_from_int32x16_t", vector_width / 4, i16(i32_1));
+        // check("convert_to_int16x16_t_from_int32x16_t", vector_width / 4, i16(i32_1));
         check("convert_to_uint32x32_t_from_uint16x32_t", vector_width / 2, u32(u16_1));
-        check("convert_to_uint16x16_t_from_uint32x16_t", vector_width / 4, u16(u32_1));
+        // check("convert_to_uint16x16_t_from_uint32x16_t", vector_width / 4, u16(u32_1));
 
         // Averaging instructions.
         check("IVP_AVGUNX16", vector_width / 2, u16((u32(u16_1) + u32(u16_2)) / 2));
@@ -114,7 +121,7 @@ public:
 
         // Saturating arithmetic
         check("IVP_ADDSNX16", vector_width / 2, i16_sat(i32(i16_1) + i32(i16_2)));
-        check("halide_xtensa_sat_add_i32", vector_width / 4, i32_sat(i64(i32_1) + i64(i32_2)));
+        // check("halide_xtensa_sat_add_i32", vector_width / 4, i32_sat(i64(i32_1) + i64(i32_2)));
         check("IVP_SUBSNX16", vector_width / 2, i16_sat(i32(i16_1) - i32(i16_2)));
         check("IVP_ABSSUBNX16", vector_width / 2, absd(u16_1, u16_2));
         check("IVP_ABSSUBNX16", vector_width / 2, absd(i16_1, i16_2));
@@ -188,7 +195,8 @@ int main(int argc, char **argv) {
     bool success = test_xtensa.test_all();
 
     // Compile a runtime for this target, for use in the static test.
-    // compile_standalone_runtime(test_xtensa.output_directory + "simd_op_check_runtime.o", test_xtensa.target);
+    // TODO(vksnk): that's going to be different for xtensa?
+    compile_standalone_runtime(test_xtensa.output_directory + "simd_op_check_runtime.o", test_xtensa.target);
 
     if (!success) {
         return -1;
