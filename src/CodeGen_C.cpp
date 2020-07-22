@@ -2624,6 +2624,11 @@ void CodeGen_C::visit(const For *op) {
     close_scope("for " + print_name(op->name));
 }
 
+void CodeGen_C::visit(const Block *op) {
+    op->first.accept(this);
+    op->rest.accept(this);
+}
+
 void CodeGen_C::visit(const Ramp *op) {
     Type vector_type = op->type.with_lanes(op->lanes);
     string id_base = print_expr(op->base);
