@@ -172,7 +172,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         }
     };
 
-    Expr cancel_correlated_subexpression(Expr e, Expr a, Expr b, bool correlated) {
+    Expr cancel_correlated_subexpression(Expr e, const Expr &a, const Expr &b, bool correlated) {
         auto ma = is_monotonic(a, loop_var, monotonic);
         auto mb = is_monotonic(b, loop_var, monotonic);
 

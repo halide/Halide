@@ -4,6 +4,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] Mullapudi2016 autoscheduler does not support WebAssembly.\n");
+        return 0;
+    }
+
     // This test is making sure that the auto-scheduler picks the appropriate
     // tail strategy when splitting the var of an update definition.
     // The default tail strategy for this case (i.e. RoundUp) will cause

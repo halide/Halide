@@ -265,6 +265,26 @@ def test_int_promotion():
     # Exprlike = Var
     # (skipped, since these can never have values of any type other than int32)
 
+def test_vector_tile():
+    # Test Func.tile() and Stage.tile() with vector arguments
+    x,  y,  z  = [ hl.Var(c    ) for c in 'xyz' ]
+    xi, yi, zi = [ hl.Var(c+"i") for c in 'xyz' ]
+    xo, yo, zo = [ hl.Var(c+"o") for c in 'xyz' ]
+    f = hl.Func('f')
+    g = hl.Func('g')
+    h = hl.Func('h')
+    f[x, y] = y
+    f[x, y] += x
+    g[x, y, z] = x + y
+    g[x, y, z] += z
+    f.tile([x,y], [xo,yo], [x,y], [8,8])
+    f.update(0).tile([x,y], [xo,yo], [xi,yi], [8,8])
+    g.tile([x,y], [xo,yo], [x,y], [8,8], hl.TailStrategy.RoundUp)
+    g.update(0).tile([x,y], [xo,yo], [xi,yi], [8,8], hl.TailStrategy.GuardWithIf)
+    p = hl.Pipeline([f, g])
+    p.compile_jit()
+
+
 
 if __name__ == "__main__":
     test_compiletime_error()
@@ -274,6 +294,7 @@ if __name__ == "__main__":
     test_float_or_int()
     test_operator_order()
     test_int_promotion()
+    test_vector_tile()
     test_basics()
     test_basics2()
     test_basics3()

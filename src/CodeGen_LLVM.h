@@ -26,6 +26,7 @@ class AllocaInst;
 class Constant;
 class Triple;
 class MDNode;
+class Metadata;
 class NamedMDNode;
 class DataLayout;
 class BasicBlock;
@@ -349,6 +350,8 @@ protected:
      * different buffers */
     void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, const Expr &index);
 
+    std::vector<llvm::Metadata *> alias_scopes, no_alias_sets;
+
     /** Get a unique name for the actual block of memory that an
      * allocate node uses. Used so that alias analysis understands
      * when multiple Allocate nodes shared the same memory. */
@@ -401,6 +404,7 @@ protected:
     void visit(const IfThenElse *) override;
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
+    void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
     // @}
@@ -512,6 +516,13 @@ protected:
 
     virtual bool supports_atomic_add(const Type &t) const;
 
+    /** Compile a horizontal reduction that starts with an explicit
+     * initial value. There are lots of complex ways to peephole
+     * optimize this pattern, especially with the proliferation of
+     * dot-product instructions, and they can usefully share logic
+     * across backends. */
+    virtual void codegen_vector_reduce(const VectorReduce *op, const Expr &init);
+
     /** Are we inside an atomic node that uses mutex locks?
         This is used for detecting deadlocks from nested atomics & illegal vectorization. */
     bool inside_atomic_mutex_node;
@@ -560,6 +571,10 @@ private:
 
     void init_codegen(const std::string &name, bool any_strict_float = false);
     std::unique_ptr<llvm::Module> finish_codegen();
+
+    /** A helper routine for generating folded vector reductions. */
+    template<typename Op>
+    bool try_to_fold_vector_reduce(const Op *op);
 };
 
 }  // namespace Internal

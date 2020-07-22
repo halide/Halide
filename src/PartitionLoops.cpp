@@ -491,8 +491,8 @@ class PartitionLoops : public IRMutator {
                                                            CodeGen_GPU_Dev::is_gpu_var(op->name));
 
         // If we're inside GPU kernel, and the body contains thread
-        // barriers or warp shuffles, it's not safe to duplicate code.
-        if (in_gpu_loop && contains_warp_synchronous_logic(op)) {
+        // barriers or warp shuffles, it's not safe to partition parallel loops.
+        if (is_parallel(op->for_type) && in_gpu_loop && contains_warp_synchronous_logic(op)) {
             return IRMutator::visit(op);
         }
 
@@ -683,12 +683,12 @@ class PartitionLoops : public IRMutator {
             if (make_prologue) {
                 prologue = For::make(op->name, op->min, min_steady - op->min,
                                      op->for_type, op->device_api, prologue);
-                stmt = Block::make(prologue, stmt);
+                stmt = Block::make(prologue, stmt, Block::Ordered);
             }
             if (make_epilogue) {
                 epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
                                      op->for_type, op->device_api, epilogue);
-                stmt = Block::make(stmt, epilogue);
+                stmt = Block::make(stmt, epilogue, Block::Ordered);
             }
         } else {
             // For parallel for loops we could use a Fork node here,

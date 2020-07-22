@@ -89,7 +89,7 @@ private:
     }
 
     void visit(const Block *block) override {
-        if (in_loop) {
+        if (in_loop || block->ordering == Block::Unordered) {
             IRVisitor::visit(block);
         } else {
             ScopedValue<Stmt> old_containing_stmt(containing_stmt, block->first);
@@ -120,10 +120,12 @@ private:
     using IRMutator::visit;
 
     Stmt inject_marker(Stmt s) {
-        if (injected) return s;
+        if (injected) {
+            return s;
+        }
         if (s.same_as(last_use)) {
             injected = true;
-            return Block::make(s, Free::make(func));
+            return Block::make(s, Free::make(func), Block::Ordered);
         } else {
             return mutate(s);
         }
@@ -137,7 +139,7 @@ private:
             new_rest.same_as(block->rest)) {
             return block;
         } else {
-            return Block::make(new_first, new_rest);
+            return Block::make(new_first, new_rest, block->ordering);
         }
     }
 };
@@ -161,7 +163,7 @@ class InjectEarlyFrees : public IRMutator {
         } else {
             stmt = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
                                   alloc->extents, alloc->condition,
-                                  Block::make(alloc->body, Free::make(alloc->name)),
+                                  Block::make(alloc->body, Free::make(alloc->name), Block::Ordered),
                                   alloc->new_expr, alloc->free_function);
         }
         return stmt;

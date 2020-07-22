@@ -501,31 +501,33 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     return node;
 }
 
-Stmt Block::make(Stmt first, Stmt rest) {
+Stmt Block::make(Stmt first, Stmt rest, Block::Ordering ordering) {
     internal_assert(first.defined()) << "Block of undefined\n";
     internal_assert(rest.defined()) << "Block of undefined\n";
 
     Block *node = new Block;
-
-    if (const Block *b = first.as<Block>()) {
+    const Block *b = first.as<Block>();
+    if (b && b->ordering == ordering) {
         // Use a canonical block nesting order
         node->first = b->first;
-        node->rest = Block::make(b->rest, std::move(rest));
+        node->rest = Block::make(b->rest, std::move(rest), ordering);
+        node->ordering = ordering;
     } else {
         node->first = std::move(first);
         node->rest = std::move(rest);
+        node->ordering = ordering;
     }
 
     return node;
 }
 
-Stmt Block::make(const std::vector<Stmt> &stmts) {
+Stmt Block::make(const std::vector<Stmt> &stmts, Block::Ordering ordering) {
     if (stmts.empty()) {
         return Stmt();
     }
     Stmt result = stmts.back();
     for (size_t i = stmts.size() - 1; i > 0; i--) {
-        result = Block::make(stmts[i - 1], result);
+        result = Block::make(stmts[i - 1], result, ordering);
     }
     return result;
 }
@@ -824,6 +826,28 @@ Stmt Atomic::make(const std::string &producer_name,
     return node;
 }
 
+Expr VectorReduce::make(VectorReduce::Operator op,
+                        Expr vec,
+                        int lanes) {
+    if (vec.type().is_bool()) {
+        internal_assert(op == VectorReduce::And || op == VectorReduce::Or)
+            << "The only legal operators for VectorReduce on a Bool"
+            << "vector are VectorReduce::And and VectorReduce::Or\n";
+    }
+    internal_assert(!vec.type().is_handle()) << "VectorReduce of handle type";
+    // Check the output lanes is a factor of the input lanes. They can
+    // also both be zero if we're constructing a wildcard expression.
+    internal_assert((lanes == 0 && vec.type().lanes() == 0) ||
+                    (lanes != 0 && (vec.type().lanes() % lanes == 0)))
+        << "Vector reduce output lanes must be a divisor of the number of lanes in the argument "
+        << lanes << " " << vec.type().lanes() << "\n";
+    VectorReduce *node = new VectorReduce;
+    node->type = vec.type().with_lanes(lanes);
+    node->op = op;
+    node->value = std::move(vec);
+    return node;
+}
+
 namespace {
 
 // Helper function to determine if a sequence of indices is a
@@ -976,6 +1000,10 @@ void ExprNode<Call>::accept(IRVisitor *v) const {
 template<>
 void ExprNode<Shuffle>::accept(IRVisitor *v) const {
     v->visit((const Shuffle *)this);
+}
+template<>
+void ExprNode<VectorReduce>::accept(IRVisitor *v) const {
+    v->visit((const VectorReduce *)this);
 }
 template<>
 void ExprNode<Let>::accept(IRVisitor *v) const {
@@ -1157,6 +1185,10 @@ Expr ExprNode<Call>::mutate_expr(IRMutator *v) const {
 template<>
 Expr ExprNode<Shuffle>::mutate_expr(IRMutator *v) const {
     return v->visit((const Shuffle *)this);
+}
+template<>
+Expr ExprNode<VectorReduce>::mutate_expr(IRMutator *v) const {
+    return v->visit((const VectorReduce *)this);
 }
 template<>
 Expr ExprNode<Let>::mutate_expr(IRMutator *v) const {

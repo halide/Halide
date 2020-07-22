@@ -229,7 +229,8 @@ class InjectFoldingCheck : public IRMutator {
                         AssertStmt::make(extent <= storage_dim.fold_factor, fold_too_small_error);
 
                     Stmt checks = Block::make({check_extent, check_in_valid_range,
-                                               update_leading_edge, update_next_leading_edge});
+                                               update_leading_edge, update_next_leading_edge},
+                                              Block::Ordered);
                     if (func.schedule().async()) {
                         Expr to_acquire;
                         if (storage_dim.fold_forward) {
@@ -237,12 +238,12 @@ class InjectFoldingCheck : public IRMutator {
                         } else {
                             to_acquire = old_leading_edge - new_leading_edge_var;
                         }
-                        body = Block::make(checks, body);
+                        body = Block::make(checks, body, Block::Ordered);
                         body = Acquire::make(sema_var, to_acquire, body);
                         body = LetStmt::make(new_leading_edge_var_name, new_leading_edge, body);
                     } else {
                         checks = LetStmt::make(new_leading_edge_var_name, new_leading_edge, checks);
-                        body = Block::make(checks, body);
+                        body = Block::make(checks, body, Block::Ordered);
                     }
                 }
 
@@ -281,10 +282,10 @@ class InjectFoldingCheck : public IRMutator {
                         // The consumer is going to get its own forked copy of the footprint, so it needs to update it too.
                         Stmt update_leading_edge = Store::make(tail, new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder());
                         update_leading_edge = Block::make(Store::make(tail + "_next", new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder()),
-                                                          update_leading_edge);
-                        update_leading_edge = Block::make(Evaluate::make(release_producer), update_leading_edge);
+                                                          update_leading_edge, Block::Ordered);
+                        update_leading_edge = Block::make(Evaluate::make(release_producer), update_leading_edge, Block::Ordered);
                         update_leading_edge = LetStmt::make(new_leading_edge_name, new_leading_edge, update_leading_edge);
-                        body = Block::make(update_leading_edge, body);
+                        body = Block::make(update_leading_edge, body, Block::Ordered);
                     } else {
                         Expr check;
                         if (storage_dim.fold_forward) {
@@ -295,7 +296,7 @@ class InjectFoldingCheck : public IRMutator {
                         Expr bad_fold_error = Call::make(Int(32), "halide_error_bad_fold",
                                                          {func.name(), storage_dim.var, loop_var},
                                                          Call::Extern);
-                        body = Block::make(AssertStmt::make(check, bad_fold_error), body);
+                        body = Block::make(AssertStmt::make(check, bad_fold_error), body, Block::Ordered);
                     }
                 }
             }
@@ -329,7 +330,7 @@ class InjectFoldingCheck : public IRMutator {
 
                 Stmt update_leading_edge =
                     Store::make(head, leading_edge, 0, Parameter(), const_true(), ModulusRemainder());
-                body = Block::make(update_leading_edge, body);
+                body = Block::make(update_leading_edge, body, Block::Ordered);
 
                 // We don't need to make sure the min is moving
                 // monotonically, because we can't do sliding window on
@@ -364,7 +365,7 @@ class InjectFoldingCheck : public IRMutator {
 
                 Stmt update_leading_edge =
                     Store::make(tail, leading_edge, 0, Parameter(), const_true(), ModulusRemainder());
-                body = Block::make(update_leading_edge, body);
+                body = Block::make(update_leading_edge, body, Block::Ordered);
 
                 if (func.schedule().async()) {
                     Expr old_leading_edge =
@@ -377,7 +378,7 @@ class InjectFoldingCheck : public IRMutator {
                     }
                     Expr release_producer =
                         Call::make(Int(32), "halide_semaphore_release", {sema_var, to_release}, Call::Extern);
-                    body = Block::make(Evaluate::make(release_producer), body);
+                    body = Block::make(Evaluate::make(release_producer), body, Block::Ordered);
                 }
             }
 
@@ -694,7 +695,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
                                             {func.name(), storage_dim.var, explicit_factor, op->name, extent},
                                             Call::Extern);
-                    body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body);
+                    body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body, Block::Ordered);
                 }
                 factor = explicit_factor;
             } else {
@@ -823,14 +824,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         Call::make(Int(32), "halide_semaphore_release", {sema.var, to_release_var}, Call::Extern);
                     Stmt release = Evaluate::make(release_producer);
                     Stmt check_release = AssertStmt::make(to_release_var >= 0 && to_release <= factor, bad_fold_error);
-                    release = Block::make(check_release, release);
+                    release = Block::make(check_release, release, Block::Ordered);
                     release = LetStmt::make(to_release_name, to_release, release);
 
                     Stmt check_acquire = AssertStmt::make(to_acquire_var >= 0 && to_acquire_var <= factor, bad_fold_error);
 
-                    body = Block::make(body, release);
+                    body = Block::make(body, release, Block::Ordered);
                     body = Acquire::make(sema.var, to_acquire_var, body);
-                    body = Block::make(check_acquire, body);
+                    body = Block::make(check_acquire, body, Block::Ordered);
                     body = LetStmt::make(to_acquire_name, to_acquire, body);
                 } else {
                     // We injected runtime tracking and semaphore logic already
@@ -900,7 +901,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr step = Variable::make(Int(32), func.name() + ".extent." + std::to_string(dims_folded.back().dim)) + dims_folded.back().factor;
             Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0, Parameter(), const_true(), ModulusRemainder());
             Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0, Parameter(), const_true(), ModulusRemainder());
-            stmt = Block::make({stmt, reset_head, reset_tail});
+            stmt = Block::make({stmt, reset_head, reset_tail}, Block::Ordered);
         }
         return stmt;
     }
@@ -974,16 +975,16 @@ class StorageFolding : public IRMutator {
                     init = op->bounds[fold.dim].min + op->bounds[fold.dim].extent - 1;
                 }
                 if (!fold.head.empty()) {
-                    stmt = Block::make(Store::make(fold.head + "_next", init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
+                    stmt = Block::make(Store::make(fold.head + "_next", init, 0, Parameter(), const_true(), ModulusRemainder()), stmt, Block::Ordered);
                     stmt = Allocate::make(fold.head + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
-                    stmt = Block::make(Store::make(fold.head, init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
+                    stmt = Block::make(Store::make(fold.head, init, 0, Parameter(), const_true(), ModulusRemainder()), stmt, Block::Ordered);
                     stmt = Allocate::make(fold.head, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
                 if (!fold.tail.empty()) {
                     internal_assert(func.schedule().async()) << "Expected a single counter for synchronous folding";
-                    stmt = Block::make(Store::make(fold.tail + "_next", init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
+                    stmt = Block::make(Store::make(fold.tail + "_next", init, 0, Parameter(), const_true(), ModulusRemainder()), stmt, Block::Ordered);
                     stmt = Allocate::make(fold.tail + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
-                    stmt = Block::make(Store::make(fold.tail, init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
+                    stmt = Block::make(Store::make(fold.tail, init, 0, Parameter(), const_true(), ModulusRemainder()), stmt, Block::Ordered);
                     stmt = Allocate::make(fold.tail, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
             }

@@ -119,7 +119,7 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
                                 {p.param_name, p.value, p.limit_value},
                                 Call::Extern);
 
-        s = Block::make(AssertStmt::make(p.condition, error), s);
+        s = Block::make(AssertStmt::make(p.condition, error), s, Block::Ordered);
     }
 
     // The unstructured assertions get checked first (because they
@@ -127,7 +127,7 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
     // them last.
     vector<Stmt> stmts = preconditions;
     stmts.push_back(s);
-    return Block::make(stmts);
+    return Block::make(stmts, Block::Ordered);
 }
 
 }  // namespace Internal

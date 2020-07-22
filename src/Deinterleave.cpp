@@ -164,7 +164,7 @@ private:
         if (collecting) {
             rest = mutate(rest);
         }
-        return Block::make(first, rest);
+        return Block::make(first, rest, op->ordering);
     }
 };
 
@@ -193,6 +193,18 @@ private:
     const Scope<> &external_lets;
 
     using IRMutator::visit;
+
+    Expr visit(const VectorReduce *op) override {
+        std::vector<int> input_lanes;
+        int factor = op->value.type().lanes() / op->type.lanes();
+        for (int i = starting_lane; i < op->type.lanes(); i += lane_stride) {
+            for (int j = 0; j < factor; j++) {
+                input_lanes.push_back(i * factor + j);
+            }
+        }
+        Expr in = Shuffle::make({op->value}, input_lanes);
+        return VectorReduce::make(op->op, in, new_lanes);
+    }
 
     Expr visit(const Broadcast *op) override {
         if (new_lanes == 1) {
@@ -566,173 +578,247 @@ class Interleaver : public IRMutator {
     }
 
     HALIDE_NEVER_INLINE Stmt gather_stores(const Block *op) {
-        const LetStmt *let = op->first.as<LetStmt>();
-        const Store *store = op->first.as<Store>();
-
-        // Gather all the let stmts surrounding the first.
-        std::vector<Stmt> let_stmts;
-        while (let) {
-            let_stmts.emplace_back(let);
-            store = let->body.as<Store>();
-            let = let->body.as<LetStmt>();
-        }
-
-        // There was no inner store.
-        if (!store) return Stmt();
-
-        const Ramp *r0 = store->index.as<Ramp>();
-
-        // It's not a store of a ramp index.
-        if (!r0) return Stmt();
-
-        const int64_t *stride_ptr = as_const_int(r0->stride);
-
-        // The stride isn't a constant or is <= 0
-        if (!stride_ptr || *stride_ptr < 1) return Stmt();
-
-        const int64_t stride = *stride_ptr;
-        const int lanes = r0->lanes;
-        const int64_t expected_stores = stride == 1 ? lanes : stride;
-
-        // Collect the rest of the stores.
-        std::vector<Stmt> stores;
-        stores.emplace_back(store);
-        Stmt rest = collect_strided_stores(op->rest, store->name,
-                                           stride, expected_stores,
-                                           let_stmts, stores);
-
-        // Check the store collector didn't collect too many
-        // stores (that would be a bug).
-        internal_assert(stores.size() <= (size_t)expected_stores);
-
-        // Not enough stores collected.
-        if (stores.size() != (size_t)expected_stores) return Stmt();
-
-        Type t = store->value.type();
-        Expr base;
-        std::vector<Expr> args(stores.size());
-        std::vector<Expr> predicates(stores.size());
-
-        int min_offset = 0;
-        std::vector<int> offsets(stores.size());
-
-        std::string load_name;
-        Buffer<> load_image;
-        Parameter load_param;
-        for (size_t i = 0; i < stores.size(); ++i) {
-            const Ramp *ri = stores[i].as<Store>()->index.as<Ramp>();
-            internal_assert(ri);
-
-            // Mismatched store vector laness.
-            if (ri->lanes != lanes) return Stmt();
-
-            Expr diff = simplify(ri->base - r0->base);
-            const int64_t *offs = as_const_int(diff);
-
-            // Difference between bases is not constant.
-            if (!offs) return Stmt();
-
-            offsets[i] = *offs;
-            if (*offs < min_offset) {
-                min_offset = *offs;
-            }
-
-            if (stride == 1) {
-                // Difference between bases is not a multiple of the lanes.
-                if (*offs % lanes != 0) return Stmt();
-
-                // This case only triggers if we have an immediate load of the correct stride on the RHS.
-                // TODO: Could we consider mutating the RHS so that we can handle more complex Expr's than just loads?
-                const Load *load = stores[i].as<Store>()->value.as<Load>();
-                if (!load) return Stmt();
-                // TODO(psuriana): Predicated load is not currently handled.
-                if (!is_one(load->predicate)) return Stmt();
-
-                const Ramp *ramp = load->index.as<Ramp>();
-                if (!ramp) return Stmt();
-
-                // Load stride or lanes is not equal to the store lanes.
-                if (!is_const(ramp->stride, lanes) || ramp->lanes != lanes) return Stmt();
-
-                if (i == 0) {
-                    load_name = load->name;
-                    load_image = load->image;
-                    load_param = load->param;
-                } else {
-                    if (load->name != load_name) return Stmt();
+        // First do a pass over all child stmts of this block nest
+        // looking for candidate buffers and strides.
+        struct Candidate {
+            std::string buffer;
+            int stride;
+            Type type;
+            Expr base;
+        };
+        std::vector<Candidate> candidates;
+        std::vector<Stmt> pending;
+        pending.push_back(op);
+        while (!pending.empty()) {
+            Stmt next = std::move(pending.back());
+            pending.pop_back();
+            if (const Block *b = next.as<Block>()) {
+                pending.push_back(b->first);
+                pending.push_back(b->rest);
+            } else {
+                while (const LetStmt *let = next.as<LetStmt>()) {
+                    next = let->body;
+                }
+                if (const Store *store = next.as<Store>()) {
+                    if (const Ramp *r = store->index.as<Ramp>()) {
+                        if (const int64_t *stride_ptr = as_const_int(r->stride)) {
+                            candidates.emplace_back(Candidate{store->name,
+                                                              (int)(*stride_ptr),
+                                                              store->value.type(),
+                                                              r->base});
+                        }
+                    }
                 }
             }
         }
+        Stmt remainder = op;
+        std::vector<Stmt> result;
+        for (const auto &c : candidates) {
+            const int64_t expected_stores = c.stride == 1 ? c.type.lanes() : c.stride;
 
-        // Gather the args for interleaving.
-        for (size_t i = 0; i < stores.size(); ++i) {
-            int j = offsets[i] - min_offset;
-            if (stride == 1) {
-                j /= stores.size();
+            // Collect the rest of the stores.
+            std::vector<Stmt> stores, let_stmts;
+            Stmt new_remainder = collect_strided_stores(remainder,
+                                                        c.buffer,
+                                                        c.stride,
+                                                        expected_stores,
+                                                        let_stmts,
+                                                        stores);
+
+            // Check the store collector didn't collect too many
+            // stores (that would be a bug).
+            internal_assert(stores.size() <= (size_t)expected_stores);
+
+            // Not enough stores collected.
+            if (stores.size() != (size_t)expected_stores) {
+                continue;
             }
 
-            if (j == 0) {
-                base = stores[i].as<Store>()->index.as<Ramp>()->base;
+            Type t = c.type;
+            Expr base;
+            std::vector<Expr> args(stores.size());
+            std::vector<Expr> predicates(stores.size());
+
+            int min_offset = 0;
+            std::vector<int> offsets(stores.size());
+
+            std::string load_name;
+            Buffer<> load_image;
+            Parameter load_param;
+            bool failed = false;
+            for (size_t i = 0; i < stores.size(); ++i) {
+                const Ramp *ri = stores[i].as<Store>()->index.as<Ramp>();
+                internal_assert(ri);
+
+                // Mismatched store vector laness.
+                if (ri->lanes != c.type.lanes()) {
+                    failed = true;
+                    break;
+                }
+
+                Expr diff = simplify(ri->base - c.base);
+                const int64_t *offs = as_const_int(diff);
+
+                // Difference between bases is not constant.
+                if (!offs) {
+                    failed = true;
+                    break;
+                }
+
+                offsets[i] = *offs;
+                if (*offs < min_offset) {
+                    min_offset = *offs;
+                }
+
+                if (c.stride == 1) {
+                    // Difference between bases is not a multiple of the lanes.
+                    if (*offs % c.type.lanes() != 0) {
+                        failed = true;
+                        break;
+                    }
+
+                    // This case only triggers if we have an immediate
+                    // load of the correct stride on the RHS.  TODO:
+                    // Could we consider mutating the RHS so that we
+                    // can handle more complex Expr's than just loads?
+                    const Load *load = stores[i].as<Store>()->value.as<Load>();
+                    if (!load) {
+                        failed = true;
+                        break;
+                    }
+
+                    // TODO(psuriana): Predicated load is not currently handled.
+                    if (!is_one(load->predicate)) {
+                        failed = true;
+                        break;
+                    }
+
+                    const Ramp *ramp = load->index.as<Ramp>();
+                    if (!ramp) {
+                        failed = true;
+                        break;
+                    }
+
+                    // Load stride or lanes is not equal to the store lanes.
+                    if (!is_const(ramp->stride, c.type.lanes()) ||
+                        ramp->lanes != c.type.lanes()) {
+                        failed = true;
+                        break;
+                    }
+
+                    if (i == 0) {
+                        load_name = load->name;
+                        load_image = load->image;
+                        load_param = load->param;
+                    } else if (load->name != load_name) {
+                        failed = true;
+                        break;
+                    }
+                }
             }
 
-            // The offset is not between zero and the stride.
-            if (j < 0 || (size_t)j >= stores.size()) return Stmt();
-
-            // We already have a store for this offset.
-            if (args[j].defined()) return Stmt();
-
-            if (stride == 1) {
-                // Convert multiple dense vector stores of strided vector loads
-                // into one dense vector store of interleaving dense vector loads.
-                args[j] = Load::make(t, load_name, stores[i].as<Store>()->index,
-                                     load_image, load_param, const_true(t.lanes()), ModulusRemainder());
-            } else {
-                args[j] = stores[i].as<Store>()->value;
+            if (failed) {
+                // Move onto the next candidate
+                continue;
             }
-            predicates[j] = stores[i].as<Store>()->predicate;
+
+            // Gather the args for interleaving.
+            for (size_t i = 0; i < stores.size(); ++i) {
+                int j = offsets[i] - min_offset;
+                if (c.stride == 1) {
+                    j /= stores.size();
+                }
+
+                if (j == 0) {
+                    base = stores[i].as<Store>()->index.as<Ramp>()->base;
+                }
+
+                // The offset is not between zero and the stride.
+                if (j < 0 || (size_t)j >= stores.size()) {
+                    failed = true;
+                    break;
+                }
+
+                // We already have a store for this offset.
+                if (args[j].defined()) {
+                    failed = true;
+                    break;
+                }
+
+                if (c.stride == 1) {
+                    // Convert multiple dense vector stores of strided vector loads
+                    // into one dense vector store of interleaving dense vector loads.
+                    args[j] = Load::make(t, load_name, stores[i].as<Store>()->index,
+                                         load_image, load_param, const_true(t.lanes()), ModulusRemainder());
+                } else {
+                    args[j] = stores[i].as<Store>()->value;
+                }
+                predicates[j] = stores[i].as<Store>()->predicate;
+            }
+
+            if (failed) {
+                // Move onto the next candidate
+                continue;
+            }
+
+            // One of the stores should have had the minimum offset.
+            internal_assert(base.defined());
+
+            // Generate a single interleaving store.
+            t = t.with_lanes(c.type.lanes() * stores.size());
+            Expr index = Ramp::make(base, make_one(base.type()), t.lanes());
+            Expr value = Shuffle::make_interleave(args);
+            Expr predicate = Shuffle::make_interleave(predicates);
+            Stmt hoisted = Store::make(c.buffer, value, index,
+                                       stores[0].as<Store>()->param,
+                                       predicate, ModulusRemainder());
+
+            // Rewrap the let statements we pulled off.
+            while (!let_stmts.empty()) {
+                const LetStmt *let = let_stmts.back().as<LetStmt>();
+                hoisted = LetStmt::make(let->name, let->value, hoisted);
+                let_stmts.pop_back();
+            }
+
+            // Success!
+            result.push_back(hoisted);
+            remainder = new_remainder;
         }
 
-        // One of the stores should have had the minimum offset.
-        internal_assert(base.defined());
-
-        // Generate a single interleaving store.
-        t = t.with_lanes(lanes * stores.size());
-        Expr index = Ramp::make(base, make_one(base.type()), t.lanes());
-        Expr value = Shuffle::make_interleave(args);
-        Expr predicate = Shuffle::make_interleave(predicates);
-        Stmt new_store = Store::make(store->name, value, index, store->param, predicate, ModulusRemainder());
-
-        // Continue recursively into the stuff that
-        // collect_strided_stores didn't collect.
-        Stmt stmt = Block::make(new_store, mutate(rest));
-
-        // Rewrap the let statements we pulled off.
-        while (!let_stmts.empty()) {
-            const LetStmt *let = let_stmts.back().as<LetStmt>();
-            stmt = LetStmt::make(let->name, let->value, stmt);
-            let_stmts.pop_back();
+        result.push_back(remainder);
+        if (result.size() == 1) {
+            return result[0];
+        } else {
+            // TODO: This block could possible be unordered? Check an
+            // example that does interleaving in c, vectorizing in x,
+            // unrolling in y
+            return Block::make(result, Block::Ordered);
         }
-
-        // Success!
-        return stmt;
     }
 
+    bool mutate_children_only = false;
+
     Stmt visit(const Block *op) override {
-        Stmt s = gather_stores(op);
-        if (s.defined()) {
-            return s;
-        } else {
-            Stmt first = mutate(op->first);
-            Stmt rest = mutate(op->rest);
-            if (first.same_as(op->first) && rest.same_as(op->rest)) {
-                return op;
-            } else {
-                return Block::make(first, rest);
-            }
+        if (mutate_children_only) {
+            return IRMutator::visit(op);
         }
+
+        ScopedValue<bool> old(mutate_children_only, true);
+        Stmt s = IRMutator::visit(op);
+        op = s.as<Block>();
+        internal_assert(op);
+        mutate_children_only = false;
+        return gather_stores(op);
     }
 
 public:
+    using IRMutator::mutate;
+
+    Stmt mutate(const Stmt &s) override {
+        ScopedValue<bool> old(mutate_children_only, !s.as<Block>());
+        return IRMutator::mutate(s);
+    }
+
     Interleaver()
         : should_deinterleave(false) {
     }

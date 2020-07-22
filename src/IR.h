@@ -418,10 +418,25 @@ struct Realize : public StmtNode<Realize> {
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
-    static Stmt make(Stmt first, Stmt rest);
+    enum Ordering {
+        Ordered,
+        Unordered
+    };
+
+    /** Is the Block ordered? If so, the sub-statements might have
+     * data dependencies between them and must be executed
+     * sequentially. These result from unrolling impure RVars. If
+     * not, the sub-statements have no data dependencies between
+     * them, and the execution of each sub-statement can be
+     * arbitrarily interleaved. These result from unrolling Pure Vars
+     * or RVars. */
+    Ordering ordering;
+
+    static Stmt make(Stmt first, Stmt rest, Ordering ordering);
+
     /** Construct zero or more Blocks to invoke a list of statements in order.
      * This method may not return a Block statement if stmts.size() <= 1. */
-    static Stmt make(const std::vector<Stmt> &stmts);
+    static Stmt make(const std::vector<Stmt> &stmts, Ordering ordering);
 
     static const IRNodeType _node_type = IRNodeType::Block;
 };
@@ -817,6 +832,33 @@ struct Atomic : public StmtNode<Atomic> {
                      Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Atomic;
+};
+
+/** Horizontally reduce a vector to a scalar or narrower vector using
+ * the given commutative and associative binary operator. The reduction
+ * factor is dictated by the number of lanes in the input and output
+ * types. Groups of adjacent lanes are combined. The number of lanes
+ * in the input type must be a divisor of the number of lanes of the
+ * output type.  */
+struct VectorReduce : public ExprNode<VectorReduce> {
+    // 99.9% of the time people will use this for horizontal addition,
+    // but these are all of our commutative and associative primitive
+    // operators.
+    typedef enum {
+        Add,
+        Mul,
+        Min,
+        Max,
+        And,
+        Or,
+    } Operator;
+
+    Expr value;
+    Operator op;
+
+    static Expr make(Operator op, Expr vec, int lanes);
+
+    static const IRNodeType _node_type = IRNodeType::VectorReduce;
 };
 
 }  // namespace Internal

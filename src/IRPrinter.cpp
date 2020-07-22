@@ -188,11 +188,11 @@ void IRPrinter::test() {
 
     Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
     Stmt consumer = ProducerConsumer::make_consume("buf", for_loop2);
-    Stmt pipeline = Block::make(producer, consumer);
+    Stmt pipeline = Block::make(producer, consumer, Block::Ordered);
 
     Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
                                                          {string("y"), y, 3}, Call::Extern));
-    Stmt block = Block::make(assertion, pipeline);
+    Stmt block = Block::make(assertion, pipeline, Block::Ordered);
     Stmt let_stmt = LetStmt::make("y", 17, block);
     Stmt allocate = Allocate::make("buf", f32, MemoryType::Stack, {1023}, const_true(), let_stmt);
 
@@ -255,6 +255,9 @@ ostream &operator<<(ostream &out, const ForType &type) {
     case ForType::Unrolled:
         out << "unrolled";
         break;
+    case ForType::UnorderedUnrolled:
+        out << "unordered_unrolled";
+        break;
     case ForType::Vectorized:
         out << "vectorized";
         break;
@@ -269,6 +272,30 @@ ostream &operator<<(ostream &out, const ForType &type) {
         break;
     case ForType::GPULane:
         out << "gpu_lane";
+        break;
+    }
+    return out;
+}
+
+ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
+    switch (op) {
+    case VectorReduce::Add:
+        out << "Add";
+        break;
+    case VectorReduce::Mul:
+        out << "Mul";
+        break;
+    case VectorReduce::Min:
+        out << "Min";
+        break;
+    case VectorReduce::Max:
+        out << "Max";
+        break;
+    case VectorReduce::And:
+        out << "And";
+        break;
+    case VectorReduce::Or:
+        out << "Or";
         break;
     }
     return out;
@@ -879,8 +906,23 @@ void IRPrinter::visit(const Prefetch *op) {
 }
 
 void IRPrinter::visit(const Block *op) {
-    print(op->first);
-    print(op->rest);
+    vector<Stmt> stmts;
+    Stmt rest;
+    Block::Ordering ordering = op->ordering;
+    do {
+        stmts.push_back(op->first);
+        rest = op->rest;
+    } while ((op = rest.as<Block>()) &&
+             op->ordering == ordering);
+    stmts.push_back(rest);
+
+    stream << get_indent() << (ordering == Block::Ordered ? "ordered {\n" : "unordered {\n");
+    indent++;
+    for (Stmt s : stmts) {
+        print(s);
+    }
+    indent--;
+    stream << get_indent() << "}\n";
 }
 
 void IRPrinter::visit(const Fork *op) {
@@ -971,6 +1013,16 @@ void IRPrinter::visit(const Shuffle *op) {
         }
         stream << ")";
     }
+}
+
+void IRPrinter::visit(const VectorReduce *op) {
+    stream << "("
+           << op->type
+           << ")vector_reduce("
+           << op->op
+           << ", "
+           << op->value
+           << ")\n";
 }
 
 void IRPrinter::visit(const Atomic *op) {

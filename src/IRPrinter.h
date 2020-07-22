@@ -71,6 +71,9 @@ std::ostream &operator<<(std::ostream &stream, const Stmt &);
  * readable form */
 std::ostream &operator<<(std::ostream &stream, const ForType &);
 
+/** Emit a horizontal vector reduction op in human-readable form. */
+std::ostream &operator<<(std::ostream &stream, const VectorReduce::Operator &);
+
 /** Emit a halide name mangling value in a human readable format */
 std::ostream &operator<<(std::ostream &stream, const NameMangling &);
 
@@ -186,6 +189,7 @@ protected:
     void visit(const IfThenElse *) override;
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
+    void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
 };

@@ -255,7 +255,7 @@ public:
                                          Parameter(), const_true(), ModulusRemainder()));
             index += i.second.size_expr;
         }
-        Stmt blocks = Block::make(writes);
+        Stmt blocks = Block::make(writes, Block::Unordered);
 
         return blocks;
     }
@@ -366,7 +366,7 @@ private:
                                                    mutated_body);
             Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), -1),
                                                                    Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern)),
-                                                  cache_miss_marker);
+                                                  cache_miss_marker, Block::Ordered);
 
             Stmt cache_lookup = LetStmt::make(cache_result_name,
                                               key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name),
@@ -386,7 +386,7 @@ private:
 
             Stmt computed_bounds_let = LetStmt::make(computed_bounds_name, computed_bounds, cache_lookup);
 
-            Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
+            Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let, Block::Ordered);
             Stmt cache_key_alloc =
                 Allocate::make(cache_key_name, UInt(8), MemoryType::Stack, {key_info.key_size()},
                                const_true(), generate_key);
@@ -423,7 +423,7 @@ private:
                 Stmt cache_store_back =
                     IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
 
-                Stmt mutated_body = Block::make(cache_store_back, body);
+                Stmt mutated_body = Block::make(cache_store_back, body, Block::Ordered);
                 return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
             }
         } else {

@@ -259,6 +259,10 @@ void IRVisitor::visit(const Shuffle *op) {
     }
 }
 
+void IRVisitor::visit(const VectorReduce *op) {
+    op->value.accept(this);
+}
+
 void IRVisitor::visit(const Atomic *op) {
     op->body.accept(this);
 }
@@ -507,6 +511,10 @@ void IRGraphVisitor::visit(const Shuffle *op) {
     for (Expr i : op->vectors) {
         include(i);
     }
+}
+
+void IRGraphVisitor::visit(const VectorReduce *op) {
+    include(op->value);
 }
 
 void IRGraphVisitor::visit(const Atomic *op) {

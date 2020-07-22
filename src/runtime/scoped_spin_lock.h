@@ -12,14 +12,14 @@ struct ScopedSpinLock {
 
     volatile AtomicFlag *const flag;
 
-    ScopedSpinLock(volatile AtomicFlag *flag) __attribute__((always_inline))
-    : flag(flag) {
+    ALWAYS_INLINE ScopedSpinLock(volatile AtomicFlag *flag)
+        : flag(flag) {
         while (__atomic_test_and_set(flag, __ATOMIC_ACQUIRE)) {
             // nothing
         }
     }
 
-    ~ScopedSpinLock() __attribute__((always_inline)) {
+    ALWAYS_INLINE ~ScopedSpinLock() {
         __atomic_clear(flag, __ATOMIC_RELEASE);
     }
 };

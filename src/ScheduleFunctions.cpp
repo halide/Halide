@@ -371,9 +371,22 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     // Make the (multi-dimensional multi-valued) store node.
     Stmt body = Provide::make(func.name(), values, site);
     if (def.schedule().atomic()) {  // Add atomic node.
-        // If required, we will allocate a mutex buffer called func.name() + ".mutex"
-        // The buffer is added in the AddAtomicMutex pass.
-        body = Atomic::make(func.name(), func.name() + ".mutex", body);
+        bool any_unordered_parallel = false;
+        for (auto d : def.schedule().dims()) {
+            any_unordered_parallel |= is_unordered_parallel(d.for_type);
+        }
+        if (any_unordered_parallel) {
+            // If required, we will allocate a mutex buffer called func.name() + ".mutex"
+            // The buffer is added in the AddAtomicMutex pass.
+            body = Atomic::make(func.name(), func.name() + ".mutex", body);
+        } else {
+            // No mutex is required if there is no parallelism, and it
+            // wouldn't work if all parallelism is synchronous
+            // (e.g. vectorization). Vectorization and the like will
+            // need to handle atomic nodes specially, by either
+            // emitting VectorReduce ops or scalarizing.
+            body = Atomic::make(func.name(), std::string{}, body);
+        }
     }
 
     // Default schedule/values if there is no specialization
@@ -618,10 +631,10 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
                 Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
                                           {shape, shape_size}, Call::Extern));
 
-            mark_buffer = Block::make(mark_buffer, mark_shape);
+            mark_buffer = Block::make(mark_buffer, mark_shape, Block::Ordered);
 
             if (!is_no_op(pre_call)) {
-                pre_call = Block::make(pre_call, mark_buffer);
+                pre_call = Block::make(pre_call, mark_buffer, Block::Ordered);
             } else {
                 pre_call = mark_buffer;
             }
@@ -632,7 +645,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             Stmt mark_contents = Evaluate::make(
                 Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", {buffer}, Call::Extern));
             if (!is_no_op(pre_call)) {
-                pre_call = Block::make(pre_call, mark_contents);
+                pre_call = Block::make(pre_call, mark_contents, Block::Ordered);
             } else {
                 pre_call = mark_contents;
             }
@@ -644,7 +657,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             Stmt check_contents = Evaluate::make(
                 Call::make(Int(32), "halide_msan_check_buffer_is_initialized", {buffer, Expr(buf_name)}, Call::Extern));
             if (!is_no_op(post_call)) {
-                post_call = Block::make(post_call, check_contents);
+                post_call = Block::make(post_call, check_contents, Block::Ordered);
             } else {
                 post_call = check_contents;
             }
@@ -688,13 +701,13 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
         string destructor_name = unique_name('d');
         const char *fn = (cropped_buffers.size() == 1 ? "_halide_buffer_retire_crop_after_extern_stage" : "_halide_buffer_retire_crops_after_extern_stage");
         Expr cleanup = Call::make(Int(32), fn, {cleanup_struct}, Call::Extern);
-        check = Block::make(Evaluate::make(cleanup), check);
+        check = Block::make(Evaluate::make(cleanup), check, Block::Ordered);
     }
 
     check = LetStmt::make(result_name, e, check);
 
     if (pre_call.defined()) {
-        check = Block::make(pre_call, check);
+        check = Block::make(pre_call, check, Block::Ordered);
     }
 
     for (const auto &let : lets) {
@@ -702,7 +715,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
     }
 
     if (post_call.defined()) {
-        check = Block::make(check, post_call);
+        check = Block::make(check, post_call, Block::Ordered);
     }
 
     Definition f_def_no_pred = f.definition().get_copy();
@@ -737,7 +750,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
                                         {b.var, func.name(), min_val, max_val, min_var, max_var},
                                         Call::Extern);
-            body = Block::make(AssertStmt::make(check, error_msg), body);
+            body = Block::make(AssertStmt::make(check, error_msg), body, Block::Ordered);
         }
     }
 
@@ -819,7 +832,7 @@ private:
         Stmt body = mutate(for_loop->body);
 
         if (level.match(for_loop->name)) {
-            body = Block::make(body, injected_stmt);
+            body = Block::make(body, injected_stmt, Block::Ordered);
             found_level = true;
         }
 
@@ -845,7 +858,7 @@ Stmt inject_stmt(Stmt root, Stmt injected, const LoopLevel &level) {
         return root;
     }
     if (level.is_inlined() || level.is_root()) {
-        return Block::make(root, injected);
+        return Block::make(root, injected, Block::Ordered);
     }
     InjectStmt injector(injected, level);
     root = injector.mutate(root);
@@ -1186,7 +1199,7 @@ private:
                 args.emplace_back(Variable::make(Int(32), max_name));
             }
             Expr decl = Call::make(Int(32), Call::declare_box_touched, args, Call::Intrinsic);
-            s = Block::make(Evaluate::make(decl), s);
+            s = Block::make(Evaluate::make(decl), s, Block::Ordered);
         }
 
         if (!is_output) {
@@ -1661,7 +1674,7 @@ private:
             // Stmt can be a no-op. No point in preserving it.
             return producer;
         } else {
-            return Block::make(producer, consumer);
+            return Block::make(producer, consumer, Block::Ordered);
         }
     }
 };

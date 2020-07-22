@@ -329,7 +329,7 @@ Stmt IRMutator::visit(const Block *op) {
         rest.same_as(op->rest)) {
         return op;
     }
-    return Block::make(std::move(first), std::move(rest));
+    return Block::make(std::move(first), std::move(rest), op->ordering);
 }
 
 Stmt IRMutator::visit(const IfThenElse *op) {
@@ -367,6 +367,14 @@ Expr IRMutator::visit(const Shuffle *op) {
         return op;
     }
     return Shuffle::make(new_vectors, op->indices);
+}
+
+Expr IRMutator::visit(const VectorReduce *op) {
+    Expr value = mutate(op->value);
+    if (value.same_as(op->value)) {
+        return op;
+    }
+    return VectorReduce::make(op->op, std::move(value), op->type.lanes());
 }
 
 Stmt IRMutator::visit(const Fork *op) {
