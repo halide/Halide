@@ -79,6 +79,10 @@ Stmt call_halide_qurt_hvx_unlock() {
 // Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
 // as a destructor if successful.
 Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
+    user_assert(target.features_any_of(
+        {Halide::Target::HVX_128, Halide::Target::HVX_64}))
+        << "Must specify either HVX_64 or HVX_128 (but not both).\n";
+
     // Modify the stmt to add a call to halide_qurt_hvx_lock, and
     // register a destructor to call halide_qurt_hvx_unlock.
     Stmt check_hvx_lock = call_halide_qurt_hvx_lock(target);
@@ -1338,17 +1342,20 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
                     // We know it is a scalar type. We can have 8 bit, 16 bit or 32 bit
                     // types only.
                     unsigned bits = arg_types[i].bits();
+                    const char *fn_name = "";
                     switch (bits) {
                     case 8:
-                        fn = module->getFunction("halide.hexagon.dup4.b");
+                        fn_name = "halide.hexagon.dup4.b";
                         break;
                     case 16:
-                        fn = module->getFunction("halide.hexagon.dup2.h");
+                        fn_name = "halide.hexagon.dup2.h";
                         break;
                     default:
                         internal_error
                             << "unhandled broadcast_scalar_word in define_hvx_intrinsic";
                     }
+                    fn = module->getFunction(fn_name);
+                    internal_assert(fn) << "Unable to find function " << fn_name << " in define_hvx_intrinsic.";
                     args[i] = builder->CreateCall(fn, {args[i]});
                 } else if (args[i]->getType()->isIntegerTy()) {
                     args[i] =
