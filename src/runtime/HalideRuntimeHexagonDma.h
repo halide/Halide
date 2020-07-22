@@ -23,7 +23,12 @@
 extern "C" {
 #endif
 
-/*!
+/**
+ * \defgroup rt_hexagon_dma Halide Hexagon DMA runtime
+ * @{
+ */
+
+/**
  * Image Formats to prepare the application for DMA Transfer
  */
 typedef enum {
