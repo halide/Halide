@@ -137,6 +137,25 @@ int main(int argc, char **argv) {
         Buffer<int> out = g.realize(100, 100);
     }
 
+    {
+        // Construct a Func with an unrolled pure var and check there
+        // aren't syncthreads between the unrolled iterations of the
+        // pure var.
+        Func f;
+        Var x, y;
+        RDom r(0, 10);
+        f(x, y) += r;
+
+        Var xi, yi;
+        f.update()
+            .gpu_tile(x, y, xi, yi, 8, 8)
+            .reorder(r, xi, yi, x, y)
+            .unroll(x, 4);
+
+        f.add_custom_lowering_pass(new CheckBarrierCount(0));
+        f.realize(100, 100);
+    }
+
     printf("Success!\n");
     return 0;
 }
