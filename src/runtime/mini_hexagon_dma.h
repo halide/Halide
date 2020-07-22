@@ -145,16 +145,18 @@ typedef struct stDmaWrapper_DmaTransferSetup {
 } t_StDmaWrapper_DmaTransferSetup;
 
 /**
+ * Abstraction for allocation of memory in cache and lock
+ *
  * @brief  API for Cache Allocation
- * @description Abstraction for allocation of memory in cache and lock
  *
  * @return NULL or Memory
  */
 void *HAP_cache_lock(unsigned int size, void **paddr_ptr);
 
 /**
+ * Abstraction for deallocation of memory and unlock cache
+ *
  * @brief  API for Free
- * @description Abstraction for deallocation of memory and unlock cache
  *
  * @return void
  */
@@ -166,10 +168,9 @@ int HAP_cache_unlock(void *vaddr_ptr);
 typedef void *t_DmaWrapper_DmaEngineHandle;
 
 /**
- * @brief       Allocates a DMA Engine to be used
+ * Allocates a DMA Engine to be used by using the default wait type (polling).
  *
- * @description Allocates a DMA Engine to be used by using the default
- *              wait type (polling).
+ * @brief       Allocates a DMA Engine to be used
  *
  * @return      Success: Engine's DMA Handle
  * @n           Failure: NULL
@@ -177,9 +178,9 @@ typedef void *t_DmaWrapper_DmaEngineHandle;
 extern t_DmaWrapper_DmaEngineHandle hDmaWrapper_AllocDma(void);
 
 /**
- * @brief       Frees a DMA Engine
+ * Frees a DMA Engine that was previously allocated by AllocDma().
  *
- * @description Frees a DMA Engine that was previously allocated by AllocDma().
+ * @brief       Frees a DMA Engine
  *
  * @param[in]   hDmaHandle - Engine's DMA Handle
  *
@@ -189,11 +190,11 @@ extern t_DmaWrapper_DmaEngineHandle hDmaWrapper_AllocDma(void);
 extern int32 nDmaWrapper_FreeDma(t_DmaWrapper_DmaEngineHandle hDmaHandle);
 
 /**
- * @brief       Starts a transfer request on the DMA engine
+ * Starts a transfer on the provided DMA engine. The transfer is based
+ * on descriptors constructed in earlier nDmaWrapper_Prepare() and
+ * nDmaWrapper_Update() calls.
  *
- * @description Starts a transfer on the provided DMA engine. The transfer is based
- *              on descriptors constructed in earlier nDmaWrapper_Prepare() and
- *              nDmaWrapper_Update() calls.
+ * @brief       Starts a transfer request on the DMA engine
  *
  * @param[in]   hDmaHandle - Engine's DMA Handle
  *
@@ -203,11 +204,11 @@ extern int32 nDmaWrapper_FreeDma(t_DmaWrapper_DmaEngineHandle hDmaHandle);
 extern int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle hDmaHandle);
 
 /**
- * @brief       Waits for all outstanding transfers on the DMA to complete
+ * Blocks until all outstanding transfers on the DMA are complete.
+ * The wait type is based on the type specified when allocating the
+ * engine.
  *
- * @description Blocks until all outstanding transfers on the DMA are complete.
- *              The wait type is based on the type specified when allocating the
- *              engine.
+ * @brief       Waits for all outstanding transfers on the DMA to complete
  *
  * @param[in]   hDmaHandle - Engine's DMA Handle
  *
@@ -217,10 +218,9 @@ extern int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle hDmaHandle);
 extern int32 nDmaWrapper_Wait(t_DmaWrapper_DmaEngineHandle hDmaHandle);
 
 /**
- * @brief       Cleans up all transfers and flushes DMA buffers
+ * This call flushes the DMA buffers. Blocks until the flush of the DMA is complete.
  *
- * @description This call flushes the DMA buffers.
- *              Blocks until the flush of the DMA is complete.
+ * @brief       Cleans up all transfers and flushes DMA buffers
  *
  * @param[in]   hDmaHandle - Engine's DMA Handle
  *
@@ -230,12 +230,12 @@ extern int32 nDmaWrapper_Wait(t_DmaWrapper_DmaEngineHandle hDmaHandle);
 extern int32 nDmaWrapper_FinishFrame(t_DmaWrapper_DmaEngineHandle hDmaHandle);
 
 /**
- * @brief         Get the recommended walk ROI width and height
+ * Get the recommended walk ROI width and height that should
+ * be used if walking the entire frame. The ROI returned is always
+ * in terms of frame dimensions. This function is different from
+ * nDmaWrapper_GetRecommendedRoi() as coordinates are not used.
  *
- * @description   Get the recommended walk ROI width and height that should
- *                be used if walking the entire frame. The ROI returned is always
- *                in terms of frame dimensions. This function is different from
- *                nDmaWrapper_GetRecommendedRoi() as coordinates are not used.
+ * @brief         Get the recommended walk ROI width and height
  *
  * @param[in]     eFmtId - Format ID
  * @param[in]     bIsUbwc - Is the format UBWC (TRUE/FALSE)
@@ -250,11 +250,10 @@ extern int32 nDmaWrapper_GetRecommendedWalkSize(t_eDmaFmt eFmtId, bool bIsUbwc,
                                                 t_StDmaWrapper_RoiAlignInfo *pStWalkSize);
 
 /**
+ * Calculates the HW descriptor buffer size based on the formats
+ * that will be used with the engine.
+ *
  * @brief       Get the HW descriptor buffer size per DMA engine
- *
- * @description Calculates the HW descriptor buffer size based
- *              on the formats that will be used with the engine.
- *
  * @param[in]   aeFmtId - Array of format IDs, such as eDmaFmt_NV12, eDmaFmt_NV12_Y,
  *                        eDmaFmt_NV12_UV etc..
  * @param[in]   nsize - Number of format IDs provided
@@ -264,11 +263,11 @@ extern int32 nDmaWrapper_GetRecommendedWalkSize(t_eDmaFmt eFmtId, bool bIsUbwc,
 extern int32 nDmaWrapper_GetDescbuffsize(t_eDmaFmt *aeFmtId, uint16 nsize);
 
 /**
- * @brief       Get the recommended intermediate buffer stride.
+ * Get the recommended (minimum) intermediate buffer stride for the
+ * L2 Cache that is used transfer data from/to DDR. The stride is
+ * greater than or equal to the width and must be a multiple of 256.
  *
- * @description Get the recommended (minimum) intermediate buffer stride for the
- *              L2 Cache that is used transfer data from/to DDR. The stride is
- *              greater than or equal to the width and must be a multiple of 256.
+ * @brief       Get the recommended intermediate buffer stride.
  *
  * @param[in]   eFmtId - Format ID
  * @param[in]   pStRoiSize - The ROI that will be used (should be aligned with
@@ -283,10 +282,10 @@ extern int32 nDmaWrapper_GetRecommendedIntermBufStride(t_eDmaFmt eFmtId,
                                                        bool bIsUbwc);
 
 /**
- * @brief       Get the recommended intermediate buffer size
+ * Get the recommended intermediate buffer size for the L2 cache
+ * that is used to transfer data to/from DDR.
  *
- * @description Get the recommended intermediate buffer size for the L2 cache
- *              that is used to transfer data to/from DDR.
+ * @brief       Get the recommended intermediate buffer size
  *
  * @param[in]   eFmtId - Format ID
  * @param[in]   bUse16BitPaddingInL2 - Is padding to 16 bits done in the L2 (TRUE/FALSE)
@@ -312,15 +311,14 @@ extern int32 nDmaWrapper_GetRecommendedIntermBufSize(t_eDmaFmt eFmtId, bool bUse
                                                      bool bIsUbwc, uint16 u16IntermBufStride);
 
 /**
+ * Setup Dma transfer parameters required to be ready to make DMA transfer.
+ * call this API multiple to create a descriptor link list
+ *
  * @brief       Dma transfer parameters per HW descriptor
  *
- * @description Setup Dma transfer parameters required to be ready to make DMA transfer.
- *              call this API multiple to create a descriptor link list
- *
- * @param[in]   hDmaHandle - Wrapper's DMA Handle. Represents
- *              t_StDmaWrapper_DmaEngine.
+ * @param[in]   hDmaHandle - Wrapper's DMA Handle. Represents t_StDmaWrapper_DmaEngine.
  * @param[in]   stpDmaTransferParm - Dma Transfer parameters. Each element describes
- *              complete Frame/ROI details for this Dma transfer
+ *                                   complete Frame/ROI details for this Dma transfer
  *
  * @return      Success: OK
  *              Failure: ERR
@@ -328,18 +326,21 @@ extern int32 nDmaWrapper_GetRecommendedIntermBufSize(t_eDmaFmt eFmtId, bool bUse
 extern int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle hDmaHandle, t_StDmaWrapper_DmaTransferSetup *stpDmaTransferParm);
 
 /**
+ * DMA power voting based on Cornercase
+ *
  * @brief       DMA power voting based on Cornercase
  *
- * @description DMA power voting
- *
  * @param[in]   cornercase:
- *                  #define PW_MIN_SVS 0
- *                  #define PW_SVS2 1
- *                  #define PW_SVS 2
- *                  #define PW_SVS_L1 3
- *                  #define PW_NORMAL 4
- *                  #define PW_NORMAL_L1 5
- *                  #define PW_TURBO 6
+ *              \code{.cpp}
+ *              #define PW_MIN_SVS 0
+ *              #define PW_SVS2 1
+ *              #define PW_SVS 2
+ *              #define PW_SVS_L1 3
+ *              #define PW_NORMAL 4
+ *              #define PW_NORMAL_L1 5
+ *              #define PW_TURBO 6
+ *              \endcode
+ *
  * @return      Success: OK
  * @n           Failure: ERR
  */
