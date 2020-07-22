@@ -717,9 +717,9 @@ public:
                         Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
                                                   {shape, shape_size}, Call::Extern));
 
-                    mark_buffer = Block::make(mark_buffer, mark_shape);
+                    mark_buffer = Block::make(mark_buffer, mark_shape, Block::Ordered);
                     if (annotate.defined()) {
-                        annotate = Block::make(annotate, mark_buffer);
+                        annotate = Block::make(annotate, mark_buffer, Block::Ordered);
                     } else {
                         annotate = mark_buffer;
                     }
@@ -739,11 +739,11 @@ public:
             check = LetStmt::make(result_name, e, check);
 
             if (annotate.defined()) {
-                check = Block::make(annotate, check);
+                check = Block::make(annotate, check, Block::Ordered);
             }
 
             // Now inner code is free to extract the fields from the halide_buffer_t
-            s = Block::make(check, s);
+            s = Block::make(check, s, Block::Ordered);
 
             // Wrap in let stmts defining the args
             for (size_t i = 0; i < lets.size(); i++) {
@@ -1274,7 +1274,7 @@ Stmt bounds_inference(Stmt s,
     // Add a note in the IR for where assertions on input images
     // should go. Those are handled by a later lowering pass.
     Expr marker = Call::make(Int(32), Call::add_image_checks_marker, {}, Call::Intrinsic);
-    s = Block::make(Evaluate::make(marker), s);
+    s = Block::make(Evaluate::make(marker), s, Block::Ordered);
 
     // Add a synthetic outermost loop to act as 'root'.
     s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::None, s);

@@ -683,12 +683,12 @@ class PartitionLoops : public IRMutator {
             if (make_prologue) {
                 prologue = For::make(op->name, op->min, min_steady - op->min,
                                      op->for_type, op->device_api, prologue);
-                stmt = Block::make(prologue, stmt);
+                stmt = Block::make(prologue, stmt, Block::Ordered);
             }
             if (make_epilogue) {
                 epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
                                      op->for_type, op->device_api, epilogue);
-                stmt = Block::make(stmt, epilogue);
+                stmt = Block::make(stmt, epilogue, Block::Ordered);
             }
         } else {
             // For parallel for loops we could use a Fork node here,

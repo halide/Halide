@@ -79,26 +79,34 @@ Stmt Simplify::visit(const IfThenElse *op) {
                                       mutate(IfThenElse::make(condition, then_pc->body, else_pc->body)));
     } else if (then_block &&
                else_block &&
+               then_block->ordering == else_block->ordering &&
                equal(then_block->first, else_block->first)) {
         return Block::make(then_block->first,
-                           mutate(IfThenElse::make(condition, then_block->rest, else_block->rest)));
+                           mutate(IfThenElse::make(condition, then_block->rest, else_block->rest)),
+                           then_block->ordering);
     } else if (then_block &&
                else_block &&
+               then_block->ordering == else_block->ordering &&
                equal(then_block->rest, else_block->rest)) {
         return Block::make(mutate(IfThenElse::make(condition, then_block->first, else_block->first)),
-                           then_block->rest);
+                           then_block->rest,
+                           then_block->ordering);
     } else if (then_block && equal(then_block->first, else_case)) {
         return Block::make(else_case,
-                           mutate(IfThenElse::make(condition, then_block->rest)));
+                           mutate(IfThenElse::make(condition, then_block->rest)),
+                           then_block->ordering);
     } else if (then_block && equal(then_block->rest, else_case)) {
         return Block::make(mutate(IfThenElse::make(condition, then_block->first)),
-                           else_case);
+                           else_case,
+                           then_block->ordering);
     } else if (else_block && equal(then_case, else_block->first)) {
         return Block::make(then_case,
-                           mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->rest)));
+                           mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->rest)),
+                           else_block->ordering);
     } else if (else_block && equal(then_case, else_block->rest)) {
         return Block::make(mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->first)),
-                           then_case);
+                           then_case,
+                           else_block->ordering);
     } else if (then_for &&
                !else_case.defined() &&
                equal(unwrapped_condition, 0 < then_for->extent)) {
@@ -369,7 +377,7 @@ Stmt Simplify::visit(const Block *op) {
 
         result.push_back(mutate(rest));
 
-        return Block::make(result);
+        return Block::make(result, Block::Ordered);
 
     } else {
         rest = mutate(op->rest);
@@ -397,7 +405,7 @@ Stmt Simplify::visit(const Block *op) {
                is_pure(let_first->value)) {
 
         // Do both first and rest start with the same let statement (occurs when unrolling).
-        Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
+        Stmt new_block = mutate(Block::make(let_first->body, let_rest->body, op->ordering));
 
         // We need to make a new name since we're pulling it out to a
         // different scope.
@@ -412,10 +420,10 @@ Stmt Simplify::visit(const Block *op) {
                equal(if_first->condition, if_next->condition) &&
                is_pure(if_first->condition)) {
         // Two ifs with matching conditions
-        Stmt then_case = mutate(Block::make(if_first->then_case, if_next->then_case));
+        Stmt then_case = mutate(Block::make(if_first->then_case, if_next->then_case, op->ordering));
         Stmt else_case;
         if (if_first->else_case.defined() && if_next->else_case.defined()) {
-            else_case = mutate(Block::make(if_first->else_case, if_next->else_case));
+            else_case = mutate(Block::make(if_first->else_case, if_next->else_case, op->ordering));
         } else if (if_first->else_case.defined()) {
             // We already simplified the body of the ifs.
             else_case = if_first->else_case;
@@ -424,7 +432,7 @@ Stmt Simplify::visit(const Block *op) {
         }
         Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
         if (if_rest.defined()) {
-            result = Block::make(result, if_rest);
+            result = Block::make(result, if_rest, op->ordering);
         }
         return result;
     } else if (if_first &&
@@ -437,18 +445,18 @@ Stmt Simplify::visit(const Block *op) {
         // the first condition.  The second if can be nested
         // inside the first one, because if it's true the
         // first one must also be true.
-        Stmt then_case = mutate(Block::make(if_first->then_case, if_next));
+        Stmt then_case = mutate(Block::make(if_first->then_case, if_next, op->ordering));
         Stmt else_case = mutate(if_first->else_case);
         Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
         if (if_rest.defined()) {
-            result = Block::make(result, if_rest);
+            result = Block::make(result, if_rest, op->ordering);
         }
         return result;
     } else if (op->first.same_as(first) &&
                op->rest.same_as(rest)) {
         return op;
     } else {
-        return Block::make(first, rest);
+        return Block::make(first, rest, op->ordering);
     }
 }
 

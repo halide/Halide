@@ -2272,7 +2272,7 @@ public:
         if (sync.find(&s) != sync.end()) {
             Stmt scatter_sync = Evaluate::make(Call::make(Int(32), "scatter_release",
                                                           {sync[&s]}, Call::Intrinsic));
-            return Block::make(scatter_sync, new_s);
+            return Block::make(scatter_sync, new_s, Block::Ordered);
         }
         return new_s;
     }

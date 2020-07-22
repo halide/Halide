@@ -329,7 +329,7 @@ Stmt IRMutator::visit(const Block *op) {
         rest.same_as(op->rest)) {
         return op;
     }
-    return Block::make(std::move(first), std::move(rest));
+    return Block::make(std::move(first), std::move(rest), op->ordering);
 }
 
 Stmt IRMutator::visit(const IfThenElse *op) {

@@ -45,7 +45,7 @@ protected:
         } else if (is_no_op(rest)) {
             return first;
         } else {
-            return Block::make(first, rest);
+            return Block::make(first, rest, op->ordering);
         }
     }
 
@@ -118,7 +118,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
             Stmt body = op->body;
             while (!sema.empty()) {
                 Expr release = Call::make(Int(32), "halide_semaphore_release", {sema.back(), 1}, Call::Extern);
-                body = Block::make(body, Evaluate::make(release));
+                body = Block::make(body, Evaluate::make(release), Block::Ordered);
                 sema.pop_back();
             }
             return ProducerConsumer::make_produce(op->name, body);
@@ -272,7 +272,7 @@ class CloneAcquire : public IRMutator {
             args[0] = new_var;
             Stmt new_stmt =
                 Evaluate::make(Call::make(call->type, call->name, args, call->call_type));
-            return Block::make(op, new_stmt);
+            return Block::make(op, new_stmt, Block::Ordered);
         } else {
             return op;
         }
@@ -419,7 +419,7 @@ class InitializeSemaphores : public IRMutator {
                                             {sema_var, call->args[0]}, Call::Extern);
                 Expr sema_allocate = Call::make(sema_type, Call::alloca,
                                                 {(int)sizeof(halide_semaphore_t)}, Call::Intrinsic);
-                body = Block::make(Evaluate::make(sema_init), std::move(body));
+                body = Block::make(Evaluate::make(sema_init), std::move(body), Block::Ordered);
                 body = LetStmt::make(op->name, std::move(sema_allocate), std::move(body));
 
                 // Re-wrap any other lets
@@ -468,11 +468,16 @@ class TightenProducerConsumerNodes : public IRMutator {
                 return ProducerConsumer::make(name, is_producer, body);
             } else if (first && rest) {
                 return Block::make(make_producer_consumer(name, is_producer, block->first, scope),
-                                   make_producer_consumer(name, is_producer, block->rest, scope));
+                                   make_producer_consumer(name, is_producer, block->rest, scope),
+                                   block->ordering);
             } else if (first) {
-                return Block::make(make_producer_consumer(name, is_producer, block->first, scope), block->rest);
+                return Block::make(make_producer_consumer(name, is_producer, block->first, scope),
+                                   block->rest,
+                                   block->ordering);
             } else if (rest) {
-                return Block::make(block->first, make_producer_consumer(name, is_producer, block->rest, scope));
+                return Block::make(block->first,
+                                   make_producer_consumer(name, is_producer, block->rest, scope),
+                                   block->ordering);
             } else {
                 // Used on neither side?!
                 return body;
@@ -520,10 +525,11 @@ class ExpandAcquireNodes : public IRMutator {
         // Do an entire sequence of blocks in a single visit method to conserve stack space.
         vector<Stmt> stmts;
         Stmt result;
+        Block::Ordering ordering = op->ordering;
         do {
             stmts.push_back(mutate(op->first));
             result = op->rest;
-        } while ((op = result.as<Block>()));
+        } while ((op = result.as<Block>()) && op->ordering == ordering);
 
         result = mutate(result);
 
@@ -534,7 +540,7 @@ class ExpandAcquireNodes : public IRMutator {
                 semaphores.emplace_back(a->semaphore, a->count);
                 s = a->body;
             }
-            result = Block::make(s, result);
+            result = Block::make(s, result, ordering);
             while (!semaphores.empty()) {
                 result = Acquire::make(semaphores.back().first, semaphores.back().second, result);
                 semaphores.pop_back();

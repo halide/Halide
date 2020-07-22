@@ -92,8 +92,7 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
                    {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj},
                    Call::Intrinsic);
 
-    stmt = Block::make(Evaluate::make(hvx_unlock), stmt);
-    stmt = Block::make(check_hvx_lock, stmt);
+    stmt = Block::make({check_hvx_lock, Evaluate::make(hvx_unlock), stmt}, Block::Ordered);
     return stmt;
 }
 bool is_dense_ramp(const Expr &x) {
@@ -271,7 +270,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                                     ForType::Serial, DeviceAPI::None, store_lanes);
             stmts.emplace_back(std::move(store_lanes));
 
-            Stmt result = Block::make(stmts);
+            Stmt result = Block::make(stmts, Block::Unordered);
 
             // Wrap with allocate nodes
 
@@ -343,7 +342,7 @@ private:
                     IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_unlock());
                 Stmt epilog =
                     IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_lock(target));
-                s = Block::make({prolog, new_for, epilog});
+                s = Block::make({prolog, new_for, epilog}, Block::Ordered);
                 debug(4) << "Wrapping prolog & epilog around par loop\n"
                          << s << "\n";
             } else {

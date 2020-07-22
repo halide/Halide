@@ -250,7 +250,7 @@ private:
             Expr call_after = builder.build();
 
             Stmt new_body = op->body;
-            new_body = Block::make(new_body, Evaluate::make(call_after));
+            new_body = Block::make(new_body, Evaluate::make(call_after), Block::Ordered);
             new_body = LetStmt::make(op->name + ".trace_id", call_before, new_body);
             stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
             // Warning: 'op' may be invalid at this point
@@ -292,7 +292,7 @@ private:
             builder.event = (op->is_producer ? halide_trace_end_produce : halide_trace_end_consume);
             Expr end_op_call = builder.build();
 
-            Stmt new_body = Block::make(op->body, Evaluate::make(end_op_call));
+            Stmt new_body = Block::make(op->body, Evaluate::make(end_op_call), Block::Ordered);
 
             stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call,
                                  ProducerConsumer::make(op->name, op->is_producer, new_body));
@@ -359,7 +359,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
         builder.parent_id = Variable::make(Int(32), "pipeline.trace_id");
         Expr pipeline_end = builder.build();
 
-        s = Block::make(s, Evaluate::make(pipeline_end));
+        s = Block::make(s, Evaluate::make(pipeline_end), Block::Ordered);
 
         // All trace_tag events go at the start, immediately after begin_pipeline.
         // For a given realization/input/output, we output them in the order
@@ -374,7 +374,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                 user_assert(it->find('\0') == string::npos)
                     << "add_trace_tag() may not contain the null character.";
                 builder.trace_tag_expr = Expr(*it);
-                s = Block::make(Evaluate::make(builder.build()), s);
+                s = Block::make(Evaluate::make(builder.build()), s, Block::Ordered);
             }
         }
 
@@ -446,7 +446,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                                      Internal::Call::stringify,
                                      strings,
                                      Internal::Call::Intrinsic);
-            s = Block::make(Evaluate::make(builder.build()), s);
+            s = Block::make(Evaluate::make(builder.build()), s, Block::Ordered);
         }
 
         s = LetStmt::make("pipeline.trace_id", pipeline_start, s);

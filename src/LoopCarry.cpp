@@ -231,17 +231,17 @@ class LoopCarryOverLoop : public IRMutator {
                 stores.push_back(v[i]);
             } else {
                 if (!stores.empty()) {
-                    result.push_back(lift_carried_values_out_of_stmt(Block::make(stores)));
+                    result.push_back(lift_carried_values_out_of_stmt(Block::make(stores, op->ordering)));
                     stores.clear();
                 }
                 result.push_back(mutate(v[i]));
             }
         }
         if (!stores.empty()) {
-            result.push_back(lift_carried_values_out_of_stmt(Block::make(stores)));
+            result.push_back(lift_carried_values_out_of_stmt(Block::make(stores, op->ordering)));
         }
 
-        return Block::make(result);
+        return Block::make(result, op->ordering);
     }
 
     Stmt lift_carried_values_out_of_stmt(const Stmt &orig_stmt) {
@@ -443,7 +443,7 @@ class LoopCarryOverLoop : public IRMutator {
                 initial_scratch_stores.push_back(store_to_scratch);
             }
 
-            Stmt initial_stores = Block::make(initial_scratch_stores);
+            Stmt initial_stores = Block::make(initial_scratch_stores, Block::Unordered);
 
             // Wrap them in the appropriate lets
             for (size_t i = initial_lets.size(); i > 0; i--) {
@@ -465,9 +465,9 @@ class LoopCarryOverLoop : public IRMutator {
                               initial_stores});
         }
 
-        Stmt s = Block::make(not_first_iteration_scratch_stores);
-        s = Block::make(s, core);
-        s = Block::make(s, Block::make(scratch_shuffles));
+        Stmt s = Block::make(not_first_iteration_scratch_stores, Block::Unordered);
+        s = Block::make(s, core, Block::Ordered);
+        s = Block::make(s, Block::make(scratch_shuffles, Block::Ordered), Block::Ordered);
         s = common_subexpression_elimination(s);
         return s;
     }
@@ -530,7 +530,7 @@ class LoopCarry : public IRMutator {
 
             // Inject the scratch buffer allocations.
             for (const auto &alloc : carry.allocs) {
-                stmt = Block::make(substitute(op->name, op->min, alloc.initial_stores), stmt);
+                stmt = Block::make(substitute(op->name, op->min, alloc.initial_stores), stmt, Block::Ordered);
                 stmt = Allocate::make(alloc.name, alloc.type, MemoryType::Stack, {alloc.size}, const_true(), stmt);
             }
             if (!carry.allocs.empty()) {

@@ -26,6 +26,7 @@ class AllocaInst;
 class Constant;
 class Triple;
 class MDNode;
+class Metadata;
 class NamedMDNode;
 class DataLayout;
 class BasicBlock;
@@ -348,6 +349,8 @@ protected:
      * so that llvm knows it can reorder loads and stores across
      * different buffers */
     void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, const Expr &index);
+
+    std::vector<llvm::Metadata *> alias_scopes, no_alias_sets;
 
     /** Get a unique name for the actual block of memory that an
      * allocate node uses. Used so that alias analysis understands

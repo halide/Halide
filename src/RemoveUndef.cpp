@@ -491,7 +491,7 @@ private:
             } else if (new_first.same_as(op->first) && result.same_as(op->rest)) {
                 result = op;
             } else {
-                result = Block::make(new_first, result);
+                result = Block::make(new_first, result, op->ordering);
             }
         }
         return result;

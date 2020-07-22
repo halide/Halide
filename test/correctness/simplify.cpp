@@ -78,6 +78,14 @@ Expr broadcast(const Expr &base, int w) {
     return Broadcast::make(base, w);
 }
 
+Stmt block(Stmt first, Stmt rest) {
+    return Block::make(first, rest, Block::Ordered);
+}
+
+Stmt block(const std::vector<Stmt> &stmts) {
+    return Block::make(stmts, Block::Ordered);
+}
+
 void check_casts() {
     Expr x = Var("x"), y = Var("y");
 
@@ -1427,47 +1435,47 @@ void check_boolean() {
                            Evaluate::make(y),
                            Evaluate::make(x)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 3), Evaluate::make(x + 4))),
+    check(block(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                IfThenElse::make(x < y, Evaluate::make(x + 3), Evaluate::make(x + 4))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
-                           Block::make(Evaluate::make(x + 2), Evaluate::make(x + 4))));
+                           block(Evaluate::make(x + 1), Evaluate::make(x + 3)),
+                           block(Evaluate::make(x + 2), Evaluate::make(x + 4))));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2))),
-          IfThenElse::make(x < y, Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))));
+    check(block(IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                IfThenElse::make(x < y, Evaluate::make(x + 2))),
+          IfThenElse::make(x < y, block(Evaluate::make(x + 1), Evaluate::make(x + 2))));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 3), Evaluate::make(x + 4)),
-                       Evaluate::make(x + 5)}),
-          Block::make(IfThenElse::make(x < y,
-                                       Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
-                                       Block::make(Evaluate::make(x + 2), Evaluate::make(x + 4))),
-                      Evaluate::make(x + 5)));
+    check(block({IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                 IfThenElse::make(x < y, Evaluate::make(x + 3), Evaluate::make(x + 4)),
+                 Evaluate::make(x + 5)}),
+          block(IfThenElse::make(x < y,
+                                 block(Evaluate::make(x + 1), Evaluate::make(x + 3)),
+                                 block(Evaluate::make(x + 2), Evaluate::make(x + 4))),
+                Evaluate::make(x + 5)));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 2)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 3)),
-                       Evaluate::make(x + 4)}),
-          Block::make(IfThenElse::make(x < y, Block::make({Evaluate::make(x + 1), Evaluate::make(x + 2), Evaluate::make(x + 3)})),
-                      Evaluate::make(x + 4)));
+    check(block({IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                 IfThenElse::make(x < y, Evaluate::make(x + 2)),
+                 IfThenElse::make(x < y, Evaluate::make(x + 3)),
+                 Evaluate::make(x + 4)}),
+          block(IfThenElse::make(x < y, block({Evaluate::make(x + 1), Evaluate::make(x + 2), Evaluate::make(x + 3)})),
+                Evaluate::make(x + 4)));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 2)),
-                       Evaluate::make(x + 3)}),
-          Block::make(IfThenElse::make(x < y, Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
-                      Evaluate::make(x + 3)));
+    check(block({IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                 IfThenElse::make(x < y, Evaluate::make(x + 2)),
+                 Evaluate::make(x + 3)}),
+          block(IfThenElse::make(x < y, block(Evaluate::make(x + 1), Evaluate::make(x + 2))),
+                Evaluate::make(x + 3)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 3))),
+    check(block(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                IfThenElse::make(x < y, Evaluate::make(x + 3))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
+                           block(Evaluate::make(x + 1), Evaluate::make(x + 3)),
                            Evaluate::make(x + 2)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))),
+    check(block(IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                           block(Evaluate::make(x + 1), Evaluate::make(x + 2)),
                            Evaluate::make(x + 3)));
 
     // The construct
@@ -1483,40 +1491,40 @@ void check_boolean() {
           Evaluate::make(x + 1));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3))),
-          Block::make(Evaluate::make(x + 1),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))));
+                           block(Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                           block(Evaluate::make(x + 1), Evaluate::make(x + 3))),
+          block(Evaluate::make(x + 1),
+                IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Block::make(Evaluate::make(x + 3), Evaluate::make(x + 2))),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 3)),
-                      Evaluate::make(x + 2)));
+                           block(Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                           block(Evaluate::make(x + 3), Evaluate::make(x + 2))),
+          block(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 3)),
+                Evaluate::make(x + 2)));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                           block(Evaluate::make(x + 1), Evaluate::make(x + 2)),
                            Evaluate::make(x + 2)),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                      Evaluate::make(x + 2)));
+          block(IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                Evaluate::make(x + 2)));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                           block(Evaluate::make(x + 1), Evaluate::make(x + 2)),
                            Evaluate::make(x + 1)),
-          Block::make(Evaluate::make(x + 1),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2))));
+          block(Evaluate::make(x + 1),
+                IfThenElse::make(x < y, Evaluate::make(x + 2))));
 
     check(IfThenElse::make(x < y,
                            Evaluate::make(x + 1),
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
-          Block::make(Evaluate::make(x + 1),
-                      IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x + 2))));
+                           block(Evaluate::make(x + 1), Evaluate::make(x + 2))),
+          block(Evaluate::make(x + 1),
+                IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x + 2))));
 
     check(IfThenElse::make(x < y,
                            Evaluate::make(x + 2),
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x + 1)),
-                      Evaluate::make(x + 2)));
+                           block(Evaluate::make(x + 1), Evaluate::make(x + 2))),
+          block(IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x + 1)),
+                Evaluate::make(x + 2)));
 
     // A for loop is also an if statement that the extent is greater than zero
     Stmt body = AssertStmt::make(y == z, y);
@@ -1555,10 +1563,10 @@ void check_boolean() {
           IfThenElse::make(max(y, 5) <= x, Evaluate::make(x)));
 
     // Concretely, this lets us skip some redundant assertions
-    check(Block::make(AssertStmt::make(max(y, 3) < x, x),
-                      AssertStmt::make(0 < x, x)),
-          Block::make(AssertStmt::make(max(y, 3) < x, x),
-                      Evaluate::make(0)));
+    check(block(AssertStmt::make(max(y, 3) < x, x),
+                AssertStmt::make(0 < x, x)),
+          block(AssertStmt::make(max(y, 3) < x, x),
+                Evaluate::make(0)));
 
     // Check it works transitively
     check(IfThenElse::make(0 < x,

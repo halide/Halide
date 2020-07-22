@@ -188,11 +188,11 @@ void IRPrinter::test() {
 
     Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
     Stmt consumer = ProducerConsumer::make_consume("buf", for_loop2);
-    Stmt pipeline = Block::make(producer, consumer);
+    Stmt pipeline = Block::make(producer, consumer, Block::Ordered);
 
     Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
                                                          {string("y"), y, 3}, Call::Extern));
-    Stmt block = Block::make(assertion, pipeline);
+    Stmt block = Block::make(assertion, pipeline, Block::Ordered);
     Stmt let_stmt = LetStmt::make("y", 17, block);
     Stmt allocate = Allocate::make("buf", f32, MemoryType::Stack, {1023}, const_true(), let_stmt);
 
@@ -254,6 +254,9 @@ ostream &operator<<(ostream &out, const ForType &type) {
         break;
     case ForType::Unrolled:
         out << "unrolled";
+        break;
+    case ForType::UnorderedUnrolled:
+        out << "unordered_unrolled";
         break;
     case ForType::Vectorized:
         out << "vectorized";
@@ -903,8 +906,23 @@ void IRPrinter::visit(const Prefetch *op) {
 }
 
 void IRPrinter::visit(const Block *op) {
-    print(op->first);
-    print(op->rest);
+    vector<Stmt> stmts;
+    Stmt rest;
+    Block::Ordering ordering = op->ordering;
+    do {
+        stmts.push_back(op->first);
+        rest = op->rest;
+    } while ((op = rest.as<Block>()) &&
+             op->ordering == ordering);
+    stmts.push_back(rest);
+
+    stream << get_indent() << (ordering == Block::Ordered ? "ordered {\n" : "unordered {\n");
+    indent++;
+    for (Stmt s : stmts) {
+        print(s);
+    }
+    indent--;
+    stream << get_indent() << "}\n";
 }
 
 void IRPrinter::visit(const Fork *op) {

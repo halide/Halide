@@ -2853,9 +2853,9 @@ void CodeGen_C::test() {
     Expr e = Select::make(alpha > 4.0f, print_when(x < 1, 3), 2);
     Stmt s = Store::make("buf", e, x, Parameter(), const_true(), ModulusRemainder());
     s = LetStmt::make("x", beta + 1, s);
-    s = Block::make(s, Free::make("tmp.stack"));
+    s = Block::make(s, Free::make("tmp.stack"), Block::Ordered);
     s = Allocate::make("tmp.stack", Int(32), MemoryType::Stack, {127}, const_true(), s);
-    s = Block::make(s, Free::make("tmp.heap"));
+    s = Block::make(s, Free::make("tmp.heap"), Block::Ordered);
     s = Allocate::make("tmp.heap", Int(32), MemoryType::Heap, {43, beta}, const_true(), s);
     Expr buf = Variable::make(Handle(), "buf.buffer");
     s = LetStmt::make("buf", Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern), s);

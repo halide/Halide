@@ -137,7 +137,7 @@ Stmt unpack_buffers(Stmt s) {
         Expr error = Call::make(Int(32), "halide_error_buffer_argument_is_null",
                                 {p.first}, Call::Extern);
         Stmt check = AssertStmt::make(cond, error);
-        s = Block::make(check, s);
+        s = Block::make(check, s, Block::Ordered);
     }
 
     return s;

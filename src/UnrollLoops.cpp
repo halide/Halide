@@ -29,7 +29,13 @@ class UnrollLoops : public IRMutator {
     }
 
     Stmt visit(const For *for_loop) override {
-        if (for_loop->for_type == ForType::Unrolled) {
+        if (for_loop->for_type == ForType::Unrolled ||
+            for_loop->for_type == ForType::UnorderedUnrolled) {
+            Block::Ordering ordering =
+                (for_loop->for_type == ForType::Unrolled ?
+                     Block::Ordered :
+                     Block::Unordered);
+
             // Give it one last chance to simplify to an int
             Expr extent = simplify(for_loop->extent);
             Stmt body = for_loop->body;
@@ -83,7 +89,7 @@ class UnrollLoops : public IRMutator {
                 if (!iters.defined()) {
                     iters = iter;
                 } else {
-                    iters = Block::make(iter, iters);
+                    iters = Block::make(iter, iters, ordering);
                 }
                 if (use_guard) {
                     iters = IfThenElse::make(likely_if_innermost(i < for_loop->extent), iters);

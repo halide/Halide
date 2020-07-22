@@ -501,31 +501,33 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     return node;
 }
 
-Stmt Block::make(Stmt first, Stmt rest) {
+Stmt Block::make(Stmt first, Stmt rest, Block::Ordering ordering) {
     internal_assert(first.defined()) << "Block of undefined\n";
     internal_assert(rest.defined()) << "Block of undefined\n";
 
     Block *node = new Block;
-
-    if (const Block *b = first.as<Block>()) {
+    const Block *b = first.as<Block>();
+    if (b && b->ordering == ordering) {
         // Use a canonical block nesting order
         node->first = b->first;
-        node->rest = Block::make(b->rest, std::move(rest));
+        node->rest = Block::make(b->rest, std::move(rest), ordering);
+        node->ordering = ordering;
     } else {
         node->first = std::move(first);
         node->rest = std::move(rest);
+        node->ordering = ordering;
     }
 
     return node;
 }
 
-Stmt Block::make(const std::vector<Stmt> &stmts) {
+Stmt Block::make(const std::vector<Stmt> &stmts, Block::Ordering ordering) {
     if (stmts.empty()) {
         return Stmt();
     }
     Stmt result = stmts.back();
     for (size_t i = stmts.size() - 1; i > 0; i--) {
-        result = Block::make(stmts[i - 1], result);
+        result = Block::make(stmts[i - 1], result, ordering);
     }
     return result;
 }

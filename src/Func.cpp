@@ -284,6 +284,12 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
     for (size_t i = 0; i < dims.size(); i++) {
         if (var_name_match(dims[i].var, var.name())) {
             found = true;
+
+            if (dims[i].is_pure() && t == ForType::Unrolled) {
+                // We can upgrade to UnorderedUnrolled
+                t = ForType::UnorderedUnrolled;
+            }
+
             dims[i].for_type = t;
 
             // If it's an rvar and the for type is parallel, we need to
@@ -1442,6 +1448,8 @@ Stage &Stage::vectorize(const VarOrRVar &var) {
 }
 
 Stage &Stage::unroll(const VarOrRVar &var) {
+    // Will upgrade to UnorderedUnrolled if the corresponding dim is
+    // found to be pure.
     set_dim_type(var, ForType::Unrolled);
     return *this;
 }

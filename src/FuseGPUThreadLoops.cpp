@@ -159,7 +159,7 @@ class NormalizeDimensionality : public IRMutator {
             rest.same_as(op->rest)) {
             return op;
         } else {
-            return Block::make(first, rest);
+            return Block::make(first, rest, op->ordering);
         }
     }
 
@@ -342,14 +342,16 @@ private:
     Stmt visit(const Block *op) override {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
-            barrier_stage++;
+            if (op->ordering == Block::Ordered) {
+                barrier_stage++;
+            }
             Stmt rest = mutate(op->rest);
 
             if (first.same_as(op->first) &&
                 rest.same_as(op->rest)) {
                 return op;
             } else {
-                return Block::make(first, rest);
+                return Block::make(first, rest, op->ordering);
             }
         } else {
             return IRMutator::visit(op);
@@ -860,7 +862,7 @@ public:
                 AssertStmt::make(allocate_heap_result_var == 0, allocate_heap_result_var);
             Expr device_field = Call::make(Handle(), Call::buffer_get_device, {buffer_var}, Call::Extern);
             s = LetStmt::make(alloc.name, device_field, s);
-            s = Block::make(check_allocated, s);
+            s = Block::make(check_allocated, s, Block::Ordered);
             s = LetStmt::make(allocate_heap_result_var_name, allocate_heap_call, s);
             s = Allocate::make(buffer_name, alloc.type,
                                MemoryType::Auto, {}, const_true(), s,
@@ -1098,7 +1100,7 @@ class InjectThreadBarriers : public IRMutator {
             if (!in_threads && !body.same_as(op->body)) {
                 // Any memory access fences should be handled by the
                 // synchronizations within the block
-                body = Block::make(body, make_barrier(0));
+                body = Block::make(body, make_barrier(0), Block::Ordered);
             }
             return For::make(op->name, op->min, op->extent,
                              op->for_type, op->device_api, body);
@@ -1155,7 +1157,10 @@ class InjectThreadBarriers : public IRMutator {
     }
 
     Stmt visit(const Block *op) override {
-        if (!in_threads && op->rest.defined()) {
+        if (op->ordering == Block::Unordered) {
+            // Known to have no data dependencies, so synchronization is unnecessary
+            return IRMutator::visit(op);
+        } else if (!in_threads && op->rest.defined()) {
             // First, we record which loads from shared/device memory occur
             // in the rest block
             Stmt rest = mutate(op->rest);
@@ -1184,7 +1189,7 @@ class InjectThreadBarriers : public IRMutator {
                     break;
                 }
             }
-            return Block::make(Block::make(first, make_barrier(mask)), rest);
+            return Block::make({first, make_barrier(mask), rest}, Block::Ordered);
         } else {
             return IRMutator::visit(op);
         }

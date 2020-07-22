@@ -357,7 +357,7 @@ private:
             prefetch_call = IfThenElse::make(condition, prefetch_call);
         }
         Stmt body = mutate(op->body);
-        return Block::make(prefetch_call, body);
+        return Block::make(prefetch_call, body, Block::Ordered);
     }
 
     Stmt visit(const For *op) override {

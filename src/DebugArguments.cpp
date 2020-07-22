@@ -37,7 +37,7 @@ void debug_arguments(LoweredFunc *func, const Target &t) {
     }
     stmts.push_back(func->body);
     stmts.push_back(Evaluate::make(print("Exiting Pipeline " + func->name)));
-    func->body = Block::make(stmts);
+    func->body = Block::make(stmts, Block::Ordered);
 }
 
 }  // namespace Internal

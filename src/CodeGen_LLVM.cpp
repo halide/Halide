@@ -1999,6 +1999,14 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, con
     tbaa = builder.createTBAAStructTagNode(tbaa, tbaa, 0);
 
     inst->setMetadata("tbaa", tbaa);
+
+    // Also add alias sets and scopes if they exist
+    if (!alias_scopes.empty()) {
+        inst->setMetadata("alias.scope", MDNode::get(*context, alias_scopes));
+    }
+    if (!no_alias_sets.empty()) {
+        inst->setMetadata("noalias", MDNode::get(*context, no_alias_sets));
+    }
 }
 
 void CodeGen_LLVM::visit(const Load *op) {
@@ -4213,9 +4221,47 @@ void CodeGen_LLVM::visit(const Block *op) {
         }
         codegen_asserts(asserts);
         codegen(s);
-    } else {
+    } else if (op->ordering == Block::Ordered) {
         codegen(op->first);
         codegen(op->rest);
+    } else {
+        // This is an unordered block. We'll get better code if we let
+        // llvm know there are no hazards.
+
+        // Make an aliasing domain. Each stmt in the block gets a
+        // unique scope within this domain.  All memory references in
+        // each stmt are tagged as noalias with the scopes from all
+        // the other stmts. Unfortunately this is a quadratic amount
+        // of metadata in the size of the unrolled block.
+        string name = unique_name("alias_domain_");
+
+        vector<Stmt> stmts;
+        Stmt rest;
+        do {
+            stmts.push_back(op->first);
+            rest = op->rest;
+        } while ((op = rest.as<Block>()) &&
+                 op->ordering == Block::Unordered);
+        stmts.push_back(rest);
+
+        auto *domain = MDNode::get(*context, {MDString::get(*context, name)});
+        vector<llvm::Metadata *> scopes;
+        for (size_t i = 0; i < stmts.size(); i++) {
+            string scope_name = name + "." + std::to_string(i);
+            scopes.push_back(MDNode::get(*context, {MDString::get(*context, scope_name), domain}));
+        }
+        for (size_t i = 0; i < stmts.size(); i++) {
+            alias_scopes.push_back(scopes[i]);
+            for (size_t j = 0; j < stmts.size(); j++) {
+                if (i == j) continue;
+                no_alias_sets.push_back(scopes[j]);
+            }
+            codegen(stmts[i]);
+            alias_scopes.pop_back();
+            for (size_t j = 0; j < stmts.size() - 1; j++) {
+                no_alias_sets.pop_back();
+            }
+        }
     }
 }
 

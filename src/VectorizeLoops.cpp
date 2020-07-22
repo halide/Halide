@@ -866,7 +866,7 @@ class VectorSubs : public IRMutator {
             }
             if (vectorize_predicate && else_case.defined()) {
                 PredicateLoadStore p(var, !cond, in_hexagon, target);
-                predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
+                predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case), Block::Ordered);
                 vectorize_predicate = p.is_vectorized();
             }
 
