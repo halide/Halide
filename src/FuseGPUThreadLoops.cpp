@@ -318,7 +318,7 @@ private:
                                        Parameter{}, const_true(), ModulusRemainder{});
 
         if (host_side_preamble.defined()) {
-            host_side_preamble = Block::make(host_side_preamble, update_size);
+            host_side_preamble = Block::make(host_side_preamble, update_size, Block::Ordered);
         } else {
             host_side_preamble = update_size;
         }
@@ -393,7 +393,7 @@ private:
             host_side_preamble = For::make(loop_name, new_min, new_extent,
                                            ForType::Serial, DeviceAPI::None, host_side_preamble);
             if (old_preamble.defined()) {
-                host_side_preamble = Block::make(old_preamble, host_side_preamble);
+                host_side_preamble = Block::make(old_preamble, host_side_preamble, Block::Ordered);
             }
         } else {
             host_side_preamble = old_preamble;
@@ -438,7 +438,7 @@ private:
             host_side_preamble = IfThenElse::make(!condition, else_preamble);
         }
         if (before_preamble.defined() && host_side_preamble.defined()) {
-            host_side_preamble = Block::make(before_preamble, host_side_preamble);
+            host_side_preamble = Block::make(before_preamble, host_side_preamble, Block::Ordered);
         } else if (before_preamble.defined()) {
             host_side_preamble = before_preamble;
         }
@@ -569,7 +569,7 @@ private:
 
         if (old_preamble.defined()) {
             if (host_side_preamble.defined()) {
-                host_side_preamble = Block::make(old_preamble, host_side_preamble);
+                host_side_preamble = Block::make(old_preamble, host_side_preamble, Block::Ordered);
             } else {
                 host_side_preamble = old_preamble;
             }
@@ -992,7 +992,7 @@ public:
         }
 
         // Prefix the preamble
-        result = Block::make(host_side_preamble, result);
+        result = Block::make(host_side_preamble, result, Block::Ordered);
 
         // Wrap the preamble in all the allocation nodes
         for (auto &alloc : allocations) {
@@ -1000,7 +1000,7 @@ public:
                 string alloc_name = alloc.name + ".shared_size";
                 Stmt init = Store::make(alloc_name, 0, 0,
                                         Parameter{}, const_true(), ModulusRemainder{});
-                result = Block::make(init, result);
+                result = Block::make(init, result, Block::Ordered);
                 result = Allocate::make(alloc_name, Int(32), MemoryType::Stack, {1}, const_true(), result);
             }
         }
