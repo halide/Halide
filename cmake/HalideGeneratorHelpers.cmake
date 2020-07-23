@@ -1,31 +1,31 @@
 cmake_minimum_required(VERSION 3.16)
 
 # TODO: find a use for these, or remove them?
-define_property(TARGET PROPERTY HALIDE_GEN_TARGET
+define_property(TARGET PROPERTY Halide_GEN_TARGET
                 BRIEF_DOCS "On a Halide library target, names the generator target used to create it"
                 FULL_DOCS "On a Halide library target, names the generator target used to create it")
 
-define_property(TARGET PROPERTY HALIDE_FILTER_NAME
+define_property(TARGET PROPERTY Halide_FILTER_NAME
                 BRIEF_DOCS "On a Halide library target, names the filter this library corresponds to"
                 FULL_DOCS "On a Halide library target, names the filter this library corresponds to")
 
-define_property(TARGET PROPERTY HALIDE_LIBNAME
+define_property(TARGET PROPERTY Halide_LIBNAME
                 BRIEF_DOCS "On a Halide library target, names the function it provides"
                 FULL_DOCS "On a Halide library target, names the function it provides")
 
-define_property(TARGET PROPERTY HALIDE_RUNTIME
+define_property(TARGET PROPERTY Halide_RUNTIME
                 BRIEF_DOCS "On a Halide library target, names the runtime target it depends on"
                 FULL_DOCS "On a Halide library target, names the runtime target it depends on")
 
-define_property(TARGET PROPERTY HALIDE_PARAMS
+define_property(TARGET PROPERTY Halide_PARAMS
                 BRIEF_DOCS "On a Halide library target, lists the parameters used to configure the filter"
                 FULL_DOCS "On a Halide library target, lists the parameters used to configure the filter")
 
-define_property(TARGET PROPERTY HALIDE_TARGETS
+define_property(TARGET PROPERTY Halide_TARGETS
                 BRIEF_DOCS "On a Halide library target, lists the runtime targets supported by the filter"
                 FULL_DOCS "On a Halide library target, lists the runtime targets supported by the filter")
 
-define_property(TARGET PROPERTY HALIDE_RT_TARGETS
+define_property(TARGET PROPERTY Halide_RT_TARGETS
                 BRIEF_DOCS "On a Halide runtime target, lists the targets the runtime backs"
                 FULL_DOCS "On a Halide runtime target, lists the targets the runtime backs")
 
@@ -98,8 +98,8 @@ function(add_halide_library TARGET)
     endif ()
 
     if (NOT ARG_TARGETS)
-        if (NOT "${HALIDE_TARGET}" STREQUAL "")
-            set(ARG_TARGETS "${HALIDE_TARGET}")
+        if (NOT "${Halide_TARGET}" STREQUAL "")
+            set(ARG_TARGETS "${Halide_TARGET}")
         elseif (NOT "$ENV{HL_TARGET}" STREQUAL "")
             set(ARG_TARGETS "$ENV{HL_TARGET}")
         else ()
@@ -139,7 +139,7 @@ function(add_halide_library TARGET)
     endif ()
 
     # The output file name might not match the host when cross compiling.
-    _Halide_get_library_suffix(HALIDE_STATIC_LIBRARY_SUFFIX ${GEN_TARGETS})
+    _Halide_get_library_suffix(Halide_STATIC_LIBRARY_SUFFIX ${GEN_TARGETS})
 
     ##
     # Set up the runtime library, if needed
@@ -156,16 +156,16 @@ function(add_halide_library TARGET)
 
             set_target_properties("${TARGET}.runtime"
                                   PROPERTIES
-                                  IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.runtime${HALIDE_STATIC_LIBRARY_SUFFIX}")
+                                  IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.runtime${Halide_STATIC_LIBRARY_SUFFIX}")
 
             # Defers reading the list of targets for which to generate a common runtime to CMake _generation_ time.
             # This prevents issues where a lower GCD is required by a later Halide library linking to this runtime.
-            add_custom_command(OUTPUT "${TARGET}.runtime${HALIDE_STATIC_LIBRARY_SUFFIX}"
+            add_custom_command(OUTPUT "${TARGET}.runtime${Halide_STATIC_LIBRARY_SUFFIX}"
                                COMMAND ${generatorCommand} -r "${TARGET}.runtime" -o .
-                               target=$<JOIN:$<TARGET_PROPERTY:${TARGET}.runtime,HALIDE_RT_TARGETS>,$<COMMA>>
+                               target=$<JOIN:$<TARGET_PROPERTY:${TARGET}.runtime,Halide_RT_TARGETS>,$<COMMA>>
                                DEPENDS "${ARG_FROM}")
 
-            add_custom_target("${TARGET}.runtime.update" DEPENDS "${TARGET}.runtime${HALIDE_STATIC_LIBRARY_SUFFIX}")
+            add_custom_target("${TARGET}.runtime.update" DEPENDS "${TARGET}.runtime${Halide_STATIC_LIBRARY_SUFFIX}")
 
             add_dependencies("${TARGET}.runtime" "${TARGET}.runtime.update")
             set(ARG_USE_RUNTIME "${TARGET}.runtime")
@@ -182,7 +182,7 @@ function(add_halide_library TARGET)
             string(REPLACE "-${T}" "" RT_TARGETS "${RT_TARGETS}")
         endforeach ()
 
-        set_property(TARGET "${ARG_USE_RUNTIME}" APPEND PROPERTY HALIDE_RT_TARGETS "${RT_TARGETS}")
+        set_property(TARGET "${ARG_USE_RUNTIME}" APPEND PROPERTY Halide_RT_TARGETS "${RT_TARGETS}")
 
         # Finally, add any new GPU libraries to the runtime
         _Halide_target_link_gpu_libs(${ARG_USE_RUNTIME} INTERFACE ${GEN_TARGETS})
@@ -202,7 +202,7 @@ function(add_halide_library TARGET)
         list(APPEND GENERATOR_OUTPUT_FILES "${TARGET}.halide_generated.cpp")
     else ()
         list(APPEND GENERATOR_OUTPUTS static_library)
-        list(APPEND GENERATOR_OUTPUT_FILES "${TARGET}${HALIDE_STATIC_LIBRARY_SUFFIX}")
+        list(APPEND GENERATOR_OUTPUT_FILES "${TARGET}${Halide_STATIC_LIBRARY_SUFFIX}")
     endif ()
 
     # Add in extra outputs using the table defined at the start of this function
@@ -244,7 +244,7 @@ function(add_halide_library TARGET)
         add_library("${TARGET}" STATIC IMPORTED)
         set_target_properties("${TARGET}" PROPERTIES
                               POSITION_INDEPENDENT_CODE ON
-                              IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}${HALIDE_STATIC_LIBRARY_SUFFIX}")
+                              IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}${Halide_STATIC_LIBRARY_SUFFIX}")
     endif ()
 
     # Load the plugins and setup dependencies
@@ -258,12 +258,12 @@ function(add_halide_library TARGET)
     endif ()
 
     set_target_properties("${TARGET}" PROPERTIES
-                          HALIDE_GEN_TARGET "${ARG_FROM}"
-                          HALIDE_FILTER_NAME "${ARG_GENERATOR}"
-                          HALIDE_LIBNAME "${ARG_FUNCTION_NAME}"
-                          HALIDE_PARAMS "${ARG_PARAMS}"
-                          HALIDE_RUNTIME "${ARG_USE_RUNTIME}"
-                          HALIDE_TARGETS "${GEN_TARGETS}")
+                          Halide_GEN_TARGET "${ARG_FROM}"
+                          Halide_FILTER_NAME "${ARG_GENERATOR}"
+                          Halide_LIBNAME "${ARG_FUNCTION_NAME}"
+                          Halide_PARAMS "${ARG_PARAMS}"
+                          Halide_RUNTIME "${ARG_USE_RUNTIME}"
+                          Halide_TARGETS "${GEN_TARGETS}")
 
     add_custom_command(OUTPUT ${GENERATOR_OUTPUT_FILES}
                        COMMAND ${generatorCommand}
