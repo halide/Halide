@@ -1202,6 +1202,14 @@ void check_boolean() {
     check(select(x < 5, select(x < 5, 0, 1), 2), select(x < 5, 0, 2));
     check(select(x < 5, 0, select(x < 5, 1, 2)), select(x < 5, 0, 2));
 
+    check(max(select((x == -1), 1, x), 6), max(x, 6));
+    check(max(select((x == -1), 1, x), x), select((x == -1), 1, x));
+    check(max(select((x == 17), 1, x), x), x);
+
+    check(min(select((x == 1), -1, x), -6), min(x, -6));
+    check(min(select((x == 1), -1, x), x), select((x == 1), -1, x));
+    check(min(select((x == -17), -1, x), x), x);
+
     check((1 - xf) * 6 < 3, 0.5f < xf);
 
     check(!f, t);

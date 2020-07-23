@@ -129,6 +129,12 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              // Canonicalize a clamp
              rewrite(min(max(x, c0), c1), max(min(x, c1), c0), c0 <= c1) ||
 
+             rewrite(min(x, select(x == c0, c1, x)), select(x == c0, c1, x), c1 < c0) ||
+             rewrite(min(x, select(x == c0, c1, x)), x, c0 <= c1) ||
+             rewrite(min(select(x == c0, c1, x), c2), min(x, c2), (c2 <= c0) && (c2 <= c1)) ||
+             rewrite(min(select(x == c0, c1, x), x), select(x == c0, c1, x), c1 < c0) ||
+             rewrite(min(select(x == c0, c1, x), x), x, c0 <= c1) ||
+
              (no_overflow(op->type) &&
               (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
                rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||

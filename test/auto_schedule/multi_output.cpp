@@ -3,6 +3,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] Mullapudi2016 autoscheduler does not support WebAssembly.\n");
+        return 0;
+    }
+
     int W = 1000;
     int H = 1000;
     Buffer<uint16_t> input(W, H);

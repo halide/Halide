@@ -88,8 +88,8 @@ int main() {
         !test<int8_t>() ||
         !test<uint16_t>() ||
         !test<int16_t>()
-        //!test<uint32_t>() ||
-        //!test<int32_t>()
+        // !test<uint32_t>() ||
+        // !test<int32_t>()
         ) return 1;
     printf("Success!\n");
     return 0;

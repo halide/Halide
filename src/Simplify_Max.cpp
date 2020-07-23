@@ -126,6 +126,12 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              rewrite(max(min(max(y, x), z), y), max(y, min(x, z))) ||
              rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
 
+             rewrite(max(x, select(x == c0, c1, x)), select(x == c0, c1, x), c0 < c1) ||
+             rewrite(max(x, select(x == c0, c1, x)), x, c1 <= c0) ||
+             rewrite(max(select(x == c0, c1, x), c2), max(x, c2), (c0 <= c2) && (c1 <= c2)) ||
+             rewrite(max(select(x == c0, c1, x), x), select(x == c0, c1, x), c0 < c1) ||
+             rewrite(max(select(x == c0, c1, x), x), x, c1 <= c0) ||
+
              (no_overflow(op->type) &&
               (rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||
                rewrite(max(max(x, y) + c0, x), max(x, y) + c0, c0 > 0) ||
