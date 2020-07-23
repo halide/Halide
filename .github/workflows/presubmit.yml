@@ -15,11 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: DoozyX/clang-format-lint-action@v0.5
+      - uses: DoozyX/clang-format-lint-action@v0.7
         with:
           source: '.'
           extensions: 'h,c,cpp'
-          clangFormatVersion: 9
+          clangFormatVersion: 10
   check_clang_tidy:
     name: Check clang-tidy
     runs-on: ubuntu-latest
