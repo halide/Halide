@@ -1699,6 +1699,10 @@ class uint32x32_t {
         return Vec(from_native_vector, v, v);
     }
 
+    void aligned_store(void *base, int32_t offset) const {
+        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
+    }
+
     friend Vec operator+(const Vec &a, const Vec &b) {
         return Vec(from_native_vector, a.native_vector[0] + b.native_vector[0], a.native_vector[1] + b.native_vector[1]);
     }
@@ -1881,6 +1885,10 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x32_t uint16x32_t_load(const void
     return r;
 }
 
+HALIDE_ALWAYS_INLINE void aligned_store(const uint16x32_t& a, void *base, int32_t offset) {
+    *((uint16x32_t *)((uint16_t*)base + offset)) = a;
+}
+
 HALIDE_ALWAYS_INLINE void store(const uint16x32_t& a, void *base, int32_t offset) {
     memcpy(((uint16_t*)base + offset), &a, sizeof(uint16_t) * 32);
 }
@@ -1894,6 +1902,26 @@ HALIDE_ALWAYS_INLINE void aligned_store(const int16x64_t& a, void *base, int32_t
 
 HALIDE_ALWAYS_INLINE void store(const int16x64_t& a, void *base, int32_t offset) {
   a.store(base, offset);
+}
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x16_t int32x16_t_load(const void *base, int32_t offset) {
+    int32x16_t r;
+    memcpy(&r, ((const int32_t*)base + offset), sizeof(int32_t) * 16);
+    return r;
+}
+
+HALIDE_ALWAYS_INLINE void aligned_store(const int32x16_t& a, void *base, int32_t offset) {
+    *((int32x16_t *)((int32_t*)base + offset)) = a;
+}
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint32x16_t uint32x16_t_load(const void *base, int32_t offset) {
+    uint32x16_t r;
+    memcpy(&r, ((const uint32_t*)base + offset), sizeof(uint32_t) * 16);
+    return r;
+}
+
+HALIDE_ALWAYS_INLINE void aligned_store(const uint32x16_t& a, void *base, int32_t offset) {
+    *((uint32x16_t *)((uint32_t*)base + offset)) = a;
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x32_t int32x32_t_aligned_load(const void *base, int32_t offset) {
@@ -1914,6 +1942,10 @@ HALIDE_ALWAYS_INLINE void aligned_store(const int32x32_t& a, void *base, int32_t
 
 HALIDE_ALWAYS_INLINE void store(const int32x32_t& a, void *base, int32_t offset) {
   a.store(base, offset);
+}
+
+HALIDE_ALWAYS_INLINE void aligned_store(const uint32x32_t& a, void *base, int32_t offset) {
+   a.aligned_store(base, offset);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_clamped_dense_load_i16(
@@ -3465,6 +3497,10 @@ string CodeGen_C::print_xtensa_call(const Call *op) {
         op_name = "IVP_ADDSNX16";
     } else if (op->name == "halide_xtensa_sat_sub_i16") {
         op_name = "IVP_SUBSNX16";
+    } else if (op->name == "halide_xtensa_avg_i16") {
+        op_name = "IVP_AVGNX16";
+    } else if (op->name == "halide_xtensa_avg_u16") {
+        op_name = "IVP_AVGUNX16";
     } else if (op->name == "halide_xtensa_avg_round_i16") {
         op_name = "IVP_AVGRNX16";
     } else if (op->name == "halide_xtensa_avg_round_u16") {
