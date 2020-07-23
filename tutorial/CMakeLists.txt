@@ -50,6 +50,7 @@ add_tutorial(lesson_09_update_definitions.cpp WITH_IMAGE_IO WITH_OPENMP)
 if (TARGET_PTX)
     if (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm")
         # TODO: Requires custom build rules to work under wasm.
+        message(WARNING "Not all tutorials build under WASM.")
     else()
         # Tutorial 10 requires that we build generation code, then run it,
         # so we can build the final executable.
@@ -155,6 +156,7 @@ set_tests_properties(tutorial_lesson_15_check_files PROPERTIES
 # Lesson 16
 if (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm")
     # TODO: Requires custom build rules to work under wasm
+    message(WARNING "Not all tutorials build under WASM.")
 else ()
     add_executable(lesson_16_rgb_generate lesson_16_rgb_generate.cpp)
     target_link_libraries(lesson_16_rgb_generate PRIVATE Halide::Generator)
@@ -187,6 +189,7 @@ add_tutorial(lesson_20_cloning_funcs.cpp)
 # Lesson 21
 if (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm")
     # TODO: Requires custom build rules to work under wasm
+    message(WARNING "Not all tutorials build under WASM.")
 else()
     add_executable(lesson_21_auto_scheduler_generate lesson_21_auto_scheduler_generate.cpp)
     target_link_libraries(lesson_21_auto_scheduler_generate PRIVATE Halide::Generator)

@@ -426,7 +426,6 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> declty
 // clang-format on
 
 std::string to_string(const wabt::MemoryStream &m) {
-    // TODO: ugh
     wabt::OutputBuffer &o = const_cast<wabt::MemoryStream *>(&m)->output_buffer();
     return std::string((const char *)o.data.data(), o.data.size());
 }

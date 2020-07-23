@@ -73,6 +73,8 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
 
         // TODO: LLVM should support this directly, but doesn't yet.
         // To make this work, we need to be able to call the intrinsics with two vecs.
+        // @abadams sez: "The way I've had to do this in the past is with force-inlined implementations
+        // that accept the wider vec, e.g. see packsswbx16 in src/runtime/x86.ll"
         // {Target::WasmSimd128, false, Int(8, 16), 0, "llvm.wasm.narrow.signed.v16i8.v8i16", i8(wild_i16x_)},
         // {Target::WasmSimd128, false, Int(16, 8), 0, "llvm.wasm.narrow.signed.v8i16.v4i32", i16(wild_i32x_)},
         // {Target::WasmSimd128, false, UInt(8, 16), 0, "llvm.wasm.narrow.unsigned.v16i8.v8i16", u8(wild_u16x_)},
