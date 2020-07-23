@@ -703,7 +703,7 @@ class OptimizeShuffles : public IRMutator {
                     // We know the size of the LUT is not more than 64, so we
                     // can safely cast the index to 16 bit, which
                     // dynamic_shuffle requires.
-                    index = simplify(cast(Int(16).with_lanes(op->type.lanes()), index - base));
+                    index = simplify(cast(Int(op->type.bits()).with_lanes(op->type.lanes()), index - base));
                     return Call::make(op->type, "halide_xtensa_dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureExtern);
                 }
                 // Only the first iteration of this loop is aligned.
@@ -759,9 +759,43 @@ private:
         return IRMutator::visit(op);
     }
 
+    Expr visit(const Select *op) override {
+        int native_lanes = get_native_vector_lanes_num(op->type);
+        if (native_lanes > 0) {
+            const int total_lanes = op->type.lanes();
+            int split_to = op->type.lanes() / native_lanes;
+            Expr cond = mutate(op->condition);
+            Expr t = mutate(op->true_value);
+            Expr f = mutate(op->false_value);
+
+            std::vector<Expr> concat_args;
+            for (int ix = 0; ix < split_to; ix++) {
+                Expr sliced_cond = Call::make(cond.type().with_lanes(native_lanes),
+                                           "halide_xtensa_slice_to_native",
+                                           {cond, ix, native_lanes, total_lanes},
+                                           Call::PureExtern);
+                Expr sliced_t = Call::make(t.type().with_lanes(native_lanes),
+                                           "halide_xtensa_slice_to_native",
+                                           {t, ix, native_lanes, total_lanes},
+                                           Call::PureExtern);
+                Expr sliced_f = Call::make(f.type().with_lanes(native_lanes),
+                                           "halide_xtensa_slice_to_native",
+                                           {f, ix, native_lanes, total_lanes},
+                                           Call::PureExtern);
+                Expr r = Select::make(sliced_cond, sliced_t, sliced_f);
+                concat_args.push_back(std::move(r));
+            }
+            return Call::make(op->type,
+                              "halide_xtensa_concat_from_native",
+                              concat_args, Call::PureExtern);
+        }
+
+        return IRMutator::visit(op);
+    }
+
     template<typename Op>
     Expr visit_binop(const Op *op) {
-        int native_lanes = get_native_vector_lanes_num(op->type);
+        int native_lanes = get_native_vector_lanes_num(op->a.type());
         if (native_lanes > 0) {
             const int total_lanes = op->type.lanes();
             int split_to = op->type.lanes() / native_lanes;
@@ -852,7 +886,7 @@ private:
     Expr visit(const Call *op) override {
         int native_lanes = get_native_vector_lanes_num(op->type);
         if (native_lanes > 0) {
-            if (op->is_intrinsic(Call::count_leading_zeros) || op->is_intrinsic(Call::shift_left) || op->is_intrinsic(Call::shift_right)) {
+            if (!(op->name == "halide_xtensa_interleave_i16")) {
                 const int total_lanes = op->type.lanes();
                 int split_to = op->type.lanes() / native_lanes;
                 vector<Expr> args;
@@ -864,14 +898,19 @@ private:
                 for (int ix = 0; ix < split_to; ix++) {
                     std::vector<Expr> sliced_args;
                     for (size_t arg_index = 0; arg_index < op->args.size(); arg_index++) {
-                        Expr sliced_arg = Call::make(args[arg_index].type().with_lanes(native_lanes),
-                                                     "halide_xtensa_slice_to_native",
-                                                     {args[arg_index], ix, native_lanes, total_lanes},
-                                                     Call::PureExtern);
+                        Expr sliced_arg;
+                        if (args[arg_index].type().is_scalar()) {
+                            sliced_arg = args[arg_index];
+                        } else {
+                            sliced_arg = Call::make(args[arg_index].type().with_lanes(native_lanes),
+                                                    "halide_xtensa_slice_to_native",
+                                                    {args[arg_index], ix, native_lanes, total_lanes},
+                                                    Call::PureExtern);
+                        }
                         sliced_args.push_back(sliced_arg);
                     }
 
-                    Expr r = Call::make(op->type.with_lanes(native_lanes), op->name, sliced_args, Internal::Call::PureIntrinsic);
+                    Expr r = Call::make(op->type.with_lanes(native_lanes), op->name, sliced_args, op->call_type);
                     concat_args.push_back(std::move(r));
                 }
                 return Call::make(op->type,
@@ -886,8 +925,12 @@ private:
 public:
     SplitVectorsToNativeSizes() {
         types_to_split = {
+          //{Type(Type::UInt, 1, 64), Type(Type::UInt, 1, 32)},
+            {Type(Type::Int, 16, 64), Type(Type::Int, 16, 32)},
+            {Type(Type::UInt, 16, 64), Type(Type::UInt, 16, 32)},
             {Type(Type::Int, 32, 32), Type(Type::Int, 32, 16)},
             {Type(Type::UInt, 32, 32), Type(Type::UInt, 32, 16)},
+            {Type(Type::Int, 48, 64), Type(Type::Int, 48, 32)},
         };
     }
 };

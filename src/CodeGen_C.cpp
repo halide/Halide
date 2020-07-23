@@ -1531,12 +1531,17 @@ inline int GetCycleCount() {
 
 #define HALIDE_MAYBE_UNUSED __attribute__ ((unused))
 
+typedef xb_vecNx8 int8x64_t;
+typedef xb_vec2Nx8 int8x128_t;
+typedef xb_vecNx8U uint8x64_t;
+typedef xb_vec2Nx8U uint8x128_t;
 typedef xb_vecNx16 int16x32_t;
 typedef xb_vecNx16U uint16x32_t;
 typedef xb_vecN_2x32v int32x16_t;
 typedef xb_vecN_2x32Uv uint32x16_t;
 typedef xb_vecNx48 int48x32_t;
 typedef vboolN uint1x32_t;
+typedef vbool2N uint1x64_t;
 
 class int32x32_t {
   typedef int32x32_t Vec;
@@ -1770,6 +1775,50 @@ public:
     }
 };
 
+class uint16x64_t {
+  typedef uint16_t ElementType;
+  typedef xb_vecNx16U CppVectorType;
+  static const int Lanes = 64;
+public:
+
+    CppVectorType native_vector[2];
+
+    enum Empty { empty };
+    inline uint16x64_t(Empty) {}
+
+    enum FromCppVector { from_native_vector };
+    inline uint16x64_t(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
+        native_vector[0] = src1;
+        native_vector[1] = src2;
+    }
+
+   static uint16x64_t load(const void *base, int32_t offset) {
+        uint16x64_t r(empty);
+        memcpy(&r.native_vector[0], ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
+        return r;
+    }
+
+    void aligned_store(void *base, int32_t offset) const {
+        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
+    }
+
+    void store(void *base, int32_t offset) const {
+        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
+    }
+};
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x64_t int8x64_t_aligned_load(const void *base, int32_t offset) {
+    return *((const int8x64_t *)((int8_t*)base + offset));
+}
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_aligned_load(const void *base, int32_t offset) {
+    return *((const uint8x64_t *)((uint8_t*)base + offset));
+}
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t int16x64_t_aligned_load(const void *base, int32_t offset) {
+    return *((const int16x64_t *)((int16_t*)base + offset));
+}
+
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t int16x32_t_aligned_load(const void *base, int32_t offset) {
     return *((const int16x32_t *)((int16_t*)base + offset));
 }
@@ -1805,6 +1854,10 @@ HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_load(const void *base, const int32x
     }
 
     return *((uint16x32_t*)tmp);
+}
+
+HALIDE_ALWAYS_INLINE void aligned_store(const uint8x64_t& a, void *base, int32_t offset) {
+    *((uint8x64_t *)((uint8_t*)base + offset)) = a;
 }
 
 HALIDE_ALWAYS_INLINE void aligned_store(const int16x32_t& a, void *base, int32_t offset) {
@@ -1880,6 +1933,14 @@ HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_interleave_i16(const int16x32_t& a
                                 IVP_SELNX16I(b, a, IVP_SELI_16B_INTERLEAVE_1_HI)
                                 );
 }
+
+HALIDE_ALWAYS_INLINE uint8x128_t halide_xtensa_dynamic_shuffle(const uint8x128_t& a, const int8x128_t& b, int min_range, int max_range) {
+  return IVP_SHFL2NX8U(a, b);
+}
+
+//HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_dynamic_shuffle(const uint8x64_t& a, const int8x64_t& b, int min_range, int max_range) {
+//  return
+//}
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_dynamic_shuffle(const int16x32_t& a, const int16x32_t& b, int min_range, int max_range) {
   return IVP_SHFLNX16(a, b);
@@ -2096,6 +2157,12 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_avg121_round_i16(const int16x32_t&
   return IVP_PACKVRNRNX48(result, 2);
 }
 
+//inline int16x32_t convert_to_int16x64_t_from_uint8x64_t(const uint8x64_t& src) {
+//  xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src);
+//  return int16x64_t(int16x64_t::from_native_vector,
+//                    IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
+//}
+
 inline int16x32_t convert_to_int16x32_t_from_int32x32_t(const int32x32_t& src) {
   xb_vecNx48 wide = IVP_CVT48SNX32(src.native_vector[1], src.native_vector[0]);
   return IVP_PACKLNX48(wide);
@@ -2148,6 +2215,30 @@ inline uint32x32_t convert_to_uint32x32_t_from_int48x32_t(const int48x32_t& src)
     return uint32x32_t(uint32x32_t::from_native_vector,
                                 IVP_CVT32UNX48L(src),
                                 IVP_CVT32UNX48H(src));
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_to_native(const int16x64_t& src, int index, int native_lanes, int total_lanes) {
+  return src.native_vector[index];
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_to_native(const int16x32_t& src, int index, int native_lanes, int total_lanes) {
+  return src;
+}
+
+HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_concat_from_native(const int16x32_t& a, const int16x32_t& b) {
+    return int16x64_t(int16x64_t::from_native_vector, a, b);
+}
+
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_to_native(const uint16x64_t& src, int index, int native_lanes, int total_lanes) {
+  return src.native_vector[index];
+}
+
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_to_native(const uint16x32_t& src, int index, int native_lanes, int total_lanes) {
+  return src;
+}
+
+HALIDE_ALWAYS_INLINE uint16x64_t halide_xtensa_concat_from_native(const uint16x32_t& a, const uint16x32_t& b) {
+    return uint16x64_t(uint16x64_t::from_native_vector, a, b);
 }
 
 HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_slice_to_native(const int32x32_t& src, int index, int native_lanes, int total_lanes) {
@@ -2594,6 +2685,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             // Emit the body
             Stmt body = f.body;
             body = match_xtensa_patterns(body);
+            //debug(0) << body;
             print(body);
             // stream << get_indent() << "printf(\"C code executed\\n\");";
 
@@ -3386,7 +3478,7 @@ string CodeGen_C::print_xtensa_call(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported by C backend.\n";
+    user_assert(is_one(op->predicate)) << "Predicated load is not supported by C backend." << Expr(op) << "\n";
 
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
