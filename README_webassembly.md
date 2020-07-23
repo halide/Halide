@@ -110,51 +110,25 @@ will), you need to install Emscripten locally.
 
 - To run the AOT tests, set `HL_TARGET=wasm-32-wasmrt` (possibly adding `wasm_simd128`, `wasm_signext`, and/or `wasm_sat_float_to_int`) and run CMake/CTest normally. Note that wasm testing is only support under CMake (not via Make).
 
-THIS SECTION IS WRONG, FIX:
->
-># Running benchmarks
->
->The `test_performance` benchmarks are misleading (and thus useless) for Wasm, as
->they include JIT overhead as described elsewhere. Instead, you should use
->`make benchmark_apps`, which will build and run a handful of targets in the
->`apps/` folder using the standard Halide benchmarking utility. (It is smart
->enough to special-case when HL_TARGET is set to any `wasm-32-wasmrt` variant.)
->
->```
->    # benchmark for whatever HL_TARGET is already set to (probably 'host')
->    $ make benchmark_apps
->
->    # benchmark for baseline wasm
->    $ HL_TARGET=wasm-32-wasmrt make benchmark_apps
->
->    # benchmark for wasm with SIMD128 (note that some benchmarks will crash when
->    # running with V8 7.5x builds, due to apparently-known bugs)
->    $ HL_TARGET=wasm-32-wasmrt-wasm_simd128 make benchmark_apps
->```
->
->Also note that if you run the above on a typical desktop system, you'll find the
->`host` benchmarks 10x faster (or more) the wasm; this is largely because your
->desktop likely has multiple cores (and is making use of them), while our Wasm
->generation doesn't yet support threading. For a fairer comparison, you can limit
->the maximum number of threads used by Halide by setting the `HL_NUM_THREADS` env
->var, e.g.
->
->```
->    # benchmark for whatever HL_TARGET is already set to (probably 'host'),
->    # ensuring that we never use more than one thread at a time (regardless of
->    # the number of CPU cores on the host).
->    $ HL_NUM_THREADS=1 make benchmark_apps
->```
+# Running benchmarks
+
+The `test_performance` benchmarks are misleading (and thus useless) for Wasm, as
+they include JIT overhead as described elsewhere. Suitable benchmarks for Wasm
+will be provided at a later date. (See https://github.com/halide/Halide/issues/5119
+and https://github.com/halide/Halide/issues/5047 to track progress.)
 
 # Known Limitations And Caveats
 
+- Current trunk LLVM (as of July 2020) doesn't reliably generate all of the Wasm
+  SIMD ops that are available; see https://github.com/halide/Halide/issues/5130
+  for tracking information as these are fixed.
 - Using the JIT requires that we link the `wasm-ld` tool into libHalide; with
   some work this need could possibly be eliminated.
 - OSX and Linux-x64 have been tested. Windows hasn't; it should be supportable
   with some work. (Patches welcome.)
 - None of the `apps/` folder has been investigated yet. Many of them should be
   supportable with some work. (Patches welcome.)
-- We currently use v8/d8 as a test environment for AOT code; we should probably
+- We currently use v8/d8 as a test environment for AOT code; we may want to
   consider using Node or (better yet) headless Chrome instead (which is probably
   required to allow for using threads in AOT code).
 
