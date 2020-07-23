@@ -176,7 +176,7 @@ function(add_wasm_halide_test TARGET)
     endif()
 
     add_halide_test("${TARGET}"
-                    GROUPS generator
+                    GROUPS ${args_GROUPS}
                     COMMAND d8 ${WASM_SHELL_FLAGS} "${TARGET}.js")
 
 endfunction (add_wasm_halide_test)
