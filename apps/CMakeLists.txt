@@ -62,8 +62,8 @@ function(add_app_test NAME)
         "-DCMAKE_PREFIX_PATH=${HALIDE_DIR}"
         "-DCMAKE_BUILD_TYPE=$<CONFIG>"
         "-DLLVM_DIR=${LLVM_DIR}")
-    if (NOT "${HL_TARGET}" STREQUAL "")
-        list(APPEND cmakeDefinitionOpts "-DHL_TARGET=${HL_TARGET}")
+    if (NOT "${Halide_TARGET}" STREQUAL "")
+        list(APPEND cmakeDefinitionOpts "-DHalide_TARGET=${Halide_TARGET}")
     endif ()
 
     add_test(NAME ${NAME}

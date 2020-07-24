@@ -28,13 +28,13 @@ function(halide_define_aot_test NAME)
     endif ()
 
     # TODO(#4938): remove need for these definitions
-    if ("${HL_TARGET}" MATCHES "opencl")
+    if ("${Halide_TARGET}" MATCHES "opencl")
         target_compile_definitions("${TARGET}" PRIVATE TEST_OPENCL)
     endif ()
-    if ("${HL_TARGET}" MATCHES "metal")
+    if ("${Halide_TARGET}" MATCHES "metal")
         target_compile_definitions("${TARGET}" PRIVATE TEST_METAL)
     endif ()
-    if ("${HL_TARGET}" MATCHES "cuda")
+    if ("${Halide_TARGET}" MATCHES "cuda")
         target_compile_definitions("${TARGET}" PRIVATE TEST_CUDA)
     endif ()
     add_halide_test("${TARGET}" GROUPS generator)
@@ -168,7 +168,7 @@ set(PARAMS_metadata_tester
 
 set(FEATURES_msan msan)
 
-set(HL_TARGET_multitarget host host-no_bounds_query)
+set(Halide_TARGET_multitarget host host-no_bounds_query)
 set(FEATURES_multitarget c_plus_plus_name_mangling)
 set(FN_NAME_multitarget HalideTest::multitarget)
 
@@ -189,7 +189,7 @@ foreach (FILE IN LISTS GENERATOR_SRCS)
     add_halide_library(${GEN_NAME}
                        FROM "${GEN_NAME}.generator"
                        PARAMS "${PARAMS_${GEN_NAME}}"
-                       TARGETS "${HL_TARGET_${GEN_NAME}}"
+                       TARGETS "${Halide_TARGET_${GEN_NAME}}"
                        FUNCTION_NAME "${FN_NAME_${GEN_NAME}}"
                        FEATURES "${FEATURES_${GEN_NAME}}"
                        ${GRADS_${GEN_NAME}})
@@ -281,11 +281,11 @@ halide_define_aot_test(variable_num_threads ENABLE_IF NOT ${USING_WASM})
 
 # Acquire-Release test requires CUDA
 halide_define_aot_test(acquire_release)
-if (TARGET_PTX AND HL_TARGET MATCHES "cuda")
+if (TARGET_PTX AND Halide_TARGET MATCHES "cuda")
     include(AddCudaToTarget)
     add_cuda_to_target(generator_aot_acquire_release PRIVATE)
 endif ()
-if (TARGET_PTX AND HL_TARGET MATCHES "opencl")
+if (TARGET_PTX AND Halide_TARGET MATCHES "opencl")
     find_package(OpenCL REQUIRED)
     target_link_libraries(generator_aot_acquire_release PRIVATE OpenCL::OpenCL)
 endif ()
@@ -311,7 +311,7 @@ endif()
 halide_define_aot_test(cxx_mangling ENABLE_IF NOT ${USING_WASM})  # Needs extra deps / build rules
 if (TARGET cxx_mangling)
     target_link_libraries(cxx_mangling INTERFACE cxx_mangling_externs)
-    if (TARGET_PTX AND HL_TARGET MATCHES "cuda")
+    if (TARGET_PTX AND Halide_TARGET MATCHES "cuda")
         add_halide_library(cxx_mangling_gpu
                            FROM cxx_mangling.generator
                            GENERATOR cxx_mangling
@@ -330,7 +330,7 @@ endif ()
 
 # Define extern for OpenCL
 halide_define_aot_test(define_extern_opencl)
-if (TARGET_PTX AND HL_TARGET MATCHES "opencl")
+if (TARGET_PTX AND Halide_TARGET MATCHES "opencl")
     find_package(OpenCL REQUIRED)
     target_link_libraries(generator_aot_define_extern_opencl PRIVATE OpenCL::OpenCL)
 endif ()

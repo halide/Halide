@@ -48,7 +48,7 @@ add_tutorial(lesson_08_scheduling_2.cpp WITH_IMAGE_IO WITH_OPENMP)
 add_tutorial(lesson_09_update_definitions.cpp WITH_IMAGE_IO WITH_OPENMP)
 
 if (TARGET_PTX)
-    if (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm")
+    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
         # TODO: Requires custom build rules to work under wasm.
         message(WARNING "Not all tutorials build under WASM.")
     else()
@@ -79,7 +79,7 @@ if (TARGET_PTX)
         # Undocumented function in HalideGeneratorHelpers. Do not call in external code.
         # Users of the AOT functions (as opposed to Generators) should link to the relevant
         # GPU libraries manually.
-        _Halide_target_link_gpu_libs(lesson_10_aot_compilation_run PRIVATE ${HL_TARGET})
+        _Halide_target_link_gpu_libs(lesson_10_aot_compilation_run PRIVATE ${Halide_TARGET})
 
         target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
@@ -154,7 +154,7 @@ set_tests_properties(tutorial_lesson_15_check_files PROPERTIES
                      FIXTURES_REQUIRED tutorial_lesson_15)
 
 # Lesson 16
-if (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm")
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
     # TODO: Requires custom build rules to work under wasm
     message(WARNING "Not all tutorials build under WASM.")
 else ()
@@ -187,7 +187,7 @@ add_tutorial(lesson_19_wrapper_funcs.cpp)
 add_tutorial(lesson_20_cloning_funcs.cpp)
 
 # Lesson 21
-if (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm")
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
     # TODO: Requires custom build rules to work under wasm
     message(WARNING "Not all tutorials build under WASM.")
 else()
