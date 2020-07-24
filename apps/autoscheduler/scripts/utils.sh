@@ -94,6 +94,29 @@ function build_retrain_cost_model() {
     echo
 }
 
+function build_get_host_target() {
+    local -r halide_root=$1
+    get_autoscheduler_dir $halide_root autoscheduler_dir
+    get_absolute_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
+
+    echo
+    echo "Building get_host_target..."
+    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/get_host_target
+    echo
+}
+
+function get_host_target() {
+    local -r halide_root=$1
+    local -n host_target_ref=$2
+
+    get_absolute_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
+
+    echo "Calling get_host_target()..."
+    host_target_ref=$(${AUTOSCHED_BIN}/get_host_target)
+    echo "host_target = ${host_target_ref}"
+    echo
+}
+
 function build_autoscheduler_tools() {
     local -r halide_root=$1
     get_autoscheduler_dir $halide_root autoscheduler_dir
@@ -103,6 +126,7 @@ function build_autoscheduler_tools() {
     build_featurization_to_sample $halide_root
     build_retrain_cost_model $halide_root
     build_libauto_schedule $halide_root
+    build_get_host_target $halide_root
     echo
 }
 
@@ -134,6 +158,19 @@ function retrain_cost_model() {
             --predictions_file=${predictions_file} \
             --verbose=${verbose} \
             --partition_schedules=${partition_schedules}
+}
+
+function predict_cost() {
+    local -r halide_root=$1
+    local -r samples_dir=$2
+    local -r weights=$3
+    local -r predictions_file=${4}
+
+    get_absolute_autoscheduler_bin_dir ${halide_root} autosched_bin
+
+    local -r num_cores=80
+    local -r num_epochs=1
+    retrain_cost_model ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} 80 1 0 0.001 ${PREDICTIONS_FILE}
 }
 
 function find_equal_predicted_pairs() {

@@ -36,10 +36,13 @@ export HL_MACHINE_PARAMS=80,24000000,160
 export HL_PERMIT_FAILED_UNROLL=1
 
 if [ -z ${HL_TARGET} ]; then
-    HL_TARGET=host-cuda
+    get_host_target ${HALIDE_ROOT} HL_TARGET
+    HL_TARGET=${HL_TARGET}-cuda
 fi
 
 export HL_TARGET=${HL_TARGET}
+
+echo "HL_TARGET set to ${HL_TARGET}"
 
 if [ -z ${SAMPLES_DIR} ]; then
     DEFAULT_SAMPLES_DIR_NAME=autotuned_samples
