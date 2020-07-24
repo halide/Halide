@@ -75,7 +75,7 @@ if (TARGET_PTX)
     # Undocumented function in HalideGeneratorHelpers. Do not call in external code.
     # Users of the AOT functions (as opposed to Generators) should link to the relevant
     # GPU libraries manually.
-    _Halide_target_link_gpu_libs(lesson_10_aot_compilation_run PRIVATE ${HL_TARGET})
+    _Halide_target_link_gpu_libs(lesson_10_aot_compilation_run PRIVATE ${Halide_TARGET})
 
     target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
