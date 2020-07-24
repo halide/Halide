@@ -646,6 +646,7 @@ public:
     int visit(const Call *op);
     int visit(const Shuffle *op);
     int visit(const Let *op);
+    int visit(const VectorReduce *op);
     int visit_binary(const Expr &a, const Expr &b);
     int visit_nary(const std::vector<Expr>& exprs);
 

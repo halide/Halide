@@ -1249,6 +1249,10 @@ int ExprBranching::visit(const Let *op) {
     return visit_binary(op->value, op->body);
 }
 
+int ExprBranching::visit(const VectorReduce *op) {
+    return Super::dispatch(op->value);
+}
+
 int ExprBranching::compute(const Function& f) {
     Definition def = f.definition();
 
