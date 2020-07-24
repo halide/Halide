@@ -31,7 +31,7 @@ using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 enum GPU_parallelism { block, thread, serial, simd, parallelized, none };
 
 // inlined => func is inlined so has no memory store location
-enum class GPUMemoryType { global, shared, local, inlined };
+enum class GPUMemoryType { global, shared, local, registers, inlined };
 
 bool use_memoized_features();
 
@@ -51,6 +51,9 @@ bool are_valid_thread_extents(const vector<int64_t>& counts);
 
 double get_idle_lane_wastage_limit_env_var();
 double get_idle_lane_wastage_limit();
+
+bool all(const vector<int>& v);
+bool accessed_at_constant_indices(const std::vector<int>& unrolled, const FunctionDAG::Edge* e);
 
 
 /** moves vectorized dimension first and also removes dimensions with size 1
@@ -214,15 +217,28 @@ struct LoopNest {
         const LoopNest *task = nullptr;      // The parallel for loop it belongs to
         const LoopNest *thread = nullptr;    // Its containing gpu_thread loop
         GPUMemoryType gpu_store_memory_type; // global, local, shared?
+        int64_t allocation_size = 0;         // Allocation size in bytes
+        bool is_constant_allocation = false; // Does the allocation have constant size?
         bool inlined = false;                // Is the Func inlined?
         uint64_t hash_of_producers_stored_at_root;
 
         bool is_stored_in_global_mem() const { return gpu_store_memory_type == GPUMemoryType::global; }
         bool is_stored_in_shared_mem() const { return gpu_store_memory_type == GPUMemoryType::shared; }
         bool is_stored_in_local_mem() const { return gpu_store_memory_type == GPUMemoryType::local; }
+        bool is_stored_in_registers() const { return gpu_store_memory_type == GPUMemoryType::registers; }
     };
 
     GPUMemoryType get_gpu_memory_type(bool in_block, bool in_thread, bool is_inlined=false) const;
+
+    std::vector<int> unrolled_loops(const Target& target, const LoopNest* parent, const LoopNest* grandparent) const;
+
+    void get_allocs_that_can_be_promoted_to_registers(const Target &target,
+                                                      StageMap<Sites> &sites,
+                                                      NodeMap<bool> &can_be_promoted_to_registers,
+                                                      const LoopNest *grandparent,
+                                                      const LoopNest *parent) const;
+
+    void promote_allocs_to_registers(const Target &target, StageMap<Sites> &sites) const;
 
     // Compute all the sites of interest for each pipeline stage
     void get_sites(const Target& target,
@@ -506,6 +522,7 @@ struct LoopNest {
         std::ostringstream schedule_source;
     };
 
+    bool has_constant_region_computed(const FunctionDAG::Node* node) const;
     bool has_constant_region_required(const FunctionDAG::Node* node) const;
     bool other_stage_has_same_producer(const FunctionDAG::Node* producer) const;
     int num_serial_loops(const FunctionDAG::Node::Stage* stage) const;

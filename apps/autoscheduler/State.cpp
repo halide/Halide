@@ -324,6 +324,7 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
     StageMap<int64_t> total_shared_mem_alloc_sizes;
     total_shared_mem_alloc_sizes.make_large(dag.nodes[0].stages[0].max_id);
     feature_root->get_sites(target, sites, total_shared_mem_alloc_sizes);
+    feature_root->promote_allocs_to_registers(target, sites);
 
     // For the input nodes and unscheduled outputs, the compute
     // and store sites are root, and the produce and innermost

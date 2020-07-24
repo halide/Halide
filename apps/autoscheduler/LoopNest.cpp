@@ -144,6 +144,15 @@ double get_idle_lane_wastage_limit() {
     return limit;
 }
 
+bool all(const vector<int>& v) {
+    for (auto x : v) {
+        if (!x) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // given a newly inserted node f into this LoopNest, get union of thread counts in each dimension
 // across all siblings of f.
 vector<int64_t> LoopNest::get_union_thread_counts(const FunctionDAG::Node *f) const {
@@ -515,6 +524,83 @@ GPUMemoryType LoopNest::get_gpu_memory_type(bool in_block, bool in_thread, bool 
     return GPUMemoryType::global;
 }
 
+std::vector<int> LoopNest::unrolled_loops(const Target& target, const LoopNest* parent, const LoopNest* grandparent) const {
+    internal_assert(innermost);
+    const auto &grandparent_bounds = grandparent->get_bounds(node);
+    std::vector<int> unrolled(parent->size.size(), 0);
+
+    if (parent->node != node) {
+        return unrolled;
+    }
+
+    int64_t total_extent = 1;
+    for (size_t i = 0; i < parent->size.size(); i++) {
+        if (!stage->loop[i].rvar) {
+            const auto &l = grandparent_bounds->loops(parent->stage->index, i);
+            unrolled[i] = l.constant_extent();
+            total_extent *= l.extent();
+        }
+    }
+
+    if (total_extent <= get_unroll_limit(target)) {
+        return unrolled;
+    }
+
+    std::fill(unrolled.begin(), unrolled.end(), 0);
+    return unrolled;
+}
+
+bool accessed_at_constant_indices(const std::vector<int>& unrolled, const FunctionDAG::Edge* e) {
+    for (const auto& jac : e->load_jacobians) {
+        for (size_t loop_index = 0; loop_index < unrolled.size(); ++loop_index) {
+            for (int i = 0; i < e->producer->dimensions; ++i) {
+                // There are two ways for an index to be constant:
+                // 1. It's an actual constant i.e. the jac entry = 0
+                // 2. It has a known stride and the loop accessing it is
+                // unrolled
+                if (!(jac(i, loop_index) == 0) && (!jac(i, loop_index).exists() || !unrolled[loop_index])) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+void LoopNest::get_allocs_that_can_be_promoted_to_registers(const Target &target,
+                                                            StageMap<Sites> &sites,
+                                                            NodeMap<bool> &can_be_promoted_to_registers,
+                                                            const LoopNest *grandparent,
+                                                            const LoopNest *parent) const {
+
+    for (const auto* alloc_node : store_at) {
+        const auto& store_site = sites.get(&alloc_node->stages[0]);
+        if (store_site.gpu_store_memory_type != GPUMemoryType::local) {
+            can_be_promoted_to_registers.get_or_create(alloc_node) = false;
+            continue;
+        }
+
+        can_be_promoted_to_registers.get_or_create(alloc_node) = store_site.is_constant_allocation && store_site.allocation_size <= 128;
+    }
+
+    for (const auto &c : children) {
+        c->get_allocs_that_can_be_promoted_to_registers(target, sites, can_be_promoted_to_registers, parent, this);
+    }
+
+    if (innermost) {
+        auto unrolled = unrolled_loops(target, parent, grandparent);
+
+        for (const auto* e : stage->incoming_edges) {
+            if (sites.get(&e->producer->stages[0]).gpu_store_memory_type != GPUMemoryType::local) {
+                continue;
+            }
+
+            can_be_promoted_to_registers.get(e->producer) = can_be_promoted_to_registers.get(e->producer) && accessed_at_constant_indices(unrolled, e);
+        }
+    }
+}
+
 // Compute all the sites of interest for each pipeline stage
 void LoopNest::get_sites(const Target &target,
                          StageMap<Sites> &sites,
@@ -544,14 +630,17 @@ void LoopNest::get_sites(const Target &target,
     bool in_thread = current_thread_loop != nullptr;
 
     for (auto f : store_at) {
+        auto store_gpu_memory_type = get_gpu_memory_type(in_block, in_thread);
+
         for (const auto &s : f->stages) {
             sites.get_or_create(&s).store = this;
-            auto store_gpu_memory_type = get_gpu_memory_type(in_block, in_thread);
             sites.get_or_create(&s).gpu_store_memory_type = store_gpu_memory_type;
+            auto alloc = sites.get_or_create(&s).store->compute_alloc_size_of_node_here(f);
+            sites.get_or_create(&s).allocation_size = alloc.first;
+            sites.get_or_create(&s).is_constant_allocation = alloc.second;
 
             const LoopNest* store_site = sites.get_or_create(&s).store;
             if (store_site->gpu_label == block && s.index == 0) {
-                auto alloc = store_site->compute_alloc_size_of_node_here(f);
                 total_shared_mem_alloc_sizes.get_or_create(store_site->stage) += alloc.first;
             }
         }
@@ -568,6 +657,23 @@ void LoopNest::get_sites(const Target &target,
     if (innermost) {
         sites.get_or_create(stage).innermost = this;
         sites.get_or_create(stage).thread = current_thread_loop;
+    }
+}
+
+void LoopNest::promote_allocs_to_registers(const Target &target, StageMap<Sites> &sites) const {
+    NodeMap<bool> can_be_promoted_to_registers;
+    get_allocs_that_can_be_promoted_to_registers(target, sites, can_be_promoted_to_registers, nullptr, nullptr);
+
+
+    for (auto& node : can_be_promoted_to_registers) {
+        if (!node.second) {
+            continue;
+        }
+
+        for (auto& stage : node.first->stages) {
+            internal_assert(sites.get(&stage).gpu_store_memory_type == GPUMemoryType::local);
+            sites.get(&stage).gpu_store_memory_type = GPUMemoryType::registers;
+        }
     }
 }
 
@@ -1742,6 +1848,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 } else if (site.is_stored_in_local_mem()) {
                     feat.local_bytes_at_task = feat.bytes_at_realization;
                     feat.local_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
+                } else if (site.is_stored_in_registers()) {
+                    feat.register_bytes_at_task = feat.bytes_at_realization;
+                    feat.register_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
                 } else {
                     internal_assert(false);
                 }
@@ -2100,13 +2209,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
              parent->node == node);
 
         if (parent_unrolled) {
-            const auto &grandparent_bounds = grandparent->get_bounds(node);
-            for (size_t i = 0; i < parent->size.size(); i++) {
-                if (!stage->loop[i].rvar) {
-                    const auto &l = grandparent_bounds->loops(parent->stage->index, i);
-                    parent_unrolled &= l.constant_extent();
-                }
-            }
+            parent_unrolled = all(unrolled_loops(target, parent, grandparent));
         }
 
         if (parent_unrolled) {
@@ -2126,11 +2229,11 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     // Analyze all memory dependencies of this stage, looking
     // through any Funcs inlined into it. This is where we track
     // things like vector gathers.
-    int64_t global_bytes_loaded = 0, shared_bytes_loaded = 0, local_bytes_loaded = 0;
-    int64_t global_lines_loaded = 0, shared_lines_loaded = 0, local_lines_loaded = 0;
-    int64_t global_bytes_loaded_per_thread = 0, shared_bytes_loaded_per_thread = 0, local_bytes_loaded_per_thread = 0;
-    int64_t global_lines_loaded_per_thread = 0, shared_lines_loaded_per_thread = 0, local_lines_loaded_per_thread = 0;
-    int64_t global_allocation_bytes_loaded = 0, shared_allocation_bytes_loaded = 0, local_allocation_bytes_loaded = 0;
+    int64_t global_bytes_loaded = 0, shared_bytes_loaded = 0, local_bytes_loaded = 0, register_bytes_loaded = 0;
+    int64_t global_lines_loaded = 0, shared_lines_loaded = 0, local_lines_loaded = 0, register_lines_loaded = 0;
+    int64_t global_bytes_loaded_per_thread = 0, shared_bytes_loaded_per_thread = 0, local_bytes_loaded_per_thread = 0, register_bytes_loaded_per_thread = 0;
+    int64_t global_lines_loaded_per_thread = 0, shared_lines_loaded_per_thread = 0, local_lines_loaded_per_thread = 0, register_lines_loaded_per_thread = 0;;
+    int64_t global_allocation_bytes_loaded = 0, shared_allocation_bytes_loaded = 0, local_allocation_bytes_loaded = 0, register_allocation_bytes_loaded = 0;
     double num_dense_loads = 0, num_broadcasts = 0,
            num_gathers = 0, num_stride_2_loads = 0,
            num_stride_3_loads = 0, num_stride_4_loads = 0,
@@ -2583,6 +2686,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     shared_allocation_bytes_loaded += compute_footprint;
                 } else if (site.is_stored_in_local_mem()) {
                     local_allocation_bytes_loaded += compute_footprint;
+                } else if (site.is_stored_in_registers()) {
+                    register_allocation_bytes_loaded += compute_footprint;
                 } else {
                     internal_assert(false);
                 }
@@ -2608,6 +2713,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                         local_bytes_loaded_per_thread += store_footprint;
                         local_lines_loaded_per_thread += store_line_footprint;
+                    } else if (site.is_stored_in_registers()) {
+                        register_bytes_loaded += store_footprint;
+                        register_lines_loaded += store_line_footprint;
+
+                        register_bytes_loaded_per_thread += store_footprint;
+                        register_lines_loaded_per_thread += store_line_footprint;
                     } else {
                         internal_assert(false);
                     }
@@ -2632,6 +2743,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                         local_bytes_loaded_per_thread += thread_footprint;
                         local_lines_loaded_per_thread += thread_line_footprint;
+                    } else if (site.is_stored_in_registers()) {
+                        register_bytes_loaded += footprint;
+                        register_lines_loaded += line_footprint;
+
+                        register_bytes_loaded_per_thread += thread_footprint;
+                        register_lines_loaded_per_thread += thread_line_footprint;
                     } else {
                         internal_assert(false);
                     }
@@ -2653,6 +2770,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         internal_assert(global_bytes_loaded >= 0) << "Negative global bytes loaded: " << global_bytes_loaded << "\n";
         internal_assert(shared_bytes_loaded >= 0) << "Negative shared bytes loaded: " << shared_bytes_loaded << "\n";
         internal_assert(local_bytes_loaded >= 0) << "Negative local bytes loaded: " << local_bytes_loaded << "\n";
+        internal_assert(register_bytes_loaded >= 0) << "Negative register bytes loaded: " << register_bytes_loaded << "\n";
 
         feat.global_allocation_bytes_read_per_realization = global_allocation_bytes_loaded;
         feat.shared_allocation_bytes_read_per_realization = shared_allocation_bytes_loaded;
@@ -2661,10 +2779,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         feat.unique_global_bytes_read_per_realization = global_bytes_loaded;
         feat.unique_shared_bytes_read_per_realization = shared_bytes_loaded;
         feat.unique_local_bytes_read_per_realization = local_bytes_loaded;
+        feat.unique_register_bytes_read_per_realization = register_bytes_loaded;
 
         feat.unique_global_lines_read_per_realization = global_lines_loaded;
         feat.unique_shared_lines_read_per_realization = shared_lines_loaded;
         feat.unique_local_lines_read_per_realization = local_lines_loaded;
+        feat.unique_register_lines_read_per_realization = register_lines_loaded;
 
         if (!at_pure_production) {
             // Also pessimistically assume this update definition relies on the entirety of the produced region so far.
@@ -2684,6 +2804,10 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 feat.unique_local_bytes_read_per_realization += feat.bytes_at_production;
                 feat.unique_local_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
                 feat.local_allocation_bytes_read_per_realization += feat.bytes_at_production;
+            } else if (consumer_site.is_stored_in_registers()) {
+                feat.unique_register_bytes_read_per_realization += feat.bytes_at_production;
+                feat.unique_register_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
+                feat.register_allocation_bytes_read_per_realization += feat.bytes_at_production;
             } else {
                 internal_assert(false);
             }
@@ -2696,10 +2820,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         feat.unique_global_bytes_read_per_thread = global_bytes_loaded_per_thread;
         feat.unique_shared_bytes_read_per_thread = shared_bytes_loaded_per_thread;
         feat.unique_local_bytes_read_per_thread = local_bytes_loaded_per_thread;
+        feat.unique_register_bytes_read_per_thread = register_bytes_loaded_per_thread;
 
         feat.unique_global_lines_read_per_thread = global_lines_loaded_per_thread;
         feat.unique_shared_lines_read_per_thread = shared_lines_loaded_per_thread;
         feat.unique_local_lines_read_per_thread = local_lines_loaded_per_thread;
+        feat.unique_register_lines_read_per_thread = register_lines_loaded_per_thread;
 
         feat.points_computed_per_production = subinstances / feat.num_productions;
         // Halide codegens strided loads for small strides as a
@@ -2717,8 +2843,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             feat.vector_loads_per_vector++;
             feat.scalar_loads_per_scalar++;
         }
-        feat.unique_bytes_read_per_vector = global_bytes_loaded + shared_bytes_loaded + local_bytes_loaded;
-        feat.unique_lines_read_per_vector = global_lines_loaded + shared_lines_loaded + local_lines_loaded;
+        feat.unique_bytes_read_per_vector = global_bytes_loaded + shared_bytes_loaded + local_bytes_loaded + register_bytes_loaded;
+        feat.unique_lines_read_per_vector = global_lines_loaded + shared_lines_loaded + local_lines_loaded + register_bytes_loaded;
 
         feat.num_global_mem_loads_per_block = global_mem_loads.num_transactions();
         feat.global_mem_load_efficiency = global_mem_loads.efficiency();
@@ -3801,6 +3927,16 @@ int64_t LoopNest::product_of_descendants(int loop_index) const {
     }
 
     return prod;
+}
+
+bool LoopNest::has_constant_region_computed(const FunctionDAG::Node* node) const {
+    const auto& bounds = get_bounds(node);
+    for (int i = 0; i < node->dimensions; i++) {
+        if (!bounds->region_computed(i).constant_extent()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool LoopNest::has_constant_region_required(const FunctionDAG::Node* node) const {

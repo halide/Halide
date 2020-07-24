@@ -274,20 +274,25 @@ public:
         Expr unique_global_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr unique_shared_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr unique_local_bytes_read_per_realization = schedule_features(n, idx++, w);
+        Expr unique_register_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr unique_global_lines_read_per_realization = schedule_features(n, idx++, w);
         Expr unique_shared_lines_read_per_realization = schedule_features(n, idx++, w);
         Expr unique_local_lines_read_per_realization = schedule_features(n, idx++, w);
+        Expr unique_register_lines_read_per_realization = schedule_features(n, idx++, w);
 
         Expr unique_global_bytes_read_per_thread = schedule_features(n, idx++, w);
         Expr unique_shared_bytes_read_per_thread = schedule_features(n, idx++, w);
         Expr unique_local_bytes_read_per_thread = schedule_features(n, idx++, w);
+        Expr unique_register_bytes_read_per_thread = schedule_features(n, idx++, w);
         Expr unique_global_lines_read_per_thread = schedule_features(n, idx++, w);
         Expr unique_shared_lines_read_per_thread = schedule_features(n, idx++, w);
         Expr unique_local_lines_read_per_thread = schedule_features(n, idx++, w);
+        Expr unique_register_lines_read_per_thread = schedule_features(n, idx++, w);
 
         Expr global_allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr shared_allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr local_allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
+        Expr register_allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr working_set = schedule_features(n, idx++, w);
         Expr vector_size = schedule_features(n, idx++, w);
         Expr native_vector_size = schedule_features(n, idx++, w);
@@ -299,9 +304,11 @@ public:
         Expr global_bytes_at_task = schedule_features(n, idx++, w);
         Expr shared_bytes_at_task = schedule_features(n, idx++, w);
         Expr local_bytes_at_task = schedule_features(n, idx++, w);
+        Expr register_bytes_at_task = schedule_features(n, idx++, w);
         Expr global_innermost_bytes_at_task = schedule_features(n, idx++, w);
         Expr shared_innermost_bytes_at_task = schedule_features(n, idx++, w);
         Expr local_innermost_bytes_at_task = schedule_features(n, idx++, w);
+        Expr register_innermost_bytes_at_task = schedule_features(n, idx++, w);
         Expr unique_bytes_read_per_vector = schedule_features(n, idx++, w);
         Expr unique_lines_read_per_vector = schedule_features(n, idx++, w);
         Expr unique_bytes_read_per_task = schedule_features(n, idx++, w);
@@ -380,8 +387,6 @@ public:
         // Ignore warp_lane_utilization and block_occupancy for inlined stages
         // Serial loops use a single thread
 
-        //compute_cost *= select(inlined_calls == 0, pow((1.f / block_occupancy), relu1(38, w, n)), 1.f);
-
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization, 1.f);
         compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization", n, w);
 
@@ -422,6 +427,9 @@ public:
         load_cost += num_realizations * unique_local_lines_read_per_realization * relu1(17, w, n);
         load_cost = print_wrap(load_cost, "load_cost after num_realizations * unique_local_lines_read_per_realization", n, w);
 
+        load_cost += num_realizations * unique_register_lines_read_per_realization * relu1(38, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_realizations * unique_register_lines_read_per_realization", n, w);
+
         load_cost += num_realizations * unique_global_bytes_read_per_realization * relu1(6, w, n);
         load_cost = print_wrap(load_cost, "load_cost after num_realizations * unique_global_bytes_read_per_realization", n, w);
 
@@ -430,6 +438,9 @@ public:
 
         load_cost += num_realizations * unique_local_bytes_read_per_realization * relu1(21, w, n);
         load_cost = print_wrap(load_cost, "load_cost after num_realizations * unique_local_bytes_read_per_realization", n, w);
+
+        load_cost += num_realizations * unique_register_bytes_read_per_realization * relu1(39, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_realizations * unique_register_bytes_read_per_realization", n, w);
 
         load_cost += num_blocks * num_threads_per_block * unique_global_lines_read_per_thread * relu1(32, w, n);
         load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_global_lines_read_per_thread", n, w);
@@ -440,6 +451,9 @@ public:
         load_cost += num_blocks * num_threads_per_block * unique_local_lines_read_per_thread * relu1(34, w, n);
         load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_local_lines_read_per_thread", n, w);
 
+        load_cost += num_blocks * num_threads_per_block * unique_register_lines_read_per_thread * relu1(40, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_register_lines_read_per_thread", n, w);
+
         load_cost += num_blocks * num_threads_per_block * unique_global_bytes_read_per_thread * relu1(35, w, n);
         load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_global_bytes_read_per_thread", n, w);
 
@@ -448,6 +462,9 @@ public:
 
         load_cost += num_blocks * num_threads_per_block * unique_local_bytes_read_per_thread * relu1(37, w, n);
         load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_local_bytes_read_per_thread", n, w);
+
+        load_cost += num_blocks * num_threads_per_block * unique_register_bytes_read_per_thread * relu1(41, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_register_bytes_read_per_thread", n, w);
 
         load_cost += num_vectors * vector_loads_per_vector * relu1(7, w, n);
         load_cost = print_wrap(load_cost, "load_cost after num_vectors * vector_loads_per_vector", n, w);
@@ -662,71 +679,71 @@ public:
         } else {
             // We just write down a good schedule for
             // inference. Scheduling a couple of convs is easy.
-            Var no;
-            prediction_output.specialize(batch_size < 8).split(n, no, n, 1);
-            prediction_output.compute_root().split(n, no, n, 8).parallel(no);
-            prediction_output.bound(n, 0, batch_size);
+            //Var no;
+            //prediction_output.specialize(batch_size < 8).split(n, no, n, 1);
+            //prediction_output.compute_root().split(n, no, n, 8).parallel(no);
+            //prediction_output.bound(n, 0, batch_size);
 
-            cost_per_stage_output.specialize(batch_size < 8).split(n, no, n, 1);
-            cost_per_stage_output.compute_root().split(n, no, n, 8).parallel(no);
+            //cost_per_stage_output.specialize(batch_size < 8).split(n, no, n, 1);
+            //cost_per_stage_output.compute_root().split(n, no, n, 8).parallel(no);
 
-            // schedule for the forwards path
-            const int vec = 8;
+            //// schedule for the forwards path
+            //const int vec = 8;
 
-            // A helper function for scheduling conv layers
-            auto schedule_conv = [&](Func conv, Func relu, RVar r_channels) {
-                Var ci, wi;
-                if (!training) {
-                    relu
-                        .compute_at(cost_per_stage_output, n)
-                        .tile(c, w, ci, wi, vec, 4, TailStrategy::RoundUp)
-                        .vectorize(ci);
-                    conv.compute_at(relu, c);
-                } else {
-                    // In training mode, we need the conv activations pre-relu too
-                    conv.in()
-                        .compute_root()
-                        .tile(c, w, ci, wi, vec, 1, TailStrategy::RoundUp)
-                        .vectorize(ci)
-                        .unroll(wi)
-                        .parallel(n, 8);
-                    conv.compute_at(conv.in(), c);
-                    relu
-                        .compute_root()
-                        .reorder_storage(c, w, n)
-                        .reorder(c, w, n)
-                        .vectorize(c, vec)
-                        .parallel(n, 8);
-                }
-                conv
-                    .vectorize(c)
-                    .unroll(w)
-                    .update()
-                    .vectorize(c)
-                    .unroll(w)
-                    .reorder(c, w, r_channels);
-            };
+            //// A helper function for scheduling conv layers
+            //auto schedule_conv = [&](Func conv, Func relu, RVar r_channels) {
+                //Var ci, wi;
+                //if (!training) {
+                    //relu
+                        //.compute_at(cost_per_stage_output, n)
+                        //.tile(c, w, ci, wi, vec, 4, TailStrategy::RoundUp)
+                        //.vectorize(ci);
+                    //conv.compute_at(relu, c);
+                //} else {
+                    //// In training mode, we need the conv activations pre-relu too
+                    //conv.in()
+                        //.compute_root()
+                        //.tile(c, w, ci, wi, vec, 1, TailStrategy::RoundUp)
+                        //.vectorize(ci)
+                        //.unroll(wi)
+                        //.parallel(n, 8);
+                    //conv.compute_at(conv.in(), c);
+                    //relu
+                        //.compute_root()
+                        //.reorder_storage(c, w, n)
+                        //.reorder(c, w, n)
+                        //.vectorize(c, vec)
+                        //.parallel(n, 8);
+                //}
+                //conv
+                    //.vectorize(c)
+                    //.unroll(w)
+                    //.update()
+                    //.vectorize(c)
+                    //.unroll(w)
+                    //.reorder(c, w, r_channels);
+            //};
 
-            // Pipeline features processing
-            conv1_stage1.compute_root().vectorize(c);
-            squashed_head1_filter.compute_root().vectorize(c);
+            //// Pipeline features processing
+            //conv1_stage1.compute_root().vectorize(c);
+            //squashed_head1_filter.compute_root().vectorize(c);
 
-            // Schedule features processing. The number of schedule
-            // features is not close to a multiple of 8, so vectorized
-            // across the batch.
-            if (!training) {
-                normalized_schedule_features
-                    .compute_at(cost_per_stage_output, n)
-                    .vectorize(n);
-            } else {
-                normalized_schedule_features
-                    .compute_root()
-                    .vectorize(n, 8);
-            }
+            //// Schedule features processing. The number of schedule
+            //// features is not close to a multiple of 8, so vectorized
+            //// across the batch.
+            //if (!training) {
+                //normalized_schedule_features
+                    //.compute_at(cost_per_stage_output, n)
+                    //.vectorize(n);
+            //} else {
+                //normalized_schedule_features
+                    //.compute_root()
+                    //.vectorize(n, 8);
+            //}
 
-            // conv+relu layers
-            schedule_conv(head2_conv, head2_relu, r_head2.x);
-            schedule_conv(conv1_stage2, relu1, r1_stage2.x);
+            //// conv+relu layers
+            //schedule_conv(head2_conv, head2_relu, r_head2.x);
+            //schedule_conv(conv1_stage2, relu1, r1_stage2.x);
         }
     }
 };
