@@ -61,6 +61,7 @@ function(add_app_test NAME)
     set_tests_properties(${NAME} PROPERTIES
                          FIXTURES_REQUIRED apps
                          LABELS apps
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET}"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endfunction()
 
