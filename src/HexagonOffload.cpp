@@ -826,7 +826,7 @@ class InjectHexagonRpc : public IRMutator {
                 Expr host_ptr = reinterpret<uint64_t>(Variable::make(Handle(), i.first));
                 Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
                                         {i.first, alignment}, Call::Extern);
-                body = Block::make(AssertStmt::make(host_ptr % alignment == 0, error), body);
+                body = Block::make(AssertStmt::make(host_ptr % alignment == 0, error), body, Block::Ordered);
             }
 
             // Unpack buffer parameters into the scope. They come in as host/dev struct pairs.
@@ -909,7 +909,8 @@ class InjectHexagonRpc : public IRMutator {
 
         Stmt offload_call = call_extern_and_assert("halide_hexagon_run", params);
         if (!scalars_buffer_init.empty()) {
-            offload_call = Block::make(Block::make(scalars_buffer_init), offload_call);
+            offload_call = Block::make(Block::make(scalars_buffer_init, Block::Unordered),
+                                       offload_call, Block::Ordered);
         }
         offload_call = Allocate::make(scalars_buffer_name, scalars_buffer_type, MemoryType::Auto,
                                       {Expr(scalars_buffer_extent)}, const_true(), offload_call);
@@ -935,7 +936,7 @@ public:
             Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, {code_buf_var}, Call::Extern);
             Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
                                                        {module_state_ptr(), code_ptr, cast<uint64_t>(code_size), runtime_ptr, cast<uint64_t>(runtime_size)});
-            s = Block::make(init_kernels, s);
+            s = Block::make(init_kernels, s, Block::Ordered);
         }
 
         // TODO: This can probably go away due to general debug info at the submodule compile level.

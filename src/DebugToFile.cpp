@@ -79,7 +79,7 @@ class DebugToFile : public IRMutator {
                                                     {f.name(), f.debug_file(), call_result_var},
                                                     Call::Extern));
             body = LetStmt::make(call_result_name, call, body);
-            body = Block::make(mutate(op->body), body);
+            body = Block::make(mutate(op->body), body, Block::Ordered);
 
             return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, body);
         } else {

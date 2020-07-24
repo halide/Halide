@@ -102,10 +102,10 @@ class AllocationInference : public IRMutator {
                                         Call::Extern);
 
             if (bound.min.defined()) {
-                stmt = Block::make(AssertStmt::make(min_var <= b[i].min, error_msg), stmt);
+                stmt = Block::make(AssertStmt::make(min_var <= b[i].min, error_msg), stmt, Block::Ordered);
             }
             if (bound.extent.defined()) {
-                stmt = Block::make(AssertStmt::make(max_var >= b[i].max, error_msg), stmt);
+                stmt = Block::make(AssertStmt::make(max_var >= b[i].max, error_msg), stmt, Block::Ordered);
             }
 
             stmt = LetStmt::make(extent_name, extent, stmt);

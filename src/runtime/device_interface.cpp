@@ -59,8 +59,8 @@ WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t 
 
 namespace {
 
-__attribute__((always_inline)) int debug_log_and_validate_buf(void *user_context, const halide_buffer_t *buf_arg,
-                                                              const char *routine) {
+ALWAYS_INLINE int debug_log_and_validate_buf(void *user_context, const halide_buffer_t *buf_arg,
+                                             const char *routine) {
     if (buf_arg == NULL) {
         return halide_error_buffer_is_null(user_context, routine);
     }

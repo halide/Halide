@@ -595,6 +595,9 @@ class HoistIfStatements : public IRMutator {
 
         const IfThenElse *i1 = first.as<IfThenElse>();
         const Block *b = rest.as<Block>();
+        if (b && b->ordering != op->ordering) {
+            b = nullptr;
+        }
         const IfThenElse *i2 = b ? b->first.as<IfThenElse>() : rest.as<IfThenElse>();
 
         if (i1 &&
@@ -603,14 +606,14 @@ class HoistIfStatements : public IRMutator {
             !i2->else_case.defined() &&
             is_pure(i1->condition) &&
             can_prove(i1->condition == i2->condition)) {
-            Stmt s = Block::make(i1->then_case, i2->then_case);
+            Stmt s = Block::make(i1->then_case, i2->then_case, op->ordering);
             s = IfThenElse::make(i1->condition, s);
             if (b) {
-                s = Block::make(s, b->rest);
+                s = Block::make(s, b->rest, op->ordering);
             }
             return s;
         } else {
-            return Block::make(first, rest);
+            return Block::make(first, rest, op->ordering);
         }
     }
 };

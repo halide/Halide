@@ -23,15 +23,6 @@ if (NOT TARGET Halide::Test)
                                INTERFACE
                                ${Halide_SOURCE_DIR}/test/common
                                ${Halide_SOURCE_DIR}/tools)
-
-    # Tests are built with the equivalent of OPTIMIZE_FOR_BUILD_TIME (-O0 or /Od).
-    # Also allow tests, via conditional compilation, to use the entire
-    # capability of the CPU being compiled on via -march=native. This
-    # presumes tests are run on the same machine they are compiled on.
-    target_compile_options(Halide_test INTERFACE
-                           $<$<CXX_COMPILER_ID:MSVC>:/Od>
-                           $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-O0>
-                           $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-march=native>)
 endif ()
 
 if (NOT TARGET Halide::ExpectAbort)
@@ -47,11 +38,15 @@ endif ()
 function(add_halide_test TARGET)
     set(options EXPECT_FAILURE)
     set(oneValueArgs WORKING_DIRECTORY)
-    set(multiValueArgs GROUPS)
+    set(multiValueArgs GROUPS COMMAND)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
+    if (NOT args_COMMAND)
+        set(args_COMMAND ${TARGET})
+    endif ()
+
     add_test(NAME ${TARGET}
-             COMMAND ${TARGET}
+             COMMAND ${args_COMMAND}
              WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
 
     set_tests_properties(${TARGET} PROPERTIES
@@ -61,6 +56,16 @@ function(add_halide_test TARGET)
     if (${args_EXPECT_FAILURE})
         set_tests_properties(${TARGET} PROPERTIES WILL_FAIL true)
     endif ()
+
+    # Add a meta-target for each group, to allow us to build by group easily
+    foreach (GROUP IN LISTS args_GROUPS)
+        set(META_TARGET build_${GROUP})
+        if (NOT TARGET ${META_TARGET})
+            add_custom_target(${META_TARGET})
+        endif ()
+        add_dependencies(${META_TARGET} ${TARGET})
+    endforeach ()
+
 endfunction()
 
 function(tests)

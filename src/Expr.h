@@ -56,6 +56,7 @@ enum class IRNodeType {
     Call,
     Let,
     Shuffle,
+    VectorReduce,
     // Stmts
     LetStmt,
     AssertStmt,
@@ -386,12 +387,17 @@ namespace Internal {
  * any order, and multiple iterations may occur
  * simultaneously. Vectorized and GPULane are parallel and
  * synchronous: they act as if all iterations occur at the same time
- * in lockstep. */
+ * in lockstep. Unrolled is a conventional sequence of statements,
+ * which may or may not have data-dependencies across
+ * them. UnorderedUnrolled is a sequence of statements guaranteed to
+ * have no data dependencies. Execution of the sub-statements can be
+ * arbitrarily interleaved. */
 enum class ForType {
     Serial,
     Parallel,
     Vectorized,
     Unrolled,
+    UnorderedUnrolled,
     Extern,
     GPUBlock,
     GPUThread,

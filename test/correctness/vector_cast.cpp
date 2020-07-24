@@ -131,7 +131,12 @@ int main(int argc, char **argv) {
     // We only test power-of-two vector widths for now
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
-    for (int vec_width = 1; vec_width <= 64; vec_width *= 2) {
+    int vec_width_max = 64;
+    if (target.arch == Target::WebAssembly) {
+        // The wasm jit is very slow, so shorten this test here.
+        vec_width_max = 16;
+    }
+    for (int vec_width = 1; vec_width <= vec_width_max; vec_width *= 2) {
         futures.push_back(pool.async([=]() {
             bool success = true;
             success = success && test_all<float>(vec_width, target);

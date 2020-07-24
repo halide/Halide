@@ -208,6 +208,7 @@ protected:
     void visit(const LetStmt *) override;
     void visit(const AssertStmt *) override;
     void visit(const ProducerConsumer *) override;
+    void visit(const Block *) override;
     void visit(const For *) override;
     void visit(const Ramp *) override;
     void visit(const Broadcast *) override;

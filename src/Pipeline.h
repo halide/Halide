@@ -348,7 +348,7 @@ public:
      extern "C" void *halide_malloc(void *, size_t)
      extern "C" void halide_free(void *, void *)
      \endcode
-     * These will clobber Halide's versions. See \file HalideRuntime.h
+     * These will clobber Halide's versions. See HalideRuntime.h
      * for declarations.
      */
     void set_custom_allocator(void *(*malloc)(void *, size_t),

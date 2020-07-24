@@ -6,6 +6,12 @@ using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     Func f;
     Var x, y;
     f(x, y) = x + y;

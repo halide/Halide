@@ -1596,6 +1596,7 @@ $(FILTERS_DIR)/external_code.halide_generated.cpp: $(BIN_DIR)/external_code.gene
 	$(CURDIR)/$< -g external_code -e c_source -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=false
 
 $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator
+	@mkdir -p $(@D)
 	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad  -d 1 target=$(TARGET)-no_runtime auto_schedule=true
 
 # Usually, it's considered best practice to have one Generator per
@@ -1605,6 +1606,7 @@ $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator
 # build each of the Generators in nested_externs_generator.cpp (which
 # all have the form nested_externs_*).
 $(FILTERS_DIR)/nested_externs_%.a: $(BIN_DIR)/nested_externs.generator
+	@mkdir -p $(@D)
 	$(CURDIR)/$< -g nested_externs_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
 
 GEN_AOT_CXX_FLAGS=$(TEST_CXX_FLAGS) -Wno-unknown-pragmas
@@ -2143,6 +2145,10 @@ ifneq (,$(findstring clang version 11.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 12.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2163,7 +2169,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 90 100 110))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 90 100 110 120))
 LLVM_OK=yes
 endif
 
@@ -2174,7 +2180,7 @@ $(BUILD_DIR)/llvm_ok: $(BUILD_DIR)/rtti_ok
 	touch $(BUILD_DIR)/llvm_ok
 else
 $(BUILD_DIR)/llvm_ok:
-	@echo "Can't find llvm or version of llvm too old (we need 7.0 or greater):"
+	@echo "Can't find llvm or version of llvm too old (we need 9.0 or greater):"
 	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
 	@exit 1
@@ -2315,10 +2321,14 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 
 # Run clang-format on most of the source. The tutorials directory is
 # explicitly skipped, as those files are manually formatted to
-# maximize readability.
+# maximize readability. NB: clang-format is *not* stable across versions;
+# we are currently standardized on the formatting from clang-format-10.
+# If CLANG_FORMAT points to a different version, you may get incorrectly-formatted code.
+CLANG_FORMAT ?= ${CLANG}-format
+
 .PHONY: format
 format:
-	find "${ROOT_DIR}/apps" "${ROOT_DIR}/src" "${ROOT_DIR}/tools" "${ROOT_DIR}/test" "${ROOT_DIR}/util" "${ROOT_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file
+	find "${ROOT_DIR}/apps" "${ROOT_DIR}/src" "${ROOT_DIR}/tools" "${ROOT_DIR}/test" "${ROOT_DIR}/util" "${ROOT_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG_FORMAT} -i -style=file
 
 # run-clang-tidy.py is a script that comes with LLVM for running clang
 # tidy in parallel. Assume it's in the standard install path relative to clang.

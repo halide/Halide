@@ -286,7 +286,8 @@ class SplitTuples : public IRMutator {
                     provides.push_back(Provide::make(name, {val}, args));
                 }
 
-                s = Block::make(provides);
+                // Within each cluster there may be data hazards
+                s = Block::make(provides, Block::Ordered);
 
                 while (!lets.empty()) {
                     auto p = lets.back();
@@ -304,7 +305,8 @@ class SplitTuples : public IRMutator {
         }
 
         {
-            Stmt s = Block::make(result);
+            // Across clusters there are no data hazards.
+            Stmt s = Block::make(result, Block::Unordered);
             if (atomic && !separate_atomic_nodes_per_store) {
                 s = Atomic::make(atomic->producer_name, atomic->mutex_name, s);
             }

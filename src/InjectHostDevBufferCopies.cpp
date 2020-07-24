@@ -305,7 +305,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
             state.device_dirty = True;
         }
 
-        s = Block::make(stmts);
+        s = Block::make(stmts, Block::Ordered);
 
         if (!finder.devices_touched_by_extern.empty()) {
             // This buffer was passed to an extern stage. Unless we
@@ -499,7 +499,7 @@ class InjectBufferCopies : public IRMutator {
                 Stmt destructor =
                     Evaluate::make(Call::make(Handle(), Call::register_destructor,
                                               {Expr("halide_device_free_as_destructor"), buf}, Call::Intrinsic));
-                Stmt body = Block::make(destructor, op->body);
+                Stmt body = Block::make(destructor, op->body, Block::Ordered);
                 return LetStmt::make(op->name, op->value, body);
             } else {
                 return IRMutator::visit(op);
@@ -536,7 +536,7 @@ class InjectBufferCopies : public IRMutator {
                     Evaluate::make(Call::make(Handle(), Call::register_destructor,
                                               {Expr("halide_device_and_host_free_as_destructor"), buf},
                                               Call::Intrinsic));
-                body = Block::make(destructor, body);
+                body = Block::make(destructor, body, Block::Ordered);
 
                 // Then the device_and_host malloc
                 Expr device_interface = make_device_interface_call(device_api);
@@ -545,7 +545,7 @@ class InjectBufferCopies : public IRMutator {
                 if (!is_one(condition)) {
                     device_malloc = IfThenElse::make(condition, device_malloc);
                 }
-                body = Block::make(device_malloc, body);
+                body = Block::make(device_malloc, body, Block::Ordered);
 
                 // In the value, we want to use null for the initial value of the host field.
                 Expr value = substitute(buffer, reinterpret(Handle(), make_zero(UInt(64))), op->value);
@@ -581,7 +581,7 @@ class InjectBufferCopies : public IRMutator {
             if (s.same_as(last_use)) {
                 internal_assert(!success);
                 success = true;
-                return Block::make(last_use, free_stmt);
+                return Block::make(last_use, free_stmt, Block::Ordered);
             } else {
                 return IRMutator::mutate(s);
             }

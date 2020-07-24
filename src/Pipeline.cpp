@@ -362,9 +362,9 @@ void Pipeline::compile_to_file(const string &filename_prefix,
 vector<Argument> Pipeline::infer_arguments(const Stmt &body) {
     Stmt s = body;
     if (!contents->requirements.empty()) {
-        s = Block::make(contents->requirements);
+        s = Block::make(contents->requirements, Block::Ordered);
         if (body.defined()) {
-            s = Block::make(s, body);
+            s = Block::make(s, body, Block::Ordered);
         }
     }
     contents->inferred_args = ::infer_arguments(s, contents->outputs);

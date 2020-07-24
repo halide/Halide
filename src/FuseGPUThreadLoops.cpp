@@ -167,7 +167,7 @@ class NormalizeDimensionality : public IRMutator {
             rest.same_as(op->rest)) {
             return op;
         } else {
-            return Block::make(first, rest);
+            return Block::make(first, rest, op->ordering);
         }
     }
 
@@ -318,7 +318,7 @@ private:
                                        Parameter{}, const_true(), ModulusRemainder{});
 
         if (host_side_preamble.defined()) {
-            host_side_preamble = Block::make(host_side_preamble, update_size);
+            host_side_preamble = Block::make(host_side_preamble, update_size, Block::Ordered);
         } else {
             host_side_preamble = update_size;
         }
@@ -393,7 +393,7 @@ private:
             host_side_preamble = For::make(loop_name, new_min, new_extent,
                                            ForType::Serial, DeviceAPI::None, host_side_preamble);
             if (old_preamble.defined()) {
-                host_side_preamble = Block::make(old_preamble, host_side_preamble);
+                host_side_preamble = Block::make(old_preamble, host_side_preamble, Block::Ordered);
             }
         } else {
             host_side_preamble = old_preamble;
@@ -406,14 +406,16 @@ private:
     Stmt visit(const Block *op) override {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
-            barrier_stage++;
+            if (op->ordering == Block::Ordered) {
+                barrier_stage++;
+            }
             Stmt rest = mutate(op->rest);
 
             if (first.same_as(op->first) &&
                 rest.same_as(op->rest)) {
                 return op;
             } else {
-                return Block::make(first, rest);
+                return Block::make(first, rest, op->ordering);
             }
         } else {
             return IRMutator::visit(op);
@@ -436,7 +438,7 @@ private:
             host_side_preamble = IfThenElse::make(!condition, else_preamble);
         }
         if (before_preamble.defined() && host_side_preamble.defined()) {
-            host_side_preamble = Block::make(before_preamble, host_side_preamble);
+            host_side_preamble = Block::make(before_preamble, host_side_preamble, Block::Ordered);
         } else if (before_preamble.defined()) {
             host_side_preamble = before_preamble;
         }
@@ -567,7 +569,7 @@ private:
 
         if (old_preamble.defined()) {
             if (host_side_preamble.defined()) {
-                host_side_preamble = Block::make(old_preamble, host_side_preamble);
+                host_side_preamble = Block::make(old_preamble, host_side_preamble, Block::Ordered);
             } else {
                 host_side_preamble = old_preamble;
             }
@@ -962,7 +964,7 @@ public:
                 AssertStmt::make(allocate_heap_result_var == 0, allocate_heap_result_var);
             Expr device_field = Call::make(Handle(), Call::buffer_get_device, {buffer_var}, Call::Extern);
             s = LetStmt::make(alloc.name, device_field, s);
-            s = Block::make(check_allocated, s);
+            s = Block::make(check_allocated, s, Block::Ordered);
             s = LetStmt::make(allocate_heap_result_var_name, allocate_heap_call, s);
             s = Allocate::make(buffer_name, alloc.type,
                                MemoryType::Auto, {}, const_true(), s,
@@ -990,7 +992,7 @@ public:
         }
 
         // Prefix the preamble
-        result = Block::make(host_side_preamble, result);
+        result = Block::make(host_side_preamble, result, Block::Ordered);
 
         // Wrap the preamble in all the allocation nodes
         for (auto &alloc : allocations) {
@@ -998,7 +1000,7 @@ public:
                 string alloc_name = alloc.name + ".shared_size";
                 Stmt init = Store::make(alloc_name, 0, 0,
                                         Parameter{}, const_true(), ModulusRemainder{});
-                result = Block::make(init, result);
+                result = Block::make(init, result, Block::Ordered);
                 result = Allocate::make(alloc_name, Int(32), MemoryType::Stack, {1}, const_true(), result);
             }
         }
@@ -1234,7 +1236,7 @@ class InjectThreadBarriers : public IRMutator {
             if (!in_threads && !body.same_as(op->body)) {
                 // Any memory access fences should be handled by the
                 // synchronizations within the block
-                body = Block::make(body, make_barrier(0));
+                body = Block::make(body, make_barrier(0), Block::Ordered);
             }
             return For::make(op->name, op->min, op->extent,
                              op->for_type, op->device_api, body);
@@ -1291,7 +1293,10 @@ class InjectThreadBarriers : public IRMutator {
     }
 
     Stmt visit(const Block *op) override {
-        if (!in_threads && op->rest.defined()) {
+        if (op->ordering == Block::Unordered) {
+            // Known to have no data dependencies, so synchronization is unnecessary
+            return IRMutator::visit(op);
+        } else if (!in_threads && op->rest.defined()) {
             // First, we record which loads from shared/device memory occur
             // in the rest block
             Stmt rest = mutate(op->rest);
@@ -1320,7 +1325,7 @@ class InjectThreadBarriers : public IRMutator {
                     break;
                 }
             }
-            return Block::make(Block::make(first, make_barrier(mask)), rest);
+            return Block::make({first, make_barrier(mask), rest}, Block::Ordered);
         } else {
             return IRMutator::visit(op);
         }

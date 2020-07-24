@@ -133,7 +133,7 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
             rest = Evaluate::make(0);
         }
         touches_buffer = old_touches_buffer;
-        return Block::make(first, rest);
+        return Block::make(first, rest, op->ordering);
     }
 
 public:
@@ -643,7 +643,7 @@ Stmt add_image_checks_inner(Stmt s,
 
     auto prepend_stmts = [&](vector<Stmt> *stmts) {
         while (!stmts->empty()) {
-            s = Block::make(std::move(stmts->back()), s);
+            s = Block::make(std::move(stmts->back()), s, Block::Ordered);
             stmts->pop_back();
         }
     };

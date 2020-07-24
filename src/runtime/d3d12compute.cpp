@@ -1861,10 +1861,10 @@ public:
     d3d12_command_queue *queue;
     int error;
 
-    __attribute__((always_inline)) D3D12ContextHolder(void *user_context, bool create) {
+    ALWAYS_INLINE D3D12ContextHolder(void *user_context, bool create) {
         save(user_context, create);
     }
-    __attribute__((always_inline)) ~D3D12ContextHolder() {
+    ALWAYS_INLINE ~D3D12ContextHolder() {
         restore();
     }
 };
