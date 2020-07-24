@@ -12,7 +12,7 @@ function(halide_define_aot_test NAME)
         return()
     endif ()
 
-    if (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm")
+    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
         halide_define_aot_wasm_test(${ARGV})
         return()
     endif ()
@@ -233,7 +233,7 @@ add_library(external_code_generator_deps OBJECT "${EC32}.cpp" "${EC64}.cpp" "${E
 # Create targets for the default AOT tests
 ##
 
-set(USING_WASM (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm"))
+set(USING_WASM (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm"))
 
 halide_define_aot_test(argvcall)
 

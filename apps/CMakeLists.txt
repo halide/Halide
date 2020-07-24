@@ -27,7 +27,7 @@ set_tests_properties(create_halide_distrib PROPERTIES
                      DEPENDS delete_halide_distrib)
 
 function(add_app_test NAME)
-    if (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm")
+    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
         # Don't attempt to build these for wasm yet.
         return()
     endif()
@@ -108,7 +108,7 @@ add_app_test(wavelet)
 
 # Add the autoschedulers.
 # TODO(#4053): refactor into separate modules
-if (TARGET_WEBASSEMBLY AND HL_TARGET MATCHES "wasm")
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
     # Don't attempt to build these for wasm yet.
 else ()
     add_subdirectory(autoscheduler)

@@ -171,7 +171,7 @@ function(add_wasm_halide_test TARGET)
     endif ()
 
     set(WASM_SHELL_FLAGS)
-    if (HL_TARGET MATCHES "wasm_simd128")
+    if (Halide_TARGET MATCHES "wasm_simd128")
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
     endif()
 
