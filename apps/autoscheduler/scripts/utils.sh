@@ -525,3 +525,17 @@ function get_num_local_cores() {
         num_local_cores_ref=$(nproc)
     fi
 }
+
+function find_unused_gpu() {
+    local -r num_gpus=$1
+    local -n gpu_id_ref=$2
+
+    for ((index=0;index<num_gpus;index++)); do
+        if nvidia-smi -i ${index} | grep -q "No running processes found"; then
+            gpu_id_ref=${index}
+            return 0
+        fi
+    done
+
+    return 1
+}

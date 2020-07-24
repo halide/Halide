@@ -97,6 +97,9 @@ NUM_GPUS=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
 
 echo "# GPUs = ${NUM_GPUS}"
 
+USE_BENCHMARK_QUEUE=1
+BENCHMARK_QUEUE_DIR=${SAMPLES}/benchmark_queue
+
 # Latest git hash
 GIT_HASH=$(git rev-parse --verify HEAD)
 
@@ -106,6 +109,7 @@ else
     echo "Train only mode: ON"
     EPOCHS=10000
 fi
+
 
 record_command() {
     BATCH=${1}
@@ -186,6 +190,9 @@ make_featurization() {
     record_command $BATCH $SAMPLE_ID "${CMD/$WEIGHTS/$USED_WEIGHTS}" "autoschedule_command" $FAILED
     if [[ $FAILED == 1 ]]; then
         echo "Autoschedule failed or timed out for ${D}" | tee -a ${D}/compile_err.txt
+        if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
+            touch "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-failed"
+        fi
         return
     fi
 
@@ -204,6 +211,13 @@ make_featurization() {
     if [[ $? != 0 ]]; then
         echo "Compile failed ${D}" | tee -a ${D}/compile_err.txt
         FAILED=1
+        if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
+            touch "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-failed"
+        fi
+    else
+        if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
+            touch "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}"
+        fi
     fi
     record_command $BATCH $SAMPLE_ID "$CMD" "compile_command" $FAILED
 }
@@ -342,67 +356,68 @@ TOTAL_NUM_SAMPLES=$((NUM_BATCHES*BATCH_SIZE*${#GENERATOR_ARGS_SETS_ARRAY[@]}))
 echo "Total number of samples to be generated: ${TOTAL_NUM_SAMPLES}"
 
 benchmark_loop() {
-    TOTAL_BENCHMARK_TIME=0
+    START_TIME="$SECONDS"
+    MAX_TIME=$((NUM_BATCHES*${#GENERATOR_ARGS_SETS_ARRAY[@]}*660))
     sleep 1
 
     echo "Starting benchmark loop for samples in ${SAMPLES}/batch_${BATCH_ID}_*"
-    while [[ 1 ]]; do
-        local num_completed=0
-        local num_active=0
+    echo "Max. benchmark loop time = ${MAX_TIME} seconds"
 
+    local num_completed=0
+    while [[ 1 ]]; do
         unset waitlist
 
-        for COMPILE_ERR_FILE in $(find ${SAMPLES}/batch_${BATCH_ID}_* | grep "compile_err.txt$"); do
-            SAMPLE_DIR=$(dirname "${COMPILE_ERR_FILE}")
+        for FILE in $(ls ${BENCHMARK_QUEUE_DIR}); do
+            if [[ $FILE == *"failed" ]]; then
+                # The sample failed to compile
+                num_completed=$((num_completed+1))
+                rm "${BENCHMARK_QUEUE_DIR}/${FILE}"
+                continue
+            fi
 
-            SAMPLE_ID=$(basename "${SAMPLE_DIR}")
-            BATCH_DIR=$(dirname "${SAMPLE_DIR}")
-            BATCH=$(basename "${BATCH_DIR}")
+            SAMPLE_ID=$(echo "${FILE}" | cut -d- -f 2)
+            BATCH=$(echo "${FILE}" | cut -d- -f 1)
+            SAMPLE_DIR="${SAMPLES}/${BATCH}/${SAMPLE_ID}"
+
+            if { [[ -f "${SAMPLE_DIR}/bench.txt" ]] && ! grep -q "Permission denied" "${SAMPLE_DIR}/bench_err.txt"; }; then
+                # Benchmarking has been completed
+                num_completed=$((num_completed+1))
+                rm "${BENCHMARK_QUEUE_DIR}/${FILE}"
+                continue
+            fi
+
+            if [[ $FILE == *"benchmarking" ]]; then
+                # Sample is still benchmarking
+                continue
+            fi
+
             BATCH_ID=$(echo "${BATCH}" | cut -d_ -f 2)
             EXTRA_ARGS_IDX=$(echo "${BATCH}" | cut -d_ -f 3)
             DIR=${SAMPLES}/${BATCH}
 
-            if [ -f "${SAMPLE_DIR}/bench.txt" ] || grep -q "Autoschedule failed" ${SAMPLE_DIR}/compile_err.txt || grep -q "Compile failed" ${SAMPLE_DIR}/compile_err.txt; then
-                # Either benchmarking has been completed or the sample failed to
-                # compile
-                num_completed=$((num_completed+1))
-                continue
-            fi
-
-            if [ ! -f "${SAMPLE_DIR}/bench" ]; then
-                # Sample is still compiling
-                continue
-            fi
-
-            S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
-            FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-            benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID $EXTRA_ARGS_IDX $FNAME $BATCH_ID $num_active &
-            waitlist+=("$!")
-            num_active=$((num_active+1))
-
-            if [[ num_active -ge NUM_GPUS ]]; then
-                break
-            fi
+            while [[ 1 ]]; do
+                if find_unused_gpu ${NUM_GPUS} gpu_id; then
+                    S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
+                    FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
+                    benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID $EXTRA_ARGS_IDX $FNAME $BATCH_ID $gpu_id &
+                    waitlist+=("$!")
+                    mv "${BENCHMARK_QUEUE_DIR}/${FILE}" "${BENCHMARK_QUEUE_DIR}/${FILE}-benchmarking"
+                    break
+                else
+                    # All GPUs are in use
+                    sleep 0.1
+                fi
+            done
         done
 
-        CUR_SECONDS="$SECONDS"
-        wait "${waitlist[@]}"
-        BENCHMARK_TIME=$(("SECONDS"-CUR_SECONDS))
-        TOTAL_BENCHMARK_TIME=$((TOTAL_BENCHMARK_TIME+BENCHMARK_TIME))
-
-        if [[ num_active -eq 0 ]]; then
-            # If there were no samples ready to be benchmarked, wait before
-            # trying again
-            sleep 1
-        fi
-
         if [[ num_completed -eq TOTAL_NUM_SAMPLES ]]; then
+            wait "${waitlist[@]}"
             echo "Benchmarking complete."
             break
         fi
 
-        if [[ SECONDS -ge 600 ]]; then
-            echo "Benchmark queue has been active for more than 10 minutes. Exiting."
+        if [[ SECONDS -ge MAX_TIME ]]; then
+            echo "Benchmark queue has been active for more than ${MAX_TIME} seconds. Exiting."
             for pid in ${waitlist[@]}; do
                 kill $pid
             done
@@ -410,14 +425,17 @@ benchmark_loop() {
         fi
     done
 
+    TOTAL_BENCHMARK_TIME=$(("SECONDS"-START_TIME))
     echo "Benchmark time for batch: ${TOTAL_BENCHMARK_TIME}"
+    rm -rf ${BENCHMARK_QUEUE_DIR}
 }
 
 MAX_AUTOSCHEDULE_JOBS=${LOCAL_CORES}
 
-USE_BENCHMARK_QUEUE=1
 if [[ $USE_BENCHMARK_QUEUE == 1 ]] && [[ $TRAIN_ONLY != 1 ]]; then
     echo "Benchmark queue = ON"
+    mkdir -p ${BENCHMARK_QUEUE_DIR}
+    # This includes 1 job for the benchmark loop
     MAX_AUTOSCHEDULE_JOBS=$((LOCAL_CORES-NUM_GPUS))
     benchmark_loop &
     benchmark_loop_pid=("$!")
