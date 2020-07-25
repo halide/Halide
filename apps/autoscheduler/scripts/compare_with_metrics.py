@@ -27,15 +27,21 @@ class Result:
     self.predicted = predicted
     if actual != 0:
       self.ratio = 100 * abs(predicted - actual) / actual
-      self.factor = max(predicted, actual) / min(predicted, actual)
-      if predicted > actual:
-        self.factor = -self.factor
     else:
       if predicted == 0:
         self.ratio = 0
       else:
         self.ratio = math.inf
-      self.factor = 0
+
+    if min(predicted, actual) != 0:
+      self.factor = max(predicted, actual) / min(predicted, actual)
+      if predicted > actual:
+        self.factor = -self.factor
+    else:
+      if max(predicted, actual) != 0:
+        self.factor = math.inf
+      else:
+        self.factor = 0
 
   def __str__(self):
     return "{:>14.2f} {:>14.2f} {:>7.2f} {:>7.2f}".format(self.actual, self.predicted, self.ratio, self.factor)
@@ -60,6 +66,12 @@ class Features(Enum):
   SHARED_STORE_REQUESTS = "shared store requests"
   SHARED_STORE_TRANSACTIONS_PER_REQUEST = "shared store transactions per request"
   SHARED_STORE_TRANSACTIONS = "shared store transactions"
+  LOCAL_LOAD_REQUESTS = "local load requests"
+  LOCAL_LOAD_TRANSACTIONS_PER_REQUEST = "local load transactions per request"
+  LOCAL_LOAD_TRANSACTIONS = "local load transactions"
+  LOCAL_STORE_REQUESTS = "local store requests"
+  LOCAL_STORE_TRANSACTIONS_PER_REQUEST = "local store transactions per request"
+  LOCAL_STORE_TRANSACTIONS = "local store transactions"
   GLOBAL_LOAD_EFFICIENCY = "global load efficiency"
   GLOBAL_STORE_EFFICIENCY = "global store efficiency"
 
@@ -84,12 +96,20 @@ class Sample:
     self.comparisons[Features.GLOBAL_STORE_TRANSACTIONS_PER_REQUEST] = self.global_store_transactions_per_request
     self.comparisons[Features.GLOBAL_LOAD_EFFICIENCY] = self.global_load_efficiency
     self.comparisons[Features.GLOBAL_STORE_EFFICIENCY] = self.global_store_efficiency
+
     self.comparisons[Features.SHARED_LOAD_TRANSACTIONS] = self.shared_load_transactions
     self.comparisons[Features.SHARED_LOAD_REQUESTS] = self.shared_load_requests
     self.comparisons[Features.SHARED_LOAD_TRANSACTIONS_PER_REQUEST] = self.shared_load_transactions_per_request
     self.comparisons[Features.SHARED_STORE_TRANSACTIONS] = self.shared_store_transactions
     self.comparisons[Features.SHARED_STORE_REQUESTS] = self.shared_store_requests
     self.comparisons[Features.SHARED_STORE_TRANSACTIONS_PER_REQUEST] = self.shared_store_transactions_per_request
+
+    self.comparisons[Features.LOCAL_LOAD_TRANSACTIONS] = self.local_load_transactions
+    self.comparisons[Features.LOCAL_LOAD_REQUESTS] = self.local_load_requests
+    self.comparisons[Features.LOCAL_LOAD_TRANSACTIONS_PER_REQUEST] = self.local_load_transactions_per_request
+    self.comparisons[Features.LOCAL_STORE_TRANSACTIONS] = self.local_store_transactions
+    self.comparisons[Features.LOCAL_STORE_REQUESTS] = self.local_store_requests
+    self.comparisons[Features.LOCAL_STORE_TRANSACTIONS_PER_REQUEST] = self.local_store_transactions_per_request
 
     self.extract_data = {}
 
@@ -237,12 +257,54 @@ class Sample:
 
     return Result(actual, predicted)
 
+  def local_load_transactions(self, metrics, features):
+    actual = self.get(metrics, "local_load_transactions", 0)
+    predicted = self.get(features, "num_local_mem_load_transactions", 0)
+    return IntResult(actual, predicted)
+
+  def local_store_transactions(self, metrics, features):
+    actual = self.get(metrics, "local_store_transactions", 0)
+    predicted = self.get(features, "num_local_mem_store_transactions", 0)
+    return IntResult(actual, predicted)
+
+  def local_load_requests(self, metrics, features):
+    if self.get(metrics, "local_load_transactions_per_request", 0) == 0:
+      return IntResult(0, 0)
+
+    actual = metrics["local_load_transactions"] / metrics["local_load_transactions_per_request"]
+    predicted = self.get(features, "num_local_load_requests", 0)
+
+    return IntResult(actual, predicted)
+
+  def local_load_transactions_per_request(self, metrics, features):
+    actual = self.get(metrics, "local_load_transactions_per_request", 0)
+    predicted = self.get(features, "num_local_load_transactions_per_request", 0)
+
+    return Result(actual, predicted)
+
+  def local_store_requests(self, metrics, features):
+    if self.get(metrics, "local_store_transactions_per_request", 0) == 0:
+      return IntResult(0, 0)
+
+    actual = metrics["local_store_transactions"] / metrics["local_store_transactions_per_request"]
+    predicted = self.get(features, "num_local_store_requests", 0)
+
+    return IntResult(actual, predicted)
+
+  def local_store_transactions_per_request(self, metrics, features):
+    actual = self.get(metrics, "local_store_transactions_per_request", 0)
+    print(actual)
+    predicted = self.get(features, "num_local_store_transactions_per_request", 0)
+
+    return Result(actual, predicted)
+
   def compare_metrics_and_features(self):
     for stage in self.features:
       self.results[stage] = {}
       self.data[stage] = {}
 
       if not stage in self.metrics:
+        continue
         print("Stage: {} not found.".format(stage))
         return False
 
@@ -261,8 +323,9 @@ class Sample:
       for label in self.results[stage]:
         ratios.append(abs(self.results[stage][label].ratio))
 
-      stages_and_ratios.append((stage, max(ratios)))
-      stages_and_ratios.sort(key=lambda s: s[1])
+      if len(ratios):
+        stages_and_ratios.append((stage, max(ratios)))
+        stages_and_ratios.sort(key=lambda s: s[1])
 
     return [s[0] for s in stages_and_ratios]
 
@@ -297,7 +360,7 @@ class Sample:
 
       if first:
         first = False
-        out += "{:{width}} {:>14} {:>14} {:>7}\n".format(stage_str, "Actual", "Predicted", "Ratio", width=width + 2)
+        out += "{:{width}} {:>14} {:>14} {:>7} {:>7}\n".format(stage_str, "Actual", "Predicted", "Ratio", "Factor", width=width + 2)
       else:
         out += "{:{width}}\n".format(stage_str, width=width + 2)
 
