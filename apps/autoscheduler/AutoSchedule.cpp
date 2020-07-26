@@ -503,8 +503,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (aslog::aslog_level() > 0) {
         aslog(0) << "BEGIN Final generated loop nest and schedule:\n";
         optimal->dump();
-        optimal->print_compute_locations();
         aslog(0) << "END Final generated loop nest and schedule\n";
+        optimal->print_compute_locations();
     }
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
