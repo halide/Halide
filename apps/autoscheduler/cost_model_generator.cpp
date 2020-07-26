@@ -330,10 +330,10 @@ public:
 
         Expr num_shared_mem_loads_per_block = schedule_features(n, idx++, w);
         Expr num_global_mem_loads_per_block = schedule_features(n, idx++, w);
-        Expr num_local_mem_loads_per_thread = schedule_features(n, idx++, w);
+        Expr num_local_mem_loads_per_block = schedule_features(n, idx++, w);
         Expr num_shared_mem_stores_per_block = schedule_features(n, idx++, w);
         Expr num_global_mem_stores_per_block = schedule_features(n, idx++, w);
-        Expr num_local_mem_stores_per_thread = schedule_features(n, idx++, w);
+        Expr num_local_mem_stores_per_block = schedule_features(n, idx++, w);
 
         Expr shared_mem_store_efficiency = schedule_features(n, idx++, w);
         Expr shared_mem_load_efficiency = schedule_features(n, idx++, w);
@@ -505,9 +505,9 @@ public:
 
         shared_mem_load_cost = print_wrap(shared_mem_load_cost, "shared_mem_load_cost_after_load_efficiency", n, w);
 
-        //Expr local_mem_load_cost = num_blocks * num_threads_per_block * num_local_mem_loads_per_thread * relu1(18, w, n);
+        Expr local_mem_load_cost = num_blocks * num_local_mem_loads_per_block * relu1(18, w, n);
 
-        //local_mem_load_cost = print_wrap(local_mem_load_cost, "local_mem_load_cost_after_load_efficiency", n, w);
+        local_mem_load_cost = print_wrap(local_mem_load_cost, "local_mem_load_cost", n, w);
 
         Expr excess_registers_required = expr_branching / num_registers_available_per_thread;
         excess_registers_required = print_wrap(excess_registers_required, "excess_registers_required", n, w);
@@ -515,8 +515,7 @@ public:
         //local_mem_load_cost *= spill_cost;
         //local_mem_load_cost = print_wrap(local_mem_load_cost, "local_mem_load_cost_after_spill_cost", n, w);
 
-        load_cost += global_mem_load_cost + shared_mem_load_cost;
-        //load_cost += global_mem_load_cost + shared_mem_load_cost + local_mem_load_cost;
+        load_cost += global_mem_load_cost + shared_mem_load_cost + local_mem_load_cost;
 
         // Store costs
         Expr shared_mem_store_cost = num_blocks * num_shared_mem_stores_per_block * relu1(29, w, n);
@@ -528,12 +527,12 @@ public:
 
         global_mem_store_cost = print_wrap(global_mem_store_cost, "global_mem_store_cost_after_store_efficiency", n, w);
 
-        Expr local_mem_store_cost = num_blocks * num_threads_per_block * num_local_mem_stores_per_thread * relu1(19, w, n);
+        Expr local_mem_store_cost = num_blocks * num_local_mem_stores_per_block * relu1(19, w, n);
 
-        local_mem_store_cost = print_wrap(local_mem_store_cost, "local_mem_store_cost_after_store_efficiency", n, w);
+        local_mem_store_cost = print_wrap(local_mem_store_cost, "local_mem_store_cost", n, w);
 
-        local_mem_store_cost *= spill_cost;
-        local_mem_store_cost = print_wrap(local_mem_store_cost, "local_mem_store_cost_after_spill_cost", n, w);
+        //local_mem_store_cost *= spill_cost;
+        //local_mem_store_cost = print_wrap(local_mem_store_cost, "local_mem_store_cost_after_spill_cost", n, w);
 
         Expr store_cost = shared_mem_store_cost + global_mem_store_cost + local_mem_store_cost;
 
