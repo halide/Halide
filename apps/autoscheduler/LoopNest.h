@@ -275,11 +275,11 @@ struct LoopNest {
     // index
     double storage_stride(const LoadJacobian& jac, int innermost_storage_dim, const FunctionDAG::Node* storage_node, const Bound& store_bounds, const LoopNest& root) const;
 
-    Strides storage_strides(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const ThreadInfo& thread_info, bool verbose=false) const;
+    Strides compute_strides(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const ThreadInfo& thread_info, bool verbose=false) const;
 
     bool all_strides_exist(const LoadJacobian& jac, const FunctionDAG::Node* storage_node, const LoopNest& root) const;
 
-    void compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root, GlobalMemInfo& global_mem_loads, SharedMemInfo& shared_mem_loads, bool verbose=false) const;
+    void compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root, GlobalMemInfo& global_mem_loads, SharedMemInfo& shared_mem_loads, LocalMemInfo& local_mem_loads, bool verbose=false) const;
 
     bool can_vectorize_access_for_innermost_dim(const LoadJacobian &jac, const FunctionDAG::Node *accessed, int innermost_dim) const;
 
@@ -288,19 +288,17 @@ struct LoopNest {
     int vectorized_access_size(bool verbose=false) const;
 
     template <typename T>
-    void compute_num_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfo<T> &mem_info, bool verbose=false) const;
+    void compute_num_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfoType<T> &mem_info, bool verbose=false) const;
 
     std::pair<double, double> compute_local_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const LoopNest& root, double serial_loop_extents) const;
 
     template <typename T>
-    MemInfo<T> compute_mem_store_info(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, bool verbose) const;
+    MemInfoType<T> compute_mem_store_info(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, bool verbose) const;
 
     template <typename T>
-    void compute_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, MemInfo<T>& mem_info, double serial_loop_extents, bool verbose=false) const;
+    void compute_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, MemInfoType<T>& mem_info, double serial_loop_extents, bool verbose=false) const;
 
     double compute_local_mem_stride(double stride, double bytes) const;
-
-    void compute_local_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, LocalMemInfo& local_mem_info, const LoopNest& root, double serial_loop_extents) const;
 
     // Assumes block, serial, thread or block, thread nesting
     const LoopNest* get_enclosing_block(const LoopNest *parent, const LoopNest *grandparent) const;

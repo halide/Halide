@@ -21,6 +21,8 @@ struct GlobalMem;
 struct GlobalAccessAccumulator;
 struct SharedMem;
 struct SharedAccessAccumulator;
+struct LocalMem;
+struct LocalAccessAccumulator;
 
 template <typename T>
 struct MemTraits;
@@ -28,13 +30,22 @@ struct MemTraits;
 template <>
 struct MemTraits<GlobalMem> {
     static constexpr double bytes_per_transaction = 32;
+    using MemInfoType = GlobalMem;
     using Accumulator = GlobalAccessAccumulator;
 };
 
 template <>
 struct MemTraits<SharedMem> {
     static constexpr double bytes_per_transaction = 128;
+    using MemInfoType = SharedMem;
     using Accumulator = SharedAccessAccumulator;
+};
+
+template <>
+struct MemTraits<LocalMem> {
+    static constexpr double bytes_per_transaction = 32;
+    using MemInfoType = GlobalMem; // Local mem behaves similarly to global mem
+    using Accumulator = LocalAccessAccumulator;
 };
 
 template <typename T>
@@ -93,8 +104,12 @@ private:
     double total_num_bytes = 0;
 };
 
-using GlobalMemInfo = MemInfo<GlobalMem>;
-using SharedMemInfo = MemInfo<SharedMem>;
+template <typename T>
+using MemInfoType = MemInfo<typename MemTraits<T>::MemInfoType>;
+
+using GlobalMemInfo = MemInfoType<GlobalMem>;
+using SharedMemInfo = MemInfoType<SharedMem>;
+using LocalMemInfo = MemInfoType<LocalMem>;
 
 struct Strides {
 public:
@@ -338,33 +353,58 @@ private:
     std::array<std::unordered_set<int64_t>, 32> bank_to_words_accessed;
 };
 
-struct LocalMemInfo {
-    void add_access(double num_accesses, double stride) {
-        total_accesses += num_accesses;
-        add_stride(stride);
-    }
+struct LocalAccessAccumulator {
+    LocalAccessAccumulator(int bytes_per_access, size_t dimensions, bool verbose)
+        : bytes_per_access{bytes_per_access}
+        , dimensions{dimensions}
+        , verbose{verbose}
+    {}
 
-    double average_efficiency() const {
-        if (total_stride == 0) {
-            return 1.0;
-        }
-        return 1.0 / (total_stride / num_entries);
-    }
-
-    double total_accesses = 0;
-
-private:
-    void add_stride(double stride) {
-        if (stride == 0) {
+    void operator()(int thread_id, int x, int y, int z, int active, bool last_thread) {
+        if (!active) {
             return;
         }
 
-        total_stride += std::min(32.0, std::max(1.0, stride));
-        ++num_entries;
+        ++thread_count;
+
+        if (verbose) {
+            aslog(0) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n"; 
+        }
     }
 
-    int num_entries = 0;
-    double total_stride = 0;
+    void add_access_info(int num_requests, LocalMemInfo& local_mem_info, bool is_tail_warp) const {
+        int num_bytes_used_per_request = thread_count * bytes_per_access;
+        int sectors_accessed = std::ceil((float)num_bytes_used_per_request / (float)LocalMemInfo::bytes_per_transaction);
+        int num_transactions_per_request = sectors_accessed;
+
+        if (verbose) {
+            if (is_tail_warp) {
+                aslog(0) << "tail_";
+            }
+            aslog(0) << "num_transactions_per_request = " << num_transactions_per_request << "\n";
+        }
+
+        if (verbose) {
+            if (is_tail_warp) {
+                aslog(0) << "tail_";
+            }
+            aslog(0) << "num_requests_per_block = " << num_requests << "\n";
+        }
+
+        local_mem_info.add_access_info(
+            num_requests,
+            num_transactions_per_request,
+            num_bytes_used_per_request
+        );
+    }
+
+private:
+    int bytes_per_access;
+    size_t dimensions;
+    bool verbose;
+    int thread_count = 0;
+    int unknown_sectors = 0;
+    std::unordered_map<int64_t, std::unordered_set<int64_t>> sectors_accessed;
 };
 
 
