@@ -3595,7 +3595,9 @@ void CodeGen_C::visit(const Load *op) {
     if (dense_ramp_base.defined()) {
         internal_assert(t.is_vector());
         std::string op_name;
-        if ((op->alignment.modulus % op->type.lanes() == 0) && (op->alignment.remainder % op->type.lanes() == 0)) {
+        // TODO(vksnk): generalize this!
+        int native_lanes = 64 / op->type.element_of().bytes();
+        if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
             op_name = "_aligned_load(";
             // debug(0) << "Aligned load\n";
         } else {
@@ -3657,7 +3659,9 @@ void CodeGen_C::visit(const Store *op) {
     if (dense_ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
         string op_name;
-        if ((op->alignment.modulus % op->value.type().lanes() == 0) && (op->alignment.remainder % op->value.type().lanes() == 0)) {
+        // TODO(vksnk): generalize this!
+        int native_lanes = 64 / op->value.type().element_of().bytes();
+        if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
             // debug(0) << "Aligned store\n";
             op_name = "aligned_store(";
         } else {
