@@ -1540,6 +1540,7 @@ typedef xb_vecNx16U uint16x32_t;
 typedef xb_vecN_2x32v int32x16_t;
 typedef xb_vecN_2x32Uv uint32x16_t;
 typedef xb_vecNx48 int48x32_t;
+typedef vboolN_2 uint1x16_t;
 typedef vboolN uint1x32_t;
 typedef vbool2N uint1x64_t;
 
@@ -1770,6 +1771,10 @@ public:
         return r;
     }
 
+   static int16x64_t concat(const int16x32_t& a, const int16x32_t& b) {
+        return int16x64_t(from_native_vector, a, b);
+    }
+
     void aligned_store(void *base, int32_t offset) const {
         memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
     }
@@ -1966,6 +1971,34 @@ HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_interleave_i16(const int16x32_t& a
                                 );
 }
 
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_deinterleave_even_i16(const int16x64_t& a) {
+  return  IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_deinterleave_odd_i16(const int16x64_t& a) {
+  return  IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_1);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_1_i16(const int16x64_t& a) {
+  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_1);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_2_i16(const int16x64_t& a) {
+  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_2);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_3_i16(const int16x64_t& a) {
+  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_3);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_4_i16(const int16x64_t& a) {
+  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_4);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_i16(const int16x64_t& a, int start) {
+  return IVP_SELNX16 (a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
+}
+
 HALIDE_ALWAYS_INLINE uint8x128_t halide_xtensa_dynamic_shuffle(const uint8x128_t& a, const int8x128_t& b, int min_range, int max_range) {
   return IVP_SHFL2NX8U(a, b);
 }
@@ -1996,6 +2029,16 @@ HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_shift_left(const uint16x32_t &a, co
 
 HALIDE_ALWAYS_INLINE uint32x16_t uint32x16_t_shift_left(const uint32x16_t &a, const uint32x16_t &b) {
     return IVP_SLLN_2X32(a, b);
+}
+
+HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_sat_add_i32(const int32x16_t& a,
+                                                                      const int32x16_t& b) {
+  // I am not 100% about it.
+  xb_vecN_2x32v zero = 0;
+  xb_vecN_2x32v one = 1;
+  xb_vecN_2x64w l0 = a * one;
+  IVP_MULAN_2X32(l0, b, one);
+  return IVP_PACKVN_2X64W(l0, zero);
 }
 
 HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_sat_add_i32(const int32x32_t& a,
@@ -2119,6 +2162,10 @@ HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_add_i48(const int48x32_
   int48x32_t r = a;
   IVP_ADDWANX16(r, b, c);
   return r;
+}
+
+HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_u48(const uint16x32_t& a, const uint16x32_t& b) {
+  return IVP_ADDWUNX16(a, b);
 }
 
 HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_u48(const int48x32_t& a, const uint16x32_t& b) {
@@ -2285,6 +2332,11 @@ HALIDE_ALWAYS_INLINE uint32x16_t halide_xtensa_slice_to_native(const uint32x32_t
   return src.native_vector[index];
 }
 
+HALIDE_ALWAYS_INLINE uint1x16_t halide_xtensa_slice_to_native(const uint1x32_t& src, int index, int native_lanes, int total_lanes) {
+  return (index == 0)?IVP_EXTRACTBLN(src):IVP_EXTRACTBHN(src);
+}
+
+
 HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_concat_from_native(const uint32x16_t& a, const uint32x16_t& b) {
     return uint32x32_t(uint32x32_t::from_native_vector, a, b);
 }
@@ -2323,6 +2375,10 @@ inline uint32x16_t halide_xtensa_convert_i48_low_u32(const int48x32_t& src, int 
 
 inline uint32x16_t halide_xtensa_convert_i48_high_u32(const int48x32_t& src, int native_lanes, int total_lines) {
     return IVP_CVT32UNX48H(src);
+}
+
+HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_concat_from_native(const uint1x16_t& a, const uint1x16_t& b) {
+        return IVP_JOINBN_2(b, a);
 }
 
 )INLINE_CODE";
@@ -2941,7 +2997,7 @@ void CodeGen_C::visit(const Div *op) {
     if (is_const_power_of_two_integer(op->b, &bits)) {
         if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
             string sa = print_expr(op->a);
-            print_assignment(op->type, "uint16x32_t_shift_right(" + sa + ", " + std::to_string(bits) + ")");
+            print_assignment(op->type, "IVP_SRLNX16(" + sa + ", " + std::to_string(bits) + ")");
         } else if (op->type.is_uint() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
             string sa = print_expr(op->a);
             print_assignment(op->type, "IVP_SRLN_2X32(" + sa + ", " + std::to_string(bits) + ")");
@@ -3170,7 +3226,7 @@ void CodeGen_C::visit(const Call *op) {
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
         if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-            rhs << "uint16x32_t_shift_right(" << a0 << ", " << a1 << ")";
+            rhs << "IVP_SRLNX16(" << a0 << ", " << a1 << ")";
         } else if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
             rhs << a0 << " >> (int32x16_t)" << a1;
         } else {
@@ -3507,6 +3563,16 @@ string CodeGen_C::print_xtensa_call(const Call *op) {
         op_name = "IVP_AVGRUNX16";
     } else if (op->name == "halide_xtensa_absd_i16") {
         op_name = "IVP_ABSSUBNX16";
+    } else if (op->name == "halide_xtensa_widen_pair_mul_u48") {
+        op_name = "IVP_MULUUPNX16";
+    } else if (op->name == "halide_xtensa_convert_i48_low_i32") {
+        op_name = "IVP_CVT32SNX48L";
+    } else if (op->name == "halide_xtensa_convert_i48_high_i32") {
+        op_name = "IVP_CVT32SNX48H";
+    } else if (op->name == "halide_xtensa_convert_i48_low_u32") {
+        op_name = "IVP_CVT32UNX48L";
+    } else if (op->name == "halide_xtensa_convert_i48_high_u32") {
+        op_name = "IVP_CVT32UNX48H";
     }
 
     rhs << op_name << "(" << with_commas(args) << ")";
@@ -3657,8 +3723,14 @@ void CodeGen_C::visit(const Select *op) {
             << " : " << false_val
             << ")";
     } else {
-        if (op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
+        if (op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
             rhs << "IVP_MOVNX16T(" << true_val << ", " << false_val << ", " << cond << ")";
+        } else if (op->type.is_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
+            rhs << "IVP_MOVNX16UT(" << true_val << ", " << false_val << ", " << cond << ")";
+        } else if (op->type.is_int() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
+            rhs << "IVP_MOVN_2X32T(" << true_val << ", " << false_val << ", " << cond << ")";
+        } else if (op->type.is_uint() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
+            rhs << "IVP_MOVN_2X32UT(" << true_val << ", " << false_val << ", " << cond << ")";
         } else {
             rhs << type << "::select(" << cond << ", " << true_val << ", " << false_val << ")";
         }
@@ -3825,7 +3897,11 @@ void CodeGen_C::visit(const Ramp *op) {
     Type vector_type = op->type.with_lanes(op->lanes);
     string id_base = print_expr(op->base);
     string id_stride = print_expr(op->stride);
-    print_assignment(vector_type, print_type(vector_type) + "::ramp(" + id_base + ", " + id_stride + ")");
+    if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
+        print_assignment(vector_type, "/* ramp */ int32x16_t(" + id_base + ") + IVP_PACKLN_2X64W(IVP_SEQN_2X32() * int32x16_t(" + id_stride + "))");
+    } else {
+        print_assignment(vector_type, print_type(vector_type) + "::ramp(" + id_base + ", " + id_stride + ")");
+    }
 }
 
 void CodeGen_C::visit(const Broadcast *op) {
@@ -4024,15 +4100,20 @@ void CodeGen_C::visit(const Shuffle *op) {
     string src = vecs[0];
     if (op->vectors.size() > 1) {
         ostringstream rhs;
-        string storage_name = unique_name('_');
-        stream << get_indent() << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
-
-        rhs << print_type(op->type) << "::concat(" << op->vectors.size() << ", " << storage_name << ")";
-        src = print_assignment(op->type, rhs.str());
+        if (vecs.size() == 2) {
+            rhs << print_type(op->type) << "::concat(" << with_commas(vecs) << ")";
+            src = print_assignment(op->type, rhs.str());
+        } else {
+            string storage_name = unique_name('_');
+            stream << get_indent() << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
+        }
     }
     ostringstream rhs;
     if (op->type.is_scalar()) {
         rhs << src << "[" << op->indices[0] << "]";
+    } else if (op->is_concat()) {
+        // Do nothing if it's just concat.
+        return;
     } else {
         string indices_name = unique_name('_');
         stream << get_indent() << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";

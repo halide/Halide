@@ -1,4 +1,5 @@
 #include "XtensaOptimize.h"
+#include "AlignLoads.h"
 #include "Bounds.h"
 #include "CSE.h"
 #include "ConciseCasts.h"
@@ -9,6 +10,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Lerp.h"
+#include "LoopCarry.h"
 #include "Simplify.h"
 #include "Substitute.h"
 
@@ -412,33 +414,6 @@ private:
         return IRMutator::visit(op);
     }
 
-    //     Expr visit(const Select* op) {
-    //         if (op->type.is_vector()) {
-    //           static const vector<Pattern> selects = {
-    //             // {"halide_xtensa_amazing_select", select(0 < (((u32(wild_u16x) * u32(wild_u16x)) / 2) + ((u32(wild_u16x) * u32(wild_u16x)) / 2)), bc(wild_i16) - i16(count_leading_zeros(((u32(wild_u16x) * u32(wild_u16x)) / 2) + ((u32(wild_u16x) * u32(wild_u16x)) / 2))), bc(wild_i16))},
-    //             // {"halide_xtensa_funny_select", select(0 < (i32(wild_i16x) * i32(wild_i16x)), bc(wild_i16) - i16(count_leading_zeros((i32(wild_i16x) * i32(wild_i16x)))), bc(wild_i16))},
-    //           };
-    //           vector<Expr> matches;
-    //           for (const auto& p: selects) {
-    //             if (expr_match(p.pattern, op, matches)) {
-    //               debug(0) << "Matched select !! " << p.intrin << matches.size() << "\n";
-
-    //               for (Expr &m : matches) {
-    //                   m = mutate(m);
-    //               }
-
-    //               debug(0) << matches[0].same_as(matches[1]) << " " << matches[3].same_as(matches[4]) << "\n";
-    //               return Call::make(op->type, p.intrin,
-    //                                 //{matches[0], matches[2], matches[5]},
-    //                                 matches,
-    //                     Call::PureExtern);
-    //             }
-
-    //           }
-    //         }
-    //         return IRMutator::visit(op);
-    //     }
-
     Expr visit(const LT *op) override {
         static const vector<Pattern> lts = {
             {"halide_xtensa_i48x_gt_zero", 0 < i32(wild_i48x)},
@@ -507,9 +482,46 @@ private:
             return Call::make(op->type, "halide_xtensa_interleave_i16",
                               {mutate(op->vectors[0]), mutate(op->vectors[1])},
                               Call::PureExtern);
-        } else {
-            return IRMutator::visit(op);
+        } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
+            // static int slice_counter = 0;
+            // slice_counter++;
+            // debug(0) << "Recognized supported slice " << op->slice_begin() << " " << op->vectors[0] << " " << slice_counter << "\n";
+            // Specialize slices which begin from 1, 2, 3 or 4.
+            if (op->slice_begin() < 5) {
+                return Call::make(op->type, "halide_xtensa_slice_start_" + std::to_string(op->slice_begin()) + "_i16",
+                                  {mutate(op->vectors[0])},
+                                  Call::PureExtern);
+            } else {
+                return Call::make(op->type, "halide_xtensa_slice_i16",
+                                  {mutate(op->vectors[0]), op->slice_begin()},
+                                  Call::PureExtern);
+            }
+        } else if (op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
+            if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 64)) {
+                bool is_deinterleave_even = true;
+                for (int ix = 0; ix < op->indices.size(); ix++) {
+                    is_deinterleave_even = is_deinterleave_even && (op->indices[ix] == 2 * ix);
+                }
+
+                if (is_deinterleave_even) {
+                    return Call::make(op->type, "halide_xtensa_deinterleave_even_i16",
+                                      {mutate(op->vectors[0])},
+                                      Call::PureExtern);
+                }
+                bool is_deinterleave_odd = true;
+                for (int ix = 0; ix < op->indices.size(); ix++) {
+                    is_deinterleave_odd = is_deinterleave_odd && (op->indices[ix] == 2 * ix + 1);
+                }
+
+                if (is_deinterleave_odd) {
+                    return Call::make(op->type, "halide_xtensa_deinterleave_odd_i16",
+                                      {mutate(op->vectors[0])},
+                                      Call::PureExtern);
+                }
+            }
         }
+
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Call *op) override {
@@ -545,10 +557,10 @@ private:
             {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
             {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
             // Slice and convert
-            {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 0, wild_i32, wild_i32)},
-            {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 1, wild_i32, wild_i32)},
-            {"halide_xtensa_convert_i48_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 0, wild_i32, wild_i32)},
-            {"halide_xtensa_convert_i48_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 1, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 0, 16, 32)},
+            {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 1, 16, 32)},
+            {"halide_xtensa_convert_i48_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 0, 16, 32)},
+            {"halide_xtensa_convert_i48_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 1, 16, 32)},
             {"halide_xtensa_convert_i16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 0, wild_i32, wild_i32)},
             {"halide_xtensa_convert_i16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 1, wild_i32, wild_i32)},
 
@@ -771,9 +783,9 @@ private:
             std::vector<Expr> concat_args;
             for (int ix = 0; ix < split_to; ix++) {
                 Expr sliced_cond = Call::make(cond.type().with_lanes(native_lanes),
-                                           "halide_xtensa_slice_to_native",
-                                           {cond, ix, native_lanes, total_lanes},
-                                           Call::PureExtern);
+                                              "halide_xtensa_slice_to_native",
+                                              {cond, ix, native_lanes, total_lanes},
+                                              Call::PureExtern);
                 Expr sliced_t = Call::make(t.type().with_lanes(native_lanes),
                                            "halide_xtensa_slice_to_native",
                                            {t, ix, native_lanes, total_lanes},
@@ -792,6 +804,51 @@ private:
 
         return IRMutator::visit(op);
     }
+
+    //     Expr visit(const Load* op) {
+    //         Expr dense_ramp_base = strided_ramp_base(op->index, 1);
+    //         if (dense_ramp_base.defined()) {
+    //             Expr predicate = mutate(op->predicate);
+    //             Expr ramp_base = mutate(op->index.as<Ramp>()->base);
+    //             Expr index = Ramp::make(ramp_base, 1, op->index.type().lanes());
+    //             return Load::make(op->type, op->name, std::move(index),
+    //                               op->image, op->param, std::move(predicate),
+    //                               op->alignment);
+    //         }
+    //         return IRMutator::visit(op);
+    //     }
+
+    //     Stmt visit(const Store* op) {
+    //         Expr dense_ramp_base = strided_ramp_base(op->index, 1);
+    //         if (dense_ramp_base.defined()) {
+    //             Expr predicate = mutate(op->predicate);
+    //             Expr value = mutate(op->value);
+    //             Expr ramp_base = mutate(op->index.as<Ramp>()->base);
+    //             Expr index = Ramp::make(ramp_base, 1, op->index.type().lanes());
+    //             return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment);
+    //         }
+    //         return IRMutator::visit(op);
+    //     }
+
+    //     Expr visit(const Ramp *op) override {
+    //         int native_lanes = get_native_vector_lanes_num(op->type);
+    //         if (native_lanes > 0) {
+    //             int split_to = op->type.lanes() / native_lanes;
+    //             Expr base = mutate(op->base);
+    //             Expr stride = mutate(op->stride);
+
+    //             std::vector<Expr> concat_args;
+    //             for (int ix = 0; ix < split_to; ix++) {
+    //                 Expr r = Ramp::make(base + stride * (native_lanes * ix), stride, native_lanes);
+    //                 concat_args.push_back(std::move(r));
+    //             }
+    //             return Call::make(op->type,
+    //                               "halide_xtensa_concat_from_native",
+    //                               concat_args, Call::PureExtern);
+    //         }
+
+    //         return IRMutator::visit(op);
+    //     }
 
     template<typename Op>
     Expr visit_binop(const Op *op) {
@@ -925,7 +982,7 @@ private:
 public:
     SplitVectorsToNativeSizes() {
         types_to_split = {
-          //{Type(Type::UInt, 1, 64), Type(Type::UInt, 1, 32)},
+            //{Type(Type::UInt, 1, 64), Type(Type::UInt, 1, 32)},
             {Type(Type::Int, 16, 64), Type(Type::Int, 16, 32)},
             {Type(Type::UInt, 16, 64), Type(Type::UInt, 16, 32)},
             {Type(Type::Int, 32, 32), Type(Type::Int, 32, 16)},
@@ -966,16 +1023,28 @@ public:
 
 Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
+
+    s = align_loads(s, 64);
+    s = common_subexpression_elimination(s);
+    //     // Don't simplify here, otherwise it will re-collapse the loads we
+    //     // want to carry across loop iterations.
+
+    //     // Use at most 16 vector registers for carrying values.
+    //     s = loop_carry(s, 16);
+    //     s = simplify(s);
+    //     s = substitute_in_all_lets(s);
     for (int ix = 0; ix < 10; ix++) {
         s = MatchXtensaPatterns().mutate(s);
     }
     // Split to the native vectors sizes.
+    s = substitute_in_all_lets(s);
     s = SplitVectorsToNativeSizes().mutate(s);
     s = SimplifySliceConcat().mutate(s);
     // Extra run to replace cast + concat, etc.
     s = MatchXtensaPatterns().mutate(s);
 
     s = simplify(common_subexpression_elimination(s));
+
     return s;
 }
 
