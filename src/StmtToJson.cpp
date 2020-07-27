@@ -72,7 +72,7 @@ class StmtToJson : public IRVisitor {
         open_obj(node_type);
         print_type(t);
         stream << get_indent() << "value : " << to_string(value) << "\n";
-        close_obj():
+        close_obj();
     }
 
 
@@ -94,7 +94,7 @@ class StmtToJson : public IRVisitor {
         open_obj("Cast");
         print_type(e->type);
         stream << get_indent() << "value : ";
-        e.accept(this); 
+        e->accept(this); 
         close_obj();
     }
 
@@ -129,7 +129,7 @@ class StmtToJson : public IRVisitor {
         print_binop("Div", e);
     }
 
-    void visit(const Mod *) override {
+    void visit(const Mod *e) override {
         print_binop("Mod", e);
     }
 
@@ -219,7 +219,7 @@ class StmtToJson : public IRVisitor {
         e->base.accept(this);
         stream << get_indent() << "stride: ";
         e->stride.accept(this);
-        stream << get_indent << "lanes : " << e->lanes << "\n";
+        stream << get_indent() << "lanes : " << e->lanes << "\n";
         close_obj();
     }
 
@@ -228,12 +228,12 @@ class StmtToJson : public IRVisitor {
         print_type(e->type);
         stream << get_indent() << "value : ";
         e->value.accept(this);
-        stream << get_indent << "lanes : " << e->lanes << "\n";
+        stream << get_indent() << "lanes : " << e->lanes << "\n";
         close_obj();
     }
 
     void visit(const Call *e) override {
-        internal_error() << "Todo: Call node\n";
+        internal_error << "Todo: Call node\n";
     }
 
     void visit(const Let *e) override {
@@ -267,13 +267,13 @@ class StmtToJson : public IRVisitor {
     }
 
     void visit(const ProducerConsumer *) override {
-        internal_error() << "Should not see ProducerConsumer in backend\n";
+        internal_error << "Should not see ProducerConsumer in backend\n";
     }
 
     void visit(const For *s) override {
         open_obj("For");
         stream << get_indent() << "name : "
-               << quoted_str(name) << "\n,";
+               << quoted_str(s->name) << "\n,";
         stream << get_indent() << "min : ";
         s->min.accept(this);
         stream << get_indent() << "extent : ";
@@ -306,18 +306,18 @@ class StmtToJson : public IRVisitor {
         close_obj();
     }
     void visit(const Provide *) override {
-        internal_error() << "Should not see Provide in backend\n";
+        internal_error << "Should not see Provide in backend\n";
     }
 
-    inline void print_vector(vector<Expr> &v) {
+    inline void print_vector(const vector<Expr> &v) {
         stream << get_indent() << "[\n";
         increase_indent();
-        for (auto &v: e) {
+        for (auto &e: v) {
             e->accept(this);
             stream << ",\n";
         }
         decrease_indent();
-        stream << get_indent << "]\n";
+        stream << get_indent() << "]\n";
     }
 
     void visit(const Allocate *s) override {
@@ -352,7 +352,7 @@ class StmtToJson : public IRVisitor {
     }
 
     void visit(const Realize *) override {
-        internal_error() << "Should not see Realize in backend\n";
+        internal_error << "Should not see Realize in backend\n";
     }
 
     void visit(const Block *s) override {
