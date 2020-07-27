@@ -11,7 +11,7 @@ find_halide HALIDE_ROOT
 
 SAMPLES_DIR=${1}
 
-APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator bgu"
+APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator bgu depthwise_separable_conv"
 
 echo "App, Average Greedy Autoschedule Time (s), Average Beam Search Autoschedule Time (s), Average Greedy Compile Time (s), Average Beam Search Total Compile Time (s), Average Number of States Added (Greedy), Average Number of States Added (Beam Search), Average Number of Featurizations Computed (Greedy), Average Number of Featurizations Computed (Beam Search), Average Number of Schedules Enqueued by Cost Model (Greedy), Average Number of Schedules Enqueued by Cost Model (Beam Search), Average Number of Memoization Hits (Greedy), Average Number of Memoization Misses (Greedy), Average Number of Memoization Hits (Beam Search), Average Number of Memoization Misses (Beam Search), Average Featurization Time (Greedy) (ms), Average Featurization Time (Beam Search) (ms), Average Cost Model Evaluation Time (Greedy) (ms), Average Cost Model Evaluation Time (Beam Search) (ms), Average Number of Tilings Generated (Greedy), Average Number of Tilings Accepted (Greedy), Average Number of Tilings Generated (Beam Search), Average Number of Tilings Accepted (Beam Search), Average Time Per Batch (s), Best Schedule Found (ms), r-squared"
 
