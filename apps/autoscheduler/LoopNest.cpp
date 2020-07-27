@@ -986,6 +986,10 @@ bool LoopNest::all_strides_exist(const LoadJacobian &jac, const FunctionDAG::Nod
 }
 
 void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root, GlobalMemInfo& global_mem_loads, SharedMemInfo& shared_mem_loads, LocalMemInfo& local_mem_loads, bool verbose) const {
+    if (consumer_site.is_stored_in_registers()) {
+        return;
+    }
+
     const ThreadInfo &thread_info = *gpu_loop_info.thread_info;
     bool is_shared_mem = consumer_site.gpu_store_memory_type == GPUMemoryType::shared;
 
@@ -2355,9 +2359,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     LoadJacobian j = j2 * j1.first;
                                     new_jacobians.emplace_back(j, e->producer);
                                 }
-                            } else {
-                                new_jacobians.emplace_back(std::move(j1));
                             }
+
+                            new_jacobians.emplace_back(std::move(j1));
                         }
                         jacobians.swap(new_jacobians);
 
@@ -2369,9 +2373,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     LoadJacobian j = j2 * j1.first;
                                     new_thread_jacobians.emplace_back(j, e->producer);
                                 }
-                            } else {
-                                new_thread_jacobians.emplace_back(std::move(j1));
                             }
+
+                            new_thread_jacobians.emplace_back(std::move(j1));
                         }
                         thread_jacobians.swap(new_thread_jacobians);
                     }
