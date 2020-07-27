@@ -930,25 +930,38 @@ Strides LoopNest::compute_strides(const LoadJacobian &jac, int innermost_storage
     }
 
     Strides strides{storage_strides};
-    for (int loop_index : thread_info.loop_indices) {
+    for (const auto& thread_loop_var : thread_info.loop_vars) {
+        int loop_index = stage->get_loop_index_from_var(thread_loop_var);
+        bool loop_index_exists = loop_index >= 0;
+
         std::vector<double> index_strides;
         bool exists = true;
         for (std::size_t i = 0; i < storage_dims.size(); i++) {
-            auto jac_stride = jac(storage_dims[i], loop_index);
-            if (!jac_stride.exists()) {
-                if (verbose) {
-                    aslog(0) << "stride does not exist. loop_index = " << loop_index << "; i = " << i << "\n";
-                    jac.dump("");
-                }
-                exists = false;
-                break;
+            if (verbose) {
+                aslog(0) << "loop_index for this stage = " << loop_index;
+                aslog(0) << "; loop_var = " << thread_loop_var;
+                aslog(0) << "; storage_dim = " << i;
             }
 
-            float s = (float)jac_stride.numerator / (float)jac_stride.denominator;
-            index_strides.push_back(s);
+            if (loop_index_exists) {
+                auto jac_stride = jac(storage_dims[i], loop_index);
+                if (!jac_stride.exists()) {
+                    if (verbose) {
+                        aslog(0) << "; stride does not exist\n";
+                        jac.dump("");
+                    }
+                    exists = false;
+                    break;
+                }
+
+                float s = (float)jac_stride.numerator / (float)jac_stride.denominator;
+                index_strides.push_back(s);
+            } else {
+                index_strides.push_back(0);
+            }
+
             if (verbose) {
-                aslog(0) << "loop_index = " << loop_index << "; storage_dim = " << i;
-                aslog(0) << "; s = " << s << "\n";
+                aslog(0) << "; index_stride = " << index_strides.back() << "\n";
             }
         }
 

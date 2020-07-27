@@ -66,7 +66,12 @@ std::unique_ptr<ThreadInfo> GPULoopInfo::create_thread_info() {
     internal_assert(at_or_inside_thread());
 
     auto max_thread_counts = current_block_loop->get_union_thread_counts(nullptr);
-    std::unique_ptr<ThreadInfo> new_thread_info = make_unique<ThreadInfo>(current_thread_loop->vectorized_loop_index, current_thread_loop->size, max_thread_counts);
+    std::unique_ptr<ThreadInfo> new_thread_info = make_unique<ThreadInfo>(
+        current_thread_loop->vectorized_loop_index,
+        current_thread_loop->size,
+        current_thread_loop->stage->loop,
+        max_thread_counts
+    );
     thread_info = new_thread_info.get();
     return new_thread_info;
 }

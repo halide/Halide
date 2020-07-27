@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "Errors.h"
+#include "FunctionDAG.h"
 
 namespace Halide {
 namespace Internal {
@@ -37,11 +38,7 @@ struct ThreadTileOption {
 };
 
 struct ThreadInfo {
-    ThreadInfo(const std::vector<int64_t>& max_thread_counts) {
-        init_threads_in_this_block(max_thread_counts);
-    }
-
-    ThreadInfo(int vectorized_loop_index, const std::vector<int64_t>& size, const std::vector<int64_t>& max_thread_counts) {
+    ThreadInfo(int vectorized_loop_index, const std::vector<int64_t>& size, const std::vector<FunctionDAG::Node::Loop>& loop, const std::vector<int64_t>& max_thread_counts) {
         init_threads_in_this_block(max_thread_counts);
 
         std::size_t num_thread_loops = 0;
@@ -51,6 +48,7 @@ struct ThreadInfo {
             num_threads *= size[vectorized_loop_index];
             num_thread_loops = 1;
             loop_indices.push_back(vectorized_loop_index);
+            loop_vars.push_back(loop[vectorized_loop_index].var);
         }
 
         for (std::size_t i = 0; i < size.size() && num_thread_loops < 3; i++) {
@@ -66,17 +64,21 @@ struct ThreadInfo {
             num_threads *= size[i];
             ++num_thread_loops;
             loop_indices.push_back(i);
+            loop_vars.push_back(loop[i].var);
         }
 
         if (loop_indices.size() == 0) {
             internal_assert(size.size() > 0);
             ++num_thread_loops;
             loop_indices.push_back(0);
+            loop_vars.push_back(loop[0].var);
         }
 
         internal_assert(num_threads <= num_threads_in_this_block);
         internal_assert(loop_indices.size() == num_thread_loops);
+        internal_assert(loop_vars.size() == num_thread_loops);
         internal_assert(loop_indices.size() > 0 && loop_indices.size() <= 3);
+        internal_assert(loop_vars.size() > 0 && loop_vars.size() <= 3);
 
         count_num_active_warps_per_block();
     }
@@ -213,6 +215,7 @@ struct ThreadInfo {
     int64_t num_threads = 1;
 
     std::vector<int> loop_indices;
+    std::vector<std::string> loop_vars;
 
 private:
     void init_threads_in_this_block(const std::vector<int64_t>& max_thread_counts) {

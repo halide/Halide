@@ -500,6 +500,19 @@ struct FunctionDAG {
             Stage(Halide::Stage s)
                 : stage(s) {
             }
+
+            int get_loop_index_from_var(const std::string& var) const {
+                int i = 0;
+                for (const auto& l : loop) {
+                    if (l.var == var) {
+                        return i;
+                    }
+
+                    ++i;
+                }
+
+                return -1;
+            }
         };
         vector<Stage> stages;
 
