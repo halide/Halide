@@ -59,7 +59,7 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 										$(AUTOSCHED_SRC)/FunctionDAG.cpp \
 										$(AUTOSCHED_SRC)/LoopNest.h \
 										$(AUTOSCHED_SRC)/LoopNest.cpp \
-										$(AUTOSCHED_SRC)/GlobalMemInfo.h \
+										$(AUTOSCHED_SRC)/GPUMemInfo.h \
 										$(AUTOSCHED_SRC)/GPULoopInfo.h \
 										$(AUTOSCHED_SRC)/GPULoopInfo.cpp \
 										$(AUTOSCHED_SRC)/ThreadInfo.h \
