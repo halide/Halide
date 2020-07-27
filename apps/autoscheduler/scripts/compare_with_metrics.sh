@@ -22,6 +22,7 @@ if [ ! -f ${OUTLIERS_FILE} ]; then
     exit
 fi
 
+OUTPUT_FILE=$(dirname ${OUTLIERS_FILE})/metric_comparisons
 if [[ $NUM == 0 ]]; then
     FILES=$(cat "${OUTLIERS_FILE}" | awk -F", " '{print $1}')
 
@@ -29,7 +30,7 @@ if [[ $NUM == 0 ]]; then
         compare_with_profiler ${HALIDE_ROOT} $(dirname "${f}")
     done
 
-    python3 $(dirname $0)/compare_with_metrics.py --outliers "${OUTLIERS_FILE}" --N "${NUM}" | tee -a "$(dirname ${OUTLIERS_FILE})/metrics_comparisons"
+    python3 $(dirname $0)/compare_with_metrics.py --outliers "${OUTLIERS_FILE}" --N "${NUM}" | tee -a "${OUTPUT_FILE}"
     exit
 fi
 
@@ -45,4 +46,4 @@ for f in ${FILES}; do
     compare_with_profiler ${HALIDE_ROOT} $(dirname "${f}")
 done
 
-python3 $(dirname $0)/compare_with_metrics.py --outliers "${OUTLIERS_FILE}" --N "${NUM}" | tee -a "$(dirname ${OUTLIERS_FILE})/metrics_comparisons"
+python3 $(dirname $0)/compare_with_metrics.py --outliers "${OUTLIERS_FILE}" --N "${NUM}" | tee -a "${OUTPUT_FILE}"
