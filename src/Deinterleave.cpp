@@ -789,9 +789,9 @@ class Interleaver : public IRMutator {
         if (result.size() == 1) {
             return result[0];
         } else {
-            // TODO: This block could possible be unordered? Check an
-            // example that does interleaving in c, vectorizing in x,
-            // unrolling in y
+            // TODO: This block could possibly be Unordered. Currently
+            // it doesn't matter because we don't deinterleave if
+            // there are potential memory hazards anyway.
             return Block::make(result, Block::Ordered);
         }
     }
