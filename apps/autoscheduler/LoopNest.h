@@ -238,7 +238,7 @@ struct LoopNest {
                                                       const LoopNest *grandparent,
                                                       const LoopNest *parent) const;
 
-    void promote_allocs_to_registers(const Target &target, StageMap<Sites> &sites) const;
+    bool promote_allocs_to_registers(const Target &target, StageMap<Sites> &sites) const;
 
     // Compute all the sites of interest for each pipeline stage
     void get_sites(const Target& target,

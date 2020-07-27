@@ -577,7 +577,6 @@ void LoopNest::get_allocs_that_can_be_promoted_to_registers(const Target &target
     for (const auto* alloc_node : store_at) {
         const auto& store_site = sites.get(&alloc_node->stages[0]);
         if (store_site.gpu_store_memory_type != GPUMemoryType::local) {
-            can_be_promoted_to_registers.get_or_create(alloc_node) = false;
             continue;
         }
 
@@ -660,14 +659,14 @@ void LoopNest::get_sites(const Target &target,
     }
 }
 
-void LoopNest::promote_allocs_to_registers(const Target &target, StageMap<Sites> &sites) const {
+bool LoopNest::promote_allocs_to_registers(const Target &target, StageMap<Sites> &sites) const {
     NodeMap<bool> can_be_promoted_to_registers;
     get_allocs_that_can_be_promoted_to_registers(target, sites, can_be_promoted_to_registers, nullptr, nullptr);
 
 
     for (auto& node : can_be_promoted_to_registers) {
         if (!node.second) {
-            continue;
+            return false;
         }
 
         for (auto& stage : node.first->stages) {
@@ -675,6 +674,8 @@ void LoopNest::promote_allocs_to_registers(const Target &target, StageMap<Sites>
             sites.get(&stage).gpu_store_memory_type = GPUMemoryType::registers;
         }
     }
+
+    return true;
 }
 
 bool LoopNest::exceeds_serial_extents_limit(const Target &target, const LoopNest *parent, bool in_threads_loop) const {

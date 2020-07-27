@@ -314,7 +314,7 @@ void State::set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *
     internal_assert(type_has_been_set);
 }
 
-void State::compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats, bool verbose) const {
+bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats, bool verbose) const {
     auto feature_root = get_root_for_features(params, target);
 
     StageMap<LoopNest::Sites> sites;
@@ -324,7 +324,9 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
     StageMap<int64_t> total_shared_mem_alloc_sizes;
     total_shared_mem_alloc_sizes.make_large(dag.nodes[0].stages[0].max_id);
     feature_root->get_sites(target, sites, total_shared_mem_alloc_sizes);
-    feature_root->promote_allocs_to_registers(target, sites);
+    if (!feature_root->promote_allocs_to_registers(target, sites)) {
+        return false;
+    }
 
     // For the input nodes and unscheduled outputs, the compute
     // and store sites are root, and the produce and innermost
@@ -424,6 +426,8 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 << n.func.name() << "\n";
         }
     }
+
+    return true;
 }
 
 void State::save_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, std::ostream &out) const {
@@ -596,7 +600,10 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
 
     StageMap<ScheduleFeatures> features;
 
-    compute_featurization(dag, params, target, &features, stats, verbose);
+    if (!compute_featurization(dag, params, target, &features, stats, verbose)) {
+        Filter(root.get()) << "Contains a local allocation that likely cannot be promoted to registers\n";
+        return false;
+    }
 
     cost = 0;
 

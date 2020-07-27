@@ -126,7 +126,7 @@ struct State {
 
     void set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *, int>>& parent, const LoopNest* loop, LoopNest::Sites& site) const;
 
-    void compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats, bool verbose=false) const;
+    bool compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats, bool verbose=false) const;
 
     void save_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, std::ostream &out) const;
 
