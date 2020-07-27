@@ -7,7 +7,7 @@
 #define LOOP_NEST_H
 
 #include "FunctionDAG.h"
-#include "GlobalMemInfo.h"
+#include "GPUMemInfo.h"
 #include "GPULoopInfo.h"
 #include "PerfectHashMap.h"
 #include "SearchSpaceOptions.h"

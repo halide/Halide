@@ -9,7 +9,7 @@
 
 /** \file
  *
- * Data structure that helps track global memory access information. Useful when 
+ * Data structures that help track memory access information. Useful when
  * computing GPU features
  */
 
