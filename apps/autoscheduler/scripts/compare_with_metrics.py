@@ -351,10 +351,12 @@ class Sample:
       #data_width = max([len(k.value) for k in self.extract_data.keys()])
       #width = max(width, data_width)
 
-      registers_64 = self.metrics[stage][Data.REGISTERS_64.value]
+      registers_64 = "?"
       registers_256 = "?"
       if Data.REGISTERS_64.value in self.metrics[stage]:
-        registers_256 = self.metrics[stage][Data.REGISTERS_64.value]
+        registers_64 = self.metrics[stage][Data.REGISTERS_64.value]
+      if Data.REGISTERS_256.value in self.metrics[stage]:
+        registers_256 = self.metrics[stage][Data.REGISTERS_256.value]
 
       stage_str = "{} (Reg. = {}; {})".format(stage, registers_64, registers_256)
 
