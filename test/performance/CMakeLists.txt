@@ -21,6 +21,7 @@ tests(GROUPS performance
       parallel_performance.cpp
       profiler.cpp
       realize_overhead.cpp
+      register_promotion.cpp
       rfactor.cpp
       rgb_interleaved.cpp
       sort.cpp

@@ -588,7 +588,7 @@ class Interleaver : public IRMutator {
         };
         std::vector<Candidate> candidates;
         std::vector<Stmt> pending;
-        pending.push_back(op);
+        pending.emplace_back(op);
         while (!pending.empty()) {
             Stmt next = std::move(pending.back());
             pending.pop_back();
