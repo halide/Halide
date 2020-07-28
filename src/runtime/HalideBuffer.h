@@ -73,13 +73,40 @@ bool any_zero(const Container &c) {
     }
     return false;
 }
+
+#ifdef HALIDE_BUFFER_DO_NOT_USE_STD_ATOMIC
+// Some embedded platforms may not have fully compliant versions of std::atomic<>
+// available (or, more specifically, the underlying __atomic primitives), despite
+// claims of C++11 compliance. This is a workaround to allow those platforms
+// to use this class safely by defining HALIDE_BUFFER_DO_NOT_USE_STD_ATOMIC.
+struct AtomicRefCount {
+    HALIDE_ALWAYS_INLINE explicit AtomicRefCount(int c)
+        : count(c) {
+    }
+    HALIDE_ALWAYS_INLINE int operator++() {
+        return __sync_fetch_and_add(&count, 1);
+    }
+    HALIDE_ALWAYS_INLINE int operator--() {
+        return __sync_fetch_and_add(&count, -1);
+    }
+    HALIDE_ALWAYS_INLINE operator int() const {
+        return count;
+    }
+
+private:
+    int count{1};
+};
+#else
+using AtomicRefCount = std::atomic<int>;
+#endif
+
 }  // namespace Internal
 
 /** A struct acting as a header for allocations owned by the Buffer
  * class itself. */
 struct AllocationHeader {
     void (*deallocate_fn)(void *);
-    std::atomic<int> ref_count;
+    Internal::AtomicRefCount ref_count;
 
     // Note that ref_count always starts at 1
     AllocationHeader(void (*deallocate_fn)(void *))
@@ -100,7 +127,7 @@ enum struct BufferDeviceOwnership : int {
 struct DeviceRefCount {
     // This is only ever constructed when there's something to manage,
     // so start at one.
-    std::atomic<int> count{1};
+    Internal::AtomicRefCount count{1};
     BufferDeviceOwnership ownership{BufferDeviceOwnership::Allocated};
 };
 
@@ -182,7 +209,7 @@ private:
     /** Increment the reference count of any owned allocation */
     void incref() const {
         if (owns_host_memory()) {
-            alloc->ref_count++;
+            ++alloc->ref_count;
         }
         if (buf.device) {
             if (!dev_ref_count) {
@@ -193,7 +220,7 @@ private:
                 // of it.
                 dev_ref_count = new DeviceRefCount;
             }
-            dev_ref_count->count++;
+            ++dev_ref_count->count;
         }
     }
 
