@@ -1,5 +1,6 @@
 #include <set>
 
+#include "test.h"
 #include "Tiling.h"
 
 using namespace Halide;
@@ -33,15 +34,14 @@ std::string to_string(const tilings_t& tilings) {
     return s.str();
 }
 
-void expect_eq(int line, const tilings_t& expected, const tilings_t& actual) {
-    user_assert(expected == actual)
-        << "Assert failed on line " << line << "."
-        << "\nExpected value = " << to_string(expected)
-        << "\nActual value = " << to_string(actual);
+template <>
+void Halide::Internal::Autoscheduler::expect_eq(int line, const tilings_t& expected, const tilings_t& actual) {
+    expect_eq(line, to_string(expected), to_string(actual));
 }
 
 void test_serial_tilings() {
     {
+        // Don't split small, odd extents
         vector<int64_t> s;
         s.push_back(3);
 
@@ -50,7 +50,16 @@ void test_serial_tilings() {
 
         vector<vector<int64_t>> actual = generate_serial_tilings(s, 0, 0, 0, {}, false, true);
 
-        // Don't split small, odd extents
+        EXPECT_EQ(expected, actual);
+
+        s.back() = 5;
+        expected.back().back() = 5;
+        actual = generate_serial_tilings(s, 0, 0, 0, {}, false, true);
+        EXPECT_EQ(expected, actual);
+
+        s.back() = 7;
+        expected.back().back() = 7;
+        actual = generate_serial_tilings(s, 0, 0, 0, {}, false, true);
         EXPECT_EQ(expected, actual);
 
         // If 'allow_inner_ones' is false, don't split
