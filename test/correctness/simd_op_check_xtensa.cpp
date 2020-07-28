@@ -87,7 +87,7 @@ public:
         check("halide_xtensa_widen_mul_i48", vector_width / 2, i32(i16_1) * i32(i16_2));
         check("halide_xtensa_widen_mul_u48", vector_width / 2, u32(u16_1) * u32(u16_2));
         check("halide_xtensa_widen_pair_mul_i48", vector_width / 2, i32(i16_1) * i32(i16_2) + i32(i16_3) * i32(i16_4));
-        check("halide_xtensa_widen_pair_mul_u48", vector_width / 2, u32(u16_1) * u32(u16_2) + u32(u16_3) * u32(u16_4));
+        check("IVP_MULUUPNX16", vector_width / 2, u32(u16_1) * u32(u16_2) + u32(u16_3) * u32(u16_4));
 
         // check("halide_xtensa_widen_add_i48", vector_width / 2, i32(i16_1) + i32(i16_2));
         // check("halide_xtensa_widen_add_u48", vector_width / 2, u32(u16_1) + u32(u16_2));
@@ -97,8 +97,8 @@ public:
         check("IVP_PACKLN_2X64W", vector_width / 4, i32_1 * i32_2);
 
         // Shifts.
-        check("uint16x32_t_shift_right", vector_width / 2, u16_1 >> u16_2);
-        check("uint16x32_t_shift_right", vector_width / 2, u16_1 / 4);
+        check("IVP_SRLNX16", vector_width / 2, u16_1 >> u16_2);
+        check("IVP_SRLNX16", vector_width / 2, u16_1 / 4);
         // Somehow there is an >> operator defined for these.
         // check("uint32x16_t_shift_right", vector_width / 4, u32_1 >> u32_2);
         check("IVP_SRLN_2X32", vector_width / 4, u32_1 / 4);
