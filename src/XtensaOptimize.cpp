@@ -499,7 +499,7 @@ private:
         } else if (op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
             if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 64)) {
                 bool is_deinterleave_even = true;
-                for (int ix = 0; ix < op->indices.size(); ix++) {
+                for (int ix = 0; ix < (int)op->indices.size(); ix++) {
                     is_deinterleave_even = is_deinterleave_even && (op->indices[ix] == 2 * ix);
                 }
 
@@ -509,7 +509,7 @@ private:
                                       Call::PureExtern);
                 }
                 bool is_deinterleave_odd = true;
-                for (int ix = 0; ix < op->indices.size(); ix++) {
+                for (int ix = 0; ix < (int)op->indices.size(); ix++) {
                     is_deinterleave_odd = is_deinterleave_odd && (op->indices[ix] == 2 * ix + 1);
                 }
 
