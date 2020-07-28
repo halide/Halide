@@ -1554,16 +1554,31 @@ double LoopNest::points_accessed_per_thread(const MachineParams& params, const T
     // In some cases, the region_required is larger than the actual number of
     // points that need to be loaded e.g. if f(x) = g(x) + g(x + 100), the
     // region_required of g will be the range [x, x + 100] but really only 2
-    // points need to be loaded. In cases like this, options 1. will
+    // points need to be loaded. In cases like this, option 1. will
     // over-estimate and we instead use the upper bound from option 2.
     double points_accessed = std::min(points_accessed_by_region_required, points_accessed_by_loop_extents);
     points_accessed *= gpu_loop_info.total_outer_serial_extents;
+
+    int64_t total_inner_serial_extents_outside_realization = gpu_loop_info.get_total_inner_serial_extents_outside_realization(this);
+
+    // If you have a realization inside a serial loop e.g.
+    // f 80 gpu_block
+    //  f 32 gpu_thread
+    //   f 8 gpu_serial
+    //    realize: g
+    //    g 1 gpu_serial
+    //     g 1 gpu_simd
+    //    f 1 gpu_simd
+    // LICM won't be able to hoist g's loads/stores above its realization level
+    // so 'f 8' will contribute a factor of 8 to the total
+    points_accessed *= total_inner_serial_extents_outside_realization;
 
     if (verbose) {
         aslog(0) << "\n";
         aslog(0) << "region_required = " << num_points << "\n";
         aslog(0) << "total_inner_serial_extents = " << gpu_loop_info.total_inner_serial_extents << "\n";
         aslog(0) << "total_outer_serial_extents = " << gpu_loop_info.total_outer_serial_extents << "\n";
+        aslog(0) << "total_inner_serial_extents_outside_realization = " << total_inner_serial_extents_outside_realization << "\n";
         aslog(0) << "product_of_non_licm_non_unrolled_extents = " << product_of_non_licm_non_unrolled_extents << "\n";
         aslog(0) << "n = " << n << "\n";
         aslog(0) << "points_accessed_by_region_required = " << points_accessed_by_region_required << "\n";

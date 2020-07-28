@@ -26,6 +26,7 @@ void GPULoopInfo::update(const Target& target, const LoopNest* loop) {
 
         if (at_or_inside_thread()) {
             total_inner_serial_extents *= serial_loop_extents;
+            inner_loop_stack.push_back(loop);
         } else {
             total_outer_serial_extents *= serial_loop_extents;
         }
@@ -56,6 +57,32 @@ std::vector<int64_t> GPULoopInfo::get_inner_serial_loop_extents(const LoopNest* 
     for (std::size_t i = 0; i < N; i++) {
         auto extent = bounds->loops(loop_nest->stage->index, i).extent();
         extents.push_back(extent);
+    }
+
+    return extents;
+}
+
+// If you have a realization inside a serial loop e.g.
+// f 80 gpu_block
+//  f 32 gpu_thread
+//   f 8 gpu_serial
+//    realize: g
+//    g 1 gpu_serial
+//     g 1 gpu_simd
+//    f 1 gpu_simd
+// This method will give the extents of the loops inside the thread level but
+// outside the given loop_nest's realization e.g. 8 for g above.
+int64_t GPULoopInfo::get_total_inner_serial_extents_outside_realization(const LoopNest* loop_nest) const {
+    int64_t extents = 1;
+
+    for (const auto* loop : inner_loop_stack) {
+        if (loop->node == loop_nest->node) {
+            break;
+        }
+
+        for (auto c : loop->size) {
+            extents *= c;
+        }
     }
 
     return extents;
