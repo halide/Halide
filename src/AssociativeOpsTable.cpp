@@ -1,6 +1,8 @@
 #include "AssociativeOpsTable.h"
 #include "IRPrinter.h"
 
+#include <mutex>
+
 namespace Halide {
 namespace Internal {
 
@@ -322,7 +324,7 @@ std::string print_types(const vector<Type> &types) {
 const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     internal_assert(!exprs.empty());
 
-    static vector<AssociativePattern> empty;
+    static const vector<AssociativePattern> empty;
 
     if (exprs.size() > 2) {
         debug(5) << "Returning empty table since tuple size is larger than 2\n";
@@ -365,6 +367,11 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     }
 
     if (root != RootExpr::Unknown) {
+        // get_ops_table_helper() lazily initializes the table, so ensure
+        // that multiple threads can't try to do so at the same time.
+        static std::mutex ops_table_lock;
+        std::lock_guard<std::mutex> lock_guard(ops_table_lock);
+
         const vector<AssociativePattern> &table = get_ops_table_helper(types, root, exprs.size());
         debug(7) << "Table size: " << table.size() << "\n";
         for (const auto &p : table) {

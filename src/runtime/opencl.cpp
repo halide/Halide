@@ -6,8 +6,6 @@
 
 #include "mini_cl.h"
 
-#define INLINE inline __attribute__((always_inline))
-
 namespace Halide {
 namespace Runtime {
 namespace Internal {
@@ -51,7 +49,7 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
 }
 
 template<typename T>
-INLINE T get_cl_symbol(void *user_context, const char *name) {
+ALWAYS_INLINE T get_cl_symbol(void *user_context, const char *name) {
     T s = (T)halide_opencl_get_symbol(user_context, name);
     if (!s) {
         error(user_context) << "OpenCL API not found: " << name << "\n";
@@ -249,7 +247,7 @@ public:
     cl_int error_code;
 
     // Constructor sets 'error_code' if any occurs.
-    INLINE ClContext(void *user_context)
+    ALWAYS_INLINE ClContext(void *user_context)
         : user_context(user_context),
           context(NULL),
           cmd_queue(NULL),
@@ -270,7 +268,7 @@ public:
         }
     }
 
-    INLINE ~ClContext() {
+    ALWAYS_INLINE ~ClContext() {
         halide_release_cl_context(user_context);
     }
 };

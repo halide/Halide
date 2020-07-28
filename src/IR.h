@@ -345,11 +345,10 @@ struct Provide : public StmtNode<Provide> {
 
 /** Allocate a scratch area called with the given name, type, and
  * size. The buffer lives for at most the duration of the body
- * statement, within which it is freed. It is an error for an allocate
- * node not to contain a free node of the same buffer. Allocation only
- * occurs if the condition evaluates to true. Within the body of the
- * allocation, defines a symbol with the given name and the type
- * Handle(). */
+ * statement, within which it may or may not be freed explicitly with
+ * a Free node with a matching name. Allocation only occurs if the
+ * condition evaluates to true. Within the body of the allocation,
+ * defines a symbol with the given name and the type Handle(). */
 struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
@@ -817,6 +816,33 @@ struct Atomic : public StmtNode<Atomic> {
                      Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Atomic;
+};
+
+/** Horizontally reduce a vector to a scalar or narrower vector using
+ * the given commutative and associative binary operator. The reduction
+ * factor is dictated by the number of lanes in the input and output
+ * types. Groups of adjacent lanes are combined. The number of lanes
+ * in the input type must be a divisor of the number of lanes of the
+ * output type.  */
+struct VectorReduce : public ExprNode<VectorReduce> {
+    // 99.9% of the time people will use this for horizontal addition,
+    // but these are all of our commutative and associative primitive
+    // operators.
+    typedef enum {
+        Add,
+        Mul,
+        Min,
+        Max,
+        And,
+        Or,
+    } Operator;
+
+    Expr value;
+    Operator op;
+
+    static Expr make(Operator op, Expr vec, int lanes);
+
+    static const IRNodeType _node_type = IRNodeType::VectorReduce;
 };
 
 }  // namespace Internal

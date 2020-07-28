@@ -49,6 +49,11 @@ Buffer<uint8_t> make_planar(uint8_t *host, int W, int H) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
 
     const int W = 1 << 11, H = 1 << 11;
 

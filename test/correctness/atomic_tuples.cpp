@@ -18,6 +18,11 @@ public:
 };
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] Skipping test for WebAssembly as it does not support atomics yet.\n");
+        return 0;
+    }
+
     {
         Func f, g;
         Var x, y;
