@@ -504,12 +504,6 @@ public:
         return r;
     }
 
-    static Vec aligned_load(const void *base, int32_t offset) {
-        Vec r(empty);
-        memcpy(&r.elements[0], ((const ElementType*)base + offset), sizeof(r.elements));
-        return r;
-    }
-
     static Vec load(const void *base, int32_t offset) {
         Vec r(empty);
         memcpy(&r.elements[0], ((const ElementType*)base + offset), sizeof(r.elements));
@@ -523,10 +517,6 @@ public:
             r.elements[i] = ((const ElementType*)base)[offset[i]];
         }
         return r;
-    }
-
-    void aligned_store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &this->elements[0], sizeof(this->elements));
     }
 
     void store(void *base, int32_t offset) const {
@@ -582,16 +572,6 @@ public:
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = !r.elements[i];
         }
-        return r;
-    }
-
-    static Vec count_leading_zeros(const Vec &a) {
-        Vec r(empty);
-
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = halide_count_leading_zeros(a[i]);
-        }
-
         return r;
     }
 
@@ -924,592 +904,424 @@ private:
     enum Empty { empty };
     CppVector(Empty) {}
 };
+#if 0
+typedef CppVector<uint8_t, 32> uint1x32_t;
+#endif
+)INLINE_CODE";
 
-#if 1 // all types
-class uint1x32_t {
-  vboolN mask_16_t;
-  vboolN_2 mask_32_t[2];
-
-  template <typename, size_t> friend class CppVector;
-
- public:
-  enum Empty { empty };
-
-  inline uint1x32_t(Empty) {}
-
-  enum FromCppVector { from_native_vector };
-
-  inline uint1x32_t(FromCppVector, vboolN m) : mask_16_t(m) {
-    *((vboolN*)&mask_32_t[0]) = m;
-  }
-  inline uint1x32_t(FromCppVector, vboolN_2 m0, vboolN_2 m1) {
-    mask_32_t[0] = m0;
-    mask_32_t[1] = m1;
-    mask_16_t = *((vboolN*)&mask_32_t[0]);
-  }
-};
-
-template <> class CppVector<int16_t, 32>;
-template <> class CppVector<uint16_t, 32>;
-template <> class CppVector<int32_t, 32>;
-template <> class CppVector<uint32_t, 32>;
-
-inline CppVector<int16_t, 32> convert_to_int16x32_from_uint16x32(const CppVector<uint16_t, 32>& src);
-inline CppVector<int16_t, 32> convert_to_int16x32_from_int32x32(const CppVector<int32_t, 32>& src);
-inline CppVector<int16_t, 32> convert_to_int16x32_from_uint32x32(const CppVector<uint32_t, 32>& src);
-inline CppVector<uint16_t, 32> convert_to_uint16x32_from_int32x32(const CppVector<int32_t, 32>& src);
-inline CppVector<uint16_t, 32> convert_to_uint16x32_from_uint32x32(const CppVector<uint32_t, 32>& src);
-
-#if 1
-template <>
-class CppVector<int16_t, 32> {
-  typedef CppVector<int16_t, 32> Vec;
-  typedef int16_t ElementType;
-  typedef xb_vecNx16 CppVectorType;
-  static const int Lanes = 32;
-  typedef uint1x32_t Mask;
-
-  template <typename, size_t> friend class CppVector;
+        const char *native_vector_decl = R"INLINE_CODE(
+#if __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+template <typename ElementType_, size_t Lanes_>
+class NativeVector {
 public:
-    CppVectorType native_vector;
+    typedef ElementType_ ElementType;
+    static const size_t Lanes = Lanes_;
+    typedef NativeVector<ElementType, Lanes> Vec;
+    typedef NativeVector<uint8_t, Lanes> Mask;
 
-    enum Empty { empty };
-    inline CppVector(Empty) {}
+#if __has_attribute(ext_vector_type)
+    typedef ElementType_ NativeVectorType __attribute__((ext_vector_type(Lanes), aligned(sizeof(ElementType))));
+#elif __has_attribute(vector_size) || __GNUC__
+    typedef ElementType_ NativeVectorType __attribute__((vector_size(Lanes * sizeof(ElementType)), aligned(sizeof(ElementType))));
+#endif
 
-    enum FromCppVector { from_native_vector };
-    inline CppVector(FromCppVector, const CppVectorType &src) {
-        native_vector = src;
-    }
-
-    static Vec broadcast(const ElementType &v) {
-        return Vec(from_native_vector, v);
-    }
-
-    static Vec aligned_load(const void *base, int32_t offset) {
-        return Vec(from_native_vector, *((const CppVectorType *)((ElementType*)base + offset)));
-    }
-
-    // TODO: could this be improved by taking advantage of native operator support?
-    static Vec load(const void *base, int32_t offset) {
-        xb_vec2Nx8 nv8;
-        xb_vec2Nx8* ptr = (xb_vec2Nx8*)((const ElementType*)base + offset);
-        IVP_L2U2NX8_XP(nv8, ptr, 0);
-        return Vec(from_native_vector, IVP_MOVNX16_FROM2NX8(nv8));
-    }
-
-    template <typename OtherVec>
-    static Vec load(const void *base, const OtherVec& offset) {
-        ElementType tmp[Lanes];
-        int offsets[Lanes];
-        offset.store(&offsets[0], 0);
-        for (int i = 0; i < Lanes; i++) {
-            tmp[i] = ((const ElementType*)base)[offsets[i]];
+    NativeVector &operator=(const Vec &src) {
+        if (this != &src) {
+            native_vector = src.native_vector;
         }
-
-        return Vec(from_native_vector, *((CppVectorType*)tmp));
+        return *this;
     }
 
-    void aligned_store(void *base, int32_t offset) const {
-        *((CppVectorType *)((ElementType*)base + offset)) = native_vector;
+    /* not-explicit */ NativeVector(const Vec &src) {
+        native_vector = src.native_vector;
     }
 
-    void store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector, sizeof(ElementType) * Lanes);
-    }
-
-    friend Vec operator+(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector + b.native_vector);
-    }
-
-    friend Vec operator-(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector - b.native_vector);
-    }
-
-    friend Vec operator*(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, IVP_MULNX16PACKL(a.native_vector, b.native_vector));
-    }
-
-    friend Vec operator>>(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, IVP_SRANX16(a.native_vector, b.native_vector));
-    }
-
-    friend Vec operator<<(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, IVP_SLANX16(a.native_vector, b.native_vector));
-    }
-
-    friend Mask operator<(const Vec &a, const Vec &b) {
-        return Mask(uint1x32_t::from_native_vector, a.native_vector < b.native_vector);
-    }
-
-    ElementType operator[](size_t i) const {
-        ElementType tmp[Lanes];
-        memcpy(&tmp[0], &native_vector, sizeof(ElementType) * Lanes);
-        return tmp[i];
-    }
-
-    static Vec select(const Mask &cond, const Vec &true_value, const Vec &false_value) {
-        return Vec(from_native_vector, IVP_MOVNX16T(true_value.native_vector, false_value.native_vector, cond.mask_16_t));
-    }
-
-    template <typename OtherVec>
-    static Vec convert_from(const CppVector<uint16_t, 32>& src) {
-      return convert_to_int16x32_from_uint16x32(src);
-    }
-
-    template <typename OtherVec>
-    static Vec convert_from(const CppVector<int32_t, 32>& src) {
-      return convert_to_int16x32_from_int32x32(src);
-    }
-
-    template <typename OtherVec>
-    static Vec convert_from(const CppVector<uint32_t, 32>& src) {
-        return convert_to_int16x32_from_uint32x32(src);
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    static Vec max(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, IVP_MAXNX16(a.native_vector, b.native_vector));
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    static Vec min(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, IVP_MINNX16(a.native_vector, b.native_vector));
-    }
-
-    static Vec count_leading_zeros(const Vec &a) {
-        return Vec(from_native_vector, IVP_NSANX16(a.native_vector));
-    }
-};
-#endif
-
-#if 1
-template <>
-class CppVector<uint16_t, 32> {
-  typedef CppVector<uint16_t, 32> Vec;
-  typedef uint16_t ElementType;
-  typedef xb_vecNx16U CppVectorType;
-  static const int Lanes = 32;
-  typedef uint1x32_t Mask;
-
-
-  template <typename, size_t> friend class CppVector;
-  friend CppVector<int16_t, 32> convert_to_int16x32_from_uint16x32(const CppVector<uint16_t, 32>& src);
-public:
-    CppVectorType native_vector;
-
-    enum Empty { empty };
-    inline CppVector(Empty) {}
-
-    enum FromCppVector { from_native_vector };
-    inline CppVector(FromCppVector, const CppVectorType &src) {
-        native_vector = src;
+    NativeVector() {
+        native_vector = (NativeVectorType){};
     }
 
     static Vec broadcast(const ElementType &v) {
-        return Vec(from_native_vector, v);
+        Vec zero; // Zero-initialized native vector.
+        return zero + v;
     }
 
-    friend Vec operator+(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector + b.native_vector);
-    }
-
-    friend Vec operator-(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector - b.native_vector);
-    }
-
-    friend Vec operator>>(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, IVP_SRANX16(a.native_vector, b.native_vector));
-    }
-
-    friend Mask operator<(const Vec &a, const Vec &b) {
-        return Mask(uint1x32_t::from_native_vector, a.native_vector < b.native_vector);
-    }
-
-
-    template <typename OtherVec>
-    static Vec convert_from(const CppVector<int16_t, 32>& src) {
-        return Vec(from_native_vector, src.native_vector);
-    }
-
-    template <typename OtherVec>
-    static Vec convert_from(const CppVector<int32_t, 32>& src) {
-        return convert_to_uint16x32_from_int32x32(src);
-    }
-
-    template <typename OtherVec>
-    static Vec convert_from(const CppVector<uint32_t, 32>& src) {
-        return convert_to_uint16x32_from_uint32x32(src);
-    }
-
-    static Vec count_leading_zeros(const Vec &a) {
-        return Vec(from_native_vector, IVP_NSAUNX16(a.native_vector));
-    }
-};
-#endif
-
-#if 1
-template <>
-class CppVector<int32_t, 32> {
-  typedef CppVector<int32_t, 32> Vec;
-  typedef int32_t ElementType;
-  typedef xb_vecN_2x32v CppVectorType;
-  static const int Lanes = 32;
-  typedef uint1x32_t Mask;
-
-  template <typename, size_t> friend class CppVector;
-  friend CppVector<int16_t, 32> convert_to_int16x32_from_int32x32(const CppVector<int32_t, 32>& src);
-  friend CppVector<uint16_t, 32> convert_to_uint16x32_from_int32x32(const CppVector<int32_t, 32>& src);
-public:
-
-    CppVectorType native_vector[2];
-
-    enum Empty { empty };
-    inline CppVector(Empty) {}
-
-    enum FromCppVector { from_native_vector };
-    inline CppVector(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
-        native_vector[0] = src1;
-        native_vector[1] = src2;
-    }
-
-    static Vec broadcast(const ElementType &v) {
-        return Vec(from_native_vector, v, v);
-    }
-
+    // TODO: this should be improved by taking advantage of native operator support.
     static Vec ramp(const ElementType &base, const ElementType &stride) {
-        CppVectorType one_to_n = IVP_SEQN_2X32();
-        CppVectorType base_w = base;
-        CppVectorType stride_w = stride;
-        CppVectorType lanes_2 = Lanes / 2;
-        return Vec(from_native_vector,
-                    base_w + IVP_PACKLN_2X64W(one_to_n * stride_w),
-                    base_w + IVP_PACKLN_2X64W((lanes_2 + one_to_n) * stride_w));
-    }
-
-    // TODO: could this be improved by taking advantage of native operator support?
-    static Vec load(const void *base, int32_t offset) {
-        xb_vec2Nx8 nv8_0, nv8_1;
-        xb_vec2Nx8* ptr = (xb_vec2Nx8*)((const ElementType*)base + offset);
-        IVP_L2U2NX8_XP(nv8_0, ptr, 0);
-        ptr++;
-        IVP_L2U2NX8_XP(nv8_1, ptr, 0);
-        return Vec(from_native_vector,
-                    IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(nv8_0)),
-                    IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(nv8_1)));
-    }
-
-    void aligned_store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-
-    void store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-
-    friend Vec operator+(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector[0] + b.native_vector[0], a.native_vector[1] + b.native_vector[1]);
-    }
-
-    friend Vec operator-(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector[0] - b.native_vector[0], a.native_vector[1] - b.native_vector[1]);
-    }
-
-    friend Vec operator*(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_PACKLN_2X64W(a.native_vector[0] * b.native_vector[0]),
-                    IVP_PACKLN_2X64W(a.native_vector[1] * b.native_vector[1]));
-    }
-
-    friend Vec operator&(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                      a.native_vector[0] & b.native_vector[0],
-                      a.native_vector[1] & b.native_vector[1]);
-    }
-
-    friend Vec operator>>(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector[0] >> b.native_vector[0], a.native_vector[1] >> b.native_vector[1]);
-    }
-
-    friend Vec operator<<(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector[0] << b.native_vector[0], a.native_vector[1] << b.native_vector[1]);
-    }
-
-    ElementType operator[](size_t i) const {
-        ElementType tmp[Lanes];
-        memcpy(&tmp[0], &native_vector[0], sizeof(ElementType) * Lanes);
-        return tmp[i];
-    }
-
-    friend Mask operator<(const Vec &a, const Vec &b) {
-        return Mask(uint1x32_t::from_native_vector,
-                    a.native_vector[0] < b.native_vector[0],
-                    a.native_vector[1] < b.native_vector[1]);
-    }
-
-    static Vec select(const Mask &cond, const Vec &true_value, const Vec &false_value) {
-        return Vec(from_native_vector,
-                    IVP_MOVN_2X32T(true_value.native_vector[0], false_value.native_vector[0], cond.mask_32_t[0]),
-                    IVP_MOVN_2X32T(true_value.native_vector[1], false_value.native_vector[1], cond.mask_32_t[1]));
-    }
-
-    template <typename OtherVec>
-    static Vec convert_from(const CppVector<int16_t, 32>& src) {
-        xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src.native_vector);
-        return Vec(from_native_vector, IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
-    }
-
-    template <typename OtherVec>
-    static Vec convert_from(const CppVector<int64_t, 32>& src) {
         Vec r(empty);
-
-        ElementType tmp[Lanes];
-        for (int i = 0; i < Lanes; i++) {
-            tmp[i] = static_cast<typename Vec::ElementType>(src[i]);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = base + stride * i;
         }
-        memcpy(&r.native_vector, &tmp[0], sizeof(ElementType) * Lanes);
-
         return r;
     }
 
+    // TODO: could this be improved by taking advantage of native operator support?
+    static Vec load(const void *base, int32_t offset) {
+        Vec r(empty);
+        // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
+        // (e.g. uint8x48, which could be produced by concat()), the actual implementation
+        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+        // that is in the logical type, to avoid possible overreads.
+        memcpy(&r.native_vector, ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
+        return r;
+    }
+
+    // gather
+    // TODO: could this be improved by taking advantage of native operator support?
+    static Vec load(const void *base, const NativeVector<int32_t, Lanes> &offset) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = ((const ElementType*)base)[offset[i]];
+        }
+        return r;
+    }
+
+    // TODO: could this be improved by taking advantage of native operator support?
+    void store(void *base, int32_t offset) const {
+        // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
+        // (e.g. uint8x48, which could be produced by concat()), the actual implementation
+        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+        // that is in the logical type, to avoid possible overwrites.
+        memcpy(((ElementType*)base + offset), &native_vector, sizeof(ElementType) * Lanes);
+    }
+
+    // scatter
+    // TODO: could this be improved by taking advantage of native operator support?
+    void store(void *base, const NativeVector<int32_t, Lanes> &offset) const {
+        for (size_t i = 0; i < Lanes; i++) {
+            ((ElementType*)base)[offset[i]] = native_vector[i];
+        }
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    static Vec shuffle(const Vec &a, const int32_t indices[Lanes]) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            if (indices[i] < 0) {
+                continue;
+            }
+            r.native_vector[i] = a[indices[i]];
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    template<size_t InputLanes>
+    static Vec concat(size_t count, const NativeVector<ElementType, InputLanes> vecs[]) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = vecs[i / InputLanes][i % InputLanes];
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    Vec replace(size_t i, const ElementType &b) const {
+        Vec r = *this;
+        r.native_vector[i] = b;
+        return r;
+    }
+
+    ElementType operator[](size_t i) const {
+        return native_vector[i];
+    }
+
+    Vec operator~() const {
+        return Vec(from_native_vector, ~native_vector);
+    }
+    Vec operator!() const {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = !(*this)[i];
+        }
+        return r;
+    }
+
+    friend Vec operator+(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector + b.native_vector);
+    }
+    friend Vec operator-(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector - b.native_vector);
+    }
+    friend Vec operator*(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector * b.native_vector);
+    }
+    friend Vec operator/(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector / b.native_vector);
+    }
+    friend Vec operator%(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector % b.native_vector);
+    }
+    friend Vec operator&(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector & b.native_vector);
+    }
+    friend Vec operator|(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector | b.native_vector);
+    }
+    friend Vec operator&&(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] && b.native_vector[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] || b.native_vector[i];
+        }
+        return r;
+    }
+
+    friend Vec operator+(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector + b);
+    }
+    friend Vec operator-(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector - b);
+    }
+    friend Vec operator*(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector * b);
+    }
+    friend Vec operator/(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector / b);
+    }
+    friend Vec operator%(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector % b);
+    }
+    friend Vec operator<<(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector << b);
+    }
+    friend Vec operator>>(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector >> b);
+    }
+    friend Vec operator&(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector & b);
+    }
+    friend Vec operator|(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector | b);
+    }
+    friend Vec operator&&(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] && b;
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] || b;
+        }
+        return r;
+    }
+
+    friend Vec operator+(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a + b.native_vector);
+    }
+    friend Vec operator-(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a - b.native_vector);
+    }
+    friend Vec operator*(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a * b.native_vector);
+    }
+    friend Vec operator/(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a / b.native_vector);
+    }
+    friend Vec operator%(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a % b.native_vector);
+    }
+    friend Vec operator<<(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a << b.native_vector);
+    }
+    friend Vec operator>>(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a >> b.native_vector);
+    }
+    friend Vec operator&(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a & b.native_vector);
+    }
+    friend Vec operator|(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a | b.native_vector);
+    }
+    friend Vec operator&&(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a && b.native_vector[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a || b.native_vector[i];
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator<(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] < b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator<=(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] <= b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator>(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] > b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator>=(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] >= b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator==(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] == b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator!=(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] != b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    static Vec select(const Mask &cond, const Vec &true_value, const Vec &false_value) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = cond[i] ? true_value[i] : false_value[i];
+        }
+        return r;
+    }
+
+    template <typename OtherVec>
+    static Vec convert_from(const OtherVec &src) {
+        #if __cplusplus >= 201103L
+        static_assert(Vec::Lanes == OtherVec::Lanes, "Lanes mismatch");
+        #endif
+#if 0 // __has_builtin(__builtin_convertvector)
+        // Disabled (for now) because __builtin_convertvector appears to have
+        // different float->int rounding behavior in at least some situations;
+        // for now we'll use the much-slower-but-correct explicit C++ code.
+        // (https://github.com/halide/Halide/issues/2080)
+        return Vec(from_native_vector, __builtin_convertvector(src.native_vector, NativeVectorType));
+#else
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = static_cast<typename Vec::ElementType>(src.native_vector[i]);
+        }
+        return r;
+#endif
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
     static Vec max(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_MAXN_2X32(a.native_vector[0], b.native_vector[0]),
-                    IVP_MAXN_2X32(a.native_vector[1], b.native_vector[1]));
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = ::halide_cpp_max(a[i], b[i]);
+        }
+        return r;
     }
 
     // TODO: this should be improved by taking advantage of native operator support.
     static Vec min(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_MINN_2X32(a.native_vector[0], b.native_vector[0]),
-                    IVP_MINN_2X32(a.native_vector[1], b.native_vector[1]));
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = ::halide_cpp_min(a[i], b[i]);
+        }
+        return r;
     }
 
-    static Vec count_leading_zeros(const Vec &a) {
-        return Vec(from_native_vector, IVP_NSAUN_2X32(a.native_vector[0]), IVP_NSAUN_2X32(a.native_vector[1]));
-    }
-};
-#endif
-#if 1
-template <>
-class CppVector<uint32_t, 32> {
-  typedef CppVector<uint32_t, 32> Vec;
-  typedef uint32_t ElementType;
-  typedef xb_vecN_2x32Uv CppVectorType;
-  static const int Lanes = 32;
-  typedef uint1x32_t Mask;
+private:
+    template<typename, size_t> friend class NativeVector;
 
-  CppVectorType native_vector[2];
+    template <typename ElementType, typename OtherElementType, size_t Lanes>
+    friend NativeVector<ElementType, Lanes> operator<<(
+                    const NativeVector<ElementType, Lanes> &a,
+                    const NativeVector<OtherElementType, Lanes> &b);
 
-  template <typename, size_t> friend class CppVector;
-  friend CppVector<int16_t, 32> convert_to_int16x32_from_uint32x32(const CppVector<uint32_t, 32>& src);
-  friend CppVector<uint16_t, 32> convert_to_uint16x32_from_uint32x32(const CppVector<uint32_t, 32>& src);
-public:
+    template <typename ElementType, typename OtherElementType, size_t Lanes>
+    friend NativeVector<ElementType, Lanes> operator>>(
+                    const NativeVector<ElementType, Lanes> &a,
+                    const NativeVector<OtherElementType, Lanes> &b);
+
+    NativeVectorType native_vector;
+
+    // Leave vector uninitialized for cases where we overwrite every entry
     enum Empty { empty };
-    inline CppVector(Empty) {}
+    inline NativeVector(Empty) {}
 
-    enum FromCppVector { from_native_vector };
-    inline CppVector(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
-        native_vector[0] = src1;
-        native_vector[1] = src2;
-    }
-
-    static Vec broadcast(const ElementType &v) {
-        return Vec(from_native_vector, v, v);
-    }
-
-    friend Vec operator+(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector[0] + b.native_vector[0], a.native_vector[1] + b.native_vector[1]);
-    }
-
-    friend Vec operator*(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_PACKLN_2X64W(IVP_MULN_2X32(a.native_vector[0], b.native_vector[0])),
-                    IVP_PACKLN_2X64W(IVP_MULN_2X32(a.native_vector[1], b.native_vector[1])));
-    }
-
-    friend Vec operator>>(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, IVP_SLAN_2X32(a.native_vector[0], b.native_vector[0]),
-                                       IVP_SLAN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    friend Mask operator<(const Vec &a, const Vec &b) {
-        return Mask(uint1x32_t::from_native_vector,
-                    a.native_vector[0] < b.native_vector[0],
-                    a.native_vector[1] < b.native_vector[1]);
-    }
-
-    template <typename OtherVec>
-    static Vec convert_from(const CppVector<uint16_t, 32>& src) {
-        xb_vec2Nx24 wide = IVP_CVT24U2NX16(0, src.native_vector);
-        return Vec(from_native_vector, IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
-    }
-
-    static Vec count_leading_zeros(const Vec &a) {
-        return Vec(from_native_vector, IVP_NSAUN_2X32(a.native_vector[0]), IVP_NSAUN_2X32(a.native_vector[1]));
+    // Syntactic sugar to avoid ctor overloading issues
+    enum FromNativeVector { from_native_vector };
+    inline NativeVector(FromNativeVector, const NativeVectorType &src) {
+        native_vector = src;
     }
 };
+
+template <typename ElementType, typename OtherElementType, size_t Lanes>
+NativeVector<ElementType, Lanes> operator<<(const NativeVector<ElementType, Lanes> &a,
+                    const NativeVector<OtherElementType, Lanes> &b) {
+    return NativeVector<ElementType, Lanes>(
+                  NativeVector<ElementType, Lanes>::from_native_vector,
+                  a.native_vector << b.native_vector);
+}
+
+template <typename ElementType, typename OtherElementType, size_t Lanes>
+NativeVector<ElementType, Lanes> operator>>(const NativeVector<ElementType, Lanes> &a,
+                    const NativeVector<OtherElementType, Lanes> &b) {
+    return NativeVector<ElementType, Lanes>(
+                  NativeVector<ElementType, Lanes>::from_native_vector,
+                  a.native_vector >> b.native_vector);
+}
+#endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+
+)INLINE_CODE";
+
+        const char *vector_selection_decl = R"INLINE_CODE(
+// Dec. 1, 2018: Apparently emscripten compilation runs with the __has_attribute true,
+// then fails to handle the vector intrinsics later.
+#if !defined(__EMSCRIPTEN__) && (__has_attribute(ext_vector_type) || __has_attribute(vector_size))
+    #if __GNUC__ && !__clang__
+        // GCC only allows powers-of-two; fall back to CppVector for other widths
+        #define halide_cpp_use_native_vector(type, lanes) ((lanes & (lanes - 1)) == 0)
+    #else
+        #define halide_cpp_use_native_vector(type, lanes) (true)
+    #endif
+#else
+    // No NativeVector available
+    #define halide_cpp_use_native_vector(type, lanes) (false)
+#endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+
+// Failsafe to allow forcing non-native vectors in case of unruly compilers
+#if HALIDE_CPP_ALWAYS_USE_CPP_VECTORS
+    #undef halide_cpp_use_native_vector
+    #define halide_cpp_use_native_vector(type, lanes) (false)
 #endif
-#if 1
-template <>
-class CppVector<int16_t, 64> {
-  typedef CppVector<int16_t, 64> Vec;
-  typedef int16_t ElementType;
-  typedef xb_vecNx16 CppVectorType;
-  static const int Lanes = 64;
-
-  template <typename, size_t> friend class CppVector;
-public:
-
-    CppVectorType native_vector[2];
-
-    enum Empty { empty };
-    inline CppVector(Empty) {}
-
-    enum FromCppVector { from_native_vector };
-    inline CppVector(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
-        native_vector[0] = src1;
-        native_vector[1] = src2;
-    }
-
-    void aligned_store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-
-    void store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-};
-#endif
-
-inline CppVector<int16_t, 32> convert_to_int16x32_from_uint16x32(const CppVector<uint16_t, 32>& src) {
-  return CppVector<int16_t, 32>(CppVector<int16_t, 32>::from_native_vector, src.native_vector);
-}
-
-inline CppVector<int16_t, 32> convert_to_int16x32_from_int32x32(const CppVector<int32_t, 32>& src) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(src.native_vector[1], src.native_vector[0]);
-  return CppVector<int16_t, 32>(CppVector<int16_t, 32>::from_native_vector, IVP_PACKLNX48(wide));
-}
-
-inline CppVector<int16_t, 32> convert_to_int16x32_from_uint32x32(const CppVector<uint32_t, 32>& src) {
-  xb_vecNx48 wide = IVP_CVT48UNX32(src.native_vector[1], src.native_vector[0]);
-  return CppVector<int16_t, 32>(CppVector<int16_t, 32>::from_native_vector, IVP_PACKLNX48(wide));
-}
-
-inline CppVector<uint16_t, 32> convert_to_uint16x32_from_int32x32(const CppVector<int32_t, 32>& src) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(src.native_vector[1], src.native_vector[0]);
-  return CppVector<uint16_t, 32>(CppVector<uint16_t, 32>::from_native_vector, IVP_PACKLNX48(wide));
-}
-
-inline CppVector<uint16_t, 32> convert_to_uint16x32_from_uint32x32(const CppVector<uint32_t, 32>& src) {
-  xb_vecNx48 wide = IVP_CVT48UNX32(src.native_vector[1], src.native_vector[0]);
-  return CppVector<uint16_t, 32>(CppVector<uint16_t, 32>::from_native_vector, IVP_PACKLNX48(wide));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<int16_t, 32> halide_xtensa_sat_add_i16(const CppVector<int16_t, 32>& a,
-                                                                      const CppVector<int16_t, 32>& b) {
-  return CppVector<int16_t, 32>(CppVector<int16_t, 32>::from_native_vector, IVP_ADDSNX16(a.native_vector, b.native_vector));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<int32_t, 32> halide_xtensa_sat_add_i32(const CppVector<int32_t, 32>& a,
-                                                                      const CppVector<int32_t, 32>& b) {
-  // I am not 100% about it.
-  xb_vecN_2x32v zero = 0;
-  xb_vecN_2x32v one = 1;
-  xb_vecN_2x64w l0 = a.native_vector[0] * one;
-  IVP_MULAN_2X32(l0, b.native_vector[0], one);
-  xb_vecN_2x64w l1 = a.native_vector[1] * one;
-  IVP_MULAN_2X32(l1, b.native_vector[1], one);
-  return CppVector<int32_t, 32>(CppVector<int32_t, 32>::from_native_vector,
-                                IVP_PACKVN_2X64W(l0, zero), IVP_PACKVN_2X64W(l1, zero));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<int16_t, 32> halide_xtensa_sat_sub_i16(const CppVector<int16_t, 32>& a,
-                                                                      const CppVector<int16_t, 32>& b) {
-  return CppVector<int16_t, 32>(CppVector<int16_t, 32>::from_native_vector, IVP_SUBSNX16(a.native_vector, b.native_vector));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<int32_t, 32> halide_xtensa_widen_add_i32(const CppVector<int32_t, 32>& a,
-                                                                        const CppVector<int16_t, 32>& b) {
-  xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, b.native_vector);
-  return CppVector<int32_t, 32>(CppVector<int32_t, 32>::from_native_vector,
-                                  IVP_CVT32S2NX24LL(wide) + a.native_vector[0],
-                                  IVP_CVT32S2NX24LH(wide) + a.native_vector[1]);
-}
-
-HALIDE_ALWAYS_INLINE CppVector<int32_t, 32> halide_xtensa_widen_mul_i32(const CppVector<int16_t, 32>& a,
-                                                                        int b) {
-  xb_vecNx48 r = a.native_vector * xb_vecNx16(b);
-  return CppVector<int32_t, 32>(CppVector<int32_t, 32>::from_native_vector,
-                                IVP_CVT32SNX48L(r),
-                                IVP_CVT32SNX48H(r));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<int32_t, 32> halide_xtensa_widen_mul_i32(const CppVector<int16_t, 32>& a,
-                                                                        const CppVector<int16_t, 32>& b) {
-  xb_vecNx48 r = a.native_vector * b.native_vector;
-  return CppVector<int32_t, 32>(CppVector<int32_t, 32>::from_native_vector,
-                                IVP_CVT32SNX48L(r),
-                                IVP_CVT32SNX48H(r));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<uint32_t, 32> halide_xtensa_widen_mul_u32(const CppVector<uint16_t, 32>& a,
-                                                                         const CppVector<uint16_t, 32>& b) {
-  xb_vecNx48 r = a.native_vector * b.native_vector;
-  return CppVector<uint32_t, 32>(CppVector<uint32_t, 32>::from_native_vector,
-                                IVP_CVT32UNX48L(r),
-                                IVP_CVT32UNX48H(r));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<int16_t, 32> halide_xtensa_avg_round_i16(const CppVector<int16_t, 32>& a,
-                                                                        const CppVector<int16_t, 32>& b) {
-  return CppVector<int16_t, 32>(CppVector<int16_t, 32>::from_native_vector, IVP_AVGRNX16(a.native_vector, b.native_vector));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<uint16_t, 32> halide_xtensa_avg_round_u16(const CppVector<uint16_t, 32>& a,
-                                                                          const CppVector<uint16_t, 32>& b) {
-  return CppVector<uint16_t, 32>(CppVector<uint16_t, 32>::from_native_vector, IVP_AVGRUNX16(a.native_vector, b.native_vector));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<int16_t, 32> halide_xtensa_narrow_with_shift_i16(const CppVector<int32_t, 32>& a,
-                                                                            int shift) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
-  return CppVector<int16_t, 32>(CppVector<int16_t, 32>::from_native_vector, IVP_PACKVRNRNX48(wide, shift));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<uint16_t, 32> halide_xtensa_absd_i16(const CppVector<int16_t, 32>& a,
-                                                                    const CppVector<int16_t, 32>& b) {
-  return CppVector<uint16_t, 32>(CppVector<uint16_t, 32>::from_native_vector, IVP_ABSSUBNX16(a.native_vector, b.native_vector));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<int16_t, 32> halide_xtensa_clamped_dense_load_i16(
-          const void *base, int32_t ramp_base, int32_t upper_limit, int32_t lower_limit, int32_t offset) {
-  // This is a bit flawed, as it assumes that vector starting at ramp_base
-  // interesects with [lower_limit, upper_limit] range.
-  xb_vecNx16 mask = IVP_MINNX16(
-                        IVP_MAXNX16(IVP_SEQNX16(), xb_vecNx16(lower_limit - ramp_base)),
-                        xb_vecNx16(upper_limit - ramp_base));
-  CppVector<int16_t, 32> unclamped_vector = CppVector<int16_t, 32>::load(base, ramp_base + offset);
-  return  CppVector<int16_t, 32>(CppVector<int16_t, 32>::from_native_vector,
-                            IVP_SHFLNX16(unclamped_vector.native_vector, mask));
-}
-
-HALIDE_ALWAYS_INLINE CppVector<int16_t, 64> halide_xtensa_interleave_i16(
-                                                    const CppVector<int16_t, 32>& a,
-                                                    const CppVector<int16_t, 32>& b) {
-  const int IVP_SELI_16B_INTERLEAVE_1_LO = 32;
-  const int IVP_SELI_16B_INTERLEAVE_1_HI = 33;
-
-  return CppVector<int16_t, 64>(CppVector<int16_t, 64>::from_native_vector,
-                                IVP_SELNX16I(b.native_vector, a.native_vector, IVP_SELI_16B_INTERLEAVE_1_LO),
-                                IVP_SELNX16I(b.native_vector, a.native_vector, IVP_SELI_16B_INTERLEAVE_1_HI)
-                                );
-}
-
-
-#else // all types
-
-typedef CppVector<uint8_t, 32> uint1x32_t;
-#endif // all types
 
 )INLINE_CODE";
 
@@ -2382,17 +2194,15 @@ HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_concat_from_native(const uint1x16_
 }
 
 )INLINE_CODE";
+
+        // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
+        // emitting this long text string was regularly garbled in a predictable pattern;
+        // flushing the stream before or after heals it. Since C++ codegen is rarely
+        // on a compilation critical path, we'll just band-aid it in this way.
         stream << std::flush;
+        stream << cpp_vector_decl << native_vector_decl << vector_selection_decl;
         stream << native_typedef_decl;
         stream << std::flush;
-        (void)cpp_vector_decl;
-        //         // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
-        //         // emitting this long text string was regularly garbled in a predictable pattern;
-        //         // flushing the stream before or after heals it. Since C++ codegen is rarely
-        //         // on a compilation critical path, we'll just band-aid it in this way.
-        //         stream << std::flush;
-        //         stream << cpp_vector_decl << native_vector_decl << vector_selection_decl;
-        //         stream << std::flush;
 
         //         for (const auto &t : vector_types) {
         //             string name = type_to_c_type(t, false, false);
@@ -3696,6 +3506,7 @@ void CodeGen_C::visit(const Store *op) {
 }
 
 void CodeGen_C::visit(const Let *op) {
+
     string id_value = print_expr(op->value);
     Expr body = op->body;
     if (op->value.type().is_handle()) {
@@ -3933,7 +3744,7 @@ void CodeGen_C::visit(const Allocate *op) {
     string op_name = print_name(op->name);
     string op_type = print_type(op->type, AppendSpace);
 
-    // For sizes less than 8k, do a stack allocation
+    // For sizes less than 16k, do a stack allocation
     bool on_stack = false;
     int32_t constant_size;
     string size_id;
