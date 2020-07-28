@@ -4163,6 +4163,10 @@ void CodeGen_LLVM::visit(const Store *op) {
 }
 
 void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
+    if (target.has_feature(Target::NoAsserts)) {
+        return;
+    }
+
     if (asserts.size() < 4) {
         for (const auto *a : asserts) {
             codegen(Stmt(a));

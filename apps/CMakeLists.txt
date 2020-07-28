@@ -1,10 +1,4 @@
 ##
-# Option controlling whether apps are built internally or at test time, externally.
-##
-
-option(APPS_INTERNAL "Build apps as part of the internal build" OFF)
-
-##
 # Test apps from the perspective of a consuming project.
 ##
 
@@ -31,15 +25,7 @@ function(add_app_test NAME)
         # Don't attempt to build these for wasm yet.
         return()
     endif ()
-
-    # Either add the apps to the build directly or add them as external tests
-    if (APPS_INTERNAL)
-        # Add a stubbed-out find module for Halide so that the apps can build as part of the parent build.
-        list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
-        add_subdirectory(${NAME})
-        return()
-    endif ()
-
+    
     unset(cmakeToolchainOpts)
     if (NOT "${CMAKE_TOOLCHAIN_FILE}" STREQUAL "")
         list(APPEND cmakeToolchainOpts "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
@@ -80,6 +66,7 @@ function(add_app_test NAME)
     set_tests_properties(${NAME} PROPERTIES
                          FIXTURES_REQUIRED apps
                          LABELS apps
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET}"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endfunction()
 

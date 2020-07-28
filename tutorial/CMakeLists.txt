@@ -17,7 +17,10 @@ function(add_tutorial source_file)
     target_compile_options(${name} PRIVATE "$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-but-set-variable>")
 
     add_test(NAME tutorial_${name} COMMAND ${name})
-    set_tests_properties(tutorial_${name} PROPERTIES LABELS tutorial)
+    set_tests_properties(tutorial_${name}
+                         PROPERTIES
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+                         LABELS tutorial)
 
     if (${args_WITH_IMAGE_IO})
         target_link_libraries(${name} PRIVATE Halide::ImageIO)
