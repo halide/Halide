@@ -825,9 +825,9 @@ double LoopNest::storage_stride(const LoadJacobian &jac, int innermost_storage_d
 }
 
 // Shared mem accesses with stride 1 will likely be vectorized
-bool LoopNest::can_vectorize_access_for_innermost_dim(const LoadJacobian &jac, const FunctionDAG::Node *accessed, int innermost_dim) const {
+bool LoopNest::can_vectorize_access_for_innermost_dim(const LoadJacobian &jac, const FunctionDAG::Node *accessed, int innermost_dim, int loop_index) const {
     for (int i = 0; i < accessed->dimensions; i++) {
-        auto stride = jac(i, vectorized_loop_index);
+        auto stride = jac(i, loop_index);
         if (i == innermost_dim) {
             if (!(stride == 1)) {
                 return false;
@@ -840,30 +840,65 @@ bool LoopNest::can_vectorize_access_for_innermost_dim(const LoadJacobian &jac, c
     return true;
 }
 
-bool LoopNest::can_vectorize_access(const LoadJacobian &jac, const FunctionDAG::Node *accessed, bool accessed_has_been_scheduled, int innermost_dim, const GPUMemoryType& mem_type) const {
-    if (vectorized_loop_index < 0 || mem_type != GPUMemoryType::shared) {
+bool LoopNest::can_vectorize_store_access(const LoadJacobian &jac, const FunctionDAG::Node *accessed, bool accessed_has_been_scheduled, int innermost_dim, int loop_index, const GPUMemoryType& mem_type) const {
+    if (loop_index < 0 || mem_type != GPUMemoryType::shared) {
         return false;
     }
 
+    internal_assert(innermost_dim >= 0);
+    return can_vectorize_access_for_innermost_dim(jac, accessed, innermost_dim, loop_index);
+}
+
+int LoopNest::vectorized_load_access_size(const LoadJacobian &jac, const FunctionDAG::Node *accessed, bool accessed_has_been_scheduled, int innermost_dim, const GPUMemoryType& mem_type, bool verbose) const {
+    int vector_size = 1;
+    if (mem_type != GPUMemoryType::shared) {
+        return vector_size;
+    }
+
     if (accessed_has_been_scheduled) {
-        return can_vectorize_access_for_innermost_dim(jac, accessed, innermost_dim);
+        // Loads can potentially be vectorized in any loop dimension, not just
+        // the vectorized_loop dimension. It's possible that some of the loop
+        // dimensions will be removed by LICM but those indices won't conflict with
+        // any potential vectorized indices because the Jacobian entry for them
+        // must be 0 in all storage dimensions, whereas for vectorization it
+        // must be 1 for the innermost_dim and 0 for all others
+        for (size_t loop_index = 0; loop_index < size.size(); ++loop_index) {
+            if (!can_vectorize_access_for_innermost_dim(jac, accessed, innermost_dim, loop_index)) {
+                continue;
+            }
+
+            vector_size = std::max(vector_size, vectorized_access_size(loop_index, verbose));
+        }
+
+        if (verbose) {
+            aslog(0) << "vector_size = " << vector_size << "\n";
+        }
+
+        return vector_size;
     }
 
     // If the producer has not been scheduled, try all of its dimensions as the
     // innermost storage dim to see if any can be vectorized
     for (int i = 0; i < accessed->dimensions; i++) {
-        if (can_vectorize_access_for_innermost_dim(jac, accessed, i)) {
-            return true;
+        for (size_t loop_index = 0; loop_index < size.size(); ++loop_index) {
+            if (!can_vectorize_access_for_innermost_dim(jac, accessed, i, loop_index)) {
+                continue;
+            }
+
+            vector_size = std::max(vector_size, vectorized_access_size(loop_index, verbose));
         }
     }
 
-    return false;
+    if (verbose) {
+        aslog(0) << "vector_size = " << vector_size << "\n";
+    }
+    return vector_size;
 }
 
-int LoopNest::vectorized_access_size(bool verbose) const {
-    int64_t extent = size[vectorized_loop_index];
+int LoopNest::vectorized_access_size(size_t loop_index, bool verbose) const {
+    int64_t extent = size[loop_index];
     constexpr int max_vector_size_in_bytes = 16;
-    int64_t max_points_per_vector = max_vector_size_in_bytes / node->bytes_per_point;
+    int64_t max_points_per_vector = std::min(4, max_vector_size_in_bytes / (int)node->bytes_per_point);
 
     if (verbose) {
         aslog(0) << "\nextent = " << extent;
@@ -998,6 +1033,20 @@ bool LoopNest::all_strides_exist(const LoadJacobian &jac, const FunctionDAG::Nod
     return true;
 }
 
+int LoopNest::get_actual_vector_dim(const Bound &store_bounds) const {
+    if (store_bounds->region_computed(vector_dim).extent() > 1) {
+        return vector_dim;
+    }
+
+    for (int i = 0; i < node->dimensions; ++i) {
+        if (store_bounds->region_computed(i).extent() > 1) {
+            return i;
+        }
+    }
+
+    return vector_dim;
+}
+
 void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root, GlobalMemInfo& global_mem_loads, SharedMemInfo& shared_mem_loads, LocalMemInfo& local_mem_loads, bool verbose) const {
     if (consumer_site.is_stored_in_registers()) {
         return;
@@ -1005,6 +1054,8 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
 
     const ThreadInfo &thread_info = *gpu_loop_info.thread_info;
     bool is_shared_mem = consumer_site.gpu_store_memory_type == GPUMemoryType::shared;
+
+    size_t actual_vector_dim = get_actual_vector_dim(consumer_store_bounds);
 
     // If any of the store dimensions are constant over all the loop dimensions,
     // then the value to be stored will likely be held in a register and stored
@@ -1022,11 +1073,11 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
 
         if (constant) {
             total_serial_loop_extents /= parent->size[loop_index];
-        } else if ((int)loop_index == vectorized_loop_index && can_vectorize_access(jac, node, true, vector_dim, consumer_site.gpu_store_memory_type)) {
-            vector_size = parent->vectorized_access_size();
-            total_serial_loop_extents /= vector_size;
+        } else if (can_vectorize_store_access(jac, node, true, actual_vector_dim, loop_index, consumer_site.gpu_store_memory_type)) {
+            vector_size = std::max(vector_size, parent->vectorized_access_size(loop_index));
         }
     }
+    total_serial_loop_extents /= vector_size;
 
     if (verbose) {
         std::string type = stage->index == 0 ? "store" : "load_and_store";
@@ -1461,10 +1512,10 @@ std::pair<const LoopNest *, const LoopNest *> LoopNest::find_innermost_and_paren
     return {child, parent};
 }
 
-double LoopNest::points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge*>& edge_chain, const LoadJacobian& jac, const LoopNest* parent, const LoopNest* grandparent, double n, const ScheduleFeatures &feat, bool verbose) const {
+int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge*>& edge_chain, const LoadJacobian& jac, const LoopNest* parent, const LoopNest* grandparent, int64_t n, const ScheduleFeatures &feat, bool verbose) const {
     std::unique_ptr<LoopNest> innermost_parent_clone = make_unique<LoopNest>();
     innermost_parent_clone->copy_from(*parent);
-    double unrolled_loop_extent = feat.unrolled_loop_extent;
+    int64_t unrolled_loop_extent = feat.unrolled_loop_extent;
     vector<int64_t> tiling(node->dimensions, 1);
     vector<int> rvars_to_move_inward(parent->size.size(), 0);
 
@@ -1543,20 +1594,20 @@ double LoopNest::points_accessed_per_thread(const MachineParams& params, const T
 
     // There are 2 ways to calculate the number of points accessed:
     // 1. The region_required of the producer in the non-LICM unrolled loops * the loop extents of the non-LICM loops that cannot be unrolled
-    double points_accessed_by_region_required = (double)num_points * product_of_non_licm_non_unrolled_extents;
+    int64_t points_accessed_by_region_required = num_points * product_of_non_licm_non_unrolled_extents;
 
     // 2. The number of points computed according to 'n' (the number of
     // entries in the LoadJacobian i.e. the number of loads, ignoring any reuse
     // of points) * the loops extents of all the non-LICM loops. This value is
     // an upper bound
-    double points_accessed_by_loop_extents = (double)n * product_of_non_licm_extents;
+    int64_t points_accessed_by_loop_extents = n * product_of_non_licm_extents;
 
     // In some cases, the region_required is larger than the actual number of
     // points that need to be loaded e.g. if f(x) = g(x) + g(x + 100), the
     // region_required of g will be the range [x, x + 100] but really only 2
     // points need to be loaded. In cases like this, option 1. will
     // over-estimate and we instead use the upper bound from option 2.
-    double points_accessed = std::min(points_accessed_by_region_required, points_accessed_by_loop_extents);
+    int64_t points_accessed = std::min(points_accessed_by_region_required, points_accessed_by_loop_extents);
     points_accessed *= gpu_loop_info.total_outer_serial_extents;
 
     int64_t total_inner_serial_extents_outside_realization = gpu_loop_info.get_total_inner_serial_extents_outside_realization(this);
@@ -2574,7 +2625,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                         for (size_t i = 0; i < thread_jacobians.size(); ++i) {
                             const auto &jac = thread_jacobians[i];
                             if (jac.second != e->producer) continue;
-                            double n = jac.first.count();
+                            int64_t n = jac.first.count();
 
                             if (is_shared_mem && get_compute_shared_mem_load_features()) {
                                 if (verbose) {
@@ -2585,7 +2636,20 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     aslog(0) << "BEGIN MEM ACCESS shared_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                                 }
 
-                                double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, verbose);
+                                int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, verbose);
+
+                                const auto& serial_jac = jacobians[i];
+                                internal_assert(serial_jac.second == e->producer);
+                                int vector_size = parent->vectorized_load_access_size(
+                                    serial_jac.first,
+                                    e->producer,
+                                    producer_has_been_scheduled,
+                                    producer_innermost_dim,
+                                    GPUMemoryType::shared,
+                                    verbose
+                                );
+
+                                internal_assert(points_accessed % vector_size == 0);
 
                                 compute_mem_load_features<SharedMem>(
                                     jac.first,
@@ -2595,7 +2659,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     producer_has_been_scheduled,
                                     *gpu_loop_info.thread_info,
                                     shared_mem_loads,
-                                    points_accessed,
+                                    points_accessed / vector_size,
                                     verbose
                                 );
                                 if (verbose) {
@@ -2617,7 +2681,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     aslog(0) << "BEGIN MEM ACCESS global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                                 }
 
-                                double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, verbose);
+                                int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, verbose);
 
                                 compute_mem_load_features<GlobalMem>(
                                     jac.first,
@@ -2646,7 +2710,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     if (site.gpu_store_memory_type == GPUMemoryType::local) {
                         for (const auto &jac : jacobians) {
                             if (jac.second != e->producer) continue;
-                            double n = jac.first.count();
+                            int64_t n = jac.first.count();
 
                             if (verbose) {
                                 std::string consumer_name = node->func.name();
@@ -2656,7 +2720,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 aslog(0) << "BEGIN MEM ACCESS local_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                             }
 
-                            double points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, verbose);
+                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, verbose);
 
                             compute_mem_load_features<LocalMem>(
                                 jac.first,
