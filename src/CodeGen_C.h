@@ -122,6 +122,9 @@ protected:
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     virtual std::string print_assignment(Type t, const std::string &rhs);
 
+    /** Emit free for the heap allocation. **/
+    void print_heap_free(const std::string &alloc_name);
+
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header() {
         return output_kind == CHeader ||
