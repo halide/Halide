@@ -777,12 +777,10 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, 
 
             Func func(state->node->func);
 
-            for (const auto *e : state->stage->incoming_edges) {
-                if (!state->producers_to_be_staged.contains(e->producer)) {
-                    continue;
-                }
+            for (const auto& to_be_staged : state->producers_to_be_staged) {
+                const auto* producer_node = to_be_staged.first;
 
-                Func producer(e->producer->func);
+                Func producer(producer_node->func);
                 producer.in(func).store_in(MemoryType::Register).compute_at(func, v.var.var);
                 staged_funcs_schedule_source
                     << producer.name()
@@ -794,12 +792,12 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, 
                     << v.var.var.name()
                     << ")";
 
-                const LoopNest* loop_nest = state->producers_to_be_staged.get(e->producer);
+                const LoopNest* loop_nest = to_be_staged.second;
 
-                const auto& bounds = loop_nest->get_bounds(e->producer);
+                const auto& bounds = loop_nest->get_bounds(producer_node);
 
                 int i = 0;
-                for (const auto& l : e->producer->stages[0].loop) {
+                for (const auto& l : producer_node->stages[0].loop) {
                     Var unrolled_var(l.var);
 
                     int extent = bounds->region_required(i++).extent();

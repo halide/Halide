@@ -4407,10 +4407,6 @@ void LoopNest::apply(LoopLevel here,
 
         if (gpu_label == thread && state.all_innermost_unrolled && num_serial_loops() <= 1) {
             for (const auto *e : stage->incoming_edges) {
-                if (all_inlined.contains(e->producer)) {
-                    continue;
-                }
-
                 if (e->producer->is_input || !has_constant_region_required(e->producer)) {
                     continue;
                 }
