@@ -293,7 +293,6 @@ class Sample:
 
   def local_store_transactions_per_request(self, metrics, features):
     actual = self.get(metrics, "local_store_transactions_per_request", 0)
-    print(actual)
     predicted = self.get(features, "num_local_store_transactions_per_request", 0)
 
     return Result(actual, predicted)
@@ -316,6 +315,19 @@ class Sample:
 
     return True
 
+  def stages_sorted_by_factor(self):
+    stages_and_factors = []
+    for stage in self.results:
+      factors = []
+      for label in self.results[stage]:
+        factors.append(abs(self.results[stage][label].factor))
+
+      if len(factors):
+        stages_and_factors.append((stage, max(factors)))
+        stages_and_factors.sort(key=lambda s: s[1])
+
+    return [s[0] for s in stages_and_factors]
+
   def stages_sorted_by_ratio(self):
     stages_and_ratios = []
     for stage in self.results:
@@ -328,6 +340,17 @@ class Sample:
         stages_and_ratios.sort(key=lambda s: s[1])
 
     return [s[0] for s in stages_and_ratios]
+
+  def max_factor(self):
+    factors = []
+    for stage in self.results:
+      if self.should_ignore(stage):
+        continue
+
+      for label in self.results[stage]:
+        factors.append(abs(self.results[stage][label].factor))
+
+    return max(factors)
 
   def max_ratio(self):
     ratios = []
@@ -343,7 +366,7 @@ class Sample:
   def __str__(self):
     out = "{}/autoschedule_command.txt\n".format(self.path.parent)
     first = True
-    for stage in self.stages_sorted_by_ratio():
+    for stage in self.stages_sorted_by_factor():
       if self.should_ignore(stage):
         continue
 
@@ -403,7 +426,7 @@ def compare_metrics_and_features(outliers_filename, N):
     else:
       print("Metrics failed: {}".format(sample_path))
 
-  samples.sort(key=lambda s: s.max_ratio())
+  samples.sort(key=lambda s: s.max_factor())
   for s in samples:
     print(s)
 
