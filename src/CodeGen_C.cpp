@@ -2771,7 +2771,7 @@ void CodeGen_C::visit(const Allocate *op) {
     close_scope("alloc " + print_name(op->name));
 }
 
-void CodeGen_C::print_heap_free(const std::string& alloc_name) {
+void CodeGen_C::print_heap_free(const std::string &alloc_name) {
     if (heap_allocations.contains(alloc_name)) {
         stream << get_indent() << print_name(alloc_name) << "_free.free();\n";
         heap_allocations.pop(alloc_name);
