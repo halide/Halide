@@ -30,7 +30,7 @@ function(add_app_test NAME)
     if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
         # Don't attempt to build these for wasm yet.
         return()
-    endif()
+    endif ()
 
     # Either add the apps to the build directly or add them as external tests
     if (APPS_INTERNAL)

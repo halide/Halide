@@ -1,7 +1,8 @@
 include(FetchContent)
+include(CMakeDependentOption)
 
-option(WITH_WABT "Include WABT Interpreter for WASM testing" ON)
-option(WITH_WASM_SHELL "Download a wasm shell (e.g. d8) for testing AOT wasm code." ON)
+cmake_dependent_option(WITH_WABT "Include WABT Interpreter for WASM testing" ON "WITH_WEBASSEMBLY" OFF)
+cmake_dependent_option(WITH_WASM_SHELL "Download a wasm shell (e.g. d8) for testing AOT wasm code." ON "WITH_WEBASSEMBLY" OFF)
 
 if ("${LLVM_PACKAGE_VERSION}" VERSION_LESS 11.0)
     if (WITH_WABT)
@@ -154,7 +155,7 @@ function(add_wasm_executable TARGET)
     add_custom_target("${TARGET}" ALL
                       DEPENDS "${TARGET}.wasm" "${TARGET}.js")
 
-endfunction (add_wasm_executable)
+endfunction()
 
 function(add_wasm_halide_test TARGET)
     set(options )
@@ -179,6 +180,6 @@ function(add_wasm_halide_test TARGET)
                     GROUPS ${args_GROUPS}
                     COMMAND d8 ${WASM_SHELL_FLAGS} "${TARGET}.js")
 
-endfunction (add_wasm_halide_test)
+endfunction()
 
 

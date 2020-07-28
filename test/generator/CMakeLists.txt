@@ -38,7 +38,7 @@ function(halide_define_aot_test NAME)
         target_compile_definitions("${TARGET}" PRIVATE TEST_CUDA)
     endif ()
     add_halide_test("${TARGET}" GROUPS generator)
-endfunction(halide_define_aot_test)
+endfunction()
 
 function(halide_define_aot_wasm_test NAME)
     set(options OMIT_DEFAULT_GENERATOR)
