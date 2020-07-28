@@ -137,7 +137,7 @@ if (TARGET_WEBASSEMBLY)
     if (NOT LLD_WASM OR NOT LLD_COMMON)
         message(WARNING 
                 "Could not find both lldWasm and lldCommon in ${LLVM_LIBRARY_DIRS}. "
-                "Configure with -DWITH_WEBASSEMBLY=NO to suppress. "
+                "Configure with -DTARGET_WEBASSEMBLY=NO to suppress. "
                 "Do you need to install liblld-${LLVM_VERSION_MAJOR}?")
     else ()
         target_compile_definitions(Halide_LLVM INTERFACE WITH_WEBASSEMBLY)
