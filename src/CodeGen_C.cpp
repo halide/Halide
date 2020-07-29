@@ -2524,7 +2524,10 @@ void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
     internal_assert(!message.defined() || message.type() == Int(32))
         << "Assertion result is not an int: " << message;
 
-    if (target.has_feature(Target::NoAsserts)) return;
+    if (target.has_feature(Target::NoAsserts)) {
+        stream << get_indent() << "halide_unused(" << id_cond << ");\n";
+        return;
+    }
 
     // don't call the create_assertion(string, string) version because
     // we don't want to force evaluation of 'message' unless the condition fails
