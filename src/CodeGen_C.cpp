@@ -2511,15 +2511,6 @@ void CodeGen_C::visit(const LetStmt *op) {
 // supposed to clean up and make the containing function return
 // -1, so we can't use the C version of assert. Instead we convert
 // to an if statement.
-void CodeGen_C::create_assertion(const string &id_cond, const string &id_msg) {
-    if (target.has_feature(Target::NoAsserts)) return;
-
-    stream << get_indent() << "if (!" << id_cond << ")\n";
-    open_scope();
-    stream << get_indent() << "return " << id_msg << ";\n";
-    close_scope("");
-}
-
 void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
     internal_assert(!message.defined() || message.type() == Int(32))
         << "Assertion result is not an int: " << message;
@@ -2529,8 +2520,6 @@ void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
         return;
     }
 
-    // don't call the create_assertion(string, string) version because
-    // we don't want to force evaluation of 'message' unless the condition fails
     stream << get_indent() << "if (!" << id_cond << ") ";
     open_scope();
     string id_msg = print_expr(message);
@@ -2754,7 +2743,7 @@ void CodeGen_C::visit(const Allocate *op) {
     }
 
     if (!on_stack) {
-        create_assertion(op_name, "halide_error_out_of_memory(_ucon)");
+        create_assertion(op_name, Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
         stream << get_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
