@@ -401,11 +401,11 @@ typedef enum halide_type_code_t
     : uint8_t
 #endif
 {
-    halide_type_int = 0,     //!< signed integers
-    halide_type_uint = 1,    //!< unsigned integers
-    halide_type_float = 2,   //!< IEEE floating point numbers
-    halide_type_handle = 3,  //!< opaque pointer type (void *)
-    halide_type_bfloat = 4,  //!< floating point numbers in the bfloat format
+    halide_type_int = 0,     ///< signed integers
+    halide_type_uint = 1,    ///< unsigned integers
+    halide_type_float = 2,   ///< IEEE floating point numbers
+    halide_type_handle = 3,  ///< opaque pointer type (void *)
+    halide_type_bfloat = 4,  ///< floating point numbers in the bfloat format
 } halide_type_code_t;
 
 // Note that while __attribute__ can go before or after the declaration,
@@ -1310,11 +1310,13 @@ typedef enum halide_target_feature_t {
     halide_target_feature_enable_llvm_loop_opt,   ///< Enable loop vectorization + unrolling in LLVM.
     halide_target_feature_wasm_simd128,           ///< Enable +simd128 instructions for WebAssembly codegen.
     halide_target_feature_wasm_signext,           ///< Enable +sign-ext instructions for WebAssembly codegen.
+    halide_target_feature_wasm_sat_float_to_int,  ///< Enable saturating (nontrapping) float-to-int instructions for WebAssembly codegen.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
     halide_target_feature_egl,                    ///< Force use of EGL support.
 
-    halide_target_feature_end  ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_arm_dot_prod,  ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
+    halide_target_feature_end            ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

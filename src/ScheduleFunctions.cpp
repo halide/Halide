@@ -371,9 +371,22 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     // Make the (multi-dimensional multi-valued) store node.
     Stmt body = Provide::make(func.name(), values, site);
     if (def.schedule().atomic()) {  // Add atomic node.
-        // If required, we will allocate a mutex buffer called func.name() + ".mutex"
-        // The buffer is added in the AddAtomicMutex pass.
-        body = Atomic::make(func.name(), func.name() + ".mutex", body);
+        bool any_unordered_parallel = false;
+        for (auto d : def.schedule().dims()) {
+            any_unordered_parallel |= is_unordered_parallel(d.for_type);
+        }
+        if (any_unordered_parallel) {
+            // If required, we will allocate a mutex buffer called func.name() + ".mutex"
+            // The buffer is added in the AddAtomicMutex pass.
+            body = Atomic::make(func.name(), func.name() + ".mutex", body);
+        } else {
+            // No mutex is required if there is no parallelism, and it
+            // wouldn't work if all parallelism is synchronous
+            // (e.g. vectorization). Vectorization and the like will
+            // need to handle atomic nodes specially, by either
+            // emitting VectorReduce ops or scalarizing.
+            body = Atomic::make(func.name(), std::string{}, body);
+        }
     }
 
     // Default schedule/values if there is no specialization

@@ -2761,17 +2761,25 @@ void CodeGen_C::visit(const Allocate *op) {
 
     op->body.accept(this);
 
-    // Should have been freed internally
-    internal_assert(!allocations.contains(op->name));
+    // Free the memory if it was allocated on the heap and there is no matching
+    // Free node.
+    print_heap_free(op->name);
+    if (allocations.contains(op->name)) {
+        allocations.pop(op->name);
+    }
 
     close_scope("alloc " + print_name(op->name));
 }
 
-void CodeGen_C::visit(const Free *op) {
-    if (heap_allocations.contains(op->name)) {
-        stream << get_indent() << print_name(op->name) << "_free.free();\n";
-        heap_allocations.pop(op->name);
+void CodeGen_C::print_heap_free(const std::string &alloc_name) {
+    if (heap_allocations.contains(alloc_name)) {
+        stream << get_indent() << print_name(alloc_name) << "_free.free();\n";
+        heap_allocations.pop(alloc_name);
     }
+}
+
+void CodeGen_C::visit(const Free *op) {
+    print_heap_free(op->name);
     allocations.pop(op->name);
 }
 
@@ -2855,7 +2863,6 @@ void CodeGen_C::test() {
     s = LetStmt::make("x", beta + 1, s);
     s = Block::make(s, Free::make("tmp.stack"));
     s = Allocate::make("tmp.stack", Int(32), MemoryType::Stack, {127}, const_true(), s);
-    s = Block::make(s, Free::make("tmp.heap"));
     s = Allocate::make("tmp.heap", Int(32), MemoryType::Heap, {43, beta}, const_true(), s);
     Expr buf = Variable::make(Handle(), "buf.buffer");
     s = LetStmt::make("buf", Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern), s);

@@ -514,6 +514,11 @@ std::string c_print_name(const std::string &name) {
     return oss.str();
 }
 
+int get_llvm_version() {
+    static_assert(LLVM_VERSION > 0, "LLVM_VERSION is not defined");
+    return LLVM_VERSION;
+}
+
 }  // namespace Internal
 
 void load_plugin(const std::string &lib_name) {

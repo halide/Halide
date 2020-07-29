@@ -17,6 +17,12 @@ Func make_pipeline(int size) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     for (int size = 1; size <= 128; size *= 2) {
         Func f = make_pipeline(size);
         double t_f = benchmark(1, 1, [&]() {

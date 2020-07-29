@@ -110,6 +110,12 @@ void same_func_per_thread() {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     for (auto &buf : bufs) {
         buf = Buffer<int32_t>(10);
         for (int i = 0; i < 10; i++) {

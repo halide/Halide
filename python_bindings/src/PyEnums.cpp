@@ -139,8 +139,10 @@ void define_enums(py::module &m) {
         .value("EnableLLVMLoopOpt", Target::Feature::EnableLLVMLoopOpt)
         .value("WasmSimd128", Target::Feature::WasmSimd128)
         .value("WasmSignExt", Target::Feature::WasmSignExt)
+        .value("WasmSatFloatToInt", Target::Feature::WasmSatFloatToInt)
         .value("SVE", Target::Feature::SVE)
         .value("SVE2", Target::Feature::SVE2)
+        .value("ARMDotProd", Target::Feature::ARMDotProd)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

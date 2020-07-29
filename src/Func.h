@@ -993,7 +993,7 @@ public:
      extern "C" void *halide_malloc(void *, size_t)
      extern "C" void halide_free(void *, void *)
      \endcode
-     * These will clobber Halide's versions. See \file HalideRuntime.h
+     * These will clobber Halide's versions. See HalideRuntime.h
      * for declarations.
      */
     void set_custom_allocator(void *(*malloc)(void *, size_t),
@@ -2125,7 +2125,7 @@ public:
 
     /** Schedule the iteration over the initial definition of this function
      *  to be fused with another stage 's' from outermost loop to a
-     * given LoopLevel. See \ref Stage::compute_with */
+     * given LoopLevel. */
     // @{
     Func &compute_with(const Stage &s, const VarOrRVar &var, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
     Func &compute_with(const Stage &s, const VarOrRVar &var, LoopAlignStrategy align = LoopAlignStrategy::Auto);

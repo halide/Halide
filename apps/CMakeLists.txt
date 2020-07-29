@@ -1,10 +1,4 @@
 ##
-# Option controlling whether apps are built internally or at test time, externally.
-##
-
-option(APPS_INTERNAL "Build apps as part of the internal build" OFF)
-
-##
 # Test apps from the perspective of a consuming project.
 ##
 
@@ -27,14 +21,11 @@ set_tests_properties(create_halide_distrib PROPERTIES
                      DEPENDS delete_halide_distrib)
 
 function(add_app_test NAME)
-    # Either add the apps to the build directly or add them as external tests
-    if (APPS_INTERNAL)
-        # Add a stubbed-out find module for Halide so that the apps can build as part of the parent build.
-        list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
-        add_subdirectory(${NAME})
+    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+        # Don't attempt to build these for wasm yet.
         return()
     endif ()
-
+    
     unset(cmakeToolchainOpts)
     if (NOT "${CMAKE_TOOLCHAIN_FILE}" STREQUAL "")
         list(APPEND cmakeToolchainOpts "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
@@ -57,8 +48,8 @@ function(add_app_test NAME)
         "-DCMAKE_PREFIX_PATH=${HALIDE_DIR}"
         "-DCMAKE_BUILD_TYPE=$<CONFIG>"
         "-DLLVM_DIR=${LLVM_DIR}")
-    if (NOT "${HL_TARGET}" STREQUAL "")
-        list(APPEND cmakeDefinitionOpts "-DHL_TARGET=${HL_TARGET}")
+    if (NOT "${Halide_TARGET}" STREQUAL "")
+        list(APPEND cmakeDefinitionOpts "-DHalide_TARGET=${Halide_TARGET}")
     endif ()
 
     add_test(NAME ${NAME}
@@ -75,6 +66,7 @@ function(add_app_test NAME)
     set_tests_properties(${NAME} PROPERTIES
                          FIXTURES_REQUIRED apps
                          LABELS apps
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET}"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endfunction()
 
@@ -103,5 +95,9 @@ add_app_test(wavelet)
 
 # Add the autoschedulers.
 # TODO(#4053): refactor into separate modules
-add_subdirectory(autoscheduler)
-add_subdirectory(gradient_autoscheduler)
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+    # Don't attempt to build these for wasm yet.
+else ()
+    add_subdirectory(autoscheduler)
+    add_subdirectory(gradient_autoscheduler)
+endif ()
