@@ -78,12 +78,11 @@ protected:
     std::string print_expr(const Expr &);
 
     /** Like print_expr, but cast the Expr to the given Type */
-    std::string print_cast_expr(const Type &, const Expr &);
+    virtual std::string print_cast_expr(const Type &, const Expr &);
 
     /** Emit a statement */
     void print_stmt(const Stmt &);
 
-    void create_assertion(const std::string &id_cond, const std::string &id_msg);
     void create_assertion(const std::string &id_cond, const Expr &message);
     void create_assertion(const Expr &cond, const Expr &message);
 
@@ -111,10 +110,6 @@ protected:
 
     /** Bottleneck to allow customization of calls to generic Extern/PureExtern calls.  */
     virtual std::string print_extern_call(const Call *op);
-
-    std::string print_xtensa_call(const Call *op);
-
-    bool is_native_vector_type(Type t);
 
     /** Convert a vector Expr into a series of scalar Exprs, then reassemble into vector of original type.  */
     std::string print_scalarized_expr(const Expr &e);

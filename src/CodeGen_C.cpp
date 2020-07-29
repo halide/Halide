@@ -12,7 +12,6 @@
 #include "Type.h"
 #include "Util.h"
 #include "Var.h"
-#include "XtensaOptimize.h"
 
 namespace Halide {
 namespace Internal {
@@ -55,7 +54,7 @@ const char *const kDefineMustUseResult = R"INLINE_CODE(#ifndef HALIDE_MUST_USE_R
 )INLINE_CODE";
 
 const string headers =
-    // "#include <iostream>\n"
+    "#include <iostream>\n"
     "#include <math.h>\n"
     "#include <float.h>\n"
     "#include <assert.h>\n"
@@ -68,9 +67,6 @@ const string headers =
 // intended to be inlined into every module but are only expressed
 // in .ll. The redundancy is regrettable (FIXME).
 const string globals = R"INLINE_CODE(
-#define constexpr const
-#define nullptr NULL
-
 extern "C" {
 int64_t halide_current_time_ns(void *ctx);
 void halide_profiler_pipeline_end(void *, void *);
@@ -904,9 +900,7 @@ private:
     enum Empty { empty };
     CppVector(Empty) {}
 };
-#if 0
-typedef CppVector<uint8_t, 32> uint1x32_t;
-#endif
+
 )INLINE_CODE";
 
         const char *native_vector_decl = R"INLINE_CODE(
@@ -1325,898 +1319,27 @@ NativeVector<ElementType, Lanes> operator>>(const NativeVector<ElementType, Lane
 
 )INLINE_CODE";
 
-        const char *native_typedef_decl = R"INLINE_CODE(
-
-
-#if defined(__XTENSA__)
-#include <xtensa/sim.h>
-#include <xtensa/tie/xt_ivpn.h>
-#include <xtensa/tie/xt_timer.h>
-
-// This inline function is needed by application to get the cycle count from ISS
-inline int GetCycleCount() {
-  return XT_RSR_CCOUNT();
-}
-
-#endif
-#include <xtensa/tie/xt_ivpn.h>
-
-#define HALIDE_MAYBE_UNUSED __attribute__ ((unused))
-
-typedef xb_vecNx8 int8x64_t;
-typedef xb_vec2Nx8 int8x128_t;
-typedef xb_vecNx8U uint8x64_t;
-typedef xb_vec2Nx8U uint8x128_t;
-typedef xb_vecNx16 int16x32_t;
-typedef xb_vecNx16U uint16x32_t;
-typedef xb_vecN_2x32v int32x16_t;
-typedef xb_vecN_2x32Uv uint32x16_t;
-typedef xb_vecNx48 int48x32_t;
-typedef vboolN_2 uint1x16_t;
-typedef vboolN uint1x32_t;
-typedef vbool2N uint1x64_t;
-
-class int32x32_t {
-  typedef int32x32_t Vec;
-  typedef int32_t ElementType;
-  typedef xb_vecN_2x32v CppVectorType;
-  static const int Lanes = 32;
-  typedef uint1x32_t Mask;
-
-public:
-
-    CppVectorType native_vector[2];
-
-    enum Empty { empty };
-    inline int32x32_t(Empty) {}
-
-    enum FromCppVector { from_native_vector };
-    inline int32x32_t(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
-        native_vector[0] = src1;
-        native_vector[1] = src2;
-    }
-
-    static Vec broadcast(const ElementType &v) {
-        return Vec(from_native_vector, v, v);
-    }
-
-    static Vec aligned_load(const void *base, int32_t offset) {
-        xb_vec2Nx8 nv8_0, nv8_1;
-        xb_vec2Nx8* ptr = (xb_vec2Nx8*)((const ElementType*)base + offset);
-        IVP_L2U2NX8_XP(nv8_0, ptr, 0);
-        ptr++;
-        IVP_L2U2NX8_XP(nv8_1, ptr, 0);
-        return Vec(from_native_vector,
-                    IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(nv8_0)),
-                    IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(nv8_1)));
-    }
-
-    static Vec load(const void *base, int32_t offset) {
-        xb_vec2Nx8 nv8_0, nv8_1;
-        xb_vec2Nx8* ptr = (xb_vec2Nx8*)((const ElementType*)base + offset);
-        IVP_L2U2NX8_XP(nv8_0, ptr, 0);
-        ptr++;
-        IVP_L2U2NX8_XP(nv8_1, ptr, 0);
-        return Vec(from_native_vector,
-                    IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(nv8_0)),
-                    IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(nv8_1)));
-    }
-
-    void aligned_store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-
-    void store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-
-    static Vec ramp(const ElementType &base, const ElementType &stride) {
-        CppVectorType one_to_n = IVP_SEQN_2X32();
-        CppVectorType base_w = base;
-        CppVectorType stride_w = stride;
-        CppVectorType lanes_2 = Lanes / 2;
-        return Vec(from_native_vector,
-                    base_w + IVP_PACKLN_2X64W(one_to_n * stride_w),
-                    base_w + IVP_PACKLN_2X64W((lanes_2 + one_to_n) * stride_w));
-    }
-
-    friend Vec operator+(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector[0] + b.native_vector[0], a.native_vector[1] + b.native_vector[1]);
-    }
-
-    friend Vec operator-(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector[0] - b.native_vector[0], a.native_vector[1] - b.native_vector[1]);
-    }
-
-    friend Vec operator*(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_PACKLN_2X64W(a.native_vector[0] * b.native_vector[0]),
-                    IVP_PACKLN_2X64W(a.native_vector[1] * b.native_vector[1]));
-    }
-
-    friend Vec operator&(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                      a.native_vector[0] & b.native_vector[0],
-                      a.native_vector[1] & b.native_vector[1]);
-    }
-
-    template <typename OtherVec>
-    friend Vec operator>>(const Vec &a, const OtherVec &b) {
-        return Vec(from_native_vector, a.native_vector[0] >> xb_vecN_2x32v(b.native_vector[0]),
-                                       a.native_vector[1] >> xb_vecN_2x32v(b.native_vector[1]));
-    }
-
-    friend Mask operator<(const Vec &a, const Vec &b) {
-        return IVP_JOINBN_2(
-                    IVP_LTN_2X32(a.native_vector[1], b.native_vector[1]),
-                    IVP_LTN_2X32(a.native_vector[0], b.native_vector[0]));
-    }
-
-    friend Mask operator<=(const Vec &a, const Vec &b) {
-        return IVP_JOINBN_2(
-                    IVP_LEN_2X32(a.native_vector[1], b.native_vector[1]),
-                    IVP_LEN_2X32(a.native_vector[0], b.native_vector[0]));
-    }
-
-    friend Mask operator==(const Vec &a, const Vec &b) {
-        return IVP_JOINBN_2(
-                    IVP_EQN_2X32(a.native_vector[1], b.native_vector[1]),
-                    IVP_EQN_2X32(a.native_vector[0], b.native_vector[0]));
-    }
-
-    static Vec select(const Mask &cond, const Vec &true_value, const Vec &false_value) {
-        return Vec(from_native_vector,
-                    IVP_MOVN_2X32T(true_value.native_vector[0], false_value.native_vector[0], IVP_EXTRACTBLN(cond)),
-                    IVP_MOVN_2X32T(true_value.native_vector[1], false_value.native_vector[1], IVP_EXTRACTBHN(cond)));
-    }
-
-    static Vec max(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_MAXN_2X32(a.native_vector[0], b.native_vector[0]),
-                    IVP_MAXN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    static Vec min(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_MINN_2X32(a.native_vector[0], b.native_vector[0]),
-                    IVP_MINN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    static Vec count_leading_zeros(const Vec &a) {
-        return Vec(from_native_vector, IVP_NSAUN_2X32(a.native_vector[0]), IVP_NSAUN_2X32(a.native_vector[1]));
-    }
-};
-
-class uint32x32_t {
-  typedef uint32x32_t Vec;
-  typedef uint32_t ElementType;
-  typedef xb_vecN_2x32Uv CppVectorType;
-  static const int Lanes = 32;
-  typedef uint1x32_t Mask;
-
-  public:
-
-    CppVectorType native_vector[2];
-
-    enum Empty { empty };
-    inline uint32x32_t(Empty) {}
-
-    enum FromCppVector { from_native_vector };
-    inline uint32x32_t(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
-        native_vector[0] = src1;
-        native_vector[1] = src2;
-    }
-
-    static Vec broadcast(const ElementType &v) {
-        return Vec(from_native_vector, v, v);
-    }
-
-    void aligned_store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-
-    friend Vec operator+(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector[0] + b.native_vector[0], a.native_vector[1] + b.native_vector[1]);
-    }
-
-    friend Vec operator*(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_PACKLN_2X64W(IVP_MULN_2X32(a.native_vector[0], b.native_vector[0])),
-                    IVP_PACKLN_2X64W(IVP_MULN_2X32(a.native_vector[1], b.native_vector[1])));
-    }
-
-    friend Vec operator<<(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, IVP_SLLN_2X32(a.native_vector[0], b.native_vector[0]),
-                                       IVP_SLLN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    friend Vec operator>>(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, IVP_SRLN_2X32(a.native_vector[0], b.native_vector[0]),
-                                       IVP_SRLN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    friend Mask operator<(const Vec &a, const Vec &b) {
-        return IVP_JOINBN_2(
-                    a.native_vector[1] < b.native_vector[1],
-                    a.native_vector[0] < b.native_vector[0]);
-    }
-
-    static Vec max(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_MAXUN_2X32(a.native_vector[0], b.native_vector[0]),
-                    IVP_MAXUN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    static Vec min(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_MINUN_2X32(a.native_vector[0], b.native_vector[0]),
-                    IVP_MINUN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    static Vec count_leading_zeros(const Vec &a) {
-        return Vec(from_native_vector, IVP_NSAUN_2X32(a.native_vector[0]), IVP_NSAUN_2X32(a.native_vector[1]));
-    }
-};
-
-class int16x64_t {
-  typedef int16_t ElementType;
-  typedef xb_vecNx16 CppVectorType;
-  static const int Lanes = 64;
-public:
-
-    CppVectorType native_vector[2];
-
-    enum Empty { empty };
-    inline int16x64_t(Empty) {}
-
-    enum FromCppVector { from_native_vector };
-    inline int16x64_t(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
-        native_vector[0] = src1;
-        native_vector[1] = src2;
-    }
-
-   static int16x64_t load(const void *base, int32_t offset) {
-        int16x64_t r(empty);
-        memcpy(&r.native_vector[0], ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
-        return r;
-    }
-
-   static int16x64_t concat(const int16x32_t& a, const int16x32_t& b) {
-        return int16x64_t(from_native_vector, a, b);
-    }
-
-    void aligned_store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-
-    void store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-};
-
-class uint16x64_t {
-  typedef uint16_t ElementType;
-  typedef xb_vecNx16U CppVectorType;
-  static const int Lanes = 64;
-public:
-
-    CppVectorType native_vector[2];
-
-    enum Empty { empty };
-    inline uint16x64_t(Empty) {}
-
-    enum FromCppVector { from_native_vector };
-    inline uint16x64_t(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
-        native_vector[0] = src1;
-        native_vector[1] = src2;
-    }
-
-   static uint16x64_t load(const void *base, int32_t offset) {
-        uint16x64_t r(empty);
-        memcpy(&r.native_vector[0], ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
-        return r;
-    }
-
-    void aligned_store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-
-    void store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-};
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x64_t int8x64_t_aligned_load(const void *base, int32_t offset) {
-    return *((const int8x64_t *)((int8_t*)base + offset));
-}
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_aligned_load(const void *base, int32_t offset) {
-    return *((const uint8x64_t *)((uint8_t*)base + offset));
-}
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t int16x64_t_aligned_load(const void *base, int32_t offset) {
-    return *((const int16x64_t *)((int16_t*)base + offset));
-}
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t int16x32_t_aligned_load(const void *base, int32_t offset) {
-    return *((const int16x32_t *)((int16_t*)base + offset));
-}
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t int16x32_t_load(const void *base, int32_t offset) {
-    int16x32_t r;
-    xb_vecNx16* ptr = (xb_vecNx16*)((const int16_t*)base + offset);
-    IVP_L2UNX16_XP(r, ptr, 0);
-    return r;
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t int16x32_t_load(const void *base, const int32x32_t& offset) {
-    int16_t tmp[32];
-    int offsets[32];
-    offset.store(&offsets[0], 0);
-    for (int i = 0; i < 32; i++) {
-        tmp[i] = ((const int16_t*)base)[offsets[i]];
-    }
-
-    return *((int16x32_t*)tmp);
-}
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x32_t uint16x32_t_aligned_load(const void *base, int32_t offset) {
-    return *((const uint16x32_t *)((uint16_t*)base + offset));
-}
-
-HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_load(const void *base, const int32x32_t& offset) {
-    uint16_t tmp[32];
-    int offsets[32];
-    offset.store(&offsets[0], 0);
-    for (int i = 0; i < 32; i++) {
-        tmp[i] = ((const uint16_t*)base)[offsets[i]];
-    }
-
-    return *((uint16x32_t*)tmp);
-}
-
-HALIDE_ALWAYS_INLINE void aligned_store(const uint8x64_t& a, void *base, int32_t offset) {
-    *((uint8x64_t *)((uint8_t*)base + offset)) = a;
-}
-
-HALIDE_ALWAYS_INLINE void aligned_store(const int16x32_t& a, void *base, int32_t offset) {
-    *((int16x32_t *)((int16_t*)base + offset)) = a;
-}
-
-HALIDE_ALWAYS_INLINE void store(const int16x32_t& a, void *base, int32_t offset) {
-    //memcpy(((int16_t*)base + offset), &a, sizeof(int16_t) * 32);
-    //TODO(vksnk): this seems to be right based on their doc, but double-check
-    valign align;
-    xb_vecNx16* ptr = (xb_vecNx16*)((const int16_t*)base + offset);
-    IVP_SANX16_IP(a, align, ptr);
-    // Flush alignment register.
-    IVP_SAPOS_FP(align, (xb_vec2Nx8*)ptr);
-}
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x32_t uint16x32_t_load(const void *base, int32_t offset) {
-    uint16x32_t r;
-    uint16x32_t* ptr = (uint16x32_t*)((const int16_t*)base + offset);
-    IVP_L2UNX16U_XP(r, ptr, 0);
-    return r;
-}
-
-HALIDE_ALWAYS_INLINE void aligned_store(const uint16x32_t& a, void *base, int32_t offset) {
-    *((uint16x32_t *)((uint16_t*)base + offset)) = a;
-}
-
-HALIDE_ALWAYS_INLINE void store(const uint16x32_t& a, void *base, int32_t offset) {
-    memcpy(((uint16_t*)base + offset), &a, sizeof(uint16_t) * 32);
-}
-
-HALIDE_ALWAYS_INLINE void aligned_store(const int16x64_t& a, void *base, int32_t offset) {
-   a.aligned_store(base, offset);
-   //xb_vecNx16* ptr = (int16x32_t *)((int16_t*)base + offset);
-   //ptr[0] = a.native_vector[0];
-   //ptr[1] = a.native_vector[1];
-}
-
-HALIDE_ALWAYS_INLINE void store(const int16x64_t& a, void *base, int32_t offset) {
-  a.store(base, offset);
-}
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x16_t int32x16_t_load(const void *base, int32_t offset) {
-    int32x16_t r;
-    memcpy(&r, ((const int32_t*)base + offset), sizeof(int32_t) * 16);
-    return r;
-}
-
-HALIDE_ALWAYS_INLINE void aligned_store(const int32x16_t& a, void *base, int32_t offset) {
-    *((int32x16_t *)((int32_t*)base + offset)) = a;
-}
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint32x16_t uint32x16_t_load(const void *base, int32_t offset) {
-    uint32x16_t r;
-    memcpy(&r, ((const uint32_t*)base + offset), sizeof(uint32_t) * 16);
-    return r;
-}
-
-HALIDE_ALWAYS_INLINE void aligned_store(const uint32x16_t& a, void *base, int32_t offset) {
-    *((uint32x16_t *)((uint32_t*)base + offset)) = a;
-}
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x32_t int32x32_t_aligned_load(const void *base, int32_t offset) {
-    return int32x32_t::aligned_load(base, offset);
-}
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x32_t int32x32_t_load(const void *base, int32_t offset) {
-    return int32x32_t::load(base, offset);
-}
-
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t int16x64_t_load(const void *base, int32_t offset) {
-    return int16x64_t::load(base, offset);
-}
-
-HALIDE_ALWAYS_INLINE void aligned_store(const int32x32_t& a, void *base, int32_t offset) {
-   a.aligned_store(base, offset);
-}
-
-HALIDE_ALWAYS_INLINE void store(const int32x32_t& a, void *base, int32_t offset) {
-  a.store(base, offset);
-}
-
-HALIDE_ALWAYS_INLINE void aligned_store(const uint32x32_t& a, void *base, int32_t offset) {
-   a.aligned_store(base, offset);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_clamped_dense_load_i16(
-          const void *base, int32_t ramp_base, int32_t upper_limit, int32_t lower_limit, int32_t offset) {
-  // This is a bit flawed, as it assumes that vector starting at ramp_base
-  // interesects with [lower_limit, upper_limit] range.
-  xb_vecNx16 mask = IVP_MINNX16(
-                        IVP_MAXNX16(IVP_SEQNX16(), xb_vecNx16(lower_limit - ramp_base)),
-                        xb_vecNx16(upper_limit - ramp_base));
-  int16x32_t unclamped_vector = int16x32_t_load(base, ramp_base + offset);
-  return IVP_SHFLNX16(unclamped_vector, mask);
-}
-
-HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_interleave_i16(const int16x32_t& a, const int16x32_t& b) {
-  return int16x64_t(int16x64_t::from_native_vector,
-                                IVP_SELNX16I(b, a, IVP_SELI_16B_INTERLEAVE_1_LO),
-                                IVP_SELNX16I(b, a, IVP_SELI_16B_INTERLEAVE_1_HI)
-                                );
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_deinterleave_even_i16(const int16x64_t& a) {
-  return  IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_deinterleave_odd_i16(const int16x64_t& a) {
-  return  IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_1);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_1_i16(const int16x64_t& a) {
-  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_1);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_2_i16(const int16x64_t& a) {
-  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_2);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_3_i16(const int16x64_t& a) {
-  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_3);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_4_i16(const int16x64_t& a) {
-  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_4);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_i16(const int16x64_t& a, int start) {
-  return IVP_SELNX16 (a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
-}
-
-HALIDE_ALWAYS_INLINE uint8x128_t halide_xtensa_dynamic_shuffle(const uint8x128_t& a, const int8x128_t& b, int min_range, int max_range) {
-  return IVP_SHFL2NX8U(a, b);
-}
-
-//HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_dynamic_shuffle(const uint8x64_t& a, const int8x64_t& b, int min_range, int max_range) {
-//  return
-//}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_dynamic_shuffle(const int16x32_t& a, const int16x32_t& b, int min_range, int max_range) {
-  return IVP_SHFLNX16(a, b);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_dynamic_shuffle(const int16x64_t& a, const int16x32_t& b, int min_range, int max_range) {
-  return IVP_SELNX16(a.native_vector[1], a.native_vector[0], b);
-}
-
-HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_shift_right(const uint16x32_t &a, const uint16x32_t &b) {
-    return IVP_SRLNX16(a, b);
-}
-
-HALIDE_ALWAYS_INLINE uint32x16_t uint32x16_t_shift_right(const uint32x16_t &a, const uint32x16_t &b) {
-    return IVP_SRLN_2X32(a, b);
-}
-
-HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_shift_left(const uint16x32_t &a, const uint16x32_t &b) {
-    return IVP_SLLNX16(a, b);
-}
-
-HALIDE_ALWAYS_INLINE uint32x16_t uint32x16_t_shift_left(const uint32x16_t &a, const uint32x16_t &b) {
-    return IVP_SLLN_2X32(a, b);
-}
-
-HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_sat_add_i32(const int32x16_t& a,
-                                                                      const int32x16_t& b) {
-  // I am not 100% about it.
-  xb_vecN_2x32v zero = 0;
-  xb_vecN_2x32v one = 1;
-  xb_vecN_2x64w l0 = a * one;
-  IVP_MULAN_2X32(l0, b, one);
-  return IVP_PACKVN_2X64W(l0, zero);
-}
-
-HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_sat_add_i32(const int32x32_t& a,
-                                                                      const int32x32_t& b) {
-  // I am not 100% about it.
-  xb_vecN_2x32v zero = 0;
-  xb_vecN_2x32v one = 1;
-  xb_vecN_2x64w l0 = a.native_vector[0] * one;
-  IVP_MULAN_2X32(l0, b.native_vector[0], one);
-  xb_vecN_2x64w l1 = a.native_vector[1] * one;
-  IVP_MULAN_2X32(l1, b.native_vector[1], one);
-  return int32x32_t(int32x32_t::from_native_vector, IVP_PACKVN_2X64W(l0, zero), IVP_PACKVN_2X64W(l1, zero));
-  //return a + b;
-  /*
-  // determine the lower or upper bound of the result
-  //int64_t ret =  (x < 0) ? INT64_MIN : INT64_MAX;
-  int32x32_t ret = int32x32_t::select(a < int32x32_t::broadcast(0),
-                                      int32x32_t::broadcast(INT32_MIN),
-                                      int32x32_t::broadcast(INT32_MAX));
-  // this is always well defined:
-  // if x < 0 this adds a positive value to INT64_MIN
-  // if x > 0 this subtracts a positive value from INT64_MAX
-  int32x32_t comp = ret - a;
-  // the condition is equivalent to
-  // ((x < 0) && (y > comp)) || ((x >=0) && (y <= comp))
-  //if ((x < 0) == (y > comp)) ret = x + y;
-  ret = int32x32_t::select(IVP_NOTBN(IVP_XORBN(a < int32x32_t::broadcast(0), comp <= b)), a + b, ret);
-  return ret;
-  */
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_add_i16(const int16x32_t& a, const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c) {
-  int16x32_t r = a;
-  IVP_ADDNX16T(r, b, c, p);
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_sub_i16(const int16x32_t& a, const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c) {
-  int16x32_t r = a;
-  IVP_SUBNX16T(r, b, c, p);
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_max_i16(const int16x32_t& a, const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c) {
-  int16x32_t r = a;
-  IVP_MAXNX16T(r, b, c, p);
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_min_i16(const int16x32_t& a, const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c) {
-  int16x32_t r = a;
-  IVP_MINNX16T(r, b, c, p);
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_sat_add_i16(const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c, const int16x32_t& a) {
-  int16x32_t r = a;
-  IVP_ADDSNX16T(r, b, c, p);
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_sat_sub_i16(const int16x32_t& a, const uint1x32_t& p, const int16x32_t& b, const int16x32_t& c) {
-  int16x32_t r = a;
-  IVP_SUBSNX16T(r, b, c, p);
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_i48(const int16x32_t& a, const int16x32_t& b) {
-  return a * b;
-}
-
-HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_widen_mul_i32(const int16x32_t& a, const int16x32_t& b) {
-  xb_vecNx48 r = a * b;
-  return int32x32_t(int32x32_t::from_native_vector,
-                                IVP_CVT32SNX48L(r),
-                                IVP_CVT32SNX48H(r));
-}
-
-HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_widen_mul_u32(const uint16x32_t& a,
-                                                                         const uint16x32_t& b) {
-  xb_vecNx48 r = a * b;
-  return uint32x32_t(uint32x32_t::from_native_vector,
-                                IVP_CVT32UNX48L(r),
-                                IVP_CVT32UNX48H(r));
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_add_i48(const int48x32_t& a, const int16x32_t& b, const int16x32_t& c) {
-  int48x32_t r = a;
-  IVP_MULANX16(r, b, c);
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_i48(const int16x32_t& a, const int16x32_t& b,
-                                                                  const int16x32_t& c, const int16x32_t& d) {
-  return IVP_MULPNX16(a, b, c, d);
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_add_i48(const int48x32_t& a, const int16x32_t& b,
-                                                                  const int16x32_t& c, const int16x32_t& d, const int16x32_t& e) {
-  int48x32_t r = a;
-  IVP_MULPANX16(r, b, c, d, e);
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_u48(const uint16x32_t& a, const uint16x32_t& b,
-                                                                  const uint16x32_t& c, const uint16x32_t& d) {
-  return IVP_MULUUPNX16(a, b, c, d);
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_i48(const int16x32_t& a, const int16x32_t& b) {
-  return IVP_ADDWNX16(a, b);
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_i48(const int48x32_t& a, const int16x32_t& b) {
-  int48x32_t r = a;
-  IVP_ADDWANX16(r, b, int16x32_t(0));
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_add_i48(const int48x32_t& a, const int16x32_t& b, const int16x32_t& c) {
-  int48x32_t r = a;
-  IVP_ADDWANX16(r, b, c);
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_u48(const uint16x32_t& a, const uint16x32_t& b) {
-  return IVP_ADDWUNX16(a, b);
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_u48(const int48x32_t& a, const uint16x32_t& b) {
-  int48x32_t r = a;
-  IVP_ADDWUANX16(r, b, uint16x32_t(0));
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_add_u48(const int48x32_t& a, const uint16x32_t& b, const uint16x32_t& c) {
-  int48x32_t r = a;
-  IVP_ADDWUANX16(r, b, c);
-  return r;
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_i48x_with_shift_i16(const int48x32_t& a, int shift) {
-  return IVP_PACKVRNRNX48(a, shift);
-}
-
-HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_narrow_i48x_with_shift_u16(const int48x32_t& a, int shift) {
-  return IVP_PACKVRNRNX48(a, shift);
-}
-
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_u48(const uint16x32_t& a,
-                                                                         const uint16x32_t& b) {
-  return a * b;
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_with_shift_i16(const int32x32_t& a, int shift) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
-  return IVP_PACKVRNRNX48(wide, shift);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_clz_i16(const int32x32_t& a) {
-  xb_vec2Nx24 wide = IVP_CVT24UNX32L(IVP_NSAUN_2X32(a.native_vector[1]), IVP_NSAUN_2X32(a.native_vector[0]));
-  return IVP_CVT16U2NX24L(wide);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_clz_i16(const uint32x32_t& a) {
-  xb_vec2Nx24 wide = IVP_CVT24UNX32L(IVP_NSAUN_2X32(a.native_vector[1]), IVP_NSAUN_2X32(a.native_vector[0]));
-  return IVP_CVT16U2NX24L(wide);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_i48x_clz_i16(const int48x32_t& a) {
-  xb_vecNx16 clz_lo = IVP_NSAUNX16(IVP_PACKLNX48(a));
-  xb_vecNx16 clz_hi = IVP_NSAUNX16(IVP_PACKVRNRNX48(a, 16));
-  IVP_ADDNX16T(clz_hi, clz_hi, clz_lo, clz_hi == xb_vecNx16(16));
-  return clz_hi;
-}
-
-HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_i48x_gt_zero(const int48x32_t& b) {
-  return int16x32_t(0) < IVP_PACKVRNX48(b, 0);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_lerp_i16(const int16x32_t& a, const int16x32_t& b, uint16_t w) {
-  // TODO(vksnk): Halide lerp actually uses full range, but it's not clear from the documentation
-  // if we can pass unsigned type to IVP_MULPN16XR16, so just to be extra careful reduce it to 14-bit
-  // for now.
-  uint32_t w32 = ((uint32_t(w)) >> 2);
-  uint32_t alphaMalpha = ((16384 - w32) << 16) | w32;
-  xb_vecNx48 output = IVP_MULPN16XR16(a, b, alphaMalpha);
-  return IVP_PACKVRNRNX48(output, 14);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_avg121_round_i16(const int16x32_t& a, const int16x32_t& b, const int16x32_t& c) {
-  static const int16_t kCeilAvg121Coef[] = {1, 1, 2, 3};
-  xb_int64pr * __restrict coef = (xb_int64pr*)kCeilAvg121Coef;
-  xb_vecNx48 result = IVP_MULQN16XR16(xb_vecNx16(1), c, b, a, coef[0]);
-  return IVP_PACKVRNRNX48(result, 2);
-}
-
-//inline int16x32_t convert_to_int16x64_t_from_uint8x64_t(const uint8x64_t& src) {
-//  xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src);
-//  return int16x64_t(int16x64_t::from_native_vector,
-//                    IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
-//}
-
-inline int16x32_t convert_to_int16x32_t_from_int32x32_t(const int32x32_t& src) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(src.native_vector[1], src.native_vector[0]);
-  return IVP_PACKLNX48(wide);
-}
-
-inline int16x32_t convert_to_int16x32_t_from_uint32x32_t(const uint32x32_t& src) {
-  xb_vecNx48 wide = IVP_CVT48UNX32(src.native_vector[1], src.native_vector[0]);
-  return IVP_PACKLNX48(wide);
-}
-
-inline uint16x32_t convert_to_uint16x32_t_from_int32x32_t(const int32x32_t& src) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(src.native_vector[1], src.native_vector[0]);
-  return IVP_PACKLNX48(wide);
-}
-
-inline uint16x32_t convert_to_uint16x32_t_from_uint32x32_t(const uint32x32_t& src) {
-  xb_vecNx48 wide = IVP_CVT48UNX32(src.native_vector[1], src.native_vector[0]);
-  return IVP_PACKLNX48(wide);
-}
-
-inline int32x32_t convert_to_int32x32_t_from_int16x32_t(const int16x32_t& src) {
-    xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src);
-    return int32x32_t(int32x32_t::from_native_vector,
-                      IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
-}
-
-inline int32x32_t convert_to_int32x32_t_from_uint16x32_t(const uint16x32_t& src) {
-    xb_vec2Nx24 wide = IVP_CVT24U2NX16(0, src);
-    return int32x32_t(int32x32_t::from_native_vector,
-                      IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
-}
-
-inline int32x32_t convert_to_int32x32_t_from_uint32x32_t(const uint32x32_t& src) {
-    return int32x32_t(int32x32_t::from_native_vector,
-                      src.native_vector[0], src.native_vector[1]);
-}
-
-inline int32x32_t convert_to_int32x32_t_from_int48x32_t(const int48x32_t& src) {
-    return int32x32_t(int32x32_t::from_native_vector,
-                                IVP_CVT32SNX48L(src),
-                                IVP_CVT32SNX48H(src));
-}
-
-inline uint32x32_t convert_to_uint32x32_t_from_uint16x32_t(const uint16x32_t& src) {
-    xb_vec2Nx24 wide = IVP_CVT24U2NX16(0, src);
-    return uint32x32_t(uint32x32_t::from_native_vector, IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
-}
-
-inline uint32x32_t convert_to_uint32x32_t_from_int48x32_t(const int48x32_t& src) {
-    return uint32x32_t(uint32x32_t::from_native_vector,
-                                IVP_CVT32UNX48L(src),
-                                IVP_CVT32UNX48H(src));
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_to_native(const int16x64_t& src, int index, int native_lanes, int total_lanes) {
-  return src.native_vector[index];
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_to_native(const int16x32_t& src, int index, int native_lanes, int total_lanes) {
-  return src;
-}
-
-HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_concat_from_native(const int16x32_t& a, const int16x32_t& b) {
-    return int16x64_t(int16x64_t::from_native_vector, a, b);
-}
-
-HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_to_native(const uint16x64_t& src, int index, int native_lanes, int total_lanes) {
-  return src.native_vector[index];
-}
-
-HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_to_native(const uint16x32_t& src, int index, int native_lanes, int total_lanes) {
-  return src;
-}
-
-HALIDE_ALWAYS_INLINE uint16x64_t halide_xtensa_concat_from_native(const uint16x32_t& a, const uint16x32_t& b) {
-    return uint16x64_t(uint16x64_t::from_native_vector, a, b);
-}
-
-HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_slice_to_native(const int32x32_t& src, int index, int native_lanes, int total_lanes) {
-  return src.native_vector[index];
-}
-
-HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_concat_from_native(const int32x16_t& a, const int32x16_t& b) {
-    return int32x32_t(int32x32_t::from_native_vector, a, b);
-}
-
-HALIDE_ALWAYS_INLINE uint32x16_t halide_xtensa_slice_to_native(const uint32x32_t& src, int index, int native_lanes, int total_lanes) {
-  return src.native_vector[index];
-}
-
-HALIDE_ALWAYS_INLINE uint1x16_t halide_xtensa_slice_to_native(const uint1x32_t& src, int index, int native_lanes, int total_lanes) {
-  return (index == 0)?IVP_EXTRACTBLN(src):IVP_EXTRACTBHN(src);
-}
-
-
-HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_concat_from_native(const uint32x16_t& a, const uint32x16_t& b) {
-    return uint32x32_t(uint32x32_t::from_native_vector, a, b);
-}
-
-inline int32x16_t halide_xtensa_convert_i16_low_i32(const int16x32_t& src, int native_lanes, int total_lines) {
-    xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src);
-    return IVP_CVT32S2NX24LL(wide);
-}
-
-inline int32x16_t halide_xtensa_convert_i16_high_i32(const int16x32_t& src, int native_lanes, int total_lines) {
-    xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src);
-    return IVP_CVT32S2NX24LH(wide);
-}
-
-inline int32x16_t halide_xtensa_convert_i48_low_i32(const int48x32_t& src, int native_lanes, int total_lines) {
-    return IVP_CVT32SNX48L(src);
-}
-
-inline int32x16_t halide_xtensa_convert_i48_high_i32(const int48x32_t& src, int native_lanes, int total_lines) {
-    return IVP_CVT32SNX48H(src);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_concat_i32_to_i16(const int32x16_t& a, const int32x16_t& b) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(b, a);
-  return IVP_PACKLNX48(wide);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_concat_u32_to_i16(const uint32x16_t& a, const uint32x16_t& b) {
-  xb_vecNx48 wide = IVP_CVT48UNX32(b, a);
-  return IVP_PACKLNX48(wide);
-}
-
-inline uint32x16_t halide_xtensa_convert_i48_low_u32(const int48x32_t& src, int native_lanes, int total_lines) {
-    return IVP_CVT32UNX48L(src);
-}
-
-inline uint32x16_t halide_xtensa_convert_i48_high_u32(const int48x32_t& src, int native_lanes, int total_lines) {
-    return IVP_CVT32UNX48H(src);
-}
-
-HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_concat_from_native(const uint1x16_t& a, const uint1x16_t& b) {
-        return IVP_JOINBN_2(b, a);
-}
-
-)INLINE_CODE";
-
         // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
         // emitting this long text string was regularly garbled in a predictable pattern;
         // flushing the stream before or after heals it. Since C++ codegen is rarely
         // on a compilation critical path, we'll just band-aid it in this way.
         stream << std::flush;
         stream << cpp_vector_decl << native_vector_decl << vector_selection_decl;
-        stream << native_typedef_decl;
         stream << std::flush;
 
-        //         for (const auto &t : vector_types) {
-        //             string name = type_to_c_type(t, false, false);
-        //             string scalar_name = type_to_c_type(t.element_of(), false, false);
-        //             stream << "#if halide_cpp_use_native_vector(" << scalar_name << ", " << t.lanes() << ")\n";
-        //             stream << "typedef NativeVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
-        //             // Useful for debugging which Vector implementation is being selected
-        //             // stream << "#pragma message \"using NativeVector for " << t << "\"\n";
-        //             stream << "#else\n";
-        //             stream << "typedef CppVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
-        //             // Useful for debugging which Vector implementation is being selected
-        //             // stream << "#pragma message \"using CppVector for " << t << "\"\n";
-        //             stream << "#endif\n";
-        //         }
+        for (const auto &t : vector_types) {
+            string name = type_to_c_type(t, false, false);
+            string scalar_name = type_to_c_type(t.element_of(), false, false);
+            stream << "#if halide_cpp_use_native_vector(" << scalar_name << ", " << t.lanes() << ")\n";
+            stream << "typedef NativeVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
+            // Useful for debugging which Vector implementation is being selected
+            // stream << "#pragma message \"using NativeVector for " << t << "\"\n";
+            stream << "#else\n";
+            stream << "typedef CppVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
+            // Useful for debugging which Vector implementation is being selected
+            // stream << "#pragma message \"using CppVector for " << t << "\"\n";
+            stream << "#endif\n";
+        }
     }
 }
 
@@ -2581,11 +1704,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                    << ";\n";
 
             // Emit the body
-            Stmt body = f.body;
-            body = match_xtensa_patterns(body);
-            //debug(0) << body;
-            print(body);
-            // stream << get_indent() << "printf(\"C code executed\\n\");";
+            print(f.body);
 
             // Return success.
             stream << get_indent() << "return 0;\n";
@@ -2694,14 +1813,10 @@ string CodeGen_C::print_expr(const Expr &e) {
 string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
     string value = print_expr(e);
     string type = print_type(t);
-    if (t.is_int_or_uint() && e.type().is_int_or_uint() &&
-        (e.type().bits() == 16) && (e.type().lanes() == 32) &&
-        (t.bits() == 16) && (t.lanes() == 32)) {
-        return print_assignment(t, "(" + type + ")(" + value + ")");
-    } else if (t.is_vector() &&
-               t.lanes() == e.type().lanes() &&
-               t != e.type()) {
-        return print_assignment(t, "convert_to_" + type + "_from_" + print_type(e.type()) + "(" + value + ")");
+    if (t.is_vector() &&
+        t.lanes() == e.type().lanes() &&
+        t != e.type()) {
+        return print_assignment(t, type + "::convert_from<" + print_type(e.type()) + ">(" + value + ")");
     } else {
         return print_assignment(t, "(" + type + ")(" + value + ")");
     }
@@ -2741,18 +1856,6 @@ void CodeGen_C::close_scope(const std::string &comment) {
     }
 }
 
-bool CodeGen_C::is_native_vector_type(Type t) {
-    if (t.is_int_or_uint() && (t.lanes() == 32) && (t.bits() == 16)) {
-        return true;
-    }
-
-    if (t.is_int_or_uint() && (t.lanes() == 16) && (t.bits() == 32)) {
-        return true;
-    }
-
-    return false;
-}
-
 void CodeGen_C::visit(const Variable *op) {
     id = print_name(op->name);
 }
@@ -2776,47 +1879,13 @@ void CodeGen_C::visit(const Sub *op) {
 }
 
 void CodeGen_C::visit(const Mul *op) {
-    int bits;
-    if (is_const_power_of_two_integer(op->b, &bits)) {
-        if (op->type.is_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-            string sa = print_expr(op->a);
-            print_assignment(op->type, "uint16x32_t_shift_left(" + sa + ", " + std::to_string(bits) + ")");
-        } else if (op->type.is_uint() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
-            string sa = print_expr(op->a);
-            print_assignment(op->type, "uint32x16_t_shift_left(" + sa + ", " + std::to_string(bits) + ")");
-        } else {
-            visit_binop(op->type, op->a, make_const(op->a.type(), bits), "<<");
-        }
-    } else {
-        if (op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-            string sa = print_expr(op->a);
-            string sb = print_expr(op->b);
-            print_assignment(op->type, "IVP_MULNX16PACKL(" + sa + ", " + sb + ")");
-        } else if (op->type.is_int() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
-            string sa = print_expr(op->a);
-            string sb = print_expr(op->b);
-            print_assignment(op->type, "IVP_PACKLN_2X64W(" + sa + " * " + sb + ")");
-        } else {
-            visit_binop(op->type, op->a, op->b, "*");
-        }
-    }
+    visit_binop(op->type, op->a, op->b, "*");
 }
 
 void CodeGen_C::visit(const Div *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
-        if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-            string sa = print_expr(op->a);
-            print_assignment(op->type, "IVP_SRLNX16(" + sa + ", " + std::to_string(bits) + ")");
-        } else if (op->type.is_uint() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
-            string sa = print_expr(op->a);
-            print_assignment(op->type, "IVP_SRLN_2X32(" + sa + ", " + std::to_string(bits) + ")");
-        } else if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
-            string sa = print_expr(op->a);
-            print_assignment(op->type, sa + " >> (int32x16_t)" + std::to_string(bits));
-        } else {
-            visit_binop(op->type, op->a, make_const(op->a.type(), bits), ">>");
-        }
+        visit_binop(op->type, op->a, make_const(op->a.type(), bits), ">>");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_div(op->a, op->b));
     } else {
@@ -2848,17 +1917,7 @@ void CodeGen_C::visit(const Max *op) {
         print_expr(Call::make(op->type, "::halide_cpp_max", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
-        if (op->type.is_int() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-            rhs << "IVP_MAXNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-            rhs << "IVP_MAXUNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
-            rhs << "IVP_MAXN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (op->type.is_uint() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
-            rhs << "IVP_MAXUN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else {
-            rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        }
+        rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         print_assignment(op->type, rhs.str());
     }
 }
@@ -2870,17 +1929,7 @@ void CodeGen_C::visit(const Min *op) {
         print_expr(Call::make(op->type, "::halide_cpp_min", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
-        if (op->type.is_int() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-            rhs << "IVP_MINNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-            rhs << "IVP_MINUNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
-            rhs << "IVP_MINN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (op->type.is_uint() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
-            rhs << "IVP_MINUN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else {
-            rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        }
+        rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         print_assignment(op->type, rhs.str());
     }
 }
@@ -2974,7 +2023,7 @@ void CodeGen_C::visit(const FloatImm *op) {
         if (op->type.bits() == 64) {
             oss << "(double) ";
         }
-        oss << "float_from_bits(" << u.as_uint << "u /* " << u.as_float << " */)";
+        oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
         print_assignment(op->type, oss.str());
     }
 }
@@ -3024,44 +2073,15 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
-        if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-            rhs << "uint16x32_t_shift_left(" << a0 << ", " << a1 << ")";
-        } else if (op->type.is_uint() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
-            rhs << "uint32x16_t_shift_left(" << a0 << ", " << a1 << ")";
-        } else {
-            rhs << a0 << " << " << a1;
-        }
+        rhs << a0 << " << " << a1;
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
-        if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
-            rhs << "IVP_SRLNX16(" << a0 << ", " << a1 << ")";
-        } else if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
-            rhs << a0 << " >> (int32x16_t)" << a1;
-        } else {
-            rhs << a0 << " >> " << a1;
-        }
-    } else if (op->is_intrinsic(Call::count_leading_zeros)) {
-        internal_assert(op->args.size() == 1);
-        if (op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-            // TODO(vksnk): it seems that what halide is always matching IVP_NSAUN*?
-            string intrins_name = op->type.is_int() ? "IVP_NSAUNX16(" : "IVP_NSAUNX16(";
-            rhs << intrins_name << print_expr(op->args[0]) << ")";
-        } else if (op->type.is_int_or_uint() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
-            // TODO(vksnk): it seems that what halide is always matching IVP_NSAUN*?
-            string intrins_name = op->type.is_int() ? "IVP_NSAUN_2X32(" : "IVP_NSAUN_2X32(";
-            rhs << intrins_name << print_expr(op->args[0]) << ")";
-        } else if (op->args[0].type().is_vector()) {
-            rhs << print_type(op->type) << "::count_leading_zeros(" << print_expr(op->args[0]) << ")";
-        } else {
-            string a0 = print_expr(op->args[0]);
-            rhs << "halide_" << op->name << "(" << a0 << ")";
-        }
-    } else if (
-        // op->is_intrinsic(Call::count_leading_zeros) ||
-        op->is_intrinsic(Call::count_trailing_zeros) ||
-        op->is_intrinsic(Call::popcount)) {
+        rhs << a0 << " >> " << a1;
+    } else if (op->is_intrinsic(Call::count_leading_zeros) ||
+               op->is_intrinsic(Call::count_trailing_zeros) ||
+               op->is_intrinsic(Call::popcount)) {
         internal_assert(op->args.size() == 1);
         if (op->args[0].type().is_vector()) {
             rhs << print_scalarized_expr(op);
@@ -3072,7 +2092,7 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
-        rhs << "/*lerp = */" << print_expr(e);
+        rhs << print_expr(e);
     } else if (op->is_intrinsic(Call::absd)) {
         internal_assert(op->args.size() == 2);
         Expr a = op->args[0];
@@ -3117,7 +2137,7 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
         Expr a0 = op->args[0];
-        rhs << "/*abs = */" << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
+        rhs << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
     } else if (op->is_intrinsic(Call::memoize_expr)) {
         internal_assert(!op->args.empty());
         string arg = print_expr(op->args[0]);
@@ -3163,18 +2183,18 @@ void CodeGen_C::visit(const Call *op) {
             string shape_name = unique_name('s');
             stream
                 << get_indent() << "struct halide_dimension_t " << shape_name
-                << "[" << dimension << "];\n";
-            // indent++;
+                << "[" << dimension << "] = {\n";
+            indent++;
             for (int i = 0; i < dimension; i++) {
                 stream
-                    // << get_indent() << "{"
-                    << get_indent() << shape_name << "[" << i << "].min = " << values[i * 4 + 0] << ";\n"
-                    << get_indent() << shape_name << "[" << i << "].extent = " << values[i * 4 + 1] << ";\n"
-                    << get_indent() << shape_name << "[" << i << "].stride = " << values[i * 4 + 2] << ";\n"
-                    << get_indent() << shape_name << "[" << i << "].flags = " << values[i * 4 + 3] << ";\n";
+                    << get_indent() << "{"
+                    << values[i * 4 + 0] << ", "
+                    << values[i * 4 + 1] << ", "
+                    << values[i * 4 + 2] << ", "
+                    << values[i * 4 + 3] << "},\n";
             }
-            // indent--;
-            // stream << get_indent() << "};\n";
+            indent--;
+            stream << get_indent() << "};\n";
 
             rhs << shape_name;
         } else {
@@ -3288,15 +2308,6 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic()) {
         // TODO: other intrinsics
         internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
-    } else if (op->name == "halide_xtensa_clamped_dense_load_i16") {
-        vector<string> args(op->args.size());
-        args[0] = print_name(op->args[0].as<StringImm>()->value);
-        for (size_t i = 1; i < op->args.size(); i++) {
-            args[i] = print_expr(op->args[i]);
-        }
-        rhs << op->name << "(" << with_commas(args) << ")";
-    } else if (op->name.find("halide_xtensa_") == 0) {
-        rhs << print_xtensa_call(op);
     } else {
         // Generic extern calls
         rhs << print_extern_call(op);
@@ -3351,46 +2362,8 @@ string CodeGen_C::print_extern_call(const Call *op) {
     return rhs.str();
 }
 
-string CodeGen_C::print_xtensa_call(const Call *op) {
-    ostringstream rhs;
-    vector<string> args(op->args.size());
-    for (size_t i = 0; i < op->args.size(); i++) {
-        args[i] = print_expr(op->args[i]);
-    }
-
-    string op_name = op->name;
-    if (op->name == "halide_xtensa_sat_add_i16") {
-        op_name = "IVP_ADDSNX16";
-    } else if (op->name == "halide_xtensa_sat_sub_i16") {
-        op_name = "IVP_SUBSNX16";
-    } else if (op->name == "halide_xtensa_avg_i16") {
-        op_name = "IVP_AVGNX16";
-    } else if (op->name == "halide_xtensa_avg_u16") {
-        op_name = "IVP_AVGUNX16";
-    } else if (op->name == "halide_xtensa_avg_round_i16") {
-        op_name = "IVP_AVGRNX16";
-    } else if (op->name == "halide_xtensa_avg_round_u16") {
-        op_name = "IVP_AVGRUNX16";
-    } else if (op->name == "halide_xtensa_absd_i16") {
-        op_name = "IVP_ABSSUBNX16";
-    } else if (op->name == "halide_xtensa_widen_pair_mul_u48") {
-        op_name = "IVP_MULUUPNX16";
-    } else if (op->name == "halide_xtensa_convert_i48_low_i32") {
-        op_name = "IVP_CVT32SNX48L";
-    } else if (op->name == "halide_xtensa_convert_i48_high_i32") {
-        op_name = "IVP_CVT32SNX48H";
-    } else if (op->name == "halide_xtensa_convert_i48_low_u32") {
-        op_name = "IVP_CVT32UNX48L";
-    } else if (op->name == "halide_xtensa_convert_i48_high_u32") {
-        op_name = "IVP_CVT32UNX48H";
-    }
-
-    rhs << op_name << "(" << with_commas(args) << ")";
-    return rhs.str();
-}
-
 void CodeGen_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported by C backend." << Expr(op) << "\n";
+    user_assert(is_one(op->predicate)) << "Predicated load is not supported by C backend.\n";
 
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
@@ -3404,25 +2377,13 @@ void CodeGen_C::visit(const Load *op) {
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
     if (dense_ramp_base.defined()) {
         internal_assert(t.is_vector());
-        std::string op_name;
-        // TODO(vksnk): generalize this!
-        int native_lanes = 64 / op->type.element_of().bytes();
-        if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
-            op_name = "_aligned_load(";
-            // debug(0) << "Aligned load\n";
-        } else {
-            op_name = "_load(";
-            // debug(0) << "Unaligned load " << op->alignment.modulus << " " << op->alignment.remainder
-            //     << " " << op->type.lanes() << "\n";
-        }
         string id_ramp_base = print_expr(dense_ramp_base);
-        rhs << print_type(t) + op_name << name << ", " << id_ramp_base << ")";
+        rhs << print_type(t) + "::load(" << name << ", " << id_ramp_base << ")";
     } else if (op->index.type().is_vector()) {
         // If index is a vector, gather vector elements.
         internal_assert(t.is_vector());
-        // debug(0) << "gather load " << op->index << "\n";
         string id_index = print_expr(op->index);
-        rhs << print_type(t) + "_load(" << name << ", " << id_index << ")";
+        rhs << print_type(t) + "::load(" << name << ", " << id_index << ")";
     } else {
         string id_index = print_expr(op->index);
         bool type_cast_needed = !(allocations.contains(op->name) &&
@@ -3468,20 +2429,8 @@ void CodeGen_C::visit(const Store *op) {
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
     if (dense_ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
-        string op_name;
-        // TODO(vksnk): generalize this!
-        int native_lanes = 64 / op->value.type().element_of().bytes();
-        if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
-            // debug(0) << "Aligned store\n";
-            op_name = "aligned_store(";
-        } else {
-            // debug(0) << "Unaligned store " << op->alignment.modulus << " " << op->alignment.remainder
-            //     << " " << op->value.type().lanes() << "\n";
-            op_name = "store(";
-        }
-
         string id_ramp_base = print_expr(dense_ramp_base);
-        stream << get_indent() << op_name << id_value << ", " << name << ", " << id_ramp_base << ");\n";
+        stream << get_indent() << id_value + ".store(" << name << ", " << id_ramp_base << ");\n";
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
@@ -3506,7 +2455,6 @@ void CodeGen_C::visit(const Store *op) {
 }
 
 void CodeGen_C::visit(const Let *op) {
-
     string id_value = print_expr(op->value);
     Expr body = op->body;
     if (op->value.type().is_handle()) {
@@ -3538,17 +2486,7 @@ void CodeGen_C::visit(const Select *op) {
             << " : " << false_val
             << ")";
     } else {
-        if (op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-            rhs << "IVP_MOVNX16T(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else if (op->type.is_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-            rhs << "IVP_MOVNX16UT(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else if (op->type.is_int() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
-            rhs << "IVP_MOVN_2X32T(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else if (op->type.is_uint() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
-            rhs << "IVP_MOVN_2X32UT(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else {
-            rhs << type << "::select(" << cond << ", " << true_val << ", " << false_val << ")";
-        }
+        rhs << type << "::select(" << cond << ", " << true_val << ", " << false_val << ")";
     }
     print_assignment(op->type, rhs.str());
 }
@@ -3569,30 +2507,15 @@ void CodeGen_C::visit(const LetStmt *op) {
     body.accept(this);
 }
 
-// Halide asserts have different semantics to C asserts.  They're
-// supposed to clean up and make the containing function return
-// -1, so we can't use the C version of assert. Instead we convert
-// to an if statement.
-void CodeGen_C::create_assertion(const string &id_cond, const string &id_msg) {
-    if (target.has_feature(Target::NoAsserts)) return;
-
-    stream << get_indent() << "if (!" << id_cond << ")\n";
-    open_scope();
-    stream << get_indent() << "return " << id_msg << ";\n";
-    close_scope("");
-}
-
 void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
     internal_assert(!message.defined() || message.type() == Int(32))
         << "Assertion result is not an int: " << message;
 
     if (target.has_feature(Target::NoAsserts)) {
-        stream << get_indent() << "(void)" << id_cond << ";\n";
+        stream << get_indent() << "halide_unused(" << id_cond << ");\n";
         return;
     }
 
-    // don't call the create_assertion(string, string) version because
-    // we don't want to force evaluation of 'message' unless the condition fails
     stream << get_indent() << "if (!" << id_cond << ") ";
     open_scope();
     string id_msg = print_expr(message);
@@ -3662,9 +2585,7 @@ void CodeGen_C::visit(const Atomic *op) {
     }
 }
 
-static int loop_level = 0;
 void CodeGen_C::visit(const For *op) {
-    loop_level++;
     string id_min = print_expr(op->min);
     string id_extent = print_expr(op->extent);
 
@@ -3674,14 +2595,6 @@ void CodeGen_C::visit(const For *op) {
         internal_assert(op->for_type == ForType::Serial)
             << "Can only emit serial or parallel for loops to C\n";
     }
-
-    // if (loop_level == 1) {
-    //   stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
-    //   stream << get_indent() << "cycles_start = GetCycleCount();\n";
-    // }
-    // if (loop_level == 2) {
-    //   stream << get_indent() << "cycles_start = GetCycleCount();\n";
-    // }
 
     stream << get_indent() << "for (int "
            << print_name(op->name)
@@ -3693,39 +2606,24 @@ void CodeGen_C::visit(const For *op) {
            << "; "
            << print_name(op->name)
            << "++)\n";
+
     open_scope();
-
     op->body.accept(this);
-
     close_scope("for " + print_name(op->name));
-
-    // if (loop_level == 2) {
-    //   stream << get_indent() << "cycles_stop = GetCycleCount();\n";
-    //   stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
-    //   stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
-    // }
-
-    loop_level--;
 }
 
 void CodeGen_C::visit(const Ramp *op) {
     Type vector_type = op->type.with_lanes(op->lanes);
     string id_base = print_expr(op->base);
     string id_stride = print_expr(op->stride);
-    if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
-        print_assignment(vector_type, "/* ramp */ int32x16_t(" + id_base + ") + IVP_PACKLN_2X64W(IVP_SEQN_2X32() * int32x16_t(" + id_stride + "))");
-    } else {
-        print_assignment(vector_type, print_type(vector_type) + "::ramp(" + id_base + ", " + id_stride + ")");
-    }
+    print_assignment(vector_type, print_type(vector_type) + "::ramp(" + id_base + ", " + id_stride + ")");
 }
 
 void CodeGen_C::visit(const Broadcast *op) {
     Type vector_type = op->type.with_lanes(op->lanes);
     string id_value = print_expr(op->value);
     string rhs;
-    if (is_native_vector_type(op->type)) {
-        rhs = print_type(vector_type) + "(" + id_value + ")";
-    } else if (op->lanes > 1) {
+    if (op->lanes > 1) {
         rhs = print_type(vector_type) + "::broadcast(" + id_value + ")";
     } else {
         rhs = id_value;
@@ -3744,7 +2642,7 @@ void CodeGen_C::visit(const Allocate *op) {
     string op_name = print_name(op->name);
     string op_type = print_type(op->type, AppendSpace);
 
-    // For sizes less than 16k, do a stack allocation
+    // For sizes less than 8k, do a stack allocation
     bool on_stack = false;
     int32_t constant_size;
     string size_id;
@@ -3842,7 +2740,7 @@ void CodeGen_C::visit(const Allocate *op) {
     }
 
     if (!on_stack) {
-        create_assertion(op_name, "halide_error_out_of_memory(_ucon)");
+        create_assertion(op_name, Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
         stream << get_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
@@ -3923,20 +2821,15 @@ void CodeGen_C::visit(const Shuffle *op) {
     string src = vecs[0];
     if (op->vectors.size() > 1) {
         ostringstream rhs;
-        if (vecs.size() == 2) {
-            rhs << print_type(op->type) << "::concat(" << with_commas(vecs) << ")";
-            src = print_assignment(op->type, rhs.str());
-        } else {
-            string storage_name = unique_name('_');
-            stream << get_indent() << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
-        }
+        string storage_name = unique_name('_');
+        stream << get_indent() << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
+
+        rhs << print_type(op->type) << "::concat(" << op->vectors.size() << ", " << storage_name << ")";
+        src = print_assignment(op->type, rhs.str());
     }
     ostringstream rhs;
     if (op->type.is_scalar()) {
         rhs << src << "[" << op->indices[0] << "]";
-    } else if (op->is_concat()) {
-        // Do nothing if it's just concat.
-        return;
     } else {
         string indices_name = unique_name('_');
         stream << get_indent() << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
