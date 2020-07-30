@@ -2507,6 +2507,10 @@ void CodeGen_C::visit(const LetStmt *op) {
     body.accept(this);
 }
 
+// Halide asserts have different semantics to C asserts.  They're
+// supposed to clean up and make the containing function return
+// -1, so we can't use the C version of assert. Instead we convert
+// to an if statement.
 void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
     internal_assert(!message.defined() || message.type() == Int(32))
         << "Assertion result is not an int: " << message;
@@ -2516,7 +2520,7 @@ void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
         return;
     }
 
-    stream << get_indent() << "if (!" << id_cond << ") ";
+    stream << get_indent() << "if (!" << id_cond << ")\n";
     open_scope();
     string id_msg = print_expr(message);
     stream << get_indent() << "return " << id_msg << ";\n";
@@ -2902,33 +2906,34 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
   int32_t *_tmp_heap = (int32_t  *)halide_malloc(_ucon, sizeof(int32_t )*_3);
   if (!_tmp_heap)
   {
-   return halide_error_out_of_memory(_ucon);
+   int32_t _4 = halide_error_out_of_memory(_ucon);
+   return _4;
   }
   HalideFreeHelper _tmp_heap_free(_ucon, _tmp_heap, halide_free);
   {
    int32_t _tmp_stack[127];
-   int32_t _4 = _beta + 1;
-   int32_t _5;
-   bool _6 = _4 < 1;
-   if (_6)
+   int32_t _5 = _beta + 1;
+   int32_t _6;
+   bool _7 = _5 < 1;
+   if (_7)
    {
     char b0[1024];
     snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
-    char const *_7 = b0;
-    halide_print(_ucon, _7);
-    int32_t _8 = 0;
-    int32_t _9 = return_second(_8, 3);
-    _5 = _9;
-   } // if _6
+    char const *_8 = b0;
+    halide_print(_ucon, _8);
+    int32_t _9 = 0;
+    int32_t _10 = return_second(_9, 3);
+    _6 = _10;
+   } // if _7
    else
    {
-    _5 = 3;
-   } // if _6 else
-   int32_t _10 = _5;
-   float _11 = float_from_bits(1082130432 /* 4 */);
-   bool _12 = _alpha > _11;
-   int32_t _13 = (int32_t)(_12 ? _10 : 2);
-   ((int32_t *)_buf)[_4] = _13;
+    _6 = 3;
+   } // if _7 else
+   int32_t _11 = _6;
+   float _12 = float_from_bits(1082130432 /* 4 */);
+   bool _13 = _alpha > _12;
+   int32_t _14 = (int32_t)(_13 ? _11 : 2);
+   ((int32_t *)_buf)[_5] = _14;
   } // alloc _tmp_stack
   _tmp_heap_free.free();
  } // alloc _tmp_heap

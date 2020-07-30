@@ -5,8 +5,17 @@
 function(halide_define_aot_test NAME)
     set(options OMIT_DEFAULT_GENERATOR)
     set(oneValueArgs)
-    set(multiValueArgs EXTRA_LIBS)
+    set(multiValueArgs EXTRA_LIBS ENABLE_IF)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
+        return()
+    endif ()
+
+    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+        halide_define_aot_wasm_test(${ARGV})
+        return()
+    endif ()
 
     set(TARGET "generator_aot_${NAME}")
     add_executable("${TARGET}" "${NAME}_aottest.cpp")
@@ -28,16 +37,42 @@ function(halide_define_aot_test NAME)
     if ("${Halide_TARGET}" MATCHES "cuda")
         target_compile_definitions("${TARGET}" PRIVATE TEST_CUDA)
     endif ()
-
     add_halide_test("${TARGET}" GROUPS generator)
-endfunction(halide_define_aot_test)
+endfunction()
+
+function(halide_define_aot_wasm_test NAME)
+    set(options OMIT_DEFAULT_GENERATOR)
+    set(oneValueArgs)
+    set(multiValueArgs EXTRA_LIBS)
+    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    set(TARGET "generator_aot_${NAME}")
+    set(DEPS ${NAME}.runtime ${args_EXTRA_LIBS})
+    if (NOT args_OMIT_DEFAULT_GENERATOR)
+        list(APPEND DEPS ${NAME})
+    endif ()
+
+    add_wasm_executable("${TARGET}"
+        SRCS "${NAME}_aottest.cpp"
+        DEPS "${DEPS}"
+        INCLUDES  "${Halide_BINARY_DIR}/include"
+                  "${Halide_SOURCE_DIR}/test/common"
+                  "${Halide_SOURCE_DIR}/tools"
+                  "${CMAKE_CURRENT_BINARY_DIR}"
+    )
+
+    add_wasm_halide_test("${TARGET}"
+                         GROUPS generator)
+endfunction()
 
 ##
 # Common extra functionality needed by certain tests.
 ##
 
 add_library(cxx_mangling_externs STATIC cxx_mangling_externs.cpp)
+
 add_library(cxx_mangling_define_extern_externs STATIC cxx_mangling_define_extern_externs.cpp)
+target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling)
 
 ##
 # Create targets for all the generators as well as library targets for their default configurations
@@ -198,10 +233,19 @@ add_library(external_code_generator_deps OBJECT "${EC32}.cpp" "${EC64}.cpp" "${E
 # Create targets for the default AOT tests
 ##
 
+set(USING_WASM (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm"))
+
 halide_define_aot_test(argvcall)
+
+# Requires threading support, not yet available for wasm tests
+halide_define_aot_test(async_parallel ENABLE_IF NOT ${USING_WASM})
+
 halide_define_aot_test(buffer_copy)
 halide_define_aot_test(can_use_target)
-#halide_define_aot_test(cleanup_on_error)  # TODO: requires access to internal header runtime/device_interface.h
+
+# TODO: requires access to internal header runtime/device_interface.h
+# halide_define_aot_test(cleanup_on_error)
+
 halide_define_aot_test(configure)
 halide_define_aot_test(embed_image)
 halide_define_aot_test(error_codes)
@@ -212,16 +256,24 @@ halide_define_aot_test(gpu_object_lifetime)
 halide_define_aot_test(gpu_only)
 halide_define_aot_test(image_from_array)
 halide_define_aot_test(mandelbrot)
-halide_define_aot_test(memory_profiler_mandelbrot)
+
+# Requires profiler support (which requires threading), not yet available for wasm tests
+halide_define_aot_test(memory_profiler_mandelbrot ENABLE_IF NOT ${USING_WASM})
+
 halide_define_aot_test(msan)
-halide_define_aot_test(multitarget)
+
+# Multitarget doesn't apply to WASM
+halide_define_aot_test(multitarget ENABLE_IF NOT ${USING_WASM})
+
 halide_define_aot_test(opencl_runtime)
 halide_define_aot_test(output_assign)
 halide_define_aot_test(pyramid)
 halide_define_aot_test(string_param)
 halide_define_aot_test(user_context)
 halide_define_aot_test(user_context_insanity)
-halide_define_aot_test(variable_num_threads)
+
+# Requires threading support, not yet available for wasm tests
+halide_define_aot_test(variable_num_threads ENABLE_IF NOT ${USING_WASM})
 
 ##
 # Create targets for the AOT tests with custom rules
@@ -245,7 +297,7 @@ add_halide_library(alias_with_offset_42
 halide_define_aot_test(alias EXTRA_LIBS alias_with_offset_42)
 
 # Autograd generator test
-halide_define_aot_test(autograd)
+halide_define_aot_test(autograd ENABLE_IF NOT ${USING_WASM})  # Requires Mullapudi2016 autoscheduler, which doesn't support wasm
 if (TARGET generator_aot_autograd)
     add_halide_library(autograd_grad
                        GRADIENT_DESCENT
@@ -256,7 +308,7 @@ if (TARGET generator_aot_autograd)
 endif()
 
 # CXX mangling generator test.
-halide_define_aot_test(cxx_mangling)
+halide_define_aot_test(cxx_mangling ENABLE_IF NOT ${USING_WASM})  # Needs extra deps / build rules
 if (TARGET cxx_mangling)
     target_link_libraries(cxx_mangling INTERFACE cxx_mangling_externs)
     if (TARGET_PTX AND Halide_TARGET MATCHES "cuda")
@@ -270,7 +322,7 @@ if (TARGET cxx_mangling)
 endif ()
 
 # CXX mangling with extern generator test
-halide_define_aot_test(cxx_mangling_define_extern)
+halide_define_aot_test(cxx_mangling_define_extern ENABLE_IF NOT ${USING_WASM})  # Needs extra deps / build rules
 if (TARGET cxx_mangling_define_extern)
     target_link_libraries(cxx_mangling_define_extern INTERFACE cxx_mangling_externs cxx_mangling_define_extern_externs)
     target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling_externs cxx_mangling)
@@ -284,7 +336,7 @@ if (TARGET_PTX AND Halide_TARGET MATCHES "opencl")
 endif ()
 
 # Matlab generator test
-halide_define_aot_test(matlab)
+halide_define_aot_test(matlab ENABLE_IF NOT ${USING_WASM})  # Needs matlab support. See https://github.com/halide/Halide/issues/2082
 if (TARGET generator_aot_matlab)
   set_target_properties(generator_aot_matlab PROPERTIES ENABLE_EXPORTS True)
 endif ()

@@ -21,6 +21,11 @@ set_tests_properties(create_halide_distrib PROPERTIES
                      DEPENDS delete_halide_distrib)
 
 function(add_app_test NAME)
+    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+        # Don't attempt to build these for wasm yet.
+        return()
+    endif ()
+    
     unset(cmakeToolchainOpts)
     if (NOT "${CMAKE_TOOLCHAIN_FILE}" STREQUAL "")
         list(APPEND cmakeToolchainOpts "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
@@ -90,5 +95,9 @@ add_app_test(wavelet)
 
 # Add the autoschedulers.
 # TODO(#4053): refactor into separate modules
-add_subdirectory(autoscheduler)
-add_subdirectory(gradient_autoscheduler)
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+    # Don't attempt to build these for wasm yet.
+else ()
+    add_subdirectory(autoscheduler)
+    add_subdirectory(gradient_autoscheduler)
+endif ()

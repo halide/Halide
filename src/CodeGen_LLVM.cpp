@@ -577,8 +577,11 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile_trampolines(
         const std::string &callee_name = e.first;
         const std::string wrapper_name = callee_name + suffix;
         llvm::FunctionType *fn_type = codegen->signature_to_type(e.second);
-        llvm::Function *callee = llvm::Function::Create(fn_type,
-                                                        llvm::Function::ExternalLinkage, callee_name, codegen->module.get());
+        // callee might already be present for builtins, e.g. halide_print
+        llvm::Function *callee = codegen->module->getFunction(callee_name);
+        if (!callee) {
+            callee = llvm::Function::Create(fn_type, llvm::Function::ExternalLinkage, callee_name, codegen->module.get());
+        }
         codegen->add_argv_wrapper(callee, wrapper_name, /*result_in_argv*/ true);
     }
     return codegen->finish_codegen();
@@ -1407,7 +1410,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
 
     // TODO: skip this correctness check for bool vectors,
     // as eliminate_bool_vectors() will cause a discrepancy for some backends
-    // (eg OpenCL, HVX); for now we're just ignoring the assert, but
+    // (eg OpenCL, HVX, WASM); for now we're just ignoring the assert, but
     // in the long run we should improve the smarts. See https://github.com/halide/Halide/issues/4194.
     const bool is_bool_vector = e.type().is_bool() && e.type().lanes() > 1;
     // TODO: skip this correctness check for prefetch, because the return type
