@@ -649,10 +649,17 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
     if (contains(output_files, Output::c_source)) {
         debug(1) << "Module.compile(): c_source " << output_files.at(Output::c_source) << "\n";
         std::ofstream file(output_files.at(Output::c_source));
-        Internal::CodeGen_Xtensa cg(file,
-                                    target(),
-                                    target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
-        cg.compile(*this);
+        if (target().has_feature(Target::Xtensa)) {
+            Internal::CodeGen_Xtensa cg(file,
+                                        target(),
+                                        target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
+            cg.compile(*this);
+        } else {
+            Internal::CodeGen_C cg(file,
+                                   target(),
+                                   target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
+            cg.compile(*this);
+        }
     }
     if (contains(output_files, Output::python_extension)) {
         debug(1) << "Module.compile(): python_extension " << output_files.at(Output::python_extension) << "\n";

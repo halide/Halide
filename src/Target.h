@@ -121,6 +121,7 @@ struct Target {
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
         ARMDotProd = halide_target_feature_arm_dot_prod,
+        Xtensa = halide_target_feature_xtensa,
         FeatureEnd = halide_target_feature_end
     };
     Target()
