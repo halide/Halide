@@ -2757,9 +2757,12 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                 // are all constant, it may be profitable to calculate the bounds here too
             }
 
-            debug(2) << "Bounds on value " << j
-                     << " for func " << order[i]
-                     << " are: " << result.min << ", " << result.max << "\n";
+            static const bool show_bounds_values = (get_env_variable("HL_SHOW_BOUNDS_VALUES") == "1");
+            if (show_bounds_values || debug::debug_level() >= 2) {
+                debug(0) << "Bounds on value " << j
+                         << " for func " << order[i]
+                         << " are: " << result.min << ", " << result.max << "\n";
+            }
         }
     }
 
