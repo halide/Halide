@@ -1512,7 +1512,8 @@ std::pair<const LoopNest *, const LoopNest *> LoopNest::find_innermost_and_paren
     return {child, parent};
 }
 
-int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge*>& edge_chain, const LoadJacobian& jac, const LoopNest* parent, const LoopNest* grandparent, int64_t n, const ScheduleFeatures &feat, bool verbose) const {
+int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge*>& edge_chain, const LoadJacobian& jac, const LoopNest* parent, const LoopNest* grandparent, int64_t n, const ScheduleFeatures &feat, const LoadJacobian& serial_jac, bool producer_has_been_scheduled, int producer_innermost_dim, const GPUMemoryType& mem_type, bool verbose) const {
+
     std::unique_ptr<LoopNest> innermost_parent_clone = make_unique<LoopNest>();
     innermost_parent_clone->copy_from(*parent);
     int64_t unrolled_loop_extent = feat.unrolled_loop_extent;
@@ -1607,7 +1608,34 @@ int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const 
     // region_required of g will be the range [x, x + 100] but really only 2
     // points need to be loaded. In cases like this, option 1. will
     // over-estimate and we instead use the upper bound from option 2.
-    int64_t points_accessed = std::min(points_accessed_by_region_required, points_accessed_by_loop_extents);
+    int64_t points_accessed = points_accessed_by_region_required;
+    if (points_accessed_by_loop_extents <= points_accessed_by_region_required) {
+        points_accessed = points_accessed_by_loop_extents;
+
+        if (mem_type == GPUMemoryType::shared) {
+            int vector_size = parent->vectorized_load_access_size(
+                serial_jac,
+                producer,
+                producer_has_been_scheduled,
+                producer_innermost_dim,
+                mem_type,
+                verbose
+            );
+
+            if (verbose) {
+                aslog(0) << "\n";
+                aslog(0) << "vector_size = " << vector_size << "\n";
+            }
+
+            if (points_accessed % vector_size == 0) {
+                points_accessed /= vector_size;
+                if (verbose) {
+                    aslog(0) << "vectorization applied\n";
+                }
+            }
+        }
+    }
+
     points_accessed *= gpu_loop_info.total_outer_serial_extents;
 
     int64_t total_inner_serial_extents_outside_realization = gpu_loop_info.get_total_inner_serial_extents_outside_realization(this);
@@ -2624,6 +2652,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     if (get_compute_shared_mem_load_features() || get_compute_global_mem_load_features()) {
                         for (size_t i = 0; i < thread_jacobians.size(); ++i) {
                             const auto &jac = thread_jacobians[i];
+                            const auto &serial_jac = jacobians[i];
+                            internal_assert(jac.second == serial_jac.second);
                             if (jac.second != e->producer) continue;
                             int64_t n = jac.first.count();
 
@@ -2636,20 +2666,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     aslog(0) << "BEGIN MEM ACCESS shared_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                                 }
 
-                                int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, verbose);
-
-                                const auto& serial_jac = jacobians[i];
-                                internal_assert(serial_jac.second == e->producer);
-                                int vector_size = parent->vectorized_load_access_size(
-                                    serial_jac.first,
-                                    e->producer,
-                                    producer_has_been_scheduled,
-                                    producer_innermost_dim,
-                                    GPUMemoryType::shared,
-                                    verbose
-                                );
-
-                                internal_assert(points_accessed % vector_size == 0);
+                                int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::shared, verbose);
 
                                 compute_mem_load_features<SharedMem>(
                                     jac.first,
@@ -2659,7 +2676,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     producer_has_been_scheduled,
                                     *gpu_loop_info.thread_info,
                                     shared_mem_loads,
-                                    points_accessed / vector_size,
+                                    points_accessed,
                                     verbose
                                 );
                                 if (verbose) {
@@ -2681,7 +2698,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     aslog(0) << "BEGIN MEM ACCESS global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                                 }
 
-                                int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, verbose);
+                                int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::global, verbose);
 
                                 compute_mem_load_features<GlobalMem>(
                                     jac.first,
@@ -2720,7 +2737,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 aslog(0) << "BEGIN MEM ACCESS local_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                             }
 
-                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, verbose);
+                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::local, verbose);
 
                             compute_mem_load_features<LocalMem>(
                                 jac.first,
