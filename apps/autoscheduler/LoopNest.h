@@ -369,8 +369,11 @@ struct LoopNest {
 
     void dump() const;
 
+    std::string to_string() const;
+
     // Recursively print a loop nest representation to stderr
-    void dump(string prefix, const LoopNest *parent) const;
+    template <typename T>
+    void dump(T& stream, string prefix, const LoopNest *parent) const;
 
     // Does this loop nest access the given Func
     bool calls(const FunctionDAG::Node *f) const;

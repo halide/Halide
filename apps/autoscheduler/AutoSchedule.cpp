@@ -80,6 +80,7 @@
 #include "FunctionDAG.h"
 #include "Halide.h"
 #include "LoopNest.h"
+#include "LoopNestParser.h"
 #include "NetworkSize.h"
 #include "PerfectHashMap.h"
 #include "State.h"
@@ -198,6 +199,14 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
         };
 
     string cyos_str = get_env_variable("HL_CYOS");
+    string cyos_from_file_str = get_env_variable("HL_CYOS_FROM_FILE");
+    bool cyos_from_file = !cyos_from_file_str.empty();
+    bool cyos_is_enabled = cyos_from_file || cyos_str == "1";
+
+    std::unique_ptr<LoopNestParser> target_loop_nest;
+    if (cyos_from_file) {
+        target_loop_nest = LoopNestParser::from_file(cyos_from_file_str);
+    }
 
     // This loop is beam search over the sequence of decisions to make.
     for (int i = 0;; i++) {
@@ -341,25 +350,49 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
             }
         }
 
-        if (cyos_str == "1") {
-            // The user has set HL_CYOS, and wants to navigate the
-            // search space manually.  Discard everything in the queue
-            // except for the user-chosen option.
-            aslog(0) << "\n--------------------\n";
-            aslog(0) << "Select a schedule:\n";
-            for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
-                auto state = q[choice_label];
-                aslog(0) << "\n[" << choice_label << "]:\n";
-                state->dump();
-                //state->calculate_cost(dag, params, target, cost_model, stats, true);
+        if (cyos_is_enabled) {
+            int selection = -1;
+            bool found = false;
+            if (cyos_from_file) {
+                for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
+                    auto state = q[choice_label];
+                    LoopNestParser option = LoopNestParser::from_string(state->root->to_string());
+
+                    if (target_loop_nest->contains_sub_loop_nest(option)) {
+                        found = true;
+                        selection = choice_label;
+                        aslog(0) << "\nFound matching option\n";
+                        break;
+                    }
+                }
+
+            }
+
+            if (!cyos_from_file || !found) {
+                // The user has set HL_CYOS, and wants to navigate the
+                // search space manually.  Discard everything in the queue
+                // except for the user-chosen option.
+                aslog(0) << "\n--------------------\n";
+                aslog(0) << "Select a schedule:\n";
+                for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
+                    auto state = q[choice_label];
+                    aslog(0) << "\n[" << choice_label << "]:\n";
+                    state->dump();
+                    //state->calculate_cost(dag, params, target, cost_model, stats, true);
+                }
             }
             cost_model->evaluate_costs();
 
-            // Select next partial schedule to expand.
-            int selection = -1;
-            while (selection < 0 || selection >= (int)q.size()) {
-                aslog(0) << "\nEnter selection: ";
-                std::cin >> selection;
+            if (cyos_from_file && !found) {
+                aslog(0) << "\nTarget loop nest was not found.\n";
+            }
+
+            if (!cyos_from_file || !found) {
+                // Select next partial schedule to expand.
+                while (selection < 0 || selection >= (int)q.size()) {
+                    aslog(0) << "\nEnter selection: ";
+                    std::cin >> selection;
+                }
             }
 
             auto selected = q[selection];
@@ -380,6 +413,10 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule(int beam_size) {
     int num_passes = (beam_size == 1) ? 1 : 5;
 
     string cyos_str = get_env_variable("HL_CYOS");
+    string cyos_from_file_str = get_env_variable("HL_CYOS_FROM_FILE");
+    if (!cyos_from_file_str.empty()) {
+        cyos_str = "1";
+    }
     if (cyos_str == "1") {
         // If the user is manually navigating the search space, don't
         // ask them to do more than one pass.

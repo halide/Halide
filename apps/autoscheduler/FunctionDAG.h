@@ -15,6 +15,7 @@
 #include "Featurization.h"
 #include "Halide.h"
 #include "PerfectHashMap.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -25,11 +26,6 @@ using std::pair;
 using std::string;
 using std::unique_ptr;
 using std::vector;
-
-template<typename T, typename... Args>
-std::unique_ptr<T> make_unique(Args &&... args) {
-    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-}
 
 // First we have various utility classes.
 

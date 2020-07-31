@@ -401,7 +401,7 @@ bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
             const auto &feat = it.value();
 
             if (!feat.equal(verification_features.get(&stage))) {
-                feature_root->dump("", nullptr);
+                feature_root->dump();
                 std::cerr << "Feature Mismatch: " << stage.node->func.name() << "\n";
                 feat.dump();
                 std::cerr << "\n";
@@ -664,7 +664,7 @@ IntrusivePtr<State> State::make_child() const {
 
 void State::dump() const {
     aslog(0) << "State with cost " << cost << ":\n";
-    root->dump("", nullptr);
+    root->dump();
     aslog(0) << schedule_source;
 }
 

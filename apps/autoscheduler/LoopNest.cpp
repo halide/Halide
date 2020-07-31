@@ -3073,28 +3073,36 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
 }
 
 void LoopNest::dump() const {
-    dump("", nullptr);
+    auto stream = aslog(0);
+    dump(stream, "", nullptr);
 }
 
-// Recursively print a loop nest representation to stderr
-void LoopNest::dump(string prefix, const LoopNest *parent) const {
+std::string LoopNest::to_string() const {
+    std::ostringstream stream;
+    dump(stream, "", nullptr);
+    return stream.str();
+}
+
+// Recursively print a loop nest representation to the given stream
+template <typename T>
+void LoopNest::dump(T& stream, string prefix, const LoopNest *parent) const {
     if (!is_root()) {
         // Non-root nodes always have parents.
         internal_assert(parent != nullptr);
 
-        aslog(0) << prefix << node->func.name();
+        stream << prefix << node->func.name();
         prefix += " ";
 
         for (size_t i = 0; i < size.size(); i++) {
-            aslog(0) << " " << size[i];
+            stream << " " << size[i];
             // The vectorized loop gets a 'v' suffix
             if (innermost && i == (size_t)vectorized_loop_index) {
-                aslog(0) << "v";
+                stream << "v";
             }
             // Loops that have a known constant size get a
             // 'c'. Useful for knowing what we can unroll.
             if (parent->get_bounds(node)->loops(stage->index, i).constant_extent()) {
-                aslog(0) << "c";
+                stream << "c";
             }
         }
 
@@ -3103,57 +3111,63 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
         const auto &bounds = get_bounds(node);
         for (size_t i = 0; i < size.size(); i++) {
             const auto &p = bounds->loops(stage->index, i);
-            aslog(0) << " [" << p.first << ", " << p.second << "]";
+            stream << " [" << p.first << ", " << p.second << "]";
         }
         */
 
-        aslog(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
+        stream << " (" << vectorized_loop_index << ", " << vector_dim << ")";
     }
 
     if (tileable) {
-        aslog(0) << " t";
+        stream << " t";
     }
     if (innermost) {
-        aslog(0) << " *";
+        stream << " *";
     }
     if (gpu_label == block) {
-        aslog(0) << " gpu_block\n";
+        stream << " gpu_block\n";
     } else if (gpu_label == serial) {
-        aslog(0) << " gpu_serial\n";
+        stream << " gpu_serial\n";
     } else if (gpu_label == none) {
-        aslog(0) << " gpu_none\n";
+        stream << " gpu_none\n";
     } else if (gpu_label == simd) {
-        aslog(0) << " gpu_simd\n";
+        stream << " gpu_simd\n";
     } else if (gpu_label == thread) {
-        aslog(0) << " gpu_thread\n";
+        stream << " gpu_thread\n";
     } else if (gpu_label == parallelized) {
-        aslog(0) << " gpu_parallelized\n";
+        stream << " gpu_parallelized\n";
     } else if (parallel) {
-        aslog(0) << " p\n";
+        stream << " p\n";
     } else {
-        aslog(0) << "\n";
+        stream << "\n";
     }
     for (auto p : store_at) {
-        aslog(0) << prefix << "realize: " << p->func.name() << " [";
+        stream << prefix << "realize: " << p->func.name() << " [";
         for (int i = 0; i < p->dimensions; i++) {
             if (i > 0) {
-                aslog(0) << ", ";
+                stream << ", ";
             }
             const auto &region = get_bounds(p)->region_computed(i);
-            aslog(0) << region.extent();
+            stream << region.extent();
             if (region.constant_extent()) {
-                aslog(0) << "c";
+                stream << "c";
             }
         }
-        aslog(0) << "] with " << p->stages.size() << " stages\n";
+        stream << "] with " << p->stages.size() << " stages\n";
     }
     for (size_t i = children.size(); i > 0; i--) {
-        children[i - 1]->dump(prefix, this);
+        children[i - 1]->dump(stream, prefix, this);
     }
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
-        aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";
+        stream << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";
     }
 }
+
+template
+void LoopNest::dump(aslog& stream, string prefix, const LoopNest *parent) const;
+
+template
+void LoopNest::dump(std::ostringstream& stream, string prefix, const LoopNest *parent) const;
 
 // Does this loop nest access the given Func
 bool LoopNest::calls(const FunctionDAG::Node *f) const {
