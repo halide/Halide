@@ -55,24 +55,6 @@ double get_idle_lane_wastage_limit();
 bool all(const vector<int>& v);
 bool accessed_at_constant_indices(const std::vector<int>& unrolled, const FunctionDAG::Edge* e);
 
-
-/** moves vectorized dimension first and also removes dimensions with size 1
-    to reflect actual thread dimensions when loop nests are lowered **/
-void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t> &lowered_size);
-
-// creates tilings for gpu threads loops.
-// Innermost thread loop is always the vectorized dim and its extent is a multiple of 32.
-// Other loop extents are sized to be powers of 2 such that total extent is < 1024
-// called either when we are creating parallel -> (blocks, threads) loop when computing at root
-// OR when we are creating none -> (threads, SIMD) loop when computing at a serial loop
-// serial_inner = True when we're generating (thread, serial) tilings, False when generating (block,thread) tilings
-// max_s hold max gpu_thread counts of all siblings in each dimension. Used to make sure union of
-// thread counts is under 1024 threshold.
-vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stage_sizes,
-        const vector<vector<int>> &pure_dims,
-        const vector<int64_t> &max_s,
-        int d, const vector<int> &vectorized_indices, bool serial_inner);
-
 // We're going to do a tree search over possible schedules to find an
 // optimal one. A tree search requires a state, and a function that
 // gives you children of the state (with costs). The following struct

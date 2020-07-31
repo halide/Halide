@@ -108,6 +108,36 @@ void test_serial_tilings() {
 
         EXPECT_EQ(expected, actual);
     }
+
+    // Test that generate_gpu_tilings does not exit when it encounters a one tiling
+    // option with too many threads
+    {
+        vector<vector<int64_t>> stage_sizes;
+        stage_sizes.push_back({16, 16, 32});
+
+        vector<vector<int>> pure_dims;
+        pure_dims.push_back({0, 1, 2});
+
+        vector<int64_t> max_s;
+        max_s.push_back(16);
+        max_s.push_back(16);
+        max_s.push_back(2);
+
+        vector<int> vectorized_indices;
+        vectorized_indices.push_back(0);
+
+        bool serial_inner = true;
+
+        vector<vector<int64_t>> expected;
+        expected.push_back({16, 2, 4});
+        expected.push_back({16, 4, 4});
+        expected.push_back({16, 8, 4});
+        expected.push_back({16, 16, 4});
+
+        auto actual = generate_gpu_tilings(stage_sizes, pure_dims, max_s, (int)(stage_sizes[0].size() - 1), vectorized_indices, serial_inner);
+
+        EXPECT_EQ(expected, actual);
+    }
 }
 
 int main(int argc, char **argv) {
