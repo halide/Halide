@@ -37,6 +37,7 @@ protected:
     void visit(const Mul *) override;
     void visit(const Div *) override;
 
+    void visit(const Allocate *) override;
     void visit(const For *) override;
     void visit(const Ramp *op) override;
     void visit(const Broadcast *op) override;

@@ -1761,5 +1761,129 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     print_assignment(op->type, rhs.str());
 }
 
+void CodeGen_Xtensa::visit(const Allocate *op) {
+    open_scope();
+
+    string op_name = print_name(op->name);
+    string op_type = print_type(op->type, AppendSpace);
+
+    // For sizes less than 8k, do a stack allocation
+    bool on_stack = false;
+    int32_t constant_size;
+    string size_id;
+    Type size_id_type;
+
+    if (op->new_expr.defined()) {
+        Allocation alloc;
+        alloc.type = op->type;
+        allocations.push(op->name, alloc);
+        heap_allocations.push(op->name);
+        stream << op_type << "*" << op_name << " = (" << print_expr(op->new_expr) << ");\n";
+    } else {
+        constant_size = op->constant_allocation_size();
+        if (constant_size > 0) {
+            int64_t stack_bytes = constant_size * op->type.bytes();
+
+            if (stack_bytes > ((int64_t(1) << 31) - 1)) {
+                user_error << "Total size for allocation "
+                           << op->name << " is constant but exceeds 2^31 - 1.\n";
+            } else {
+                size_id_type = Int(32);
+                size_id = print_expr(make_const(size_id_type, constant_size));
+
+                if (op->memory_type == MemoryType::Stack ||
+                    (op->memory_type == MemoryType::Auto &&
+                     can_allocation_fit_on_stack(stack_bytes))) {
+                    on_stack = true;
+                }
+            }
+        } else {
+            // Check that the allocation is not scalar (if it were scalar
+            // it would have constant size).
+            internal_assert(!op->extents.empty());
+
+            size_id = print_assignment(Int(64), print_expr(op->extents[0]));
+            size_id_type = Int(64);
+
+            for (size_t i = 1; i < op->extents.size(); i++) {
+                // Make the code a little less cluttered for two-dimensional case
+                string new_size_id_rhs;
+                string next_extent = print_expr(op->extents[i]);
+                if (i > 1) {
+                    new_size_id_rhs = "(" + size_id + " > ((int64_t(1) << 31) - 1)) ? " + size_id + " : (" + size_id + " * " + next_extent + ")";
+                } else {
+                    new_size_id_rhs = size_id + " * " + next_extent;
+                }
+                size_id = print_assignment(Int(64), new_size_id_rhs);
+            }
+            stream << get_indent() << "if (("
+                   << size_id << " > ((int64_t(1) << 31) - 1)) || (("
+                   << size_id << " * sizeof("
+                   << op_type << ")) > ((int64_t(1) << 31) - 1)))\n";
+            open_scope();
+            stream << get_indent();
+            // TODO: call halide_error_buffer_allocation_too_large() here instead
+            // TODO: call create_assertion() so that NoAssertions works
+            stream << "halide_error(_ucon, "
+                   << "\"32-bit signed overflow computing size of allocation " << op->name << "\\n\");\n";
+            stream << get_indent() << "return -1;\n";
+            close_scope("overflow test " + op->name);
+        }
+
+        // Check the condition to see if this allocation should actually be created.
+        // If the allocation is on the stack, the only condition we can respect is
+        // unconditional false (otherwise a non-constant-sized array declaration
+        // will be generated).
+        if (!on_stack || is_zero(op->condition)) {
+            Expr conditional_size = Select::make(op->condition,
+                                                 Variable::make(size_id_type, size_id),
+                                                 make_const(size_id_type, 0));
+            conditional_size = simplify(conditional_size);
+            size_id = print_assignment(Int(64), print_expr(conditional_size));
+        }
+
+        Allocation alloc;
+        alloc.type = op->type;
+        allocations.push(op->name, alloc);
+
+        stream << get_indent() << op_type;
+
+        if (on_stack) {
+            stream << "__attribute__((aligned(64))) " << op_name
+                   << "[" << size_id << "];\n";
+        } else {
+            stream << "*"
+                   // << " __restrict "
+                   << op_name
+                   << " = ("
+                   << op_type
+                   << " *)halide_malloc(_ucon, sizeof("
+                   << op_type
+                   << ")*" << size_id << ");\n";
+            heap_allocations.push(op->name);
+        }
+    }
+
+    if (!on_stack) {
+        create_assertion(op_name, Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
+
+        stream << get_indent();
+        string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
+        stream << "HalideFreeHelper " << op_name << "_free(_ucon, "
+               << op_name << ", " << free_function << ");\n";
+    }
+
+    op->body.accept(this);
+
+    // Free the memory if it was allocated on the heap and there is no matching
+    // Free node.
+    print_heap_free(op->name);
+    if (allocations.contains(op->name)) {
+        allocations.pop(op->name);
+    }
+
+    close_scope("alloc " + print_name(op->name));
+}
+
 }  // namespace Internal
 }  // namespace Halide

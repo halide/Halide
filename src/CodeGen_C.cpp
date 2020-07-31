@@ -2728,11 +2728,10 @@ void CodeGen_C::visit(const Allocate *op) {
         stream << get_indent() << op_type;
 
         if (on_stack) {
-            stream << "__attribute__((aligned(64))) " << op_name
+            stream << op_name
                    << "[" << size_id << "];\n";
         } else {
             stream << "*"
-                   // << " __restrict "
                    << op_name
                    << " = ("
                    << op_type
@@ -2843,7 +2842,6 @@ void CodeGen_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_C::test() {
-    return;
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3, ArgumentEstimates{});
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0, ArgumentEstimates{});
     LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0, ArgumentEstimates{});
