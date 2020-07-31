@@ -84,11 +84,25 @@ build: $(BIN)/$(HL_TARGET)/test \
 
 test: run_test test_perfect_hash_map test_function_dag demo included_schedule_file autotune
 
+$(BIN)/test_bounds: $(TEST_DIR)/bounds.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h ASLog.h ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(AUTOSCHED_SRC)
+
+test_bounds: $(BIN)/test_bounds
+	$^
+
 $(BIN)/test_tiling: $(TEST_DIR)/tiling.cpp Tiling.h Tiling.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(AUTOSCHED_SRC)
 
 test_tiling: $(BIN)/test_tiling
+	$^
+
+$(BIN)/test_storage_strides: $(TEST_DIR)/storage_strides.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h ASLog.h ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(AUTOSCHED_SRC)
+
+test_storage_strides: $(BIN)/test_storage_strides
 	$^
 
 clean:
