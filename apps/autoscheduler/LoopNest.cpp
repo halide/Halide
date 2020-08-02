@@ -1674,14 +1674,7 @@ void LoopNest::recompute_inlined_features(const StageMap<Sites> &sites, StageMap
 
         auto &inlined_feat = features->get(&(f->stages[0]));
         inlined_feat.inlined_calls += intermediate.inlined_calls;
-        inlined_feat.num_vectors += intermediate.num_vectors;
         inlined_feat.num_scalars += intermediate.num_scalars;
-        inlined_feat.native_vector_size = stage->vector_size;
-        if (inlined_feat.vector_size > 0) {
-            inlined_feat.vector_size = std::min(inlined_feat.vector_size, (double)stage->vector_size);
-        } else {
-            inlined_feat.vector_size = intermediate.vector_size;
-        }
         if (inlined_feat.innermost_pure_loop_extent > 0) {
             inlined_feat.innermost_pure_loop_extent =
                 std::min(inlined_feat.innermost_pure_loop_extent,
@@ -1783,8 +1776,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             feat.num_realizations = subinstances;
 
             feat.points_computed_per_realization = 1;
-            feat.num_scalars = feat.num_vectors = subinstances;
-            bool vectorized = false;
+            feat.num_scalars = subinstances;
             for (int i = 0; i < (int)node->stages[s].loop.size(); i++) {
                 const auto &p = bounds->loops(s, i);
                 int64_t extent = p.extent();
@@ -1794,16 +1786,10 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     // things such that non-native-width
                     // vectorization is a problem, except for the
                     // tail.
-                    feat.num_vectors *= extent / node->stages[s].vector_size;
                     feat.num_scalars *= extent % node->stages[s].vector_size;
-                    vectorized = true;
                 } else {
-                    feat.num_vectors *= extent;
                     feat.num_scalars *= extent;
                 }
-            }
-            if (!vectorized) {
-                feat.num_vectors = 0;
             }
             feat.points_computed_total = feat.points_computed_per_realization * feat.num_realizations;
 
@@ -1940,9 +1926,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             // so we reset them here
             if (use_memoized_features && sites.get(stage).inlined) {
                 feat.inlined_calls = 0;
-                feat.num_vectors = 0;
                 feat.num_scalars = 0;
-                feat.native_vector_size = 0;
                 feat.innermost_pure_loop_extent = 0;
                 feat.outer_parallelism = 0;
                 feat.num_warps_per_block = 0;
@@ -1979,16 +1963,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     ScheduleFeatures &feat = features->get_or_create(stage);
 
     if (innermost) {
-        if (vectorized_loop_index >= 0 && vectorized_loop_index < (int)size.size()) {
-            feat.vector_size = size[vectorized_loop_index];
-        } else {
-            feat.vector_size = 1;
-        }
-        if (feat.vector_size == 1) {
-            // They're all scalars
-            feat.num_scalars += feat.num_vectors;
-            feat.num_vectors = 0;
-        }
     } else {
         // We want these features just outside the innermost loop,
         // so just set them at every level and let them get
@@ -2114,7 +2088,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         feat.num_productions = instances;
         feat.inner_parallelism = parallel_tasks;
         feat.outer_parallelism = parallelism;
-        feat.native_vector_size = stage->vector_size;
 
         const auto &bounds = parent->get_bounds(node);
 
@@ -2216,10 +2189,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     int64_t global_bytes_loaded_per_thread = 0, shared_bytes_loaded_per_thread = 0, local_bytes_loaded_per_thread = 0, register_bytes_loaded_per_thread = 0;
     int64_t global_lines_loaded_per_thread = 0, shared_lines_loaded_per_thread = 0, local_lines_loaded_per_thread = 0, register_lines_loaded_per_thread = 0;;
     int64_t global_allocation_bytes_loaded = 0, shared_allocation_bytes_loaded = 0, local_allocation_bytes_loaded = 0, register_allocation_bytes_loaded = 0;
-    double num_dense_loads = 0, num_broadcasts = 0,
-           num_gathers = 0, num_stride_2_loads = 0,
-           num_stride_3_loads = 0, num_stride_4_loads = 0,
-           num_loads = 0;
     GlobalMemInfo global_mem_loads;
     SharedMemInfo shared_mem_loads;
     LocalMemInfo local_mem_loads;
@@ -2367,117 +2336,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     // should be at the root level.
                     internal_assert(producer_store_site->is_root());
                     internal_assert(producer_compute_site->is_root());
-                }
-
-                if (innermost) {
-
-                    // Grab the Jacobians that describe the memory dependence
-                    for (const auto &jac : jacobians) {
-                        if (jac.second != e->producer) continue;
-                        double n = jac.first.count();
-
-                        // Classify them to figure out what's going on in the vector dimension.
-                        bool vector_broadcast = true;
-                        bool dense_vector_load = true;
-                        bool stride_2_vector_load = true;
-                        bool stride_3_vector_load = true;
-                        bool stride_4_vector_load = true;
-                        int producer_innermost_dim =
-                            (e->producer->is_input ? 0 :  // Assume default storage layout for inputs
-                                 !producer_has_been_scheduled ? -1 :
-                                                                site.produce->vector_dim);
-                        if (vectorized_loop_index >= 0) {
-                            if (!producer_has_been_scheduled) {
-                                // Operate optimistically and just
-                                // see if *any* dimension of the
-                                // producer would make for a good
-                                // load.
-                                int count[5] = {0, 0, 0, 0, 0};
-                                for (int i = 0; i < e->producer->dimensions; i++) {
-                                    auto stride = jac.first(i, vectorized_loop_index);
-                                    // stride is a rational. Check to see if it's a small integer.
-                                    if (stride == 0)
-                                        count[0]++;
-                                    else if (stride == 1)
-                                        count[1]++;
-                                    else if (stride == 2)
-                                        count[2]++;
-                                    else if (stride == 3)
-                                        count[3]++;
-                                    else if (stride == 4)
-                                        count[4]++;
-                                }
-                                vector_broadcast = (count[0] == e->producer->dimensions);
-                                dense_vector_load = (count[0] == e->producer->dimensions - 1 && count[1] == 1);
-                                stride_2_vector_load = (count[0] == e->producer->dimensions - 1 && count[2] == 1);
-                                stride_3_vector_load = (count[0] == e->producer->dimensions - 1 && count[3] == 1);
-                                stride_4_vector_load = (count[0] == e->producer->dimensions - 1 && count[4] == 1);
-                            } else {
-                                for (int i = 0; i < e->producer->dimensions; i++) {
-                                    auto stride = jac.first(i, vectorized_loop_index);
-                                    vector_broadcast &= stride == 0;
-                                    if (i == producer_innermost_dim) {
-                                        dense_vector_load &= stride == 1;
-                                        stride_2_vector_load &= stride == 2;
-                                        stride_3_vector_load &= stride == 3;
-                                        stride_4_vector_load &= stride == 4;
-                                    } else {
-                                        dense_vector_load &= stride == 0;
-                                        stride_2_vector_load &= stride == 0;
-                                        stride_3_vector_load &= stride == 0;
-                                        stride_4_vector_load &= stride == 0;
-                                        // TODO: Check for strided
-                                        // loads across non-innermost
-                                        // dims, and use to count the
-                                        // number of pages, cache
-                                        // lines, cache conflict misses, etc.
-                                    }
-                                }
-                            }
-                        }
-
-                        // Is this load loop-invariant over an
-                        // unrolled block? If so, we amortize the
-                        // number of loads to account for
-                        // LICM. This is the key performance
-                        // optimization you get from unrolling the
-                        // inner loop of a gemm or conv, so it's
-                        // important to capture it in the
-                        // featurization.
-                        int64_t amortization = 1;
-                        if (feat.unrolled_loop_extent > 1) {
-                            for (size_t idx = 0; idx < stage->loop.size(); idx++) {
-                                if (!stage->loop[idx].rvar) {
-                                    bool loop_invariant = true;
-                                    for (int i = 0; i < e->producer->dimensions; i++) {
-                                        if (!(jac.first(i, idx) == 0)) {
-                                            loop_invariant = false;
-                                            break;
-                                        }
-                                    }
-                                    if (loop_invariant) {
-                                        amortization *= parent->size[idx];
-                                    }
-                                }
-                            }
-                        }
-                        n /= amortization;
-
-                        num_loads += n;
-                        if (vector_broadcast) {
-                            num_broadcasts += n;
-                        } else if (dense_vector_load) {
-                            num_dense_loads += n;
-                        } else if (stride_2_vector_load) {
-                            num_stride_2_loads += n;
-                        } else if (stride_3_vector_load) {
-                            num_stride_3_loads += n;
-                        } else if (stride_4_vector_load) {
-                            num_stride_4_loads += n;
-                        } else {
-                            num_gathers += n;
-                        }
-                    }
                 }
 
                 if (innermost) {
@@ -2835,21 +2693,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         feat.unique_register_lines_read_per_thread = register_lines_loaded_per_thread;
 
         feat.points_computed_per_production = subinstances / feat.num_productions;
-        // Halide codegens strided loads for small strides as a
-        // large dense vector load and a cheap swizzle. ARM even
-        // has instructions that do this for free on load
-        // (e.g. vld4).
-        feat.vector_loads_per_vector = (num_dense_loads +
-                                        2 * num_stride_2_loads +
-                                        3 * num_stride_3_loads +
-                                        4 * num_stride_4_loads);
-        feat.scalar_loads_per_vector = num_broadcasts + feat.vector_size * num_gathers;
-        feat.scalar_loads_per_scalar = num_loads;
-        if (stage->index > 0) {
-            // Assume at update definitions we do a self-load
-            feat.vector_loads_per_vector++;
-            feat.scalar_loads_per_scalar++;
-        }
+
         feat.unique_bytes_read_per_vector = global_bytes_loaded + shared_bytes_loaded + local_bytes_loaded + register_bytes_loaded;
         feat.unique_lines_read_per_vector = global_lines_loaded + shared_lines_loaded + local_lines_loaded + register_bytes_loaded;
 
@@ -2875,14 +2719,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         internal_assert(f);
         auto &inlined_feat = features->get_or_create(&(f->stages[0]));
         inlined_feat.inlined_calls += it.value() * subinstances;
-        inlined_feat.num_vectors += it.value() * feat.num_vectors;
         inlined_feat.num_scalars += it.value() * feat.num_scalars;
-        inlined_feat.native_vector_size = stage->vector_size;
-        if (inlined_feat.vector_size > 0) {
-            inlined_feat.vector_size = std::min(inlined_feat.vector_size, (double)stage->vector_size);
-        } else {
-            inlined_feat.vector_size = feat.vector_size;
-        }
         if (inlined_feat.innermost_pure_loop_extent > 0) {
             inlined_feat.innermost_pure_loop_extent =
                 std::min(inlined_feat.innermost_pure_loop_extent,
@@ -2907,10 +2744,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             auto& intermediate_map = block->feature_intermediates[hash_of_producers].get_or_create(&(f->stages[0]));
             auto& intermediate = intermediate_map.get_or_create(stage);
             intermediate.inlined_calls = it.value() * subinstances;
-            intermediate.num_vectors = it.value() * feat.num_vectors;
             intermediate.num_scalars = it.value() * feat.num_scalars;
 
-            intermediate.vector_size = feat.vector_size;
             intermediate.innermost_pure_loop_extent = feat.innermost_pure_loop_extent;
             intermediate.outer_parallelism = parallelism;
             intermediate.num_warps_per_block = num_warps;

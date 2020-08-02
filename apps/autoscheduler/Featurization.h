@@ -287,28 +287,8 @@ struct ScheduleFeatures {
     // fits in cache.
     double working_set = 0;
 
-    // The vectorization factor (#simd lanes) to be used to compute
-    // this stage. Wasted work if it's smaller than the stage's native
-    // vector size.
-    double vector_size = 0;
-
-    // The native vector size for the narrowest type used. Does not
-    // vary with the schedule, but a useful reference point.
-    double native_vector_size = 0;
-
-    // Number of SIMD vectors computed
-    double num_vectors = 0;
-
     // Number of scalars computed (e.g. from tails of loops)
     double num_scalars = 0;
-
-    // The number of loads done per vector or scalar computed. Vector
-    // gathers count as a batch of scalar loads. These get amortized
-    // across unrolled blocks if some loads can be reused across the
-    // unrolled dimension.
-    double vector_loads_per_vector = 0;
-    double scalar_loads_per_vector = 0;
-    double scalar_loads_per_scalar = 0;
 
     // The memory footprint written over one per parallel task. The
     // union of the regions if the stage is computed at finer
@@ -418,13 +398,7 @@ struct ScheduleFeatures {
             << " local_allocation_bytes_read_per_realization: " << local_allocation_bytes_read_per_realization << "\n"
             << " register_allocation_bytes_read_per_realization: " << register_allocation_bytes_read_per_realization << "\n"
             << "    working_set:                           " << working_set << "\n"
-            << "    vector_size:                           " << vector_size << "\n"
-            << "    native_vector_size:                    " << native_vector_size << "\n"
-            << "    num_vectors:                           " << num_vectors << "\n"
             << "    num_scalars:                           " << num_scalars << "\n"
-            << "    scalar_loads_per_vector:               " << scalar_loads_per_vector << "\n"
-            << "    vector_loads_per_vector:               " << vector_loads_per_vector << "\n"
-            << "    scalar_loads_per_scalar:               " << scalar_loads_per_scalar << "\n"
             << "    global_bytes_at_task:                  " << global_bytes_at_task << "\n"
             << "    shared_bytes_at_task:                  " << shared_bytes_at_task << "\n"
             << "    local_bytes_at_task:                   " << local_bytes_at_task << "\n"
@@ -518,13 +492,7 @@ struct ScheduleFeatures {
             && local_allocation_bytes_read_per_realization == other.local_allocation_bytes_read_per_realization
             && register_allocation_bytes_read_per_realization == other.register_allocation_bytes_read_per_realization
             && working_set                           == other.working_set
-            && vector_size                           == other.vector_size
-            && native_vector_size                    == other.native_vector_size
-            && num_vectors                           == other.num_vectors
             && num_scalars                           == other.num_scalars
-            && scalar_loads_per_vector               == other.scalar_loads_per_vector
-            && vector_loads_per_vector               == other.vector_loads_per_vector
-            && scalar_loads_per_scalar               == other.scalar_loads_per_scalar
             && global_bytes_at_task                  == other.global_bytes_at_task
             && shared_bytes_at_task                  == other.shared_bytes_at_task
             && local_bytes_at_task                   == other.local_bytes_at_task
