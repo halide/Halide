@@ -59,6 +59,7 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 										$(AUTOSCHED_SRC)/FunctionDAG.cpp \
 										$(AUTOSCHED_SRC)/LoopNest.h \
 										$(AUTOSCHED_SRC)/LoopNest.cpp \
+										$(AUTOSCHED_SRC)/LoopNestParser.h \
 										$(AUTOSCHED_SRC)/GPUMemInfo.h \
 										$(AUTOSCHED_SRC)/GPULoopInfo.h \
 										$(AUTOSCHED_SRC)/GPULoopInfo.cpp \
@@ -74,6 +75,7 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 										$(AUTOSCHED_SRC)/Statistics.h \
 										$(AUTOSCHED_SRC)/Tiling.h \
 										$(AUTOSCHED_SRC)/Tiling.cpp \
+										$(AUTOSCHED_SRC)/Util.h \
 										$(AUTOSCHED_WEIGHT_OBJECTS) \
 										$(AUTOSCHED_COST_MODEL_LIBS) \
 										$(GENERATOR_DEPS) \
