@@ -6,7 +6,7 @@ namespace Halide {
 // model and also the cost model training script.
 const int head1_channels = 8, head1_w = 40, head1_h = 7;
 const int head2_channels = 24, head2_w = 86;
-const int conv1_channels = 35;
+const int conv1_channels = 36;
 } // namespace Halide
 
 #endif  // HALIDE_NETWORK_SIZE_H

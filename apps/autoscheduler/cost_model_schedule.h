@@ -556,18 +556,6 @@ inline void do_cost_model_schedule(Halide::Pipeline pipeline) {
         .reorder(w, n);
     relu1_0_d_def__.update(36)
         .reorder(w, n);
-    relu1_0_d_def__.update(37)
-        .reorder(w, n);
-    relu1_0_d_def__.update(38)
-        .reorder(w, n);
-    relu1_0_d_def__.update(39)
-        .reorder(w, n);
-    relu1_0_d_def__.update(40)
-        .reorder(w, n);
-    relu1_0_d_def__.update(41)
-        .reorder(w, n);
-    relu1_0_d_def__.update(42)
-        .reorder(w, n);
     cost_per_stage_output_0_d_def__
         .store_in(MemoryType::Stack)
         .split(w, w, wi, 8, TailStrategy::GuardWithIf)
