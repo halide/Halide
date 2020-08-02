@@ -563,7 +563,7 @@ public:
         // Make it easier for the model to penalize working sets that
         // start to fall out of cache by giving it a term that gets
         // multiplied by the working set.
-        Expr cost_of_working_set = working_set * relu1(27, w, n);
+        Expr cost_of_working_set = working_set * relu1(42, w, n);
 
         Expr cost = (print_wrap(compute_cost, "compute_cost_total", n, w) +
                      print_wrap(store_cost, "store_cost_total", n, w) +
