@@ -105,6 +105,13 @@ $(BIN)/test_storage_strides: $(TEST_DIR)/storage_strides.cpp LoopNest.h LoopNest
 test_storage_strides: $(BIN)/test_storage_strides
 	$^
 
+$(BIN)/test_parser: $(TEST_DIR)/parser.cpp LoopNestParser.h ASLog.h ASLog.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(AUTOSCHED_SRC)
+
+test_parser: $(BIN)/test_parser
+	$^
+
 clean:
 	rm -rf $(BIN)
 
