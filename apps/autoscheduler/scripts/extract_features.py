@@ -210,6 +210,8 @@ class FeatureParser:
     to_add.append(mem_access)
 
     for a in to_add:
+      if "num_requests_per_block" not in a:
+        continue
       access = MemAccess.create(a)
       if access.key in self.mem_accesses:
         self.mem_accesses[access.key].add(access)
@@ -313,6 +315,8 @@ class FeatureParser:
           feature_stage = None
         elif in_features:
           self.parse_feature(feature_stage, line)
+        elif line.startswith("BEGIN Final generated loop nest"):
+          in_loop_nest = True
 
   def write_to_file(self):
     processed_features = self.process_features()
