@@ -88,9 +88,19 @@ public:
     }
 
     void dump() const {
-        aslog(0) << "Partially scheduled stages:\n";
+        aslog(0) << "All stages:\n";
+        for (const auto& s : all_stages) {
+            aslog(0) << s << "\n";
+        }
+
+        aslog(0) << "\ncompute_root stages:\n";
+        for (const auto& s : compute_root_stages) {
+            aslog(0) << s.first << " with vector_dim = " << s.second << "\n";
+        }
+
+        aslog(0) << "\nPartially scheduled stages:\n";
         for (const auto& s : partially_scheduled) {
-            aslog(0) << s << ": " << compute_root_stages.at(s) << "\n";
+            aslog(0) << s << " with vector_dim = " << compute_root_stages.at(s) << "\n";
         }
 
         aslog(0) << "\nInlined stages:\n";
@@ -119,11 +129,13 @@ public:
                 return other.compute_root_stages.at(stage) == compute_root_stages.at(stage);
             }
 
-            if (other.inlined.count(stage)) {
+            if (other.inlined.count(stage) > 0) {
                 if (inlined.count(stage) == 0) {
                     return false;
                 }
                 continue;
+            } else if (inlined.count(stage) > 0) {
+                return false;
             }
 
             if (other.per_stage_loop_nests.at(stage) != per_stage_loop_nests.at(stage)) {
