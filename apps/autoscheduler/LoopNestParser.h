@@ -119,8 +119,11 @@ public:
                 return other.compute_root_stages.at(stage) == compute_root_stages.at(stage);
             }
 
-            if (other.inlined.count(stage) == 1 && inlined.count(stage) == 0) {
-                return false;
+            if (other.inlined.count(stage)) {
+                if (inlined.count(stage) == 0) {
+                    return false;
+                }
+                continue;
             }
 
             if (other.per_stage_loop_nests.at(stage) != per_stage_loop_nests.at(stage)) {
