@@ -134,7 +134,44 @@ void test_serial_tilings() {
         expected.push_back({16, 8, 4});
         expected.push_back({16, 16, 4});
 
-        auto actual = generate_gpu_tilings(stage_sizes, pure_dims, max_s, (int)(stage_sizes[0].size() - 1), vectorized_indices, serial_inner);
+        auto actual = generate_gpu_tilings(stage_sizes, pure_dims, max_s, (int)(stage_sizes[0].size() - 1), vectorized_indices, serial_inner, false);
+
+        EXPECT_EQ(expected, actual);
+    }
+
+    {
+        vector<vector<int64_t>> stage_sizes;
+        stage_sizes.push_back({128});
+
+        vector<vector<int>> pure_dims;
+        pure_dims.push_back({0});
+
+        vector<int64_t> max_s;
+        max_s.push_back(1);
+
+        vector<int> vectorized_indices;
+        vectorized_indices.push_back(0);
+
+        bool serial_inner = false;
+
+        vector<vector<int64_t>> expected;
+        expected.push_back({16});
+        expected.push_back({32});
+        expected.push_back({64});
+
+        auto actual = generate_gpu_tilings(stage_sizes, pure_dims, max_s, (int)(stage_sizes[0].size() - 1), vectorized_indices, serial_inner, false);
+
+        EXPECT_EQ(expected, actual);
+
+        expected.clear();
+        expected.push_back({1});
+        expected.push_back({2});
+        expected.push_back({4});
+        expected.push_back({8});
+        expected.push_back({16});
+        expected.push_back({32});
+        expected.push_back({64});
+        actual = generate_gpu_tilings(stage_sizes, pure_dims, max_s, (int)(stage_sizes[0].size() - 1), vectorized_indices, serial_inner, true);
 
         EXPECT_EQ(expected, actual);
     }

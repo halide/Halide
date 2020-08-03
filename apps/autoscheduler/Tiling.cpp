@@ -203,7 +203,7 @@ void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t
 vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stage_sizes,
                                              const vector<vector<int>> &pure_dims,
                                              const vector<int64_t> &max_s,
-                                             int d, const vector<int> &vectorized_indices, bool serial_inner) {
+                                             int d, const vector<int> &vectorized_indices, bool serial_inner, bool is_compute_root_stage) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
@@ -212,8 +212,12 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
         int64_t max_threads_extent = 64, total_threads_limit = 1024;  // less than 1024 to limit states
         int factor = 2, innermost_warp_extent = 16, max_serial_ext = 8;
 
+        if (is_compute_root_stage && pure_dims[0].size() == 1) {
+            innermost_warp_extent = 1;
+        }
+
         vector<vector<int64_t>> v;
-        v = generate_gpu_tilings(stage_sizes, pure_dims, max_s, d - 1, vectorized_indices, serial_inner);
+        v = generate_gpu_tilings(stage_sizes, pure_dims, max_s, d - 1, vectorized_indices, serial_inner, is_compute_root_stage);
 
         for (auto t : v) {
             enum validity { serial_count_err,

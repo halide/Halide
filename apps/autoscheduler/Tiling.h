@@ -49,7 +49,7 @@ void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t
 vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stage_sizes,
         const vector<vector<int>> &pure_dims,
         const vector<int64_t> &max_s,
-        int d, const vector<int> &vectorized_indices, bool serial_inner);
+        int d, const vector<int> &vectorized_indices, bool serial_inner, bool is_compute_root_stage);
 
 }  // namespace Autoscheduler
 }  // namespace Internal

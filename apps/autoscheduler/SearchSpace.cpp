@@ -137,21 +137,32 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
         for (const auto &c : state->root->children) {
             if (c->node == node) {
                 int64_t total = 1;
+                int64_t max_available = 1;
                 for (auto &l : c->stage->loop) {
                     if (!l.rvar) {
                         total *= o.outer_tiling[l.pure_dim];
+                        max_available *= c->size[l.pure_dim];
                     }
                 }
-                if (min_total != 0) {
-                    min_total = std::min(min_total, total);
-                } else {
-                    min_total = total;
-                }
                 max_total = std::max(max_total, total);
-                const double tasks_per_core = ((double)total) / params.parallelism;
-                o.idle_core_wastage = std::max(o.idle_core_wastage,
-                                               std::ceil(tasks_per_core) /
-                                                   tasks_per_core);
+
+                // If a stage does not have enough parallelism regardless of the
+                // tiling (i.e. its size is < params.parallelism * 2 before
+                // splitting), then the only tiling worth considering is the
+                // one that retains the full extent in this dimension
+                // (outer_tiling == size). In that case, skip over updating
+                // min_total, otherwise it will be filtered out below
+                if (max_available >= params.parallelism * 2 || total != max_available) {
+                    if (min_total != 0) {
+                        min_total = std::min(min_total, total);
+                    } else {
+                        min_total = total;
+                    }
+                    const double tasks_per_core = ((double)total) / params.parallelism;
+                    o.idle_core_wastage = std::max(o.idle_core_wastage,
+                                                   std::ceil(tasks_per_core) /
+                                                       tasks_per_core);
+                }
             }
         }
 
@@ -477,7 +488,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             // at root level sibling thread counts are in separate blocks, extents are irrelevant
             vector<int64_t> max_size((int)(stage_sizes[0].size()), 1);
 
-            auto block_tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, node->dimensions-1, vectorized_indices, false);
+            auto block_tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, node->dimensions-1, vectorized_indices, false, true);
 
             // If no options, create a thread tiling as large as possible with block size (1,1,1).
             // This can happen if the loops are too small to generate desired gpu tiles.
@@ -502,12 +513,14 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             auto options = filter_parallel_tile_options(state, node, block_tilings, stage_sizes[0]);
             stats.filter_parallel_tiles_time += timer.elapsed();
 
+            double prev_idle_core_wastage = 0;
             for (const auto &o : options) {
-                if (!randomize_tilings && num_children >= 1 && o.idle_core_wastage > 1.2) {
+                if (!randomize_tilings && num_children >= 1 && o.idle_core_wastage > 1.2 && o.idle_core_wastage != prev_idle_core_wastage) {
                     // We have considered several options, and the
                     // remaining ones leave lots of cores idle.
                     break;
                 }
+                prev_idle_core_wastage = o.idle_core_wastage;
 
                 ++stats.num_tilings_generated;
 

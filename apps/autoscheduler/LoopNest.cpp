@@ -236,7 +236,7 @@ bool LoopNest::add_gpu_thread_tilings(const FunctionDAG::Node *f,
     this->get_stage_sizes(f, stage_sizes, pure_dims, vectorized_indices);
     internal_assert(stage_sizes.size() != 0);
     //internal_assert(pure_size);
-    auto tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, (int)(stage_sizes[0].size() - 1), vectorized_indices, true);
+    auto tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, (int)(stage_sizes[0].size() - 1), vectorized_indices, true, false);
     bool made_child = false;
     for (const auto &t : tilings) {
         LoopNest *new_parent = new LoopNest;
