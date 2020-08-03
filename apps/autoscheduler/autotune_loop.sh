@@ -432,6 +432,8 @@ benchmark_loop() {
 
 MAX_AUTOSCHEDULE_JOBS=${LOCAL_CORES}
 
+BENCHMARK_QUEUE_ENABLED=0
+
 if [[ $USE_BENCHMARK_QUEUE == 1 ]] && [[ $TRAIN_ONLY != 1 ]]; then
     echo "Benchmark queue = ON"
     mkdir -p ${BENCHMARK_QUEUE_DIR}
@@ -439,6 +441,7 @@ if [[ $USE_BENCHMARK_QUEUE == 1 ]] && [[ $TRAIN_ONLY != 1 ]]; then
     MAX_AUTOSCHEDULE_JOBS=$((LOCAL_CORES-NUM_GPUS))
     benchmark_loop &
     benchmark_loop_pid=("$!")
+    BENCHMARK_QUEUE_ENABLED=1
 else
     echo "Benchmark queue = OFF"
 fi
@@ -514,7 +517,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
     done
 fi
 
-if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
+if [[ $BENCHMARK_QUEUE_ENABLED == 1 ]]; then
     wait "${benchmark_loop_pid}"
 fi
 
