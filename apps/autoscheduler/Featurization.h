@@ -259,27 +259,22 @@ struct ScheduleFeatures {
     // containing the allocation site.
     double unique_global_bytes_read_per_realization = 0;
     double unique_shared_bytes_read_per_realization = 0;
-    double unique_local_bytes_read_per_realization = 0;
     double unique_register_bytes_read_per_realization = 0;
     double unique_global_lines_read_per_realization = 0;
     double unique_shared_lines_read_per_realization = 0;
-    double unique_local_lines_read_per_realization = 0;
     double unique_register_lines_read_per_realization = 0;
 
     double unique_global_bytes_read_per_thread = 0;
     double unique_shared_bytes_read_per_thread = 0;
-    double unique_local_bytes_read_per_thread = 0;
     double unique_register_bytes_read_per_thread = 0;
     double unique_global_lines_read_per_thread = 0;
     double unique_shared_lines_read_per_thread = 0;
-    double unique_local_lines_read_per_thread = 0;
     double unique_register_lines_read_per_thread = 0;
 
     // The sum of the sizes of the allocations accessed at this
     // site. Gives a hint as to the likely locality of it.
     double global_allocation_bytes_read_per_realization = 0;
     double shared_allocation_bytes_read_per_realization = 0;
-    double local_allocation_bytes_read_per_realization = 0;
     double register_allocation_bytes_read_per_realization = 0;
 
     // The sum of the sizes of the temporary allocations while
@@ -295,11 +290,9 @@ struct ScheduleFeatures {
     // granularity that one parallel task of some consumer.
     double global_bytes_at_task = 0;
     double shared_bytes_at_task = 0;
-    double local_bytes_at_task = 0;
     double register_bytes_at_task = 0;
     double global_innermost_bytes_at_task = 0;
     double shared_innermost_bytes_at_task = 0;
-    double local_innermost_bytes_at_task = 0;
     double register_innermost_bytes_at_task = 0;
 
     // The memory footprint accessed while computing a single vector.
@@ -330,10 +323,8 @@ struct ScheduleFeatures {
 
     double num_shared_mem_loads_per_block = 0;
     double num_global_mem_loads_per_block = 0;
-    double num_local_mem_loads_per_block = 0;
     double num_shared_mem_stores_per_block = 0;
     double num_global_mem_stores_per_block = 0;
-    double num_local_mem_stores_per_block = 0;
 
     double shared_mem_store_efficiency = 1;
     double shared_mem_load_efficiency = 1;
@@ -341,12 +332,7 @@ struct ScheduleFeatures {
     double global_mem_store_efficiency = 1;
     double global_mem_load_efficiency = 1;
 
-    double local_mem_store_efficiency = 1;
-    double local_mem_load_efficiency = 1;
-
     double working_set_at_thread = 0;
-    double working_set_local_constant = 0;
-    double working_set_local_dynamic = 0;
 
     double shared_mem_occupancy = 0;
     double shared_mem_block_limit_factor = 1;
@@ -379,33 +365,26 @@ struct ScheduleFeatures {
             << "    inlined_calls:                         " << inlined_calls << "\n"
             << " unique_global_bytes_read_per_realization: " << unique_global_bytes_read_per_realization << "\n"
             << " unique_shared_bytes_read_per_realization: " << unique_shared_bytes_read_per_realization << "\n"
-            << " unique_local_bytes_read_per_realization:  " << unique_local_bytes_read_per_realization << "\n"
             << " unique_register_bytes_read_per_realization:  " << unique_register_bytes_read_per_realization << "\n"
             << " unique_global_lines_read_per_realization: " << unique_global_lines_read_per_realization << "\n"
             << " unique_shared_lines_read_per_realization: " << unique_shared_lines_read_per_realization << "\n"
-            << " unique_local_lines_read_per_realization:  " << unique_local_lines_read_per_realization << "\n"
             << " unique_register_lines_read_per_realization:  " << unique_register_lines_read_per_realization << "\n"
             << " unique_global_bytes_read_per_thread:      " << unique_global_bytes_read_per_thread << "\n"
             << " unique_shared_bytes_read_per_thread:      " << unique_shared_bytes_read_per_thread << "\n"
-            << " unique_local_bytes_read_per_thread:       " << unique_local_bytes_read_per_thread << "\n"
             << " unique_register_bytes_read_per_thread:       " << unique_register_bytes_read_per_thread << "\n"
             << " unique_global_lines_read_per_thread:      " << unique_global_lines_read_per_thread << "\n"
             << " unique_shared_lines_read_per_thread:      " << unique_shared_lines_read_per_thread << "\n"
-            << " unique_local_lines_read_per_thread:       " << unique_local_lines_read_per_thread << "\n"
             << " unique_register_lines_read_per_thread:       " << unique_register_lines_read_per_thread << "\n"
             << " global_allocation_bytes_read_per_realization: " << global_allocation_bytes_read_per_realization << "\n"
             << " shared_allocation_bytes_read_per_realization: " << shared_allocation_bytes_read_per_realization << "\n"
-            << " local_allocation_bytes_read_per_realization: " << local_allocation_bytes_read_per_realization << "\n"
             << " register_allocation_bytes_read_per_realization: " << register_allocation_bytes_read_per_realization << "\n"
             << "    working_set:                           " << working_set << "\n"
             << "    num_scalars:                           " << num_scalars << "\n"
             << "    global_bytes_at_task:                  " << global_bytes_at_task << "\n"
             << "    shared_bytes_at_task:                  " << shared_bytes_at_task << "\n"
-            << "    local_bytes_at_task:                   " << local_bytes_at_task << "\n"
             << "    register_bytes_at_task:                " << register_bytes_at_task << "\n"
             << "    global_innermost_bytes_at_task:        " << global_innermost_bytes_at_task << "\n"
             << "    shared_innermost_bytes_at_task:        " << shared_innermost_bytes_at_task << "\n"
-            << "    local_innermost_bytes_at_task:         " << local_innermost_bytes_at_task << "\n"
             << "    register_innermost_bytes_at_task:      " << register_innermost_bytes_at_task << "\n"
             << "    unique_bytes_read_per_vector:          " << unique_bytes_read_per_vector << "\n"
             << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << "\n"
@@ -425,19 +404,13 @@ struct ScheduleFeatures {
             << "    idle_lane_wastage:                     " << idle_lane_wastage << "\n"
             << "    num_shared_mem_loads_per_block:        " << num_shared_mem_loads_per_block << "\n"
             << "    num_global_mem_loads_per_block:        " << num_global_mem_loads_per_block << "\n"
-            << "    num_local_mem_loads_per_block:         " << num_local_mem_loads_per_block << "\n"
             << "    num_shared_mem_stores_per_block:       " << num_shared_mem_stores_per_block << "\n"
             << "    num_global_mem_stores_per_block:       " << num_global_mem_stores_per_block << "\n"
-            << "    num_local_mem_stores_per_block:        " << num_local_mem_stores_per_block << "\n"
             << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << "\n"
             << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << "\n"
             << "    global_mem_store_efficiency:           " << global_mem_store_efficiency << "\n"
             << "    global_mem_load_efficiency:            " << global_mem_load_efficiency << "\n"
-            << "    local_mem_store_efficiency:            " << local_mem_store_efficiency << "\n"
-            << "    local_mem_load_efficiency:             " << local_mem_load_efficiency << "\n"
             << "    working_set_at_thread:                 " << working_set_at_thread << "\n"
-            << "    working_set_local_constant:            " << working_set_local_constant << "\n"
-            << "    working_set_local_dynamic:             " << working_set_local_dynamic << "\n"
             << "    shared_mem_occupancy:                  " << shared_mem_occupancy << "\n"
             << "    shared_mem_block_limit_factor:         " << shared_mem_block_limit_factor << "\n"
             << "    max_warp_occupancy:                    " << max_warp_occupancy << "\n"
@@ -473,33 +446,26 @@ struct ScheduleFeatures {
             && inlined_calls                         == other.inlined_calls
             && unique_global_bytes_read_per_realization     == other.unique_global_bytes_read_per_realization
             && unique_shared_bytes_read_per_realization     == other.unique_shared_bytes_read_per_realization
-            && unique_local_bytes_read_per_realization     == other.unique_local_bytes_read_per_realization
             && unique_register_bytes_read_per_realization     == other.unique_register_bytes_read_per_realization
             && unique_global_lines_read_per_realization     == other.unique_global_lines_read_per_realization
             && unique_shared_lines_read_per_realization     == other.unique_shared_lines_read_per_realization
-            && unique_local_lines_read_per_realization     == other.unique_local_lines_read_per_realization
             && unique_register_lines_read_per_realization     == other.unique_register_lines_read_per_realization
             && unique_global_bytes_read_per_thread   == other.unique_global_bytes_read_per_thread
             && unique_shared_bytes_read_per_thread   == other.unique_shared_bytes_read_per_thread
-            && unique_local_bytes_read_per_thread    == other.unique_local_bytes_read_per_thread
             && unique_register_bytes_read_per_thread    == other.unique_register_bytes_read_per_thread
             && unique_global_lines_read_per_thread   == other.unique_global_lines_read_per_thread
             && unique_shared_lines_read_per_thread   == other.unique_shared_lines_read_per_thread
-            && unique_local_lines_read_per_thread    == other.unique_local_lines_read_per_thread
             && unique_register_lines_read_per_thread    == other.unique_register_lines_read_per_thread
             && global_allocation_bytes_read_per_realization == other.global_allocation_bytes_read_per_realization
             && shared_allocation_bytes_read_per_realization == other.shared_allocation_bytes_read_per_realization
-            && local_allocation_bytes_read_per_realization == other.local_allocation_bytes_read_per_realization
             && register_allocation_bytes_read_per_realization == other.register_allocation_bytes_read_per_realization
             && working_set                           == other.working_set
             && num_scalars                           == other.num_scalars
             && global_bytes_at_task                  == other.global_bytes_at_task
             && shared_bytes_at_task                  == other.shared_bytes_at_task
-            && local_bytes_at_task                   == other.local_bytes_at_task
             && register_bytes_at_task                   == other.register_bytes_at_task
             && global_innermost_bytes_at_task        == other.global_innermost_bytes_at_task
             && shared_innermost_bytes_at_task        == other.shared_innermost_bytes_at_task
-            && local_innermost_bytes_at_task         == other.local_innermost_bytes_at_task
             && register_innermost_bytes_at_task         == other.register_innermost_bytes_at_task
             && unique_bytes_read_per_vector          == other.unique_bytes_read_per_vector
             && unique_lines_read_per_vector          == other.unique_lines_read_per_vector
@@ -519,19 +485,13 @@ struct ScheduleFeatures {
             && idle_lane_wastage                     == other.idle_lane_wastage
             && num_shared_mem_loads_per_block        == other.num_shared_mem_loads_per_block
             && num_global_mem_loads_per_block        == other.num_global_mem_loads_per_block
-            && num_local_mem_loads_per_block         == other.num_local_mem_loads_per_block
             && num_shared_mem_stores_per_block       == other.num_shared_mem_stores_per_block
             && num_global_mem_stores_per_block       == other.num_global_mem_stores_per_block
-            && num_local_mem_stores_per_block        == other.num_local_mem_stores_per_block
             && shared_mem_store_efficiency           == other.shared_mem_store_efficiency
             && shared_mem_load_efficiency            == other.shared_mem_load_efficiency
             && global_mem_store_efficiency           == other.global_mem_store_efficiency
             && global_mem_load_efficiency            == other.global_mem_load_efficiency
-            && local_mem_store_efficiency            == other.local_mem_store_efficiency
-            && local_mem_load_efficiency             == other.local_mem_load_efficiency
             && working_set_at_thread                 == other.working_set_at_thread
-            && working_set_local_constant            == other.working_set_local_constant
-            && working_set_local_dynamic             == other.working_set_local_dynamic
             && shared_mem_occupancy                  == other.shared_mem_occupancy
             && shared_mem_block_limit_factor         == other.shared_mem_block_limit_factor
             && max_warp_occupancy                    == other.max_warp_occupancy

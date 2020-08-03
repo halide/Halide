@@ -992,13 +992,13 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             total_serial_loop_extents,
             verbose
         );
-        feat.num_local_mem_stores_per_block = local_mem_info.num_transactions();
+        //feat.num_local_mem_stores_per_block = local_mem_info.num_transactions();
         if (stage->index > 0) {
             local_mem_loads.add(local_mem_info);
         }
-        feat.local_mem_store_efficiency = local_mem_info.efficiency();
+        //feat.local_mem_store_efficiency = local_mem_info.efficiency();
 
-        internal_assert(in_range_zero_one(feat.local_mem_store_efficiency)) << "Invalid local mem store coalesce efficiency: " << feat.local_mem_store_efficiency << " for " << node->func.name();
+        //internal_assert(in_range_zero_one(feat.local_mem_store_efficiency)) << "Invalid local mem store coalesce efficiency: " << feat.local_mem_store_efficiency << " for " << node->func.name();
     }
 
     if (verbose) {
@@ -1814,8 +1814,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     feat.shared_bytes_at_task = feat.bytes_at_realization;
                     feat.shared_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
                 } else if (site.is_stored_in_local_mem()) {
-                    feat.local_bytes_at_task = feat.bytes_at_realization;
-                    feat.local_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
+                    //feat.local_bytes_at_task = feat.bytes_at_realization;
+                    //feat.local_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
                 } else if (site.is_stored_in_registers()) {
                     feat.register_bytes_at_task = feat.bytes_at_realization;
                     feat.register_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
@@ -2023,8 +2023,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             feat.shared_bytes_at_task = bytes_at_task;
             feat.shared_innermost_bytes_at_task = innermost_bytes_at_task;
         } else if (site.is_stored_in_local_mem()) {
-            feat.local_bytes_at_task = bytes_at_task;
-            feat.local_innermost_bytes_at_task = innermost_bytes_at_task;
+            //feat.local_bytes_at_task = bytes_at_task;
+            //feat.local_innermost_bytes_at_task = innermost_bytes_at_task;
         } else {
             internal_assert(false);
         }
@@ -2110,26 +2110,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     for (const auto *node : store_at) {
         auto &feat = features->get(&(node->stages[0]));
         working_set_here += feat.bytes_at_production;
-
-        if (gpu_loop_info.at_or_inside_thread()) {
-            const auto &bounds = get_bounds(node);
-
-            auto bytes = node->bytes_per_point;
-            bool is_constant = true;
-            for (int i = 0; i < node->dimensions; i++) {
-                const auto &p = bounds->region_computed(i);
-                bytes *= p.extent();
-                is_constant = is_constant && p.constant_extent();
-            }
-
-            if (node->dimensions > 0) {
-                if (is_constant) {
-                    working_set_here_local_constant += bytes;
-                } else {
-                    working_set_here_local_dynamic += bytes;
-                }
-            }
-        }
     }
     for (const auto *node : store_at) {
         for (const auto &s : node->stages) {
@@ -2154,8 +2134,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     if (at_production) {
         feat.working_set = working_set_here;
-        feat.working_set_local_constant = working_set_here_local_constant;
-        feat.working_set_local_dynamic = working_set_here_local_dynamic;
     }
 
     if (innermost) {
@@ -2640,16 +2618,16 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
         feat.global_allocation_bytes_read_per_realization = global_allocation_bytes_loaded;
         feat.shared_allocation_bytes_read_per_realization = shared_allocation_bytes_loaded;
-        feat.local_allocation_bytes_read_per_realization = local_allocation_bytes_loaded;
+        //feat.local_allocation_bytes_read_per_realization = local_allocation_bytes_loaded;
 
         feat.unique_global_bytes_read_per_realization = global_bytes_loaded;
         feat.unique_shared_bytes_read_per_realization = shared_bytes_loaded;
-        feat.unique_local_bytes_read_per_realization = local_bytes_loaded;
+        //feat.unique_local_bytes_read_per_realization = local_bytes_loaded;
         feat.unique_register_bytes_read_per_realization = register_bytes_loaded;
 
         feat.unique_global_lines_read_per_realization = global_lines_loaded;
         feat.unique_shared_lines_read_per_realization = shared_lines_loaded;
-        feat.unique_local_lines_read_per_realization = local_lines_loaded;
+        //feat.unique_local_lines_read_per_realization = local_lines_loaded;
         feat.unique_register_lines_read_per_realization = register_lines_loaded;
 
         if (!at_pure_production) {
@@ -2667,9 +2645,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 feat.unique_shared_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
                 feat.shared_allocation_bytes_read_per_realization += feat.bytes_at_production;
             } else if (consumer_site.is_stored_in_local_mem()) {
-                feat.unique_local_bytes_read_per_realization += feat.bytes_at_production;
-                feat.unique_local_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
-                feat.local_allocation_bytes_read_per_realization += feat.bytes_at_production;
+                //feat.unique_local_bytes_read_per_realization += feat.bytes_at_production;
+                //feat.unique_local_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
+                //feat.local_allocation_bytes_read_per_realization += feat.bytes_at_production;
             } else if (consumer_site.is_stored_in_registers()) {
                 feat.unique_register_bytes_read_per_realization += feat.bytes_at_production;
                 feat.unique_register_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
@@ -2685,12 +2663,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
         feat.unique_global_bytes_read_per_thread = global_bytes_loaded_per_thread;
         feat.unique_shared_bytes_read_per_thread = shared_bytes_loaded_per_thread;
-        feat.unique_local_bytes_read_per_thread = local_bytes_loaded_per_thread;
+        //feat.unique_local_bytes_read_per_thread = local_bytes_loaded_per_thread;
         feat.unique_register_bytes_read_per_thread = register_bytes_loaded_per_thread;
 
         feat.unique_global_lines_read_per_thread = global_lines_loaded_per_thread;
         feat.unique_shared_lines_read_per_thread = shared_lines_loaded_per_thread;
-        feat.unique_local_lines_read_per_thread = local_lines_loaded_per_thread;
+        //feat.unique_local_lines_read_per_thread = local_lines_loaded_per_thread;
         feat.unique_register_lines_read_per_thread = register_lines_loaded_per_thread;
 
         feat.points_computed_per_production = subinstances / feat.num_productions;
@@ -2704,14 +2682,14 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         feat.num_shared_mem_loads_per_block = shared_mem_loads.num_transactions();
         feat.shared_mem_load_efficiency = shared_mem_loads.efficiency();
 
-        feat.num_local_mem_loads_per_block = local_mem_loads.num_transactions();
-        feat.local_mem_load_efficiency = local_mem_loads.efficiency();
+        //feat.num_local_mem_loads_per_block = local_mem_loads.num_transactions();
+        //feat.local_mem_load_efficiency = local_mem_loads.efficiency();
 
         internal_assert(in_range_zero_one(feat.global_mem_load_efficiency)) << "Invalid global mem load efficiency: " << feat.global_mem_load_efficiency;
 
         internal_assert(in_range_zero_one(feat.shared_mem_load_efficiency)) << "Invalid shared mem load efficiency: " << feat.shared_mem_load_efficiency;
 
-        internal_assert(in_range_zero_one(feat.local_mem_load_efficiency)) << "Invalid local mem load efficiency: " << feat.local_mem_load_efficiency;
+        //internal_assert(in_range_zero_one(feat.local_mem_load_efficiency)) << "Invalid local mem load efficiency: " << feat.local_mem_load_efficiency;
     }
 
     // Track features for inlined Funcs
