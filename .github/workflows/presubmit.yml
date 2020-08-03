@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install clang-tidy
         run: |
+          sudo apt-get update
           sudo apt-get install llvm-10 clang-10 libclang-10-dev clang-tidy-10
           sudo apt-get remove llvm-8 clang-8 libclang-8-dev clang-tidy-8
       - name: Build Compilation DB
