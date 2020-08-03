@@ -296,8 +296,8 @@ public:
         Expr global_innermost_bytes_at_task = schedule_features(n, idx++, w);
         Expr shared_innermost_bytes_at_task = schedule_features(n, idx++, w);
         Expr register_innermost_bytes_at_task = schedule_features(n, idx++, w);
-        Expr unique_bytes_read_per_vector = schedule_features(n, idx++, w);
-        Expr unique_lines_read_per_vector = schedule_features(n, idx++, w);
+        Expr unique_bytes_read_per_point = schedule_features(n, idx++, w);
+        Expr unique_lines_read_per_point = schedule_features(n, idx++, w);
         Expr unique_bytes_read_per_task = schedule_features(n, idx++, w);
         Expr unique_lines_read_per_task = schedule_features(n, idx++, w);
         Expr working_set_at_task = schedule_features(n, idx++, w);
@@ -432,11 +432,11 @@ public:
         load_cost += num_blocks * num_threads_per_block * unique_register_bytes_read_per_thread * relu1(0, w, n);
         load_cost = print_wrap(load_cost, "load_cost after num_blocks * num_threads_per_block * unique_register_bytes_read_per_thread", n, w);
 
-        load_cost += num_scalars * unique_bytes_read_per_vector * relu1(10, w, n);
-        load_cost = print_wrap(load_cost, "load_cost after num_scalars * unique_bytes_read_per_vector", n, w);
+        load_cost += num_scalars * unique_bytes_read_per_point * relu1(10, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_scalars * unique_bytes_read_per_point", n, w);
 
-        load_cost += num_scalars * unique_lines_read_per_vector * relu1(12, w, n);
-        load_cost = print_wrap(load_cost, "load_cost after num_scalars * unique_lines_read_per_vector", n, w);
+        load_cost += num_scalars * unique_lines_read_per_point * relu1(12, w, n);
+        load_cost = print_wrap(load_cost, "load_cost after num_scalars * unique_lines_read_per_point", n, w);
 
         load_cost += num_tasks * unique_bytes_read_per_task * relu1(14, w, n);
         load_cost = print_wrap(load_cost, "load_cost after num_tasks * unique_bytes_read_per_task", n, w);

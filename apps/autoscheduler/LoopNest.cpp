@@ -2673,8 +2673,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
         feat.points_computed_per_production = subinstances / feat.num_productions;
 
-        feat.unique_bytes_read_per_vector = global_bytes_loaded + shared_bytes_loaded + local_bytes_loaded + register_bytes_loaded;
-        feat.unique_lines_read_per_vector = global_lines_loaded + shared_lines_loaded + local_lines_loaded + register_bytes_loaded;
+        feat.unique_bytes_read_per_point = global_bytes_loaded + shared_bytes_loaded + local_bytes_loaded + register_bytes_loaded;
+        feat.unique_lines_read_per_point = global_lines_loaded + shared_lines_loaded + local_lines_loaded + register_bytes_loaded;
 
         feat.num_global_mem_loads_per_block = global_mem_loads.num_transactions();
         feat.global_mem_load_efficiency = global_mem_loads.efficiency();

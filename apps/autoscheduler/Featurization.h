@@ -295,9 +295,9 @@ struct ScheduleFeatures {
     double shared_innermost_bytes_at_task = 0;
     double register_innermost_bytes_at_task = 0;
 
-    // The memory footprint accessed while computing a single vector.
-    double unique_bytes_read_per_vector = 0;
-    double unique_lines_read_per_vector = 0;
+    // The memory footprint accessed while computing a single point
+    double unique_bytes_read_per_point = 0;
+    double unique_lines_read_per_point = 0;
 
     // The memory footprint accessed per parallel task. Only counts
     // loads from things computed outside of that parallel task (to
@@ -386,8 +386,8 @@ struct ScheduleFeatures {
             << "    global_innermost_bytes_at_task:        " << global_innermost_bytes_at_task << "\n"
             << "    shared_innermost_bytes_at_task:        " << shared_innermost_bytes_at_task << "\n"
             << "    register_innermost_bytes_at_task:      " << register_innermost_bytes_at_task << "\n"
-            << "    unique_bytes_read_per_vector:          " << unique_bytes_read_per_vector << "\n"
-            << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << "\n"
+            << "    unique_bytes_read_per_point:          " << unique_bytes_read_per_point << "\n"
+            << "    unique_lines_read_per_point:          " << unique_lines_read_per_point << "\n"
             << "    unique_bytes_read_per_task:            " << unique_bytes_read_per_task << "\n"
             << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << "\n"
             << "    working_set_at_task:                   " << working_set_at_task << "\n"
@@ -467,8 +467,8 @@ struct ScheduleFeatures {
             && global_innermost_bytes_at_task        == other.global_innermost_bytes_at_task
             && shared_innermost_bytes_at_task        == other.shared_innermost_bytes_at_task
             && register_innermost_bytes_at_task         == other.register_innermost_bytes_at_task
-            && unique_bytes_read_per_vector          == other.unique_bytes_read_per_vector
-            && unique_lines_read_per_vector          == other.unique_lines_read_per_vector
+            && unique_bytes_read_per_point          == other.unique_bytes_read_per_point
+            && unique_lines_read_per_point          == other.unique_lines_read_per_point
             && unique_bytes_read_per_task            == other.unique_bytes_read_per_task
             && unique_lines_read_per_task            == other.unique_lines_read_per_task
             && working_set_at_task                   == other.working_set_at_task
