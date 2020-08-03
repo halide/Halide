@@ -2425,6 +2425,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     }
 
                     if (site.gpu_store_memory_type == GPUMemoryType::local) {
+                        internal_assert(false) << "Loop nest contains local_mem_load";
                         for (const auto &jac : jacobians) {
                             if (jac.second != e->producer) continue;
                             int64_t n = jac.first.count();

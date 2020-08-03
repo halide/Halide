@@ -290,7 +290,7 @@ void State::set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *
     const LoopNest *candidate_block = loop;
     while (candidate_block) {
         if (candidate_block->gpu_label == thread) {
-            site.gpu_store_memory_type = GPUMemoryType::local;
+            site.gpu_store_memory_type = GPUMemoryType::registers;
             type_has_been_set = true;
             break;
         }
