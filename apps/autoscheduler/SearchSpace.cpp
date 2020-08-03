@@ -296,6 +296,8 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
     if (phase == 0) {
         // Injecting realizations
         {
+            state->update_always_consider_inline_options(node);
+
             // 1) Inline it
             if (search_space_options.compute_inline() && node->stages.size() == 1 && !node->is_output && !must_compute_root) {
                 LoopNest *new_root = new LoopNest;

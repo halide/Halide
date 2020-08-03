@@ -73,6 +73,7 @@ struct State {
     IntrusivePtr<const State> parent;
     double cost = 0;
     std::vector<double> cost_per_stage;
+    NodeMap<bool> always_consider_inline;
     int num_decisions_made = 0;
     bool penalized = false;
     string schedule_source;
@@ -171,6 +172,9 @@ struct State {
     // Pipeline. Also generate source code for the schedule for the
     // user to copy-paste to freeze this schedule as permanent artifact.
     void apply_schedule(const FunctionDAG &dag, const MachineParams &params, const Target &target);
+
+    bool should_always_consider_inline(const FunctionDAG::Node *node) const;
+    void update_always_consider_inline_options(const FunctionDAG::Node *node);
 };
 
 // A priority queue of states, sorted according to increasing

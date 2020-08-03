@@ -624,6 +624,10 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
     for (auto it = features.begin(); it != features.end(); it++) {
         if (!it.key()->node->is_wrapper) {  // It's OK to repeatedly stage data
             auto &feat = it.value();
+            if (should_always_consider_inline(it.key()->node)) {
+                continue;
+            }
+
             if (feat.points_computed_total + feat.inlined_calls > 8 * feat.points_computed_minimum) {
                 Filter(root.get()) << "Excess recompute for " << it.key()->node->func.name() << " stage " << it.key()->index << "\n"
                     << "points_computed_total = " << feat.points_computed_total << "\n"
@@ -659,6 +663,7 @@ IntrusivePtr<State> State::make_child() const {
     s->cost = cost;
     s->cost_per_stage = cost_per_stage;
     s->num_decisions_made = num_decisions_made;
+    s->always_consider_inline = always_consider_inline;
     return s;
 }
 
@@ -1077,6 +1082,56 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
     // Sanitize the names of things to make them legal source code.
     schedule_source = src.str();
     sanitize_names(schedule_source);
+}
+
+bool State::should_always_consider_inline(const FunctionDAG::Node *node) const {
+    return always_consider_inline.contains(node) && always_consider_inline.get(node);
+}
+
+void State::update_always_consider_inline_options(const FunctionDAG::Node *node) {
+    if (node->is_output) {
+        return;
+    }
+
+    if (node->stages.size() > 1) {
+        return;
+    }
+
+    if (node->is_pointwise) {
+        NodeMap<bool> currently_inlined;
+        root->collect_all_inlined(currently_inlined);
+
+        std::unordered_set<const FunctionDAG::Node*> non_inlined_consumers;
+        std::unordered_set<const FunctionDAG::Node *> done;
+        std::vector<const FunctionDAG::Node*> pending;
+        pending.push_back(node);
+
+        while (!pending.empty()) {
+            const auto *cur_node = pending.back();
+            pending.pop_back();
+
+            if (done.count(cur_node)) {
+                continue;
+            }
+            done.insert(cur_node);
+
+            for (const auto *e : cur_node->outgoing_edges) {
+                if (!currently_inlined.contains(e->consumer->node) || !currently_inlined.get(e->consumer->node)) {
+                    non_inlined_consumers.insert(e->consumer->node);
+                    continue;
+                }
+
+                pending.push_back(e->consumer->node);
+            }
+        }
+
+        if (non_inlined_consumers.size() > 1) {
+            return;
+        }
+
+        internal_assert(non_inlined_consumers.size() == 1);
+        always_consider_inline.get_or_create(node) = true;
+    }
 }
 
 }  // namespace Autoscheduler
