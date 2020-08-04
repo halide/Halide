@@ -643,7 +643,7 @@ bool Target::supported() const {
 #if !defined(WITH_RISCV)
     bad |= arch == Target::RISCV;
 #endif
-#if !defined(WITH_PTX)
+#if !defined(WITH_NVPTX)
     bad |= has_feature(Target::CUDA);
 #endif
 #if !defined(WITH_OPENCL)

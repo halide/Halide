@@ -202,11 +202,11 @@ DECLARE_NO_INITMOD(aarch64)
 DECLARE_NO_INITMOD(aarch64_cpu_features)
 #endif  // WITH_AARCH64
 
-#ifdef WITH_PTX
+#ifdef WITH_NVPTX
 DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
-#endif  // WITH_PTX
+#endif  // WITH_NVPTX
 
 #ifdef WITH_X86
 DECLARE_LL_INITMOD(x86_avx2)
@@ -1198,7 +1198,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
     return std::move(modules[0]);
 }
 
-#ifdef WITH_PTX
+#ifdef WITH_NVPTX
 std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, llvm::LLVMContext *c) {
     std::vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));

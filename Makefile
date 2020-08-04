@@ -141,7 +141,7 @@ MIPS_LLVM_CONFIG_LIB=$(if $(WITH_MIPS), mips, )
 POWERPC_CXX_FLAGS=$(if $(WITH_POWERPC), -DWITH_POWERPC, )
 POWERPC_LLVM_CONFIG_LIB=$(if $(WITH_POWERPC), powerpc, )
 
-PTX_CXX_FLAGS=$(if $(WITH_PTX), -DWITH_PTX, )
+PTX_CXX_FLAGS=$(if $(WITH_PTX), -DWITH_NVPTX, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
 PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_PTX), libdevice.compute_20.10.bc libdevice.compute_30.10.bc libdevice.compute_35.10.bc, )
 
