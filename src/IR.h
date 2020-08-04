@@ -345,11 +345,10 @@ struct Provide : public StmtNode<Provide> {
 
 /** Allocate a scratch area called with the given name, type, and
  * size. The buffer lives for at most the duration of the body
- * statement, within which it is freed. It is an error for an allocate
- * node not to contain a free node of the same buffer. Allocation only
- * occurs if the condition evaluates to true. Within the body of the
- * allocation, defines a symbol with the given name and the type
- * Handle(). */
+ * statement, within which it may or may not be freed explicitly with
+ * a Free node with a matching name. Allocation only occurs if the
+ * condition evaluates to true. Within the body of the allocation,
+ * defines a symbol with the given name and the type Handle(). */
 struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;

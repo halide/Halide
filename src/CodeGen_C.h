@@ -83,7 +83,6 @@ protected:
     /** Emit a statement */
     void print_stmt(const Stmt &);
 
-    void create_assertion(const std::string &id_cond, const std::string &id_msg);
     void create_assertion(const std::string &id_cond, const Expr &message);
     void create_assertion(const Expr &cond, const Expr &message);
 
@@ -117,6 +116,9 @@ protected:
 
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     virtual std::string print_assignment(Type t, const std::string &rhs);
+
+    /** Emit free for the heap allocation. **/
+    void print_heap_free(const std::string &alloc_name);
 
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header() {

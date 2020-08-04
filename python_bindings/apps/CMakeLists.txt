@@ -11,5 +11,5 @@ foreach (SCRIPT IN LISTS SCRIPTS)
              COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${SCRIPT}>")
     set_tests_properties(python_apps_${BASE} PROPERTIES
                          LABELS python
-                         ENVIRONMENT "PYTHONPATH=$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Python>>;HL_TARGET=${HL_TARGET}")
+                         ENVIRONMENT "PYTHONPATH=$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Python>>;HL_TARGET=${Halide_TARGET}")
 endforeach ()
