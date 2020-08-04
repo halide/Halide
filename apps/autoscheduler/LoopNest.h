@@ -518,6 +518,7 @@ struct LoopNest {
     bool producer_computed_here_or_further_in(const FunctionDAG::Node* producer) const;
 
     void update_producers_to_be_staged(StageScheduleState& state, const NodeMap<bool>& all_inlined) const;
+    bool region_computed_shrinks(const FunctionDAG::Node *f, const LoopNest *parent) const;
 
     // Apply the schedule represented by this loop nest to a Halide pipeline.
     void apply(LoopLevel here,

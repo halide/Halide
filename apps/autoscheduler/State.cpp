@@ -57,6 +57,41 @@ void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest 
     }
 }
 
+const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root) const {
+    std::vector<const LoopNest*> ancestors;
+
+    const LoopNest *cur_loop = loop;
+    while (parent.count(cur_loop) > 0) {
+        ancestors.push_back(parent.at(cur_loop).first);
+        cur_loop = ancestors.back();
+    }
+
+    if (ancestors.size() == 0) {
+        return root;
+    }
+
+    const LoopNest *candidate = ancestors.back();
+    bool first = true;
+
+    for (auto it = ancestors.rbegin(); it != ancestors.rend(); it++) {
+        if (first) {
+            first = false;
+            continue;
+        }
+
+        // If the region_computed does not shrink, ancestors.at(i) (the loop
+        // nest one level further in) will never be considered as a compute
+        // location
+        if (!(*it)->region_computed_shrinks(&node, candidate)) {
+            break;
+        }
+
+        candidate = *it;
+    }
+
+    return candidate;
+}
+
 const LoopNest *State::deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *a, const LoopNest *b) const {
     if (a->is_root()) return a;
     if (b->is_root()) return b;
@@ -373,6 +408,12 @@ bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         internal_assert(loop)
             << "Could not compute plausible site for unscheduled Func: "
             << n.func.name() << "\n";
+
+        // If 'loop' would never be considered as a compute location (i.e. by
+        // LoopNest::compute_in_tiles()), walk up the loop nest until we reach a
+        // location that would be considered
+        loop = deepest_valid_compute_location(parent, n, loop, feature_root.get());
+
         for (auto &stage : n.stages) {
             auto &site = sites.get_or_create(&stage);
             site.compute = loop;

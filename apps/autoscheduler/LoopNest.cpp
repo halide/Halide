@@ -3383,6 +3383,22 @@ bool LoopNest::requires_dynamic_allocation(const FunctionDAG::Node *f, const Tar
     return false;
 }
 
+// Is the region_computed smaller here than at its parent?
+bool LoopNest::region_computed_shrinks(const FunctionDAG::Node *f, const LoopNest *parent) const {
+    const auto &bounds_here = get_bounds(f);
+    const auto &bounds_at_parent = parent->get_bounds(f);
+
+    int64_t total_here = 1, total_at_parent = 1;
+    for (int i = 0; i < f->dimensions; i++) {
+        const auto &range_here = bounds_here->region_computed(i);
+        const auto &range_at_parent = bounds_at_parent->region_computed(i);
+        total_here *= range_here.extent();
+        total_at_parent *= range_at_parent.extent();
+    }
+
+    return total_here < total_at_parent;
+}
+
 // Return all possible ways to compute f in tiles somewhere within
 // this loop nest.
 // in_threads_loop tracks whether or not function is going to be placed inside a
@@ -3416,15 +3432,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
 
         // Don't descend into loops if the bounds required don't
         // shrink.
-        int64_t total_here = 1, total_at_parent = 1;
-        for (int i = 0; i < f->dimensions; i++) {
-            const auto &range_here = bounds_here->region_computed(i);
-            const auto &range_at_parent = bounds_at_parent->region_computed(i);
-            total_here *= range_here.extent();
-            total_at_parent *= range_at_parent.extent();
-        }
-
-        if (total_here >= total_at_parent) return result;
+        if (!region_computed_shrinks(f, parent)) return result;
     }
 
     // Figure out which child we can fuse this into
