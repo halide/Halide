@@ -687,7 +687,7 @@ class Interleaver : public IRMutator {
                         break;
                     }
 
-                    // TODO(psuriana): Predicated load is not currently handled.
+                    // TODO: Predicated load is not currently handled.
                     if (!is_one(load->predicate)) {
                         failed = true;
                         break;

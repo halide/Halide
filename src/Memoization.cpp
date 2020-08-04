@@ -255,6 +255,7 @@ public:
                                          Parameter(), const_true(), ModulusRemainder()));
             index += i.second.size_expr;
         }
+        // These writes are non-overlapping, so order doesn't matter.
         Stmt blocks = Block::make(writes, Block::Unordered);
 
         return blocks;

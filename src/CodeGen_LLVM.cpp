@@ -4258,6 +4258,7 @@ void CodeGen_LLVM::visit(const Block *op) {
             }
             codegen(stmts[i]);
             alias_scopes.pop_back();
+            // Note we pushed size - 1 times above because we skipped the case i == j
             for (size_t j = 0; j < stmts.size() - 1; j++) {
                 no_alias_sets.pop_back();
             }
