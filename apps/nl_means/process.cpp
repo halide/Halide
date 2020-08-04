@@ -46,6 +46,7 @@ int main(int argc, char **argv) {
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
 
+    output.copy_to_host();
     convert_and_save_image(output, argv[6]);
 
     printf("Success!\n");

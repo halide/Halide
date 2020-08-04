@@ -16,7 +16,7 @@ $(BIN)/%/bgu.a: $(GENERATOR_BIN)/bgu.generator
 
 $(BIN)/%/bgu_auto_schedule.a: $(GENERATOR_BIN)/bgu.generator
 	@mkdir -p $(@D)
-	$< -g bgu -f bgu_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
+	$< -g bgu -f bgu_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true -p ../Sioutas20/bin/libauto_schedule.so -s Sioutas20
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/bgu.generator
 	@mkdir -p $(@D)

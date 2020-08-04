@@ -15,7 +15,7 @@ $(BIN)/%/lens_blur.a: $(GENERATOR_BIN)/lens_blur.generator
 
 $(BIN)/%/lens_blur_auto_schedule.a: $(GENERATOR_BIN)/lens_blur.generator
 	@mkdir -p $(@D)
-	$^ -g lens_blur -e $(GENERATOR_OUTPUTS) -o $(@D) -f lens_blur_auto_schedule target=$*-no_runtime auto_schedule=true
+	$^ -g lens_blur -e $(GENERATOR_OUTPUTS) -o $(@D) -f lens_blur_auto_schedule target=$*-no_runtime auto_schedule=true -p ../Sioutas20/bin/libauto_schedule.so -s Sioutas20
 
 $(BIN)/%/process: process.cpp $(BIN)/%/lens_blur.a $(BIN)/%/lens_blur_auto_schedule.a
 	@mkdir -p $(@D)
