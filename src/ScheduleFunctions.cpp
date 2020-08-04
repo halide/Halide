@@ -1136,6 +1136,15 @@ protected:
                                   body);
         }
 
+        // If we've split a store_at/compute_at over an unrolled loop,
+        // the ordering of it matters.
+        ForType for_type = for_loop->for_type;
+        if (_found_compute_level &&
+            !_found_store_level &&
+            for_type == ForType::UnorderedUnrolled) {
+            for_type = ForType::Unrolled;
+        }
+
         // Skips pointless allocation
         if (body.same_as(for_loop->body)) {
             return for_loop;
@@ -1143,7 +1152,7 @@ protected:
             return For::make(for_loop->name,
                              for_loop->min,
                              for_loop->extent,
-                             for_loop->for_type,
+                             for_type,
                              for_loop->device_api,
                              body);
         }
