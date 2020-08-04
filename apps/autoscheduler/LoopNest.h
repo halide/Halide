@@ -502,7 +502,7 @@ struct LoopNest {
         vector<FuncVar> ordered_vars;
         vector<int64_t> gpu_thread_extents;
 
-        NodeMap<const LoopNest*> producers_to_be_staged;
+        NodeMap<std::vector<std::pair<const LoopNest*, std::vector<const FunctionDAG::Edge*>>>> producers_to_be_staged;
 
         // From outermost in
         vector<StageScheduleState*> ancestors;
@@ -516,6 +516,8 @@ struct LoopNest {
     int num_serial_loops(const FunctionDAG::Node::Stage* stage) const;
     int num_serial_loops() const;
     bool producer_computed_here_or_further_in(const FunctionDAG::Node* producer) const;
+
+    void update_producers_to_be_staged(StageScheduleState& state, const NodeMap<bool>& all_inlined) const;
 
     // Apply the schedule represented by this loop nest to a Halide pipeline.
     void apply(LoopLevel here,

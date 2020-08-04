@@ -4157,17 +4157,7 @@ void LoopNest::apply(LoopLevel here,
         }
 
         if (gpu_label == thread && state.all_innermost_unrolled && num_serial_loops() <= 1) {
-            for (const auto *e : stage->incoming_edges) {
-                if (e->producer->is_input || !has_constant_region_required(e->producer)) {
-                    continue;
-                }
-
-                if (other_stage_has_same_producer(e->producer) || producer_computed_here_or_further_in(e->producer) || !e->all_load_jacobian_coeffs_exist()) {
-                    continue;
-                }
-
-                state.producers_to_be_staged.insert(e->producer, this);
-            }
+            update_producers_to_be_staged(state, all_inlined);
         }
 
         for (auto f : store_at) {
@@ -4182,6 +4172,48 @@ void LoopNest::apply(LoopLevel here,
                 auto &state = *(state_map.get(&(f->stages[0])));
                 state.schedule_source << "\n    .store" << loop_level;
             }
+        }
+    }
+}
+
+void LoopNest::update_producers_to_be_staged(StageScheduleState& state, const NodeMap<bool>& all_inlined) const {
+    std::vector<pair<const FunctionDAG::Node::Stage*, vector<const FunctionDAG::Edge*>>> pending;
+    std::vector<const FunctionDAG::Edge*> edge_chain;
+    pending.emplace_back(stage, edge_chain);
+    NodeMap<bool> done;
+
+    while (!pending.empty()) {
+        auto cur_pair = pending.back();
+        pending.pop_back();
+
+        auto* s = cur_pair.first;
+
+        for (const auto *e : s->incoming_edges) {
+            std::vector<const FunctionDAG::Edge*> edge_chain = cur_pair.second;
+            edge_chain.push_back(e);
+
+            // If the producer is inlined, then its producers should potentially be
+            // staged
+            if (all_inlined.contains(e->producer) && all_inlined.get(e->producer)) {
+                pending.emplace_back(&e->producer->stages[0], edge_chain);
+                continue;
+            }
+
+            if (done.contains(e->producer) && done.get(e->producer)) {
+                continue;
+            }
+
+            done.get_or_create(e->producer) = true;
+
+            if (e->producer->is_input || !has_constant_region_required(e->producer)) {
+                continue;
+            }
+
+            if (other_stage_has_same_producer(e->producer) || producer_computed_here_or_further_in(e->producer) || !e->all_load_jacobian_coeffs_exist()) {
+                continue;
+            }
+
+            state.producers_to_be_staged.get_or_create(e->producer).emplace_back(this, edge_chain);
         }
     }
 }

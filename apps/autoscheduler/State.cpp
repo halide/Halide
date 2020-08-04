@@ -785,39 +785,57 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, 
             for (const auto& to_be_staged : state->producers_to_be_staged) {
                 const auto* producer_node = to_be_staged.first;
 
-                Func producer(producer_node->func);
-                producer.in(func).store_in(MemoryType::Register).compute_at(func, v.var.var);
-                staged_funcs_schedule_source
-                    << producer.name()
-                    << ".in("
-                    << func.name()
-                    << ").store_in(MemoryType::Register).compute_at("
-                    << func.name()
-                    << ", "
-                    << v.var.var.name()
-                    << ")";
+                for (const auto& cur_pair : to_be_staged.second) {
+                    const LoopNest* loop_nest = cur_pair.first;
+                    const std::vector<const FunctionDAG::Edge*>& edge_chain = cur_pair.second;
 
-                const LoopNest* loop_nest = to_be_staged.second;
+                    internal_assert(edge_chain.at(0)->consumer == loop_nest->stage);
+                    internal_assert(edge_chain.back()->producer == producer_node);
 
-                const auto& bounds = loop_nest->get_bounds(producer_node);
+                    if (edge_chain.size() > 2) {
+                        continue;
+                    }
 
-                int i = 0;
-                for (const auto& l : producer_node->stages[0].loop) {
-                    Var unrolled_var(l.var);
+                    auto clone_in_chain = func;
+                    auto clone_in_chain_source_str = func.name();
 
-                    int extent = bounds->region_required(i++).extent();
-                    producer.in(func).bound_extent(unrolled_var, extent);
+                    for (size_t i = 0; i < edge_chain.size() - 1; ++i) {
+                        clone_in_chain = Func(edge_chain.at(i)->producer->func).clone_in(clone_in_chain);
+                        clone_in_chain_source_str = edge_chain.at(i)->producer->func.name() + ".clone_in(" + clone_in_chain_source_str + ")";
+                    }
+
+                    Func producer(producer_node->func);
+                    producer.in(clone_in_chain).store_in(MemoryType::Register).compute_at(func, v.var.var);
                     staged_funcs_schedule_source
-                        << "\n    .bound_extent("
-                        << unrolled_var.name()
+                        << producer.name()
+                        << ".in("
+                        << clone_in_chain_source_str
+                        << ").store_in(MemoryType::Register).compute_at("
+                        << func.name()
                         << ", "
-                        << extent
+                        << v.var.var.name()
                         << ")";
 
-                    producer.in(func).unroll(unrolled_var);
-                    staged_funcs_schedule_source << "\n    .unroll(" << unrolled_var.name() << ")";
+                    const auto& bounds = loop_nest->get_bounds_along_edge_chain(producer_node, edge_chain);
+
+                    int i = 0;
+                    for (const auto& l : producer_node->stages[0].loop) {
+                        Var unrolled_var(l.var);
+
+                        int extent = bounds->region_required(i++).extent();
+                        producer.in(clone_in_chain).bound_extent(unrolled_var, extent);
+                        staged_funcs_schedule_source
+                            << "\n    .bound_extent("
+                            << unrolled_var.name()
+                            << ", "
+                            << extent
+                            << ")";
+
+                        producer.in(clone_in_chain).unroll(unrolled_var);
+                        staged_funcs_schedule_source << "\n    .unroll(" << unrolled_var.name() << ")";
+                    }
+                    staged_funcs_schedule_source << ";\n";
                 }
-                staged_funcs_schedule_source << ";\n";
             }
         }
     }
