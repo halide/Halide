@@ -89,7 +89,7 @@ if (WITH_WASM_SHELL)
 endif ()
 
 function(add_wasm_executable TARGET)
-    set(options )
+    set(options)
     set(oneValueArgs)
     set(multiValueArgs SRCS DEPS INCLUDES ENABLE_IF)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -114,23 +114,23 @@ function(add_wasm_executable TARGET)
     endif ()
 
     set(EMCC_FLAGS
-            -O3
-            -g
-            -std=c++11
-            -Wall
-            -Wcast-qual
-            -Werror
-            -Wignored-qualifiers
-            -Wno-comment
-            -Wno-psabi
-            -Wno-unknown-warning-option
-            -Wno-unused-function
-            -Wsign-compare
-            -Wsuggest-override
-            -s ASSERTIONS=1
-            -s ALLOW_MEMORY_GROWTH=1
-            -s STANDALONE_WASM=1
-            -s ENVIRONMENT=shell)
+        -O3
+        -g
+        -std=c++11
+        -Wall
+        -Wcast-qual
+        -Werror
+        -Wignored-qualifiers
+        -Wno-comment
+        -Wno-psabi
+        -Wno-unknown-warning-option
+        -Wno-unused-function
+        -Wsign-compare
+        -Wsuggest-override
+        -s ASSERTIONS=1
+        -s ALLOW_MEMORY_GROWTH=1
+        -s STANDALONE_WASM=1
+        -s ENVIRONMENT=shell)
 
     set(SRCS)
     foreach (S IN LISTS args_SRCS)
@@ -174,7 +174,7 @@ function(add_wasm_halide_test TARGET)
     set(WASM_SHELL_FLAGS)
     if (Halide_TARGET MATCHES "wasm_simd128")
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
-    endif()
+    endif ()
 
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}

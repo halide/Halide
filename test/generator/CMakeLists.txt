@@ -53,13 +53,14 @@ function(halide_define_aot_wasm_test NAME)
     endif ()
 
     add_wasm_executable("${TARGET}"
-        SRCS "${NAME}_aottest.cpp"
-        DEPS "${DEPS}"
-        INCLUDES  "${Halide_BINARY_DIR}/include"
-                  "${Halide_SOURCE_DIR}/test/common"
-                  "${Halide_SOURCE_DIR}/tools"
-                  "${CMAKE_CURRENT_BINARY_DIR}"
-    )
+                        SRCS "${NAME}_aottest.cpp"
+                        DEPS "${DEPS}"
+                        INCLUDES
+                        "${Halide_BINARY_DIR}/include"
+                        "${Halide_SOURCE_DIR}/test/common"
+                        "${Halide_SOURCE_DIR}/tools"
+                        "${CMAKE_CURRENT_BINARY_DIR}"
+                        )
 
     add_wasm_halide_test("${TARGET}"
                          GROUPS generator)
@@ -305,7 +306,7 @@ if (TARGET generator_aot_autograd)
                        GENERATOR autograd
                        PARAMS "auto_schedule=true")
     target_link_libraries(generator_aot_autograd PRIVATE autograd_grad)
-endif()
+endif ()
 
 # CXX mangling generator test.
 halide_define_aot_test(cxx_mangling ENABLE_IF NOT ${USING_WASM})  # Needs extra deps / build rules
@@ -338,7 +339,7 @@ endif ()
 # Matlab generator test
 halide_define_aot_test(matlab ENABLE_IF NOT ${USING_WASM})  # Needs matlab support. See https://github.com/halide/Halide/issues/2082
 if (TARGET generator_aot_matlab)
-  set_target_properties(generator_aot_matlab PROPERTIES ENABLE_EXPORTS True)
+    set_target_properties(generator_aot_matlab PROPERTIES ENABLE_EXPORTS True)
 endif ()
 
 # Metadata tester

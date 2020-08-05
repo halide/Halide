@@ -25,7 +25,7 @@ function(add_app_test NAME)
         # Don't attempt to build these for wasm yet.
         return()
     endif ()
-    
+
     unset(cmakeToolchainOpts)
     if (NOT "${CMAKE_TOOLCHAIN_FILE}" STREQUAL "")
         list(APPEND cmakeToolchainOpts "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
