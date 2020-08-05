@@ -149,7 +149,7 @@ endif ()
 option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" YES)
 if (HALIDE_ENABLE_EXCEPTIONS)
     message(STATUS "Compiling Halide WITH exceptions.")
-    target_compile_definitions(Halide_LanguageOptions INTERFACE WITH_EXCEPTIONS)
+    target_compile_definitions(Halide_LanguageOptions INTERFACE HALIDE_WITH_EXCEPTIONS)
 else ()
     message(STATUS "Compiling Halide WITHOUT exceptions.")
     target_compile_options(Halide_LanguageOptions INTERFACE
