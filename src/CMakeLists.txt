@@ -385,7 +385,7 @@ add_dependencies(Halide HalideIncludes)
 if (WITH_WABT)
     target_link_libraries(Halide PRIVATE wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
-endif()
+endif ()
 
 ##
 # Include paths for libHalide
@@ -399,6 +399,8 @@ target_include_directories(Halide INTERFACE ${Halide_INCLUDE_PATH})
 ##
 
 add_library(Halide_Plugin INTERFACE)
+set_target_properties(Halide_Plugin PROPERTIES EXPORT_NAME Plugin)
+
 if (NOT BUILD_SHARED_LIBS)
     if (MSVC)
         message(STATUS "Notice: Halide plugins are not available when building statically with MSVC")
@@ -413,6 +415,7 @@ if (NOT BUILD_SHARED_LIBS)
 else ()
     target_link_libraries(Halide_Plugin INTERFACE Halide::Halide)
 endif ()
+
 add_library(Halide::Plugin ALIAS Halide_Plugin)
 
 ##
