@@ -307,6 +307,7 @@ Target find_gpu_target() {
 
     for (Target::Feature f : features_to_try) {
         Target new_target = target.with_feature(f);
+        new_target = new_target.with_feature(Target::Debug);
         if (host_supports_target_device(new_target)) {
             return new_target;
         }

@@ -828,7 +828,6 @@ RUNTIME_LL_COMPONENTS = \
   aarch64 \
   arm \
   arm_no_neon \
-  d3d12_abi_patch_64 \
   hvx_64 \
   hvx_128 \
   mips \
