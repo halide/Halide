@@ -281,11 +281,11 @@ halide_define_aot_test(variable_num_threads ENABLE_IF NOT ${USING_WASM})
 
 # Acquire-Release test requires CUDA
 halide_define_aot_test(acquire_release)
-if (TARGET_PTX AND Halide_TARGET MATCHES "cuda")
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
     include(AddCudaToTarget)
     add_cuda_to_target(generator_aot_acquire_release PRIVATE)
 endif ()
-if (TARGET_PTX AND Halide_TARGET MATCHES "opencl")
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
     find_package(OpenCL REQUIRED)
     target_link_libraries(generator_aot_acquire_release PRIVATE OpenCL::OpenCL)
 endif ()
@@ -311,7 +311,7 @@ endif()
 halide_define_aot_test(cxx_mangling ENABLE_IF NOT ${USING_WASM})  # Needs extra deps / build rules
 if (TARGET cxx_mangling)
     target_link_libraries(cxx_mangling INTERFACE cxx_mangling_externs)
-    if (TARGET_PTX AND Halide_TARGET MATCHES "cuda")
+    if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
         add_halide_library(cxx_mangling_gpu
                            FROM cxx_mangling.generator
                            GENERATOR cxx_mangling
@@ -330,7 +330,7 @@ endif ()
 
 # Define extern for OpenCL
 halide_define_aot_test(define_extern_opencl)
-if (TARGET_PTX AND Halide_TARGET MATCHES "opencl")
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
     find_package(OpenCL REQUIRED)
     target_link_libraries(generator_aot_define_extern_opencl PRIVATE OpenCL::OpenCL)
 endif ()

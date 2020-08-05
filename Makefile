@@ -114,7 +114,7 @@ WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_RISCV ?= $(findstring riscv, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
-WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
+WITH_NVPTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 # AMDGPU target is WIP
 WITH_AMDGPU ?= $(findstring amdgpu, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
@@ -141,9 +141,9 @@ MIPS_LLVM_CONFIG_LIB=$(if $(WITH_MIPS), mips, )
 POWERPC_CXX_FLAGS=$(if $(WITH_POWERPC), -DWITH_POWERPC, )
 POWERPC_LLVM_CONFIG_LIB=$(if $(WITH_POWERPC), powerpc, )
 
-PTX_CXX_FLAGS=$(if $(WITH_PTX), -DWITH_PTX, )
-PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
-PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_PTX), libdevice.compute_20.10.bc libdevice.compute_30.10.bc libdevice.compute_35.10.bc, )
+PTX_CXX_FLAGS=$(if $(WITH_NVPTX), -DWITH_NVPTX, )
+PTX_LLVM_CONFIG_LIB=$(if $(WITH_NVPTX), nvptx, )
+PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_NVPTX), libdevice.compute_20.10.bc libdevice.compute_30.10.bc libdevice.compute_35.10.bc, )
 
 AMDGPU_CXX_FLAGS=$(if $(WITH_AMDGPU), -DWITH_AMDGPU, )
 AMDGPU_LLVM_CONFIG_LIB=$(if $(WITH_AMDGPU), amdgpu, )
@@ -275,7 +275,7 @@ ifeq ($(WITH_LLVM_INSIDE_SHARED_LIBHALIDE), )
 TEST_LD_FLAGS += -Wl,--rpath=$(LLVM_LIBDIR)
 endif
 
-ifneq ($(WITH_PTX), )
+ifneq ($(WITH_NVPTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
 TEST_CUDA = 1
 endif
