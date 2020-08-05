@@ -41,7 +41,7 @@
 #endif
 #include "mini_d3d12.h"
 
-#define HALIDE_D3D12_APPLY_ABI_PATCHES (1)
+#define HALIDE_D3D12_APPLY_ABI_PATCHES (0)
 #include "d3d12_abi_patch_64.h"
 
 // For all intents and purposes, we always want to use COMPUTE command lists
@@ -159,7 +159,7 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
     return symbol;
 }
 
-#define d3d12_debug_break (*((volatile int8_t *)NULL) = 0)
+#define d3d12_debug_break() (*((volatile int *)NULL) = 0)
 
 #ifndef MAYBE_UNUSED
 #define MAYBE_UNUSED(x) ((void)x)
@@ -240,7 +240,7 @@ D3D12TYPENAME(IDXGIAdapter1)
 D3D12TYPENAME(IDXGIOutput)
 
 template<typename ID3D12T>
-static bool D3DError(HRESULT result, ID3D12T *object, void *user_context, const char *message) {
+static bool D3DErrorCheck(HRESULT result, ID3D12T *object, void *user_context, const char *message) {
     TRACELOG;
     // HRESULT ERROR CODES:
     // D3D12: https://msdn.microsoft.com/en-us/library/windows/desktop/bb509553(v=vs.85).aspx
@@ -251,7 +251,7 @@ static bool D3DError(HRESULT result, ID3D12T *object, void *user_context, const 
                     << ", object*=" << object << ")");
         return true;
     }
-    TRACEPRINT(d3d12typename(object) << " object created: " << object << "\n");
+    TRACEPRINT("SUCCESS: " << d3d12typename(object) << " object created: " << object << "\n");
     return false;
 }
 
@@ -865,7 +865,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
     TRACEPRINT("Using Direct3D 12 Debug Layer\n");
     ID3D12Debug *d3d12Debug = NULL;
     result = D3D12GetDebugInterface(IID_PPV_ARGS(&d3d12Debug));
-    if (D3DError(result, d3d12Debug, user_context, "Unable to retrieve the debug interface for Direct3D 12")) {
+    if (D3DErrorCheck(result, d3d12Debug, user_context, "Unable to retrieve the debug interface for Direct3D 12")) {
         return NULL;
     }
     d3d12Debug->EnableDebugLayer();
@@ -873,7 +873,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
 
     IDXGIFactory1 *dxgiFactory = NULL;
     result = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
-    if (D3DError(result, dxgiFactory, user_context, "Unable to create DXGI Factory (IDXGIFactory1)")) {
+    if (D3DErrorCheck(result, dxgiFactory, user_context, "Unable to create DXGI Factory (IDXGIFactory1)")) {
         return NULL;
     }
 
@@ -884,7 +884,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
         if (DXGI_ERROR_NOT_FOUND == result) {
             break;
         }
-        if (D3DError(result, adapter, user_context, "Unable to enumerate DXGI adapter (IDXGIAdapter1).")) {
+        if (D3DErrorCheck(result, adapter, user_context, "Unable to enumerate DXGI adapter (IDXGIAdapter1).")) {
             return NULL;
         }
         DXGI_ADAPTER_DESC1 desc = {};
@@ -921,7 +921,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
     // NOTE(marcos): ignoring IDXGIOutput setup since this back-end is compute only
     IDXGIOutput *dxgiDisplayOutput = NULL;
     result = dxgiAdapter->EnumOutputs(0, &dxgiDisplayOutput);
-    if (D3DError(result, dxgiDisplayOutput, user_context, "Unable to enumerate DXGI outputs for adapter (IDXGIOutput)")) {
+    if (D3DErrorCheck(result, dxgiDisplayOutput, user_context, "Unable to enumerate DXGI outputs for adapter (IDXGIOutput)")) {
         return NULL;
     }
 #endif
@@ -929,7 +929,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
     ID3D12Device *device = NULL;
     D3D_FEATURE_LEVEL MinimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
     result = D3D12CreateDevice(dxgiAdapter, MinimumFeatureLevel, IID_PPV_ARGS(&device));
-    if (D3DError(result, device, user_context, "Unable to create the Direct3D 12 device")) {
+    if (D3DErrorCheck(result, device, user_context, "Unable to create the Direct3D 12 device")) {
         return NULL;
     }
 
@@ -942,7 +942,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
     //        (DXGI_ERROR_DEVICE_REMOVED : 0x887a0005)"
     // https://msdn.microsoft.com/en-us/library/windows/desktop/dn903835(v=vs.85).aspx
     result = device->SetStablePowerState(TRUE);
-    if (D3DError(result, device, user_context, "Unable to activate stable power state")) {
+    if (D3DErrorCheck(result, device, user_context, "Unable to activate stable power state")) {
         return NULL;
     }
 #endif
@@ -1031,7 +1031,7 @@ ID3D12RootSignature *D3D12CreateMasterRootSignature(ID3D12Device *device) {
     ID3DBlob *pSignBlob = NULL;
     ID3DBlob *pSignError = NULL;
     HRESULT result = D3D12SerializeRootSignature(&rsd, Version, &pSignBlob, &pSignError);
-    if (D3DError(result, pSignBlob, NULL, "Unable to serialize the Direct3D 12 root signature")) {
+    if (D3DErrorCheck(result, pSignBlob, NULL, "Unable to serialize the Direct3D 12 root signature")) {
         halide_assert(user_context, pSignError);
         d3d12_halt((const char *)pSignError->GetBufferPointer());
         return NULL;
@@ -1042,7 +1042,7 @@ ID3D12RootSignature *D3D12CreateMasterRootSignature(ID3D12Device *device) {
     const void *pBlobWithRootSignature = pSignBlob->GetBufferPointer();
     SIZE_T blobLengthInBytes = pSignBlob->GetBufferSize();
     result = device->CreateRootSignature(nodeMask, pBlobWithRootSignature, blobLengthInBytes, IID_PPV_ARGS(&rootSignature));
-    if (D3DError(result, rootSignature, NULL, "Unable to create the Direct3D 12 root signature")) {
+    if (D3DErrorCheck(result, rootSignature, NULL, "Unable to create the Direct3D 12 root signature")) {
         return NULL;
     }
 
@@ -1122,7 +1122,7 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12
     ID3D12Resource *resource = NULL;
     // A commited resource manages its own private heap:
     HRESULT result = (*device)->CreateCommittedResource(pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, IID_PPV_ARGS(&resource));
-    if (D3DError(result, resource, NULL, "Unable to create the Direct3D 12 buffer")) {
+    if (D3DErrorCheck(result, resource, NULL, "Unable to create the Direct3D 12 buffer")) {
         return buffer;
     }
 
@@ -1148,7 +1148,7 @@ WEAK d3d12_buffer new_device_buffer(d3d12_device *device, size_t length) {
     return buffer;
 }
 
-// faux type name for logging purposes in D3DError()
+// faux type name for logging purposes in D3DErrorCheck()
 struct ID3D12MemoryMappedResourceFAUX;
 D3D12TYPENAME(ID3D12MemoryMappedResourceFAUX)
 
@@ -1187,7 +1187,7 @@ WEAK void *map_buffer(d3d12_buffer *buffer) {
     const D3D12_RANGE *pReadRange = &readRange;
     void *pData = NULL;
     HRESULT result = resource->Map(Subresource, pReadRange, &pData);
-    if (D3DError(result, (ID3D12MemoryMappedResourceFAUX *)pData, NULL, "Unable to map Direct3D 12 staging buffer memory")) {
+    if (D3DErrorCheck(result, (ID3D12MemoryMappedResourceFAUX *)pData, NULL, "Unable to map Direct3D 12 staging buffer memory")) {
         return NULL;
     }
 
@@ -1230,7 +1230,7 @@ WEAK void unmap_buffer(d3d12_buffer *buffer) {
     UINT Subresource = 0;  // buffers contain only one subresource (at index 0)
     const D3D12_RANGE *pWrittenRange = &writtenRange;
     resource->Unmap(Subresource, pWrittenRange);
-    if (D3DError(S_OK, (ID3D12MemoryMappedResourceFAUX *)pData, NULL, "Unable to unmap Direct3D 12 staging buffer memory")) {
+    if (D3DErrorCheck(S_OK, (ID3D12MemoryMappedResourceFAUX *)pData, NULL, "Unable to unmap Direct3D 12 staging buffer memory")) {
         return;
     }
 
@@ -1313,7 +1313,7 @@ WEAK size_t suballocate(d3d12_device *device, d3d12_buffer *staging, size_t num_
     return byte_offset;
 }
 
-// faux type name for logging purposes in D3DError()
+// faux type name for logging purposes in D3DErrorCheck()
 struct ID3D12CommandQueueTimestampFrequencyFAUX;
 D3D12TYPENAME(ID3D12CommandQueueTimestampFrequencyFAUX)
 
@@ -1323,7 +1323,7 @@ d3d12_profiler *new_profiler(d3d12_device *device, size_t num_queries) {
     UINT64 Frequency = 0;
     {
         HRESULT result = (*queue)->GetTimestampFrequency(&Frequency);
-        if (D3DError(result, (ID3D12CommandQueueTimestampFrequencyFAUX *)Frequency, user_context, "Unable to query the timestamp frequency of the command queue")) {
+        if (D3DErrorCheck(result, (ID3D12CommandQueueTimestampFrequencyFAUX *)Frequency, user_context, "Unable to query the timestamp frequency of the command queue")) {
             return NULL;
         }
         TRACEPRINT("tick frequency: " << Frequency << " Hz.\n");
@@ -1338,7 +1338,7 @@ d3d12_profiler *new_profiler(d3d12_device *device, size_t num_queries) {
             desc.NodeMask = 0;
         }
         HRESULT result = (*device)->CreateQueryHeap(&desc, IID_PPV_ARGS(&pQueryHeap));
-        if (D3DError(result, pQueryHeap, user_context, "Unable to create timestamp query heap")) {
+        if (D3DErrorCheck(result, pQueryHeap, user_context, "Unable to create timestamp query heap")) {
             return NULL;
         }
     }
@@ -1424,7 +1424,7 @@ WEAK d3d12_command_queue *new_command_queue(d3d12_device *device) {
             cqDesc.NodeMask = 0;  // 0, for single GPU operation
         }
         HRESULT result = (*device)->CreateCommandQueue(&cqDesc, IID_PPV_ARGS(&commandQueue));
-        if (D3DError(result, commandQueue, NULL, "Unable to create the Direct3D 12 command queue")) {
+        if (D3DErrorCheck(result, commandQueue, NULL, "Unable to create the Direct3D 12 command queue")) {
             return NULL;
         }
     }
@@ -1432,7 +1432,7 @@ WEAK d3d12_command_queue *new_command_queue(d3d12_device *device) {
     ID3D12Fence *fence = NULL;
     {
         HRESULT result = (*device)->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
-        if (D3DError(result, fence, NULL, "Unable to create the Direct3D 12 fence for command queue")) {
+        if (D3DErrorCheck(result, fence, NULL, "Unable to create the Direct3D 12 fence for command queue")) {
             return NULL;
         }
     }
@@ -1449,7 +1449,7 @@ static d3d12_command_allocator *new_command_allocator(d3d12_device *device) {
     halide_assert(user_context, device);
     ID3D12CommandAllocator *commandAllocator = NULL;
     HRESULT result = (*device)->CreateCommandAllocator(Type, IID_PPV_ARGS(&commandAllocator));
-    if (D3DError(result, commandAllocator, NULL, "Unable to create the Direct3D 12 command allocator")) {
+    if (D3DErrorCheck(result, commandAllocator, NULL, "Unable to create the Direct3D 12 command allocator")) {
         return NULL;
     }
     return reinterpret_cast<d3d12_command_allocator *>(commandAllocator);
@@ -1463,7 +1463,7 @@ static d3d12_command_list *new_command_list(d3d12_device *device, d3d12_command_
     ID3D12CommandAllocator *pCommandAllocator = (*allocator);
     ID3D12PipelineState *pInitialState = NULL;
     HRESULT result = (*device)->CreateCommandList(nodeMask, Type, pCommandAllocator, pInitialState, IID_PPV_ARGS(&commandList));
-    if (D3DError(result, commandList, NULL, "Unable to create the Direct3D 12 command list")) {
+    if (D3DErrorCheck(result, commandList, NULL, "Unable to create the Direct3D 12 command list")) {
         return NULL;
     }
 
@@ -1498,7 +1498,7 @@ static d3d12_compute_pipeline_state *new_compute_pipeline_state_with_function(d3
         cpsd.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
     }
     HRESULT result = (*device)->CreateComputePipelineState(&cpsd, IID_PPV_ARGS(&pipelineState));
-    if (D3DError(result, pipelineState, NULL, "Unable to create the Direct3D 12 pipeline state")) {
+    if (D3DErrorCheck(result, pipelineState, NULL, "Unable to create the Direct3D 12 pipeline state")) {
         return NULL;
     }
     return reinterpret_cast<d3d12_compute_pipeline_state *>(pipelineState);
@@ -1540,7 +1540,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
         dhd.NodeMask = 0;
     }
     HRESULT result = (*device)->CreateDescriptorHeap(&dhd, IID_PPV_ARGS(&descriptorHeap));
-    if (D3DError(result, descriptorHeap, NULL, "Unable to create the Direct3D 12 descriptor heap")) {
+    if (D3DErrorCheck(result, descriptorHeap, NULL, "Unable to create the Direct3D 12 descriptor heap")) {
         return NULL;
     }
 
@@ -1552,13 +1552,13 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
     binder->descriptorSize = descriptorSize;
 
     D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
-    TRACEPRINT("descriptor heap base for CPU: " << baseCPU.ptr << "\n");
+    TRACEPRINT("descriptor heap base for CPU: " << (void*)baseCPU.ptr << "\n");
     binder->CPU[UAV].ptr = (baseCPU.ptr += descriptorSize * 0);
     binder->CPU[CBV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
     binder->CPU[SRV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);
 
     D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
-    TRACEPRINT("descriptor heap base for GPU: " << baseGPU.ptr << "\n");
+    TRACEPRINT("descriptor heap base for GPU: " << (void*)baseGPU.ptr << "\n");
     binder->GPU[UAV].ptr = (baseGPU.ptr += descriptorSize * 0);
     binder->GPU[CBV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
     binder->GPU[SRV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);
