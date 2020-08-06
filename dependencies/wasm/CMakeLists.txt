@@ -4,18 +4,6 @@ include(CMakeDependentOption)
 cmake_dependent_option(WITH_WABT "Include WABT Interpreter for WASM testing" ON "TARGET_WEBASSEMBLY" OFF)
 cmake_dependent_option(WITH_WASM_SHELL "Download a wasm shell (e.g. d8) for testing AOT wasm code." ON "TARGET_WEBASSEMBLY" OFF)
 
-if ("${LLVM_PACKAGE_VERSION}" VERSION_LESS 11.0)
-    if (WITH_WABT)
-        message(STATUS "WITH_WABT is only supported for LLVM >= 11")
-        set(WITH_WABT OFF CACHE BOOL "WITH_WABT is only supported for LLVM >= 11" FORCE)
-    endif ()
-
-    if (WITH_WASM_SHELL)
-        message(STATUS "WITH_WASM_SHELL is only supported for LLVM >= 11")
-        set(WITH_WASM_SHELL OFF CACHE BOOL "WITH_WASM_SHELL is only supported for LLVM >= 11" FORCE)
-    endif ()
-endif ()
-
 if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
     if (WITH_WABT)
         message(STATUS "WITH_WABT is not yet supported on Windows")
@@ -50,7 +38,10 @@ if (WITH_WABT)
     # TODO: we want to require unique prefixes to include these files, to avoid ambiguity;
     # this means we have to prefix with "wabt-src/...", which is less bad than other alternatives,
     # but perhaps we could do better (esp. if wabt was smarter about what it exposed?)
-    target_include_directories(wabt INTERFACE ${wabt_SOURCE_DIR} ${wabt_BINARY_DIR} ${CMAKE_BINARY_DIR}/_deps)
+    target_include_directories(wabt INTERFACE
+                               $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>
+                               $<BUILD_INTERFACE:${wabt_BINARY_DIR}>
+                               $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps>)
 endif ()
 
 if (WITH_WASM_SHELL)

@@ -3,32 +3,29 @@
 ##
 
 # Fallback configurations for weirdly built LLVMs
-set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release RelWithDebInfo)
-set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel)
-set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release RelWithDebInfo MinSizeRel)
+set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release RelWithDebInfo "")
+set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "")
+set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
 
 find_package(LLVM ${HALIDE_REQUIRE_LLVM_VERSION} REQUIRED)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-if ("${LLVM_PACKAGE_VERSION}" VERSION_LESS 9.0)
+if (LLVM_PACKAGE_VERSION VERSION_LESS 9.0)
     message(FATAL_ERROR "LLVM version must be 9.0 or newer")
 endif ()
 
-if ("${LLVM_PACKAGE_VERSION}" VERSION_GREATER 12.0)
+if (LLVM_PACKAGE_VERSION VERSION_GREATER 12.0)
     message(WARNING "Halide is not tested on LLVM versions beyond 12.0")
 endif ()
 
-set(LLVM_PACKAGE_VERSION "${LLVM_PACKAGE_VERSION}" CACHE INTERNAL "The version of the LLVM in use")
 list(APPEND LLVM_DEFINITIONS $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
 
 ##
-# Promote executable targets from LLVM
+# Promote LLVM assembler target
 ##
 
 set_target_properties(llvm-as PROPERTIES IMPORTED_GLOBAL TRUE)
-set_target_properties(llvm-nm PROPERTIES IMPORTED_GLOBAL TRUE)
-set_target_properties(llvm-config PROPERTIES IMPORTED_GLOBAL TRUE)
 
 ##
 # Detect supported llvm targets
@@ -80,6 +77,9 @@ if (TARGET_WEBASSEMBLY)
     add_library(LLVMLLDCommon STATIC IMPORTED)
     set_target_properties(LLVMLLDCommon PROPERTIES IMPORTED_LOCATION ${LLD_COMMON})
 
+    target_link_libraries(LLVMLLDWasm INTERFACE LLVMLLDCommon)
+    target_link_libraries(LLVMLLDCommon INTERFACE LLVMLTO LLVMOption)
+
     if (NOT LLD_WASM OR NOT LLD_COMMON)
         message(FATAL_ERROR
                 "Could not find both lldWasm and lldCommon in ${LLVM_LIBRARY_DIRS}."
@@ -87,7 +87,7 @@ if (TARGET_WEBASSEMBLY)
                 "Do you need to install liblld-${LLVM_VERSION_MAJOR}?")
     endif ()
 
-    list(APPEND LLVM_COMPONENTS lto option LLDWasm LLDCommon)
+    list(APPEND LLVM_COMPONENTS LLDWasm LLDCommon)
 endif ()
 
 ##

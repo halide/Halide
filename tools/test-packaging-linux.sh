@@ -11,6 +11,15 @@ FLAGS=(
   "-DWITH_UTILS=NO"
 )
 
+if [ -n "$LLVM_DIR" ]; then
+  FLAGS+=("-DLLVM_DIR=$LLVM_DIR")
+  if [ -n "$Clang_DIR" ]; then
+    FLAGS+=("-DClang_DIR=$Clang_DIR")
+  else
+    FLAGS+=("-DClang_DIR=$LLVM_DIR/../clang")
+  fi
+fi
+
 Halide_static="-DBUILD_SHARED_LIBS=NO"
 Halide_shared="-DBUILD_SHARED_LIBS=YES"
 
