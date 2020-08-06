@@ -96,6 +96,10 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f) {
                    << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ";\n";
 
+            if (target.has_feature(Target::NoAsserts)) {
+                stream << get_indent() << "halide_unused(_ucon);";
+            }
+
             // Emit the body
             Stmt body = f.body;
             body = match_xtensa_patterns(body);
@@ -516,10 +520,10 @@ HALIDE_ALWAYS_INLINE void store(const uint16x32_t& a, void *base, int32_t offset
 }
 
 HALIDE_ALWAYS_INLINE void aligned_store(const int16x64_t& a, void *base, int32_t offset) {
-   a.aligned_store(base, offset);
-   //xb_vecNx16* ptr = (int16x32_t *)((int16_t*)base + offset);
-   //ptr[0] = a.native_vector[0];
-   //ptr[1] = a.native_vector[1];
+   //a.aligned_store(base, offset);
+   xb_vecNx16 * ptr = (int16x32_t *)((int16_t*)base + offset);
+   ptr[0] = a.native_vector[0];
+   ptr[1] = a.native_vector[1];
 }
 
 HALIDE_ALWAYS_INLINE void store(const int16x64_t& a, void *base, int32_t offset) {
@@ -568,17 +572,6 @@ HALIDE_ALWAYS_INLINE void store(const int32x32_t& a, void *base, int32_t offset)
 
 HALIDE_ALWAYS_INLINE void aligned_store(const uint32x32_t& a, void *base, int32_t offset) {
    a.aligned_store(base, offset);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_clamped_dense_load_i16(
-          const void *base, int32_t ramp_base, int32_t upper_limit, int32_t lower_limit, int32_t offset) {
-  // This is a bit flawed, as it assumes that vector starting at ramp_base
-  // interesects with [lower_limit, upper_limit] range.
-  xb_vecNx16 mask = IVP_MINNX16(
-                        IVP_MAXNX16(IVP_SEQNX16(), xb_vecNx16(lower_limit - ramp_base)),
-                        xb_vecNx16(upper_limit - ramp_base));
-  int16x32_t unclamped_vector = int16x32_t_load(base, ramp_base + offset);
-  return IVP_SHFLNX16(unclamped_vector, mask);
 }
 
 HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_interleave_i16(const int16x32_t& a, const int16x32_t& b) {
@@ -986,6 +979,11 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_concat_u32_to_i16(const ui
   return IVP_PACKLNX48(wide);
 }
 
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_convert_concat_u32_to_u16(const uint32x16_t& a, const uint32x16_t& b) {
+  xb_vecNx48 wide = IVP_CVT48UNX32(b, a);
+  return IVP_PACKLNX48(wide);
+}
+
 inline uint32x16_t halide_xtensa_convert_i48_low_u32(const int48x32_t& src, int native_lanes, int total_lines) {
     return IVP_CVT32UNX48L(src);
 }
@@ -1072,6 +1070,13 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         args[i] = print_expr(op->args[i]);
     }
 
+    // This is just multiplication.
+    if (op->name == "halide_xtensa_widen_mul_i48") {
+        internal_assert(args.size() == 2);
+        rhs << "int16x32_t(" << args[0] + ") * int16x32_t(" + args[1] + ")";
+        return rhs.str();
+    }
+
     string op_name = op->name;
     if (op->name == "halide_xtensa_sat_add_i16") {
         op_name = "IVP_ADDSNX16";
@@ -1097,6 +1102,8 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         op_name = "IVP_CVT32UNX48L";
     } else if (op->name == "halide_xtensa_convert_i48_high_u32") {
         op_name = "IVP_CVT32UNX48H";
+    } else if (op->name == "halide_xtensa_narrow_i48x_with_shift_u16") {
+        op_name = "IVP_PACKVRNRNX48";
     }
 
     rhs << op_name << "(" << with_commas(args) << ")";
@@ -1647,13 +1654,6 @@ void CodeGen_Xtensa::visit(const Call *op) {
     } else if (op->is_intrinsic()) {
         // TODO: other intrinsics
         internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
-    } else if (op->name == "halide_xtensa_clamped_dense_load_i16") {
-        vector<string> args(op->args.size());
-        args[0] = print_name(op->args[0].as<StringImm>()->value);
-        for (size_t i = 1; i < op->args.size(); i++) {
-            args[i] = print_expr(op->args[i]);
-        }
-        rhs << op->name << "(" << with_commas(args) << ")";
     } else if (op->name.find("halide_xtensa_") == 0) {
         rhs << print_xtensa_call(op);
     } else {
@@ -1853,7 +1853,8 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
                    << "[" << size_id << "];\n";
         } else {
             stream << "*"
-                   // << " __restrict "
+                   << "__attribute__((aligned(64))) "
+                   << " __restrict "
                    << op_name
                    << " = ("
                    << op_type

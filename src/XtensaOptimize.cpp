@@ -457,7 +457,9 @@ private:
 
             // Concat and cast.
             {"halide_xtensa_convert_concat_i32_to_i16", i16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x))},
+            {"halide_xtensa_convert_concat_i32_to_u16", u16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x))},
             {"halide_xtensa_convert_concat_u32_to_i16", i16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
+            {"halide_xtensa_convert_concat_u32_to_u16", u16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
 
             // {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_u32x))},
             // {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_i32x))},
@@ -1025,12 +1027,12 @@ Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
 
     s = align_loads(s, 64);
-    s = common_subexpression_elimination(s);
-    //     // Don't simplify here, otherwise it will re-collapse the loads we
-    //     // want to carry across loop iterations.
+    // s = common_subexpression_elimination(s);
+    // Don't simplify here, otherwise it will re-collapse the loads we
+    // want to carry across loop iterations.
 
-    //     // Use at most 16 vector registers for carrying values.
-    //     s = loop_carry(s, 16);
+    // Use at most 16 vector registers for carrying values.
+    s = loop_carry(s, 16);
     //     s = simplify(s);
     //     s = substitute_in_all_lets(s);
     for (int ix = 0; ix < 10; ix++) {
