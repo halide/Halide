@@ -36,6 +36,9 @@ install(TARGETS Halide Halide_Generator Halide_RunGenMain
 
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
+install(TARGETS Halide_LLVM
+        EXPORT Halide_Targets)
+
 install(TARGETS Halide_Tools Halide_ImageIO Halide_LanguageOptions
         EXPORT Halide_Interfaces
         INCLUDES DESTINATION ${CMAKE_INSTALL_DATADIR}/tools)
@@ -43,8 +46,6 @@ install(TARGETS Halide_Tools Halide_ImageIO Halide_LanguageOptions
 install(TARGETS Halide_Runtime
         EXPORT Halide_Interfaces
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
-install(TARGETS Halide_LLVM EXPORT Halide_Targets)
 
 # Captures both the runtime and Halide.h
 install(DIRECTORY ${Halide_BINARY_DIR}/include/ TYPE INCLUDE FILES_MATCHING PATTERN "include/*.h")
