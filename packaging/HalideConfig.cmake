@@ -27,7 +27,12 @@ endif ()
 
 include(CMakeFindDependencyMacro)
 find_dependency(Threads)
-@__find_LLVM_deps@
+
+get_filename_component(_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+file(GLOB CONFIG_FILES "${_DIR}/Halide-Deps-*.cmake")
+foreach (f IN LISTS CONFIG_FILES)
+    include(${f})
+endforeach ()
 
 # Load common targets that do not depend on shared/static distinction
 include("${CMAKE_CURRENT_LIST_DIR}/Halide-Interfaces.cmake")

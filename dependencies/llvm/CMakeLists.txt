@@ -2,12 +2,16 @@
 # Find LLVM and check the version.
 ##
 
+include(CMakeDependentOption)
+
 # Fallback configurations for weirdly built LLVMs
 set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release RelWithDebInfo "")
 set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "")
 set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
 
 find_package(LLVM ${HALIDE_REQUIRE_LLVM_VERSION} REQUIRED)
+find_package(Clang REQUIRED CONFIG HINTS "${LLVM_DIR}/../clang")
+
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
@@ -19,28 +23,21 @@ if (LLVM_PACKAGE_VERSION VERSION_GREATER 12.0)
     message(WARNING "Halide is not tested on LLVM versions beyond 12.0")
 endif ()
 
-list(APPEND LLVM_DEFINITIONS $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
+set(Halide_LLVM_DEFS ${LLVM_DEFINITIONS} $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
 
 ##
-# Promote LLVM assembler target
+# Promote LLVM/Clang executable targets
 ##
 
-set_target_properties(llvm-as PROPERTIES IMPORTED_GLOBAL TRUE)
+set_target_properties(llvm-as clang PROPERTIES IMPORTED_GLOBAL TRUE)
+
+# clang-tools-extra is optional, but provides the clang-format target
+if (TARGET clang-format)
+    set_target_properties(clang-format PROPERTIES IMPORTED_GLOBAL TRUE)
+endif ()
 
 ##
-# Detect supported llvm targets
-##
-
-function(check_llvm_target TARGET HAS_TARGET)
-    if ("${TARGET}" IN_LIST LLVM_TARGETS_TO_BUILD)
-        set(${HAS_TARGET} ON PARENT_SCOPE)
-    else ()
-        set(${HAS_TARGET} OFF PARENT_SCOPE)
-    endif ()
-endfunction()
-
-##
-# Create options that are initialized based on LLVM's config
+# Create options for including or excluding LLVM backends.
 ##
 
 set(LLVM_COMPONENTS mcjit bitwriter linker passes)
@@ -55,40 +52,16 @@ foreach (comp IN LISTS known_components)
     string(TOUPPER "TARGET_${comp}" OPTION)
     string(TOUPPER "WITH_${comp}" DEFINE)
 
-    check_llvm_target(${comp} present)
-    option(${OPTION} "Include ${comp} target" ${present})
+    cmake_dependent_option(${OPTION} "Include ${comp} target" ON
+                           "${comp} IN_LIST LLVM_TARGETS_TO_BUILD" OFF)
     if (${OPTION})
-        list(APPEND LLVM_DEFINITIONS $<BUILD_INTERFACE:${DEFINE}>)
+        message(STATUS "Enabling ${comp} backend")
+        list(APPEND Halide_LLVM_DEFS $<BUILD_INTERFACE:${DEFINE}>)
         list(APPEND LLVM_COMPONENTS ${comp})
+    else ()
+        message(STATUS "Disabling ${comp} backend")
     endif ()
 endforeach ()
-
-if (TARGET_WEBASSEMBLY)
-    ##
-    # lld libraries -- inexplicably, LLVM doesn't put these in the CMake imports,
-    # but we need them, so we fake it here by abusing the LLVM${comp} convention.
-    ##
-
-    find_library(LLD_WASM lldWasm HINTS ${LLVM_LIBRARY_DIRS})
-    add_library(LLVMLLDWasm STATIC IMPORTED)
-    set_target_properties(LLVMLLDWasm PROPERTIES IMPORTED_LOCATION ${LLD_WASM})
-
-    find_library(LLD_COMMON lldCommon HINTS ${LLVM_LIBRARY_DIRS})
-    add_library(LLVMLLDCommon STATIC IMPORTED)
-    set_target_properties(LLVMLLDCommon PROPERTIES IMPORTED_LOCATION ${LLD_COMMON})
-
-    target_link_libraries(LLVMLLDWasm INTERFACE LLVMLLDCommon)
-    target_link_libraries(LLVMLLDCommon INTERFACE LLVMLTO LLVMOption)
-
-    if (NOT LLD_WASM OR NOT LLD_COMMON)
-        message(FATAL_ERROR
-                "Could not find both lldWasm and lldCommon in ${LLVM_LIBRARY_DIRS}."
-                "Configure with -DTARGET_WEBASSEMBLY=NO to disable WebAssembly."
-                "Do you need to install liblld-${LLVM_VERSION_MAJOR}?")
-    endif ()
-
-    list(APPEND LLVM_COMPONENTS LLDWasm LLDCommon)
-endif ()
 
 ##
 # Create Halide::LLVM library alias pointing to the correct LLVM
@@ -99,6 +72,10 @@ option(Halide_BUNDLE_LLVM "When built as a static library, include LLVM's object
 option(Halide_SHARED_LLVM "Link against shared LLVM (disables components)." OFF)
 
 llvm_map_components_to_libnames(LLVM_LIBNAMES ${LLVM_COMPONENTS})
+if (TARGET_WEBASSEMBLY)
+    find_package(LLD CONFIG REQUIRED HINTS "${LLVM_DIR}/../lld")
+    list(APPEND LLVM_LIBNAMES lldWasm)
+endif ()
 
 if (Halide_BUNDLE_LLVM AND NOT BUILD_SHARED_LIBS)
     include(BundleStatic)
@@ -116,7 +93,7 @@ endif ()
 # Attach the include dirs and (patched) definitions to the target, where they belong.
 set_target_properties(Halide_LLVM PROPERTIES EXPORT_NAME LLVM)
 target_include_directories(Halide_LLVM INTERFACE $<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>)
-target_compile_definitions(Halide_LLVM INTERFACE ${LLVM_DEFINITIONS})
+target_compile_definitions(Halide_LLVM INTERFACE ${Halide_LLVM_DEFS})
 
 add_library(Halide::LLVM ALIAS Halide_LLVM)
 
