@@ -68,17 +68,15 @@ public:
                                         alpha * upsampled[l](x, y, c));
         }
 
-        Func normalize("normalize");
-        normalize(x, y, c) = interpolated[0](x, y, c) / interpolated[0](x, y, 3);
+        output(x, y, c) = interpolated[0](x, y, c) / interpolated[0](x, y, 3);
 
         // Schedule
         if (auto_schedule) {
-            output = normalize;
         } else {
             // 0.86ms on a 2060 RTX
             Var yo, yi, xo, xi, ci, xii, yii;
             if (get_target().has_gpu_feature()) {
-                normalize
+                output
                     .bound(x, 0, input.width())
                     .bound(y, 0, input.height())
                     .bound(c, 0, 3)
@@ -113,7 +111,7 @@ public:
                 }
 
                 upsampledx[1]
-                    .compute_at(normalize, x)
+                    .compute_at(output, x)
                     .reorder(c, x, y)
                     .tile(x, y, xi, yi, 2, 1)
                     .unroll(xi)
@@ -122,7 +120,7 @@ public:
                     .gpu_threads(x, y);
 
                 interpolated[1]
-                    .compute_at(normalize, x)
+                    .compute_at(output, x)
                     .reorder(c, x, y)
                     .tile(x, y, xi, yi, 2, 2)
                     .unroll(xi)
@@ -131,12 +129,11 @@ public:
                     .gpu_threads(x, y);
 
                 interpolated[2]
-                    .compute_at(normalize, x)
+                    .compute_at(output, x)
                     .reorder(c, x, y)
                     .unroll(c)
                     .gpu_threads(x, y);
 
-                output = normalize;
             } else {
                 // 4.54ms on an Intel i9-9960X using 16 threads
                 Var xo, xi, yo, yi;
@@ -167,7 +164,7 @@ public:
                     .unroll(c)
                     .vectorize(x, vec);
 
-                normalize
+                output
                     .bound(x, 0, input.width())
                     .bound(y, 0, input.height())
                     .bound(c, 0, 3)
@@ -179,20 +176,18 @@ public:
                     .parallel(yo);
 
                 downsampled[0]
-                    .store_at(normalize, yo)
-                    .compute_at(normalize, yi)
+                    .store_at(output, yo)
+                    .compute_at(output, yi)
                     .reorder(c, x, y)
                     .unroll(c)
                     .vectorize(x, vec);
 
                 for (int l = 1; l < levels; l++) {
                     interpolated[l]
-                        .store_at(normalize, yo)
-                        .compute_at(normalize, yi)
+                        .store_at(output, yo)
+                        .compute_at(output, yi)
                         .vectorize(x, vec);
                 }
-
-                output = normalize;
             }
         }
 
