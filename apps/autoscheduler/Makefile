@@ -112,6 +112,13 @@ $(BIN)/test_parser: $(TEST_DIR)/parser.cpp LoopNestParser.h ASLog.h ASLog.cpp
 test_parser: $(BIN)/test_parser
 	$^
 
+$(BIN)/test_state: $(TEST_DIR)/state.cpp State.h State.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h ASLog.h ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(AUTOSCHED_SRC)
+
+test_state: $(BIN)/test_state
+	$^
+
 clean:
 	rm -rf $(BIN)
 
