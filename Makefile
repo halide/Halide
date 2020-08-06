@@ -307,7 +307,8 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I
 # capability of the CPU being compiled on via -march=native. This
 # presumes tests are run on the same machine they are compiled on.
 ARCH_FOR_TESTS ?= native
-TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -march=${ARCH_FOR_TESTS}
+TEST_CXX_ARCH_FLAGS ?= -march=${ARCH_FOR_TESTS}
+TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) ${TEST_CXX_ARCH_FLAGS}
 TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
 # In the tests, some of our expectations change depending on the llvm version
