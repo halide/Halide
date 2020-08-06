@@ -177,6 +177,7 @@ struct State {
     void update_always_consider_inline_options(const FunctionDAG::Node *node);
 
     const LoopNest *deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root) const;
+    int64_t total_loop_extents_of_ancestors(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop) const;
 };
 
 // A priority queue of states, sorted according to increasing

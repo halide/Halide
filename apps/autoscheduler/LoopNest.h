@@ -201,6 +201,7 @@ struct LoopNest {
         GPUMemoryType gpu_store_memory_type; // global, local, shared?
         int64_t allocation_size = 0;         // Allocation size in bytes
         bool is_constant_allocation = false; // Does the allocation have constant size?
+        int64_t num_realizations = 0;        // Number of times this stage is realized. Only valid for unscheduled producers
         bool inlined = false;                // Is the Func inlined?
         uint64_t hash_of_producers_stored_at_root;
 

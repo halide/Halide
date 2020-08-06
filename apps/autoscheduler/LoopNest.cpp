@@ -2512,12 +2512,16 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                 int64_t store_instances_per_consumption = 1;
 
-                if (producer_has_been_scheduled && !e->producer->is_input) {
-                    const auto &producer_feat = features->get_or_create(&(e->producer->stages[0]));
+                if (!e->producer->is_input) {
+                    const int64_t producer_store_instances =
+                        producer_has_been_scheduled
+                        ? features->get_or_create(&(e->producer->stages[0])).num_realizations
+                        : site.num_realizations;
 
-                    if (producer_feat.num_realizations) {
+                    internal_assert(producer_store_instances > 0);
+
+                    if (producer_store_instances) {
                         // The producer's realization is nested inside this Func's realization
-                        const int64_t producer_store_instances = producer_feat.num_realizations;
                         if (producer_store_instances > consumer_instances) {
                             store_instances_per_consumption = producer_store_instances / consumer_instances;
                         }

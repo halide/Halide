@@ -92,6 +92,29 @@ const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *
     return candidate;
 }
 
+int64_t State::total_loop_extents_of_ancestors(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop) const {
+    int64_t total = 1;
+
+    if (loop->is_root()) {
+        return total;
+    }
+
+    const LoopNest *cur_loop = loop;
+    while (true) {
+        for (size_t i = 0; i < cur_loop->size.size(); ++i) {
+            total *= cur_loop->size[i];
+        }
+
+        if (parent.count(cur_loop) == 0) {
+            break;
+        }
+
+        cur_loop = parent.at(cur_loop).first;
+    }
+
+    return total;
+}
+
 const LoopNest *State::deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *a, const LoopNest *b) const {
     if (a->is_root()) return a;
     if (b->is_root()) return b;
@@ -413,11 +436,13 @@ bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         // LoopNest::compute_in_tiles()), walk up the loop nest until we reach a
         // location that would be considered
         loop = deepest_valid_compute_location(parent, n, loop, feature_root.get());
+        int64_t num_realizations = total_loop_extents_of_ancestors(parent, loop);
 
         for (auto &stage : n.stages) {
             auto &site = sites.get_or_create(&stage);
             site.compute = loop;
             site.store = loop;
+            site.num_realizations = num_realizations;
             if (target.has_gpu_feature()) {
                 set_gpu_store_site(parent, loop, site);
             }
