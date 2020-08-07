@@ -1703,6 +1703,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                    << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ";\n";
 
+            if (target.has_feature(Target::NoAsserts)) {
+                stream << get_indent() << "halide_unused(_ucon);";
+            }
+
             // Emit the body
             print(f.body);
 
