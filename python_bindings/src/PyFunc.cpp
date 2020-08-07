@@ -271,22 +271,22 @@ void define_func(py::module &m) {
             .def("output_buffers", &Func::output_buffers)
 
             .def(
-                "infer_input_bounds", [](Func &f, int x_size, int y_size, int z_size, int w_size) -> void {
-                    f.infer_input_bounds(x_size, y_size, z_size, w_size);
+                "infer_input_bounds", [](Func &f, int x_size, int y_size, int z_size, int w_size, const Target &target) -> void {
+                    f.infer_input_bounds(x_size, y_size, z_size, w_size, target);
                 },
-                py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0)
+                py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("target") = get_jit_target_from_environment())
 
             .def(
-                "infer_input_bounds", [](Func &f, Buffer<> buffer) -> void {
-                    f.infer_input_bounds(buffer);
+                "infer_input_bounds", [](Func &f, Buffer<> buffer, const Target &target) -> void {
+                    f.infer_input_bounds(buffer, target);
                 },
-                py::arg("dst"))
+                py::arg("dst"), py::arg("target") = get_jit_target_from_environment())
 
             .def(
-                "infer_input_bounds", [](Func &f, std::vector<Buffer<>> buffer) -> void {
+                "infer_input_bounds", [](Func &f, std::vector<Buffer<>> buffer, const Target &target) -> void {
                     f.infer_input_bounds(Realization(buffer));
                 },
-                py::arg("dst"))
+                py::arg("dst"), py::arg("target") = get_jit_target_from_environment())
 
             .def("in_", (Func(Func::*)(const Func &)) & Func::in, py::arg("f"))
             .def("in_", (Func(Func::*)(const std::vector<Func> &fs)) & Func::in, py::arg("fs"))

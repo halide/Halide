@@ -499,8 +499,10 @@ public:
      * ImageParams. */
     // @{
     void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+                            const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
     void infer_input_bounds(RealizationArg output,
+                            const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
