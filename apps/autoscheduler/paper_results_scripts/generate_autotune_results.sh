@@ -37,7 +37,7 @@ export HL_PERMIT_FAILED_UNROLL=1
 
 if [ -z ${HL_TARGET} ]; then
     get_host_target ${HALIDE_ROOT} HL_TARGET
-    HL_TARGET=${HL_TARGET}-cuda
+    HL_TARGET=${HL_TARGET}-cuda-cuda_capability_61
 fi
 
 export HL_TARGET=${HL_TARGET}
