@@ -155,9 +155,25 @@ function(transfer_locations)
 
             if (NOT EXISTS "${stage}")
                 file(MAKE_DIRECTORY "${stage}")
-                # TODO: find something that works for Windows's lib.exe (/extract + /list)
-                execute_process(COMMAND ${CMAKE_AR} -x "${lib}"
-                                WORKING_DIRECTORY "${stage}")
+                if (MSVC)
+                    execute_process(COMMAND "${CMAKE_AR}" /NOLOGO /LIST "${lib}"
+                                    WORKING_DIRECTORY "${stage}"
+                                    OUTPUT_VARIABLE objsInLib)
+
+                    # Process the output to a list of internal objects
+                    string(STRIP "${objsInLib}" objsInLib)
+                    string(REGEX REPLACE "(\r|\n)+" ";" objsInLib "${objsInLib}")
+                    list(TRANSFORM objsInLib STRIP)
+
+                    foreach (obj IN LISTS objsInLib)
+                        execute_process(COMMAND "${CMAKE_AR}" /NOLOGO "/EXTRACT:${obj}" "${lib}"
+                                        WORKING_DIRECTORY "${stage}")
+                    endforeach ()
+                else ()
+                    execute_process(COMMAND "${CMAKE_AR}" -x "${lib}"
+                                    WORKING_DIRECTORY "${stage}"
+                                    RESULT_VARIABLE error)
+                endif ()
             endif ()
 
             get_property(languages TARGET ${ARG_FROM} PROPERTY "IMPORTED_LINK_INTERFACE_LANGUAGES${cfg}")

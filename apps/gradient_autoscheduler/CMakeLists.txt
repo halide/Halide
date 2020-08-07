@@ -5,7 +5,8 @@
 
 if (NOT BUILD_SHARED_LIBS)
     if (MSVC)
-        message(FATAL_ERROR "Autoscheduler plugins cannot be built against static Halide on Windows")
+        message(WARNING "Autoscheduler plugins cannot be built against static Halide on Windows")
+        return()
     endif ()
 
     # Need to enable exports for the plugins to find Halide's symbols.
