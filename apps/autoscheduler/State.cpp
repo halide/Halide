@@ -701,8 +701,8 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
                     << "points_computed_total + inlined_calls = " << feat.points_computed_total + feat.inlined_calls << "\n"
                     << "points_computed_minimum = " << feat.points_computed_minimum << "\n"
                     << "8 * points_computed_minimum = " << 8 * feat.points_computed_minimum << "\n";
-                cost = 1e50;
-                return false;
+                //cost = 1e50;
+                //return false;
             }
         }
     }
@@ -1178,6 +1178,11 @@ void State::update_always_consider_inline_options(const FunctionDAG::Node *node)
     }
 
     if (node->stages.size() > 1) {
+        return;
+    }
+
+    if (is_func_trivial_to_inline(node->func)) {
+        always_consider_inline.get_or_create(node) = true;
         return;
     }
 
