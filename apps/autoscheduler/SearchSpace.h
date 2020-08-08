@@ -47,7 +47,8 @@ struct SearchSpace {
         vector<int64_t> outer_tiling;
         vector<int64_t> inner_tiling;
         double idle_core_wastage;
-        bool entire;
+        int64_t min_parallelism;
+        int64_t max_parallelism;
         bool operator<(const ParallelTileOption &other) const {
             return idle_core_wastage < other.idle_core_wastage;
         }

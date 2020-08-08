@@ -119,11 +119,11 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
                                                               vector<vector<int64_t>>& inner_tilings,
                                                               const vector<int64_t>& pure_size) const {
     vector<SearchSpace::ParallelTileOption> options;
+    vector<SearchSpace::ParallelTileOption> insufficient_parallelism;
     for (size_t i = 0; i < inner_tilings.size(); i++) {
         auto &t = inner_tilings[i];
         SearchSpace::ParallelTileOption o;
         o.inner_tiling = t;
-        o.entire = (i == inner_tilings.size() - 1);
 
         for (size_t j = 0; j < pure_size.size(); j++) {
             t[j] = (pure_size[j] + t[j] - 1) / t[j];
@@ -166,16 +166,31 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
             }
         }
 
+        o.min_parallelism = min_total;
+        o.max_parallelism = max_total;
+
         // Filter out the less useful options
         bool ok =
-            ((o.entire || min_total >= params.parallelism * 2) &&
+            (min_total >= params.parallelism * 2 &&
              (max_total <= params.parallelism * 16 || target.has_gpu_feature()));
 
         if (!ok) {
+            insufficient_parallelism.emplace_back(std::move(o));
             continue;
         }
 
         options.emplace_back(std::move(o));
+    }
+
+    int64_t parallelism_limit = params.parallelism;
+    while (options.empty()) {
+        for (auto& o : insufficient_parallelism) {
+            if (o.min_parallelism >= parallelism_limit) {
+                options.emplace_back(std::move(o));
+            }
+        }
+
+        parallelism_limit /= 2;
     }
 
     std::sort(options.begin(), options.end());
