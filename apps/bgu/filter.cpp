@@ -91,6 +91,32 @@ int main(int argc, char **argv) {
         low_res_out(x, y, c) = val;
     });
 
+    Halide::Runtime::Buffer<float> low_res_in_saved = load_and_convert_image("../images/low_res_in.png");
+    bool success = true;
+    float epsilon = 0.0001;
+    low_res_in.for_each_element([&](int x, int y, int c) {
+        float saved = low_res_in_saved(x, y, c);
+        float computed = low_res_in(x, y, c);
+        if (std::abs(saved - computed) > epsilon) {
+            printf("%d %d %d: %f vs %f\n", x, y, c, saved, computed);
+            success = false;
+        }
+    });
+
+    Halide::Runtime::Buffer<float> low_res_out_saved = load_and_convert_image("../images/low_res_out.png");
+    low_res_out.for_each_element([&](int x, int y, int c) {
+        float saved = low_res_out_saved(x, y, c);
+        float computed = low_res_out(x, y, c);
+        if (std::abs(saved - computed) > epsilon) {
+            printf("%d %d %d: %f vs %f\n", x, y, c, saved, computed);
+            success = false;
+        }
+    });
+
+    if (!success) {
+        return -1;
+    }
+
     // To view the low res output for debugging the algorithm above
     // convert_and_save_image(low_res_out, "test.png");
 

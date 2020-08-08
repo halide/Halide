@@ -92,12 +92,12 @@ echo Local number of cores detected as ${LOCAL_CORES}
 # benchmarked serially.
 BATCH_SIZE=${LOCAL_CORES}
 NUM_CORES=80
-EPOCHS=100
+EPOCHS=200
 NUM_GPUS=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
 
 echo "# GPUs = ${NUM_GPUS}"
 
-USE_BENCHMARK_QUEUE=1
+USE_BENCHMARK_QUEUE=0
 BENCHMARK_QUEUE_DIR=${SAMPLES}/benchmark_queue
 
 # Latest git hash
@@ -203,8 +203,7 @@ make_featurization() {
         ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
-        -DHALIDE_NO_PNG -DHALIDE_NO_JPEG \
-        -ldl -lpthread"
+        -ljpeg -lpng16 -ldl -lpthread"
 
     eval $CMD
     FAILED=0
@@ -221,6 +220,8 @@ make_featurization() {
     fi
     record_command $BATCH $SAMPLE_ID "$CMD" "compile_command" $FAILED
 }
+
+IMAGES_DIR="${HALIDE_ROOT}/apps/images"
 
 # Benchmark one of the random samples
 benchmark_sample() {
@@ -244,8 +245,9 @@ benchmark_sample() {
             --default_input_scalars=estimate \
             --benchmarks=all"
     else
+        get_bench_args ${IMAGES_DIR} ${PIPELINE} ${D} BENCH_ARGS
         CMD="${CMD} \
-            --estimate_all \
+            ${BENCH_ARGS} \
             --benchmarks=all"
     fi
 

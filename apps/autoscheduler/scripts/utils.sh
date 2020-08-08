@@ -394,7 +394,7 @@ function save_best_schedule_result() {
 function print_best_schedule_times() {
     local -r dir=$1
 
-    local -r apps="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur_generator depthwise_separable_conv"
+    local -r apps="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur depthwise_separable_conv"
 
     for app in $apps; do
         local file=$dir/$app.txt
@@ -532,4 +532,31 @@ function find_unused_gpu() {
     done
 
     return 1
+}
+
+function get_bench_args() {
+    local -r images_dir=$1
+    local -r app=$2
+    local -r sample_dir=$3
+    local -n bench_args_ref=$4
+
+    case $app in
+        "bgu") bench_args_ref="splat_loc=${images_dir}/low_res_in.png values=${images_dir}/low_res_out.png slice_loc=${images_dir}/rgb.png output=${sample_dir}/out.png r_sigma=0.125 s_sigma=16" ;;
+        "bilateral_grid") bench_args_ref="input=${images_dir}/gray.png bilateral_grid=${sample_dir}/out.png r_sigma=0.1" ;;
+        "local_laplacian") bench_args_ref="input=${images_dir}/rgb.png output=${sample_dir}/out.png levels=8 alpha=1 beta=1" ;;
+        "lens_blur") bench_args_ref="left_im=${images_dir}/rgb.png right_im=${images_dir}/rgb.png final=${sample_dir}/out.png slices=32 focus_depth=13 blur_radius_scale=0.5 aperture_samples=32" ;;
+        "nl_means") bench_args_ref="input=${images_dir}/rgb.png non_local_means=${sample_dir}/out.png patch_size=7 search_area=7 sigma=0.12" ;;
+        "camera_pipe") bench_args_ref="input=${images_dir}/bayer_raw.png matrix_3200=${images_dir}/matrix_3200.mat matrix_7000=${images_dir}/matrix_7000.mat processed=${sample_dir}/out.png color_temp=3700 gamma=2.0 contrast=50 sharpen_strength=1.0 blackLevel=25 whiteLevel=1023" ;;
+        "stencil_chain") bench_args_ref="input=${images_dir}/rgb.png output=${sample_dir}/out.png" ;;
+        "harris") bench_args_ref="input=${images_dir}/rgba.png output=${sample_dir}/out.png" ;;
+        "hist") bench_args_ref="input=${images_dir}/rgb.png output=${sample_dir}/out.png" ;;
+        "max_filter") bench_args_ref="input=${images_dir}/rgb.png output=${sample_dir}/out.png" ;;
+        "unsharp") bench_args_ref="input=${images_dir}/rgba.png output=${sample_dir}/out.png" ;;
+        "interpolate") bench_args_ref="input=${images_dir}/rgba.png output=${sample_dir}/out.png" ;;
+        "conv_layer") bench_args_ref="input=random:0:estimate filter=random:0:estimate bias=random:0:estimate" ;;
+        "cuda_mat_mul") bench_args_ref="A=zero:estimate B=zero:estimate" ;;
+        "iir_blur") bench_args_ref="input=${images_dir}/rgba.png output=${sample_dir}/out.png alpha=0.5" ;;
+        "depthwise_separable_conv") bench_args_ref="input=random:0:estimate depthwise_filter=random:0:estimate pointwise_filter=random:0:estimate bias=random:0:estimate pad_width=1 pad_height=1" ;;
+        *) bench_args_ref="--estimate_all" ;;
+    esac
 }

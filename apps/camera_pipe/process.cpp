@@ -56,6 +56,36 @@ int main(int argc, char **argv) {
         }
     }
 
+    //convert_and_save_image(matrix_3200, "../images/matrix_3200.mat");
+    //convert_and_save_image(matrix_7000, "../images/matrix_7000.mat");
+
+    Halide::Runtime::Buffer<float> matrix_3200_saved = load_and_convert_image("../images/matrix_3200.mat");
+    bool success = true;
+    float epsilon = 0.0001;
+    matrix_3200.for_each_element([&](int x, int y) {
+        float saved = matrix_3200_saved(x, y);
+        float computed = matrix_3200(x, y);
+        std::cerr << saved << " " << computed << "\n";
+        if (std::abs(saved - computed) > epsilon) {
+            printf("%d %d: %f vs %f\n", x, y, saved, computed);
+            success = false;
+        }
+    });
+
+    Halide::Runtime::Buffer<float> matrix_7000_saved = load_and_convert_image("../images/matrix_7000.mat");
+    matrix_7000.for_each_element([&](int x, int y) {
+        float saved = matrix_7000_saved(x, y);
+        float computed = matrix_7000(x, y);
+        if (std::abs(saved - computed) > epsilon) {
+            printf("%d %d: %f vs %f\n", x, y, saved, computed);
+            success = false;
+        }
+    });
+
+    if (!success) {
+        return -1;
+    }
+
     float color_temp = (float) atof(argv[2]);
     float gamma = (float) atof(argv[3]);
     float contrast = (float) atof(argv[4]);
