@@ -1,17 +1,14 @@
-#include <cassert>
 #include <cstdio>
-#include <cstdlib>
-
-#include "HalideBuffer.h"
-#include "HalideRuntime.h"
+#include <random>
 
 #include "iir_blur.h"
+#ifndef NO_AUTO_SCHEDULE
 #include "iir_blur_auto_schedule.h"
+#include "iir_blur_gradient_auto_schedule.h"
+#endif
 
-#include "halide_benchmark.h"
-#include "halide_image_io.h"
-
-using namespace Halide::Tools;
+#include "benchmark_util.h"
+#include "HalideBuffer.h"
 
 int main(int argc, char **argv) {
     if (argc != 3) {
@@ -19,23 +16,22 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    const float alpha = 0.5f;
+
     Halide::Runtime::Buffer<float> input = load_and_convert_image(argv[1]);
     Halide::Runtime::Buffer<float> output(input.width(), input.height(), input.channels());
 
-    double best_manual = benchmark([&]() {
-        iir_blur(input, 0.5f, output);
-        output.device_sync();
+    multi_way_bench({
+        {"iir_blur_generator Manual", [&]() { iir_blur(input, alpha, output); output.device_sync(); }},
+    #ifndef NO_AUTO_SCHEDULE
+        {"iir_blur_generator Auto-scheduled", [&]() { iir_blur_auto_schedule(input, alpha, output); output.device_sync(); }},
+        {"iir_blur_generator Gradient auto-scheduled", [&]() { iir_blur_gradient_auto_schedule(input, alpha, output); output.device_sync(); }}
+    #endif
     });
-    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
-
-    double best_auto = benchmark([&]() {
-        iir_blur_auto_schedule(input, 0.5f, output);
-        output.device_sync();
-    });
-    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
 
     convert_and_save_image(output, argv[2]);
 
     printf("Success!\n");
+
     return 0;
 }
