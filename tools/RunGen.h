@@ -201,7 +201,7 @@ inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
 // variants *will* be instantiated (increasing code size), so this approach
 // should only be used when strictly necessary.
 template<template<typename> class Functor, typename... Args>
-auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
+auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
 #define HANDLE_CASE(CODE, BITS, TYPE)  \
     case halide_type_code(CODE, BITS): \
@@ -387,6 +387,7 @@ inline Buffer<> allocate_buffer(const halide_type_t &type, const Shape &shape) {
     if (b.number_of_elements() > 0) {
         b.check_overflow();
         b.allocate();
+        b.set_host_dirty();
     }
     return b;
 }
@@ -1286,7 +1287,7 @@ public:
                   << result.samples << " samples, "
                   << result.iterations << " iterations, "
                   << "accuracy " << std::setprecision(2) << (result.accuracy * 100.0) << "%)."
-                  << " Total benchmark time = " << result.total_time << " sec.\n" 
+                  << " Total benchmark time = " << result.total_time << " sec.\n"
                   << "Best output throughput is " << (megapixels_out() / result.wall_time) << " mpix/sec.\n";
         } else {
             out() << md->name << "  BEST_TIME_MSEC_PER_ITER  " << result.wall_time * 1000.f << "\n"
