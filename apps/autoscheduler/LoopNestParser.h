@@ -22,6 +22,10 @@ class LoopNestParser {
                 continue;
             }
 
+            if (line.at(0) == '#') {
+                continue;
+            }
+
             std::istringstream iss(line);
             std::vector<std::string> tokens{
                 std::istream_iterator<std::string>(iss),
@@ -30,6 +34,7 @@ class LoopNestParser {
 
             std::string stage = tokens.at(0);
             bool is_inlined = tokens.at(0) == "inlined:";
+
             if (tokens.at(0) == "realize:" || is_inlined) {
                 stage = tokens.at(1);
             }
