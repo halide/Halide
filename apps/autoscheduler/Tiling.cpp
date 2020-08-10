@@ -210,7 +210,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
     } else {
         // set max thread count 64 for now in all dims
         int64_t max_threads_extent = 64, total_threads_limit = 1024;  // less than 1024 to limit states
-        int factor = 2, innermost_warp_extent = 16, max_serial_ext = 8;
+        int factor = 2, innermost_warp_extent = 16, max_serial_ext = 16;
 
         if (is_compute_root_stage && pure_dims[0].size() == 1) {
             innermost_warp_extent = 1;
