@@ -97,7 +97,7 @@ NUM_GPUS=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
 
 echo "# GPUs = ${NUM_GPUS}"
 
-USE_BENCHMARK_QUEUE=0
+USE_BENCHMARK_QUEUE="${USE_BENCHMARK_QUEUE:-0}"
 BENCHMARK_QUEUE_DIR=${SAMPLES}/benchmark_queue
 
 # Latest git hash

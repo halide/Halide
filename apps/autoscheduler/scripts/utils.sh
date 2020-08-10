@@ -2,7 +2,7 @@
 
 function find_halide() {
     local -n halide_root_ref=$1
-    local -r silent=$2 || 0
+    local -r silent="${2:-0}"
     local dir=$(pwd)
 
     for i in {1..5}; do
