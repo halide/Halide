@@ -151,6 +151,10 @@ struct Target {
     /** Check if a target string is valid. */
     static bool validate_target_string(const std::string &s);
 
+    /** Return true if all of the arch/bits/os fields are well-defined;
+        return false if any of them are false/zero. */
+    bool defined() const;
+
     void set_feature(Feature f, bool value = true);
 
     void set_features(const std::vector<Feature> &features_to_set, bool value = true);
