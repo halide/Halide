@@ -553,10 +553,10 @@ function get_bench_args() {
         "max_filter") bench_args_ref="input=${images_dir}/rgb.png" ;;
         "unsharp") bench_args_ref="input=${images_dir}/rgba.png" ;;
         "interpolate") bench_args_ref="input=${images_dir}/rgba.png" ;;
-        "conv_layer") bench_args_ref="input=random:0:estimate filter=random:0:estimate bias=random:0:estimate" ;;
+        "conv_layer") bench_args_ref="--estimate_all" ;;
         "cuda_mat_mul") bench_args_ref="A=zero:estimate B=zero:estimate" ;;
         "iir_blur") bench_args_ref="input=${images_dir}/rgba.png alpha=0.5" ;;
-        "depthwise_separable_conv") bench_args_ref="input=random:0:estimate depthwise_filter=random:0:estimate pointwise_filter=random:0:estimate bias=random:0:estimate pad_width=1 pad_height=1" ;;
+        "depthwise_separable_conv") bench_args_ref="--estimate_all" ;;
         *) bench_args_ref="--estimate_all" ;;
     esac
 }
