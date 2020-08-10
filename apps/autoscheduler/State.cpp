@@ -756,7 +756,7 @@ void State::print_compute_locations() const {
     aslog(0) << "END compute locations\n";
 }
 
-void State::fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents) const {
+void State::fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents, const vector<int>& constant_extents) const {
     if (parallel_vars.empty() || parallel_extents.empty()) {
         return;
     }
@@ -766,15 +766,23 @@ void State::fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, c
 
     std::vector<size_t> block_var_assignments[3];
 
+    // When parallel_vars/parallel_extents/constant_extents were created in apply_schedule,
+    // each entry was added in reverse order. Start from the end (the
+    // innermost dimension) and assign each var to a gpu_block.
     int i = parallel_vars.size() - 1;
     for (size_t block_i = 0; block_i < 3; ++block_i) {
         for (; i >= 0 && parallel_extents[i] * block_extents[block_i] <= max_blocks[block_i]; --i) {
-            block_extents[block_i] *= parallel_extents[i];
-            block_var_assignments[block_i].push_back(i);
+            if (parallel_extents[i] > 1 || !constant_extents[i]) {
+                block_extents[block_i] *= parallel_extents[i];
+                block_var_assignments[block_i].push_back(i);
 
-            if (i > (int)parallel_vars.size() - 3) {
-                --i;
-                break;
+                // Use a single block for the first 2 innermost dimensions. The
+                // remaining dimensions should all be assigned to the same block and
+                // fused
+                if (block_i < 2) {
+                    --i;
+                    break;
+                }
             }
         }
     }
@@ -993,6 +1001,7 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
         int64_t parallel_tasks = 1;
         vector<VarOrRVar> parallel_vars;
         vector<int64_t> parallel_extents;
+        vector<int> constant_extents;
         bool any_parallel_vars = false, any_parallel_rvars = false;
         for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
             if (!it->exists) continue;
@@ -1002,6 +1011,7 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
             parallel_tasks *= it->extent;
             parallel_extents.push_back(it->extent);
             parallel_vars.push_back(it->var);
+            constant_extents.push_back(it->constant_extent);
         }
 
         if (p.second->vars.size() > 1) {
@@ -1026,7 +1036,7 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
         // they are both pure.
         bool can_fuse = !(any_parallel_vars && any_parallel_rvars);
         if (can_fuse) {
-            fuse_gpu_blocks(p.second.get(), stage, parallel_vars, parallel_extents);
+            fuse_gpu_blocks(p.second.get(), stage, parallel_vars, parallel_extents, constant_extents);
         } else {
             if (target.has_gpu_feature()) {
                 mark_gpu_blocks(p.second.get(), stage, parallel_vars, parallel_extents);
