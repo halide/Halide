@@ -694,15 +694,15 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
                 continue;
             }
 
-            if (feat.points_computed_total + feat.inlined_calls > 8 * feat.points_computed_minimum) {
+            if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
                 Filter(root.get()) << "Excess recompute for " << it.key()->node->func.name() << " stage " << it.key()->index << "\n"
                     << "points_computed_total = " << feat.points_computed_total << "\n"
                     << "inlined_calls = " << feat.inlined_calls << "\n"
                     << "points_computed_total + inlined_calls = " << feat.points_computed_total + feat.inlined_calls << "\n"
                     << "points_computed_minimum = " << feat.points_computed_minimum << "\n"
                     << "8 * points_computed_minimum = " << 8 * feat.points_computed_minimum << "\n";
-                //cost = 1e50;
-                //return false;
+                cost = 1e50;
+                return false;
             }
         }
     }
@@ -858,7 +858,12 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, 
                     internal_assert(edge_chain.at(0)->consumer == loop_nest->stage);
                     internal_assert(edge_chain.back()->producer == producer_node);
 
-                    if (edge_chain.size() > 2) {
+                    if (edge_chain.size() > 1) {
+                        std::string s = func.name();
+                        for (size_t i = 0; i < edge_chain.size() - 1; ++i) {
+                            s = edge_chain.at(i)->producer->func.name() + ".clone_in(" + s + ")";
+                        }
+                        aslog(0) << "Chain with length > 1: " << producer_node->func.name() << ".in(" << s << ")\n";
                         continue;
                     }
 
