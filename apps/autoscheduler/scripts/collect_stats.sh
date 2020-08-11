@@ -64,3 +64,21 @@ for app in $APPS; do
 done
 
 echo
+
+echo "Best Run Times"
+for app in $APPS; do
+    FILE="${HALIDE_ROOT}/apps/${app}/${SAMPLES_DIR}/autotune_out.txt"
+
+    if [ ! -f ${FILE} ]; then
+        echo "?"
+        continue
+    fi
+
+    output=$(grep "Best runtime" ${FILE})
+    if [[ -n $output ]]; then
+        grep "Best runtime" ${FILE} | tail -n 1 | awk '{if (NR == 0) printf("?"); else printf("%f", $4);}'
+    else
+        echo "?"
+    fi
+    echo
+done

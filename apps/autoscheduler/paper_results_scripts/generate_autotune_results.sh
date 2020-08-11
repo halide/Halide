@@ -5,8 +5,6 @@ if [[ $# -ne 5 && $# -ne 6 ]]; then
     exit
 fi
 
-set -eu
-
 MAX_ITERATIONS=${1}
 RESUME=${2}
 TRAIN_ONLY=${3}
@@ -84,7 +82,7 @@ trap ctrl_c INT
 if [ -z $APP ]; then
     APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur depthwise_separable_conv"
 else
-    APPS=$APP
+    APPS=${APP}
 fi
 
 NUM_APPS=0
