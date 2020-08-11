@@ -537,7 +537,7 @@ Target Pipeline::get_compiled_jit_target() const {
     const bool has_native = contents->jit_module.compiled();
     if (contents->jit_target.arch == Target::WebAssembly) {
         internal_assert(has_wasm && !has_native);
-    } else if (contents->jit_target.defined()) {
+    } else if (!contents->jit_target.has_unknowns()) {
         internal_assert(!has_wasm && has_native);
     } else {
         internal_assert(!has_wasm && !has_native);
@@ -547,7 +547,7 @@ Target Pipeline::get_compiled_jit_target() const {
 
 void Pipeline::compile_jit(const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    user_assert(target_arg.defined()) << "Cannot compile_jit() for target '" << target_arg << "'\n";
+    user_assert(!target_arg.has_unknowns()) << "Cannot compile_jit() for target '" << target_arg << "'\n";
 
     Target target(target_arg);
     target.set_feature(Target::JIT);
@@ -1067,10 +1067,10 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
 
     debug(2) << "Realizing Pipeline for " << target << "\n";
 
-    if (!target.defined()) {
+    if (target.has_unknowns()) {
         // If we've already jit-compiled for a specific target, use that.
         target = get_compiled_jit_target();
-        if (!target.defined()) {
+        if (target.has_unknowns()) {
             // Otherwise get the target from the environment
             target = get_jit_target_from_environment();
         }

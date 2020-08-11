@@ -661,8 +661,8 @@ bool Target::supported() const {
     return !bad;
 }
 
-bool Target::defined() const {
-    return os != OSUnknown && arch != ArchUnknown && bits > 0;
+bool Target::has_unknowns() const {
+    return os == OSUnknown || arch == ArchUnknown || bits == 0;
 }
 
 void Target::set_feature(Feature f, bool value) {
@@ -820,7 +820,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
 }
 
 int Target::natural_vector_size(const Halide::Type &t) const {
-    user_assert(defined())
+    user_assert(!has_unknowns())
         << "natural_vector_size cannot be used on a Target with Unknown values.\n";
 
     const bool is_integer = t.is_int() || t.is_uint();
