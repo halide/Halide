@@ -13,7 +13,7 @@ AUTOSCHED_WEIGHT_OBJECTS=$(AUTOSCHED_BIN)/baseline_weights.o
 
 # TODO(srj): depending on something not in the distrib folder isn't strictly
 # kosher, but this is still experimental
-$(AUTOSCHED_BIN)/binary2cpp: ../../tools/binary2cpp.cpp
+$(AUTOSCHED_BIN)/binary2cpp: ../../src/tools/binary2cpp.cpp
 	@mkdir -p $(@D)
 	$(CXX) $< -o $@
 

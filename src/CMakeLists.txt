@@ -339,6 +339,48 @@ set(SOURCE_FILES
     )
 
 ##
+# Build time tools
+##
+
+if (CMAKE_CROSSCOMPILING)
+    # Note: using CMAKE_EXECUTABLE_SUFFIX breaks cross-OS builds involving Windows.
+    include(ExternalProject)
+    ExternalProject_Add(host-tools
+                        BUILD_BYPRODUCTS
+                        "<INSTALL_DIR>/bin/build_halide_h${CMAKE_EXECUTABLE_SUFFIX}"
+                        "<INSTALL_DIR>/bin/binary2cpp${CMAKE_EXECUTABLE_SUFFIX}"
+                        SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/tools
+                        INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/host-tools
+                        CMAKE_ARGS
+                        -D CMAKE_TOOLCHAIN_FILE=${Halide_HOST_TOOLCHAIN_FILE}
+                        -D CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                        -D CMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+                        BUILD_ALWAYS YES)
+
+    # We avoid a full super-build by manually creating imported targets here.
+    # If we start adding lots of build-time tools, we should migrate to the
+    # export() mechanism, which would also avoid the cross-OS bug.
+    ExternalProject_Get_Property(host-tools INSTALL_DIR)
+
+    add_executable(build_halide_h IMPORTED GLOBAL)
+    set_target_properties(build_halide_h
+                          PROPERTIES
+                          IMPORTED_LOCATION "${INSTALL_DIR}/bin/build_halide_h${CMAKE_EXECUTABLE_SUFFIX}"
+                          CROSSCOMPILING_EMULATOR "")
+    add_dependencies(build_halide_h host-tools)
+
+    add_executable(binary2cpp IMPORTED GLOBAL)
+    set_target_properties(binary2cpp
+                          PROPERTIES
+                          IMPORTED_LOCATION "${INSTALL_DIR}/bin/binary2cpp${CMAKE_EXECUTABLE_SUFFIX}"
+                          CROSSCOMPILING_EMULATOR "")
+    add_dependencies(binary2cpp host-tools)
+else ()
+    # Do the safe, reliable thing when not cross-compiling.
+    add_subdirectory(tools)
+endif ()
+
+##
 # Build and import the runtime.
 ##
 
