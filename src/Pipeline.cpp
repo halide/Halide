@@ -1164,13 +1164,9 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_map) {
-    if (!contents->jit_module.compiled() ||
-        contents->jit_target.has_feature(Target::NoBoundsQuery)) {
-        Target target = get_jit_target_from_environment();
-        target.set_feature(Target::NoBoundsQuery, false);
-        compile_jit(target);
-    }
+void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, const ParamMap &param_map) {
+    user_assert(!target.has_feature(Target::NoBoundsQuery)) << "You may not call infer_input_bounds() with Target::NoBoundsQuery set.";
+    compile_jit(target);
 
     // This has to happen after a runtime has been compiled in compile_jit.
     JITFuncCallContext jit_context(jit_handlers());
@@ -1274,6 +1270,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
 }
 
 void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
+                                  const Target &target,
                                   const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
 
@@ -1288,7 +1285,7 @@ void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size
         bufs.emplace_back(t, size);
     }
     Realization r(bufs);
-    infer_input_bounds(r, param_map);
+    infer_input_bounds(r, target, param_map);
 }
 
 void Pipeline::invalidate_cache() {

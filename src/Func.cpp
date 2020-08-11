@@ -2991,6 +2991,7 @@ Realization Func::realize(const Target &target,
 }
 
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
+                              const Target &target,
                               const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
@@ -3004,7 +3005,7 @@ void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
         outputs[i] = std::move(im);
     }
     Realization r(outputs);
-    infer_input_bounds(r, param_map);
+    infer_input_bounds(r, target, param_map);
 }
 
 OutputImageParam Func::output_buffer() const {
@@ -3187,9 +3188,9 @@ void Func::realize(Pipeline::RealizationArg outputs, const Target &target,
     pipeline().realize(std::move(outputs), target, param_map);
 }
 
-void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
+void Func::infer_input_bounds(Pipeline::RealizationArg outputs, const Target &target,
                               const ParamMap &param_map) {
-    pipeline().infer_input_bounds(std::move(outputs), param_map);
+    pipeline().infer_input_bounds(std::move(outputs), target, param_map);
 }
 
 void Func::compile_jit(const Target &target) {
