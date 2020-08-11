@@ -75,11 +75,11 @@ fi
 
 # We could add this unconditionally, but it's easier to wade thru
 # results if we only add if needed
-for F in disable_llvm_loop_opt; do
-    if [[ ! ${HL_TARGET} =~ .*${F}.* ]]; then
-        HL_TARGET="${HL_TARGET}-${F}"
-    fi
-done
+#for F in disable_llvm_loop_opt; do
+    #if [[ ! ${HL_TARGET} =~ .*${F}.* ]]; then
+        #HL_TARGET="${HL_TARGET}-${F}"
+    #fi
+#done
 
 if [ $(uname -s) = "Darwin" ]; then
     LOCAL_CORES=`sysctl -n hw.ncpu`
