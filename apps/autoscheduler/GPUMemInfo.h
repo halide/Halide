@@ -147,17 +147,17 @@ public:
 
         for (size_t i = 0; i < storage_strides.size(); ++i) {
             if (!valid(i)) {
-                aslog(0) << "stride " << i << ": invalid\n";
+                aslog(2) << "stride " << i << ": invalid\n";
                 continue;
             }
-            aslog(0) << "storage_stride " << i << ": " << storage_strides[i] << "\n";
+            aslog(2) << "storage_stride " << i << ": " << storage_strides[i] << "\n";
         }
 
         for (size_t i = 0; i < index_strides.size(); ++i) {
             for (size_t j = 0; j < index_strides[i].size(); ++j) {
-                aslog(0) << "index_stride " << i << ", storage_stride " << j << ": " << index_strides[i][j] << " ";
+                aslog(2) << "index_stride " << i << ", storage_stride " << j << ": " << index_strides[i][j] << " ";
             }
-            aslog(0) << "\n";
+            aslog(2) << "\n";
         }
     }
 
@@ -186,7 +186,7 @@ struct GlobalAccessAccumulator {
         }
 
         if (verbose) {
-            aslog(0) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n"; 
+            aslog(2) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n"; 
         }
 
         int thread_ids[3] = {x, y, z};
@@ -200,21 +200,21 @@ struct GlobalAccessAccumulator {
         }
 
         if (verbose) {
-            aslog(0) << "byte accessed: " << byte << "\n";
+            aslog(2) << "byte accessed: " << byte << "\n";
         }
 
         int64_t sector = byte / 32;
         if (verbose) {
-            aslog(0) << "sectors accessed: ";
+            aslog(2) << "sectors accessed: ";
         }
         for (int i = 0; i < bytes_per_access; ++i) {
             if (verbose) {
-                aslog(0) << sector << " ";
+                aslog(2) << sector << " ";
             }
             sectors_accessed[sector].insert(byte + i);
         }
         if (verbose) {
-            aslog(0) << "\n\n";
+            aslog(2) << "\n\n";
         }
     }
 
@@ -223,9 +223,9 @@ struct GlobalAccessAccumulator {
 
         if (verbose) {
             if (is_tail_warp) {
-                aslog(0) << "tail_";
+                aslog(2) << "tail_";
             }
-            aslog(0) << "num_transactions_per_request = " << num_transactions_per_request << "\n";
+            aslog(2) << "num_transactions_per_request = " << num_transactions_per_request << "\n";
         }
 
         int num_bytes_used_per_request = 0;
@@ -237,9 +237,9 @@ struct GlobalAccessAccumulator {
 
         if (verbose) {
             if (is_tail_warp) {
-                aslog(0) << "tail_";
+                aslog(2) << "tail_";
             }
-            aslog(0) << "num_requests_per_block = " << num_requests << "\n";
+            aslog(2) << "num_requests_per_block = " << num_requests << "\n";
         }
 
         global_mem_info.add_access_info(
@@ -272,7 +272,7 @@ struct SharedAccessAccumulator {
         }
 
         if (verbose) {
-            aslog(0) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n"; 
+            aslog(2) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n"; 
         }
 
         int thread_ids[3] = {x, y, z};
@@ -286,27 +286,27 @@ struct SharedAccessAccumulator {
         }
 
         if (verbose) {
-            aslog(0) << "bytes accessed: ";
+            aslog(2) << "bytes accessed: ";
             for (int i = 0; i < bytes_per_access; ++i) {
-                aslog(0) << byte + i << " ";
+                aslog(2) << byte + i << " ";
             }
-            aslog(0) << "\n";
+            aslog(2) << "\n";
         }
 
         if (verbose) {
-            aslog(0) << "banks accessed: ";
+            aslog(2) << "banks accessed: ";
         }
         for (int i = 0; i < bytes_per_access; ++i) {
             int64_t word = (byte + i) / 4;
             int64_t bank = word % 32;
             if (verbose) {
-                aslog(0) << bank << " ";
+                aslog(2) << bank << " ";
             }
             bytes_accessed.insert(byte + i);
             bank_to_words_accessed[bank].insert(word);
         }
         if (verbose) {
-            aslog(0) << "\n\n";
+            aslog(2) << "\n\n";
         }
     }
 
@@ -320,9 +320,9 @@ struct SharedAccessAccumulator {
 
         if (verbose) {
             if (is_tail_warp) {
-                aslog(0) << "tail_";
+                aslog(2) << "tail_";
             }
-            aslog(0) << "num_transactions_per_request = " << num_transactions_per_request << "\n";
+            aslog(2) << "num_transactions_per_request = " << num_transactions_per_request << "\n";
         }
 
         int num_bytes_used_per_request = bytes_accessed.size();
@@ -331,9 +331,9 @@ struct SharedAccessAccumulator {
 
         if (verbose) {
             if (is_tail_warp) {
-                aslog(0) << "tail_";
+                aslog(2) << "tail_";
             }
-            aslog(0) << "num_requests_per_block = " << num_requests << "\n";
+            aslog(2) << "num_requests_per_block = " << num_requests << "\n";
         }
 
         shared_mem_info.add_access_info(
@@ -368,7 +368,7 @@ struct LocalAccessAccumulator {
         ++thread_count;
 
         if (verbose) {
-            aslog(0) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n"; 
+            aslog(2) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n"; 
         }
     }
 
@@ -379,16 +379,16 @@ struct LocalAccessAccumulator {
 
         if (verbose) {
             if (is_tail_warp) {
-                aslog(0) << "tail_";
+                aslog(2) << "tail_";
             }
-            aslog(0) << "num_transactions_per_request = " << num_transactions_per_request << "\n";
+            aslog(2) << "num_transactions_per_request = " << num_transactions_per_request << "\n";
         }
 
         if (verbose) {
             if (is_tail_warp) {
-                aslog(0) << "tail_";
+                aslog(2) << "tail_";
             }
-            aslog(0) << "num_requests_per_block = " << num_requests << "\n";
+            aslog(2) << "num_requests_per_block = " << num_requests << "\n";
         }
 
         local_mem_info.add_access_info(

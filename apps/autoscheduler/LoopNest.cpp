@@ -713,7 +713,7 @@ int LoopNest::vectorized_load_access_size(const LoadJacobian &jac, const Functio
         }
 
         if (verbose) {
-            aslog(0) << "vector_size = " << vector_size << "\n";
+            aslog(2) << "vector_size = " << vector_size << "\n";
         }
 
         return vector_size;
@@ -732,7 +732,7 @@ int LoopNest::vectorized_load_access_size(const LoadJacobian &jac, const Functio
     }
 
     if (verbose) {
-        aslog(0) << "vector_size = " << vector_size << "\n";
+        aslog(2) << "vector_size = " << vector_size << "\n";
     }
     return vector_size;
 }
@@ -743,9 +743,9 @@ int LoopNest::vectorized_access_size(size_t loop_index, bool verbose) const {
     int64_t max_points_per_vector = std::min(4, max_vector_size_in_bytes / (int)node->bytes_per_point);
 
     if (verbose) {
-        aslog(0) << "\nextent = " << extent;
-        aslog(0) << "\nbytes_per_point = " << node->bytes_per_point;
-        aslog(0) << "\nmax_points_per_vector = " << max_points_per_vector;
+        aslog(2) << "\nextent = " << extent;
+        aslog(2) << "\nbytes_per_point = " << node->bytes_per_point;
+        aslog(2) << "\nmax_points_per_vector = " << max_points_per_vector;
     }
 
     if (extent >= max_points_per_vector && extent % max_points_per_vector == 0) {
@@ -776,7 +776,7 @@ Strides LoopNest::compute_strides(const LoadJacobian &jac, int innermost_storage
     internal_assert(innermost_storage_dim >= 0);
 
     if (verbose) {
-        aslog(0) << "\nstrides: " << node->func.name() << " (stage = " << stage->index << ") loading from " << storage_node->func.name() << " ->\n";
+        aslog(2) << "\nstrides: " << node->func.name() << " (stage = " << stage->index << ") loading from " << storage_node->func.name() << " ->\n";
     }
 
     // The node's storage dimensions (from innermost outward)
@@ -793,17 +793,17 @@ Strides LoopNest::compute_strides(const LoadJacobian &jac, int innermost_storage
     std::vector<int64_t> storage_strides;
     int64_t storage_stride = 1;
     if (verbose) {
-        aslog(0) << "Storage stride: ";
+        aslog(2) << "Storage stride: ";
     }
     for (std::size_t i = 0; i < storage_dims.size(); i++) {
         storage_strides.push_back(storage_stride);
         if (verbose) {
-            aslog(0) << storage_stride << " ";
+            aslog(2) << storage_stride << " ";
         }
         storage_stride *= store_bounds->region_required(storage_dims[i]).extent();
     }
     if (verbose) {
-        aslog(0) << "\n";
+        aslog(2) << "\n";
     }
 
     Strides strides{storage_strides};
@@ -815,16 +815,16 @@ Strides LoopNest::compute_strides(const LoadJacobian &jac, int innermost_storage
         bool exists = true;
         for (std::size_t i = 0; i < storage_dims.size(); i++) {
             if (verbose) {
-                aslog(0) << "loop_index for this stage = " << loop_index;
-                aslog(0) << "; loop_var = " << thread_loop_var;
-                aslog(0) << "; storage_dim = " << i;
+                aslog(2) << "loop_index for this stage = " << loop_index;
+                aslog(2) << "; loop_var = " << thread_loop_var;
+                aslog(2) << "; storage_dim = " << i;
             }
 
             if (loop_index_exists) {
                 auto jac_stride = jac(storage_dims[i], loop_index);
                 if (!jac_stride.exists()) {
                     if (verbose) {
-                        aslog(0) << "; stride does not exist\n";
+                        aslog(2) << "; stride does not exist\n";
                         jac.dump("");
                     }
                     exists = false;
@@ -838,25 +838,25 @@ Strides LoopNest::compute_strides(const LoadJacobian &jac, int innermost_storage
             }
 
             if (verbose) {
-                aslog(0) << "; index_stride = " << index_strides.back() << "\n";
+                aslog(2) << "; index_stride = " << index_strides.back() << "\n";
             }
         }
 
         if (exists) {
             strides.add_valid(index_strides);
             if (verbose) {
-                aslog(0) << "adding valid stride\n";
+                aslog(2) << "adding valid stride\n";
             }
         } else {
             strides.add_invalid();
             if (verbose) {
-                aslog(0) << "adding invalid stride\n";
+                aslog(2) << "adding invalid stride\n";
             }
         }
     }
 
     if (verbose) {
-        aslog(0) << "<- strides\n\n";
+        aslog(2) << "<- strides\n\n";
     }
 
     return strides;
@@ -931,14 +931,14 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
         } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::local) {
             mem_type = "local";
         }
-        aslog(0) << "BEGIN MEM ACCESS " << mem_type << "_mem_" << type;
-        aslog(0) << ". consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << consumer_name << "\n";
-        aslog(0) << "total_serial_loop_extents = " << total_serial_loop_extents << "\n";
+        aslog(2) << "BEGIN MEM ACCESS " << mem_type << "_mem_" << type;
+        aslog(2) << ". consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << consumer_name << "\n";
+        aslog(2) << "total_serial_loop_extents = " << total_serial_loop_extents << "\n";
     }
 
     if (is_shared_mem) {
         if (verbose) {
-            aslog(0) << "vector_size = " << vector_size << "\n";
+            aslog(2) << "vector_size = " << vector_size << "\n";
         }
         auto store_jac = jac * inner_serial_loop_extents;
         auto shared_mem_info = compute_mem_store_info<SharedMem>(
@@ -961,7 +961,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
 
     } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::global) {
         if (verbose) {
-            aslog(0) << "vector_size = " << vector_size << "\n";
+            aslog(2) << "vector_size = " << vector_size << "\n";
         }
         auto store_jac = jac * inner_serial_loop_extents;
         auto global_mem_info = compute_mem_store_info<GlobalMem>(
@@ -1002,7 +1002,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
     }
 
     if (verbose) {
-        aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
+        aslog(2) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
         std::string type = stage->index == 0 ? "store" : "load_and_store";
         std::string consumer_name = node->func.name();
         sanitize_names(consumer_name);
@@ -1012,12 +1012,12 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
         } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::local) {
             mem_type = "local";
         }
-        aslog(0) << "END MEM ACCESS " << mem_type << "_mem_" << type << ". consumer: " << consumer_name << "_s" << stage->index << "; producer: " << consumer_name;
+        aslog(2) << "END MEM ACCESS " << mem_type << "_mem_" << type << ". consumer: " << consumer_name << "_s" << stage->index << "; producer: " << consumer_name;
         if (!jac.all_coeffs_exist()) {
-            aslog(0) << " (not all coeffs exist)";
+            aslog(2) << " (not all coeffs exist)";
 
         }
-        aslog(0) << "\n\n";
+        aslog(2) << "\n\n";
     }
 }
 
@@ -1042,8 +1042,8 @@ void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac, const
         );
 
         if (verbose) {
-            aslog(0) << "num_requests_per_warp = " << num_requests_per_warp << "\n";
-            aslog(0) << "num_regular_warps = " << thread_info.num_regular_active_warps_per_block << "\n";
+            aslog(2) << "num_requests_per_warp = " << num_requests_per_warp << "\n";
+            aslog(2) << "num_regular_warps = " << thread_info.num_regular_active_warps_per_block << "\n";
         }
     }
 
@@ -1052,8 +1052,8 @@ void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac, const
     }
 
     if (verbose) {
-        aslog(0) << "\nBEGIN tail warp\n";
-        aslog(0) << "# threads in tail warp: " << thread_info.num_threads_in_final_warp << "\n";
+        aslog(2) << "\nBEGIN tail warp\n";
+        aslog(2) << "# threads in tail warp: " << thread_info.num_threads_in_final_warp << "\n";
     }
 
     Accumulator<T> accumulator(bytes_per_access, dimensions, strides, verbose);
@@ -1066,7 +1066,7 @@ void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac, const
     );
 
     if (verbose) {
-        aslog(0) << "END tail warp\n\n";
+        aslog(2) << "END tail warp\n\n";
     }
 }
 
@@ -1094,8 +1094,8 @@ void LoopNest::compute_num_mem_accesses_per_block<LocalMem>(const LoadJacobian &
         );
 
         if (verbose) {
-            aslog(0) << "num_requests_per_warp = " << num_requests_per_warp << "\n";
-            aslog(0) << "num_regular_warps = " << thread_info.num_regular_active_warps_per_block << "\n";
+            aslog(2) << "num_requests_per_warp = " << num_requests_per_warp << "\n";
+            aslog(2) << "num_regular_warps = " << thread_info.num_regular_active_warps_per_block << "\n";
         }
     }
 
@@ -1104,8 +1104,8 @@ void LoopNest::compute_num_mem_accesses_per_block<LocalMem>(const LoadJacobian &
     }
 
     if (verbose) {
-        aslog(0) << "\nBEGIN tail warp\n";
-        aslog(0) << "# threads in tail warp: " << thread_info.num_threads_in_final_warp << "\n";
+        aslog(2) << "\nBEGIN tail warp\n";
+        aslog(2) << "# threads in tail warp: " << thread_info.num_threads_in_final_warp << "\n";
     }
 
     LocalAccessAccumulator accumulator(bytes_per_access, dimensions, verbose);
@@ -1118,7 +1118,7 @@ void LoopNest::compute_num_mem_accesses_per_block<LocalMem>(const LoadJacobian &
     );
 
     if (verbose) {
-        aslog(0) << "END tail warp\n\n";
+        aslog(2) << "END tail warp\n\n";
     }
 }
 
@@ -1403,18 +1403,18 @@ int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const 
                     rvars_to_move_inward[idx] = 1;
                 }
                 if (verbose) {
-                    aslog(0) << "loop idx = " << idx << ": non_licm_unrolled = " << parent->size[idx] << "\n";
+                    aslog(2) << "loop idx = " << idx << ": non_licm_unrolled = " << parent->size[idx] << "\n";
                 }
             } else {
                 // Case 3
                 product_of_non_licm_non_unrolled_extents *= parent->size[idx];
                 if (verbose) {
-                    aslog(0) << "loop idx = " << idx << ": non_licm_non_unrolled = " << parent->size[idx] << "\n";
+                    aslog(2) << "loop idx = " << idx << ": non_licm_non_unrolled = " << parent->size[idx] << "\n";
                 }
             }
         } else if (verbose) {
              // Case 1
-            aslog(0) << "loop idx = " << idx << ": apply licm = " << parent->size[idx] << "\n";
+            aslog(2) << "loop idx = " << idx << ": apply licm = " << parent->size[idx] << "\n";
         }
     }
 
@@ -1431,7 +1431,7 @@ int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const 
             << "region_required min = " << std::abs(bounds->region_required(i).min())
             << "; region_required max = " << std::abs(bounds->region_required(i).max());
         if (verbose) {
-            aslog(0) << "region_required(" << i << ") = " << bounds->region_required(i).extent() << "; ";
+            aslog(2) << "region_required(" << i << ") = " << bounds->region_required(i).extent() << "; ";
         }
     }
 
@@ -1465,14 +1465,14 @@ int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const 
             );
 
             if (verbose) {
-                aslog(0) << "\n";
-                aslog(0) << "vector_size = " << vector_size << "\n";
+                aslog(2) << "\n";
+                aslog(2) << "vector_size = " << vector_size << "\n";
             }
 
             if (points_accessed % vector_size == 0) {
                 points_accessed /= vector_size;
                 if (verbose) {
-                    aslog(0) << "vectorization applied\n";
+                    aslog(2) << "vectorization applied\n";
                 }
             }
         }
@@ -1495,16 +1495,16 @@ int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const 
     points_accessed *= total_inner_serial_extents_outside_realization;
 
     if (verbose) {
-        aslog(0) << "\n";
-        aslog(0) << "region_required = " << num_points << "\n";
-        aslog(0) << "total_inner_serial_extents = " << gpu_loop_info.total_inner_serial_extents << "\n";
-        aslog(0) << "total_outer_serial_extents = " << gpu_loop_info.total_outer_serial_extents << "\n";
-        aslog(0) << "total_inner_serial_extents_outside_realization = " << total_inner_serial_extents_outside_realization << "\n";
-        aslog(0) << "product_of_non_licm_non_unrolled_extents = " << product_of_non_licm_non_unrolled_extents << "\n";
-        aslog(0) << "n = " << n << "\n";
-        aslog(0) << "points_accessed_by_region_required = " << points_accessed_by_region_required << "\n";
-        aslog(0) << "points_accessed_by_loop_extents = " << points_accessed_by_loop_extents << "\n";
-        aslog(0) << "final points_accessed_per_thread = " << points_accessed << "\n";
+        aslog(2) << "\n";
+        aslog(2) << "region_required = " << num_points << "\n";
+        aslog(2) << "total_inner_serial_extents = " << gpu_loop_info.total_inner_serial_extents << "\n";
+        aslog(2) << "total_outer_serial_extents = " << gpu_loop_info.total_outer_serial_extents << "\n";
+        aslog(2) << "total_inner_serial_extents_outside_realization = " << total_inner_serial_extents_outside_realization << "\n";
+        aslog(2) << "product_of_non_licm_non_unrolled_extents = " << product_of_non_licm_non_unrolled_extents << "\n";
+        aslog(2) << "n = " << n << "\n";
+        aslog(2) << "points_accessed_by_region_required = " << points_accessed_by_region_required << "\n";
+        aslog(2) << "points_accessed_by_loop_extents = " << points_accessed_by_loop_extents << "\n";
+        aslog(2) << "final points_accessed_per_thread = " << points_accessed << "\n";
     }
 
     return points_accessed;
@@ -2341,7 +2341,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     sanitize_names(consumer_name);
                                     std::string producer_name = e->producer->func.name();
                                     sanitize_names(producer_name);
-                                    aslog(0) << "BEGIN MEM ACCESS shared_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
+                                    aslog(2) << "BEGIN MEM ACCESS shared_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                                 }
 
                                 int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::shared, verbose);
@@ -2358,12 +2358,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     verbose
                                 );
                                 if (verbose) {
-                                    aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
-                                    aslog(0) << "END MEM ACCESS shared_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
+                                    aslog(2) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
+                                    aslog(2) << "END MEM ACCESS shared_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
                                     if (!jac.first.all_coeffs_exist()) {
                                         aslog(0) << " (not all coeffs exist)";
                                     }
-                                    aslog(0) << "\n\n";
+                                    aslog(2) << "\n\n";
                                 }
 
                             } else if (is_global_mem && get_compute_global_mem_load_features()) {
@@ -2373,7 +2373,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     sanitize_names(consumer_name);
                                     std::string producer_name = e->producer->func.name();
                                     sanitize_names(producer_name);
-                                    aslog(0) << "BEGIN MEM ACCESS global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
+                                    aslog(2) << "BEGIN MEM ACCESS global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                                 }
 
                                 int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::global, verbose);
@@ -2391,12 +2391,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 );
 
                                 if (verbose) {
-                                    aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
-                                    aslog(0) << "END MEM ACCESS global_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
+                                    aslog(2) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
+                                    aslog(2) << "END MEM ACCESS global_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
                                     if (!jac.first.all_coeffs_exist()) {
-                                        aslog(0) << " (not all coeffs exist)";
+                                        aslog(2) << " (not all coeffs exist)";
                                     }
-                                    aslog(0) << "\n\n";
+                                    aslog(2) << "\n\n";
                                 }
                             }
                         }
@@ -2413,7 +2413,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 sanitize_names(consumer_name);
                                 std::string producer_name = e->producer->func.name();
                                 sanitize_names(producer_name);
-                                aslog(0) << "BEGIN MEM ACCESS local_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
+                                aslog(2) << "BEGIN MEM ACCESS local_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
                             }
 
                             int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::local, verbose);
@@ -2431,12 +2431,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                             );
 
                             if (verbose) {
-                                aslog(0) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
-                                aslog(0) << "END MEM ACCESS local_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
+                                aslog(2) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
+                                aslog(2) << "END MEM ACCESS local_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
                                 if (!jac.first.all_coeffs_exist()) {
-                                    aslog(0) << " (not all coeffs exist)";
+                                    aslog(2) << " (not all coeffs exist)";
                                 }
-                                aslog(0) << "\n\n";
+                                aslog(2) << "\n\n";
                             }
                         }
                     }
