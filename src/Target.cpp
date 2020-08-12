@@ -547,15 +547,7 @@ Target::Target(const std::string &target) {
         // If nothing is specified, use the full host target.
         *this = host;
     } else {
-
-        // Default to the host OS and architecture in case of partially
-        // specified targets (e.g. x86-64-cuda doesn't specify the OS, so
-        // use the host OS).
-        os = host.os;
-        arch = host.arch;
-        bits = host.bits;
-
-        if (!merge_string(*this, target)) {
+        if (!merge_string(*this, target) || has_unknowns()) {
             bad_target_string(target);
         }
     }
@@ -567,7 +559,7 @@ Target::Target(const char *s)
 
 bool Target::validate_target_string(const std::string &s) {
     Target t;
-    return merge_string(t, s);
+    return merge_string(t, s) && !t.has_unknowns();
 }
 
 std::string Target::feature_to_name(Target::Feature feature) {
@@ -659,6 +651,10 @@ bool Target::supported() const {
     bad |= has_feature(Target::D3D12Compute);
 #endif
     return !bad;
+}
+
+bool Target::has_unknowns() const {
+    return os == OSUnknown || arch == ArchUnknown || bits == 0;
 }
 
 void Target::set_feature(Feature f, bool value) {
