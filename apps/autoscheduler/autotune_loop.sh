@@ -100,6 +100,13 @@ echo "# GPUs = ${NUM_GPUS}"
 USE_BENCHMARK_QUEUE="${USE_BENCHMARK_QUEUE:-0}"
 BENCHMARK_QUEUE_DIR=${SAMPLES}/benchmark_queue
 
+ENABLE_BEAM_SEARCH=${ENABLE_BEAM_SEARCH:-0}
+if [[ ${ENABLE_BEAM_SEARCH} == 1 ]]; then
+    echo "Beam search: ON"
+else
+    echo "Beam search: OFF"
+fi
+
 # Latest git hash
 GIT_HASH=$(git rev-parse --verify HEAD)
 
@@ -140,7 +147,8 @@ make_featurization() {
     mkdir -p ${D}
     rm -f "${D}/${FNAME}.featurization"
     rm -f "${D}/${FNAME}.sample"
-    if [[ $D == */0 ]]; then
+
+    if [[ $D == */0 && ${ENABLE_BEAM_SEARCH} == 1 ]]; then
         # Sample 0 in each batch is best effort beam search, with no randomness
         dropout=100
         beam=32
@@ -243,9 +251,7 @@ benchmark_sample() {
 
     if [ $PIPELINE == "random_pipeline" ]; then
         CMD="${CMD} \
-            --output_extents=estimate \
-            --default_input_buffers=random:0:auto \
-            --default_input_scalars=estimate \
+            --estimate_all \
             --benchmarks=all"
     else
         get_bench_args ${IMAGES_DIR} ${PIPELINE} ${D} BENCH_ARGS
