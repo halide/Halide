@@ -144,7 +144,6 @@ for app in $APPS; do
     echo "Total autotune time (s): ${SECONDS}" >> ${OUTPUT_FILE}
 
     save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
-    python3 ${SCRIPTS_DIR}/scatter.py --predictions ${PREDICTIONS_FILE} --app ${app} --output ${SAMPLES_DIR}
 
     if [[ $COMPARE_WITH_METRICS == 1 ]]; then
         echo "Comparing with metrics..."
