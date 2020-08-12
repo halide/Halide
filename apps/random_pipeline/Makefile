@@ -31,7 +31,7 @@ $(BIN)/runtime.a: $(GENERATOR_BIN)/random_pipeline.generator
 
 $(GENERATOR_BIN)/random_pipeline.generator: random_pipeline_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -fno-rtti -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/$(ID)/random_pipeline.a: $(GENERATOR_BIN)/random_pipeline.generator
 	@mkdir -p $(@D)
