@@ -2993,7 +2993,6 @@ Realization Func::realize(const Target &target,
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
                               const Target &target,
                               const ParamMap &param_map) {
-    user_assert(0) << "do not call";
     vector<int32_t> sizes;
     if (x_size) sizes.push_back(x_size);
     if (y_size) sizes.push_back(y_size);
