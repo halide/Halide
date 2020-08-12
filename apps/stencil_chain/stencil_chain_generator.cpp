@@ -50,22 +50,37 @@ public:
         } else if (get_target().has_gpu_feature()) {
             // GPU schedule
 
-            // 5.90 ms on a 2060 RTX
+            // 2.9 ms on a 2060 RTX
 
             // It seems that just compute-rooting all the stencils is
-            // fastest on this GPU, plus some unrolling to share loads
-            // between adjacent pixels.
+            // fastest on this GPU, plus some unrolling and aggressive
+            // staging to share loads between adjacent pixels.
             Var xi, yi, xii, yii;
+            stages.push_back(output);
             for (size_t i = 1; i < stages.size(); i++) {
                 Func &s = stages[i];
+                Func prev = stages[i - 1];
                 x = s.args()[0];
                 y = s.args()[1];
                 s.compute_root()
-                    .gpu_tile(x, y, xi, yi, 64, 16)
+                    .gpu_tile(x, y, xi, yi, 30 * 2, 12)
                     .tile(xi, yi, xii, yii, 2, 2)
                     .unroll(xii)
                     .unroll(yii);
+                prev.in()
+                    .compute_at(s, x)
+                    .tile(prev.args()[0], prev.args()[1], xi, yi, 2, 2)
+                    .vectorize(xi)
+                    .unroll(yi)
+                    .gpu_threads(prev.args()[0], prev.args()[1]);
+                prev.in()
+                    .in()
+                    .compute_at(s, xi)
+                    .vectorize(prev.args()[0], 2)
+                    .unroll(prev.args()[0])
+                    .unroll(prev.args()[1]);
             }
+
         } else {
             // CPU schedule
             // 4.23ms on an Intel i9-9960X using 16 threads at 3.5
