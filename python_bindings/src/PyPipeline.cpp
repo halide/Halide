@@ -137,20 +137,49 @@ void define_pipeline(py::module &m) {
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target())
 
+            // TODO: deprecate/remove when the C++ non-vector version of this API is removed
             .def(
                 "infer_input_bounds", [](Pipeline &p, int x_size, int y_size, int z_size, int w_size, const Target &target) -> void {
-                    p.infer_input_bounds(x_size, y_size, z_size, w_size, target);
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call infer_input_bounds() with an explicit list of ints instead.",
+                                 1);
+                    std::vector<int32_t> sizes;
+                    if (x_size) sizes.push_back(x_size);
+                    if (y_size) sizes.push_back(y_size);
+                    if (z_size) sizes.push_back(z_size);
+                    if (w_size) sizes.push_back(w_size);
+                    p.infer_input_bounds(sizes, target);
                 },
                 py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("target") = get_jit_target_from_environment())
 
             .def(
-                "infer_input_bounds", [](Pipeline &p, Buffer<> buffer, const Target &target) -> void {
-                    p.infer_input_bounds(Realization(buffer), target);
-                },
-                py::arg("dst"), py::arg("target") = get_jit_target_from_environment())
-            .def(
-                "infer_input_bounds", [](Pipeline &p, std::vector<Buffer<>> buffers, const Target &target) -> void {
-                    p.infer_input_bounds(Realization(buffers));
+                "infer_input_bounds", [](Pipeline &p, py::object dst, const Target &target) -> void {
+                    // dst could be Buffer<>, vector<Buffer>, or vector<int>
+                    try {
+                        Buffer<> b = dst.cast<Buffer<>>();
+                        p.infer_input_bounds(b, target);
+                        return;
+                    } catch (...) {
+                        // fall thru
+                    }
+
+                    try {
+                        std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
+                        p.infer_input_bounds(Realization(v), target);
+                        return;
+                    } catch (...) {
+                        // fall thru
+                    }
+
+                    try {
+                        std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
+                        p.infer_input_bounds(v, target);
+                        return;
+                    } catch (...) {
+                        // fall thru
+                    }
+
+                    throw py::value_error("Invalid arguments to infer_input_bounds");
                 },
                 py::arg("dst"), py::arg("target") = get_jit_target_from_environment())
 

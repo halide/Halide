@@ -2993,13 +2993,20 @@ Realization Func::realize(const Target &target,
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
                               const Target &target,
                               const ParamMap &param_map) {
-    user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
-    vector<Buffer<>> outputs(func.outputs());
-    vector<int> sizes;
+    user_assert(0) << "do not call";
+    vector<int32_t> sizes;
     if (x_size) sizes.push_back(x_size);
     if (y_size) sizes.push_back(y_size);
     if (z_size) sizes.push_back(z_size);
     if (w_size) sizes.push_back(w_size);
+    infer_input_bounds(sizes, target, param_map);
+}
+
+void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
+                              const Target &target,
+                              const ParamMap &param_map) {
+    user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
+    vector<Buffer<>> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         Buffer<> im(func.output_types()[i], nullptr, sizes);
         outputs[i] = std::move(im);
