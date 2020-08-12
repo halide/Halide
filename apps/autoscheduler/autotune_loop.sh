@@ -231,6 +231,9 @@ benchmark_sample() {
     GPU_INDEX=${8}
 
     if [[ ! -f ${D}/bench ]]; then
+        if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
+            mv "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-benchmarking-gpu_${GPU_INDEX}" "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-completed"
+        fi
         return
     fi
 
@@ -322,6 +325,9 @@ benchmark_sample() {
     record_command $BATCH $SAMPLE_ID "$TRACE_CMD" "trace_256_command" $FAILED
 
     if [[ ${FAILED} == 1 ]]; then
+        if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
+            mv "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-benchmarking-gpu_${GPU_INDEX}" "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-completed"
+        fi
         return
     fi
 
@@ -342,6 +348,10 @@ benchmark_sample() {
     rm ${D}/${FNAME}.stmt
     rm ${D}/${FNAME}.h
     rm ${D}/${FNAME}.registration.cpp
+
+    if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
+        mv "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-benchmarking-gpu_${GPU_INDEX}" "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-completed"
+    fi
 }
 
 if [[ $BATCH_ID == 0 ]]; then
@@ -381,14 +391,21 @@ benchmark_loop() {
             BATCH=$(echo "${FILE}" | cut -d- -f 1)
             SAMPLE_DIR="${SAMPLES}/${BATCH}/${SAMPLE_ID}"
 
-            if { [[ -f "${SAMPLE_DIR}/bench.txt" ]] && ! grep -q "Permission denied" "${SAMPLE_DIR}/bench_err.txt"; }; then
+            # We sometimes encounter spurious permission denied errors. Usually,
+            # retrying will resolve them so remove from this file the
+            # '-completed' tag and let it be benchmarked again
+            if grep -q "Permission denied" "${SAMPLE_DIR}/bench_err.txt"; then
+                FILE=${FILE%-completed}
+            fi
+
+            if [[ -f "${SAMPLE_DIR}/bench.txt" ]] && [[ $FILE == *"-completed" ]]; then
                 # Benchmarking has been completed
                 num_completed=$((num_completed+1))
                 rm "${BENCHMARK_QUEUE_DIR}/${FILE}"
                 continue
             fi
 
-            if [[ $FILE == *"benchmarking" ]]; then
+            if [[ $FILE == *"benchmarking"* ]]; then
                 # Sample is still benchmarking
                 continue
             fi
@@ -398,12 +415,15 @@ benchmark_loop() {
             DIR=${SAMPLES}/${BATCH}
 
             while [[ 1 ]]; do
-                if find_unused_gpu ${NUM_GPUS} gpu_id; then
+                if find_unused_gpu ${BENCHMARK_QUEUE_DIR} ${NUM_GPUS} gpu_id; then
                     S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
                     FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
                     benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID $EXTRA_ARGS_IDX $FNAME $BATCH_ID $gpu_id &
                     waitlist+=("$!")
-                    mv "${BENCHMARK_QUEUE_DIR}/${FILE}" "${BENCHMARK_QUEUE_DIR}/${FILE}-benchmarking"
+
+                    # Mark this file with gpu_${gpu_id} so we know that GPU is
+                    # occupied
+                    mv "${BENCHMARK_QUEUE_DIR}/${FILE}" "${BENCHMARK_QUEUE_DIR}/${FILE}-benchmarking-gpu_${gpu_id}"
                     break
                 else
                     # All GPUs are in use

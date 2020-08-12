@@ -521,11 +521,20 @@ function get_num_local_cores() {
 }
 
 function find_unused_gpu() {
-    local -r num_gpus=$1
-    local -n gpu_id_ref=$2
+    local -r benchmark_queue_dir=$1
+    local -r num_gpus=$2
+    local -n gpu_id_ref=$3
 
     for ((index=0;index<num_gpus;index++)); do
-        if nvidia-smi -i ${index} | grep -q "No running processes found"; then
+        exists=0
+        # If a GPU is in use in the benchmark queue, a file will have the suffix
+        # _gpu_${index}
+        for f in ${benchmark_queue_dir}/*-gpu_${index}; do
+            [ -e "$f" ] && exists=1
+            break
+        done
+
+        if [[ $exists == 0 ]]; then
             gpu_id_ref=${index}
             return 0
         fi
