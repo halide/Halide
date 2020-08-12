@@ -424,12 +424,11 @@ benchmark_loop() {
                 if find_unused_gpu ${BENCHMARK_QUEUE_DIR} ${NUM_GPUS} gpu_id; then
                     S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
                     FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-                    benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID $EXTRA_ARGS_IDX $FNAME $BATCH_ID $gpu_id &
-                    waitlist+=("$!")
-
                     # Mark this file with gpu_${gpu_id} so we know that GPU is
                     # occupied
                     mv "${BENCHMARK_QUEUE_DIR}/${FILE}" "${BENCHMARK_QUEUE_DIR}/${FILE}-benchmarking-gpu_${gpu_id}"
+                    benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID $EXTRA_ARGS_IDX $FNAME $BATCH_ID $gpu_id &
+                    waitlist+=("$!")
                     break
                 else
                     # All GPUs are in use
