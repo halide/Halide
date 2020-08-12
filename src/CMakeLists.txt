@@ -382,12 +382,17 @@ target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,S
 
 add_dependencies(Halide HalideIncludes)
 
+if (WITH_WABT)
+    target_link_libraries(Halide PRIVATE wabt)
+    target_compile_definitions(Halide PRIVATE WITH_WABT)
+endif()
+
 ##
 # Include paths for libHalide
 ##
 
-set(HL_INCLUDE_PATH "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
-target_include_directories(Halide INTERFACE ${HL_INCLUDE_PATH})
+set(Halide_INCLUDE_PATH "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
+target_include_directories(Halide INTERFACE ${Halide_INCLUDE_PATH})
 
 ##
 # Plugin interface for Halide on weak systems
@@ -402,7 +407,7 @@ if (NOT BUILD_SHARED_LIBS)
         target_link_options(Halide_Plugin INTERFACE
                             $<$<CXX_COMPILER_ID:GNU>:-rdynamic>
                             $<$<CXX_COMPILER_ID:Clang,AppleClang>:-undefined dynamic_lookup>)
-        target_include_directories(Halide_Plugin INTERFACE ${HL_INCLUDE_PATH})
+        target_include_directories(Halide_Plugin INTERFACE ${Halide_INCLUDE_PATH})
         add_dependencies(Halide_Plugin Halide)
     endif ()
 else ()

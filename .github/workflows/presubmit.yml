@@ -15,11 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: DoozyX/clang-format-lint-action@v0.5
+      - uses: DoozyX/clang-format-lint-action@v0.7
         with:
           source: '.'
           extensions: 'h,c,cpp'
-          clangFormatVersion: 9
+          clangFormatVersion: 10
   check_clang_tidy:
     name: Check clang-tidy
     runs-on: ubuntu-latest
@@ -27,15 +27,16 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install clang-tidy
         run: |
-          sudo apt-get install llvm-9 clang-9 libclang-9-dev clang-tidy-9
+          sudo apt-get update
+          sudo apt-get install llvm-10 clang-10 libclang-10-dev clang-tidy-10
           sudo apt-get remove llvm-8 clang-8 libclang-8-dev clang-tidy-8
       - name: Build Compilation DB
         run: |
-          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DLLVM_DIR=/usr/lib/llvm-9/lib/cmake/llvm -S . -B build
+          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DLLVM_DIR=/usr/lib/llvm-10/lib/cmake/llvm -S . -B build
           [ -a build/compile_commands.json ]
       - name: Run clang-tidy
         run: |
-          clang-tidy-9 --quiet -extra-arg=-Wno-unknown-warning-option -p build src/*.cpp
+          clang-tidy-10 --quiet -extra-arg=-Wno-unknown-warning-option -p build src/*.cpp
   check_cmake_file_lists:
     name: Check CMake file lists
     runs-on: ubuntu-latest

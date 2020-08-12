@@ -6,7 +6,7 @@
 if (NOT BUILD_SHARED_LIBS)
     if (MSVC)
         message(FATAL_ERROR "Autoscheduler plugins cannot be built against static Halide on Windows")
-    endif()
+    endif ()
 
     # Need to enable exports for the plugins to find Halide's symbols.
     set(CMAKE_ENABLE_EXPORTS ON)
@@ -81,7 +81,10 @@ target_link_libraries(demo_apps_autoscheduler PRIVATE demo Halide::RunGenMain)
 add_test(NAME demo_apps_autoscheduler
          COMMAND demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
 
-set_tests_properties(demo_apps_autoscheduler PROPERTIES LABELS Adams2019)
+set_tests_properties(demo_apps_autoscheduler
+                     PROPERTIES
+                     LABELS Adams2019
+                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 # =================================================================
 # TODO(#4053): move this to a separate folder since it's a demo/app
@@ -100,7 +103,10 @@ target_link_libraries(demo_included_schedule_file PRIVATE included_schedule_file
 add_test(NAME demo_included_schedule_file
          COMMAND demo_included_schedule_file --benchmarks=all --benchmark_min_time=1 --estimate_all)
 
-set_tests_properties(demo_included_schedule_file PROPERTIES LABELS Adams2019)
+set_tests_properties(demo_included_schedule_file
+                     PROPERTIES
+                     LABELS Adams2019
+                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 # ====================================================
 # Auto-tuning support utilities.
@@ -126,14 +132,17 @@ add_test(NAME test_apps_autoscheduler
 
 set_tests_properties(test_apps_autoscheduler PROPERTIES
                      LABELS Adams2019
-                     ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>")
+                     ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>;HL_TARGET=${Halide_TARGET}")
 
 ##
 
 add_executable(test_perfect_hash_map test_perfect_hash_map.cpp)
 
 add_test(NAME test_perfect_hash_map COMMAND test_perfect_hash_map)
-set_tests_properties(test_perfect_hash_map PROPERTIES LABELS Adams2019)
+set_tests_properties(test_perfect_hash_map
+                     PROPERTIES
+                     LABELS Adams2019
+                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 ##
 
@@ -141,4 +150,7 @@ add_executable(test_function_dag test_function_dag.cpp FunctionDAG.cpp ASLog.cpp
 target_link_libraries(test_function_dag PRIVATE Halide::Halide Halide::Tools)
 
 add_test(NAME test_function_dag COMMAND test_function_dag)
-set_tests_properties(test_function_dag PROPERTIES LABELS Adams2019)
+set_tests_properties(test_function_dag
+                     PROPERTIES
+                     LABELS Adams2019
+                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")

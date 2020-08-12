@@ -10,9 +10,11 @@ if ("${LLVM_PACKAGE_VERSION}" VERSION_LESS 9.0)
     message(FATAL_ERROR "LLVM version must be 9.0 or newer")
 endif ()
 
-if ("${LLVM_PACKAGE_VERSION}" VERSION_GREATER 11.0)
-    message(WARNING "Halide is not tested on LLVM versions beyond 11.0")
+if ("${LLVM_PACKAGE_VERSION}" VERSION_GREATER 12.0)
+    message(WARNING "Halide is not tested on LLVM versions beyond 12.0")
 endif ()
+
+set(LLVM_PACKAGE_VERSION "${LLVM_PACKAGE_VERSION}" CACHE INTERNAL "The version of the LLVM in use")
 
 ##
 # Promote executable targets from LLVM
@@ -48,81 +50,55 @@ function(check_llvm_target TARGET HAS_TARGET)
     endif ()
 endfunction()
 
-check_llvm_target(AArch64 WITH_AARCH64)
-check_llvm_target(AMDGPU WITH_AMDGPU)
-check_llvm_target(ARM WITH_ARM)
-check_llvm_target(Hexagon WITH_HEXAGON)
-check_llvm_target(Mips WITH_MIPS)
-check_llvm_target(NVPTX WITH_NVPTX)
-check_llvm_target(PowerPC WITH_POWERPC)
-check_llvm_target(RISCV WITH_RISCV)
-check_llvm_target(WebAssembly WITH_WEBASSEMBLY)
-check_llvm_target(X86 WITH_X86)
-
 ##
 # Create options that are initialized based on LLVM's config
 ##
 
 set(LLVM_COMPONENTS mcjit bitwriter linker passes)
+set(known_components AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
 
-option(TARGET_AARCH64 "Include AARCH64 (arm64) target" ${WITH_AARCH64})
-if (TARGET_AARCH64)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_AARCH64)
-    list(APPEND LLVM_COMPONENTS AArch64)
+# We don't support LLVM10 or below for wasm codegen.
+if (LLVM_PACKAGE_VERSION VERSION_LESS 11.0)
+    list(REMOVE_ITEM known_components WebAssembly)
 endif ()
 
-option(TARGET_AMDGPU "Include AMDGPU target" ${WITH_AMDGPU})
-if (TARGET_AMDGPU)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_AMDGPU)
-    list(APPEND LLVM_COMPONENTS AMDGPU)
-endif ()
+foreach (comp IN LISTS known_components)
+    string(TOUPPER "TARGET_${comp}" OPTION)
+    string(TOUPPER "WITH_${comp}" DEFINE)
 
-option(TARGET_ARM "Include ARM target" ${WITH_ARM})
-if (TARGET_ARM)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_ARM)
-    list(APPEND LLVM_COMPONENTS ARM)
-endif ()
+    check_llvm_target(${comp} present)
+    option(${OPTION} "Include ${comp} target" ${present})
+    if (${OPTION})
+        target_compile_definitions(Halide_LLVM INTERFACE ${DEFINE})
+        list(APPEND LLVM_COMPONENTS ${comp})
+    endif ()
+endforeach ()
 
-option(TARGET_HEXAGON "Include Hexagon target" ${WITH_HEXAGON})
-if (TARGET_HEXAGON)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_HEXAGON)
-    list(APPEND LLVM_COMPONENTS Hexagon)
-endif ()
-
-option(TARGET_MIPS "Include MIPS target" ${WITH_MIPS})
-if (TARGET_MIPS)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_MIPS)
-    list(APPEND LLVM_COMPONENTS Mips)
-endif ()
-
-option(TARGET_PTX "Include PTX target" ${WITH_NVPTX})
-if (TARGET_PTX)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_PTX)
-    list(APPEND LLVM_COMPONENTS NVPTX)
-endif ()
-
-option(TARGET_POWERPC "Include POWERPC target" ${WITH_POWERPC})
-if (TARGET_POWERPC)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_POWERPC)
-    list(APPEND LLVM_COMPONENTS PowerPC)
-endif ()
-
-option(TARGET_RISCV "Include RISCV target" ${WITH_RISCV})
-if (TARGET_RISCV)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_RISCV)
-    list(APPEND LLVM_COMPONENTS RISCV)
-endif ()
-
-option(TARGET_WEBASSEMBLY "Include WebAssembly target" ${WITH_WEBASSEMBLY})
 if (TARGET_WEBASSEMBLY)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_WEBASSEMBLY)
-    list(APPEND LLVM_COMPONENTS WebAssembly)
-endif ()
+    ##
+    # lld libraries -- inexplicably, LLVM doesn't put these in the CMake imports,
+    # but we need them, so let's fake it here:
+    ##
+    find_library(LLD_WASM lldWasm HINTS ${LLVM_LIBRARY_DIRS})
+    add_library(LLDWasm STATIC IMPORTED)
+    set_target_properties(LLDWasm PROPERTIES IMPORTED_LOCATION ${LLD_WASM})
 
-option(TARGET_X86 "Include x86 target" ${WITH_X86})
-if (TARGET_X86)
-    target_compile_definitions(Halide_LLVM INTERFACE WITH_X86)
-    list(APPEND LLVM_COMPONENTS X86)
+    find_library(LLD_COMMON lldCommon HINTS ${LLVM_LIBRARY_DIRS})
+    add_library(LLDCommon STATIC IMPORTED)
+    set_target_properties(LLDCommon PROPERTIES IMPORTED_LOCATION ${LLD_COMMON})
+
+    if (NOT LLD_WASM OR NOT LLD_COMMON)
+        message(WARNING
+                "Could not find both lldWasm and lldCommon in ${LLVM_LIBRARY_DIRS}. "
+                "Configure with -DTARGET_WEBASSEMBLY=NO to suppress. "
+                "Do you need to install liblld-${LLVM_VERSION_MAJOR}?")
+    else ()
+        target_link_libraries(Halide_LLVM INTERFACE LLDWasm LLDCommon)
+
+        # lto and options aren't needed to *generate* WebAssembly, but they
+        # are needed to link in LLDWasm.
+        list(APPEND LLVM_COMPONENTS lto option)
+    endif ()
 endif ()
 
 ##
@@ -203,6 +179,5 @@ install(TARGETS Halide_LanguageOptions EXPORT Halide_Targets)
 # fully private implementation detail as far as CMake is concerned, so it
 # then doesn't need to expose any LLVM-related dependencies through targets.
 if (NOT BUILD_SHARED_LIBS)
-    install(TARGETS Halide_LLVM
-            EXPORT Halide_Targets)
+    install(TARGETS Halide_LLVM EXPORT Halide_Targets)
 endif ()

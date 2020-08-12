@@ -4,6 +4,7 @@
 
 #include "Argument.h"
 #include "AutoSchedule.h"
+#include "CodeGen_Internal.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "IRVisitor.h"
@@ -178,7 +179,7 @@ void Pipeline::auto_schedule_Mullapudi2016(const Pipeline &pipeline, const Targe
 
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
                 target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "The Mullapudi2016 autoscheduler is currently supported only on these architectures." << (int)target.arch;
+        << "The Mullapudi2016 autoscheduler is not supported for the target: " << target;
     results.scheduler_name = "Mullapudi2016";
     results.schedule_source = generate_schedules(pipeline.contents->outputs, target, arch_params);
     // this autoscheduler has no featurization
@@ -416,10 +417,15 @@ class FindExterns : public IRGraphVisitor {
                 // separate call per lane. Not sure there is anywhere to get
                 // information to make a distinction in the current design.
                 std::vector<Type> arg_types;
+                if (function_takes_user_context(op->name)) {
+                    arg_types.push_back(type_of<void *>());
+                }
                 for (Expr e : op->args) {
                     arg_types.push_back(e.type().element_of());
                 }
-                ExternCFunction f(address, ExternSignature(op->type.element_of(), op->type.bits() == 0, arg_types));
+                bool is_void_return = op->type.bits() == 0 || op->name == "halide_print";
+                ExternSignature sig(is_void_return ? Type() : op->type.element_of(), is_void_return, arg_types);
+                ExternCFunction f(address, sig);
                 JITExtern jit_extern(f);
                 debug(2) << "FindExterns adds: " << op->name << "\n";
                 externs.emplace(op->name, jit_extern);
@@ -1158,13 +1164,9 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_map) {
-    if (!contents->jit_module.compiled() ||
-        contents->jit_target.has_feature(Target::NoBoundsQuery)) {
-        Target target = get_jit_target_from_environment();
-        target.set_feature(Target::NoBoundsQuery, false);
-        compile_jit(target);
-    }
+void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, const ParamMap &param_map) {
+    user_assert(!target.has_feature(Target::NoBoundsQuery)) << "You may not call infer_input_bounds() with Target::NoBoundsQuery set.";
+    compile_jit(target);
 
     // This has to happen after a runtime has been compiled in compile_jit.
     JITFuncCallContext jit_context(jit_handlers());
@@ -1268,6 +1270,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
 }
 
 void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
+                                  const Target &target,
                                   const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
 
@@ -1282,7 +1285,7 @@ void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size
         bufs.emplace_back(t, size);
     }
     Realization r(bufs);
-    infer_input_bounds(r, param_map);
+    infer_input_bounds(r, target, param_map);
 }
 
 void Pipeline::invalidate_cache() {
