@@ -523,7 +523,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
         done
 
         wait "${waitlist[@]}"
-        COMPILE_TIME=$(("SECONDS"-CUR_SECONDS))
+        COMPILE_TIME=$((SECONDS-CUR_SECONDS))
         echo "Compile time for batch: ${COMPILE_TIME}"
 
         # benchmark them serially using rungen
@@ -538,7 +538,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
                 done
                 wait
             done
-            BENCHMARK_TIME=$(("SECONDS"-CUR_SECONDS))
+            BENCHMARK_TIME=$((SECONDS-CUR_SECONDS))
             echo "Benchmark time for batch: ${BENCHMARK_TIME}"
         fi
     done
@@ -553,7 +553,7 @@ echo Retraining model...
 
 CUR_SECONDS="$SECONDS"
 retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
-TRAIN_TIME=$(("SECONDS"-CUR_SECONDS))
+TRAIN_TIME=$((SECONDS-CUR_SECONDS))
 echo "Train time for batch: ${TRAIN_TIME}"
 
 if [[ $TRAIN_ONLY == 1 ]]; then
