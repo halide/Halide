@@ -377,13 +377,15 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
                 for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                     auto state = q[choice_label];
                     aslog(0) << "\n[" << choice_label << "]:\n";
-                    state->dump();
                     //state->calculate_cost(dag, params, target, cost_model, stats, true);
+                    state->dump();
                 }
 
                 int next_node = q[0]->num_decisions_made / 2;
-                const FunctionDAG::Node *node = &dag.nodes[next_node];
-                aslog(0) << "\nNext node to be scheduled: " << node->func.name() << "\n";
+                if (next_node < (int)dag.nodes.size()) {
+                    const FunctionDAG::Node *node = &dag.nodes[next_node];
+                    aslog(0) << "\nNext node to be scheduled: " << node->func.name() << "\n";
+                }
             }
             cost_model->evaluate_costs();
 
