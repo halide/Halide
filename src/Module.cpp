@@ -761,8 +761,6 @@ void compile_multitarget(const std::string &fn_name,
     user_assert(!targets.empty()) << "Must specify at least one target.\n";
     user_assert(suffixes.empty() || suffixes.size() == targets.size())
         << "The suffixes list must be empty or the same length as the targets list.\n";
-    user_assert(((int)contains(output_files, Output::object) + (int)contains(output_files, Output::static_library)) == 1)
-        << "compile_multitarget() expects exactly one of 'object' and 'static_library' to be specified.\n";
 
     // The final target in the list is considered "baseline", and is used
     // for (e.g.) the runtime and shared code. It is often just os-bits-arch
@@ -780,6 +778,9 @@ void compile_multitarget(const std::string &fn_name,
         module_factory(fn_name, base_target).compile(output_files);
         return;
     }
+
+    user_assert(((int)contains(output_files, Output::object) + (int)contains(output_files, Output::static_library)) == 1)
+        << "compile_multitarget() expects exactly one of 'object' and 'static_library' to be specified when multiple targets are specified.\n";
 
     // For safety, the runtime must be built only with features common to all
     // of the targets; given an unusual ordering like
