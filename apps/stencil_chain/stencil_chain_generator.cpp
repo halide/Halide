@@ -56,6 +56,7 @@ public:
             // fastest on this GPU, plus some unrolling to share loads
             // between adjacent pixels.
             Var xi, yi, xii, yii;
+            stages.push_back(output);
             for (size_t i = 1; i < stages.size(); i++) {
                 Func &s = stages[i];
                 x = s.args()[0];
