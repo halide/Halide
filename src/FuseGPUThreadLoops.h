@@ -24,6 +24,9 @@ Stmt zero_gpu_loop_mins(const Stmt &s);
  * allocated outside the kernel. */
 Stmt fuse_gpu_thread_loops(Stmt s);
 
+/** Helper to check if a statement has GPU synchronization logic in it. */
+bool contains_warp_synchronous_logic(const Stmt &s);
+
 }  // namespace Internal
 }  // namespace Halide
 

@@ -1188,7 +1188,7 @@ public:
 };
 
 class InjectThreadBarriers : public IRMutator {
-    bool in_threads;
+    bool in_threads, injected_barrier;
 
     using IRMutator::visit;
 
@@ -1228,12 +1228,14 @@ class InjectThreadBarriers : public IRMutator {
                                           op->for_type == ForType::GPUThread ||
                                           op->for_type == ForType::GPULane));
 
+        ScopedValue<bool> old_injected_barrier(injected_barrier, false);
+
         if (!is_parallel(op->for_type)) {
             Stmt body = mutate(op->body);
             // Serial for loops at the block level with internal
             // synchronization also need synchronization after each
             // loop iteration.
-            if (!in_threads && !body.same_as(op->body)) {
+            if (!in_threads && injected_barrier) {
                 // Any memory access fences should be handled by the
                 // synchronizations within the block
                 body = Block::make(body, make_barrier(0), Block::Ordered);
@@ -1289,7 +1291,6 @@ class InjectThreadBarriers : public IRMutator {
         }
 
         return IRMutator::visit(op);
-        return op;
     }
 
     Stmt visit(const Block *op) override {
@@ -1325,6 +1326,7 @@ class InjectThreadBarriers : public IRMutator {
                     break;
                 }
             }
+            injected_barrier = true;
             return Block::make({first, make_barrier(mask), rest}, Block::Ordered);
         } else {
             return IRMutator::visit(op);
@@ -1605,6 +1607,38 @@ class NormalizeIfStatements : public IRMutator {
         return IRMutator::visit(op);
     }
 };
+
+class ContainsWarpSynchronousLogic : public IRVisitor {
+public:
+    bool result = false;
+
+protected:
+    using IRVisitor::visit;
+    void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const For *op) override {
+        if (op->for_type == ForType::GPULane) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) override {
+    }
+};
+
+bool contains_warp_synchronous_logic(const Stmt &s) {
+    ContainsWarpSynchronousLogic c;
+    s.accept(&c);
+    return c.result;
+}
 
 Stmt fuse_gpu_thread_loops(Stmt s) {
     ValidateGPULoopNesting validate;

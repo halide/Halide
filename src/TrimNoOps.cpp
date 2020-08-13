@@ -3,6 +3,7 @@
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
 #include "ExprUsesVar.h"
+#include "FuseGPUThreadLoops.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -347,6 +348,11 @@ class TrimNoOps : public IRMutator {
         // Bounds of GPU loops can't depend on outer gpu loop vars
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             debug(3) << "TrimNoOps found gpu loop var: " << op->name << "\n";
+            return IRMutator::visit(op);
+        }
+
+        // Can't safely trim loops with thread barriers in them
+        if (contains_warp_synchronous_logic(op->body)) {
             return IRMutator::visit(op);
         }
 

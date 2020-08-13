@@ -5,6 +5,7 @@
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
 #include "ExprUsesVar.h"
+#include "FuseGPUThreadLoops.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -447,38 +448,6 @@ public:
     }
 };
 
-class ContainsWarpSynchronousLogic : public IRVisitor {
-public:
-    bool result = false;
-
-protected:
-    using IRVisitor::visit;
-    void visit(const Call *op) override {
-        if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-            result = true;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const For *op) override {
-        if (op->for_type == ForType::GPULane) {
-            result = true;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const Load *op) override {
-    }
-};
-
-bool contains_warp_synchronous_logic(const Stmt &s) {
-    ContainsWarpSynchronousLogic c;
-    s.accept(&c);
-    return c.result;
-}
-
 class PartitionLoops : public IRMutator {
     using IRMutator::visit;
 
@@ -491,8 +460,8 @@ class PartitionLoops : public IRMutator {
                                                            CodeGen_GPU_Dev::is_gpu_var(op->name));
 
         // If we're inside GPU kernel, and the body contains thread
-        // barriers or warp shuffles, it's not safe to partition parallel loops.
-        if (is_parallel(op->for_type) && in_gpu_loop && contains_warp_synchronous_logic(op)) {
+        // barriers or warp shuffles, it's not safe to partition loops.
+        if (in_gpu_loop && contains_warp_synchronous_logic(op)) {
             return IRMutator::visit(op);
         }
 
