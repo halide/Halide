@@ -1272,17 +1272,21 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, 
 void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
                                   const Target &target,
                                   const ParamMap &param_map) {
+    vector<int32_t> sizes;
+    if (x_size) sizes.push_back(x_size);
+    if (y_size) sizes.push_back(y_size);
+    if (z_size) sizes.push_back(z_size);
+    if (w_size) sizes.push_back(w_size);
+    infer_input_bounds(sizes, target, param_map);
+}
+
+void Pipeline::infer_input_bounds(const std::vector<int32_t> &sizes,
+                                  const Target &target,
+                                  const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
-
-    vector<int> size;
-    if (x_size) size.push_back(x_size);
-    if (y_size) size.push_back(y_size);
-    if (z_size) size.push_back(z_size);
-    if (w_size) size.push_back(w_size);
-
     vector<Buffer<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
-        bufs.emplace_back(t, size);
+        bufs.emplace_back(t, sizes);
     }
     Realization r(bufs);
     infer_input_bounds(r, target, param_map);
