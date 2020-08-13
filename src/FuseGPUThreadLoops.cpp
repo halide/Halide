@@ -1050,7 +1050,7 @@ public:
 };
 
 class InjectThreadBarriers : public IRMutator {
-    bool in_threads;
+    bool in_threads, injected_barrier;
 
     using IRMutator::visit;
 
@@ -1090,12 +1090,14 @@ class InjectThreadBarriers : public IRMutator {
                                           op->for_type == ForType::GPUThread ||
                                           op->for_type == ForType::GPULane));
 
+        ScopedValue<bool> old_injected_barrier(injected_barrier, false);
+
         if (!is_parallel(op->for_type)) {
             Stmt body = mutate(op->body);
             // Serial for loops at the block level with internal
             // synchronization also need synchronization after each
             // loop iteration.
-            if (!in_threads && !body.same_as(op->body)) {
+            if (!in_threads && injected_barrier) {
                 // Any memory access fences should be handled by the
                 // synchronizations within the block
                 body = Block::make(body, make_barrier(0));
@@ -1151,7 +1153,6 @@ class InjectThreadBarriers : public IRMutator {
         }
 
         return IRMutator::visit(op);
-        return op;
     }
 
     Stmt visit(const Block *op) override {
@@ -1184,7 +1185,8 @@ class InjectThreadBarriers : public IRMutator {
                     break;
                 }
             }
-            return Block::make(Block::make(first, make_barrier(mask)), rest);
+            injected_barrier = true;
+            return Block::make({first, make_barrier(mask), rest});
         } else {
             return IRMutator::visit(op);
         }
