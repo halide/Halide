@@ -41,7 +41,7 @@ if [ ${#GENERATOR_ARGS_SETS_ARRAY[@]} -eq 0 ]; then
 fi
 
 COMPILATION_TIMEOUT=600s
-BENCHMARKING_TIMEOUT=60s
+BENCHMARKING_TIMEOUT=10s
 
 if [ -z ${HL_TARGET} ]; then
 # Use the host target -- but remove features that we don't want to train
@@ -92,7 +92,7 @@ echo Local number of cores detected as ${LOCAL_CORES}
 # benchmarked serially.
 BATCH_SIZE=${LOCAL_CORES}
 NUM_CORES=80
-EPOCHS=500
+EPOCHS=200
 NUM_GPUS=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
 
 echo "# GPUs = ${NUM_GPUS}"
