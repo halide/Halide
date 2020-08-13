@@ -204,14 +204,17 @@ make_featurization() {
         return
     fi
 
-    CMD="c++ \
+    LIBPNG_CFLAGS=$(libpng-config --cflags)
+    LIBPNG_LIBS=$(libpng-config --ldflags)
+    CMD="${CXX} \
         -std=c++11 \
         -I ../../include \
+        ${LIBPNG_CFLAGS} \
         ../../tools/RunGenMain.cpp \
         ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
-        -ljpeg -lpng16 -ldl -lpthread"
+        -ljpeg ${LIBPNG_LIBS} -ldl -lpthread"
 
     eval $CMD
     FAILED=0

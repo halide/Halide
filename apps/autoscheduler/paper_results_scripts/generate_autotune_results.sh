@@ -32,7 +32,7 @@ find_halide HALIDE_ROOT
 build_autoscheduler_tools ${HALIDE_ROOT}
 get_absolute_autoscheduler_bin_dir ${HALIDE_ROOT} AUTOSCHED_BIN
 
-export CXX="ccache c++"
+export CXX="ccache ${CXX}"
 
 export HL_MACHINE_PARAMS=80,24000000,160
 
