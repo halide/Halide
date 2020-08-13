@@ -763,7 +763,7 @@ void compile_multitarget(const std::string &fn_name,
         << "The suffixes list must be empty or the same length as the targets list.\n";
 
     // The final target in the list is considered "baseline", and is used
-    // for (e.g.) the runtime and shared code. It is often just os-bits-arch
+    // for (e.g.) the runtime and shared code. It is often just arch-bits-os
     // with no other features (though this is *not* a requirement).
     const Target &base_target = targets.back();
 
