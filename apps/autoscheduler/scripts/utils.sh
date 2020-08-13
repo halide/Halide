@@ -337,7 +337,7 @@ function extract_best_sample_details() {
 function save_best_schedule_result() {
     local -r results_dir=$1
     local -r samples_dir=$2
-    mkdir ${results_dir}
+    mkdir -p ${results_dir}
 
     local -r app=$(basename $(dirname $samples_dir))
 
