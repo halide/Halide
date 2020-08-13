@@ -752,15 +752,20 @@ public:
 void compile_multitarget(const std::string &fn_name,
                          const std::map<Output, std::string> &output_files,
                          const std::vector<Target> &targets,
+                         const std::vector<std::string> &suffixes,
                          const ModuleFactory &module_factory,
                          const CompilerLoggerFactory &compiler_logger_factory) {
     validate_outputs(output_files);
 
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";
     user_assert(!targets.empty()) << "Must specify at least one target.\n";
+    user_assert(suffixes.empty() || suffixes.size() == targets.size())
+        << "The suffixes list must be empty or the same length as the targets list.\n";
+    user_assert(((int)contains(output_files, Output::object) + (int)contains(output_files, Output::static_library)) == 1)
+        << "compile_multitarget() expects exactly one of 'object' and 'static_library' to be specified.\n";
 
     // The final target in the list is considered "baseline", and is used
-    // for (e.g.) the runtime and shared code. It is often just os-arch-bits
+    // for (e.g.) the runtime and shared code. It is often just os-bits-arch
     // with no other features (though this is *not* a requirement).
     const Target &base_target = targets.back();
 
@@ -775,13 +780,6 @@ void compile_multitarget(const std::string &fn_name,
         module_factory(fn_name, base_target).compile(output_files);
         return;
     }
-
-    // You can't ask for .o files when doing this; it's not really useful,
-    // and would complicate output (we might have to do multiple passes
-    // if different values for NoRuntime are specified)... so just forbid
-    // it up front.
-    user_assert(!contains(output_files, Output::object))
-        << "Cannot request 'object' when using multiple Targets. Use 'static_library' instead.\n";
 
     // For safety, the runtime must be built only with features common to all
     // of the targets; given an unusual ordering like
@@ -803,7 +801,11 @@ void compile_multitarget(const std::string &fn_name,
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
-    for (const Target &target : targets) {
+
+    for (size_t i = 0; i < targets.size(); ++i) {
+        const Target &target = targets[i];
+        const std::string target_label = suffixes.empty() ? target.to_string() : suffixes[i];
+
         // arch-bits-os must be identical across all targets.
         if (target.os != base_target.os ||
             target.arch != base_target.arch ||
@@ -830,7 +832,7 @@ void compile_multitarget(const std::string &fn_name,
         }
 
         // Each sub-target has a function name that is the 'real' name plus a suffix
-        std::string suffix = "_" + replace_all(target.to_string(), "-", "_");
+        std::string suffix = "_" + replace_all(target_label, "-", "_");
         std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
@@ -848,10 +850,13 @@ void compile_multitarget(const std::string &fn_name,
             base_target_args = sub_module.get_function_by_name(sub_fn_name).args;
 
             auto sub_out = add_suffixes(output_files, suffix);
-            internal_assert(contains(output_files, Output::static_library));
-            sub_out[Output::object] = temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), suffix, target);
+            if (contains(output_files, Output::static_library)) {
+                sub_out[Output::object] = temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), suffix, target);
+                sub_out.erase(Output::static_library);
+            }
             sub_out.erase(Output::registration);
             sub_out.erase(Output::schedule);
+            sub_out.erase(Output::c_header);
             if (contains(sub_out, Output::compiler_log)) {
                 sub_out[Output::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(Output::static_library), suffix, target);
             }
@@ -905,9 +910,12 @@ void compile_multitarget(const std::string &fn_name,
                 runtime_target.set_feature((Target::Feature)i);
             }
         }
+        std::string runtime_path = contains(output_files, Output::static_library) ?
+                                       temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), "_runtime", runtime_target) :
+                                       add_suffix(output_files.at(Output::object), "_runtime");
+
         std::map<Output, std::string> runtime_out =
-            {{Output::object,
-              temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), "_runtime", runtime_target)}};
+            {{Output::object, runtime_path}};
         debug(1) << "compile_multitarget: compile_standalone_runtime " << runtime_out.at(Output::object) << "\n";
         compile_standalone_runtime(runtime_out, runtime_target);
     }
@@ -939,8 +947,11 @@ void compile_multitarget(const std::string &fn_name,
         Module wrapper_module(fn_name, wrapper_target);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
-        std::map<Output, std::string> wrapper_out = {{Output::object,
-                                                      temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), "_wrapper", base_target, /* in_front*/ true)}};
+        std::string wrapper_path = contains(output_files, Output::static_library) ?
+                                       temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), "_wrapper", base_target, /* in_front*/ true) :
+                                       add_suffix(output_files.at(Output::object), "_wrapper");
+
+        std::map<Output, std::string> wrapper_out = {{Output::object, wrapper_path}};
         debug(1) << "compile_multitarget: wrapper " << wrapper_out.at(Output::object) << "\n";
         wrapper_module.compile(wrapper_out);
     }

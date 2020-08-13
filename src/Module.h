@@ -209,6 +209,7 @@ using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLo
 void compile_multitarget(const std::string &fn_name,
                          const std::map<Output, std::string> &output_files,
                          const std::vector<Target> &targets,
+                         const std::vector<std::string> &suffixes,
                          const ModuleFactory &module_factory,
                          const CompilerLoggerFactory &compiler_logger_factory = nullptr);
 

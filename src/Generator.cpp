@@ -1013,7 +1013,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 gen->set_generator_param_values(sub_generator_args);
                 return build_gradient_module ? gen->build_gradient_module(name) : gen->build_module(name);
             };
-            compile_multitarget(function_name, output_files, targets, module_factory, compiler_logger_factory);
+            compile_multitarget(function_name, output_files, targets, target_strings, module_factory, compiler_logger_factory);
         }
     }
 

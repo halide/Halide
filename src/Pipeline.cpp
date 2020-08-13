@@ -51,6 +51,15 @@ std::map<Output, std::string> static_library_outputs(const string &filename_pref
     return outputs;
 }
 
+std::map<Output, std::string> object_file_outputs(const string &filename_prefix, const Target &target) {
+    auto ext = get_output_info(target);
+    std::map<Output, std::string> outputs = {
+        {Output::c_header, filename_prefix + ext.at(Output::c_header).extension},
+        {Output::object, filename_prefix + ext.at(Output::object).extension},
+    };
+    return outputs;
+}
+
 }  // namespace
 
 struct PipelineContents {
@@ -344,7 +353,18 @@ void Pipeline::compile_to_multitarget_static_library(const std::string &filename
         return compile_to_module(args, name, target);
     };
     auto outputs = static_library_outputs(filename_prefix, targets.back());
-    compile_multitarget(generate_function_name(), outputs, targets, module_producer);
+    compile_multitarget(generate_function_name(), outputs, targets, {}, module_producer);
+}
+
+void Pipeline::compile_to_multitarget_object_files(const std::string &filename_prefix,
+                                                   const std::vector<Argument> &args,
+                                                   const std::vector<Target> &targets,
+                                                   const std::vector<std::string> &suffixes) {
+    auto module_producer = [this, &args](const std::string &name, const Target &target) -> Module {
+        return compile_to_module(args, name, target);
+    };
+    auto outputs = object_file_outputs(filename_prefix, targets.back());
+    compile_multitarget(generate_function_name(), outputs, targets, suffixes, module_producer);
 }
 
 void Pipeline::compile_to_file(const string &filename_prefix,
