@@ -25,6 +25,8 @@ source $(dirname $0)/../scripts/utils.sh
 
 BEST_SCHEDULES_DIR=$(dirname $0)/best
 
+mkdir -p ${BEST_SCHEDULES_DIR}
+
 find_halide HALIDE_ROOT
 
 build_autoscheduler_tools ${HALIDE_ROOT}
