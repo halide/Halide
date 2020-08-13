@@ -31,7 +31,10 @@ set(SOURCES
 
 pybind11_add_module(Halide_Python MODULE SYSTEM ${SOURCES})
 add_library(Halide::Python ALIAS Halide_Python)
-set_target_properties(Halide_Python PROPERTIES LIBRARY_OUTPUT_NAME halide)
+set_target_properties(Halide_Python
+                      PROPERTIES
+                      LIBRARY_OUTPUT_NAME halide
+                      EXPORT_NAME Python)
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
 if (WIN32 AND BUILD_SHARED_LIBS)

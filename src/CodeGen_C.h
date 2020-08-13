@@ -83,7 +83,6 @@ protected:
     /** Emit a statement */
     void print_stmt(const Stmt &);
 
-    void create_assertion(const std::string &id_cond, const std::string &id_msg);
     void create_assertion(const std::string &id_cond, const Expr &message);
     void create_assertion(const Expr &cond, const Expr &message);
 

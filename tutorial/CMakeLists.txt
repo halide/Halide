@@ -50,11 +50,11 @@ add_tutorial(lesson_07_multi_stage_pipelines.cpp WITH_IMAGE_IO)
 add_tutorial(lesson_08_scheduling_2.cpp WITH_IMAGE_IO WITH_OPENMP)
 add_tutorial(lesson_09_update_definitions.cpp WITH_IMAGE_IO WITH_OPENMP)
 
-if (TARGET_PTX)
+if (TARGET_NVPTX)
     if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
         # TODO: Requires custom build rules to work under wasm.
         message(WARNING "Not all tutorials build under WASM.")
-    else()
+    else ()
         # Tutorial 10 requires that we build generation code, then run it,
         # so we can build the final executable.
         add_tutorial(lesson_10_aot_compilation_generate.cpp)
@@ -193,7 +193,7 @@ add_tutorial(lesson_20_cloning_funcs.cpp)
 if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
     # TODO: Requires custom build rules to work under wasm
     message(WARNING "Not all tutorials build under WASM.")
-else()
+else ()
     add_executable(lesson_21_auto_scheduler_generate lesson_21_auto_scheduler_generate.cpp)
     target_link_libraries(lesson_21_auto_scheduler_generate PRIVATE Halide::Generator)
 
@@ -208,4 +208,4 @@ else()
 
     add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND lesson_21_auto_scheduler_run)
     set_tests_properties(tutorial_lesson_21_auto_scheduler_run PROPERTIES LABELS tutorial)
-endif()
+endif ()

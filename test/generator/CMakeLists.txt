@@ -53,13 +53,14 @@ function(halide_define_aot_wasm_test NAME)
     endif ()
 
     add_wasm_executable("${TARGET}"
-        SRCS "${NAME}_aottest.cpp"
-        DEPS "${DEPS}"
-        INCLUDES  "${Halide_BINARY_DIR}/include"
-                  "${Halide_SOURCE_DIR}/test/common"
-                  "${Halide_SOURCE_DIR}/tools"
-                  "${CMAKE_CURRENT_BINARY_DIR}"
-    )
+                        SRCS "${NAME}_aottest.cpp"
+                        DEPS "${DEPS}"
+                        INCLUDES
+                        "${Halide_BINARY_DIR}/include"
+                        "${Halide_SOURCE_DIR}/test/common"
+                        "${Halide_SOURCE_DIR}/tools"
+                        "${CMAKE_CURRENT_BINARY_DIR}"
+                        )
 
     add_wasm_halide_test("${TARGET}"
                          GROUPS generator)
@@ -281,11 +282,11 @@ halide_define_aot_test(variable_num_threads ENABLE_IF NOT ${USING_WASM})
 
 # Acquire-Release test requires CUDA
 halide_define_aot_test(acquire_release)
-if (TARGET_PTX AND Halide_TARGET MATCHES "cuda")
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
     include(AddCudaToTarget)
     add_cuda_to_target(generator_aot_acquire_release PRIVATE)
 endif ()
-if (TARGET_PTX AND Halide_TARGET MATCHES "opencl")
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
     find_package(OpenCL REQUIRED)
     target_link_libraries(generator_aot_acquire_release PRIVATE OpenCL::OpenCL)
 endif ()
@@ -305,13 +306,13 @@ if (TARGET generator_aot_autograd)
                        GENERATOR autograd
                        PARAMS "auto_schedule=true")
     target_link_libraries(generator_aot_autograd PRIVATE autograd_grad)
-endif()
+endif ()
 
 # CXX mangling generator test.
 halide_define_aot_test(cxx_mangling ENABLE_IF NOT ${USING_WASM})  # Needs extra deps / build rules
 if (TARGET cxx_mangling)
     target_link_libraries(cxx_mangling INTERFACE cxx_mangling_externs)
-    if (TARGET_PTX AND Halide_TARGET MATCHES "cuda")
+    if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
         add_halide_library(cxx_mangling_gpu
                            FROM cxx_mangling.generator
                            GENERATOR cxx_mangling
@@ -330,7 +331,7 @@ endif ()
 
 # Define extern for OpenCL
 halide_define_aot_test(define_extern_opencl)
-if (TARGET_PTX AND Halide_TARGET MATCHES "opencl")
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
     find_package(OpenCL REQUIRED)
     target_link_libraries(generator_aot_define_extern_opencl PRIVATE OpenCL::OpenCL)
 endif ()
@@ -338,7 +339,7 @@ endif ()
 # Matlab generator test
 halide_define_aot_test(matlab ENABLE_IF NOT ${USING_WASM})  # Needs matlab support. See https://github.com/halide/Halide/issues/2082
 if (TARGET generator_aot_matlab)
-  set_target_properties(generator_aot_matlab PROPERTIES ENABLE_EXPORTS True)
+    set_target_properties(generator_aot_matlab PROPERTIES ENABLE_EXPORTS True)
 endif ()
 
 # Metadata tester
