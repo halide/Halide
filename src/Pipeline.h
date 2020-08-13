@@ -159,6 +159,10 @@ private:
 
     int call_jit_code(const Target &target, const JITCallArgs &args);
 
+    // Get the value of contents->jit_target, but reality-check that the contents
+    // sensibly match the value. Return Target() if not jitted.
+    Target get_compiled_jit_target() const;
+
 public:
     /** Make an undefined Pipeline object. */
     Pipeline();
