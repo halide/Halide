@@ -441,6 +441,10 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x64_t int8x64_t_aligned_load(const 
     return *((const int8x64_t *)((int8_t*)base + offset));
 }
 
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x128_t uint8x128_t_aligned_load(const void *base, int32_t offset) {
+    return *((const uint8x128_t *)((uint8_t*)base + offset));
+}
+
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_aligned_load(const void *base, int32_t offset) {
     return *((const uint8x64_t *)((uint8_t*)base + offset));
 }
@@ -451,6 +455,13 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t int16x64_t_aligned_load(cons
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t int16x32_t_aligned_load(const void *base, int32_t offset) {
     return *((const int16x32_t *)((int16_t*)base + offset));
+}
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_load(const void *base, int32_t offset) {
+    uint8x64_t r;
+    xb_vecNx8* ptr = (xb_vecNx8*)((const uint8_t*)base + offset);
+    IVP_L2UNX8_XP(r, ptr, 0);
+    return r;
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t int16x32_t_load(const void *base, int32_t offset) {
@@ -613,9 +624,9 @@ HALIDE_ALWAYS_INLINE uint8x128_t halide_xtensa_dynamic_shuffle(const uint8x128_t
   return IVP_SHFL2NX8U(a, b);
 }
 
-//HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_dynamic_shuffle(const uint8x64_t& a, const int8x64_t& b, int min_range, int max_range) {
-//  return
-//}
+HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_dynamic_shuffle(const uint8x64_t& a, const int8x64_t& b, int min_range, int max_range) {
+  return IVP_SHFL2NX8(a, b);
+}
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_dynamic_shuffle(const int16x32_t& a, const int16x32_t& b, int min_range, int max_range) {
   return IVP_SHFLNX16(a, b);
@@ -846,11 +857,25 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_avg121_round_i16(const int16x32_t&
   return IVP_PACKVRNRNX48(result, 2);
 }
 
-//inline int16x32_t convert_to_int16x64_t_from_uint8x64_t(const uint8x64_t& src) {
-//  xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src);
-//  return int16x64_t(int16x64_t::from_native_vector,
-//                    IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
-//}
+inline int16x64_t convert_to_int16x64_t_from_uint8x64_t(const uint8x64_t& src) {
+  int16x64_t result = src;
+  return result;
+}
+
+inline int8x64_t convert_to_int8x64_t_from_int16x64_t(const int16x64_t& src) {
+  int8x64_t result = src;
+  return result;
+}
+
+inline uint8x64_t convert_to_uint8x64_t_from_int16x64_t(const int16x64_t& src) {
+  uint8x64_t result = src;
+  return result;
+}
+
+inline uint16x64_t convert_to_uint16x64_t_from_uint8x64_t(const uint8x64_t& src) {
+  uint16x64_t result = src;
+  return result;
+}
 
 inline int16x32_t convert_to_int16x32_t_from_int32x32_t(const int32x32_t& src) {
   xb_vecNx48 wide = IVP_CVT48SNX32(src.native_vector[1], src.native_vector[0]);
@@ -1756,7 +1781,7 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     } else {
         string indices_name = unique_name('_');
         stream << get_indent() << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
-        rhs << print_type(op->type) << "::shuffle(" << src << ", " << indices_name << ")";
+        rhs << "halide_xtensa_dynamic_shuffle(" << src << ", " << indices_name << ")";
     }
     print_assignment(op->type, rhs.str());
 }
