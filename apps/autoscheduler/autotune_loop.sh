@@ -363,14 +363,25 @@ benchmark_sample() {
     fi
 }
 
-if [[ $BATCH_ID == 0 ]]; then
-    # Don't clobber existing samples
-    FIRST=$(ls -d ${SAMPLES}/batch_* 2>/dev/null | sed -e "s|.*/batch_||;s|_.*||" | sort -n | tail -n1)
+
+if [ $PIPELINE == "random_pipeline" ]; then
+    while [[ 1 ]]; do
+        BATCH_ID=$(od -vAn -N4 -tu4 < /dev/urandom | awk '{print $1}')
+
+        if [ ! -d "${SAMPLES}/batch_${BATCH_ID}_0" ]; then
+            break
+        fi
+    done
 else
-    FIRST=$((BATCH_ID-1))
+    if [[ $BATCH_ID == 0 ]]; then
+        # Don't clobber existing samples
+        FIRST=$(ls -d ${SAMPLES}/batch_* 2>/dev/null | sed -e "s|.*/batch_||;s|_.*||" | sort -n | tail -n1)
+    else
+        FIRST=$((BATCH_ID-1))
+    fi
+    BATCH_ID=$((FIRST+1))
 fi
 
-BATCH_ID=$((FIRST+1))
 NUM_BATCHES=1
 TOTAL_NUM_SAMPLES=$((NUM_BATCHES*BATCH_SIZE*${#GENERATOR_ARGS_SETS_ARRAY[@]}))
 
