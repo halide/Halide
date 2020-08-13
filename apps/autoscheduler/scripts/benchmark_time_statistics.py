@@ -10,7 +10,10 @@ import matplotlib.pyplot as plt
 
 def benchmark_time_statistics(timestamp):
   apps_dir = Path(__file__).absolute().parent.parent.parent
-  apps = ["bgu", "bilateral_grid", "local_laplacian", "nl_means", "lens_blur", "camera_pipe", "stencil_chain", "harris", "hist", "max_filter", "unsharp", "interpolate_generator", "conv_layer", "cuda_mat_mul", "iir_blur_generator", "depthwise_separable_conv"]
+  apps = ["bgu", "bilateral_grid", "local_laplacian", "nl_means", "lens_blur", "camera_pipe", "stencil_chain", "harris",
+          "hist", "max_filter", "unsharp", "interpolate_generator", "conv_layer", "cuda_mat_mul", "iir_blur_generator",
+          "depthwise_separable_conv", "mobilenet0", "mobilenet1", "mobilenet2", "mobilenet3", "mobilenet4",
+          "mobilenet5", "mobilenet6", "mobilenet7"]
 
   times = []
 

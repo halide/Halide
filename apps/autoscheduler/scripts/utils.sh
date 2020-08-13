@@ -395,7 +395,7 @@ function save_best_schedule_result() {
 function print_best_schedule_times() {
     local -r dir=$1
 
-    local -r apps="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur depthwise_separable_conv"
+    local -r apps="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur depthwise_separable_conv mobilenet0 mobilenet1 mobilenet2 mobilenet3 mobilenet4 mobilenet5 mobilenet6 mobilenet7"
 
     for app in $apps; do
         local file=$dir/$app.txt

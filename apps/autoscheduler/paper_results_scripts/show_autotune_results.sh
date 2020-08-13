@@ -1,7 +1,7 @@
 HALIDE=$(dirname $0)/../../..
 echo "Using Halide in " $HALIDE
 
-APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator bgu"
+APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator bgu mobilenet0 mobiletnet1 mobilenet2 mobilenet3 mobilenet4 mobilenet5 mobilenet6 mobilenet7"
 
 echo "Best time including all random samples"
 
