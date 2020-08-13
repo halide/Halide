@@ -92,7 +92,7 @@ echo Local number of cores detected as ${LOCAL_CORES}
 # benchmarked serially.
 BATCH_SIZE=${LOCAL_CORES}
 NUM_CORES=80
-EPOCHS=200
+EPOCHS=500
 NUM_GPUS=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
 
 echo "# GPUs = ${NUM_GPUS}"
@@ -366,7 +366,7 @@ benchmark_sample() {
 
 if [ $PIPELINE == "random_pipeline" ]; then
     while [[ 1 ]]; do
-        BATCH_ID=$(od -vAn -N4 -tu4 < /dev/urandom | awk '{print $1}')
+        BATCH_ID=$(od -vAn -N3 -tu4 < /dev/urandom | awk '{print $1}')
 
         if [ ! -d "${SAMPLES}/batch_${BATCH_ID}_0" ]; then
             break
