@@ -974,6 +974,11 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_concat_i32_to_i16(const in
   return IVP_PACKLNX48(wide);
 }
 
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_convert_concat_i32_to_u16(const int32x16_t& a, const int32x16_t& b) {
+  xb_vecNx48 wide = IVP_CVT48SNX32(b, a);
+  return IVP_PACKLNX48(wide);
+}
+
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_concat_u32_to_i16(const uint32x16_t& a, const uint32x16_t& b) {
   xb_vecNx48 wide = IVP_CVT48UNX32(b, a);
   return IVP_PACKLNX48(wide);
