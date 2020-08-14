@@ -1,6 +1,10 @@
 #ifndef INCLUDING_FROM_D3D12WRAPPER_CPP
 #define __ID3D12Device_FWD_DEFINED__
 #define __ID3D12Device_INTERFACE_DEFINED__
+#define __ID3D12CommandList_FWD_DEFINED__
+#define __ID3D12CommandList_INTERFACE_DEFINED__
+#define __ID3D12CommandQueue_FWD_DEFINED__
+#define __ID3D12CommandQueue_INTERFACE_DEFINED__
 #define __ID3D12DescriptorHeap_FWD_DEFINED__
 #define __ID3D12DescriptorHeap_INTERFACE_DEFINED__
 #define __ID3D12GraphicsCommandList_FWD_DEFINED__
@@ -20,11 +24,12 @@ extern PFN_D3DCOMPILE dllD3DCompile;
 extern PFN_CREATEDXGIFACORY1 dllCreateDXGIFactory1;
 
 struct ID3D12Device;
+struct ID3D12CommandList;
+struct ID3D12CommandQueue;
 struct ID3D12DescriptorHeap;
 struct ID3D12GraphicsCommandList;
 
-struct ID3D12Device
-{
+struct ID3D12Device {
 #ifndef INCLUDING_FROM_D3D12WRAPPER_CPP
     struct ID3D12Device* device;
 #else
@@ -40,8 +45,8 @@ struct ID3D12Device
 */
     HRESULT CreateCommandQueue(
         _In_ const D3D12_COMMAND_QUEUE_DESC *pDesc,
-        REFIID riid,
-        _COM_Outptr_ void **ppCommandQueue);
+        _COM_Outptr_ ID3D12CommandQueue *& ppCommandQueue);
+        //REFIID riid, _COM_Outptr_ void **ppCommandQueue);
 
     HRESULT CreateCommandAllocator(
         _In_ D3D12_COMMAND_LIST_TYPE type,
@@ -255,8 +260,88 @@ struct ID3D12Device
 */
 };
 
-struct ID3D12DescriptorHeap
-{
+struct ID3D12CommandList {
+#ifndef INCLUDING_FROM_D3D12WRAPPER_CPP
+    struct ID3D12CommandList* cmdlist;
+#else
+    ::ID3D12CommandList* cmdlist;
+#endif//INCLUDING_FROM_D3D12WRAPPER_CPP
+/*
+    D3D12_COMMAND_LIST_TYPE GetType(void);
+*/
+};
+
+struct ID3D12CommandQueue {
+#ifndef INCLUDING_FROM_D3D12WRAPPER_CPP
+    struct ID3D12CommandQueue* cmdqueue;
+#else
+    ::ID3D12CommandQueue* cmdqueue;
+#endif//INCLUDING_FROM_D3D12WRAPPER_CPP
+    ID3D12CommandQueue();
+    ~ID3D12CommandQueue();
+
+    ULONG Release(void);
+/*
+    void UpdateTileMappings(
+        _In_ ID3D12Resource * pResource,
+        UINT NumResourceRegions,
+        _In_reads_opt_(NumResourceRegions) const D3D12_TILED_RESOURCE_COORDINATE *pResourceRegionStartCoordinates,
+        _In_reads_opt_(NumResourceRegions) const D3D12_TILE_REGION_SIZE *pResourceRegionSizes,
+        _In_opt_ ID3D12Heap *pHeap,
+        UINT NumRanges,
+        _In_reads_opt_(NumRanges) const D3D12_TILE_RANGE_FLAGS *pRangeFlags,
+        _In_reads_opt_(NumRanges) const UINT *pHeapRangeStartOffsets,
+        _In_reads_opt_(NumRanges) const UINT *pRangeTileCounts,
+        D3D12_TILE_MAPPING_FLAGS Flags);
+*/
+/*
+    void CopyTileMappings(
+        _In_ ID3D12Resource * pDstResource,
+        _In_ const D3D12_TILED_RESOURCE_COORDINATE *pDstRegionStartCoordinate,
+        _In_ ID3D12Resource *pSrcResource,
+        _In_ const D3D12_TILED_RESOURCE_COORDINATE *pSrcRegionStartCoordinate,
+        _In_ const D3D12_TILE_REGION_SIZE *pRegionSize,
+        D3D12_TILE_MAPPING_FLAGS Flags);
+*/
+    void ExecuteCommandLists(
+        _In_ UINT NumCommandLists,
+        _In_reads_(NumCommandLists) ID3D12CommandList *const *ppCommandLists);
+/*
+    void SetMarker(
+        UINT Metadata,
+        _In_reads_bytes_opt_(Size) const void *pData,
+        UINT Size);
+*/
+/*
+    void BeginEvent(
+        UINT Metadata,
+        _In_reads_bytes_opt_(Size) const void *pData,
+        UINT Size);
+*/
+/*
+    void EndEvent(void);
+*/
+    HRESULT Signal(
+        ID3D12Fence * pFence,
+        UINT64 Value);
+/*
+    HRESULT Wait(
+        ID3D12Fence * pFence,
+        UINT64 Value);
+*/
+    HRESULT GetTimestampFrequency(
+        _Out_ UINT64 * pFrequency);
+/*
+    HRESULT GetClockCalibration(
+        _Out_ UINT64 * pGpuTimestamp,
+        _Out_ UINT64 * pCpuTimestamp);
+*/
+/*
+    D3D12_COMMAND_QUEUE_DESC GetDesc(void);
+*/
+};
+
+struct ID3D12DescriptorHeap {
 #ifndef INCLUDING_FROM_D3D12WRAPPER_CPP
     struct ID3D12DescriptorHeap* descheap;
 #else
@@ -274,8 +359,7 @@ struct ID3D12DescriptorHeap
     D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandleForHeapStart(void);
 };
 
-struct ID3D12GraphicsCommandList
-{
+struct ID3D12GraphicsCommandList : public ID3D12CommandList {
 #ifndef INCLUDING_FROM_D3D12WRAPPER_CPP
     struct ID3D12GraphicsCommandList* gfxcmdlist;
 #else
@@ -285,9 +369,6 @@ struct ID3D12GraphicsCommandList
     ~ID3D12GraphicsCommandList();
 
     ULONG Release(void);
-
-    // TODO(marcos): ugly hack... how to abstract it more cleanly?
-    ID3D12CommandList* base();
 
     HRESULT Close(void);
 /*

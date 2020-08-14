@@ -1421,7 +1421,7 @@ WEAK d3d12_command_queue *new_command_queue(d3d12_device *device) {
             cqDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
             cqDesc.NodeMask = 0;  // 0, for single GPU operation
         }
-        HRESULT result = (*device)->CreateCommandQueue(&cqDesc, IID_PPV_ARGS(&commandQueue));
+        HRESULT result = (*device)->CreateCommandQueue(&cqDesc, commandQueue);
         if (D3DErrorCheck(result, commandQueue, NULL, "Unable to create the Direct3D 12 command queue")) {
             return NULL;
         }
@@ -1818,7 +1818,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
 static void commit_command_list(d3d12_compute_command_list *cmdList) {
     TRACELOG;
     end_recording(cmdList);
-    ID3D12CommandList *lists[] = {(*cmdList)->base()};
+    ID3D12CommandList *lists[] = {(*cmdList)};
     (*queue)->ExecuteCommandLists(1, lists);
     cmdList->signal = __atomic_add_fetch(&queue_last_signal, 1, __ATOMIC_SEQ_CST);  // ++last_signal
     (*queue)->Signal(queue_fence, cmdList->signal);

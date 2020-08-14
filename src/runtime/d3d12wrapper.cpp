@@ -59,9 +59,16 @@ ULONG ID3D12Device::Release(void) {
 
 HRESULT ID3D12Device::CreateCommandQueue(
     _In_ const D3D12_COMMAND_QUEUE_DESC *pDesc,
-    REFIID riid,
-    _COM_Outptr_ void **ppCommandQueue) {
-        return device->CreateCommandQueue(pDesc, riid, ppCommandQueue);
+    _COM_Outptr_ ID3D12CommandQueue *& ppCommandQueue) {
+    //REFIID riid, _COM_Outptr_ void **ppCommandQueue) {
+        ::ID3D12CommandQueue* true_cmdqueue = NULL;
+        HRESULT result = device->CreateCommandQueue(pDesc, IID_PPV_ARGS(&true_cmdqueue));
+        if (FAILED(result)) {
+            return result;
+        }
+        ppCommandQueue = (ID3D12CommandQueue*)malloc(sizeof(ID3D12CommandQueue));
+        ppCommandQueue->cmdqueue = true_cmdqueue;
+        return result;
     }
 
 HRESULT ID3D12Device::CreateCommandAllocator(
@@ -92,6 +99,7 @@ HRESULT ID3D12Device::CreateCommandList(
         }
         ppCommandList = (ID3D12GraphicsCommandList*)malloc(sizeof(ID3D12GraphicsCommandList));
         ppCommandList->gfxcmdlist = true_gfxcmdlist;
+        ppCommandList->cmdlist = true_gfxcmdlist;
         return result;
     }
 
@@ -175,10 +183,43 @@ HRESULT ID3D12Device::CreateQueryHeap(
     }
 
 
+ID3D12CommandQueue::ID3D12CommandQueue()
+: cmdqueue(NULL) {
+}
+
+ID3D12CommandQueue::~ID3D12CommandQueue() {
+    Release();
+}
+
+ULONG ID3D12CommandQueue::Release(void) {
+    return cmdqueue->Release();
+}
+
+void ID3D12CommandQueue::ExecuteCommandLists(
+    _In_ UINT NumCommandLists,
+    _In_reads_(NumCommandLists) ID3D12CommandList *const *ppCommandLists) {
+        ::ID3D12CommandList** cmdlists = (::ID3D12CommandList**)_alloca(NumCommandLists*sizeof(::ID3D12CommandList*));
+        for (UINT i=0; i<NumCommandLists; ++i) {
+            cmdlists[i] = ppCommandLists[i]->cmdlist;
+        }
+        return cmdqueue->ExecuteCommandLists(NumCommandLists, cmdlists);
+    }
+
+HRESULT ID3D12CommandQueue::Signal(
+    ID3D12Fence * pFence,
+    UINT64 Value) {
+        return cmdqueue->Signal(pFence, Value);
+    }
+
+HRESULT ID3D12CommandQueue::GetTimestampFrequency(
+    _Out_ UINT64 * pFrequency) {
+        return cmdqueue->GetTimestampFrequency(pFrequency);
+    }
+
+
 
 ID3D12DescriptorHeap::ID3D12DescriptorHeap()
 :  descheap(NULL) {
-
 }
 
 ID3D12DescriptorHeap::~ID3D12DescriptorHeap() {
@@ -215,10 +256,6 @@ ULONG ID3D12GraphicsCommandList::Release(void) {
     return gfxcmdlist->Release();
 }
 
-ID3D12CommandList* ID3D12GraphicsCommandList::base() {
-    return gfxcmdlist;
-}
-
 HRESULT ID3D12GraphicsCommandList::Close(void) {
     return gfxcmdlist->Close();
 }
@@ -253,7 +290,7 @@ _In_reads_(NumBarriers) const D3D12_RESOURCE_BARRIER *pBarriers) {
 void ID3D12GraphicsCommandList::SetDescriptorHeaps(
 _In_ UINT NumDescriptorHeaps,
 _In_reads_(NumDescriptorHeaps) ID3D12DescriptorHeap *const *ppDescriptorHeaps) {
-    ::ID3D12DescriptorHeap** heaps = (::ID3D12DescriptorHeap**)_alloca(NumDescriptorHeaps*sizeof(ppDescriptorHeaps[0]->descheap));
+    ::ID3D12DescriptorHeap** heaps = (::ID3D12DescriptorHeap**)_alloca(NumDescriptorHeaps*sizeof(::ID3D12DescriptorHeap*));
     for (UINT i=0; i<NumDescriptorHeaps; ++i) {
         heaps[i] = ppDescriptorHeaps[i]->descheap;
     }
