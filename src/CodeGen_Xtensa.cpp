@@ -152,10 +152,8 @@ inline int GetCycleCount() {
 
 #define HALIDE_MAYBE_UNUSED __attribute__ ((unused))
 
-typedef xb_vecNx8 int8x64_t;
-typedef xb_vec2Nx8 int8x128_t;
-typedef xb_vecNx8U uint8x64_t;
-typedef xb_vec2Nx8U uint8x128_t;
+typedef xb_vec2Nx8 int8x64_t;
+typedef xb_vec2Nx8U uint8x64_t;
 typedef xb_vecNx16 int16x32_t;
 typedef xb_vecNx16U uint16x32_t;
 typedef xb_vecN_2x32v int32x16_t;
@@ -437,12 +435,48 @@ public:
     }
 };
 
+class uint8x128_t {
+  typedef uint8_t ElementType;
+  typedef xb_vec2Nx8U CppVectorType;
+  static const int Lanes = 128;
+public:
+
+    CppVectorType native_vector[2];
+
+    enum Empty { empty };
+    inline uint8x128_t(Empty) {}
+
+    enum FromCppVector { from_native_vector };
+    inline uint8x128_t(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
+        native_vector[0] = src1;
+        native_vector[1] = src2;
+    }
+
+   static uint8x128_t load(const void *base, int32_t offset) {
+        uint8x128_t r(empty);
+        memcpy(&r.native_vector[0], ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
+        return r;
+    }
+
+    void aligned_store(void *base, int32_t offset) const {
+        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
+    }
+
+    void store(void *base, int32_t offset) const {
+        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
+    }
+
+   static uint8x128_t concat(const uint8x64_t& a, const uint8x64_t& b) {
+        return uint8x128_t(from_native_vector, a, b);
+    }
+};
+
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x64_t int8x64_t_aligned_load(const void *base, int32_t offset) {
     return *((const int8x64_t *)((int8_t*)base + offset));
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x128_t uint8x128_t_aligned_load(const void *base, int32_t offset) {
-    return *((const uint8x128_t *)((uint8_t*)base + offset));
+    return uint8x128_t::load(base, offset);
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_aligned_load(const void *base, int32_t offset) {
@@ -460,7 +494,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t int16x32_t_aligned_load(cons
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_load(const void *base, int32_t offset) {
     uint8x64_t r;
     xb_vecNx8* ptr = (xb_vecNx8*)((const uint8_t*)base + offset);
-    IVP_L2UNX8_XP(r, ptr, 0);
+    IVP_L2U2NX8U_XP(r, ptr, 0);
     return r;
 }
 
@@ -499,6 +533,10 @@ HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_load(const void *base, const int32x
 
 HALIDE_ALWAYS_INLINE void aligned_store(const uint8x64_t& a, void *base, int32_t offset) {
     *((uint8x64_t *)((uint8_t*)base + offset)) = a;
+}
+
+HALIDE_ALWAYS_INLINE void store(const uint8x64_t& a, void *base, int32_t offset) {
+    memcpy(((uint8_t*)base + offset), &a, sizeof(uint8_t) * 64);
 }
 
 HALIDE_ALWAYS_INLINE void aligned_store(const int16x32_t& a, void *base, int32_t offset) {
@@ -620,8 +658,12 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_i16(const int16x64_t& a, int
   return IVP_SELNX16 (a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
 }
 
-HALIDE_ALWAYS_INLINE uint8x128_t halide_xtensa_dynamic_shuffle(const uint8x128_t& a, const int8x128_t& b, int min_range, int max_range) {
-  return IVP_SHFL2NX8U(a, b);
+HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_slice_start_1_u8(const uint8x128_t& a) {
+  return IVP_SEL2NX8UI(a.native_vector[1], a.native_vector[0], IVP_SELI_8B_ROTATE_RIGHT_1);
+}
+
+HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_slice_start_2_u8(const uint8x128_t& a) {
+  return IVP_SEL2NX8UI(a.native_vector[1], a.native_vector[0], IVP_SELI_8B_ROTATE_RIGHT_2);
 }
 
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_dynamic_shuffle(const uint8x64_t& a, const int8x64_t& b, int min_range, int max_range) {
@@ -857,24 +899,31 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_avg121_round_i16(const int16x32_t&
   return IVP_PACKVRNRNX48(result, 2);
 }
 
+inline uint16x64_t convert_to_uint16x64_t_from_uint8x64_t(const uint8x64_t& src) {
+  xb_vec2Nx24 wide = src;
+  return uint16x64_t(uint16x64_t::from_native_vector,
+                        IVP_CVT16U2NX24L(wide), IVP_CVT16U2NX24H(wide));
+}
+
 inline int16x64_t convert_to_int16x64_t_from_uint8x64_t(const uint8x64_t& src) {
-  int16x64_t result = src;
-  return result;
+  xb_vec2Nx24 wide = src;
+  return int16x64_t(int16x64_t::from_native_vector,
+                        IVP_CVT16S2NX24L(wide), IVP_CVT16S2NX24H(wide));
 }
 
 inline int8x64_t convert_to_int8x64_t_from_int16x64_t(const int16x64_t& src) {
-  int8x64_t result = src;
-  return result;
+  xb_vec2Nx24 wide = IVP_CVT24S2NX16(src.native_vector[1], src.native_vector[0]);
+  return IVP_PACKL2NX24(wide);
 }
 
 inline uint8x64_t convert_to_uint8x64_t_from_int16x64_t(const int16x64_t& src) {
-  uint8x64_t result = src;
-  return result;
+  xb_vec2Nx24 wide = IVP_CVT24S2NX16(src.native_vector[1], src.native_vector[0]);
+  return IVP_PACKL2NX24(wide);
 }
 
-inline uint16x64_t convert_to_uint16x64_t_from_uint8x64_t(const uint8x64_t& src) {
-  uint16x64_t result = src;
-  return result;
+inline uint8x64_t convert_to_uint8x64_t_from_uint16x64_t(const uint16x64_t& src) {
+  xb_vec2Nx24 wide = IVP_CVT24U2NX16(src.native_vector[1], src.native_vector[0]);
+  return IVP_PACKL2NX24(wide);
 }
 
 inline int16x32_t convert_to_int16x32_t_from_int32x32_t(const int32x32_t& src) {
@@ -1781,7 +1830,8 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     } else {
         string indices_name = unique_name('_');
         stream << get_indent() << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
-        rhs << "halide_xtensa_dynamic_shuffle(" << src << ", " << indices_name << ")";
+        rhs << print_type(op->type) << "::shuffle(" << src << ", " << indices_name << ")";
+        // rhs << "halide_xtensa_dynamic_shuffle(" << src << ", " << indices_name << ")";
     }
     print_assignment(op->type, rhs.str());
 }
@@ -1879,7 +1929,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         } else {
             stream << "*"
                    << "__attribute__((aligned(64))) "
-                   << " __restrict "
+                   //    << " __restrict "
                    << op_name
                    << " = ("
                    << op_type

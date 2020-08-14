@@ -164,7 +164,7 @@ public:
                 .reorder(c, x, y)
                 .unroll(c);
         } else {
-            int vec = 32; //get_target().natural_vector_size(UInt(16));
+            int vec = 32;  //get_target().natural_vector_size(UInt(16));
             bool use_hexagon = get_target().features_any_of({Target::HVX_64, Target::HVX_128});
             if (get_target().has_feature(Target::HVX_64)) {
                 vec = 32;
@@ -517,7 +517,7 @@ void CameraPipe::generate() {
         }
         strip_size = (strip_size / 2) * 2;
 
-        int vec = 32; //get_target().natural_vector_size(UInt(16));
+        int vec = 32;  //get_target().natural_vector_size(UInt(16));
         if (get_target().has_feature(Target::HVX_64)) {
             vec = 32;
         } else if (get_target().has_feature(Target::HVX_128)) {
@@ -536,7 +536,7 @@ void CameraPipe::generate() {
         denoised
             .compute_at(processed, yi)
             .store_at(processed, yo)
-                //.prefetch(input, y, 2)
+            //.prefetch(input, y, 2)
             .fold_storage(y, 16)
             .tile(x, y, x, y, xi, yi, 2 * vec, 2)
             .vectorize(xi)

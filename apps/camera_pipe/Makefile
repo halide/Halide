@@ -24,7 +24,7 @@ $(BIN)/%/camera_pipe_c.halide_generated.cpp: $(GENERATOR_BIN)/camera_pipe.genera
 
 $(BIN)/%/process: process.cpp $(BIN)/%/camera_pipe.a $(BIN)/%/camera_pipe_auto_schedule.a $(BIN)/%/camera_pipe_c.halide_generated.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -fmax-errors=5 -Wall -O2 -I$(BIN)/$* -I${XTENSA_CSTUBS_ROOT}  $^ ${XTENSA_CSTUBS_ROOT}/libcstub.a -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -Wall -O2 -I$(BIN)/$* -I${XTENSA_CSTUBS_ROOT}  $^ ${XTENSA_CSTUBS_ROOT}/libcstub.a -o $@  $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 $(BIN)/%/process_viz: process.cpp $(BIN)/%-trace_all/camera_pipe.a
 	@mkdir -p $(@D)

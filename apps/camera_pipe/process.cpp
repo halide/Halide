@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 #endif
 
     fprintf(stderr, "input: %s\n", argv[1]);
-    Buffer<uint16_t> input = load_and_convert_image(argv[1]);
+    Buffer<int16_t> input = load_and_convert_image(argv[1]);
     fprintf(stderr, "       %d %d\n", input.width(), input.height());
     Buffer<uint8_t> output(((input.width() - 32) / 32) * 32, ((input.height() - 24) / 32) * 32, 3);
 
