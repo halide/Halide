@@ -60,6 +60,11 @@ void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest 
 const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root) const {
     std::vector<const LoopNest*> ancestors;
 
+    // Innermost loop nests are never considered as compute locations
+    if (!loop->innermost) {
+        ancestors.push_back(loop);
+    }
+
     const LoopNest *cur_loop = loop;
     while (parent.count(cur_loop) > 0) {
         ancestors.push_back(parent.at(cur_loop).first);
@@ -89,6 +94,7 @@ const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *
         candidate = *it;
     }
 
+    internal_assert(!candidate->innermost);
     return candidate;
 }
 
@@ -423,9 +429,32 @@ bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 internal_error << e->producer->func.name() << " -> " << e->consumer->name << "\n";
             }
             if (loop) {
-                loop = deepest_common_ancestor(parent, l, loop);
+                if (consumer_site.inlined) {
+                    // If this func is inlined, find the deepest common ancestor
+                    // of all its inlined locations
+                    for (const auto* innermost : consumer_site.inlined_innermosts) {
+                        loop = deepest_common_ancestor(parent, innermost, loop);
+                    }
+                } else {
+                    loop = deepest_common_ancestor(parent, l, loop);
+                }
             } else {
-                loop = l;
+                if (consumer_site.inlined) {
+                    bool first = true;
+                    // If this func is inlined, find the deepest common ancestor
+                    // of all its inlined locations
+                    for (const auto* innermost : consumer_site.inlined_innermosts) {
+                        if (first) {
+                            first = false;
+                            loop = innermost;
+                            continue;
+                        }
+
+                        loop = deepest_common_ancestor(parent, innermost, loop);
+                    }
+                } else {
+                    loop = l;
+                }
             }
         }
         internal_assert(loop)
