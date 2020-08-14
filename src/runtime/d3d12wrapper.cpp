@@ -27,6 +27,21 @@ PFN_CREATEDXGIFACORY1 dllCreateDXGIFactory1 = NULL;
 
 
 
+template<typename T>
+static T* malloc_t() {
+    T* t = (T*)malloc(sizeof(T));
+    return t;
+}
+
+template<typename T>
+static T* calloc_t() {
+    T* t = malloc_t<T>();
+    memset(t, 0, sizeof(T));
+    return t;
+}
+
+
+
 HRESULT D3D12CreateDevice(_In_opt_ IUnknown * dxgiAdapter,
                           D3D_FEATURE_LEVEL MinimumFeatureLevel,
                           _COM_Outptr_opt_ ID3D12Device *& ppDevice) {
@@ -36,7 +51,7 @@ HRESULT D3D12CreateDevice(_In_opt_ IUnknown * dxgiAdapter,
     if (FAILED(result)) {
         return result;
     }
-    ppDevice = (ID3D12Device*)malloc(sizeof(ID3D12Device));
+    ppDevice = calloc_t<ID3D12Device>();
     *ppDevice = ID3D12Device(true_device);  // "constructor"
     return result;
 }
@@ -67,7 +82,7 @@ HRESULT ID3D12Device::CreateCommandQueue(
         if (FAILED(result)) {
             return result;
         }
-        ppCommandQueue = (ID3D12CommandQueue*)malloc(sizeof(ID3D12CommandQueue));
+        ppCommandQueue = malloc_t<ID3D12CommandQueue>();
         *ppCommandQueue = ID3D12CommandQueue(true_cmdqueue);    // "constructor"
         return result;
     }
@@ -98,7 +113,7 @@ HRESULT ID3D12Device::CreateCommandList(
         if (FAILED(result)) {
             return result;
         }
-        ppCommandList = (ID3D12GraphicsCommandList*)malloc(sizeof(ID3D12GraphicsCommandList));
+        ppCommandList = malloc_t<ID3D12GraphicsCommandList>();
         *ppCommandList = ID3D12GraphicsCommandList(true_gfxcmdlist);    // "constructor"
         return result;
     }
@@ -112,7 +127,7 @@ HRESULT ID3D12Device::CreateDescriptorHeap(
         if (FAILED(result)) {
             return result;
         }
-        ppvHeap = (ID3D12DescriptorHeap*)malloc(sizeof(ID3D12DescriptorHeap));
+        ppvHeap = malloc_t<ID3D12DescriptorHeap>();
         *ppvHeap = ID3D12DescriptorHeap(true_descheap); // "constructor"
         return result;
     }
