@@ -66,7 +66,7 @@ HRESULT D3D12CreateDevice(_In_opt_ IUnknown * dxgiAdapter,
 
 ID3D12Device::ID3D12Device(::ID3D12Device* d)
 : device(d) {
- }
+}
 
 ID3D12Device::~ID3D12Device() {
     // NOTE(marcos): we must NOT Release() the wrapped object here...
@@ -83,28 +83,28 @@ HRESULT ID3D12Device::CreateCommandQueue(
     _In_ const D3D12_COMMAND_QUEUE_DESC *pDesc,
     _COM_Outptr_ ID3D12CommandQueue *& ppCommandQueue) {
     //REFIID riid, _COM_Outptr_ void **ppCommandQueue) {
-        ::ID3D12CommandQueue* true_cmdqueue = NULL;
-        HRESULT result = device->CreateCommandQueue(pDesc, IID_PPV_ARGS(&true_cmdqueue));
-        if (FAILED(result)) {
-            return result;
-        }
-        ppCommandQueue = new_object(ID3D12CommandQueue, true_cmdqueue);
+    ::ID3D12CommandQueue* true_cmdqueue = NULL;
+    HRESULT result = device->CreateCommandQueue(pDesc, IID_PPV_ARGS(&true_cmdqueue));
+    if (FAILED(result)) {
         return result;
     }
+    ppCommandQueue = new_object(ID3D12CommandQueue, true_cmdqueue);
+    return result;
+}
 
 HRESULT ID3D12Device::CreateCommandAllocator(
     _In_ D3D12_COMMAND_LIST_TYPE type,
     REFIID riid,
     _COM_Outptr_ void **ppCommandAllocator) {
-        return device->CreateCommandAllocator(type, riid, ppCommandAllocator);
-    }
+    return device->CreateCommandAllocator(type, riid, ppCommandAllocator);
+}
 
 HRESULT ID3D12Device::CreateComputePipelineState(
     _In_ const D3D12_COMPUTE_PIPELINE_STATE_DESC *pDesc,
     REFIID riid,
     _COM_Outptr_ void **ppPipelineState) {
-        return device->CreateComputePipelineState(pDesc, riid, ppPipelineState);
-    }
+    return device->CreateComputePipelineState(pDesc, riid, ppPipelineState);
+}
 
 HRESULT ID3D12Device::CreateCommandList(
     _In_ UINT nodeMask,
@@ -113,32 +113,32 @@ HRESULT ID3D12Device::CreateCommandList(
     _In_opt_ ID3D12PipelineState * pInitialState,
     _COM_Outptr_ ID3D12GraphicsCommandList *& ppCommandList) {
     //REFIID riid, _COM_Outptr_ void **ppCommandList) {
-        ::ID3D12GraphicsCommandList* true_gfxcmdlist = NULL;
-        HRESULT result = device->CreateCommandList(nodeMask, type, pCommandAllocator, pInitialState, IID_PPV_ARGS(&true_gfxcmdlist));
-        if (FAILED(result)) {
-            return result;
-        }
-        ppCommandList = new_object(ID3D12GraphicsCommandList, true_gfxcmdlist);
+    ::ID3D12GraphicsCommandList* true_gfxcmdlist = NULL;
+    HRESULT result = device->CreateCommandList(nodeMask, type, pCommandAllocator, pInitialState, IID_PPV_ARGS(&true_gfxcmdlist));
+    if (FAILED(result)) {
         return result;
     }
+    ppCommandList = new_object(ID3D12GraphicsCommandList, true_gfxcmdlist);
+    return result;
+}
 
 HRESULT ID3D12Device::CreateDescriptorHeap(
     _In_ const D3D12_DESCRIPTOR_HEAP_DESC *pDescriptorHeapDesc,
     _COM_Outptr_ ID3D12DescriptorHeap *& ppvHeap) {
     //REFIID riid, _COM_Outptr_ void **ppvHeap) {
-        ::ID3D12DescriptorHeap* true_descheap = NULL;
-        HRESULT result = device->CreateDescriptorHeap(pDescriptorHeapDesc, IID_PPV_ARGS(&true_descheap));
-        if (FAILED(result)) {
-            return result;
-        }
-        ppvHeap = new_object(ID3D12DescriptorHeap, true_descheap);
+    ::ID3D12DescriptorHeap* true_descheap = NULL;
+    HRESULT result = device->CreateDescriptorHeap(pDescriptorHeapDesc, IID_PPV_ARGS(&true_descheap));
+    if (FAILED(result)) {
         return result;
     }
+    ppvHeap = new_object(ID3D12DescriptorHeap, true_descheap);
+    return result;
+}
 
 UINT ID3D12Device::GetDescriptorHandleIncrementSize(
     _In_ D3D12_DESCRIPTOR_HEAP_TYPE DescriptorHeapType) {
-        return device->GetDescriptorHandleIncrementSize(DescriptorHeapType);
-    }
+    return device->GetDescriptorHandleIncrementSize(DescriptorHeapType);
+}
 
 HRESULT ID3D12Device::CreateRootSignature(
     _In_ UINT nodeMask,
@@ -146,29 +146,29 @@ HRESULT ID3D12Device::CreateRootSignature(
     _In_ SIZE_T blobLengthInBytes,
     REFIID riid,
     _COM_Outptr_ void **ppvRootSignature) {
-        return device->CreateRootSignature(nodeMask, pBlobWithRootSignature, blobLengthInBytes, riid, ppvRootSignature);
-    }
+    return device->CreateRootSignature(nodeMask, pBlobWithRootSignature, blobLengthInBytes, riid, ppvRootSignature);
+}
 
 void ID3D12Device::CreateConstantBufferView(
     _In_opt_ const D3D12_CONSTANT_BUFFER_VIEW_DESC *pDesc,
     _In_ D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor) {
-        return device->CreateConstantBufferView(pDesc, DestDescriptor);
-    }
+    return device->CreateConstantBufferView(pDesc, DestDescriptor);
+}
 
 void ID3D12Device::CreateShaderResourceView(
     _In_opt_ ID3D12Resource * pResource,
     _In_opt_ const D3D12_SHADER_RESOURCE_VIEW_DESC *pDesc,
     _In_ D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor) {
-        return device->CreateShaderResourceView(pResource, pDesc, DestDescriptor);
-    }
+    return device->CreateShaderResourceView(pResource, pDesc, DestDescriptor);
+}
 
 void ID3D12Device::CreateUnorderedAccessView(
     _In_opt_ ID3D12Resource * pResource,
     _In_opt_ ID3D12Resource * pCounterResource,
     _In_opt_ const D3D12_UNORDERED_ACCESS_VIEW_DESC *pDesc,
     _In_ D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor) {
-        return device->CreateUnorderedAccessView(pResource, pCounterResource, pDesc, DestDescriptor);
-    }
+    return device->CreateUnorderedAccessView(pResource, pCounterResource, pDesc, DestDescriptor);
+}
 
 HRESULT ID3D12Device::CreateCommittedResource(
     _In_ const D3D12_HEAP_PROPERTIES *pHeapProperties,
@@ -178,27 +178,27 @@ HRESULT ID3D12Device::CreateCommittedResource(
     _In_opt_ const D3D12_CLEAR_VALUE *pOptimizedClearValue,
     REFIID riidResource,
     _COM_Outptr_opt_ void **ppvResource) {
-        return device->CreateCommittedResource(pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, riidResource, ppvResource);
-    }
+    return device->CreateCommittedResource(pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, riidResource, ppvResource);
+}
 
 HRESULT ID3D12Device::CreateFence(
     UINT64 InitialValue,
     D3D12_FENCE_FLAGS Flags,
     REFIID riid,
     _COM_Outptr_ void **ppFence) {
-        return device->CreateFence(InitialValue, Flags, riid, ppFence);
-    }
+    return device->CreateFence(InitialValue, Flags, riid, ppFence);
+}
 
 HRESULT ID3D12Device::GetDeviceRemovedReason(void) {
-        return device->GetDeviceRemovedReason();
-    }
+    return device->GetDeviceRemovedReason();
+}
 
 HRESULT ID3D12Device::CreateQueryHeap(
     _In_ const D3D12_QUERY_HEAP_DESC *pDesc,
     REFIID riid,
     _COM_Outptr_opt_ void **ppvHeap) {
-        return device->CreateQueryHeap(pDesc, riid, ppvHeap);
-    }
+    return device->CreateQueryHeap(pDesc, riid, ppvHeap);
+}
 
 
 
@@ -224,23 +224,23 @@ ULONG ID3D12CommandQueue::Release(void) {
 void ID3D12CommandQueue::ExecuteCommandLists(
     _In_ UINT NumCommandLists,
     _In_reads_(NumCommandLists) ID3D12CommandList *const *ppCommandLists) {
-        ::ID3D12CommandList** cmdlists = (::ID3D12CommandList**)alloca(NumCommandLists*sizeof(::ID3D12CommandList*));
-        for (UINT i=0; i<NumCommandLists; ++i) {
-            cmdlists[i] = ppCommandLists[i]->cmdlist;
-        }
-        return cmdqueue->ExecuteCommandLists(NumCommandLists, cmdlists);
+    ::ID3D12CommandList** cmdlists = (::ID3D12CommandList**)alloca(NumCommandLists*sizeof(::ID3D12CommandList*));
+    for (UINT i=0; i<NumCommandLists; ++i) {
+        cmdlists[i] = ppCommandLists[i]->cmdlist;
     }
+    return cmdqueue->ExecuteCommandLists(NumCommandLists, cmdlists);
+}
 
 HRESULT ID3D12CommandQueue::Signal(
     ID3D12Fence * pFence,
     UINT64 Value) {
-        return cmdqueue->Signal(pFence, Value);
-    }
+    return cmdqueue->Signal(pFence, Value);
+}
 
 HRESULT ID3D12CommandQueue::GetTimestampFrequency(
     _Out_ UINT64 * pFrequency) {
-        return cmdqueue->GetTimestampFrequency(pFrequency);
-    }
+    return cmdqueue->GetTimestampFrequency(pFrequency);
+}
 
 
 
