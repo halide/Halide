@@ -745,6 +745,8 @@ std::string halide_type_to_c_type(const Type &t) {
     return m.at(encode(t));
 }
 
+namespace {
+
 int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] =
         "gengen \n"
@@ -1019,6 +1021,8 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
 
     return 0;
 }
+
+}  // namespace
 
 #ifdef HALIDE_WITH_EXCEPTIONS
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {

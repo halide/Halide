@@ -505,7 +505,7 @@ inline Type type_of() {
 }
 
 /** Halide type to a C++ type */
-std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true);
+std::string type_to_c_type(Type type, bool include_space = false, bool c_plus_plus = true);
 
 }  // namespace Halide
 
