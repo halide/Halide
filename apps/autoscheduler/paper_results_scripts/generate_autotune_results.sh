@@ -134,18 +134,8 @@ for app in $APPS; do
     mkdir -p ${SAMPLES_DIR}
     touch ${OUTPUT_FILE}
 
-    ITERATION=1
-
     if [[ $PREDICT_ONLY != 1 ]]; then
-        while [[ 1 ]]; do
-            TRAIN_ONLY=${TRAIN_ONLY} SAMPLES_DIR=${SAMPLES_DIR} make -C ${APP_DIR} autotune | tee -a ${OUTPUT_FILE}
-
-            if [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
-                break
-            fi
-
-            ITERATION=$((ITERATION + 1))
-        done
+        NUM_BATCHES=${MAX_ITERATIONS} TRAIN_ONLY=${TRAIN_ONLY} SAMPLES_DIR=${SAMPLES_DIR} make -C ${APP_DIR} autotune | tee -a ${OUTPUT_FILE}
     fi
 
     WEIGHTS_FILE="${SAMPLES_DIR}/updated.weights"
