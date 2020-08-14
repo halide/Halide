@@ -40,6 +40,13 @@ static T* calloc_t() {
     return t;
 }
 
+#ifndef alloca
+#define alloca _alloca
+#endif//alloca
+
+// allocate memory, zero-initialize it, and "call the constructor":
+#define new_object(T, ...) &(*calloc_t<T>() = T(__VA_ARGS__))
+
 
 
 HRESULT D3D12CreateDevice(_In_opt_ IUnknown * dxgiAdapter,
@@ -51,8 +58,7 @@ HRESULT D3D12CreateDevice(_In_opt_ IUnknown * dxgiAdapter,
     if (FAILED(result)) {
         return result;
     }
-    ppDevice = calloc_t<ID3D12Device>();
-    *ppDevice = ID3D12Device(true_device);  // "constructor"
+    ppDevice = new_object(ID3D12Device, true_device);
     return result;
 }
 
@@ -82,8 +88,7 @@ HRESULT ID3D12Device::CreateCommandQueue(
         if (FAILED(result)) {
             return result;
         }
-        ppCommandQueue = malloc_t<ID3D12CommandQueue>();
-        *ppCommandQueue = ID3D12CommandQueue(true_cmdqueue);    // "constructor"
+        ppCommandQueue = new_object(ID3D12CommandQueue, true_cmdqueue);
         return result;
     }
 
@@ -113,8 +118,7 @@ HRESULT ID3D12Device::CreateCommandList(
         if (FAILED(result)) {
             return result;
         }
-        ppCommandList = malloc_t<ID3D12GraphicsCommandList>();
-        *ppCommandList = ID3D12GraphicsCommandList(true_gfxcmdlist);    // "constructor"
+        ppCommandList = new_object(ID3D12GraphicsCommandList, true_gfxcmdlist);
         return result;
     }
 
@@ -127,8 +131,7 @@ HRESULT ID3D12Device::CreateDescriptorHeap(
         if (FAILED(result)) {
             return result;
         }
-        ppvHeap = malloc_t<ID3D12DescriptorHeap>();
-        *ppvHeap = ID3D12DescriptorHeap(true_descheap); // "constructor"
+        ppvHeap = new_object(ID3D12DescriptorHeap, true_descheap);
         return result;
     }
 
@@ -221,7 +224,7 @@ ULONG ID3D12CommandQueue::Release(void) {
 void ID3D12CommandQueue::ExecuteCommandLists(
     _In_ UINT NumCommandLists,
     _In_reads_(NumCommandLists) ID3D12CommandList *const *ppCommandLists) {
-        ::ID3D12CommandList** cmdlists = (::ID3D12CommandList**)_alloca(NumCommandLists*sizeof(::ID3D12CommandList*));
+        ::ID3D12CommandList** cmdlists = (::ID3D12CommandList**)alloca(NumCommandLists*sizeof(::ID3D12CommandList*));
         for (UINT i=0; i<NumCommandLists; ++i) {
             cmdlists[i] = ppCommandLists[i]->cmdlist;
         }
