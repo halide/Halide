@@ -57,7 +57,7 @@ void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest 
     }
 }
 
-const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root) const {
+const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root, StageMap<int64_t>& total_shared_mem_alloc_sizes) const {
     std::vector<const LoopNest*> ancestors;
 
     // Innermost loop nests are never considered as compute locations
@@ -78,10 +78,24 @@ const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *
     const LoopNest *candidate = ancestors.back();
     bool first = true;
 
+    int64_t new_shared_mem_alloc_size = 0;
+
     for (auto it = ancestors.rbegin(); it != ancestors.rend(); it++) {
         if (first) {
             first = false;
             continue;
+        }
+
+        if ((*it)->gpu_label == block) {
+            new_shared_mem_alloc_size = node.bytes_per_point;
+            for (int i = 0; i < node.dimensions; ++i) {
+                new_shared_mem_alloc_size *= (*it)->get_bounds(&node)->region_computed(i).extent();
+            }
+
+            int64_t total = new_shared_mem_alloc_size + total_shared_mem_alloc_sizes.get((*it)->stage);
+            if (total > get_shared_memory_limit()) {
+                continue;
+            }
         }
 
         // If the region_computed does not shrink, ancestors.at(i) (the loop
@@ -92,6 +106,11 @@ const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *
         }
 
         candidate = *it;
+    }
+
+    if (candidate->gpu_label == block) {
+        total_shared_mem_alloc_sizes.get(candidate->stage) += new_shared_mem_alloc_size;
+        internal_assert(total_shared_mem_alloc_sizes.get(candidate->stage) < get_shared_memory_limit());
     }
 
     internal_assert(!candidate->innermost);
@@ -464,7 +483,7 @@ bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         // If 'loop' would never be considered as a compute location (i.e. by
         // LoopNest::compute_in_tiles()), walk up the loop nest until we reach a
         // location that would be considered
-        loop = deepest_valid_compute_location(parent, n, loop, feature_root.get());
+        loop = deepest_valid_compute_location(parent, n, loop, feature_root.get(), total_shared_mem_alloc_sizes);
         int64_t num_realizations = total_loop_extents_of_ancestors(parent, loop);
 
         for (auto &stage : n.stages) {
