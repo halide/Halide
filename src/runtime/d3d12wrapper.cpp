@@ -4,15 +4,12 @@
 // #pragma message "The Halide Direct3D 12 back-end is not yet supported on 32bit targets..."
 #else  // BITS_64
 
+#include <stddef.h> // for NULL
+#include <stdlib.h> // for malloc and friends
+#include <string.h> // for memset
+
 #define INCLUDING_FROM_D3D12WRAPPER_CPP
-
 #include "d3d12wrapper.h"
-
-// HalideRuntime.h : needed for 'halide_get_library_symbol()'
-// (is this going toc ause an issue with ABI linkage later?)
-// (if it turns out to be problematic, we'll have to pass a
-// dispatch table from the runtme module to this wrapper...)
-#include "HalideRuntime.h"
 
 namespace Halide {
 namespace Runtime {
