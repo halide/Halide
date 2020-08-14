@@ -900,13 +900,13 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_avg121_round_i16(const int16x32_t&
 }
 
 inline uint16x64_t convert_to_uint16x64_t_from_uint8x64_t(const uint8x64_t& src) {
-  xb_vec2Nx24 wide = src;
+  xb_vec2Nx24 wide = src * uint8x64_t(1);
   return uint16x64_t(uint16x64_t::from_native_vector,
                         IVP_CVT16U2NX24L(wide), IVP_CVT16U2NX24H(wide));
 }
 
 inline int16x64_t convert_to_int16x64_t_from_uint8x64_t(const uint8x64_t& src) {
-  xb_vec2Nx24 wide = src;
+  xb_vec2Nx24 wide = src * uint8x64_t(1);
   return int16x64_t(int16x64_t::from_native_vector,
                         IVP_CVT16S2NX24L(wide), IVP_CVT16S2NX24H(wide));
 }
@@ -1795,7 +1795,6 @@ void CodeGen_Xtensa::visit(const For *op) {
     //   stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
     //   stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
     // }
-
     loop_level--;
 }
 
