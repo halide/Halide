@@ -67,12 +67,31 @@ public:
                     .tile(xi, yi, xii, yii, 2, 2)
                     .unroll(xii)
                     .unroll(yii);
+
+                // Pre-load the entire region required of the previous
+                // stage into shared memory by adding a wrapper Func
+                // and scheduling it at blocks. This way instead of
+                // every pixel doing 25 loads from global memory, many of
+                // which overlap, we load each unique value from
+                // global into shared once, and then we use faster
+                // loads from shared in the actual stencil.
                 prev.in()
                     .compute_at(s, x)
                     .tile(prev.args()[0], prev.args()[1], xi, yi, 2, 2)
                     .vectorize(xi)
                     .unroll(yi)
                     .gpu_threads(prev.args()[0], prev.args()[1]);
+
+                // A similar benefit applies for the
+                // vectorized/unrolled 2x2 tiles. Instead of having
+                // each unrolled iteration do its own mix of scalar
+                // and vector loads from shared memory in a 5x5
+                // window, many of which get deduped across the block,
+                // we load a 6x6 window of shared into registers using
+                // only aligned vector loads, and then the actual
+                // stencil pulls from those registers. We're adding
+                // another wrapper Func around the wrapper Func we
+                // created above, so we say .in().in()
                 prev.in()
                     .in()
                     .compute_at(s, xi)
