@@ -44,9 +44,6 @@
 #endif
 #include "mini_d3d12.h"
 
-#define HALIDE_D3D12_APPLY_ABI_PATCHES (1)
-#include "d3d12_abi_patch_64.h"
-
 // For all intents and purposes, we always want to use COMPUTE command lists
 // (and queues) ...
 #define HALIDE_D3D12_COMMAND_LIST_TYPE D3D12_COMMAND_LIST_TYPE_COMPUTE
@@ -1519,9 +1516,9 @@ static void set_compute_pipeline_state(d3d12_compute_command_list *cmdList, d3d1
     ID3D12DescriptorHeap *heaps[] = {binder->descriptorHeap};
     (*cmdList)->SetDescriptorHeaps(1, heaps);
 
-    Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable((*cmdList), UAV, binder->GPU[UAV]);
-    Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable((*cmdList), CBV, binder->GPU[CBV]);
-    Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable((*cmdList), SRV, binder->GPU[SRV]);
+    (*cmdList)->SetComputeRootDescriptorTable(UAV, binder->GPU[UAV]);
+    (*cmdList)->SetComputeRootDescriptorTable(CBV, binder->GPU[CBV]);
+    (*cmdList)->SetComputeRootDescriptorTable(SRV, binder->GPU[SRV]);
 }
 
 static void end_recording(d3d12_compute_command_list *cmdList) {
@@ -1554,13 +1551,13 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
     binder->descriptorHeap = descriptorHeap;
     binder->descriptorSize = descriptorSize;
 
-    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
+    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
     TRACEPRINT("descriptor heap base for CPU: " << baseCPU.ptr << "(" << (void*)baseCPU.ptr << ")\n");
     binder->CPU[UAV].ptr = (baseCPU.ptr += descriptorSize * 0);
     binder->CPU[CBV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
     binder->CPU[SRV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);
 
-    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
+    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
     TRACEPRINT("descriptor heap base for GPU: " << baseGPU.ptr << "(" << (void*)baseGPU.ptr << ")\n");
     binder->GPU[UAV].ptr = (baseGPU.ptr += descriptorSize * 0);
     binder->GPU[CBV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
@@ -1590,7 +1587,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
         }
         D3D12_CPU_DESCRIPTOR_HANDLE hCPU = binder->CPU[CBV];
         hCPU.ptr += i * descriptorSize;
-        Call_ID3D12Device_CreateConstantBufferView((*device), &NullDescCBV, hCPU);
+        (*device)->CreateConstantBufferView(&NullDescCBV, hCPU);
     }
     for (uint32_t i = 0; i < ResourceBindingLimits[SRV]; ++i) {
         D3D12_SHADER_RESOURCE_VIEW_DESC NullDescSRV = {};
@@ -1605,7 +1602,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
         }
         D3D12_CPU_DESCRIPTOR_HANDLE hCPU = binder->CPU[SRV];
         hCPU.ptr += i * descriptorSize;
-        Call_ID3D12Device_CreateShaderResourceView((*device), NULL, &NullDescSRV, hCPU);
+        (*device)->CreateShaderResourceView(NULL, &NullDescSRV, hCPU);
     }
 
     return binder;
@@ -1748,7 +1745,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
         D3D12_CPU_DESCRIPTOR_HANDLE hDescCBV = binder->CPU[CBV];
         binder->CPU[CBV].ptr += binder->descriptorSize;
 
-        Call_ID3D12Device_CreateConstantBufferView((*device), &cbvd, hDescCBV);
+        (*device)->CreateConstantBufferView(&cbvd, hDescCBV);
 
         break;
     }

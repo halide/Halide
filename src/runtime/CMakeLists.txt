@@ -12,7 +12,6 @@ set(RUNTIME_CPP
     cache
     can_use_target
     cuda
-    d3d12compute
     destructors
     device_interface
     errors
@@ -84,6 +83,7 @@ set(RUNTIME_CPP
     windows_abort
     windows_clock
     windows_cuda
+    windows_d3d12compute_x86
     windows_get_symbol
     windows_io
     windows_opencl
@@ -99,7 +99,6 @@ set(RUNTIME_LL
     aarch64
     arm
     arm_no_neon
-    d3d12_abi_patch_64
     hvx_128
     hvx_64
     mips
@@ -144,7 +143,8 @@ add_library(Halide_initmod OBJECT)
 
 set(CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
 set(RUNTIME_CXX_FLAGS -O3
-    -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fpic
+    -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables
+    #-fpic
     # Note: we don't want static locals to get thread synchronization stuff.
     -fno-threadsafe-statics)
 
@@ -159,8 +159,12 @@ foreach (i IN LISTS RUNTIME_CPP)
                 set(TARGET "le32-unknown-nacl-unknown")
             endif ()
         else ()
-            # generic 64-bit code
-            set(TARGET "le64-unknown-unknown-unknown")
+            if (${i} MATCHES "windows_.*")
+                set(TARGET "x86_64-unknown-windows-unknown")
+            else ()
+                # generic 64-bit code
+                set(TARGET "le64-unknown-unknown-unknown")
+            endif ()
         endif ()
 
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
