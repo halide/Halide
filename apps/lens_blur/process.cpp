@@ -7,8 +7,8 @@
 #include "lens_blur_gradient_auto_schedule.h"
 #endif
 
-#include "benchmark_util.h"
 #include "HalideBuffer.h"
+#include "benchmark_util.h"
 #include "halide_benchmark.h"
 #include "halide_image_io.h"
 
@@ -36,15 +36,14 @@ int main(int argc, char **argv) {
     Buffer<float> output(left_im.width(), left_im.height(), 3);
 
     // Timing code
-    multi_way_bench({
-        {"lens_blur Manual", [&]() { lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
-    #ifndef NO_AUTO_SCHEDULE
-        {"lens_blur Auto-scheduled", [&]() { lens_blur_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
-        {"lens_blur Gradient auto-scheduled", [&]() { lens_blur_gradient_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }}
-    #endif
-        }
-    );
+    multi_way_bench({{"lens_blur Manual", [&]() { lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
+#ifndef NO_AUTO_SCHEDULE
+                     {"lens_blur Auto-scheduled", [&]() { lens_blur_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
+                     {"lens_blur Gradient auto-scheduled", [&]() { lens_blur_gradient_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }}
+#endif
+    });
 
+    output.copy_to_host();
     convert_and_save_image(output, argv[7]);
 
     printf("Success!\n");
