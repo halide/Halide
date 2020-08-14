@@ -68,7 +68,6 @@ function ctrl_c() {
             SAMPLES_DIR=${LATEST_SAMPLES_DIR}
         else
             while [[ 1 ]]; do
-                CURRENT_DATE_TIME="`date +%Y-%m-%d-%H-%M-%S`";
                 SAMPLES_DIR_NAME=${DEFAULT_SAMPLES_DIR_NAME}-${CURRENT_DATE_TIME}
                 SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
 
@@ -77,6 +76,7 @@ function ctrl_c() {
                 fi
 
                 sleep 1
+                CURRENT_DATE_TIME="`date +%Y-%m-%d-%H-%M-%S`";
             done
         fi
         save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
@@ -111,7 +111,6 @@ for app in $APPS; do
         echo "Resuming from existing run: ${SAMPLES_DIR}"
     else
         while [[ 1 ]]; do
-            CURRENT_DATE_TIME="`date +%Y-%m-%d-%H-%M-%S`";
             SAMPLES_DIR_NAME=${DEFAULT_SAMPLES_DIR_NAME}-${CURRENT_DATE_TIME}
             SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
 
@@ -120,6 +119,7 @@ for app in $APPS; do
             fi
 
             sleep 1
+            CURRENT_DATE_TIME="`date +%Y-%m-%d-%H-%M-%S`";
         done
         SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
         echo "Starting new run in: ${SAMPLES_DIR}"
