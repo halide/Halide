@@ -79,6 +79,7 @@ const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *
     bool first = true;
 
     int64_t new_shared_mem_alloc_size = 0;
+    int64_t new_register_alloc_size = 0;
 
     for (auto it = ancestors.rbegin(); it != ancestors.rend(); it++) {
         if (first) {
@@ -98,6 +99,19 @@ const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *
             }
         }
 
+        if ((*it)->gpu_label == thread || (*it)->gpu_label == serial) {
+            int64_t total = node.bytes_per_point;
+            for (int i = 0; i < node.dimensions; ++i) {
+                total *= (*it)->get_bounds(&node)->region_computed(i).extent();
+            }
+
+            if (total > get_register_mem_alloc_limit()) {
+                continue;
+            }
+
+            new_register_alloc_size = total;
+        }
+
         // If the region_computed does not shrink, ancestors.at(i) (the loop
         // nest one level further in) will never be considered as a compute
         // location
@@ -113,6 +127,7 @@ const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *
         internal_assert(total_shared_mem_alloc_sizes.get(candidate->stage) < get_shared_memory_limit());
     }
 
+    internal_assert(new_register_alloc_size <= get_register_mem_alloc_limit());
     internal_assert(!candidate->innermost);
     return candidate;
 }

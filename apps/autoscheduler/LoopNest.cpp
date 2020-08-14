@@ -422,7 +422,7 @@ void LoopNest::get_allocs_that_can_be_promoted_to_registers(const Target &target
             continue;
         }
 
-        can_be_promoted_to_registers.get_or_create(alloc_node) = store_site.is_constant_allocation && store_site.allocation_size <= 128;
+        can_be_promoted_to_registers.get_or_create(alloc_node) = store_site.is_constant_allocation && store_site.allocation_size <= get_register_mem_alloc_limit();
     }
 
     for (const auto &c : children) {

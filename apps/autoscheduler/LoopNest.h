@@ -43,6 +43,10 @@ int64_t get_active_block_hardware_limit();
 
 int64_t get_active_warp_hardware_limit();
 
+constexpr int64_t get_register_mem_alloc_limit() {
+    return 128;
+}
+
 int get_unroll_limit(const Target& target);
 
 bool in_range_zero_one(double x);
