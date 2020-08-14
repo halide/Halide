@@ -573,6 +573,8 @@ struct ID3D12GraphicsCommandList
 */
 };
 
+// TODO(marcos): is there a wa to preserve the original interface with REDIID as a parameter?
+// How would we override __uuidof (which is a bulit-in), IID_PPV_ARGS_Helper and IID_PPV_ARGS?
 HRESULT D3D12CreateDevice(_In_opt_ IUnknown * pAdapter,
                           D3D_FEATURE_LEVEL MinimumFeatureLevel,
                           _COM_Outptr_opt_ ID3D12Device *& ppDevice);
