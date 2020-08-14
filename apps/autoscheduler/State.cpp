@@ -124,7 +124,7 @@ const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *
 
     if (candidate->gpu_label == block) {
         total_shared_mem_alloc_sizes.get(candidate->stage) += new_shared_mem_alloc_size;
-        internal_assert(total_shared_mem_alloc_sizes.get(candidate->stage) < get_shared_memory_limit());
+        internal_assert(total_shared_mem_alloc_sizes.get(candidate->stage) <= get_shared_memory_limit());
     }
 
     internal_assert(new_register_alloc_size <= get_register_mem_alloc_limit());
