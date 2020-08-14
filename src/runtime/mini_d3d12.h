@@ -1,6 +1,8 @@
 #ifndef __mini_d3d12_h__
 #define __mini_d3d12_h__
 
+#include <stdint.h>
+
 #ifdef __clang__
 //    #define __stdcall __attribute__ ((stdcall))
 #pragma clang diagnostic push

@@ -13,6 +13,7 @@ set(RUNTIME_CPP
     can_use_target
     cuda
     d3d12compute
+    d3d12wrapper
     destructors
     device_interface
     errors
@@ -159,7 +160,7 @@ foreach (i IN LISTS RUNTIME_CPP)
                 set(TARGET "le32-unknown-nacl-unknown")
             endif ()
         else ()
-            if (${i} MATCHES "d3d12compute.*")
+            if (${i} MATCHES "d3d12wrapper.*")
                 set(TARGET "x86_64-unknown-windows-unknown")
             else ()
                 # generic 64-bit code

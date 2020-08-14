@@ -84,8 +84,10 @@ DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
 #ifdef WITH_D3D12
 DECLARE_CPP_INITMOD(d3d12compute)
+DECLARE_CPP_INITMOD(d3d12wrapper)
 #else
 DECLARE_NO_INITMOD(d3d12compute)
+DECLARE_NO_INITMOD(d3d12wrapper)
 #endif
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
@@ -1157,6 +1159,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (t.has_feature(Target::D3D12Compute)) {
             user_assert(bits_64) << "D3D12Compute target only available on 64-bit targets for now.\n";
             user_assert(t.os == Target::Windows) << "D3D12Compute target only available on Windows targets.\n";
+            modules.push_back(get_initmod_d3d12wrapper(c, bits_64, debug));
             modules.push_back(get_initmod_d3d12compute(c, bits_64, debug));
         }
         if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {

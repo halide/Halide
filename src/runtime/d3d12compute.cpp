@@ -39,10 +39,8 @@
 #if !defined(COBJMACROS)
 #define COBJMACROS
 #endif
-#include "mini_d3d12.h"
 
-#define HALIDE_D3D12_APPLY_ABI_PATCHES (0)
-#include "d3d12_abi_patch_64.h"
+#include "d3d12wrapper.h"
 
 // For all intents and purposes, we always want to use COMPUTE command lists
 // (and queues) ...
@@ -401,7 +399,7 @@ struct LibrarySymbol {
     }
 };
 
-static PFN_D3D12_CREATE_DEVICE D3D12CreateDevice = NULL;
+//static PFN_D3D12_CREATE_DEVICE D3D12CreateDevice = NULL;
 static PFN_D3D12_GET_DEBUG_INTERFACE D3D12GetDebugInterface = NULL;
 static PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignature = NULL;
 static PFN_D3DCOMPILE D3DCompile = NULL;
@@ -801,7 +799,7 @@ static void D3D12LoadDependencies(void *user_context) {
 #endif
 #endif
 
-    D3D12CreateDevice = LibrarySymbol::get(user_context, lib_d3d12, "D3D12CreateDevice");
+    dllD3D12CreateDevice = LibrarySymbol::get(user_context, lib_d3d12, "D3D12CreateDevice");
     D3D12GetDebugInterface = LibrarySymbol::get(user_context, lib_d3d12, "D3D12GetDebugInterface");
     D3D12SerializeRootSignature = LibrarySymbol::get(user_context, lib_d3d12, "D3D12SerializeRootSignature");
     D3DCompile = LibrarySymbol::get(user_context, lib_D3DCompiler_47, "D3DCompile");
@@ -928,8 +926,8 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
 
     ID3D12Device *device = NULL;
     D3D_FEATURE_LEVEL MinimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
-    result = D3D12CreateDevice(dxgiAdapter, MinimumFeatureLevel, IID_PPV_ARGS(&device));
-    if (D3DErrorCheck(result, device, user_context, "Unable to create the Direct3D 12 device")) {
+    result = D3D12CreateDevice(dxgiAdapter, MinimumFeatureLevel, device);
+    if (D3DErrorCheck(result, device->device, user_context, "Unable to create the Direct3D 12 device")) {
         return NULL;
     }
 
@@ -1150,7 +1148,7 @@ WEAK d3d12_buffer new_device_buffer(d3d12_device *device, size_t length) {
 
 // faux type name for logging purposes in D3DErrorCheck()
 struct ID3D12MemoryMappedResourceFAUX;
-D3D12TYPENAME(ID3D12MemoryMappedResourceFAUX)
+//D3D12TYPENAME(ID3D12MemoryMappedResourceFAUX)
 
 WEAK void *map_buffer(d3d12_buffer *buffer) {
     TRACELOG;
@@ -1315,7 +1313,7 @@ WEAK size_t suballocate(d3d12_device *device, d3d12_buffer *staging, size_t num_
 
 // faux type name for logging purposes in D3DErrorCheck()
 struct ID3D12CommandQueueTimestampFrequencyFAUX;
-D3D12TYPENAME(ID3D12CommandQueueTimestampFrequencyFAUX)
+//D3D12TYPENAME(ID3D12CommandQueueTimestampFrequencyFAUX)
 
 d3d12_profiler *new_profiler(d3d12_device *device, size_t num_queries) {
     TRACELOG;
@@ -1462,8 +1460,8 @@ static d3d12_command_list *new_command_list(d3d12_device *device, d3d12_command_
     UINT nodeMask = 0;
     ID3D12CommandAllocator *pCommandAllocator = (*allocator);
     ID3D12PipelineState *pInitialState = NULL;
-    HRESULT result = (*device)->CreateCommandList(nodeMask, Type, pCommandAllocator, pInitialState, IID_PPV_ARGS(&commandList));
-    if (D3DErrorCheck(result, commandList, NULL, "Unable to create the Direct3D 12 command list")) {
+    HRESULT result = (*device)->CreateCommandList(nodeMask, Type, pCommandAllocator, pInitialState, commandList);
+    if (D3DErrorCheck(result, commandList->gfxcmdlist, NULL, "Unable to create the Direct3D 12 command list")) {
         return NULL;
     }
 
@@ -1516,9 +1514,9 @@ static void set_compute_pipeline_state(d3d12_compute_command_list *cmdList, d3d1
     ID3D12DescriptorHeap *heaps[] = {binder->descriptorHeap};
     (*cmdList)->SetDescriptorHeaps(1, heaps);
 
-    Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable((*cmdList), UAV, binder->GPU[UAV]);
-    Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable((*cmdList), CBV, binder->GPU[CBV]);
-    Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable((*cmdList), SRV, binder->GPU[SRV]);
+    (*cmdList)->SetComputeRootDescriptorTable(UAV, binder->GPU[UAV]);
+    (*cmdList)->SetComputeRootDescriptorTable(CBV, binder->GPU[CBV]);
+    (*cmdList)->SetComputeRootDescriptorTable(SRV, binder->GPU[SRV]);
 }
 
 static void end_recording(d3d12_compute_command_list *cmdList) {
@@ -1539,8 +1537,8 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
         dhd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         dhd.NodeMask = 0;
     }
-    HRESULT result = (*device)->CreateDescriptorHeap(&dhd, IID_PPV_ARGS(&descriptorHeap));
-    if (D3DErrorCheck(result, descriptorHeap, NULL, "Unable to create the Direct3D 12 descriptor heap")) {
+    HRESULT result = (*device)->CreateDescriptorHeap(&dhd, descriptorHeap);
+    if (D3DErrorCheck(result, descriptorHeap->descheap, NULL, "Unable to create the Direct3D 12 descriptor heap")) {
         return NULL;
     }
 
@@ -1551,13 +1549,13 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
     binder->descriptorHeap = descriptorHeap;
     binder->descriptorSize = descriptorSize;
 
-    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
+    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
     TRACEPRINT("descriptor heap base for CPU: " << (void*)baseCPU.ptr << "\n");
     binder->CPU[UAV].ptr = (baseCPU.ptr += descriptorSize * 0);
     binder->CPU[CBV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
     binder->CPU[SRV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);
 
-    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
+    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
     TRACEPRINT("descriptor heap base for GPU: " << (void*)baseGPU.ptr << "\n");
     binder->GPU[UAV].ptr = (baseGPU.ptr += descriptorSize * 0);
     binder->GPU[CBV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
@@ -1587,7 +1585,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
         }
         D3D12_CPU_DESCRIPTOR_HANDLE hCPU = binder->CPU[CBV];
         hCPU.ptr += i * descriptorSize;
-        Call_ID3D12Device_CreateConstantBufferView((*device), &NullDescCBV, hCPU);
+        (*device)->CreateConstantBufferView(&NullDescCBV, hCPU);
     }
     for (uint32_t i = 0; i < ResourceBindingLimits[SRV]; ++i) {
         D3D12_SHADER_RESOURCE_VIEW_DESC NullDescSRV = {};
@@ -1602,7 +1600,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
         }
         D3D12_CPU_DESCRIPTOR_HANDLE hCPU = binder->CPU[SRV];
         hCPU.ptr += i * descriptorSize;
-        Call_ID3D12Device_CreateShaderResourceView((*device), NULL, &NullDescSRV, hCPU);
+        (*device)->CreateShaderResourceView(NULL, &NullDescSRV, hCPU);
     }
 
     return binder;
@@ -1745,7 +1743,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
         D3D12_CPU_DESCRIPTOR_HANDLE hDescCBV = binder->CPU[CBV];
         binder->CPU[CBV].ptr += binder->descriptorSize;
 
-        Call_ID3D12Device_CreateConstantBufferView((*device), &cbvd, hDescCBV);
+        (*device)->CreateConstantBufferView(&cbvd, hDescCBV);
 
         break;
     }
@@ -1820,7 +1818,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
 static void commit_command_list(d3d12_compute_command_list *cmdList) {
     TRACELOG;
     end_recording(cmdList);
-    ID3D12CommandList *lists[] = {(*cmdList)};
+    ID3D12CommandList *lists[] = {(*cmdList)->base()};
     (*queue)->ExecuteCommandLists(1, lists);
     cmdList->signal = __atomic_add_fetch(&queue_last_signal, 1, __ATOMIC_SEQ_CST);  // ++last_signal
     (*queue)->Signal(queue_fence, cmdList->signal);
