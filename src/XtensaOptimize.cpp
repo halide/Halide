@@ -479,22 +479,29 @@ private:
     }
 
     Expr visit(const Shuffle *op) override {
+        // TODO(vksnk): clean-up this if.
         if (op->is_interleave() && op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 64)) {
-            debug(0) << "Recognized supported interleave\n";
             return Call::make(op->type, "halide_xtensa_interleave_i16",
                               {mutate(op->vectors[0]), mutate(op->vectors[1])},
                               Call::PureExtern);
         } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-            // static int slice_counter = 0;
-            // slice_counter++;
-            // debug(0) << "Recognized supported slice " << op->slice_begin() << " " << op->vectors[0] << " " << slice_counter << "\n";
-            // Specialize slices which begin from 1, 2, 3 or 4.
             if (op->slice_begin() < 5) {
                 return Call::make(op->type, "halide_xtensa_slice_start_" + std::to_string(op->slice_begin()) + "_i16",
                                   {mutate(op->vectors[0])},
                                   Call::PureExtern);
             } else {
                 return Call::make(op->type, "halide_xtensa_slice_i16",
+                                  {mutate(op->vectors[0]), op->slice_begin()},
+                                  Call::PureExtern);
+            }
+        } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_uint() && (op->type.bits() == 8) && (op->type.lanes() == 64)) {
+            // Specialize slices which begin from 1, 2, 3 or 4.
+            if (op->slice_begin() < 5) {
+                return Call::make(op->type, "halide_xtensa_slice_start_" + std::to_string(op->slice_begin()) + "_u8",
+                                  {mutate(op->vectors[0])},
+                                  Call::PureExtern);
+            } else {
+                return Call::make(op->type, "halide_xtensa_slice_u8",
                                   {mutate(op->vectors[0]), op->slice_begin()},
                                   Call::PureExtern);
             }

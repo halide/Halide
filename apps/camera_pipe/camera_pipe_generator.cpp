@@ -164,7 +164,7 @@ public:
                 .reorder(c, x, y)
                 .unroll(c);
         } else {
-            int vec = get_target().natural_vector_size(UInt(16));
+            int vec = 32;  //get_target().natural_vector_size(UInt(16));
             bool use_hexagon = get_target().features_any_of({Target::HVX_64, Target::HVX_128});
             if (get_target().has_feature(Target::HVX_64)) {
                 vec = 32;
@@ -217,7 +217,7 @@ public:
     // currently allow 8-bit computations
     GeneratorParam<Type> result_type{"result_type", UInt(8)};
 
-    Input<Buffer<uint16_t>> input{"input", 2};
+    Input<Buffer<int16_t>> input{"input", 2};
     Input<Buffer<float>> matrix_3200{"matrix_3200", 2};
     Input<Buffer<float>> matrix_7000{"matrix_7000", 2};
     Input<float> color_temp{"color_temp"};
@@ -304,7 +304,7 @@ Func CameraPipe::apply_curve(Func input) {
     Expr maxRaw = whiteLevel;
 
     // How much to upsample the LUT by when sampling it.
-    int lutResample = 1;
+    int lutResample = 8;
     if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
         // On HVX, LUT lookups are much faster if they are to LUTs not
         // greater than 256 elements, so we reduce the tonemap to 256
@@ -360,9 +360,9 @@ Func CameraPipe::apply_curve(Func input) {
         Expr in = input(x, y, c);
         Expr u0 = in / lutResample;
         Expr u = in % lutResample;
-        Expr y0 = curve(clamp(u0, 0, 127));
-        Expr y1 = curve(clamp(u0 + 1, 0, 127));
-        curved(x, y, c) = cast<uint8_t>((cast<uint16_t>(y0) * lutResample + (y1 - y0) * u) / lutResample);
+        Expr y0 = curve(clamp(u0, 0, 63));
+        Expr y1 = curve(clamp(u0 + 1, 0, 63));
+        curved(x, y, c) = cast<uint8_t>((cast<int16_t>(y0) * lutResample + (y1 - y0) * u) / lutResample);
     }
 
     return curved;
@@ -517,7 +517,7 @@ void CameraPipe::generate() {
         }
         strip_size = (strip_size / 2) * 2;
 
-        int vec = get_target().natural_vector_size(UInt(16));
+        int vec = 32;  //get_target().natural_vector_size(UInt(16));
         if (get_target().has_feature(Target::HVX_64)) {
             vec = 32;
         } else if (get_target().has_feature(Target::HVX_128)) {
@@ -529,14 +529,14 @@ void CameraPipe::generate() {
             .reorder(c, x, y)
             .split(y, yi, yii, 2, TailStrategy::RoundUp)
             .split(yi, yo, yi, strip_size / 2)
-            .vectorize(x, 2 * vec, TailStrategy::RoundUp)
+            .vectorize(x, vec * 2, TailStrategy::RoundUp)
             .unroll(c)
             .parallel(yo);
 
         denoised
             .compute_at(processed, yi)
             .store_at(processed, yo)
-            .prefetch(input, y, 2)
+            //.prefetch(input, y, 2)
             .fold_storage(y, 16)
             .tile(x, y, x, y, xi, yi, 2 * vec, 2)
             .vectorize(xi)
@@ -547,7 +547,7 @@ void CameraPipe::generate() {
             .store_at(processed, yo)
             .fold_storage(y, 8)
             .reorder(c, x, y)
-            .vectorize(x, 2 * vec, TailStrategy::RoundUp)
+            .vectorize(x, vec, TailStrategy::RoundUp)
             .unroll(c);
 
         curved
@@ -562,7 +562,7 @@ void CameraPipe::generate() {
         corrected
             .compute_at(curved, x)
             .reorder(c, x, y)
-            .vectorize(x)
+            .vectorize(x, vec, TailStrategy::RoundUp)
             .unroll(c);
 
         demosaiced->intermed_compute_at.set({processed, yi});

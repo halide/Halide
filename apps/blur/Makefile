@@ -35,3 +35,5 @@ clean:
 
 test: $(BIN)/$(HL_TARGET)/test
 	$<
+
+.SECONDARY: $(BIN)/host/halide_blur_c.halide_generated.cpp
