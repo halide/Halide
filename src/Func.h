@@ -833,15 +833,30 @@ public:
 
      Target t = get_jit_target_from_environment();
      Buffer<> in;
-     f.infer_input_bounds(10, 10, t, { { img, &in } });
+     f.infer_input_bounds({10, 10}, t, { { img, &in } });
      \endcode
      * On return, in will be an allocated buffer of the correct size
      * to evaulate f over a 10x10 region.
      */
     // @{
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+    void infer_input_bounds(const std::vector<int32_t> &sizes,
+                            const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call infer_input_bounds() with an explicit vector<int> instead")
+    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map());
+    // TODO: this is a temporary wrapper used to disambiguate the cases where
+    // a single-entry braced list would match the deprecated overload
+    // (rather than the vector overload); when the deprecated method is removed,
+    // this should be removed, too
+    void infer_input_bounds(const std::initializer_list<int> &sizes,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map()) {
+        infer_input_bounds(std::vector<int>{sizes}, target, param_map);
+    }
     void infer_input_bounds(Pipeline::RealizationArg outputs,
+                            const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
     // @}
 

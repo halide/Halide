@@ -44,7 +44,7 @@ void set_custom_compile_time_error_reporter(CompileTimeErrorReporter *error_repo
 }
 
 bool exceptions_enabled() {
-#ifdef WITH_EXCEPTIONS
+#ifdef HALIDE_WITH_EXCEPTIONS
     return true;
 #else
     return false;
@@ -82,7 +82,7 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
 // (aside from newlines inserted by user code) to make it easy to filter
 // specific warnings or messages via (e.g.) grep.... unless we are likely to be
 // outputting to a proper terminal, in which case newlines are used to improve readability.
-#if defined(WITH_EXCEPTIONS)
+#if defined(HALIDE_WITH_EXCEPTIONS)
     const bool use_newlines = false;
 #else
     const bool use_newlines = (custom_error_reporter == nullptr) && isatty(2);
@@ -141,7 +141,7 @@ ErrorReport::~ErrorReport()
         return;
     }
 
-#ifdef WITH_EXCEPTIONS
+#ifdef HALIDE_WITH_EXCEPTIONS
     if (std::uncaught_exception()) {
         // This should never happen - evaluating one of the arguments
         // to the error message would have to throw an

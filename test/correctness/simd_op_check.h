@@ -224,8 +224,7 @@ public:
                                     .without_feature(Target::NoAsserts)
                                     .without_feature(Target::NoBoundsQuery);
 
-            error.compile_jit(run_target);
-            error.infer_input_bounds();
+            error.infer_input_bounds({}, run_target);
             // Fill the inputs with noise
             std::mt19937 rng(123);
             for (auto p : image_params) {

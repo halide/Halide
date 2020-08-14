@@ -643,7 +643,7 @@ bool Target::supported() const {
 #if !defined(WITH_RISCV)
     bad |= arch == Target::RISCV;
 #endif
-#if !defined(WITH_PTX)
+#if !defined(WITH_NVPTX)
     bad |= has_feature(Target::CUDA);
 #endif
 #if !defined(WITH_OPENCL)
@@ -659,6 +659,10 @@ bool Target::supported() const {
     bad |= has_feature(Target::D3D12Compute);
 #endif
     return !bad;
+}
+
+bool Target::has_unknowns() const {
+    return os == OSUnknown || arch == ArchUnknown || bits == 0;
 }
 
 void Target::set_feature(Feature f, bool value) {
@@ -816,7 +820,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
 }
 
 int Target::natural_vector_size(const Halide::Type &t) const {
-    user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0)
+    user_assert(!has_unknowns())
         << "natural_vector_size cannot be used on a Target with Unknown values.\n";
 
     const bool is_integer = t.is_int() || t.is_uint();
