@@ -15,10 +15,6 @@ def plot(predictions_file, app, output_dir):
   actual_label = "Actual (ms)"
   data = pd.read_csv(predictions_file, names=[predicted_label, actual_label])
 
-  if len(data) > 1024:
-    print("Number of data points ({}) exceeds limit of 1024".format(len(data)))
-    return
-
   r2 = rsquared(data, predicted_label, actual_label)
   title = "{}: Run Time Predictions ($R^2$ = {:.2f}; Loss = {:.2f})".format(app, r2, relative_loss(data, predicted_label, actual_label))
   fig, ax = plt.subplots()
