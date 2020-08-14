@@ -82,13 +82,6 @@ DECLARE_CPP_INITMOD(halide_buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
-#ifdef WITH_D3D12
-DECLARE_CPP_INITMOD(d3d12compute)
-DECLARE_CPP_INITMOD(d3d12wrapper)
-#else
-DECLARE_NO_INITMOD(d3d12compute)
-DECLARE_NO_INITMOD(d3d12wrapper)
-#endif
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(errors)
@@ -207,6 +200,14 @@ DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
 #endif  // WITH_PTX
+
+#ifdef WITH_D3D12
+DECLARE_CPP_INITMOD(windows_d3d12compute)
+DECLARE_CPP_INITMOD(windows_d3d12wrapper)
+#else
+DECLARE_NO_INITMOD(windows_d3d12compute)
+DECLARE_NO_INITMOD(windows_d3d12wrapper)
+#endif  // WITH_D3D12
 
 #ifdef WITH_X86
 DECLARE_LL_INITMOD(x86_avx2)
@@ -567,6 +568,20 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // Set the layout and triple on the modules before linking, so
     // llvm doesn't complain while combining them.
     for (size_t i = 0; i < modules.size(); i++) {
+
+        if (t.os == Target::Windows &&
+            !Internal::starts_with(modules[i]->getName(), "windows_")) {
+            // When compiling for windows, all wchars are
+            // 16-bit. Generic modules may have it set to 32-bit. Drop
+            // any module flags on the generic modules and use the
+            // more correct ones on the windows-specific modules to
+            // avoid a conflict. This is safe as long as the generic
+            // modules never actually use a wchar.
+            if (auto *module_flags = modules[i]->getModuleFlagsMetadata()) {
+                modules[i]->eraseNamedMetadata(module_flags);
+            }
+        }
+
         modules[i]->setDataLayout(data_layout);
         modules[i]->setTargetTriple(triple.str());
     }
@@ -1159,8 +1174,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (t.has_feature(Target::D3D12Compute)) {
             user_assert(bits_64) << "D3D12Compute target only available on 64-bit targets for now.\n";
             user_assert(t.os == Target::Windows) << "D3D12Compute target only available on Windows targets.\n";
-            modules.push_back(get_initmod_d3d12wrapper(c, bits_64, debug));
-            modules.push_back(get_initmod_d3d12compute(c, bits_64, debug));
+            modules.push_back(get_initmod_windows_d3d12wrapper(c, bits_64, debug));
+            modules.push_back(get_initmod_windows_d3d12compute(c, bits_64, debug));
         }
         if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));

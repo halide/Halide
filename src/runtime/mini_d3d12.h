@@ -1,7 +1,7 @@
 #ifndef __mini_d3d12_h__
 #define __mini_d3d12_h__
 
-#include <stdint.h>
+#include "runtime_internal.h"
 
 #ifdef __clang__
 //    #define __stdcall __attribute__ ((stdcall))
@@ -157,7 +157,7 @@
 #endif  //__RPC__deref_out
 
 /* minwindef.h */
-/* 
+/*
  * On ARM and x64 processors, __stdcall is accepted and ignored by the compiler;
  * on ARM and x64 architectures, by convention, arguments are passed in registers
  * when possible, and subsequent arguments are passed on the stack.
@@ -868,10 +868,10 @@ interface IUnknown {
 #endif /* C style interface */
 
 #if 0
-HRESULT STDMETHODCALLTYPE IUnknown_QueryInterface_Proxy( 
+HRESULT STDMETHODCALLTYPE IUnknown_QueryInterface_Proxy(
     IUnknown * This,
     /* [in] */ REFIID riid,
-    /* [annotation][iid_is][out] */ 
+    /* [annotation][iid_is][out] */
     _COM_Outptr_  void **ppvObject);
 
 
@@ -882,7 +882,7 @@ void __RPC_STUB IUnknown_QueryInterface_Stub(
     DWORD *_pdwStubPhase);
 
 
-ULONG STDMETHODCALLTYPE IUnknown_AddRef_Proxy( 
+ULONG STDMETHODCALLTYPE IUnknown_AddRef_Proxy(
     IUnknown * This);
 
 
@@ -893,7 +893,7 @@ void __RPC_STUB IUnknown_AddRef_Stub(
     DWORD *_pdwStubPhase);
 
 
-ULONG STDMETHODCALLTYPE IUnknown_Release_Proxy( 
+ULONG STDMETHODCALLTYPE IUnknown_Release_Proxy(
     IUnknown * This);
 
 

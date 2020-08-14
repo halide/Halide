@@ -12,8 +12,6 @@ set(RUNTIME_CPP
     cache
     can_use_target
     cuda
-    d3d12compute
-    d3d12wrapper
     destructors
     device_interface
     errors
@@ -85,6 +83,8 @@ set(RUNTIME_CPP
     windows_abort
     windows_clock
     windows_cuda
+    windows_d3d12compute
+    windows_d3d12wrapper
     windows_get_symbol
     windows_io
     windows_opencl
@@ -160,12 +160,11 @@ foreach (i IN LISTS RUNTIME_CPP)
                 set(TARGET "le32-unknown-nacl-unknown")
             endif ()
         else ()
-            if (${i} MATCHES "d3d12wrapper.*")
+            if (${i} MATCHES "windows_.*")
                 set(TARGET "x86_64-unknown-windows-unknown")
             else ()
                 # generic 64-bit code
                 set(TARGET "le64-unknown-unknown-unknown")
-				set(TARGET "x86_64-unknown-windows-unknown")
             endif ()
         endif ()
 
