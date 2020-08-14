@@ -491,8 +491,8 @@ class PartitionLoops : public IRMutator {
                                                            CodeGen_GPU_Dev::is_gpu_var(op->name));
 
         // If we're inside GPU kernel, and the body contains thread
-        // barriers or warp shuffles, it's not safe to partition parallel loops.
-        if (is_parallel(op->for_type) && in_gpu_loop && contains_warp_synchronous_logic(op)) {
+        // barriers or warp shuffles, it's not safe to partition loops.
+        if (in_gpu_loop && contains_warp_synchronous_logic(op)) {
             return IRMutator::visit(op);
         }
 
