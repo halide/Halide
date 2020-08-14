@@ -13,90 +13,39 @@ set(HALIDE_INSTALL_CMAKEDIR
 # Main library exports
 ##
 
-# TODO(#4053): fix when autoschedulers are refactored
-unset(EXTRA_TARGETS)
-foreach (T IN ITEMS Halide_Adams2019 Halide_Li2018 Halide_Python)
-    if (TARGET ${T})
-        list(APPEND EXTRA_TARGETS ${T})
-    endif ()
-endforeach ()
+# TODO(#4053): add autoschedulers when refactored
 
-if (WIN32)
-    # We build joint debug/release packages on Windows.
-    install(TARGETS Halide Halide_Plugin Halide_Runtime ${EXTRA_TARGETS}
+# Sends Debug -> Debug, Release/MinSizeRel/RelWithDebInfo -> Release
+set(CONFIG_DIR $<IF:$<CONFIG:Debug>,Debug,Release>)
 
-            RUNTIME
-            DESTINATION ${CMAKE_INSTALL_BINDIR}/Debug
-            COMPONENT Halide_Runtime
-            CONFIGURATIONS Debug
-
-            LIBRARY
-            DESTINATION ${CMAKE_INSTALL_LIBDIR}/Debug
-            COMPONENT Halide_Runtime
-            NAMELINK_COMPONENT Halide_Development
-            CONFIGURATIONS Debug
-
-            ARCHIVE
-            DESTINATION ${CMAKE_INSTALL_LIBDIR}/Debug
-            COMPONENT Halide_Development
-            CONFIGURATIONS Debug
-
-            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
-    install(TARGETS Halide Halide_Plugin Halide_Runtime ${EXTRA_TARGETS}
-            EXPORT Halide_Targets
-
-            RUNTIME
-            DESTINATION ${CMAKE_INSTALL_BINDIR}/Release
-            COMPONENT Halide_Runtime
-            CONFIGURATIONS Release RelWithDebInfo MinSizeRel
-
-            LIBRARY
-            DESTINATION ${CMAKE_INSTALL_LIBDIR}/Release
-            COMPONENT Halide_Runtime
-            NAMELINK_COMPONENT Halide_Development
-            CONFIGURATIONS Release RelWithDebInfo MinSizeRel
-
-            ARCHIVE
-            DESTINATION ${CMAKE_INSTALL_LIBDIR}/Release
-            COMPONENT Halide_Development
-            CONFIGURATIONS Release RelWithDebInfo MinSizeRel
-
-            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-else ()
-    # Define destinations for all the targets
-    install(TARGETS Halide Halide_Plugin Halide_Runtime ${EXTRA_TARGETS}
-            EXPORT Halide_Targets
-
-            RUNTIME
-            DESTINATION ${CMAKE_INSTALL_BINDIR}
-            COMPONENT Halide_Runtime
-
-            LIBRARY
-            DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            COMPONENT Halide_Runtime
-            NAMELINK_COMPONENT Halide_Development
-
-            ARCHIVE
-            DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            COMPONENT Halide_Development
-
-            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-endif ()
-
-install(TARGETS Halide_Tools Halide_ImageIO
+install(TARGETS Halide Halide_Generator Halide_RunGenMain
         EXPORT Halide_Targets
-        INCLUDES DESTINATION ${CMAKE_INSTALL_DATADIR}/tools)
 
-install(TARGETS Halide_Generator Halide_RunGenMain
+        RUNTIME
+        DESTINATION ${CMAKE_INSTALL_BINDIR}/${CONFIG_DIR}
+        COMPONENT Halide_Runtime
+
+        LIBRARY
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/${CONFIG_DIR}
+        COMPONENT Halide_Runtime
+        NAMELINK_COMPONENT Halide_Development
+
+        ARCHIVE
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/${CONFIG_DIR}
+        COMPONENT Halide_Development
+
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+install(TARGETS Halide_LLVM
         EXPORT Halide_Targets)
 
-# Create a cmake script for importing those targets for consuming libraries.
-install(EXPORT Halide_Targets
-        DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
-        NAMESPACE Halide::
-        FILE Halide-Targets.cmake
-        COMPONENT Halide_Development)
+install(TARGETS Halide_Tools Halide_ImageIO Halide_LanguageOptions
+        EXPORT Halide_Interfaces
+        INCLUDES DESTINATION ${CMAKE_INSTALL_DATADIR}/tools)
+
+install(TARGETS Halide_Runtime
+        EXPORT Halide_Interfaces
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # Captures both the runtime and Halide.h
 install(DIRECTORY ${Halide_BINARY_DIR}/include/ TYPE INCLUDE FILES_MATCHING PATTERN "include/*.h")
@@ -106,7 +55,6 @@ install(DIRECTORY ${Halide_BINARY_DIR}/include/ TYPE INCLUDE FILES_MATCHING PATT
 ##
 
 install(FILES
-        ${Halide_SOURCE_DIR}/CODE_OF_CONDUCT.md
         ${Halide_SOURCE_DIR}/README_cmake.md
         ${Halide_SOURCE_DIR}/README.md
         ${Halide_SOURCE_DIR}/README_rungen.md
@@ -147,20 +95,43 @@ install(DIRECTORY ${Halide_SOURCE_DIR}/tutorial
 ##
 
 if (BUILD_SHARED_LIBS)
-    # Don't need to expose LLVM-related targets
-    unset(__find_LLVM_deps)
+    set(LIB_TYPE shared)
 else ()
-    set(__find_LLVM_deps "find_dependency(LLVM CONFIG)")
+    set(LIB_TYPE static)
 endif ()
 
-configure_file(HalideConfig.cmake.in HalideConfig.cmake @ONLY)
+# If Halide explicitly links against shared LLVM or if it is a static library
+# and we are not bundling our static dependencies, then end-users must have
+# the relevant system libraries installed.
+if (Halide_SHARED_LLVM OR (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM))
+    set(depFile "${CMAKE_CURRENT_BINARY_DIR}/Halide-Deps-${LIB_TYPE}.cmake")
+    file(WRITE "${depFile}" "find_dependency(LLVM CONFIG)\n")
+
+    if (TARGET_WEBASSEMBLY)
+        file(APPEND "${depFile}" "find_dependency(LLD CONFIG HINTS \"\${LLVM_DIR}/../lld\")\n")
+    endif ()
+
+    install(FILES "${depFile}" DESTINATION ${HALIDE_INSTALL_CMAKEDIR})
+endif ()
+
+install(EXPORT Halide_Targets
+        DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+        NAMESPACE Halide::${LIB_TYPE}::
+        FILE Halide-Targets-${LIB_TYPE}.cmake
+        COMPONENT Halide_Development)
+
+install(EXPORT Halide_Interfaces
+        DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+        NAMESPACE Halide::
+        FILE Halide-Interfaces.cmake
+        COMPONENT Halide_Development)
 
 write_basic_package_version_file(
         HalideConfigVersion.cmake
         COMPATIBILITY SameMajorVersion)
 
 install(FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/HalideConfig.cmake
+        ${CMAKE_CURRENT_SOURCE_DIR}/HalideConfig.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfigVersion.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideGeneratorHelpers.cmake
         DESTINATION ${HALIDE_INSTALL_CMAKEDIR})
@@ -182,7 +153,5 @@ if (WIN32)
 else ()
     set(CPACK_GENERATOR "TGZ")
 endif ()
-# Remove this to get package names that are formatted as
-# ${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CPACK_SYSTEM_NAME}.
-set(CPACK_PACKAGE_FILE_NAME "Halide" CACHE STRING "Name of package created by distrib target")
+
 include(CPack)

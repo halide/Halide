@@ -159,6 +159,10 @@ private:
 
     int call_jit_code(const Target &target, const JITCallArgs &args);
 
+    // Get the value of contents->jit_target, but reality-check that the contents
+    // sensibly match the value. Return Target() if not jitted.
+    Target get_compiled_jit_target() const;
+
 public:
     /** Make an undefined Pipeline object. */
     Pipeline();
@@ -516,9 +520,22 @@ public:
      * of the appropriate size and binding them to the unbound
      * ImageParams. */
     // @{
+    void infer_input_bounds(const std::vector<int32_t> &sizes,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call infer_input_bounds() with an explicit vector<int> instead")
     void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
                             const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
+    // TODO: this is a temporary wrapper used to disambiguate the cases where
+    // a single-entry braced list would match the deprecated overload
+    // (rather than the vector overload); when the deprecated method is removed,
+    // this should be removed, too
+    void infer_input_bounds(const std::initializer_list<int> &sizes,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map()) {
+        infer_input_bounds(std::vector<int>{sizes}, target, param_map);
+    }
     void infer_input_bounds(RealizationArg output,
                             const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());

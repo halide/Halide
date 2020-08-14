@@ -5,8 +5,9 @@
 
 if (NOT BUILD_SHARED_LIBS)
     if (MSVC)
-        message(FATAL_ERROR "Autoscheduler plugins cannot be built against static Halide on Windows")
-    endif()
+        message(WARNING "Autoscheduler plugins cannot be built against static Halide on Windows")
+        return()
+    endif ()
 
     # Need to enable exports for the plugins to find Halide's symbols.
     set(CMAKE_ENABLE_EXPORTS ON)

@@ -1020,7 +1020,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     return 0;
 }
 
-#ifdef WITH_EXCEPTIONS
+#ifdef HALIDE_WITH_EXCEPTIONS
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     try {
         return generate_filter_main_inner(argc, argv, cerr);

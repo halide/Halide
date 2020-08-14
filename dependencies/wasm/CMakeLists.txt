@@ -4,18 +4,6 @@ include(CMakeDependentOption)
 cmake_dependent_option(WITH_WABT "Include WABT Interpreter for WASM testing" ON "TARGET_WEBASSEMBLY" OFF)
 cmake_dependent_option(WITH_WASM_SHELL "Download a wasm shell (e.g. d8) for testing AOT wasm code." ON "TARGET_WEBASSEMBLY" OFF)
 
-if ("${LLVM_PACKAGE_VERSION}" VERSION_LESS 11.0)
-    if (WITH_WABT)
-        message(STATUS "WITH_WABT is only supported for LLVM >= 11")
-        set(WITH_WABT OFF CACHE BOOL "WITH_WABT is only supported for LLVM >= 11" FORCE)
-    endif ()
-
-    if (WITH_WASM_SHELL)
-        message(STATUS "WITH_WASM_SHELL is only supported for LLVM >= 11")
-        set(WITH_WASM_SHELL OFF CACHE BOOL "WITH_WASM_SHELL is only supported for LLVM >= 11" FORCE)
-    endif ()
-endif ()
-
 if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
     if (WITH_WABT)
         message(STATUS "WITH_WABT is not yet supported on Windows")
@@ -50,7 +38,10 @@ if (WITH_WABT)
     # TODO: we want to require unique prefixes to include these files, to avoid ambiguity;
     # this means we have to prefix with "wabt-src/...", which is less bad than other alternatives,
     # but perhaps we could do better (esp. if wabt was smarter about what it exposed?)
-    target_include_directories(wabt INTERFACE ${wabt_SOURCE_DIR} ${wabt_BINARY_DIR} ${CMAKE_BINARY_DIR}/_deps)
+    target_include_directories(wabt INTERFACE
+                               $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>
+                               $<BUILD_INTERFACE:${wabt_BINARY_DIR}>
+                               $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps>)
 endif ()
 
 if (WITH_WASM_SHELL)
@@ -89,7 +80,7 @@ if (WITH_WASM_SHELL)
 endif ()
 
 function(add_wasm_executable TARGET)
-    set(options )
+    set(options)
     set(oneValueArgs)
     set(multiValueArgs SRCS DEPS INCLUDES ENABLE_IF)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -114,23 +105,23 @@ function(add_wasm_executable TARGET)
     endif ()
 
     set(EMCC_FLAGS
-            -O3
-            -g
-            -std=c++11
-            -Wall
-            -Wcast-qual
-            -Werror
-            -Wignored-qualifiers
-            -Wno-comment
-            -Wno-psabi
-            -Wno-unknown-warning-option
-            -Wno-unused-function
-            -Wsign-compare
-            -Wsuggest-override
-            -s ASSERTIONS=1
-            -s ALLOW_MEMORY_GROWTH=1
-            -s STANDALONE_WASM=1
-            -s ENVIRONMENT=shell)
+        -O3
+        -g
+        -std=c++11
+        -Wall
+        -Wcast-qual
+        -Werror
+        -Wignored-qualifiers
+        -Wno-comment
+        -Wno-psabi
+        -Wno-unknown-warning-option
+        -Wno-unused-function
+        -Wsign-compare
+        -Wsuggest-override
+        -s ASSERTIONS=1
+        -s ALLOW_MEMORY_GROWTH=1
+        -s STANDALONE_WASM=1
+        -s ENVIRONMENT=shell)
 
     set(SRCS)
     foreach (S IN LISTS args_SRCS)
@@ -174,7 +165,7 @@ function(add_wasm_halide_test TARGET)
     set(WASM_SHELL_FLAGS)
     if (Halide_TARGET MATCHES "wasm_simd128")
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
-    endif()
+    endif ()
 
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
