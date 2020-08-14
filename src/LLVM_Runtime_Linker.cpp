@@ -82,11 +82,6 @@ DECLARE_CPP_INITMOD(halide_buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
-#ifdef WITH_D3D12
-DECLARE_CPP_INITMOD(windows_d3d12compute_x86)
-#else
-DECLARE_NO_INITMOD(windows_d3d12compute_x86)
-#endif
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(errors)
@@ -205,6 +200,12 @@ DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
 #endif  // WITH_PTX
+
+#ifdef WITH_D3D12
+DECLARE_CPP_INITMOD(windows_d3d12compute_x86)
+#else
+DECLARE_NO_INITMOD(windows_d3d12compute_x86)
+#endif
 
 #ifdef WITH_X86
 DECLARE_LL_INITMOD(x86_avx2)
@@ -565,6 +566,18 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // Set the layout and triple on the modules before linking, so
     // llvm doesn't complain while combining them.
     for (size_t i = 0; i < modules.size(); i++) {
+        if (t.os == Target::Windows &&
+            !Internal::starts_with(modules[i]->getName().str(), "windows_")) {
+            // When compiling for windows, all wchars are
+            // 16-bit. Generic modules may have it set to 32-bit. Drop
+            // any module flags on the generic modules and use the
+            // more correct ones on the windows-specific modules to
+            // avoid a conflict. This is safe as long as the generic
+            // modules never actually use a wchar.
+            if (auto *module_flags = modules[i]->getModuleFlagsMetadata()) {
+                modules[i]->eraseNamedMetadata(module_flags);
+            }
+        }
         modules[i]->setDataLayout(data_layout);
         modules[i]->setTargetTriple(triple.str());
     }
