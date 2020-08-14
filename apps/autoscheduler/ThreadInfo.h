@@ -169,32 +169,12 @@ struct ThreadInfo {
         });
     }
 
-    double warp_lane_utilization_at_block_x() const {
-        return warp_lane_utilization_at_block(0);
-    }
-
-    double warp_lane_utilization_at_block_y() const {
-        return warp_lane_utilization_at_block(1);
-    }
-
-    double warp_lane_utilization_at_block_z() const {
-        return warp_lane_utilization_at_block(2);
-    }
-
-    double warp_lane_utilization_at_block(std::size_t i) const {
-        return (double)threads[i] / (double)threads_in_this_block[i];
-    }
-
-    double total_warp_lane_utilization_at_block() const {
-        return (double)num_threads / (double)num_threads_in_this_block;
-    }
-
     double warp_lane_utilization() const {
-        return (double)num_threads / (double)(num_warps_per_block * 32);
+        return (double)num_active_threads / (double)(num_active_warps_per_block * 32);
     }
 
     double idle_lane_wastage() const {
-        return ((double)(num_warps_per_block * 32) - (double)num_threads) / MAX_THREADS_PER_BLOCK;
+        return ((double)(num_active_warps_per_block * 32) - (double)num_active_threads) / MAX_THREADS_PER_BLOCK;
     }
 
     double block_occupancy() const {
@@ -213,6 +193,7 @@ struct ThreadInfo {
 
     int threads[3] = {1, 1, 1};
     int64_t num_threads = 1;
+    int64_t num_active_threads = 0;
 
     std::vector<int> loop_indices;
     std::vector<std::string> loop_vars;
@@ -252,6 +233,7 @@ private:
 
             if (is_active) {
                 ++num_active_threads_in_cur_warp;
+                ++num_active_threads;
             }
             ++num_threads_in_cur_warp;
 
@@ -272,6 +254,7 @@ private:
                         internal_assert(num_threads_in_final_warp <= 32);
                     }
                 }
+
                 current_warp_is_active = false;
                 num_threads_in_cur_warp = 0;
                 num_active_threads_in_cur_warp = 0;

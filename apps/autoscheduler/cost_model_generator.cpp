@@ -310,7 +310,7 @@ public:
         Expr block_occupancy = schedule_features(n, idx++, w);
 
         Expr warp_lane_utilization = schedule_features(n, idx++, w);
-        Expr warp_lane_utilization_at_block_x = schedule_features(n, idx++, w);
+        Expr num_active_warps_per_block = schedule_features(n, idx++, w);
         Expr warp_lane_utilization_at_block_y = schedule_features(n, idx++, w);
         Expr warp_lane_utilization_at_block_z = schedule_features(n, idx++, w);
         Expr idle_lane_wastage = schedule_features(n, idx++, w);
@@ -362,20 +362,8 @@ public:
 
         compute_cost = print_wrap(compute_cost, "compute_cost_after_idle_core_wastage", n, w);
 
-        // Ignore warp_lane_utilization and block_occupancy for inlined stages
+        // Ignore for inlined stages
         // Serial loops use a single thread
-
-        compute_cost /= select(inlined_calls == 0, warp_lane_utilization, 1.f);
-        compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization", n, w);
-
-        compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_x, 1.f);
-        compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization_at_block_x", n, w);
-
-        compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_y, 1.f);
-        compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization_at_block_y", n, w);
-
-        compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_z, 1.f);
-        compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization_at_block_z", n, w);
 
         compute_cost /= select(inlined_calls == 0, 1 - idle_lane_wastage, 1.f);
         compute_cost = print_wrap(compute_cost, "compute_cost_after_idle_lane", n, w);
