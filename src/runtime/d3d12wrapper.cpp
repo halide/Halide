@@ -37,18 +37,19 @@ HRESULT D3D12CreateDevice(_In_opt_ IUnknown * dxgiAdapter,
         return result;
     }
     ppDevice = (ID3D12Device*)malloc(sizeof(ID3D12Device));
-    ppDevice->device = true_device;
+    *ppDevice = ID3D12Device(true_device);  // "constructor"
     return result;
 }
 
 
 
-ID3D12Device::ID3D12Device()
-: device(NULL) {
+ID3D12Device::ID3D12Device(::ID3D12Device* d)
+: device(d) {
  }
 
 ID3D12Device::~ID3D12Device() {
-    Release();
+    // NOTE(marcos): we must NOT Release() the wrapped object here...
+    // The wrapper class is here simply to translate between ABIs and not to mess with ref-counting!
 }
 
 ULONG ID3D12Device::Release(void) {
@@ -67,7 +68,7 @@ HRESULT ID3D12Device::CreateCommandQueue(
             return result;
         }
         ppCommandQueue = (ID3D12CommandQueue*)malloc(sizeof(ID3D12CommandQueue));
-        ppCommandQueue->cmdqueue = true_cmdqueue;
+        *ppCommandQueue = ID3D12CommandQueue(true_cmdqueue);    // "constructor"
         return result;
     }
 
@@ -98,8 +99,7 @@ HRESULT ID3D12Device::CreateCommandList(
             return result;
         }
         ppCommandList = (ID3D12GraphicsCommandList*)malloc(sizeof(ID3D12GraphicsCommandList));
-        ppCommandList->gfxcmdlist = true_gfxcmdlist;
-        ppCommandList->cmdlist = true_gfxcmdlist;
+        *ppCommandList = ID3D12GraphicsCommandList(true_gfxcmdlist);    // "constructor"
         return result;
     }
 
@@ -113,7 +113,7 @@ HRESULT ID3D12Device::CreateDescriptorHeap(
             return result;
         }
         ppvHeap = (ID3D12DescriptorHeap*)malloc(sizeof(ID3D12DescriptorHeap));
-        ppvHeap->descheap = true_descheap;
+        *ppvHeap = ID3D12DescriptorHeap(true_descheap); // "constructor"
         return result;
     }
 
@@ -183,12 +183,20 @@ HRESULT ID3D12Device::CreateQueryHeap(
     }
 
 
-ID3D12CommandQueue::ID3D12CommandQueue()
-: cmdqueue(NULL) {
+
+ID3D12CommandList::ID3D12CommandList(::ID3D12CommandList* cl)
+: cmdlist(cl) {
+}
+
+
+
+ID3D12CommandQueue::ID3D12CommandQueue(::ID3D12CommandQueue* cq)
+: cmdqueue(cq) {
 }
 
 ID3D12CommandQueue::~ID3D12CommandQueue() {
-    Release();
+    // NOTE(marcos): we must NOT Release() the wrapped object here...
+    // The wrapper class is here simply to translate between ABIs and not to mess with ref-counting!
 }
 
 ULONG ID3D12CommandQueue::Release(void) {
@@ -218,12 +226,13 @@ HRESULT ID3D12CommandQueue::GetTimestampFrequency(
 
 
 
-ID3D12DescriptorHeap::ID3D12DescriptorHeap()
-:  descheap(NULL) {
+ID3D12DescriptorHeap::ID3D12DescriptorHeap(::ID3D12DescriptorHeap* dh)
+:  descheap(dh) {
 }
 
 ID3D12DescriptorHeap::~ID3D12DescriptorHeap() {
-    Release();
+    // NOTE(marcos): we must NOT Release() the wrapped object here...
+    // The wrapper class is here simply to translate between ABIs and not to mess with ref-counting!
 }
 
 ULONG ID3D12DescriptorHeap::Release(void) {
@@ -244,12 +253,14 @@ D3D12_GPU_DESCRIPTOR_HANDLE ID3D12DescriptorHeap::GetGPUDescriptorHandleForHeapS
 
 
 
-ID3D12GraphicsCommandList::ID3D12GraphicsCommandList()
-: gfxcmdlist(NULL) {
+ID3D12GraphicsCommandList::ID3D12GraphicsCommandList(::ID3D12GraphicsCommandList* gcl)
+: ID3D12CommandList(gcl)
+, gfxcmdlist(gcl) {
 }
 
 ID3D12GraphicsCommandList::~ID3D12GraphicsCommandList() {
-    Release();
+    // NOTE(marcos): we must NOT Release() the wrapped object here...
+    // The wrapper class is here simply to translate between ABIs and not to mess with ref-counting!
 }
 
 ULONG ID3D12GraphicsCommandList::Release(void) {

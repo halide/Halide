@@ -34,8 +34,8 @@ struct ID3D12Device {
     struct ID3D12Device* device;
 #else
     ::ID3D12Device* device;
+    ID3D12Device(::ID3D12Device* d);
 #endif//INCLUDING_FROM_D3D12WRAPPER_CPP
-    ID3D12Device();
     ~ID3D12Device();
 
     ULONG Release(void);
@@ -265,6 +265,7 @@ struct ID3D12CommandList {
     struct ID3D12CommandList* cmdlist;
 #else
     ::ID3D12CommandList* cmdlist;
+    ID3D12CommandList(::ID3D12CommandList* cl);
 #endif//INCLUDING_FROM_D3D12WRAPPER_CPP
 /*
     D3D12_COMMAND_LIST_TYPE GetType(void);
@@ -276,8 +277,8 @@ struct ID3D12CommandQueue {
     struct ID3D12CommandQueue* cmdqueue;
 #else
     ::ID3D12CommandQueue* cmdqueue;
+    ID3D12CommandQueue(::ID3D12CommandQueue* cq);
 #endif//INCLUDING_FROM_D3D12WRAPPER_CPP
-    ID3D12CommandQueue();
     ~ID3D12CommandQueue();
 
     ULONG Release(void);
@@ -346,8 +347,8 @@ struct ID3D12DescriptorHeap {
     struct ID3D12DescriptorHeap* descheap;
 #else
     ::ID3D12DescriptorHeap* descheap;
+    ID3D12DescriptorHeap(::ID3D12DescriptorHeap* dh);
 #endif//INCLUDING_FROM_D3D12WRAPPER_CPP
-    ID3D12DescriptorHeap();
     ~ID3D12DescriptorHeap();
 
     ULONG Release(void);
@@ -364,8 +365,8 @@ struct ID3D12GraphicsCommandList : public ID3D12CommandList {
     struct ID3D12GraphicsCommandList* gfxcmdlist;
 #else
     ::ID3D12GraphicsCommandList* gfxcmdlist;
+    ID3D12GraphicsCommandList(::ID3D12GraphicsCommandList* gcl);
 #endif//INCLUDING_FROM_D3D12WRAPPER_CPP
-    ID3D12GraphicsCommandList();
     ~ID3D12GraphicsCommandList();
 
     ULONG Release(void);
