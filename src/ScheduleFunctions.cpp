@@ -1025,20 +1025,19 @@ public:
           is_output_list(is_output_list),
           target(target),
           env(env),
-          compute_level(funcs[0].schedule().compute_level()),
-          store_level(funcs[0].schedule().store_level()) {
+          compute_level(funcs[0].schedule().compute_level()) {
     }
 
     bool found_compute_level() const {
         return _found_compute_level;
     }
     bool found_store_level() const {
-        return _found_store_level;
+        return _found_store_levels_count == (int)funcs.size();
     }
 
 protected:
     bool _found_compute_level{};
-    bool _found_store_level{};
+    int _found_store_levels_count = 0;
 
     using IRMutator::visit;
 
@@ -1098,7 +1097,8 @@ protected:
             debug(2) << "Injecting realization of " << funcs[0].name() << " around node " << Stmt(for_loop) << "\n";
 
             Stmt stmt = build_realize(build_pipeline_group(for_loop), funcs[0], is_output_list[0]);
-            _found_store_level = _found_compute_level = true;
+            _found_compute_level = true;
+            _found_store_levels_count = 1;
             return stmt;
         }
 
@@ -1110,10 +1110,14 @@ protected:
             _found_compute_level = true;
         }
 
-        if (_found_compute_level && store_level.match(for_loop->name)) {
-            debug(3) << "Found store level at " << for_loop->name << "\n";
-            body = build_realize_group(body);
-            _found_store_level = true;
+        if (_found_compute_level) {
+            for (size_t i = 0; i < funcs.size(); i++) {
+                if (funcs[i].schedule().store_level().match(for_loop->name)) {
+                    debug(3) << "Found store level for " << funcs[i].name() << " at " << for_loop->name << "\n";
+                    body = build_realize_function_from_group(body, i);
+                    _found_store_levels_count++;
+                }
+            }
         }
 
         // Reinstate the let/if statements
@@ -1161,7 +1165,8 @@ protected:
 
             // Prefix all calls to func in op
             Stmt stmt = build_realize(build_pipeline_group(provide_op), funcs[0], is_output_list[0]);
-            _found_store_level = _found_compute_level = true;
+            _found_compute_level = true;
+            _found_store_levels_count = 1;
             return stmt;
         }
 
@@ -1182,7 +1187,6 @@ private:
     const Target &target;
     const map<string, Function> &env;
     const LoopLevel &compute_level;
-    const LoopLevel &store_level;
 
     Stmt build_realize(Stmt s, const Function &func, bool is_output) {
         if (func.has_extern_definition()) {
@@ -1225,15 +1229,14 @@ private:
         }
     }
 
-    Stmt build_realize_group(Stmt s) {
-        for (size_t i = 0; i < funcs.size(); ++i) {
-            if (function_is_already_realized_in_stmt(funcs[i], s)) {
-                continue;
-            }
-            if (function_is_used_in_stmt(funcs[i], s) || is_output_list[i]) {
-                s = build_realize(s, funcs[i], is_output_list[i]);
-            }
+    Stmt build_realize_function_from_group(Stmt s, int func_index) {
+        if (function_is_already_realized_in_stmt(funcs[func_index], s)) {
+            return s;
         }
+        if (function_is_used_in_stmt(funcs[func_index], s) || is_output_list[func_index]) {
+            s = build_realize(s, funcs[func_index], is_output_list[func_index]);
+        }
+
         return s;
     }
 
