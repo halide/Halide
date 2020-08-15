@@ -389,6 +389,11 @@ void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSampl
         assert(dot != string::npos && best_path.substr(dot) == ".sample");
         string schedule_file = best_path.substr(0, dot) + ".schedule.h";
         std::ifstream src(schedule_file);
+
+        if (!src.good()) {
+            std::cout << "Could not find " << schedule_file << ". Unable to save it as the best schedule. Continuing...\n";
+            return;
+        }
         std::ofstream dst(flags.best_schedule_path);
         dst << src.rdbuf();
         assert(!src.fail());
