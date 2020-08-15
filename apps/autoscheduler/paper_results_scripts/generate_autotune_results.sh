@@ -45,7 +45,7 @@ echo
 
 if [ ! -v HL_TARGET ]; then
     get_host_target ${HALIDE_ROOT} HL_TARGET
-    HL_TARGET=${HL_TARGET}-cuda-cuda_capability_61
+    HL_TARGET=${HL_TARGET}-cuda-cuda_capability_70
 fi
 
 export HL_TARGET=${HL_TARGET}
