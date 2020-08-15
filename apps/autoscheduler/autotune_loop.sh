@@ -395,7 +395,7 @@ benchmark_loop() {
     while [[ 1 ]]; do
         unset waitlist
 
-        for FILE in $(ls -1tr ${BENCHMARK_QUEUE_DIR}); do
+        for FILE in $(ls ${BENCHMARK_QUEUE_DIR}); do
             if [[ $FILE == *"failed" ]]; then
                 # The sample failed to compile
                 num_completed=$((num_completed+1))
@@ -453,7 +453,8 @@ benchmark_loop() {
             break
         fi
 
-        if [[ SECONDS -ge MAX_TIME ]]; then
+        ELAPSED_TIME=$(("SECONDS"-START_TIME))
+        if [[ ELAPSED_TIME -ge MAX_TIME ]]; then
             echo "Benchmark queue has been active for more than ${MAX_TIME} seconds. Exiting."
             for pid in ${waitlist[@]}; do
                 kill $pid
@@ -489,6 +490,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
         echo "Starting benchmark queue"
         benchmark_loop &
         benchmark_loop_pid=("$!")
+        echo "Starting PID: ${benchmark_loop_pid}"
     fi
 
     for ((BATCH_IDX=0;BATCH_IDX<${NUM_BATCHES};BATCH_IDX++)); do
@@ -496,6 +498,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
             echo "Starting benchmark queue"
             benchmark_loop &
             benchmark_loop_pid=("$!")
+            echo "Starting PID: ${benchmark_loop_pid}"
         fi
 
         if [ $PIPELINE == "random_pipeline" ]; then
@@ -582,6 +585,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
         if [[ ${RETRAIN_AFTER_EACH_BATCH} == 1 ]]; then
             if [[ $BENCHMARK_QUEUE_ENABLED == 1 ]]; then
                 echo "Waiting for benchmarking to complete"
+                echo "Waiting PID: ${benchmark_loop_pid}"
                 wait "${benchmark_loop_pid}"
             fi
 
@@ -594,6 +598,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
 
     if [[ ${BENCHMARK_QUEUE_ENABLED} == 1 && ${RETRAIN_AFTER_EACH_BATCH} == 0 ]]; then
         echo "Waiting for benchmarking to complete"
+        echo "Waiting PID: ${benchmark_loop_pid}"
         wait "${benchmark_loop_pid}"
     fi
 fi
