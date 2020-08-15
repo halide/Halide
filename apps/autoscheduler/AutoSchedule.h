@@ -67,6 +67,7 @@ struct AutoSchedule {
     CostModel *cost_model;
     Statistics &stats;
     SearchSpace &search_space;
+    const LoopNestParser* partial_schedule;
 
     AutoSchedule(const FunctionDAG &dag,
                  const MachineParams &params,
@@ -75,7 +76,12 @@ struct AutoSchedule {
                  std::mt19937 &rng,
                  CostModel *cost_model,
                  Statistics &stats,
-                 SearchSpace &search_space);
+                 SearchSpace &search_space,
+                 const LoopNestParser* partial_schedule);
+
+    bool use_partial_schedule() const {
+        return partial_schedule;
+    }
 
     IntrusivePtr<State> optimal_schedule_pass(int beam_size,
                                               int pass_idx,

@@ -18,7 +18,8 @@ SearchSpace::SearchSpace(const FunctionDAG &dag,
                          const std::string &search_space_options,
                          std::mt19937 &rng,
                          CostModel *cost_model,
-                         Statistics &stats)
+                         Statistics &stats,
+                         const LoopNestParser* partial_schedule)
     : dag{dag}
     , params{params}
     , target{target}
@@ -27,6 +28,7 @@ SearchSpace::SearchSpace(const FunctionDAG &dag,
     , cost_model{cost_model}
     , stats{stats}
     , randomize_tilings{use_randomized_tilings()}
+    , partial_schedule{partial_schedule}
 {
     memoized_compute_root_blocks.make_large(dag.nodes.size());
 }
@@ -220,10 +222,11 @@ vector<ThreadTileOption> SearchSpace::filter_thread_tile_options(vector<Intrusiv
 void SearchSpace::process_pending_states(std::unordered_map<uint64_t, StateVector>& primary_options,
                                          std::unordered_map<uint64_t, StateVector>& secondary_options,
                                          int &num_children,
-                                         std::function<void(IntrusivePtr<State> &&)> &accept_child) {
+                                         std::function<void(IntrusivePtr<State> &&)> &accept_child,
+                                         const FunctionDAG::Node* node) {
     for (auto& entry : primary_options) {
         size_t N = entry.second.size();
-        if (N > 1) {
+        if (N > 1 && !is_in_partial_schedule(node)) {
             N = std::log2(entry.second.size());
         }
 
@@ -442,7 +445,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         }
 
         if (randomize_tilings) {
-            process_pending_states(primary_options, secondary_options, num_children, accept_child);
+            process_pending_states(primary_options, secondary_options, num_children, accept_child, node);
         }
     } else {
         // We are parallelizing the loops of the func we just injected a realization for.
@@ -571,7 +574,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         }
 
         if (randomize_tilings) {
-            process_pending_states(primary_options, secondary_options, num_children, accept_child);
+            process_pending_states(primary_options, secondary_options, num_children, accept_child, node);
         }
     }
 
@@ -668,6 +671,10 @@ bool SearchSpace::add_child(const IntrusivePtr<State>& state,
         return true;
     }
     return false;
+}
+
+bool SearchSpace::is_in_partial_schedule(const FunctionDAG::Node *node) const {
+    return partial_schedule && partial_schedule->is_in_partial_schedule(node);
 }
 
 }  // namespace Autoscheduler

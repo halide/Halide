@@ -76,6 +76,21 @@ class LoopNestParser {
 
             per_stage_loop_nests[entry.first] = loop_nest;
         }
+
+        // If a stage appears in a 'realize: ' line but nowhere else, remove it
+        std::vector<std::string> to_remove;
+        for (const auto& entry : compute_root_stages) {
+            if (entry.second == -1) {
+                to_remove.push_back(entry.first);
+            }
+        }
+
+        for (const auto& key : to_remove) {
+            compute_root_stages.erase(key);
+            partially_scheduled.erase(key);
+            all_stages.erase(key);
+            per_stage_loop_nests.erase(key);
+        }
     }
 
     std::vector<std::string> loop_nest;
@@ -120,9 +135,23 @@ public:
         aslog(0) << "\n";
     }
 
-    bool contains_sub_loop_nest(const LoopNestParser& other) const {
+    bool is_in_partial_schedule(const FunctionDAG::Node* node) const {
+        return node && all_stages.count(node->func.name()) > 0;
+    }
+
+    bool contains_sub_loop_nest_for_shared_stages(const LoopNestParser& other) const {
+        return contains_sub_loop_nest(other, true);
+    }
+
+    // 'only_consider_shared_stages': check if other is contained in this loop 
+    // nest, but ignore stages that are present in other but not present in 
+    // this loop nest
+    bool contains_sub_loop_nest(const LoopNestParser& other, bool only_consider_shared_stages=false) const {
         for (const auto& stage : other.all_stages) {
             if (all_stages.count(stage) == 0) {
+                if (only_consider_shared_stages) {
+                    continue;
+                }
                 return false;
             }
 

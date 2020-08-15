@@ -146,7 +146,8 @@ AutoSchedule::AutoSchedule(const FunctionDAG &dag,
                            std::mt19937 &rng,
                            CostModel *cost_model,
                            Statistics &stats,
-                           SearchSpace &search_space)
+                           SearchSpace &search_space,
+                           const LoopNestParser* partial_schedule)
     : dag{dag}
     , params{params}
     , target{target}
@@ -155,6 +156,7 @@ AutoSchedule::AutoSchedule(const FunctionDAG &dag,
     , cost_model{cost_model}
     , stats{stats}
     , search_space{search_space}
+    , partial_schedule{partial_schedule}
 {
     configure_pipeline_features(dag, params, cost_model);
 }
@@ -319,6 +321,40 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
 
         // Drop the other states unconsidered.
         pending.clear();
+
+        int cur_node = (q[0]->num_decisions_made - 1) / 2;
+        const FunctionDAG::Node *node = &dag.nodes[cur_node];
+        if (partial_schedule && partial_schedule->is_in_partial_schedule(node)) {
+            bool found = false;
+            for (int i = (int)q.size() - 1; i >= 0; i--) {
+                auto state = q[i];
+                LoopNestParser option = LoopNestParser::from_string(state->root->to_string());
+
+                if (partial_schedule->contains_sub_loop_nest_for_shared_stages(option)) {
+                    if (cost_model) {
+                        cost_model->evaluate_costs();
+                    }
+
+                    auto selected = q[i];
+                    q.clear();
+                    q.emplace(std::move(selected));
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found) {
+                continue;
+            }
+
+            for (int i = (int)q.size() - 1; i >= 0; i--) {
+                auto state = q[i];
+                LoopNestParser option = LoopNestParser::from_string(state->root->to_string());
+                option.dump();
+            }
+            partial_schedule->dump();
+            internal_assert(false) << "Partial schedule not found";
+        }
 
         if (cost_model) {
             // Now evaluate all the costs and re-sort them in the priority queue
@@ -524,9 +560,20 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     IntrusivePtr<State> optimal;
 
+    string partial_schedule_filename = get_env_variable("PARTIAL_SCHEDULE");
+    std::unique_ptr<LoopNestParser> partial_schedule;
+    if (!partial_schedule_filename.empty()) {
+        aslog(0) << "Loading partial schedule from " << partial_schedule_filename << "\n";
+        partial_schedule = LoopNestParser::from_file(partial_schedule_filename);
+        aslog(0) << "Partial schedule:\n";
+        partial_schedule->dump();
+        aslog(0) << "\n";
+    }
+
     std::mt19937 rng{(uint32_t)seed};
-    SearchSpace search_space{dag, params, target, get_env_variable("HL_SEARCH_SPACE_OPTIONS"), rng, cost_model.get(), stats};
-    AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model.get(), stats, search_space};
+    SearchSpace search_space{dag, params, target, get_env_variable("HL_SEARCH_SPACE_OPTIONS"), rng, cost_model.get(), stats, partial_schedule.get()};
+
+    AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model.get(), stats, search_space, partial_schedule.get()};
 
     // Run beam search
     optimal = autoschedule.optimal_schedule(beam_size);
@@ -638,8 +685,19 @@ void find_and_apply_schedule(FunctionDAG &dag,
 
     Statistics stats;
     std::mt19937 rng{(uint32_t)12345};
-    SearchSpace search_space{dag, params, target, get_env_variable("HL_SEARCH_SPACE_OPTIONS"), rng, cost_model, stats};
-    AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model, stats, search_space};
+
+    string partial_schedule_filename = get_env_variable("PARTIAL_SCHEDULE");
+    std::unique_ptr<LoopNestParser> partial_schedule;
+    if (!partial_schedule_filename.empty()) {
+        aslog(0) << "Loading partial schedule from " << partial_schedule_filename << "\n";
+        partial_schedule = LoopNestParser::from_file(partial_schedule_filename);
+        aslog(0) << "Partial schedule:\n";
+        partial_schedule->dump();
+        aslog(0) << "\n";
+    }
+
+    SearchSpace search_space{dag, params, target, get_env_variable("HL_SEARCH_SPACE_OPTIONS"), rng, cost_model, stats, partial_schedule.get()};
+    AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model, stats, search_space, partial_schedule.get()};
 
     IntrusivePtr<State> optimal = autoschedule.optimal_schedule(beam_size);
 
