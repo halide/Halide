@@ -179,6 +179,7 @@ void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSampl
     string best_path;
 
     size_t num_read = 0, num_unique = 0;
+    std::cout << "Loading samples...\n";
     while (!std::cin.eof()) {
         string s;
         std::cin >> s;
