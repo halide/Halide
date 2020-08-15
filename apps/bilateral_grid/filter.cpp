@@ -8,8 +8,8 @@
 #include "bilateral_grid_gradient_auto_schedule.h"
 #endif
 
-#include "benchmark_util.h"
 #include "HalideBuffer.h"
+#include "benchmark_util.h"
 #include "halide_benchmark.h"
 #include "halide_image_io.h"
 
@@ -28,14 +28,14 @@ int main(int argc, char **argv) {
     Buffer<float> input = load_and_convert_image(argv[1]);
     Buffer<float> output(input.width(), input.height());
 
-    multi_way_bench({
-        {"bilateral_grid Manual", [&]() { bilateral_grid(input, r_sigma, output); output.device_sync(); }},
-    #ifndef NO_AUTO_SCHEDULE
-        {"bilateral_grid Auto-scheduled", [&]() { bilateral_grid_auto_schedule(input, r_sigma, output); output.device_sync(); }},
-        {"bilateral_grid Gradient auto-scheduled", [&]() { bilateral_grid_gradient_auto_schedule(input, r_sigma, output); output.device_sync(); }}
-    #endif
-        }
-    );
+    multi_way_bench({{"bilateral_grid Manual", [&]() { bilateral_grid(input, r_sigma, output); output.device_sync(); }},
+#ifndef NO_AUTO_SCHEDULE
+                     {"bilateral_grid Auto-scheduled", [&]() { bilateral_grid_auto_schedule(input, r_sigma, output); output.device_sync(); }},
+                     {"bilateral_grid Gradient auto-scheduled", [&]() { bilateral_grid_gradient_auto_schedule(input, r_sigma, output); output.device_sync(); }}
+#endif
+    });
+
+    output.copy_to_host();
 
     convert_and_save_image(output, argv[2]);
 

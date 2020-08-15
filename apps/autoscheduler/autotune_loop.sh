@@ -269,7 +269,7 @@ benchmark_sample() {
 
     if [ $PIPELINE == "random_pipeline" ]; then
         CMD="${CMD} \
-            --estimate_all \
+            --output_extents=estimate --default_input_scalars=estimate --default_input_buffers=zero:estimate_then_auto \
             --benchmarks=all"
     else
         get_bench_args ${IMAGES_DIR} ${PIPELINE} ${D} BENCH_ARGS
