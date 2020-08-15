@@ -395,7 +395,7 @@ benchmark_loop() {
     while [[ 1 ]]; do
         unset waitlist
 
-        for FILE in $(ls ${BENCHMARK_QUEUE_DIR}); do
+        for FILE in $(ls -1tr ${BENCHMARK_QUEUE_DIR}); do
             if [[ $FILE == *"failed" ]]; then
                 # The sample failed to compile
                 num_completed=$((num_completed+1))
