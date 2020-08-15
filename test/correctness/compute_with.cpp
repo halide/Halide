@@ -2006,7 +2006,7 @@ int store_at_different_levels_test() {
             int correct = 8 * x + 6 * y;
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
-                        x, y, out(x, y), correct);
+                       x, y, out(x, y), correct);
                 return -1;
             }
         }
@@ -2014,7 +2014,6 @@ int store_at_different_levels_test() {
 
     return 0;
 }
-
 
 }  // namespace
 
