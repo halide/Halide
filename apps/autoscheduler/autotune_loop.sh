@@ -229,7 +229,22 @@ make_featurization() {
             touch "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}"
         fi
     fi
-    record_command $BATCH $SAMPLE_ID "$CMD" "compile_command" $FAILED
+    if [ $PIPELINE != "random_pipeline" ]; then
+        record_command $BATCH $SAMPLE_ID "$CMD" "compile_command" $FAILED
+    fi
+
+    rm ${D}/${FNAME}.a
+    rm ${D}/${FNAME}.s
+    rm ${D}/${FNAME}.h
+    rm ${D}/${FNAME}.registration.cpp
+    rm ${D}/compile_log.txt
+
+    if [ $PIPELINE == "random_pipeline" ]; then
+        tail -10 ${D}/compile_err.txt > ${D}/compile_err_truncated.txt
+        mv ${D}/compile_err_truncated.txt ${D}/compile_err.txt
+        rm ${D}/${FNAME}.stmt
+        rm ${D}/${FNAME}.schedule.h
+    fi
 }
 
 IMAGES_DIR="${HALIDE_ROOT}/apps/images"
@@ -275,63 +290,66 @@ benchmark_sample() {
 
     record_command $BATCH $SAMPLE_ID "$CMD" "benchmark_command" $FAILED
 
-    NVPROF_TIMELINE_CMD="HL_NUM_THREADS=${NUM_CORES} \
-        ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
-        nvprof --output-profile ${D}/timeline_${BATCH}_${SAMPLE_ID}.nvprof \
-        ${D}/bench \
-        --output_extents=estimate \
-        --default_input_buffers=random:0:estimate_then_auto \
-        --default_input_scalars=estimate \
-        --benchmarks=all"
+    #if [ $PIPELINE != "random_pipeline" ]; then
+    if false; then
+        NVPROF_TIMELINE_CMD="HL_NUM_THREADS=${NUM_CORES} \
+            ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
+            nvprof --output-profile ${D}/timeline_${BATCH}_${SAMPLE_ID}.nvprof \
+            ${D}/bench \
+            --output_extents=estimate \
+            --default_input_buffers=random:0:estimate_then_auto \
+            --default_input_scalars=estimate \
+            --benchmarks=all"
 
-    NVPROF_METRICS_CMD="HL_NUM_THREADS=${NUM_CORES} \
-        ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
-        nvprof --analysis-metrics -o ${D}/metrics_${BATCH}_${SAMPLE_ID}.nvprof \
-        ${D}/bench \
-        --output_extents=estimate \
-        --default_input_buffers=random:0:estimate_then_auto \
-        --default_input_scalars=estimate \
-        --benchmarks=all"
+        NVPROF_METRICS_CMD="HL_NUM_THREADS=${NUM_CORES} \
+            ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
+            nvprof --analysis-metrics -o ${D}/metrics_${BATCH}_${SAMPLE_ID}.nvprof \
+            ${D}/bench \
+            --output_extents=estimate \
+            --default_input_buffers=random:0:estimate_then_auto \
+            --default_input_scalars=estimate \
+            --benchmarks=all"
 
-    NVPROF_CMD="${NVPROF_TIMELINE_CMD} && ${NVPROF_METRICS_CMD}"
-    record_command $BATCH $SAMPLE_ID "$NVPROF_CMD" "nvprof_command" $FAILED
+        NVPROF_CMD="${NVPROF_TIMELINE_CMD} && ${NVPROF_METRICS_CMD}"
+        record_command $BATCH $SAMPLE_ID "$NVPROF_CMD" "nvprof_command" $FAILED
 
-    METRICS_CMD="HL_NUM_THREADS=${NUM_CORES} \
-        ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
-        nvprof --metrics gld_transactions,gst_transactions,gld_efficiency,gst_efficiency,gld_transactions_per_request,gst_transactions_per_request,shared_load_transactions,shared_load_transactions_per_request,shared_store_transactions,shared_store_transactions_per_request,local_load_requests,local_load_transactions,local_load_transactions_per_request,local_store_requests,local_store_transactions,local_store_transactions_per_request \
-        --log-file ${D}/metrics.log \
-        ${D}/bench \
-        --output_extents=estimate \
-        --default_input_buffers=random:0:estimate_then_auto \
-        --default_input_scalars=estimate \
-        --benchmarks=all"
+        METRICS_CMD="HL_NUM_THREADS=${NUM_CORES} \
+            ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
+            nvprof --metrics gld_transactions,gst_transactions,gld_efficiency,gst_efficiency,gld_transactions_per_request,gst_transactions_per_request,shared_load_transactions,shared_load_transactions_per_request,shared_store_transactions,shared_store_transactions_per_request,local_load_requests,local_load_transactions,local_load_transactions_per_request,local_store_requests,local_store_transactions,local_store_transactions_per_request \
+            --log-file ${D}/metrics.log \
+            ${D}/bench \
+            --output_extents=estimate \
+            --default_input_buffers=random:0:estimate_then_auto \
+            --default_input_scalars=estimate \
+            --benchmarks=all"
 
-    record_command $BATCH $SAMPLE_ID "$METRICS_CMD" "metrics_command" $FAILED
+        record_command $BATCH $SAMPLE_ID "$METRICS_CMD" "metrics_command" $FAILED
 
-    TRACE_CMD="HL_NUM_THREADS=${NUM_CORES} \
-        ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
-        nvprof --print-gpu-trace \
-        --log-file ${D}/trace_64.log \
-        ${D}/bench \
-        --output_extents=estimate \
-        --default_input_buffers=random:0:estimate_then_auto \
-        --default_input_scalars=estimate \
-        --benchmarks=all"
+        TRACE_CMD="HL_NUM_THREADS=${NUM_CORES} \
+            ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
+            nvprof --print-gpu-trace \
+            --log-file ${D}/trace_64.log \
+            ${D}/bench \
+            --output_extents=estimate \
+            --default_input_buffers=random:0:estimate_then_auto \
+            --default_input_scalars=estimate \
+            --benchmarks=all"
 
-    record_command $BATCH $SAMPLE_ID "$TRACE_CMD" "trace_64_command" $FAILED
+        record_command $BATCH $SAMPLE_ID "$TRACE_CMD" "trace_64_command" $FAILED
 
-    TRACE_CMD="HL_NUM_THREADS=${NUM_CORES} \
-        HL_CUDA_JIT_MAX_REGISTERS=256 \
-        ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
-        nvprof --print-gpu-trace \
-        --log-file ${D}/trace_256.log \
-        ${D}/bench \
-        --output_extents=estimate \
-        --default_input_buffers=random:0:estimate_then_auto \
-        --default_input_scalars=estimate \
-        --benchmarks=all"
+        TRACE_CMD="HL_NUM_THREADS=${NUM_CORES} \
+            HL_CUDA_JIT_MAX_REGISTERS=256 \
+            ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
+            nvprof --print-gpu-trace \
+            --log-file ${D}/trace_256.log \
+            ${D}/bench \
+            --output_extents=estimate \
+            --default_input_buffers=random:0:estimate_then_auto \
+            --default_input_scalars=estimate \
+            --benchmarks=all"
 
-    record_command $BATCH $SAMPLE_ID "$TRACE_CMD" "trace_256_command" $FAILED
+        record_command $BATCH $SAMPLE_ID "$TRACE_CMD" "trace_256_command" $FAILED
+    fi
 
     if [[ ${FAILED} == 1 ]]; then
         if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
@@ -351,12 +369,8 @@ benchmark_sample() {
 
     ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
 
-    rm ${D}/${FNAME}.a
-    rm ${D}/${FNAME}.s
     rm ${D}/${FNAME}.featurization
-    rm ${D}/${FNAME}.stmt
-    rm ${D}/${FNAME}.h
-    rm ${D}/${FNAME}.registration.cpp
+    rm ${D}/bench
 
     if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
         mv "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-benchmarking-gpu_${GPU_INDEX}" "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-completed"
