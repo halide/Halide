@@ -287,7 +287,10 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         if (op->value.type().is_float() &&
             (op->value.type().bits() == 32 ||
              (op->value.type().bits() == 64 &&
-              target.has_feature(Target::CUDACapability61)))) {
+              (target.has_feature(Target::CUDACapability61) ||
+               target.has_feature(Target::CUDACapability70) ||
+               target.has_feature(Target::CUDACapability75) ||
+               target.has_feature(Target::CUDACapability80))))) {
             Expr val_expr = op->value;
             Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
             Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
@@ -502,7 +505,13 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    if (target.has_feature(Target::CUDACapability61)) {
+    if (target.has_feature(Target::CUDACapability80)) {
+        return "sm_80";
+    } else if (target.has_feature(Target::CUDACapability75)) {
+        return "sm_75";
+    } else if (target.has_feature(Target::CUDACapability70)) {
+        return "sm_70";
+    } else if (target.has_feature(Target::CUDACapability61)) {
         return "sm_61";
     } else if (target.has_feature(Target::CUDACapability50)) {
         return "sm_50";
@@ -518,7 +527,12 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.has_feature(Target::CUDACapability61)) {
+    if (target.has_feature(Target::CUDACapability80)) {
+        return "+ptx70";
+    } else if (target.has_feature(Target::CUDACapability70) ||
+               target.has_feature(Target::CUDACapability75)) {
+        return "+ptx60";
+    } else if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
                                        Target::CUDACapability50})) {
@@ -669,9 +683,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
              << outstr.c_str() << "\n";
 
     vector<char> buffer(outstr.begin(), outstr.end());
+    // Null-terminate the ptx source
+    buffer.push_back(0);
 
     // Dump the SASS too if the cuda SDK is in the path
-    if (debug::debug_level() >= 2) {
+    const bool try_compile_to_sass = true;
+    if (try_compile_to_sass) {
         debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";
 
         TemporaryFile ptx(get_current_kernel_name(), ".ptx");
@@ -683,16 +700,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
         string cmd = "ptxas --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
         if (system(cmd.c_str()) == 0) {
-            cmd = "nvdisasm " + sass.pathname();
-            int ret = system(cmd.c_str());
-            (void)ret;  // Don't care if it fails
-        }
-
-        // Note: It works to embed the contents of the .sass file in
-        // the buffer instead of the ptx source, and this could help
-        // with app startup times. Expose via the target?
-        /*
-        {
+            // Success. Use SASS instead of PTX to save app startup time
+            debug(0) << "Reading sass from " << sass.pathname() << "\n";
             std::ifstream f(sass.pathname());
             buffer.clear();
             f.seekg(0, std::ios_base::end);
@@ -700,12 +709,16 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
             buffer.resize(sz);
             f.seekg(0, std::ios_base::beg);
             f.read(buffer.data(), sz);
+            if (debug::debug_level() >= 2) {
+                cmd = "nvdisasm " + sass.pathname();
+                int ret = system(cmd.c_str());
+                (void)ret;  // Don't care if it fails
+            }
+        } else {
+            user_warning << "Failed to find ptxas in path. Embedding ptx source instead of sass\n";
         }
-        */
     }
 
-    // Null-terminate the ptx source
-    buffer.push_back(0);
     return buffer;
 #else  // WITH_PTX
     return vector<char>();
@@ -742,7 +755,10 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
     }
     if (t.is_float() && t.bits() == 64) {
         // double atomics are supported since CC6.1
-        return target.has_feature(Target::CUDACapability61);
+        return (target.has_feature(Target::CUDACapability61) ||
+                target.has_feature(Target::CUDACapability70) ||
+                target.has_feature(Target::CUDACapability75) ||
+                target.has_feature(Target::CUDACapability80));
     }
     return false;
 }

@@ -184,6 +184,15 @@ int get_cuda_capability_lower_bound(const Target &t) {
     if (t.has_feature(Target::CUDACapability61)) {
         return 61;
     }
+    if (t.has_feature(Target::CUDACapability70)) {
+        return 70;
+    }
+    if (t.has_feature(Target::CUDACapability75)) {
+        return 75;
+    }
+    if (t.has_feature(Target::CUDACapability80)) {
+        return 80;
+    }
     return 20;
 }
 
@@ -244,8 +253,14 @@ Target::Feature calculate_host_cuda_capability(Target t) {
         return Target::CUDACapability35;
     } else if (ver < 61) {
         return Target::CUDACapability50;
-    } else {
+    } else if (ver < 70) {
         return Target::CUDACapability61;
+    } else if (ver < 75) {
+        return Target::CUDACapability70;
+    } else if (ver < 80) {
+        return Target::CUDACapability75;
+    } else {
+        return Target::CUDACapability80;
     }
 }
 
@@ -316,6 +331,9 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cuda_capability_35", Target::CUDACapability35},
     {"cuda_capability_50", Target::CUDACapability50},
     {"cuda_capability_61", Target::CUDACapability61},
+    {"cuda_capability_70", Target::CUDACapability70},
+    {"cuda_capability_75", Target::CUDACapability75},
+    {"cuda_capability_80", Target::CUDACapability80},
     {"opencl", Target::OpenCL},
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
@@ -472,7 +490,10 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::CUDACapability32) &&
         !t.has_feature(Target::CUDACapability35) &&
         !t.has_feature(Target::CUDACapability50) &&
-        !t.has_feature(Target::CUDACapability61)) {
+        !t.has_feature(Target::CUDACapability61) &&
+        !t.has_feature(Target::CUDACapability70) &&
+        !t.has_feature(Target::CUDACapability75) &&
+        !t.has_feature(Target::CUDACapability80)) {
         // Detect host cuda capability
         t.set_feature(get_host_cuda_capability(t));
     }
@@ -882,12 +903,12 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (a) must be included if either target has the feature (union)
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
-    const std::array<Feature, 15> union_features = {{// These are true union features.
+    const std::array<Feature, 18> union_features = {{// These are true union features.
                                                      CUDA, OpenCL, OpenGL, OpenGLCompute, Metal, D3D12Compute, NoNEON,
 
                                                      // These features are actually intersection-y, but because targets only record the _highest_,
                                                      // we have to put their union in the result and then take a lower bound.
-                                                     CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61,
+                                                     CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61, CUDACapability70, CUDACapability75, CUDACapability80,
                                                      HVX_v62, HVX_v65, HVX_v66}};
 
     const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
@@ -944,6 +965,9 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     if (cuda_capability < 35) output.features.reset(CUDACapability35);
     if (cuda_capability < 50) output.features.reset(CUDACapability50);
     if (cuda_capability < 61) output.features.reset(CUDACapability61);
+    if (cuda_capability < 70) output.features.reset(CUDACapability70);
+    if (cuda_capability < 75) output.features.reset(CUDACapability75);
+    if (cuda_capability < 80) output.features.reset(CUDACapability80);
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
