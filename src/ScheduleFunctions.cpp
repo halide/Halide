@@ -1032,12 +1032,12 @@ public:
         return _found_compute_level;
     }
     bool found_store_level() const {
-        return _found_store_levels_count == (int)funcs.size();
+        return _found_store_levels_for_funcs.size() == funcs.size();
     }
 
 protected:
     bool _found_compute_level{};
-    int _found_store_levels_count = 0;
+    std::set<string> _found_store_levels_for_funcs;
 
     using IRMutator::visit;
 
@@ -1098,7 +1098,7 @@ protected:
 
             Stmt stmt = build_realize(build_pipeline_group(for_loop), funcs[0], is_output_list[0]);
             _found_compute_level = true;
-            _found_store_levels_count = 1;
+            _found_store_levels_for_funcs.insert(funcs[0].name());
             return stmt;
         }
 
@@ -1115,7 +1115,7 @@ protected:
                 if (funcs[i].schedule().store_level().match(for_loop->name)) {
                     debug(3) << "Found store level for " << funcs[i].name() << " at " << for_loop->name << "\n";
                     body = build_realize_function_from_group(body, i);
-                    _found_store_levels_count++;
+                    _found_store_levels_for_funcs.insert(funcs[i].name());
                 }
             }
         }
@@ -1166,7 +1166,7 @@ protected:
             // Prefix all calls to func in op
             Stmt stmt = build_realize(build_pipeline_group(provide_op), funcs[0], is_output_list[0]);
             _found_compute_level = true;
-            _found_store_levels_count = 1;
+            _found_store_levels_for_funcs.insert(funcs[0].name());
             return stmt;
         }
 
