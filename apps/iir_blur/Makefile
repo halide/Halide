@@ -9,9 +9,14 @@ CXXFLAGS += -I../support/
 FILTER_DEPS=$(BIN)/%/iir_blur.a
 
 ifndef NO_AUTO_SCHEDULE
-	FILTER_DEPS += $(BIN)/%/iir_blur_auto_schedule.a $(BIN)/%/iir_blur_gradient_auto_schedule.a
+	FILTER_DEPS += $(BIN)/%/iir_blur_auto_schedule.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/iir_blur_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
 endif
 
 $(GENERATOR_BIN)/iir_blur.generator: iir_blur_generator.cpp $(GENERATOR_DEPS)

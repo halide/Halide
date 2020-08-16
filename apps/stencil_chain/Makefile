@@ -8,9 +8,14 @@ CXXFLAGS += -I../support/
 PROCESS_DEPS=$(BIN)/%/stencil_chain.a
 
 ifndef NO_AUTO_SCHEDULE
-	PROCESS_DEPS += $(BIN)/%/stencil_chain_auto_schedule.a $(BIN)/%/stencil_chain_gradient_auto_schedule.a
+	PROCESS_DEPS += $(BIN)/%/stencil_chain_auto_schedule.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	PROCESS_DEPS += $(BIN)/%/stencil_chain_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
 endif
 
 .PHONY: build clean test

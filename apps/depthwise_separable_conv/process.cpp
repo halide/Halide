@@ -3,8 +3,10 @@
 
 #include "depthwise_separable_conv.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "depthwise_separable_conv_auto_schedule.h"
-#include "depthwise_separable_conv_gradient_auto_schedule.h"
+    #include "depthwise_separable_conv_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "depthwise_separable_conv_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -69,6 +71,8 @@ int main(int argc, char **argv) {
         {"depthwise_separable_conv Manual", [&]() { depthwise_separable_conv(input, depthwise_filter, pointwise_filter, bias, 1, 1, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
         {"depthwise_separable_conv Auto-schedule", [&]() { depthwise_separable_conv_auto_schedule(input, depthwise_filter, pointwise_filter, bias, 1, 1, output); output.device_sync(); }},
+    #endif
+    #ifndef NO_GRADIENT_AUTO_SCHEDULE
         {"depthwise_separable_conv Gradient auto-schedule", [&]() { depthwise_separable_conv_gradient_auto_schedule(input, depthwise_filter, pointwise_filter, bias, 1, 1, output); output.device_sync(); }}
     #endif
     });

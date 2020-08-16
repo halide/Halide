@@ -7,9 +7,14 @@ CXXFLAGS += -I../support/
 PROCESS_DEPS=$(BIN)/%/depthwise_separable_conv.a
 
 ifndef NO_AUTO_SCHEDULE
-	PROCESS_DEPS += $(BIN)/%/depthwise_separable_conv_auto_schedule.a $(BIN)/%/depthwise_separable_conv_gradient_auto_schedule.a
+	PROCESS_DEPS += $(BIN)/%/depthwise_separable_conv_auto_schedule.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	PROCESS_DEPS += $(BIN)/%/depthwise_separable_conv_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
 endif
 
 all: $(BIN)/$(HL_TARGET)/process

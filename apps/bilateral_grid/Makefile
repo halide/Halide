@@ -8,9 +8,15 @@ GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 FILTER_DEPS=$(BIN)/%/bilateral_grid.a
 
 ifndef NO_AUTO_SCHEDULE
-	FILTER_DEPS += $(BIN)/%/bilateral_grid_auto_schedule.a $(BIN)/%/bilateral_grid_gradient_auto_schedule.a
+	FILTER_DEPS += $(BIN)/%/bilateral_grid_auto_schedule.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/bilateral_grid_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
 endif
 
 .PHONY: build clean test

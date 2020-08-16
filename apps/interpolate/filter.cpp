@@ -7,8 +7,10 @@
 
 #include "interpolate.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "interpolate_auto_schedule.h"
-#include "interpolate_gradient_auto_schedule.h"
+    #include "interpolate_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "interpolate_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -28,6 +30,8 @@ int main(int argc, char **argv) {
     multi_way_bench({{"interpolate Manual", [&]() { interpolate(input, output); output.device_sync(); }},
 #ifndef NO_AUTO_SCHEDULE
                      {"interpolate Auto-scheduled", [&]() { interpolate_auto_schedule(input, output); output.device_sync(); }},
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
                      {"interpolate Gradient auto-scheduled", [&]() { interpolate_gradient_auto_schedule(input, output); output.device_sync(); }}
 #endif
     });

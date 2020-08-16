@@ -3,8 +3,10 @@
 
 #include "local_laplacian.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "local_laplacian_auto_schedule.h"
-#include "local_laplacian_gradient_auto_schedule.h"
+    #include "local_laplacian_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "local_laplacian_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -33,6 +35,8 @@ int main(int argc, char **argv) {
         {"local_laplacian Manual", [&]() { local_laplacian(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
         {"local_laplacian Auto-scheduled", [&]() { local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
+    #endif
+    #ifndef NO_GRADIENT_AUTO_SCHEDULE
         {"local_laplacian Gradient auto-scheduled", [&]() { local_laplacian_gradient_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }}
     #endif
         }

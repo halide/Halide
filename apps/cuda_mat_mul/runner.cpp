@@ -1,7 +1,9 @@
 #include "mat_mul.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "mat_mul_auto_schedule.h"
-#include "mat_mul_gradient_auto_schedule.h"
+    #include "mat_mul_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "mat_mul_gradient_auto_schedule.h"
 #endif
 #include "halide_benchmark.h"
 #include "HalideBuffer.h"
@@ -65,6 +67,8 @@ int main(int argc, char **argv) {
             {"cuda_mat_mul Manual", [&]() { mat_mul(A, B, C); C.device_sync(); }},
         #ifndef NO_AUTO_SCHEDULE
             {"cuda_mat_mul Auto-schedule", [&]() { mat_mul_auto_schedule(A, B, C); C.device_sync(); }},
+        #endif
+        #ifndef NO_GRADIENT_AUTO_SCHEDULE
             {"cuda_mat_mul Gradient auto-schedule", [&]() { mat_mul_gradient_auto_schedule(A, B, C); C.device_sync(); }}
         #endif
         });
