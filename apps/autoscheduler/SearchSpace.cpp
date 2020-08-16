@@ -327,6 +327,10 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         {
             state->update_always_consider_inline_options(node);
 
+            if (is_in_partial_schedule(node)) {
+                state->add_to_always_consider_inline_options(node);
+            }
+
             // 1) Inline it
             if (search_space_options.compute_inline() && node->stages.size() == 1 && !node->is_output && !must_compute_root) {
                 LoopNest *new_root = new LoopNest;
@@ -391,6 +395,9 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
                 const auto &p = root->get_bounds(node)->region_computed(v);
                 if (p.extent() >= 16) {
                     vector_dims.push_back(v);
+                    if (!is_in_partial_schedule(node)) {
+                        break;
+                    }
                 }
             }
         }

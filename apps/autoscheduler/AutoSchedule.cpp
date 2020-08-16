@@ -347,11 +347,14 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
                 continue;
             }
 
+            aslog(0) << "Options:\n";
             for (int i = (int)q.size() - 1; i >= 0; i--) {
                 auto state = q[i];
                 LoopNestParser option = LoopNestParser::from_string(state->root->to_string());
+                aslog(0) << "Option " << i << ":\n";
                 option.dump();
             }
+            aslog(0) << "\nTarget partial schedule:\n";
             partial_schedule->dump();
             internal_assert(false) << "Partial schedule not found";
         }

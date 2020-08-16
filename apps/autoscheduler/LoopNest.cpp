@@ -781,6 +781,9 @@ Strides LoopNest::compute_strides(const LoadJacobian &jac, int innermost_storage
 
     if (verbose) {
         aslog(2) << "\nstrides: " << node->func.name() << " (stage = " << stage->index << ") loading from " << storage_node->func.name() << " ->\n";
+        if (aslog::aslog_level() >= 2) {
+            jac.dump("");
+        }
     }
 
     // The node's storage dimensions (from innermost outward)

@@ -1250,6 +1250,10 @@ bool State::should_always_consider_inline(const FunctionDAG::Node *node) const {
     return always_consider_inline.contains(node) && always_consider_inline.get(node);
 }
 
+void State::add_to_always_consider_inline_options(const FunctionDAG::Node *node) {
+    always_consider_inline.get_or_create(node) = true;
+}
+
 void State::update_always_consider_inline_options(const FunctionDAG::Node *node) {
     if (node->is_output) {
         return;
