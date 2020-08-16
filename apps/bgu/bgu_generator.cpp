@@ -479,9 +479,13 @@ public:
                     .unroll(c);
 
             } else {
-                // Runtime is bimodal. 0.76ms on a 2060 RTX when run
-                // under nvprof, but 0.96ms when run without
-                // nvprof. Unclear what is taking the extra time.
+                // 0.91ms on a 2060 RTX
+
+                // This app is somewhat sensitive to atomic adds
+                // getting lowered correctly, so if runtime is
+                // mysteriously slow, check the ptx to see if there
+                // are atomic adds vs cas loops. If it's the latter,
+                // please file a bug.
 
                 Var xi, yi, zi, xo, yo, t;
                 histogram
@@ -499,7 +503,7 @@ public:
                         .update()
                         .atomic()
                         .split(x, xo, xi, 16)
-                        .reorder(xi, c, r.x, r.y, xo, y)
+                        .reorder(c, r.x, xi, r.y, xo, y)
                         .unroll(c)
                         .gpu_blocks(r.y, xo, y)
                         .gpu_threads(xi);
@@ -507,19 +511,21 @@ public:
                     histogram
                         .update()
                         .split(x, xo, xi, 16)
-                        .reorder(xi, c, r.x, r.y, xo, y)
+                        .reorder(c, r.x, r.y, xi, xo, y)
                         .unroll(c)
                         .gpu_blocks(xo, y)
                         .gpu_threads(xi);
                 }
 
                 clamped_values
-                    .compute_root()
-                    .gpu_tile(Halide::_0, Halide::_1, xi, yi, 16, 8, TailStrategy::RoundUp)
-                    .gpu_blocks(Halide::_0, Halide::_1, Halide::_2);
-                clamped_splat_loc.compute_root()
-                    .gpu_tile(Halide::_0, Halide::_1, xi, yi, 16, 8, TailStrategy::RoundUp)
-                    .gpu_blocks(Halide::_0, Halide::_1, Halide::_2);
+                    .compute_at(histogram, r.x)
+                    .unroll(Halide::_2);
+                clamped_splat_loc
+                    .compute_at(histogram, r.x)
+                    .unroll(Halide::_2);
+
+                gray_splat_loc
+                    .compute_at(histogram, r.x);
 
                 blurz
                     .compute_root()
@@ -555,7 +561,7 @@ public:
                     .gpu_threads(xi, yi)
                     .gpu_blocks(y, z, c);
 
-                // 2/3 of the runtime (512us) is in the slicing kernel
+                // Most of the runtime (670us) is in the slicing kernel
                 slice
                     .compute_root()
                     .reorder(c, x, y)
@@ -564,6 +570,14 @@ public:
                     .tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp)
                     .gpu_threads(xi, yi)
                     .gpu_blocks(x, y);
+
+                interpolated_matrix_z
+                    .compute_at(slice, c)
+                    .unroll(c);
+                interpolated
+                    .compute_at(slice, c);
+                gray_slice_loc
+                    .compute_at(slice, xi);
             }
         }
 
@@ -583,8 +597,6 @@ public:
             output.dim(0).set_estimate(0, 1536);
             output.dim(1).set_estimate(0, 2560);
             output.dim(2).set_estimate(0, 3);
-
-            slice.bound(c, 0, 3);
         }
     }
 };
