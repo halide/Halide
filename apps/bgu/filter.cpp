@@ -128,6 +128,8 @@ int main(int argc, char **argv) {
     #endif
     });
 
+    high_res_out.copy_to_host();
+
     convert_and_save_image(high_res_out, argv[2]);
 
     printf("Success!\n");
