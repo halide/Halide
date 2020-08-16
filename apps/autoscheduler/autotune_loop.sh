@@ -211,7 +211,7 @@ make_featurization() {
         -O3
         -I ../../include \
         ${LIBPNG_CFLAGS} \
-        ../../tools/RunGenMain.cpp \
+        ${AUTOSCHED_BIN}/RunGenMain.o \
         ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
