@@ -38,6 +38,8 @@ int main(int argc, char **argv) {
 #endif
     });
 
+    output.copy_to_host();
+
     convert_and_save_image(output, argv[6]);
 
     printf("Success!\n");

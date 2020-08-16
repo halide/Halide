@@ -208,6 +208,7 @@ make_featurization() {
     LIBPNG_LIBS=$(libpng-config --ldflags)
     CMD="${CXX} \
         -std=c++11 \
+        -O3
         -I ../../include \
         ${LIBPNG_CFLAGS} \
         ../../tools/RunGenMain.cpp \
