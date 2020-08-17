@@ -1,44 +1,73 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
-BIN ?= bin
+CXXFLAGS += -I../support/
+
+GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
+
+FILTER_DEPS=$(BIN)/%/burst_camera_pipe.a
+
+ifndef NO_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/burst_camera_pipe_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/burst_camera_pipe_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
+endif
 
 SRCS = burst_camera_pipe_generator.cpp align.cpp finish.cpp merge.cpp util.cpp
 
-# 'classic' will exceed 2GB in some allocations, so enable -large
-HL_TARGET_LARGE=$(HL_TARGET)-large_buffers
+.PHONY: build clean test
 
-$(BIN)/burst_camera_pipe.generator: $(SRCS) $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
+build: $(BIN)/$(HL_TARGET)/process
 
-$(BIN)/burst_camera_pipe.a: $(BIN)/burst_camera_pipe.generator
+$(GENERATOR_BIN)/burst_camera_pipe.generator: $(SRCS) $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$< -g burst_camera_pipe -f burst_camera_pipe -o $(BIN) target=$(HL_TARGET_LARGE) auto_schedule=false
+	$(CXX) -g $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-$(BIN)/burst_camera_pipe_classic_auto_schedule.a: $(BIN)/burst_camera_pipe.generator
+$(BIN)/%/burst_camera_pipe.a: $(GENERATOR_BIN)/burst_camera_pipe.generator
 	@mkdir -p $(@D)
-	$< -g burst_camera_pipe -f burst_camera_pipe_classic_auto_schedule -o $(BIN) target=$(HL_TARGET_LARGE) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
+	$< -g burst_camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f burst_camera_pipe target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/burst_camera_pipe_auto_schedule.a: $(BIN)/burst_camera_pipe.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+$(BIN)/%/burst_camera_pipe_auto_schedule.a: $(GENERATOR_BIN)/burst_camera_pipe.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
-	$< -g burst_camera_pipe -f burst_camera_pipe_auto_schedule -o $(BIN) target=$(HL_TARGET_LARGE) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
+	HL_PERMIT_FAILED_UNROLL=1 \
+    HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=48 \
+	$< -g burst_camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f burst_camera_pipe_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019 machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
-$(BIN)/process: process.cpp $(BIN)/burst_camera_pipe.a $(BIN)/burst_camera_pipe_classic_auto_schedule.a $(BIN)/burst_camera_pipe_auto_schedule.a
+$(BIN)/%/burst_camera_pipe_gradient_auto_schedule.a: $(GENERATOR_BIN)/burst_camera_pipe.generator
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$^ -g burst_camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f burst_camera_pipe_gradient_auto_schedule target=$(HL_TARGET) auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
+
+$(BIN)/%/process: process.cpp $(FILTER_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -I$(@D) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS)
 
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/process
-	$(BIN)/process
+test: $(BIN)/$(HL_TARGET)/process
+	$(BIN)/$(HL_TARGET)/process
 
-autotune: $(BIN)/burst_camera_pipe.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+BATCH_ID ?= 0
+TRAIN_ONLY ?= 0
+SAMPLES_DIR ?= autotuned_samples
+autotune: $(GENERATOR_BIN)/burst_camera_pipe.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	HL_MACHINE_PARAMS=80,1,1 \
+	SAMPLES_DIR=$(SAMPLES_DIR) \
+	HL_DEBUG_CODEGEN=0 \
+	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
-		$(BIN)/burst_camera_pipe.generator \
+		$(GENERATOR_BIN)/burst_camera_pipe.generator \
 		burst_camera_pipe \
-		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
-		$(AUTOSCHED_BIN)
+		$(HL_TARGET) \
+		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_BIN) \
+		$(BATCH_ID) \
+		$(TRAIN_ONLY)

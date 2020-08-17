@@ -20,7 +20,8 @@ echo " Running on multiple nodes/GPU devices"
 echo ""
 echo " Run started at:- "
 date
-ENABLE_BEAM_SEARCH=0 OPTIMIZE="-O3" bash generate_autotune_results.sh 125 0 0 0 0 random_pipeline
+ulimit -c 0
+ENABLE_BEAM_SEARCH=0 OPTIMIZE="-O3" bash generate_autotune_results.sh 250 0 0 0 0 random_pipeline
 echo "Run completed at:- "
 date
 
