@@ -498,7 +498,6 @@ inline Buffer<> load_input_from_file(const std::string &pathname,
 void fill_with_random(Buffer<> &b, int seed) {
     uint8_t *start = (uint8_t *)b.begin();
     uint8_t *end = (uint8_t *)b.end();
-    // TODO: worry about buffers that aren't a multiple of 8 bytes.
 
     // We'll use xorshift 64
     // The state must be initialized to be anything non-zero.
