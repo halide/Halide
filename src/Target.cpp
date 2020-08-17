@@ -1027,7 +1027,7 @@ void target_test() {
     }
 
     internal_assert(Target().vector_bits == 0) << "Default Target vector_bits not 0.\n";
-    internal_assert(Target("arm-64-sve2-vector_bits_512").vector_bits == 512) << "Vector bits not round tripped in Target.\n";
+    internal_assert(Target("arm-64-linux-sve2-vector_bits_512").vector_bits == 512) << "Vector bits not round tripped in Target.\n";
 
     std::cout << "Target test passed" << std::endl;
 }
