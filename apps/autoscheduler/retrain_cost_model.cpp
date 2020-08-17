@@ -675,6 +675,8 @@ int main(int argc, char **argv) {
                 std::cout << "Zero loss, returning early\n";
                 return 0;
             }
+
+            std::cout << "Completed epoch " << e + 1 << "\n";
         }
     }
 
