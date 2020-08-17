@@ -495,79 +495,74 @@ inline Buffer<> load_input_from_file(const std::string &pathname,
     return b;
 }
 
-template<typename T>
-struct FillWithRandom {
-public:
-    void operator()(Buffer<> &b_dynamic, int seed) {
-        Buffer<T> b = b_dynamic;
-        std::mt19937 rng(seed);
-        fill(b, rng);
+void fill_with_random(Buffer<> &b, int seed) {
+    uint8_t *start = (uint8_t *)b.begin();
+    uint8_t *end = (uint8_t *)b.end();
+    // TODO: worry about buffers that aren't a multiple of 8 bytes.
+
+    // We'll use xorshift 64
+    // The state must be initialized to be anything non-zero.
+    uint64_t x = (uint64_t)seed;
+    x = (x << 1) | 1;
+
+    halide_type_t type = b.type();
+    if (type.code == halide_type_float) {
+        if (type.bits == 32) {
+            while (start + 7 < end) {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                // Use the bits for the mantissa to get a number between 1.0 and 2.0
+                uint64_t y = 0x3f8000003f800000ULL | (x & 0x07ffffff07ffffffULL);
+                float f[2];
+                memcpy(&f, &y, sizeof(y));
+                // Subtract one to get into the [0, 1] range
+                f[0] -= 1.0f;
+                f[1] -= 1.0f;
+                memcpy(start, &f, sizeof(f));
+                start += 8;
+            }
+        } else {
+            assert(type.bits == 64);
+            while (start + 7 < end) {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                uint64_t y = 0x3ff0000000000000ULL | (x & 0x000fffffffffffffULL);
+                double f;
+                memcpy(&f, &y, sizeof(y));
+                f -= 1.0;
+                memcpy(start, &f, sizeof(f));
+                start += 8;
+            }
+        }
+    } else {
+        while (start + 7 < end) {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            memcpy(start, &x, 8);
+            start += 8;
+        }
+    }
+    if (start != end) {
+        // We may have a sub-8-byte tail to fill
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        memcpy(start, &x, end - start);
+        if (type.code == halide_type_float) {
+            uint32_t x32 = (uint32_t)x;
+            x32 = 0x3f800000 | (x32 & 0x07ffffff);
+            float f;
+            memcpy(&f, &x32, 4);
+            f -= 1.0f;
+            memcpy(start, &f, 4);
+        }
     }
 
-private:
-    template<typename T2 = T,
-             typename std::enable_if<std::is_integral<T2>::value && !std::is_same<T2, bool>::value && !std::is_same<T2, char>::value && !std::is_same<T2, signed char>::value && !std::is_same<T2, unsigned char>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<T2> dis;
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = dis(rng);
-        });
-    }
-
-    template<typename T2 = T, typename std::enable_if<std::is_floating_point<T2>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_real_distribution<T2> dis(0.0, 1.0);
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = dis(rng);
-        });
-    }
-
-    template<typename T2 = T, typename std::enable_if<std::is_same<T2, bool>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<int> dis(0, 1);
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = static_cast<T2>(dis(rng));
-        });
-    }
-
-    // std::uniform_int_distribution<char> is UB in C++11,
-    // so special-case to avoid compiler variation
-    template<typename T2 = T, typename std::enable_if<std::is_same<T2, char>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<int> dis(-128, 127);
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = static_cast<T2>(dis(rng));
-        });
-    }
-
-    // std::uniform_int_distribution<signed char> is UB in C++11,
-    // so special-case to avoid compiler variation
-    template<typename T2 = T, typename std::enable_if<std::is_same<T2, signed char>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<int> dis(-128, 127);
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = static_cast<T2>(dis(rng));
-        });
-    }
-
-    // std::uniform_int_distribution<unsigned char> is UB in C++11,
-    // so special-case to avoid compiler variation
-    template<typename T2 = T, typename std::enable_if<std::is_same<T2, unsigned char>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<int> dis(0, 255);
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = static_cast<T2>(dis(rng));
-        });
-    }
-
-    template<typename T2 = T, typename std::enable_if<std::is_pointer<T2>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<intptr_t> dis;
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = reinterpret_cast<T2>(dis(rng));
-        });
-    }
-};
+    b.set_host_dirty();
+}
 
 template<typename T>
 struct FillWithScalar {
@@ -768,7 +763,7 @@ struct ArgData {
             }
             auto shape = parse_optional_extents(v[2]);
             Buffer<> b = allocate_buffer(metadata->type, shape);
-            dynamic_type_dispatch<FillWithRandom>(metadata->type, b, seed);
+            fill_with_random(b, seed);
             return b;
         } else {
             return load_input_from_file(v[0], *metadata);
@@ -1108,6 +1103,8 @@ public:
 
             info() << "Saving output " << arg_name << " to " << arg.raw_string << " ...";
             Buffer<> &b = arg.buffer_value;
+
+            b.copy_to_host();
 
             std::set<Halide::Tools::FormatInfo> savable_types;
             if (!Halide::Tools::save_query<Buffer<>, IOCheckFail>(arg.raw_string, &savable_types)) {
