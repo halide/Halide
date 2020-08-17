@@ -1,7 +1,9 @@
 #include "camera_pipe.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "camera_pipe_auto_schedule.h"
-#include "camera_pipe_gradient_auto_schedule.h"
+    #include "camera_pipe_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "camera_pipe_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -95,10 +97,12 @@ int main(int argc, char **argv) {
 
     multi_way_bench({
         {"camera_pipe Manual", [&]() { camera_pipe(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }},
-    #ifndef NO_AUTO_SCHEDULE
+#ifndef NO_AUTO_SCHEDULE
         {"camera_pipe Auto-scheduled", [&]() { camera_pipe_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }},
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
         {"camera_pipe Gradient auto-scheduled", [&]() { camera_pipe_gradient_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }}
-    #endif
+#endif
         }
     );
 

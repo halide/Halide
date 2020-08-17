@@ -49,6 +49,6 @@ for app in $APPS; do
     APP_DIR="${HALIDE_ROOT}/apps/${app}"
 
     make -C ${APP_DIR} clean
-    IMAGES="${HALIDE_ROOT}/apps/images" HL_TARGET=host-cuda OPTIMIZE=-O3 NO_AUTO_SCHEDULE=1 NO_GRADIENT_AUTO_SCHEDULE=1 make -C ${APP_DIR} test -j${LOCAL_CORES} | grep "Manual time"
+    HL_TARGET=host-cuda OPTIMIZE=-O3 NO_AUTO_SCHEDULE=1 make -C ${APP_DIR} test -j${LOCAL_CORES} | grep "Gradient"
 done
 

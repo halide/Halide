@@ -7,9 +7,14 @@ CXXFLAGS += -I../support/
 FILTER_DEPS=$(BIN)/%/interpolate.a
 
 ifndef NO_AUTO_SCHEDULE
-	FILTER_DEPS += $(BIN)/%/interpolate_auto_schedule.a $(BIN)/%/interpolate_gradient_auto_schedule.a
+	FILTER_DEPS += $(BIN)/%/interpolate_auto_schedule.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/interpolate_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
 endif
 
 all: $(BIN)/$(HL_TARGET)/test

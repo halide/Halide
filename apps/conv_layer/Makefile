@@ -7,9 +7,15 @@ CXXFLAGS += -I../support/
 PROCESS_DEPS=$(BIN)/%/conv_layer.a
 
 ifndef NO_AUTO_SCHEDULE
-	PROCESS_DEPS += $(BIN)/%/conv_layer_auto_schedule.a $(BIN)/%/conv_layer_gradient_auto_schedule.a
+	PROCESS_DEPS += $(BIN)/%/conv_layer_auto_schedule.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	PROCESS_DEPS += $(BIN)/%/conv_layer_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
 endif
 
 .PHONY: build clean test

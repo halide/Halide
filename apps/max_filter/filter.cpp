@@ -7,8 +7,10 @@
 
 #include "max_filter.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "max_filter_auto_schedule.h"
-#include "max_filter_gradient_auto_schedule.h"
+    #include "max_filter_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "max_filter_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -29,6 +31,8 @@ int main(int argc, char **argv) {
         {"max_filter Manual", [&]() { max_filter(input, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
         {"max_filter Auto-scheduler", [&]() { max_filter_auto_schedule(input, output); output.device_sync(); }},
+    #endif
+    #ifndef NO_GRADIENT_AUTO_SCHEDULE
         {"max_filter Gradient auto-scheduler", [&]() { max_filter_gradient_auto_schedule(input, output); output.device_sync();}}
     #endif
         });

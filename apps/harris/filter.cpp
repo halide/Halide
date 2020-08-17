@@ -7,8 +7,10 @@
 
 #include "harris.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "harris_auto_schedule.h"
-#include "harris_gradient_auto_schedule.h"
+    #include "harris_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "harris_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -40,6 +42,8 @@ int main(int argc, char **argv) {
                           harris_auto_schedule(padded_input, output);
                           output.device_sync();
                       }},
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
                      {"harris Gradient auto-scheduled", [&]() {
                           harris_gradient_auto_schedule(padded_input, output);
                           output.device_sync();

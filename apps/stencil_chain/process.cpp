@@ -3,8 +3,10 @@
 
 #include "stencil_chain.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "stencil_chain_auto_schedule.h"
-#include "stencil_chain_gradient_auto_schedule.h"
+    #include "stencil_chain_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "stencil_chain_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -33,6 +35,8 @@ int main(int argc, char **argv) {
         {"stencil_chain Manual", [&]() { stencil_chain(input, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
         {"stencil_chain Auto-scheduled", [&]() { stencil_chain_auto_schedule(input, output); output.device_sync(); }},
+    #endif
+    #ifndef NO_GRADIENT_AUTO_SCHEDULE
         {"stencil_chain Gradient auto-scheduled", [&]() { stencil_chain_gradient_auto_schedule(input, output); output.device_sync();}}
     #endif
         }

@@ -7,9 +7,14 @@ CXXFLAGS += -I../support/
 FILTER_DEPS=$(BIN)/%/unsharp.a
 
 ifndef NO_AUTO_SCHEDULE
-	FILTER_DEPS += $(BIN)/%/unsharp_auto_schedule.a $(BIN)/%/unsharp_gradient_auto_schedule.a
+	FILTER_DEPS += $(BIN)/%/unsharp_auto_schedule.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/unsharp_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
 endif
 
 all: $(BIN)/$(HL_TARGET)/test

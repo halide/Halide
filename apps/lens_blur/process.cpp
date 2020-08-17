@@ -3,8 +3,10 @@
 
 #include "lens_blur.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "lens_blur_auto_schedule.h"
-#include "lens_blur_gradient_auto_schedule.h"
+    #include "lens_blur_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "lens_blur_gradient_auto_schedule.h"
 #endif
 
 #include "HalideBuffer.h"
@@ -39,6 +41,8 @@ int main(int argc, char **argv) {
     multi_way_bench({{"lens_blur Manual", [&]() { lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
 #ifndef NO_AUTO_SCHEDULE
                      {"lens_blur Auto-scheduled", [&]() { lens_blur_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
                      {"lens_blur Gradient auto-scheduled", [&]() { lens_blur_gradient_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }}
 #endif
     });

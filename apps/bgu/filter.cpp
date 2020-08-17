@@ -3,8 +3,10 @@
 
 #include "bgu.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "bgu_auto_schedule.h"
-#include "bgu_gradient_auto_schedule.h"
+    #include "bgu_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "bgu_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -122,10 +124,12 @@ int main(int argc, char **argv) {
 
     multi_way_bench({
         {"bgu Manual", [&]() { bgu(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); high_res_out.device_sync(); }},
-    #ifndef NO_AUTO_SCHEDULE
+#ifndef NO_AUTO_SCHEDULE
         {"bgu Auto-scheduled", [&]() { bgu_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); high_res_out.device_sync(); }},
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
         {"bgu Gradient auto-scheduled", [&]() { bgu_gradient_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); high_res_out.device_sync(); }}
-    #endif
+#endif
     });
 
     high_res_out.copy_to_host();

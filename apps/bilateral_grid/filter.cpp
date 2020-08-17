@@ -4,8 +4,10 @@
 
 #include "bilateral_grid.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "bilateral_grid_auto_schedule.h"
-#include "bilateral_grid_gradient_auto_schedule.h"
+    #include "bilateral_grid_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "bilateral_grid_gradient_auto_schedule.h"
 #endif
 
 #include "HalideBuffer.h"
@@ -31,6 +33,8 @@ int main(int argc, char **argv) {
     multi_way_bench({{"bilateral_grid Manual", [&]() { bilateral_grid(input, r_sigma, output); output.device_sync(); }},
 #ifndef NO_AUTO_SCHEDULE
                      {"bilateral_grid Auto-scheduled", [&]() { bilateral_grid_auto_schedule(input, r_sigma, output); output.device_sync(); }},
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
                      {"bilateral_grid Gradient auto-scheduled", [&]() { bilateral_grid_gradient_auto_schedule(input, r_sigma, output); output.device_sync(); }}
 #endif
     });

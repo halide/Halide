@@ -3,8 +3,10 @@
 
 #include "nl_means.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "nl_means_auto_schedule.h"
-#include "nl_means_gradient_auto_schedule.h"
+    #include "nl_means_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "nl_means_gradient_auto_schedule.h"
 #endif
 
 #include "HalideBuffer.h"
@@ -34,6 +36,8 @@ int main(int argc, char **argv) {
     multi_way_bench({{"nl_means Manual", [&]() { nl_means(input, patch_size, search_area, sigma, output); output.device_sync(); }},
 #ifndef NO_AUTO_SCHEDULE
                      {"nl_means Auto-scheduled", [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }},
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
                      {"nl_means Gradient auto-scheduled", [&]() { nl_means_gradient_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }}
 #endif
     });

@@ -15,9 +15,14 @@ GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 RUNNER_DEPS=$(BIN)/%/mat_mul.a
 
 ifndef NO_AUTO_SCHEDULE
-	RUNNER_DEPS += $(BIN)/%/mat_mul_auto_schedule.a $(BIN)/%/mat_mul_gradient_auto_schedule.a
+	RUNNER_DEPS += $(BIN)/%/mat_mul_auto_schedule.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	RUNNER_DEPS += $(BIN)/%/mat_mul_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
 endif
 
 all: $(BIN)/$(HL_TARGET)/runner
