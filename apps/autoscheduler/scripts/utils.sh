@@ -356,8 +356,13 @@ function save_best_schedule_result() {
     echo "Comparing candidate results with current best for ${app}"
 
     local -r candidate_details_file=${samples_dir}/best.txt
-    local -r generator_name=${app#"cuda_"}
-    local -r candidate_schedule_file=${samples_dir}/best.${generator_name%"_generator"}.schedule.h
+    if [[ ${app} == "mobilenet"* ]]; then
+        local -r generator_name="onnx_model_generator"
+        local -r candidate_schedule_file=${samples_dir}/best.${generator_name}.schedule.h
+    else
+        local -r generator_name=${app#"cuda_"}
+        local -r candidate_schedule_file=${samples_dir}/best.${generator_name%"_generator"}.schedule.h
+    fi
     local -r candidate_weights_file=${samples_dir}/best.weights
     local -r candidate_autotune_out_file=${samples_dir}/autotune_out.txt
 
