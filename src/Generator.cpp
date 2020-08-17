@@ -77,7 +77,7 @@ std::string compute_base_path(const std::string &output_dir,
 std::map<Output, std::string> compute_output_files(const Target &target,
                                                    const std::string &base_path,
                                                    const std::set<Output> &outputs) {
-    std::map<Output, OutputInfo> output_info = get_output_info(target);
+    std::map<Output, const OutputInfo> output_info = get_output_info(target);
 
     std::map<Output, std::string> output_files;
     for (auto o : outputs) {
@@ -891,7 +891,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     }
 
     // extensions won't vary across multitarget output
-    std::map<Output, OutputInfo> output_info = get_output_info(targets[0]);
+    std::map<Output, const OutputInfo> output_info = get_output_info(targets[0]);
 
     std::set<Output> outputs;
     if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
