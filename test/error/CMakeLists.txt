@@ -42,6 +42,7 @@ tests(GROUPS error
       implicit_args.cpp
       impossible_constraints.cpp
       init_def_should_be_all_vars.cpp
+      incomplete_target.cpp
       inspect_loop_level.cpp
       lerp_float_weight_out_of_range.cpp
       lerp_mismatch.cpp
