@@ -8,6 +8,9 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <chrono>
+
+using Clock = std::chrono::high_resolution_clock;
 
 #include "cmdline.h"
 
@@ -171,7 +174,7 @@ string leaf(const string &path) {
 }
 
 // Load all the samples, reading filenames from stdin
-void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSample>& validation_set, map<int, PipelineData>& pipelines, const Flags& flags, bool predict_only) {
+size_t load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSample>& validation_set, map<int, PipelineData>& pipelines, const Flags& flags, bool predict_only) {
     vector<float> scratch(10 * 1024 * 1024);
 
     int best = -1;
@@ -392,13 +395,15 @@ void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSampl
 
         if (!src.good()) {
             std::cout << "Could not find " << schedule_file << ". Unable to save it as the best schedule. Continuing...\n";
-            return;
+            return num_read;
         }
         std::ofstream dst(flags.best_schedule_path);
         dst << src.rdbuf();
         assert(!src.fail());
         assert(!dst.fail());
     }
+
+    return num_read;
 }
 
 void save_predictions(const map<int, PipelineSample>& samples, const string& filename) {
@@ -465,7 +470,7 @@ int main(int argc, char **argv) {
     map<int, PipelineSample> validation_set;
     map<int, PipelineData> pipelines;
     bool predict_only = !flags.predictions_file.empty();
-    load_samples(samples, validation_set, pipelines, flags, predict_only);
+    size_t num_samples = load_samples(samples, validation_set, pipelines, flags, predict_only);
     print_statistics(samples, validation_set);
 
     if (predict_only) {
@@ -481,6 +486,7 @@ int main(int argc, char **argv) {
 
     std::cout << "Iterating over " << samples.size() << " pipelines using seed = " << seed << "\n";
 
+    std::chrono::time_point<Clock> start = Clock::now();
     for (float learning_rate : flags.rates) {
         float loss_sum[kModels] = {0}, loss_sum_counter[kModels] = {0};
         float correct_ordering_rate_sum[kModels] = {0};
@@ -489,6 +495,7 @@ int main(int argc, char **argv) {
         float v_correct_ordering_rate_count[kModels] = {0};
 
         for (int e = 0; e < flags.epochs; e++) {
+            std::chrono::time_point<Clock> epoch_start = Clock::now();
             int counter = 0;
 
             float worst_miss = 0;
@@ -647,11 +654,20 @@ int main(int argc, char **argv) {
 
             if (kModels > 1) std::cout << "\n";
             if (!predict_only && samples.count(worst_miss_pipeline_id)) {
-                std::cout << " Worst: " << worst_miss << " " << leaf(samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename) << "\n";
+                std::cout << " Worst: " << worst_miss << " " << leaf(samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename) << " ";
                 // samples[worst_miss_pipeline_id].schedules.erase(worst_miss_schedule_id);
-            } else {
-                std::cout << "\n";
             }
+
+            auto epoch_duration = Clock::now() - epoch_start;
+            auto total_duration = Clock::now() - start;
+
+            auto epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(epoch_duration).count();
+            auto total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(total_duration).count();
+            std::cout << "(Epoch " << e + 1 << " ";
+            std::cout << "took " << epoch_ms  << " ms. ";
+            std::cout << "Total time: " << total_ms << " ms. ";
+            std::cout << "Avg. time per epoch: " << total_ms / (float)(e + 1) << " ms. ";
+            std::cout << "Avg. time per epoch, per sample: " << total_ms / (float)((e + 1) * num_samples) << " ms)\n";
 
             if (worst_inversion.badness > 0) {
                 std::cout << "Worst inversion:\n"
@@ -676,7 +692,6 @@ int main(int argc, char **argv) {
                 return 0;
             }
 
-            std::cout << "Completed epoch " << e + 1 << "\n";
         }
     }
 
