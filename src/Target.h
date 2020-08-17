@@ -156,6 +156,10 @@ struct Target {
     /** Check if a target string is valid. */
     static bool validate_target_string(const std::string &s);
 
+    /** Return true if any of the arch/bits/os fields are "unknown"/0;
+        return false otherwise. */
+    bool has_unknowns() const;
+
     void set_feature(Feature f, bool value = true);
 
     void set_features(const std::vector<Feature> &features_to_set, bool value = true);

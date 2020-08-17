@@ -95,7 +95,7 @@ using std::vector;
 #define InitializeARMAsmPrinter() InitializeAsmPrinter(ARM)
 #endif
 
-#ifdef WITH_PTX
+#ifdef WITH_NVPTX
 #define InitializeNVPTXTarget() InitializeTarget(NVPTX)
 #define InitializeNVPTXAsmParser() InitializeAsmParser(NVPTX)
 #define InitializeNVPTXAsmPrinter() InitializeAsmPrinter(NVPTX)

@@ -1985,6 +1985,36 @@ int different_arg_num_compute_at_test() {
     return 0;
 }
 
+int store_at_different_levels_test() {
+    Func producer1, producer2, consumer;
+    Var x, y;
+
+    producer1(x, y) = x + y;
+    producer2(x, y) = 3 * x + 2 * y;
+    consumer(x, y) = producer1(x, y - 1) + producer1(x, y + 1) + producer2(x, y - 1) + producer2(x, y + 1);
+    consumer.compute_root();
+
+    producer1.compute_at(consumer, y);
+    producer2.store_root().compute_at(consumer, y).compute_with(producer1, y);
+
+    consumer.bound(x, 0, 16).bound(y, 0, 16);
+
+    Buffer<int> out = consumer.realize(16, 16);
+
+    for (int y = 0; y < out.height(); y++) {
+        for (int x = 0; x < out.width(); x++) {
+            int correct = 8 * x + 6 * y;
+            if (out(x, y) != correct) {
+                printf("out(%d, %d) = %d instead of %d\n",
+                       x, y, out(x, y), correct);
+                return -1;
+            }
+        }
+    }
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -2118,6 +2148,11 @@ int main(int argc, char **argv) {
 
     printf("Running different arg number compute_at test\n");
     if (different_arg_num_compute_at_test() != 0) {
+        return -1;
+    }
+
+    printf("Running store_at different levels test\n");
+    if (store_at_different_levels_test() != 0) {
         return -1;
     }
 

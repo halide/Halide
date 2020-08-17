@@ -20,7 +20,6 @@ endif ()
 # Third-party dependencies in their own subdirectories
 ## 
 
-add_subdirectory(clang)
 add_subdirectory(llvm)
 
 add_subdirectory(jpeg)

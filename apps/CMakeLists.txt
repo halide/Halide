@@ -25,7 +25,7 @@ function(add_app_test NAME)
         # Don't attempt to build these for wasm yet.
         return()
     endif ()
-    
+
     unset(cmakeToolchainOpts)
     if (NOT "${CMAKE_TOOLCHAIN_FILE}" STREQUAL "")
         list(APPEND cmakeToolchainOpts "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
@@ -55,7 +55,7 @@ function(add_app_test NAME)
     add_test(NAME ${NAME}
              COMMAND ${CMAKE_CTEST_COMMAND}
              --output-on-failure
-             --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/${NAME}" "${CMAKE_CURRENT_BINARY_DIR}/app_test_${NAME}"
+             --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/${NAME}" "${CMAKE_CURRENT_BINARY_DIR}/${NAME}"
              --build-generator "${CMAKE_GENERATOR}"
              ${cmakeGenOpts}
              --build-config "$<CONFIG>"
