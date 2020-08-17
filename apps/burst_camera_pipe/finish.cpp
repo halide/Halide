@@ -35,17 +35,20 @@ Func black_white_level(Func input, Expr bp, Expr wp, bool skip_schedule) {
  */
 Func white_balance(Func input, Expr width, Expr height, const WhiteBalance &wb, bool skip_schedule) {
 
-    Func output("white_balance_output");
+    Func output_f32("white_balance_output_f32");
 
     Var x, y;
     RDom r(0, width / 2, 0, height / 2);
 
-    output(x, y) = u16(0);
+    output_f32(x, y) = 0.f;
 
-    output(r.x * 2    , r.y * 2    ) = u16_sat(wb.r  * f32(input(r.x * 2    , r.y * 2    )));   // red
-    output(r.x * 2 + 1, r.y * 2    ) = u16_sat(wb.g0 * f32(input(r.x * 2 + 1, r.y * 2    )));   // green 0
-    output(r.x * 2    , r.y * 2 + 1) = u16_sat(wb.g1 * f32(input(r.x * 2    , r.y * 2 + 1)));   // green 1
-    output(r.x * 2 + 1, r.y * 2 + 1) = u16_sat(wb.b  * f32(input(r.x * 2 + 1, r.y * 2 + 1)));   // blue
+    output_f32(r.x * 2    , r.y * 2    ) = (wb.r  * f32(input(r.x * 2    , r.y * 2    )));   // red
+    output_f32(r.x * 2 + 1, r.y * 2    ) = (wb.g0 * f32(input(r.x * 2 + 1, r.y * 2    )));   // green 0
+    output_f32(r.x * 2    , r.y * 2 + 1) = (wb.g1 * f32(input(r.x * 2    , r.y * 2 + 1)));   // green 1
+    output_f32(r.x * 2 + 1, r.y * 2 + 1) = (wb.b  * f32(input(r.x * 2 + 1, r.y * 2 + 1)));   // blue
+
+    Func output("white_balance_output");
+    output(x, y) = u16_sat(output_f32(x, y));
 
     ///////////////////////////////////////////////////////////////////////////
     // schedule
@@ -53,10 +56,10 @@ Func white_balance(Func input, Expr width, Expr height, const WhiteBalance &wb, 
     if (!skip_schedule) {
         output.compute_root().parallel(y).vectorize(x, 16);
 
-        output.update(0).parallel(r.y);
-        output.update(1).parallel(r.y);
-        output.update(2).parallel(r.y);
-        output.update(3).parallel(r.y);
+        output_f32.update(0).parallel(r.y);
+        output_f32.update(1).parallel(r.y);
+        output_f32.update(2).parallel(r.y);
+        output_f32.update(3).parallel(r.y);
     }
     return output;
 }

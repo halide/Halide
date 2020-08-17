@@ -3,8 +3,10 @@
 
 #include "conv_layer.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "conv_layer_auto_schedule.h"
-#include "conv_layer_gradient_auto_schedule.h"
+    #include "conv_layer_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "conv_layer_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -62,10 +64,12 @@ int main(int argc, char **argv) {
 
     multi_way_bench({
         {"conv_layer Manual", [&]() { conv_layer(input, filter, bias, output); output.device_sync(); }},
-    #ifndef NO_AUTO_SCHEDULE
+#ifndef NO_AUTO_SCHEDULE
         {"conv_layer Auto-schedule", [&]() { conv_layer_auto_schedule(input, filter, bias, output); output.device_sync(); }},
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
         {"conv_layer Gradient auto-schedule", [&]() { conv_layer_gradient_auto_schedule(input, filter, bias, output); output.device_sync(); }}
-    #endif
+#endif
     });
 
     printf("Success!\n");

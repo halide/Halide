@@ -316,7 +316,7 @@ struct ScheduleFeatures {
     double block_occupancy = 1.0 / 1024.0;
 
     double warp_lane_utilization = 1.0 / 32.0;
-    double warp_lane_utilization_at_block_x = 1;
+    double num_active_warps_per_block = 0;
     double warp_lane_utilization_at_block_y = 1;
     double warp_lane_utilization_at_block_z = 1;
     double idle_lane_wastage = 0;
@@ -398,7 +398,7 @@ struct ScheduleFeatures {
             << "    num_warps_per_block:                   " << num_warps_per_block << "\n"
             << "    block_occupancy:                       " << block_occupancy << "\n"
             << "    warp_lane_utilization:                 " << warp_lane_utilization << "\n"
-            << "    warp_lane_utilization_at_block_x:      " << warp_lane_utilization_at_block_x << "\n"
+            << "    num_active_warps_per_block:      " << num_active_warps_per_block << "\n"
             << "    warp_lane_utilization_at_block_y:      " << warp_lane_utilization_at_block_y << "\n"
             << "    warp_lane_utilization_at_block_z:      " << warp_lane_utilization_at_block_z << "\n"
             << "    idle_lane_wastage:                     " << idle_lane_wastage << "\n"
@@ -479,7 +479,7 @@ struct ScheduleFeatures {
             && num_warps_per_block                   == other.num_warps_per_block
             && block_occupancy                       == other.block_occupancy
             && warp_lane_utilization                 == other.warp_lane_utilization
-            && warp_lane_utilization_at_block_x      == other.warp_lane_utilization_at_block_x
+            && num_active_warps_per_block            == other.num_active_warps_per_block
             && warp_lane_utilization_at_block_y      == other.warp_lane_utilization_at_block_y
             && warp_lane_utilization_at_block_z      == other.warp_lane_utilization_at_block_z
             && idle_lane_wastage                     == other.idle_lane_wastage

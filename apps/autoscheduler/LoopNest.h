@@ -43,6 +43,10 @@ int64_t get_active_block_hardware_limit();
 
 int64_t get_active_warp_hardware_limit();
 
+constexpr int64_t get_register_mem_alloc_limit() {
+    return 128;
+}
+
 int get_unroll_limit(const Target& target);
 
 bool in_range_zero_one(double x);
@@ -203,6 +207,7 @@ struct LoopNest {
         bool is_constant_allocation = false; // Does the allocation have constant size?
         int64_t num_realizations = 0;        // Number of times this stage is realized. Only valid for unscheduled producers
         bool inlined = false;                // Is the Func inlined?
+        std::vector<const LoopNest*> inlined_innermosts;                // Is the Func inlined?
         uint64_t hash_of_producers_stored_at_root;
 
         bool is_stored_in_global_mem() const { return gpu_store_memory_type == GPUMemoryType::global; }

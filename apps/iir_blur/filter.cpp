@@ -3,12 +3,17 @@
 
 #include "iir_blur.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "iir_blur_auto_schedule.h"
-#include "iir_blur_gradient_auto_schedule.h"
+    #include "iir_blur_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "iir_blur_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
+#include "halide_image_io.h"
+
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     if (argc != 3) {
@@ -25,9 +30,13 @@ int main(int argc, char **argv) {
         {"iir_blur_generator Manual", [&]() { iir_blur(input, alpha, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
         {"iir_blur_generator Auto-scheduled", [&]() { iir_blur_auto_schedule(input, alpha, output); output.device_sync(); }},
+    #endif
+    #ifndef NO_GRADIENT_AUTO_SCHEDULE
         {"iir_blur_generator Gradient auto-scheduled", [&]() { iir_blur_gradient_auto_schedule(input, alpha, output); output.device_sync(); }}
     #endif
     });
+
+    output.copy_to_host();
 
     convert_and_save_image(output, argv[2]);
 

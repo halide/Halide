@@ -10,12 +10,18 @@ CXXFLAGS += -I../support/
 
 BIN ?= bin
 
-FILTER_DEPS=$(BIN)/%/bgu.a
+FILTER_DEPS=$(BIN)/%/bgu.a $(BIN)/%/runtime.a
 
 ifndef NO_AUTO_SCHEDULE
-	FILTER_DEPS += $(BIN)/%/bgu_auto_schedule.a $(BIN)/%/bgu_gradient_auto_schedule.a $(BIN)/%/runtime.a
+	FILTER_DEPS += $(BIN)/%/bgu_auto_schedule.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/bgu_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
 endif
 
 $(GENERATOR_BIN)/bgu.generator: bgu_generator.cpp $(GENERATOR_DEPS)

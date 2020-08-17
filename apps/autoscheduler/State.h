@@ -174,9 +174,10 @@ struct State {
     void apply_schedule(const FunctionDAG &dag, const MachineParams &params, const Target &target);
 
     bool should_always_consider_inline(const FunctionDAG::Node *node) const;
+    void add_to_always_consider_inline_options(const FunctionDAG::Node *node);
     void update_always_consider_inline_options(const FunctionDAG::Node *node);
 
-    const LoopNest *deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root) const;
+    const LoopNest *deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root, StageMap<int64_t>& total_shared_mem_alloc_sizes) const;
     int64_t total_loop_extents_of_ancestors(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop) const;
 };
 

@@ -41,12 +41,12 @@ public:
 
         // Estimates
         {
-            constexpr int w = 5218;
-            constexpr int h = 3482;
+            constexpr int w = 5218 / 4;
+            constexpr int h = 3482 / 4;
             constexpr int num_frames = 7;
-            inputs.dim(0).set_bounds_estimate(0, w)
-                    .dim(1).set_bounds_estimate(0, h)
-                    .dim(2).set_bounds_estimate(0, num_frames);
+            inputs.dim(0).set_estimate(0, w)
+                  .dim(1).set_estimate(0, h)
+                  .dim(2).set_estimate(0, num_frames);
             // taken from eos-1dx.cr2
             black_point.set_estimate(2050);
             white_point.set_estimate(15464);
@@ -56,9 +56,9 @@ public:
             white_balance_b.set_estimate(1.26855);
             compression.set_estimate(3.8);
             gain.set_estimate(1.1);
-            output.dim(0).set_bounds_estimate(0, w)
-                    .dim(1).set_bounds_estimate(0, h)
-                    .dim(2).set_bounds_estimate(0, 3);
+            output.dim(0).set_estimate(0, w)
+                  .dim(1).set_estimate(0, h)
+                  .dim(2).set_estimate(0, 3);
         }
     }
 };

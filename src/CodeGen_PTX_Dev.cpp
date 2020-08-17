@@ -698,7 +698,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.write(buffer.data(), buffer.size());
         f.close();
 
-        string cmd = "ptxas --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
+        string max_regs_str = get_env_variable("HL_CUDA_JIT_MAX_REGISTERS");
+        if (max_regs_str.empty()) {
+            max_regs_str = "64";
+        }
+        string cmd = "ptxas --warn-on-spills --warn-on-local-memory-usage --maxrregcount=" + max_regs_str + " --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
+        debug(1) << "PTX compile command: " << cmd << "\n";
         if (system(cmd.c_str()) == 0) {
             // Success. Use SASS instead of PTX to save app startup time
             debug(0) << "Reading sass from " << sass.pathname() << "\n";

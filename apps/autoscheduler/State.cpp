@@ -57,8 +57,13 @@ void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest 
     }
 }
 
-const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root) const {
+const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root, StageMap<int64_t>& total_shared_mem_alloc_sizes) const {
     std::vector<const LoopNest*> ancestors;
+
+    // Innermost loop nests are never considered as compute locations
+    if (!loop->innermost) {
+        ancestors.push_back(loop);
+    }
 
     const LoopNest *cur_loop = loop;
     while (parent.count(cur_loop) > 0) {
@@ -73,10 +78,38 @@ const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *
     const LoopNest *candidate = ancestors.back();
     bool first = true;
 
+    int64_t new_shared_mem_alloc_size = 0;
+    int64_t new_register_alloc_size = 0;
+
     for (auto it = ancestors.rbegin(); it != ancestors.rend(); it++) {
         if (first) {
             first = false;
             continue;
+        }
+
+        if ((*it)->gpu_label == block) {
+            new_shared_mem_alloc_size = node.bytes_per_point;
+            for (int i = 0; i < node.dimensions; ++i) {
+                new_shared_mem_alloc_size *= (*it)->get_bounds(&node)->region_computed(i).extent();
+            }
+
+            int64_t total = new_shared_mem_alloc_size + total_shared_mem_alloc_sizes.get((*it)->stage);
+            if (total > get_shared_memory_limit()) {
+                continue;
+            }
+        }
+
+        if ((*it)->gpu_label == thread || (*it)->gpu_label == serial) {
+            int64_t total = node.bytes_per_point;
+            for (int i = 0; i < node.dimensions; ++i) {
+                total *= (*it)->get_bounds(&node)->region_computed(i).extent();
+            }
+
+            if (total > get_register_mem_alloc_limit()) {
+                continue;
+            }
+
+            new_register_alloc_size = total;
         }
 
         // If the region_computed does not shrink, ancestors.at(i) (the loop
@@ -89,6 +122,13 @@ const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *
         candidate = *it;
     }
 
+    if (candidate->gpu_label == block) {
+        total_shared_mem_alloc_sizes.get(candidate->stage) += new_shared_mem_alloc_size;
+        internal_assert(total_shared_mem_alloc_sizes.get(candidate->stage) <= get_shared_memory_limit());
+    }
+
+    internal_assert(new_register_alloc_size <= get_register_mem_alloc_limit());
+    internal_assert(!candidate->innermost);
     return candidate;
 }
 
@@ -423,9 +463,32 @@ bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 internal_error << e->producer->func.name() << " -> " << e->consumer->name << "\n";
             }
             if (loop) {
-                loop = deepest_common_ancestor(parent, l, loop);
+                if (consumer_site.inlined) {
+                    // If this func is inlined, find the deepest common ancestor
+                    // of all its inlined locations
+                    for (const auto* innermost : consumer_site.inlined_innermosts) {
+                        loop = deepest_common_ancestor(parent, innermost, loop);
+                    }
+                } else {
+                    loop = deepest_common_ancestor(parent, l, loop);
+                }
             } else {
-                loop = l;
+                if (consumer_site.inlined) {
+                    bool first = true;
+                    // If this func is inlined, find the deepest common ancestor
+                    // of all its inlined locations
+                    for (const auto* innermost : consumer_site.inlined_innermosts) {
+                        if (first) {
+                            first = false;
+                            loop = innermost;
+                            continue;
+                        }
+
+                        loop = deepest_common_ancestor(parent, innermost, loop);
+                    }
+                } else {
+                    loop = l;
+                }
             }
         }
         internal_assert(loop)
@@ -435,7 +498,7 @@ bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         // If 'loop' would never be considered as a compute location (i.e. by
         // LoopNest::compute_in_tiles()), walk up the loop nest until we reach a
         // location that would be considered
-        loop = deepest_valid_compute_location(parent, n, loop, feature_root.get());
+        loop = deepest_valid_compute_location(parent, n, loop, feature_root.get(), total_shared_mem_alloc_sizes);
         int64_t num_realizations = total_loop_extents_of_ancestors(parent, loop);
 
         for (auto &stage : n.stages) {
@@ -1185,6 +1248,10 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
 
 bool State::should_always_consider_inline(const FunctionDAG::Node *node) const {
     return always_consider_inline.contains(node) && always_consider_inline.get(node);
+}
+
+void State::add_to_always_consider_inline_options(const FunctionDAG::Node *node) {
+    always_consider_inline.get_or_create(node) = true;
 }
 
 void State::update_always_consider_inline_options(const FunctionDAG::Node *node) {

@@ -97,6 +97,10 @@ $(AUTOSCHED_BIN)/retrain_cost_model: $(AUTOSCHED_SRC)/retrain_cost_model.cpp \
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(AUTOSCHED_BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_OPEN_MP)
 
+$(AUTOSCHED_BIN)/RunGenMain.o: ../../tools/RunGenMain.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c -std=c++11 -I ../../include $(shell libpng-config --cflags) -O3 $< -o $@ -ljpeg $(shell libpng-config --ldflags) -ldl
+
 $(AUTOSCHED_BIN)/featurization_to_sample: $(AUTOSCHED_SRC)/featurization_to_sample.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OPTIMIZE) -o $@

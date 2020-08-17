@@ -7,8 +7,10 @@
 
 #include "unsharp.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "unsharp_auto_schedule.h"
-#include "unsharp_gradient_auto_schedule.h"
+    #include "unsharp_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "unsharp_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -29,9 +31,13 @@ int main(int argc, char **argv) {
         {"unsharp Manual", [&]() { unsharp(input, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
         {"unsharp Auto-scheduled", [&]() { unsharp_auto_schedule(input, output); output.device_sync(); }},
+    #endif
+    #ifndef NO_GRADIENT_AUTO_SCHEDULE
         {"unsharp Gradient auto-scheduled", [&]() {unsharp_gradient_auto_schedule(input, output); output.device_sync(); }}
     #endif
     });
+
+    output.copy_to_host();
 
     convert_and_save_image(output, argv[2]);
 

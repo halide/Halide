@@ -7,8 +7,10 @@
 
 #include "hist.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "hist_auto_schedule.h"
-#include "hist_gradient_auto_schedule.h"
+    #include "hist_auto_schedule.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+    #include "hist_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -29,6 +31,8 @@ int main(int argc, char **argv) {
         {"hist Manual", [&]() { hist(input, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
         {"hist Auto-scheduled", [&]() { hist_auto_schedule(input, output); output.device_sync(); }},
+    #endif
+    #ifndef NO_GRADIENT_AUTO_SCHEDULE
         {"hist Gradient auto-scheduled", [&]() { hist_gradient_auto_schedule(input, output); output.device_sync(); }}
     #endif
     });

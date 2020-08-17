@@ -6,6 +6,7 @@
 #include "Featurization.h"
 #include "FunctionDAG.h"
 #include "LoopNest.h"
+#include "LoopNestParser.h"
 #include "PerfectHashMap.h"
 #include "ASLog.h"
 #include "SearchSpaceOptions.h"
@@ -29,6 +30,7 @@ struct SearchSpace {
     CostModel *cost_model;
     Statistics &stats;
     bool randomize_tilings;
+    const LoopNestParser* partial_schedule;
 
     NodeMap<bool> inlined_nodes;
     NodeMap<std::vector<IntrusivePtr<const LoopNest>>> compute_root_nodes;
@@ -40,7 +42,8 @@ struct SearchSpace {
                 const std::string &search_space_options,
                 std::mt19937 &rng,
                 CostModel *cost_model,
-                Statistics &stats);
+                Statistics &stats,
+                const LoopNestParser* partial_schedule);
 
     // Sort / filter parallel tile options
     struct ParallelTileOption {
@@ -93,7 +96,10 @@ struct SearchSpace {
     void process_pending_states(std::unordered_map<uint64_t, StateVector>& primary_options,
                                 std::unordered_map<uint64_t, StateVector>& secondary_options,
                                 int &num_children,
-                                std::function<void(IntrusivePtr<State> &&)> &accept_child);
+                                std::function<void(IntrusivePtr<State> &&)> &accept_child,
+                                const FunctionDAG::Node* node);
+
+    bool is_in_partial_schedule(const FunctionDAG::Node *node) const;
 };
 
 

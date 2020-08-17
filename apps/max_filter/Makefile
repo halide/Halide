@@ -8,12 +8,17 @@ build: $(BIN)/$(HL_TARGET)/filter
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
-FILTER_DEPS=$(BIN)/%/max_filter.a
+FILTER_DEPS=$(BIN)/%/max_filter.a $(BIN)/%/runtime.a
 
 ifndef NO_AUTO_SCHEDULE
-	FILTER_DEPS += $(BIN)/%/max_filter_auto_schedule.a $(BIN)/%/max_filter_gradient_auto_schedule.a $(BIN)/%/runtime.a
+	FILTER_DEPS += $(BIN)/%/max_filter_auto_schedule.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/max_filter_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
 endif
 
 all: $(BIN)/test
