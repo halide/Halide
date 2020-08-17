@@ -44,7 +44,7 @@ std::map<Output, const OutputInfo> get_output_info(const Target &target) {
         {Output::assembly, {"assembly", ".s", IsMulti}},
         {Output::bitcode, {"bitcode", ".bc", IsMulti}},
         {Output::c_header, {"c_header", ".h", IsSingle}},
-        {Output::c_source, {"c_source", ".halide_generated.cpp", IsMulti}},
+        {Output::c_source, {"c_source", ".halide_generated.cpp", IsSingle}},
         {Output::compiler_log, {"compiler_log", ".halide_compiler_log", IsSingle}},
         {Output::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
         {Output::featurization, {"featurization", ".featurization", IsMulti}},

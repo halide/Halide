@@ -149,7 +149,7 @@ void test_compile_to_everything(Func j, bool do_object) {
     std::vector<std::string> files;
 
     // single-file outputs
-    for (const char *ext : {".h", ".halide_compiler_log", ".py.cpp", ".pytorch.h", ".registration.cpp", ".schedule.h", a}) {
+    for (const char *ext : {".h", ".halide_generated.cpp", ".halide_compiler_log", ".py.cpp", ".pytorch.h", ".registration.cpp", ".schedule.h", a}) {
         if (do_object && !strcmp(ext, a)) continue;
         files.push_back(fname + ext);
     }
@@ -180,7 +180,7 @@ void test_compile_to_everything(Func j, bool do_object) {
         {Output::assembly, fname + ".s"},                        // IsMulti
         {Output::bitcode, fname + ".bc"},                        // IsMulti
         {Output::c_header, fname + ".h"},                        // IsSingle
-        {Output::c_source, fname + ".halide_generated.cpp"},     // IsMulti
+        {Output::c_source, fname + ".halide_generated.cpp"},     // IsSingle
         {Output::compiler_log, fname + ".halide_compiler_log"},  // IsSingle
         // Note: compile_multitarget() doesn't produce cpp_stub output,
         // even if you pass this in.
