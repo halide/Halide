@@ -787,8 +787,17 @@ void compile_multitarget(const std::string &fn_name,
     if (targets.size() == 1) {
         debug(1) << "compile_multitarget: single target is " << base_target.to_string() << "\n";
         ScopedCompilerLogger activate(compiler_logger_factory, fn_name, base_target);
-        auto sub_out = add_suffixes(output_files, suffix_for_entry(0));
-        module_factory(fn_name, base_target).compile(sub_out);
+
+        // If we want to have single-output object files use the target suffix, we'd
+        // want to do this instead:
+        //
+        //     auto sub_out = add_suffixes(output_files, suffix_for_entry(0));
+        //     module_factory(fn_name, base_target).compile(sub_out);
+        //
+        // This would make the filename outputs more symmetrical (ie the same for n=1 as for n>1)
+        // but at the expense of breaking existing users. So for now, we're going to continue
+        // with the legacy treatment below:
+        module_factory(fn_name, base_target).compile(output_files);
         return;
     }
 
