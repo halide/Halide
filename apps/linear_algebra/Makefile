@@ -5,9 +5,8 @@ BIN ?= bin
 BUILD = $(BIN)/build
 CXXFLAGS += -Wall -march=native -I /opt/local/include
 HL_TARGET ?= host
-LIBHALIDE_BLAS = $(BIN)/libhalide_blas.a
 HALIDEBLAS_FLAGS ?= -DUSE_HALIDE
-EMIT_OPTIONS = stmt,assembly,object,c_header
+EMIT_OPTIONS = stmt,assembly,static_library,c_header
 
 EIGEN_INCLUDES ?= -I/usr/include/eigen3
 CBLAS_LIBS ?= -lblas
@@ -75,7 +74,7 @@ BENCHMARKS = \
 
 .PHONY: build clean run_benchmarks test
 all: build
-	make run_benchmarks 
+	make run_benchmarks
 
 ifneq ("$(wildcard /usr/include/cblas.h /usr/include/*/cblas.h)","")
 build: $(BENCHMARKS) $(BIN)/test_halide_blas
@@ -91,16 +90,15 @@ clean:
 	rm -rf $(BIN)
 
 KERNEL_HEADERS = $(KERNELS:%=$(BUILD)/halide_%.h)
-KERNEL_OBJECTS = $(KERNELS:%=$(BUILD)/halide_%.o) $(BUILD)/halide_runtime.o
+KERNEL_OBJECTS = $(KERNELS:%=$(BUILD)/halide_%.a) $(BUILD)/halide_runtime.a
 
-$(BUILD)/halide_blas.o: src/halide_blas.cpp src/halide_blas.h $(KERNEL_HEADERS)
+$(BUILD)/halide_blas.a: src/halide_blas.cpp src/halide_blas.h $(KERNEL_HEADERS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c -o $(@) -I ../../include/ -I ../support -I$(BUILD) $(<)
 
-$(LIBHALIDE_BLAS): $(KERNEL_OBJECTS) $(BUILD)/halide_blas.o
-	$(AR) q $@ $(filter-out %.a,$^)
+HALIDE_BLAS_LIBS = $(BUILD)/halide_blas.a $(KERNEL_OBJECTS)
 
-$(BIN)/test_halide_blas: tests/test_halide_blas.cpp $(LIBHALIDE_BLAS)
+$(BIN)/test_halide_blas: tests/test_halide_blas.cpp $(HALIDE_BLAS_LIBS)
 	$(CXX) $(CXXFLAGS) -Wno-unused-variable -o $(@) -I../../include/ -I../support -Isrc -I$(BUILD) \
 	$(CBLAS_FLAGS) $^ $(CBLAS_LIBS) $(LDFLAGS)
 
@@ -203,110 +201,110 @@ $(BIN)/eigen_benchmarks: benchmarks/eigen_benchmarks.cpp benchmarks/clock.h benc
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o $(@) -I$(BUILD) $(EIGEN_INCLUDES) $(<)
 
-$(BIN)/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
+$(BIN)/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(HALIDE_BLAS_LIBS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -o $(@) -Isrc -I$(BUILD) $(HALIDEBLAS_FLAGS) $(<) $(LIBHALIDE_BLAS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -o $(@) -Isrc -I$(BUILD) $(HALIDEBLAS_FLAGS) $(<) $(HALIDE_BLAS_LIBS) $(LDFLAGS)
 
 $(BUILD)/%.generator: src/%_generators.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) -o $@
 
 # This can use any of the generators; pick an arbitrary one
-$(BUILD)/halide_runtime.o: $(BUILD)/blas_l1.generator
-	$< -o $(BUILD) -e object -r halide_runtime target=$(HL_TARGET)
+$(BUILD)/halide_runtime.a: $(BUILD)/blas_l1.generator
+	$< -o $(BUILD) -e static_library -r halide_runtime target=$(HL_TARGET)
 
-$(BUILD)/halide_scopy_impl.o $(BUILD)/halide_scopy_impl.h: $(BUILD)/blas_l1.generator
+$(BUILD)/halide_scopy_impl.a $(BUILD)/halide_scopy_impl.h: $(BUILD)/blas_l1.generator
 	$< -g saxpy -f halide_scopy_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=false add_to_y=false
 
-$(BUILD)/halide_dcopy_impl.o $(BUILD)/halide_dcopy_impl.h: $(BUILD)/blas_l1.generator
+$(BUILD)/halide_dcopy_impl.a $(BUILD)/halide_dcopy_impl.h: $(BUILD)/blas_l1.generator
 	$< -g daxpy -f halide_dcopy_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=false add_to_y=false
 
-$(BUILD)/halide_sscal_impl.o $(BUILD)/halide_sscal_impl.h: $(BUILD)/blas_l1.generator
+$(BUILD)/halide_sscal_impl.a $(BUILD)/halide_sscal_impl.h: $(BUILD)/blas_l1.generator
 	$< -g saxpy -f halide_sscal_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=true add_to_y=false
 
-$(BUILD)/halide_dscal_impl.o $(BUILD)/halide_dscal_impl.h: $(BUILD)/blas_l1.generator
+$(BUILD)/halide_dscal_impl.a $(BUILD)/halide_dscal_impl.h: $(BUILD)/blas_l1.generator
 	$< -g daxpy -f halide_dscal_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=true add_to_y=false
 
-$(BUILD)/halide_saxpy_impl.o $(BUILD)/halide_saxpy_impl.h: $(BUILD)/blas_l1.generator
+$(BUILD)/halide_saxpy_impl.a $(BUILD)/halide_saxpy_impl.h: $(BUILD)/blas_l1.generator
 	$< -g saxpy -f halide_saxpy_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=true add_to_y=true
 
-$(BUILD)/halide_daxpy_impl.o $(BUILD)/halide_daxpy_impl.h: $(BUILD)/blas_l1.generator
+$(BUILD)/halide_daxpy_impl.a $(BUILD)/halide_daxpy_impl.h: $(BUILD)/blas_l1.generator
 	$< -g daxpy -f halide_daxpy_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=true add_to_y=true
 
-$(BUILD)/halide_sdot.o $(BUILD)/halide_sdot.h: $(BUILD)/blas_l1.generator
+$(BUILD)/halide_sdot.a $(BUILD)/halide_sdot.h: $(BUILD)/blas_l1.generator
 	$< -g sdot -f halide_sdot -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR_NA) vectorize=true
 
-$(BUILD)/halide_ddot.o $(BUILD)/halide_ddot.h: $(BUILD)/blas_l1.generator
+$(BUILD)/halide_ddot.a $(BUILD)/halide_ddot.h: $(BUILD)/blas_l1.generator
 	$< -g ddot -f halide_ddot -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR_NA) vectorize=true
 
-$(BUILD)/halide_sasum.o $(BUILD)/halide_sasum.h: $(BUILD)/blas_l1.generator
+$(BUILD)/halide_sasum.a $(BUILD)/halide_sasum.h: $(BUILD)/blas_l1.generator
 	$< -g sasum -f halide_sasum -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR_NA) vectorize=true
 
-$(BUILD)/halide_dasum.o $(BUILD)/halide_dasum.h: $(BUILD)/blas_l1.generator
+$(BUILD)/halide_dasum.a $(BUILD)/halide_dasum.h: $(BUILD)/blas_l1.generator
 	$< -g dasum -f halide_dasum -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR_NA) vectorize=true
 
-$(BUILD)/halide_sgemv_notrans.o $(BUILD)/halide_sgemv_notrans.h: $(BUILD)/blas_l2.generator
+$(BUILD)/halide_sgemv_notrans.a $(BUILD)/halide_sgemv_notrans.h: $(BUILD)/blas_l2.generator
 	$< -g sgemv -f halide_sgemv_notrans -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) parallel=true vectorize=true transpose=false
 
-$(BUILD)/halide_dgemv_notrans.o $(BUILD)/halide_dgemv_notrans.h: $(BUILD)/blas_l2.generator
+$(BUILD)/halide_dgemv_notrans.a $(BUILD)/halide_dgemv_notrans.h: $(BUILD)/blas_l2.generator
 	$< -g dgemv -f halide_dgemv_notrans -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) parallel=true vectorize=true transpose=false
 
-$(BUILD)/halide_sgemv_trans.o $(BUILD)/halide_sgemv_trans.h: $(BUILD)/blas_l2.generator
+$(BUILD)/halide_sgemv_trans.a $(BUILD)/halide_sgemv_trans.h: $(BUILD)/blas_l2.generator
 	$< -g sgemv -f halide_sgemv_trans -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) parallel=true vectorize=true transpose=true
 
-$(BUILD)/halide_dgemv_trans.o $(BUILD)/halide_dgemv_trans.h: $(BUILD)/blas_l2.generator
+$(BUILD)/halide_dgemv_trans.a $(BUILD)/halide_dgemv_trans.h: $(BUILD)/blas_l2.generator
 	$< -g dgemv -f halide_dgemv_trans -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) parallel=true vectorize=true transpose=true
 
-$(BUILD)/halide_sger_impl.o $(BUILD)/halide_sger_impl.h: $(BUILD)/blas_l2.generator
+$(BUILD)/halide_sger_impl.a $(BUILD)/halide_sger_impl.h: $(BUILD)/blas_l2.generator
 	$< -g sger -f halide_sger_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) parallel=true vectorize=true
 
-$(BUILD)/halide_dger_impl.o $(BUILD)/halide_dger_impl.h: $(BUILD)/blas_l2.generator
+$(BUILD)/halide_dger_impl.a $(BUILD)/halide_dger_impl.h: $(BUILD)/blas_l2.generator
 	$< -g dger -f halide_dger_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) parallel=true vectorize=true
 
-$(BUILD)/halide_sgemm_notrans.o $(BUILD)/halide_sgemm_notrans.h: $(BUILD)/blas_l3.generator
+$(BUILD)/halide_sgemm_notrans.a $(BUILD)/halide_sgemm_notrans.h: $(BUILD)/blas_l3.generator
 	$< -g sgemm -f halide_sgemm_notrans -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) transpose_A=false transpose_B=false
 
-$(BUILD)/halide_dgemm_notrans.o $(BUILD)/halide_dgemm_notrans.h: $(BUILD)/blas_l3.generator
+$(BUILD)/halide_dgemm_notrans.a $(BUILD)/halide_dgemm_notrans.h: $(BUILD)/blas_l3.generator
 	$< -g dgemm -f halide_dgemm_notrans -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) transpose_A=false transpose_B=false
 
-$(BUILD)/halide_sgemm_transA.o $(BUILD)/halide_sgemm_transA.h: $(BUILD)/blas_l3.generator
+$(BUILD)/halide_sgemm_transA.a $(BUILD)/halide_sgemm_transA.h: $(BUILD)/blas_l3.generator
 	$< -g sgemm -f halide_sgemm_transA -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) transpose_A=true transpose_B=false
 
-$(BUILD)/halide_dgemm_transA.o $(BUILD)/halide_dgemm_transA.h: $(BUILD)/blas_l3.generator
+$(BUILD)/halide_dgemm_transA.a $(BUILD)/halide_dgemm_transA.h: $(BUILD)/blas_l3.generator
 	$< -g dgemm -f halide_dgemm_transA -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) transpose_A=true transpose_B=false
 
-$(BUILD)/halide_sgemm_transB.o $(BUILD)/halide_sgemm_transB.h: $(BUILD)/blas_l3.generator
+$(BUILD)/halide_sgemm_transB.a $(BUILD)/halide_sgemm_transB.h: $(BUILD)/blas_l3.generator
 	$< -g sgemm -f halide_sgemm_transB -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) transpose_A=false transpose_B=true
 
-$(BUILD)/halide_dgemm_transB.o $(BUILD)/halide_dgemm_transB.h: $(BUILD)/blas_l3.generator
+$(BUILD)/halide_dgemm_transB.a $(BUILD)/halide_dgemm_transB.h: $(BUILD)/blas_l3.generator
 	$< -g dgemm -f halide_dgemm_transB -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) transpose_A=false transpose_B=true
 
-$(BUILD)/halide_sgemm_transAB.o $(BUILD)/halide_sgemm_transAB.h: $(BUILD)/blas_l3.generator
+$(BUILD)/halide_sgemm_transAB.a $(BUILD)/halide_sgemm_transAB.h: $(BUILD)/blas_l3.generator
 	$< -g sgemm -f halide_sgemm_transAB -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) transpose_A=true transpose_B=true
 
-$(BUILD)/halide_dgemm_transAB.o $(BUILD)/halide_dgemm_transAB.h: $(BUILD)/blas_l3.generator
+$(BUILD)/halide_dgemm_transAB.a $(BUILD)/halide_dgemm_transAB.h: $(BUILD)/blas_l3.generator
 	$< -g dgemm -f halide_dgemm_transAB -o $(BUILD) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET_NR) transpose_A=true transpose_B=true
