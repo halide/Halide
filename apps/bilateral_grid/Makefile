@@ -12,9 +12,14 @@ $(BIN)/%/bilateral_grid.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
 	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid target=$* auto_schedule=false
 
+$(BIN)/%/bilateral_grid_auto_schedule_folded.a: $(GENERATOR_BIN)/bilateral_grid.generator
+	@mkdir -p $(@D)
+	HL_AUTO_FOLDED_FUSION=1 \
+	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid_auto_schedule target=$*-no_runtime auto_schedule=true -p ../Sioutas20/bin/libauto_schedule.so -s Sioutas20
+
 $(BIN)/%/bilateral_grid_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
-	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid_auto_schedule target=$*-no_runtime auto_schedule=true -e static_library,c_header,schedule
+	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid_auto_schedule target=$*-no_runtime auto_schedule=true -p ../Sioutas20/bin/libauto_schedule.so -s Sioutas20
 
 $(BIN)/%/filter: filter.cpp $(BIN)/%/bilateral_grid.a $(BIN)/%/bilateral_grid_auto_schedule.a
 	@mkdir -p $(@D)

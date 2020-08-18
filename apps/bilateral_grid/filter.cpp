@@ -5,6 +5,7 @@
 #include "bilateral_grid.h"
 #ifndef NO_AUTO_SCHEDULE
 #include "bilateral_grid_auto_schedule.h"
+#include "bilateral_grid_auto_schedule_folded.h"
 #endif
 
 #include "HalideBuffer.h"
@@ -46,6 +47,14 @@ int main(int argc, char **argv) {
         output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+
+    {
+        double min_t_auto = benchmark(timing_iterations, 10, [&]() {
+            bilateral_grid_auto_schedule_folded(input, r_sigma, output);
+            output.device_sync();
+        });
+        printf("Folded Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+    }
 #endif
 
     convert_and_save_image(output, argv[2]);
