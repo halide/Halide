@@ -182,6 +182,7 @@ size_t load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSam
     string best_path;
 
     size_t num_read = 0, num_unique = 0;
+    auto start = Clock::now();
     std::cout << "Loading samples...\n";
     while (!std::cin.eof()) {
         string s;
@@ -333,7 +334,10 @@ size_t load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSam
         }
     }
 
-    std::cout << "Samples loaded: " << num_read << " (" << num_unique << " unique)\n";
+    auto dur = Clock::now() - start;
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+    auto avg = ms / (float)num_read;
+    std::cout << "Samples loaded: " << num_read << " (" << num_unique << " unique) in " << ms << "ms (avg. per sample = " << avg << " ms)\n";
 
     // If the training set is empty, we are likely training on a single pipeline
     if (training_set.empty()) {
@@ -667,7 +671,7 @@ int main(int argc, char **argv) {
             std::cout << "took " << epoch_ms  << " ms. ";
             std::cout << "Total time: " << total_ms << " ms. ";
             std::cout << "Avg. time per epoch: " << total_ms / (float)(e + 1) << " ms. ";
-            std::cout << "Avg. time per epoch, per sample: " << total_ms / (float)((e + 1) * num_samples) << " ms)\n";
+            std::cout << "Avg. time per epoch, per sample: " << total_ms / (float)((e + 1) * num_samples) << " ms)" << std::endl;
 
             if (worst_inversion.badness > 0) {
                 std::cout << "Worst inversion:\n"
