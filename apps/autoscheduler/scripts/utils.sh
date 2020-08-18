@@ -157,9 +157,9 @@ function retrain_cost_model() {
     get_absolute_autoscheduler_bin_dir ${halide_root} autosched_bin
 
     echo "Using learning rate: ${learning_rate}"
-
+    
     find ${samples_dir} -name "*.sample" | \
-        ${autosched_bin}/retrain_cost_model \
+         HL_NUM_THREADS=8 ${autosched_bin}/retrain_cost_model \
             --epochs=${num_epochs} \
             --rates=${learning_rate} \
             --num_cores=${num_cores} \
