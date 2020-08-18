@@ -116,9 +116,7 @@ void test_compile_to_object_files_single_target(Func j) {
 
     std::vector<std::string> files;
     files.push_back(fname + ".h");
-    for (auto s : target_strings) {
-        files.push_back(fname + "_" + Internal::replace_all(s, "-", "_") + o);
-    }
+    files.push_back(fname + o);
 
     for (auto f : files) {
         Internal::ensure_no_file_exists(f);
