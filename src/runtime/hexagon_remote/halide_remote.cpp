@@ -15,7 +15,6 @@ extern "C" {
 #include "dlib.h"
 #include "known_symbols.h"
 #include "log.h"
-#include "pipeline_context.h"
 
 const int stack_alignment = 128;
 const int stack_size = 1024 * 1024;
@@ -83,8 +82,6 @@ void *halide_load_library(const char *name) {
 void *halide_get_library_symbol(void *lib, const char *name) {
     return dlsym(lib, name);
 }
-
-PipelineContext run_context(stack_alignment, stack_size);
 
 int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
                                        const unsigned char *code, int codeLen,
@@ -367,15 +364,8 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
                                  const buffer *input_buffersPtrs, int input_buffersLen,
                                  buffer *output_buffersPtrs, int output_buffersLen,
                                  const scalar_t *scalars, int scalarsLen) {
-    if (saved_thread_priority > 0) {
-        // Existing thread
-        run_context.set_priority(saved_thread_priority);
-        // Future threads
-        halide_hexagon_runtime_set_thread_priority(saved_thread_priority);
-        saved_thread_priority = -1;  // Only do this once
-    }
-
     // Get a pointer to the argv version of the pipeline.
+    typedef int (*pipeline_argv_t)(void **);
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
     // Construct a list of arguments.
@@ -431,7 +421,7 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
     }
 
     // Call the pipeline and return the result.
-    result = run_context.run(pipeline, args);
+    result = pipeline(args);
 
     // Power HVX off.
     halide_hexagon_remote_power_hvx_off();
