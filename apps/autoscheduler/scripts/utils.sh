@@ -153,11 +153,12 @@ function retrain_cost_model() {
     local -r predictions_file=${8-""}
     local -r verbose=${9-0}
     local -r partition_schedules=${10-0}
+    local -r limit=${11-0}
 
     get_absolute_autoscheduler_bin_dir ${halide_root} autosched_bin
 
     echo "Using learning rate: ${learning_rate}"
-    
+
     find ${samples_dir} -name "*.sample" | \
          HL_NUM_THREADS=8 ${autosched_bin}/retrain_cost_model \
             --epochs=${num_epochs} \
@@ -169,7 +170,8 @@ function retrain_cost_model() {
             --best_schedule=${samples_dir}/best.${pipeline_id}.schedule.h \
             --predictions_file=${predictions_file} \
             --verbose=${verbose} \
-            --partition_schedules=${partition_schedules}
+            --partition_schedules=${partition_schedules} \
+            --limit=${limit}
 }
 
 function predict_cost() {
@@ -259,9 +261,10 @@ function predict_all() {
     local -r weights_dir=$3
     local -r predictions_file=$4
     local -r include_filenames=$5
+    local -r limit=$6
 
     get_autoscheduler_scripts_dir ${halide_root} scripts_dir
-    bash ${scripts_dir}/predict_all.sh ${samples_dir} ${weights_dir} ${predictions_file} ${include_filenames}
+    bash ${scripts_dir}/predict_all.sh ${samples_dir} ${weights_dir} ${predictions_file} ${include_filenames} ${limit}
 }
 
 function extract_best_times() {

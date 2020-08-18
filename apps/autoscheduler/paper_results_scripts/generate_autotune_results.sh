@@ -139,7 +139,7 @@ for app in $APPS; do
     fi
 
     WEIGHTS_FILE="${SAMPLES_DIR}/updated.weights"
-    predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_WITH_FILENAMES_FILE} 1
+    predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_WITH_FILENAMES_FILE} 1 ${LIMIT:-0}
     awk -F", " '{printf("%f, %f\n", $2, $3);}' ${PREDICTIONS_WITH_FILENAMES_FILE} > ${PREDICTIONS_FILE}
 
     find_outliers ${PREDICTIONS_WITH_FILENAMES_FILE} ${OUTLIERS_FILE}
