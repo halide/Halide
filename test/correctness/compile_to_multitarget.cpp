@@ -55,7 +55,7 @@ void test_compile_to_object_files(Func j) {
     files.push_back(fname + "_runtime" + o);
     files.push_back(fname + "_wrapper" + o);
     for (auto s : target_strings) {
-        files.push_back(fname + "_" + Internal::replace_all(s, "-", "_") + o);
+        files.push_back(fname + "-" + s + o);
     }
 
     for (auto f : files) {
@@ -87,7 +87,7 @@ void test_compile_to_object_files_no_runtime(Func j) {
     files.push_back(fname + ".h");
     files.push_back(fname + "_wrapper" + o);
     for (auto s : target_strings) {
-        files.push_back(fname + "_" + Internal::replace_all(s, "-", "_") + o);
+        files.push_back(fname + "-" + s + o);
     }
 
     for (auto f : files) {
@@ -160,7 +160,7 @@ void test_compile_to_everything(Func j, bool do_object) {
     for (const auto &s : target_strings) {
         for (const char *ext : {".s", ".bc", ".featurization", ".ll", ".stmt", ".stmt.html", o}) {
             if (!do_object && !strcmp(ext, o)) continue;
-            files.push_back(fname + "_" + Internal::replace_all(s, "-", "_") + ext);
+            files.push_back(fname + "-" + s + ext);
         }
     }
 

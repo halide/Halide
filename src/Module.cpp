@@ -765,8 +765,7 @@ void compile_multitarget(const std::string &fn_name,
     user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
 
     const auto suffix_for_entry = [&](int i) -> std::string {
-        const std::string target_label = suffixes.empty() ? targets[i].to_string() : suffixes[i];
-        const std::string suffix = "_" + replace_all(target_label, "-", "_");
+        const std::string suffix = "-" + (suffixes.empty() ? targets[i].to_string() : suffixes[i]);
         return suffix;
     };
 
