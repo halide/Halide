@@ -185,7 +185,7 @@ public:
         return 1 / (1 + exp(-e));
     }
 
-    Expr print_wrap(Expr e, const std::string& out, const Var& n, const Var& w) {
+    Expr print_wrap(Expr e, const std::string &out, const Var &n, const Var &w) {
         if (training || !enable_debug_output) {
             return e;
         }
@@ -344,8 +344,8 @@ public:
         // different cost to vectors and scalars, and a different cost
         // depending on whether we were inlined.
         Expr compute_cost = select(inlined_calls == 0,
-                                    num_scalars * relu1(1, w, n),
-                                    num_scalars * relu1(3, w, n));
+                                   num_scalars * relu1(1, w, n),
+                                   num_scalars * relu1(3, w, n));
 
         compute_cost = print_wrap(compute_cost, "compute_cost_initial", n, w);
 
@@ -601,12 +601,12 @@ public:
             // inference. Scheduling a couple of convs is easy.
             Var no;
             prediction_output.specialize(batch_size < 8).split(n, no, n, 1);
-            prediction_output.compute_root().split(n, no, n, 8).parallel(no);
+            prediction_output.compute_root().split(n, no, n, 8);  //.parallel(no);
             prediction_output.bound(n, 0, batch_size);
 
             cost_per_stage_output.reorder(w, n);
             cost_per_stage_output.specialize(batch_size < 8).split(n, no, n, 1);
-            cost_per_stage_output.compute_root().split(n, no, n, 8).parallel(no);
+            cost_per_stage_output.compute_root().split(n, no, n, 8);  //.parallel(no);
 
             // schedule for the forwards path
             const int vec = 8;
@@ -626,15 +626,13 @@ public:
                         .compute_root()
                         .tile(c, w, ci, wi, vec, 1, TailStrategy::RoundUp)
                         .vectorize(ci)
-                        .unroll(wi)
-                        .parallel(n, 8);
+                        .unroll(wi);
                     conv.compute_at(conv.in(), c);
                     relu
                         .compute_root()
                         .reorder_storage(c, w, n)
                         .reorder(c, w, n)
-                        .vectorize(c, vec)
-                        .parallel(n, 8);
+                        .vectorize(c, vec);
                 }
                 conv
                     .vectorize(c)

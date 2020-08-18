@@ -547,22 +547,6 @@ void generate_schedule(const std::vector<Function> &outputs,
     string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
 
-    // Analyse the Halide algorithm and construct our abstract representation of it
-    FunctionDAG dag(outputs, params, target);
-    if (aslog::aslog_level() > 0) {
-        dag.dump();
-    }
-
-    Statistics stats;
-
-    // Construct a cost model to use to evaluate states. Currently we
-    // just have the one, but it's an abstract interface, so others
-    // can be slotted in for experimentation.
-    std::unique_ptr<CostModel> cost_model = make_default_cost_model(stats, weights_in_path, weights_out_path, randomize_weights);
-    internal_assert(cost_model != nullptr);
-
-    IntrusivePtr<State> optimal;
-
     string partial_schedule_filename = get_env_variable("PARTIAL_SCHEDULE");
     std::unique_ptr<LoopNestParser> partial_schedule;
     if (!partial_schedule_filename.empty()) {
@@ -573,13 +557,68 @@ void generate_schedule(const std::vector<Function> &outputs,
         aslog(0) << "\n";
     }
 
+    struct ProbeResult {
+        Statistics stats;
+        std::unique_ptr<CostModel> cost_model;
+        std::unique_ptr<FunctionDAG> dag;
+        IntrusivePtr<State> optimal;
+    };
+
     std::mt19937 rng{(uint32_t)seed};
-    SearchSpace search_space{dag, params, target, get_env_variable("HL_SEARCH_SPACE_OPTIONS"), rng, cost_model.get(), stats, partial_schedule.get()};
 
-    AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model.get(), stats, search_space, partial_schedule.get()};
+    auto do_probe = ([&]() {
+        std::unique_ptr<ProbeResult> result(new ProbeResult);
 
-    // Run beam search
-    optimal = autoschedule.optimal_schedule(beam_size);
+        // Analyse the Halide algorithm and construct our abstract representation of it
+        result->dag.reset(new FunctionDAG(outputs, params, target));
+        if (aslog::aslog_level() > 0) {
+            result->dag->dump();
+        }
+
+        // Construct a cost model to use to evaluate states. Currently we
+        // just have the one, but it's an abstract interface, so others
+        // can be slotted in for experimentation.
+        result->cost_model = make_default_cost_model(result->stats, weights_in_path, weights_out_path, randomize_weights);
+        internal_assert(result->cost_model != nullptr);
+
+        std::mt19937 sub_rng{(uint32_t)rng()};
+
+        SearchSpace search_space{*result->dag, params, target, get_env_variable("HL_SEARCH_SPACE_OPTIONS"), sub_rng, result->cost_model.get(), result->stats, partial_schedule.get()};
+
+        AutoSchedule autoschedule{*result->dag, params, target, outputs, sub_rng, result->cost_model.get(), result->stats, search_space, partial_schedule.get()};
+
+        // Run beam search
+        result->optimal = autoschedule.optimal_schedule(beam_size);
+
+        return result;
+    });
+
+    string num_random_probes_str = get_env_variable("HL_NUM_RANDOM_PROBES");
+    int num_random_probes = 1;
+    if (!num_random_probes_str.empty()) {
+        num_random_probes = std::atoi(num_random_probes_str.c_str());
+    }
+    ThreadPool<std::unique_ptr<ProbeResult>> pool;
+    std::vector<std::future<std::unique_ptr<ProbeResult>>> results;
+    for (int i = 0; i < num_random_probes; i++) {
+        results.emplace_back(pool.async(do_probe));
+    }
+    std::unique_ptr<ProbeResult> best_result;
+    for (auto &f : results) {
+        std::unique_ptr<ProbeResult> r{f.get()};
+        if (!best_result ||
+            r->optimal->cost < best_result->optimal->cost) {
+            best_result = std::move(r);
+        }
+    }
+    results.clear();
+
+    auto &optimal = best_result->optimal;
+    auto &stats = best_result->stats;
+    auto *cost_model = best_result->cost_model.get();
+    const auto &dag = *(best_result->dag);
+
+    aslog(0) << "Best cost across probes: " << optimal->cost << "\n";
 
     HALIDE_TOC;
 
@@ -587,7 +626,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, target, cost_model.get(), stats, aslog::aslog_level() > 0);
+    optimal->calculate_cost(dag, params, target, cost_model, stats, aslog::aslog_level() > 0);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params, target);
@@ -682,7 +721,7 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              const std::vector<Function> &outputs,
                              const MachineParams &params,
                              const Target &target,
-                             CostModel* cost_model,
+                             CostModel *cost_model,
                              int beam_size,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
