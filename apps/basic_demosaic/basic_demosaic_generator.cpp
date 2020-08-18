@@ -80,9 +80,9 @@ public:
     chroma_h.shape = input_t.shape;
     chroma_q.shape = input_t.shape;
 
-    chroma_v.f(c, x, y, n) = chroma_v_diff.f(c, x, y, n) + green.f(c, x, y, n);
-    chroma_h.f(c, x, y, n) = chroma_h_diff.f(c, x, y, n) + green.f(c, x, y, n);
-    chroma_q.f(c, x, y, n) = chroma_q_diff.f(c, x, y, n) + green.f(c, x, y, n);
+    chroma_v.f(c, x, y, n) = chroma_v_diff.f(c, x, y, n) + green.f(0, x, y, n);
+    chroma_h.f(c, x, y, n) = chroma_h_diff.f(c, x, y, n) + green.f(0, x, y, n);
+    chroma_q.f(c, x, y, n) = chroma_q_diff.f(c, x, y, n) + green.f(0, x, y, n);
 
 
     output(c, x, y, n) = select(c == 0, (select( (x % 2) == 0 && (y % 2) == 0, chroma_h.f(0, x, y, n),
@@ -130,47 +130,6 @@ public:
       .dim(2).set_estimate(0,5)
       .dim(3).set_estimate(0,1);
 
-    green.f.bound(green.f.args()[0], 0, 1);
-    green.f.bound(green.f.args()[1], 0, 128);
-    green.f.bound(green.f.args()[2], 0, 128);
-    green.f.bound(green.f.args()[3], 0, 32);
-
-    chroma_minus_g.f.bound(chroma_minus_g.f.args()[0], 0, 1);
-    chroma_minus_g.f.bound(chroma_minus_g.f.args()[1], 0, 128);
-    chroma_minus_g.f.bound(chroma_minus_g.f.args()[2], 0, 128);
-    chroma_minus_g.f.bound(chroma_minus_g.f.args()[3], 0, 32);
-
-    chroma_v_diff.f.bound(chroma_v_diff.f.args()[0], 0, 2);
-    chroma_v_diff.f.bound(chroma_v_diff.f.args()[1], 0, 128);
-    chroma_v_diff.f.bound(chroma_v_diff.f.args()[2], 0, 128);
-    chroma_v_diff.f.bound(chroma_v_diff.f.args()[3], 0, 32);
-
-    chroma_h_diff.f.bound(chroma_h_diff.f.args()[0], 0, 2);
-    chroma_h_diff.f.bound(chroma_h_diff.f.args()[1], 0, 128);
-    chroma_h_diff.f.bound(chroma_h_diff.f.args()[2], 0, 128);
-    chroma_h_diff.f.bound(chroma_h_diff.f.args()[3], 0, 32);
-
-    chroma_q_diff.f.bound(chroma_q_diff.f.args()[0], 0, 2);
-    chroma_q_diff.f.bound(chroma_q_diff.f.args()[1], 0, 128);
-    chroma_q_diff.f.bound(chroma_q_diff.f.args()[2], 0, 128);
-    chroma_q_diff.f.bound(chroma_q_diff.f.args()[3], 0, 32);
-
-    chroma_v.f.bound(chroma_v.f.args()[0], 0, 2);
-    chroma_v.f.bound(chroma_v.f.args()[1], 0, 128);
-    chroma_v.f.bound(chroma_v.f.args()[2], 0, 128);
-    chroma_v.f.bound(chroma_v.f.args()[3], 0, 32);
-
-    chroma_h.f.bound(chroma_h.f.args()[0], 0, 2);
-    chroma_h.f.bound(chroma_h.f.args()[1], 0, 128);
-    chroma_h.f.bound(chroma_h.f.args()[2], 0, 128);
-    chroma_h.f.bound(chroma_h.f.args()[3], 0, 32);
-
-    chroma_q.f.bound(chroma_q.f.args()[0], 0, 2);
-    chroma_q.f.bound(chroma_q.f.args()[1], 0, 128);
-    chroma_q.f.bound(chroma_q.f.args()[2], 0, 128);
-    chroma_q.f.bound(chroma_q.f.args()[3], 0, 32);
-
-    
     output.bound(output.args()[0], 0, 3);
     output.bound(output.args()[1], 0, 128);
     output.bound(output.args()[2], 0, 128);
