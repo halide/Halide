@@ -695,7 +695,6 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
 }
 
 Expr Variable::make(Type type, const std::string &name, Buffer<> image, Parameter param, ReductionDomain reduction_domain) {
-    internal_assert(!name.empty());
     Variable *node = new Variable;
     node->type = type;
     node->name = name;
