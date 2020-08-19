@@ -441,7 +441,6 @@ class ForkAsyncProducers : public IRMutator {
                 }
             }
 
-
             mutated = Realize::make(op->name, op->types, op->memory_type,
                                     op->bounds, op->condition, body);
         } else {
