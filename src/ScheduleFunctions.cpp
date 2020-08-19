@@ -2179,6 +2179,11 @@ void validate_fused_group_schedule_helper(const string &fn,
             << ") and " << p.func_2 << ".s" << p.stage_2 << " ("
             << func_2.schedule().compute_level().to_string() << ") do not match.\n";
 
+        // Verify that they have matching async flags.
+        user_assert(func_1.schedule().async() == func_2.schedule().async())
+            << "Invalid compute_with: functions " << func_1.name()
+            << " and " << func_2.name() << " have different async flags.\n";
+
         const vector<Dim> &dims_1 = def_1.schedule().dims();
         const vector<Dim> &dims_2 = def_2.schedule().dims();
 
