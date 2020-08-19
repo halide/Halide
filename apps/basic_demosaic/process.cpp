@@ -3,8 +3,11 @@
 
 #include "basic_demosaic.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "basic_demosaic_auto_schedule.h"
-#include "basic_demosaic_gradient_auto_schedule.h"
+  #include "basic_demosaic_auto_schedule_sioutas.h"
+  #include "basic_demosaic_auto_schedule_sioutas_folded.h"
+#endif
+#ifndef NO_GRADIENT_AUTO_SCHEDULE
+  #include "basic_demosaic_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -16,9 +19,9 @@ using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-    if (argc < 4) {
-        printf("Usage: ./process input.png timing_iterations output.png\n"
-               "e.g.: ./process input.png 10 output.png\n");
+    if (argc < 2) {
+        printf("Usage: ./process timing_iterations\n"
+               "e.g.: ./process 10\n");
         return 0;
     }
 
@@ -45,11 +48,13 @@ int main(int argc, char **argv) {
     multi_way_bench({
         {"basic_demosaic Manual", [&]() { basic_demosaic(input, g_conv2d_weights, g_1x1_1_weights, g_1x1_2_weights,  g_filter_weights, chroma_v_weights, chroma_q_weights, chroma_h_weights, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"basic_demosaic Auto-scheduled", [&]() { basic_demosaic_auto_schedule(input, output); output.device_sync(); }},
-        {"basic_demosaic Gradient auto-scheduled", [&]() { basic_demosaic_gradient_auto_schedule(input, output); output.device_sync();}}
+        {"basic_demosaic Sioutas Auto-scheduled", [&]() { basic_demosaic_auto_schedule_sioutas(input, g_conv2d_weights, g_1x1_1_weights, g_1x1_2_weights, g_filter_weights, chroma_v_weights, chroma_q_weights, chroma_h_weights, output); output.device_sync(); }},
+        {"basic_demosaic Sioutas Auto-scheduled Folded", [&]() { basic_demosaic_auto_schedule_sioutas_folded(input, g_conv2d_weights, g_1x1_1_weights, g_1x1_2_weights, g_filter_weights, chroma_v_weights, chroma_q_weights, chroma_h_weights, output); output.device_sync();}},
     #endif
-        }
-    );
+    #ifndef NO_GRADIENT_AUTO_SCHEDULE
+        {"basic_demosaic Gradient auto-scheduled", [&]() { basic_demosaic_gradient_auto_schedule(input, g_convex_weights, g_filter_weights, chroma_v_weights, chroma_q_weights, chroma_h_weights, output); output.device_sync();}}
+    #endif
+        });
 
     printf("Success!\n");
     return 0;

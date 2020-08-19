@@ -30,9 +30,33 @@ make -C sioutas2020
 #make  test | tail -5  >> ../results_sioutas.txt
 #cd ..
 
-echo "BILATERAL"
-echo "bilateral_grid:" >> results_sioutas.txt
-cd bilateral_grid
+#echo "BILATERAL"
+#echo "bilateral_grid:" >> results_sioutas.txt
+#cd bilateral_grid
+#make clean
+#make  test
+#| tail -5  >> ../results_sioutas.txt
+#cd ..
+
+#echo "AHD_DEMOSAIC"
+#echo "ahd_demosaic:" >> results_sioutas.txt
+#cd ahd_demosaic
+#make clean
+#make  test
+#| tail -5  >> ../results_sioutas.txt
+#cd ..
+
+#echo "BASIC_DEMOSAIC"
+#echo "basic_demosaic:" >> results_sioutas.txt
+#cd basic_demosaic
+#make clean
+#make  test
+#| tail -5  >> ../results_sioutas.txt
+#cd ..
+
+echo "MULTIRES_DEMOSAIC"
+echo "multires_demosaic:" >> results_sioutas.txt
+cd multires_demosaic
 make clean
 make  test
 #| tail -5  >> ../results_sioutas.txt

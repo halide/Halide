@@ -1,21 +1,28 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
-GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
-
-CXXFLAGS += -I../support/
-
-PROCESS_DEPS=$(BIN)/%/ahd_demosaic.a
-
-ifndef NO_AUTO_SCHEDULE
-	PROCESS_DEPS += $(BIN)/%/ahd_auto_schedule.a $(BIN)/%/ahd_gradient_auto_schedule.a
-else
-	CXXFLAGS += -DNO_AUTO_SCHEDULE
-endif
-
 .PHONY: build clean test
 
 build: $(BIN)/$(HL_TARGET)/process
+
+GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
+CXXFLAGS += -I../support/
+
+BIN ?= bin
+
+PROCESS_DEPS=$(BIN)/%/ahd_demosaic.a
+
+ifndef NO_GRADIENT_AUTO_SCHEDULE
+	PROCESS_DEPS += $(BIN)/%/ahd_demosaic_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_GRADIENT_AUTO_SCHEDULE
+endif
+
+ifndef NO_AUTO_SCHEDULE
+	PROCESS_DEPS += $(BIN)/%/ahd_demosaic_auto_schedule_sioutas.a $(BIN)/%/ahd_demosaic_auto_schedule_sioutas_folded.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
 
 $(GENERATOR_BIN)/ahd_demosaic.generator: ahd_demosaic_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -27,13 +34,14 @@ $(BIN)/%/ahd_demosaic.a: $(GENERATOR_BIN)/ahd_demosaic.generator
 	@mkdir -p $(@D)
 	$^ -g ahd_demosaic -e $(GENERATOR_OUTPUTS) -o $(@D) -f ahd_demosaic target=$* auto_schedule=false
 
-$(BIN)/%/ahd_demosaic_auto_schedule.a: $(GENERATOR_BIN)/ahd_demosaic.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+$(BIN)/%/ahd_demosaic_auto_schedule_sioutas_folded.a: $(GENERATOR_BIN)/ahd_demosaic.generator
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
-	HL_DEBUG_CODEGEN=1 \
-	HL_SHARED_MEMORY_LIMIT=48 \
-	$< -g ahd_demosaic -e $(GENERATOR_OUTPUTS) -o $(@D) -f ahd_demosaic_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019 machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
+	HL_AUTO_FOLDED_FUSION=1 \
+	$^ -g ahd_demosaic -e $(GENERATOR_OUTPUTS) -o $(@D) -f ahd_demosaic_auto_schedule_sioutas_folded target=$*-no_runtime auto_schedule=true -p ../sioutas2020/bin/libauto_schedule.so -s Sioutas2020
+
+$(BIN)/%/ahd_demosaic_auto_schedule_sioutas.a: $(GENERATOR_BIN)/ahd_demosaic.generator
+	@mkdir -p $(@D)
+	$^ -g ahd_demosaic -e $(GENERATOR_OUTPUTS) -o $(@D) -f ahd_demosaic_auto_schedule_sioutas target=$*-no_runtime auto_schedule=true -p ../sioutas2020/bin/libauto_schedule.so -s Sioutas2020
 
 $(BIN)/%/ahd_demosaic_gradient_auto_schedule.a: $(GENERATOR_BIN)/ahd_demosaic.generator
 	@mkdir -p $(@D)
@@ -45,8 +53,7 @@ $(BIN)/%/process: process.cpp $(PROCESS_DEPS)
 
 $(BIN)/%/out.png: $(BIN)/%/process
 	@mkdir -p $(@D)
-	$< $(IMAGES)/rgb.png 10 $@
-	rm $@
+	$< 10
 
 clean:
 	rm -rf $(BIN)
