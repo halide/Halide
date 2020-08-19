@@ -378,7 +378,7 @@ class ForkAsyncProducers : public IRMutator {
         }
         internal_assert(fused_group_index < fused_groups.size());
         // We want to make sure that for fused function group transformation is
-        // applied to inner Realize node.
+        // applied to the inner Realize node.
         fused_group_func_counter[fused_group_index]++;
         const auto &current_group = fused_groups[fused_group_index];
 
@@ -443,7 +443,7 @@ class ForkAsyncProducers : public IRMutator {
 
 
             mutated = Realize::make(op->name, op->types, op->memory_type,
-                                 op->bounds, op->condition, body);
+                                    op->bounds, op->condition, body);
         } else {
             mutated = IRMutator::visit(op);
         }
