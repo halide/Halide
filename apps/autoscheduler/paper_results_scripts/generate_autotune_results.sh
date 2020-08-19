@@ -156,7 +156,7 @@ for app in $APPS; do
     touch ${OUTPUT_FILE}
 
     if [[ $PREDICT_ONLY != 1 ]]; then
-        TRAIN_ONLY=${TRAIN_ONLY} SAMPLES_DIR=${SAMPLES_DIR} make -C ${APP_DIR} autotune | tee -a ${OUTPUT_FILE}
+        NUM_BATCHES=${MAX_ITERATIONS} TRAIN_ONLY=${TRAIN_ONLY} SAMPLES_DIR=${SAMPLES_DIR} make -C ${APP_DIR} autotune | tee -a ${OUTPUT_FILE}
     fi
 
     WEIGHTS_FILE="${SAMPLES_DIR}/updated.weights"
