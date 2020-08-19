@@ -8,10 +8,10 @@ if [ $# -lt 7 -o $# -gt 8 ]; then
     exit
 fi
 
+set -eu
+
 source $(dirname $0)/scripts/utils.sh
 find_halide HALIDE_ROOT
-
-set -eu
 
 #trap "exit" INT TERM
 #trap "kill 0" EXIT
@@ -116,7 +116,6 @@ else
     echo "Train only mode: ON"
     EPOCHS=10000
 fi
-
 
 record_command() {
     BATCH=${1}
@@ -229,9 +228,6 @@ make_featurization() {
         if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
             touch "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}"
         fi
-    fi
-    if [ $PIPELINE != "random_pipeline" ]; then
-        record_command $BATCH $SAMPLE_ID "$CMD" "compile_command" $FAILED
     fi
 
     rm ${D}/${FNAME}.a
@@ -372,6 +368,8 @@ benchmark_sample() {
 
     rm ${D}/${FNAME}.featurization
     rm ${D}/bench
+    rm ${D}/${FNAME}.schedule.h
+    rm ${D}/${FNAME}.stmt
 
     if [[ $USE_BENCHMARK_QUEUE == 1 ]]; then
         mv "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-benchmarking-gpu_${GPU_INDEX}" "${BENCHMARK_QUEUE_DIR}/${BATCH}-${SAMPLE_ID}-completed"
@@ -384,15 +382,9 @@ TOTAL_NUM_SAMPLES=$((NUM_BATCHES*BATCH_SIZE*${#GENERATOR_ARGS_SETS_ARRAY[@]}))
 echo "Num batches: ${NUM_BATCHES}"
 echo "Total number of samples to be generated: ${TOTAL_NUM_SAMPLES}"
 
-if [ $PIPELINE == "random_pipeline" ]; then
-    RETRAIN_AFTER_EACH_BATCH=0
-    MAX_BENCHMARK_TIME=$((NUM_BATCHES*${#GENERATOR_ARGS_SETS_ARRAY[@]}*660))
-    NUM_SAMPLES_PER_QUEUE=$((NUM_BATCHES*BATCH_SIZE*${#GENERATOR_ARGS_SETS_ARRAY[@]}))
-else
-    RETRAIN_AFTER_EACH_BATCH=1
-    MAX_BENCHMARK_TIME=$((${#GENERATOR_ARGS_SETS_ARRAY[@]}*660))
-    NUM_SAMPLES_PER_QUEUE=$((BATCH_SIZE*${#GENERATOR_ARGS_SETS_ARRAY[@]}))
-fi
+RETRAIN_AFTER_EACH_BATCH=0
+MAX_BENCHMARK_TIME=$((NUM_BATCHES*${#GENERATOR_ARGS_SETS_ARRAY[@]}*660))
+NUM_SAMPLES_PER_QUEUE=$((NUM_BATCHES*BATCH_SIZE*${#GENERATOR_ARGS_SETS_ARRAY[@]}))
 
 echo "Retrain after each batch: ${RETRAIN_AFTER_EACH_BATCH}"
 
@@ -425,8 +417,10 @@ benchmark_loop() {
             # We sometimes encounter spurious permission denied errors. Usually,
             # retrying will resolve them so remove from this file the
             # '-completed' tag and let it be benchmarked again
-            if grep -q "Permission denied" "${SAMPLE_DIR}/bench_err.txt"; then
-                FILE=${FILE%-completed}
+            if [[ -f "${SAMPLE_DIR}/bench_err.txt" ]]; then
+                if grep -q "Permission denied" "${SAMPLE_DIR}/bench_err.txt"; then
+                    FILE=${FILE%-completed}
+                fi
             fi
 
             if [[ -f "${SAMPLE_DIR}/bench.txt" ]] && [[ $FILE == *"-completed" ]]; then
@@ -516,19 +510,13 @@ if [[ $TRAIN_ONLY != 1 ]]; then
             echo "Starting PID: ${benchmark_loop_pid}"
         fi
 
-        if [ $PIPELINE == "random_pipeline" ]; then
-            while [[ 1 ]]; do
-                BATCH_ID=$(od -vAn -N3 -tu4 < /dev/urandom | awk '{print $1}')
+        while [[ 1 ]]; do
+            BATCH_ID=$(od -vAn -N3 -tu4 < /dev/urandom | awk '{print $1}')
 
-                if [ ! -d "${SAMPLES}/batch_${BATCH_ID}_0" ]; then
-                    break
-                fi
-            done
-        else
-            # Don't clobber existing samples
-            FIRST=$(ls -d ${SAMPLES}/batch_* 2>/dev/null | sed -e "s|.*/batch_||;s|_.*||" | sort -n | tail -n1)
-            BATCH_ID=$((FIRST+1))
-        fi
+            if [ ! -d "${SAMPLES}/batch_${BATCH_ID}_0" ]; then
+                break
+            fi
+        done
 
         echo "Starting compiling of new batch with id: ${BATCH_ID}"
 
@@ -595,6 +583,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
                 BENCHMARK_TIME=$((SECONDS-CUR_SECONDS))
                 echo "Benchmark time for batch: ${BENCHMARK_TIME}"
             fi
+
         done
 
         if [[ ${RETRAIN_AFTER_EACH_BATCH} == 1 ]]; then

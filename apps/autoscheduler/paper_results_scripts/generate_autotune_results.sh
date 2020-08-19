@@ -63,8 +63,18 @@ function ctrl_c() {
     for app in $APPS; do
         ps aux | grep ${app}.generator | awk '{print $2}' | xargs kill
 
-        LATEST_SAMPLES_DIR=$(ls -ld $APP_DIR/${DEFAULT_SAMPLES_DIR_NAME}* | tail -n 1 | rev | cut -d" " -f 1 | rev)
-        if [[ ${RESUME} -eq 1 && -d ${LATEST_SAMPLES_DIR} ]]; then
+        unset -v LATEST_SAMPLES_DIR
+        for f in "$APP_DIR/${DEFAULT_SAMPLES_DIR_NAME}"*; do
+            if [[ ! -d $f ]]; then
+               continue
+           fi
+
+            if [[ -z ${LATEST_SAMPLES_DIR+x} || $f -nt $LATEST_SAMPLES_DIR ]]; then
+                LATEST_SAMPLES_DIR=$f
+            fi
+        done
+
+        if [[ ${RESUME} -eq 1 && -z ${LATEST_SAMPLES_DIR+x} ]]; then
             SAMPLES_DIR=${LATEST_SAMPLES_DIR}
         else
             while [[ 1 ]]; do
@@ -89,7 +99,7 @@ function ctrl_c() {
 trap ctrl_c INT
 
 if [ -z $APP ]; then
-    APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur depthwise_separable_conv mobilenet0 mobilenet1 mobilenet2 mobilenet3 mobilenet4 mobilenet5 mobilenet6 mobilenet7"
+    APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur depthwise_separable_conv mobilenet0 mobilenet1 mobilenet2 mobilenet3 mobilenet4 mobilenet5 mobilenet6 mobilenet7"
 else
     APPS=${APP}
 fi
@@ -105,8 +115,18 @@ for app in $APPS; do
     SECONDS=0
     APP_DIR="${HALIDE_ROOT}/apps/${app}"
 
-    LATEST_SAMPLES_DIR=$(ls -ld $APP_DIR/${DEFAULT_SAMPLES_DIR_NAME}* | tail -n 1 | rev | cut -d" " -f 1 | rev)
-    if [[ ${RESUME} -eq 1 && -d ${LATEST_SAMPLES_DIR} ]]; then
+    unset -v LATEST_SAMPLES_DIR
+    for f in "$APP_DIR/${DEFAULT_SAMPLES_DIR_NAME}"*; do
+        if [[ ! -d $f ]]; then
+           continue
+       fi
+
+        if [[ -z ${LATEST_SAMPLES_DIR+x} || $f -nt $LATEST_SAMPLES_DIR ]]; then
+            LATEST_SAMPLES_DIR=$f
+        fi
+    done
+
+    if [[ ${RESUME} -eq 1 && -z ${LATEST_SAMPLES_DIR+x} ]]; then
         SAMPLES_DIR=${LATEST_SAMPLES_DIR}
         echo "Resuming from existing run: ${SAMPLES_DIR}"
     else
@@ -135,7 +155,7 @@ for app in $APPS; do
     touch ${OUTPUT_FILE}
 
     if [[ $PREDICT_ONLY != 1 ]]; then
-        NUM_BATCHES=${MAX_ITERATIONS} TRAIN_ONLY=${TRAIN_ONLY} SAMPLES_DIR=${SAMPLES_DIR} make -C ${APP_DIR} autotune | tee -a ${OUTPUT_FILE}
+        TRAIN_ONLY=${TRAIN_ONLY} SAMPLES_DIR=${SAMPLES_DIR} make -C ${APP_DIR} autotune | tee -a ${OUTPUT_FILE}
     fi
 
     WEIGHTS_FILE="${SAMPLES_DIR}/updated.weights"
