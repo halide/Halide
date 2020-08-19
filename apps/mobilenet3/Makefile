@@ -20,3 +20,7 @@ autotune:
 		$(TRAIN_ONLY) \
 		'model_file_path=$(CURDIR)/../onnx/models/mobilenetv2_3.onnx'
 
+test:
+	cd $(CURDIR)/../onnx && $(MAKE) build && \
+	python benchmark_models.py models/mobilenetv2_3.onnx && \
+	cd $(CURDIR)
