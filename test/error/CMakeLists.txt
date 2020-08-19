@@ -2,6 +2,7 @@ tests(GROUPS error
       EXPECT_FAILURE
       SOURCES
       ambiguous_inline_reductions.cpp
+      async_compute_with.cpp
       async_require_fail.cpp
       atomics_gpu_8_bit.cpp
       atomics_gpu_mutex.cpp
