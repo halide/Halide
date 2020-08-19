@@ -377,6 +377,8 @@ class ForkAsyncProducers : public IRMutator {
             }
         }
         internal_assert(fused_group_index < fused_groups.size());
+        // We want to make sure that for fused function group transformation is
+        // applied to inner Realize node.
         fused_group_func_counter[fused_group_index]++;
         const auto &current_group = fused_groups[fused_group_index];
 
@@ -407,6 +409,7 @@ class ForkAsyncProducers : public IRMutator {
             Stmt producer = GenerateProducerBody(current_group, cloned_acquires).mutate(body);
             Stmt consumer = GenerateConsumerBody(current_group).mutate(body);
 
+            // Insert producer/consumer semaphores.
             for (size_t ix = 0; ix < current_group.size(); ix++) {
                 producer = InsertProducerSemaphores(current_group[ix], sema_vars[ix]).mutate(producer);
                 consumer = InsertConsumerSemaphores(current_group[ix], sema_vars[ix]).mutate(consumer);

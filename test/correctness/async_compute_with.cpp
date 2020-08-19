@@ -3,7 +3,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    // Compute_with and async is broken.
+    // Two producers scheduled as async and two separate consumers.
     {
         Func producer1, producer2, consumer, consumer1, consumer2;
         Var x, y;
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Compute_with and async is broken.
+    // Two producers scheduled as async and one consumers.
     {
         Func producer1, producer2, producer3, consumer, consumer1, consumer2;
         Var x, y;
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
             }
         });
     }
-
+    // Two fused producers + one producer scheduled as async and one consumers.
     {
         Func producer1, producer2, producer3, consumer;
         Var x, y;
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Compute_with and async is broken.
+    // Two producers scheduled as async + one producer and one consumer.
     {
         Func producer1, producer2, producer3, consumer;
         Var x, y;
@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Compute_with and async is broken.
+    // Two producers scheduled as async and two separate consumers.
     {
         Func producer1, producer2, producer3, consumer, consumer1, consumer2;
         Var x, y;
