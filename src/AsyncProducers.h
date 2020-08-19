@@ -14,7 +14,8 @@ namespace Internal {
 
 class Function;
 
-Stmt fork_async_producers(Stmt s, const std::map<std::string, Function> &env);
+Stmt fork_async_producers(Stmt s, const std::map<std::string, Function> &env,
+                          const std::vector<std::vector<std::string>> &fused_groups);
 
 }  // namespace Internal
 }  // namespace Halide

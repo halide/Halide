@@ -244,7 +244,7 @@ Module lower(const vector<Function> &output_funcs,
              << s << "\n\n";
 
     debug(1) << "Forking asynchronous producers...\n";
-    s = fork_async_producers(s, env);
+    s = fork_async_producers(s, env, fused_groups);
     debug(2) << "Lowering after forking asynchronous producers:\n"
              << s << "\n";
 
