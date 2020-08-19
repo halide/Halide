@@ -3671,17 +3671,6 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
     for (int i = 0; i < num_tasks; i++) {
         ParallelTask t = tasks[i];
 
-        // Analyze the task body
-        class MayBlock : public IRVisitor {
-            using IRVisitor::visit;
-            void visit(const Acquire *op) override {
-                result = true;
-            }
-
-        public:
-            bool result = false;
-        };
-
         // TODO(zvookin|abadams): This makes multiple passes over the
         // IR to cover each node. (One tree walk produces the min
         // thread count for all nodes, but we redo each subtree when
@@ -3708,6 +3697,8 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             }
 
             void visit(const Fork *op) override {
+                is_leaf = false;
+
                 int total_threads = 0;
                 int direct_acquires = 0;
                 // Take the sum of min threads across all
@@ -3742,6 +3733,8 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
                 result = 0;
 
                 if (op->for_type == ForType::Parallel) {
+                    is_leaf = false;
+
                     IRVisitor::visit(op);
                     if (result > 0) {
                         result += 1;
@@ -3751,6 +3744,8 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
                     if (after_acquires.second > 0 &&
                         !expr_uses_var(op->body.as<Acquire>()->count, op->name)) {
                         after_acquires.first.accept(this);
+                        is_leaf = false;
+
                         result++;
                     } else {
                         IRVisitor::visit(op);
@@ -3763,6 +3758,8 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             // This is a "standalone" Acquire and will result in its own task.
             // Treat it requiring one more thread than its body.
             void visit(const Acquire *op) override {
+                is_leaf = false;
+
                 result = 0;
                 auto after_inner_acquires = skip_acquires(op);
                 after_inner_acquires.first.accept(this);
@@ -3780,10 +3777,12 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
 
         public:
             int result = 0;
+            bool is_leaf = true;
         };
         MinThreads min_threads;
         t.body.accept(&min_threads);
 
+#if 0
         // Decide if we're going to call do_par_for or
         // do_parallel_tasks. halide_do_par_for is simpler, but
         // assumes a bunch of things. Programs that don't use async
@@ -3793,6 +3792,9 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
                                min_threads.result == 0 &&
                                t.semaphores.empty() &&
                                !task_parent);
+#else
+        bool use_do_par_for = false;
+#endif
 
         // Make the array of semaphore acquisitions this task needs to do before it runs.
         Value *semaphores;
@@ -3919,6 +3921,8 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             debug(4) << "Creating call to do_par_for\n";
             result = builder->CreateCall(do_par_for, args);
         } else {
+            bool is_leaf_for = min_threads.is_leaf && t.semaphores.empty();
+            Value *is_leaf = codegen(cast(UInt(8), is_leaf_for));
             // Populate the task struct
             Value *slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 0);
             builder->CreateStore(task_ptr, slot_ptr);
@@ -3938,6 +3942,8 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             builder->CreateStore(ConstantInt::get(i32_t, min_threads.result), slot_ptr);
             slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 8);
             builder->CreateStore(serial, slot_ptr);
+            slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 9);
+            builder->CreateStore(is_leaf, slot_ptr);
         }
     }
 

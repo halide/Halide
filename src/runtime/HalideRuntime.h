@@ -237,6 +237,11 @@ struct halide_parallel_task_t {
     // one executing at a time. If false, any order is fine, and
     // concurrency is fine.
     bool serial;
+
+    // This loop is a leaf -- it is guaranteed to not add any more tasks to the queue.
+    // This allows more efficient execution of the loop without rechecking the queue
+    // each iteration.
+    bool is_leaf;
 };
 
 /** Enqueue some number of the tasks described above and wait for them
