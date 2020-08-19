@@ -154,7 +154,7 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
 
 #if LLVM_VERSION >= 110
 const llvm::ElementCount element_count(int e) {
-    return llvm::ElementCount(e, /*scalable*/ false);
+    return llvm::ElementCount::getFixed(e);
 }
 #else
 int element_count(int e) {
