@@ -8,7 +8,7 @@ CXXFLAGS += -I../support/
 PROCESS_DEPS=$(BIN)/%/basic_demosaic.a
 
 ifndef NO_AUTO_SCHEDULE
-	PROCESS_DEPS += $(BIN)/%/basic_auto_schedule.a $(BIN)/%/basic_gradient_auto_schedule.a
+	PROCESS_DEPS += $(BIN)/%/basic_demosaic_gradient_auto_schedule.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
 endif
