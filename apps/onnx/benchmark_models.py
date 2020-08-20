@@ -138,8 +138,7 @@ def main():
             end = time.time_ns()
             t = ((end - beg) / (10 ** 9))
             min_time = min(t, min_time)
-        t = ((end - beg) / (10 ** 9)) / num_iter
-        print('{}: Gradient autoscheduler: {}s'.format(f, t))
+        print('{}: Gradient autoscheduler: {}s'.format(f, min_time))
 
 
 if __name__ == '__main__':
