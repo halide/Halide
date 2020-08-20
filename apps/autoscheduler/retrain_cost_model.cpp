@@ -40,6 +40,7 @@ struct Flags {
     string predictions_file;
     bool verbose;
     bool partition_schedules;
+    int limit;
 
     Flags(int argc, char **argv) {
         cmdline::parser a;
@@ -59,6 +60,7 @@ struct Flags {
         a.add<string>("predictions_file");
         a.add<bool>("verbose");
         a.add<bool>("partition_schedules");
+        a.add<int>("limit");
 
         a.parse_check(argc, argv);  // exits if parsing fails
 
@@ -73,6 +75,7 @@ struct Flags {
         predictions_file = a.get<string>("predictions_file");
         verbose = a.exist("verbose") && a.get<bool>("verbose");
         partition_schedules = a.exist("partition_schedules") && a.get<bool>("partition_schedules");
+        limit = a.get<int>("limit");
 
         if (!reset_weights && epochs <= 0) {
             std::cerr << "--epochs must be specified and > 0.\n";
@@ -350,10 +353,6 @@ size_t load_samples(map<int, PipelineSample> &training_set, map<int, PipelineSam
 
         if (num_read % 10000 == 0) {
             std::cout << "Samples loaded: " << num_read << " (" << num_unique << " unique)\n";
-        }
-
-        if (flags.limit > 0 && (int)num_read > flags.limit) {
-            break;
         }
     }
 
