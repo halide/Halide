@@ -83,7 +83,9 @@ void define_pipeline(py::module &m) {
                  py::arg("filename"), py::arg("arguments"), py::arg("format") = StmtOutputFormat::Text, py::arg("target") = get_target_from_environment())
 
             .def("compile_to_multitarget_static_library", &Pipeline::compile_to_multitarget_static_library,
-                 py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets") = get_target_from_environment())
+                 py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"))
+            .def("compile_to_multitarget_object_files", &Pipeline::compile_to_multitarget_object_files,
+                 py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"), py::arg("suffixes"))
 
             .def("compile_to_module", &Pipeline::compile_to_module,
                  py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment(), py::arg("linkage") = LinkageType::ExternalPlusMetadata)

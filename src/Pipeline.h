@@ -316,6 +316,24 @@ public:
                                                const std::vector<Argument> &args,
                                                const std::vector<Target> &targets);
 
+    /** Like compile_to_multitarget_static_library(), except that the object files
+     * are all output as object files (rather than bundled into a static library).
+     *
+     * `suffixes` is an optional list of strings to use for as the suffix for each object
+     * file. If nonempty, it must be the same length as `targets`. (If empty, Target::to_string()
+     * will be used for each suffix.)
+     *
+     * Note that if `targets.size()` > 1, the wrapper code (to select the subtarget)
+     * will be generated with the filename `${filename_prefix}_wrapper.o`
+     *
+     * Note that if `targets.size()` > 1 and `no_runtime` is not specified, the runtime
+     * will be generated with the filename `${filename_prefix}_runtime.o`
+     */
+    void compile_to_multitarget_object_files(const std::string &filename_prefix,
+                                             const std::vector<Argument> &args,
+                                             const std::vector<Target> &targets,
+                                             const std::vector<std::string> &suffixes);
+
     /** Create an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
     Module compile_to_module(const std::vector<Argument> &args,
