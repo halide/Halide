@@ -44,10 +44,8 @@ struct Argument {
      * If kind == InputScalar, then type fully encodes the expected type
      * of the scalar argument.
      *
-     * If kind == InputBuffer|OutputBuffer, then type.bytes() should be used
-     * to determine* elem_size of the buffer; additionally, type.code *should*
-     * reflect the expected interpretation of the buffer data (e.g. float vs int),
-     * but there is no runtime enforcement of this at present.
+     * If kind == InputBuffer|OutputBuffer, then this field (and the dimensions field)
+     * are used to specify the buffer argument.
      */
     enum Kind {
         InputScalar = halide_argument_kind_input_scalar,
