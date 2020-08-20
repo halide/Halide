@@ -63,7 +63,7 @@ public:
     // chroma model
     Tensor chroma_minus_g, chroma_v_diff, chroma_h_diff, chroma_q_diff, chroma_v, chroma_h, chroma_q;
     chroma_minus_g.shape = input_t.shape;
-    chroma_minus_g.f(c, x, y, n) = input_t.f(c, x, y, n) - green.f(c, x, y, n);
+    chroma_minus_g.f(c, x, y, n) = input_t.f(c, x, y, n) - green.f(0, x, y, n);
 
     chroma_v_diff = conv2D(chroma_minus_g, chroma_v_ws, chroma_v_weights, "chroma_v_diff");
     chroma_h_diff = conv2D(chroma_minus_g, chroma_h_ws, chroma_h_weights, "chroma_h_diff");
