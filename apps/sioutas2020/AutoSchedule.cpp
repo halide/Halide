@@ -1872,6 +1872,23 @@ void Partitioner::get_gpu_params(const Target &target) {
         gparams.warp_alloc_granularity = make_const(Float(32), 4);
         gparams.reg_alloc_unit_size = make_const(Float(32), 256);
         return;
+
+    } else if (target.has_feature(Target::CUDACapability70)) {
+        gparams.max_regs_per_thread = make_const(Float(32), 255);
+        gparams.total_regs_per_SM = make_const(Float(32), 65536);
+        gparams.max_regs_per_block = make_const(Float(32), 65536);
+        gparams.limit_threads_per_warp = make_const(Float(32), 32);
+        gparams.min_shared_mem_unit = make_const(Float(32), 256);
+        gparams.limit_warps_per_SM = make_const(Float(32), 64);
+        gparams.max_blocks_per_SM = make_const(Float(32), 32);
+        gparams.limit_shared_mem_per_SM = make_const(Float(32), 98304);
+        gparams.limit_shared_mem_per_block = make_const(Float(32), 98304);
+        gparams.limit_threads_per_SM = make_const(Float(32), 2048);
+        gparams.limit_threads_per_block = make_const(Float(32), 1024);
+        gparams.n_SM = arch_params.parallelism;
+        gparams.warp_alloc_granularity = make_const(Float(32), 4);
+        gparams.reg_alloc_unit_size = make_const(Float(32), 256);
+        return;
     }
 }
 
