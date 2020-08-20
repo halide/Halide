@@ -675,10 +675,10 @@ class CheckAsyncOrder : public IRVisitor {
                         internal_assert(other_it != env.end());
                         Function other_f = other_it->second;
                         user_assert(other_f.schedule().async()) << "Invalid async: producer " << op->name
-                            << " is a consumer of " << r.name() << ", but " << r.name() << " is inside of the "
-                            << op->name << " Realize node, " << "which is scheduled as async(), so " << r.name()
-                            << " must be scheduled as async() too.";
-                    }
+                                                                << " is a consumer of " << r.name() << ", but " << r.name() << " is inside of the "
+                                                                << op->name << " Realize node, "
+                                                                << "which is scheduled as async(), so " << r.name()
+                                                                << " must be scheduled as async() too.";                    }
                 }
             }
         } else {
@@ -700,7 +700,6 @@ public:
     CheckAsyncOrder(const map<string, Function> &e)
         : env(e) {
     }
-
 };
 
 // TODO: merge semaphores?
