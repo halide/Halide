@@ -11,8 +11,11 @@ import halide as hl
 sys.path.append('./bin/host-cuda')
 import time
 import tensorflow as tf
-import numpy as np
+from tensorflow.core.framework import graph_pb2
+import copy
 import onnx_tf.backend
+
+tf.compat.v1.disable_eager_execution()
 
 python_include_path = sysconfig.get_paths()['include']
 python_cflags = '-I' + python_include_path + ' '
@@ -38,51 +41,41 @@ def main():
     for f in args.files:
         print('Processing ', f)
         onnx_model = onnx.load(f)
-        tf_model = onnx_tf.backend.prepare(onnx_model, 'GPU')
-        tf_model.export_graph('bin/host-cuda/tf_model.pb')
         inputs = get_model_inputs(onnx_model)
-        with tf.compat.v1.Session() as session:
-            with tf.io.gfile.GFile("bin/host-cuda/tf_model.pb", "rb") as graph:
-                g = tf.compat.v1.GraphDef()
-                g.ParseFromString(graph.read())
-                tf.import_graph_def(g)
-    
-            graph = tf.compat.v1.get_default_graph()
-            feed_dict = {}
-            for op in graph.get_operations():
-                if op.type == 'Placeholder':
-                    shape = [d.size for d in (op.get_attr('shape').dim)]
-                    b = tf.constant(0.5, shape=shape)
-                    # https://github.com/tensorflow/tensorflow/issues/3389
-                    h = tf.compat.v1.get_session_handle(b)
-                    h = session.run(h)
-                    feed_dict[graph.get_tensor_by_name(op.name + ":0")] = h
-            output = []
-            for n in onnx_model.graph.output:
-                output.append(graph.get_tensor_by_name("import/" + n.name + ":0"))
-    
-            run_options = tf.compat.v1.RunOptions(trace_level=tf.compat.v1.RunOptions.NO_TRACE)
-            run_metadata = tf.compat.v1.RunMetadata()
-    
-            tensorflow_out = session.run(
-                output,
-                feed_dict=feed_dict,
-                options=run_options,
-                run_metadata=run_metadata
-            )
+        tf_model = onnx_tf.backend.prepare(onnx_model, 'GPU')
+        # Copy the TF graph and replace the Placeholder
+        graph_def = tf_model.graph.as_graph_def()
+        new_graph_def = graph_pb2.GraphDef()
+        for node in graph_def.node:
+            if node.op == 'Placeholder':
+                shape = [d.size for d in (node.attr['shape'].shape.dim)]
+                b = tf.constant(0.5, shape=shape, name=node.name)
+                new_graph_def.node.extend([b.op.node_def])
+            else:
+                new_graph_def.node.extend([copy.deepcopy(node)])
+        output_name = new_graph_def.node[-1].name
+        tf.import_graph_def(new_graph_def)
 
-            num_iter = 20
-            beg = time.time_ns()
-            for i in range(num_iter):
-                tensorflow_out = session.run(
-                    output,
-                    feed_dict=feed_dict,
-                    options=run_options,
-                    run_metadata=run_metadata
-                )
-            end = time.time_ns()
-            t = ((end - beg) / (10 ** 9)) / num_iter
-            print('{}: TensorFlow: {}s'.format(f, t))
+        with tf.compat.v1.Session() as sess:
+            with tf.device('/device:gpu:0'):
+                graph = tf.compat.v1.get_default_graph()
+                feed_dict = {}
+                sess.run(tf.compat.v1.global_variables_initializer())
+                outputs = [graph.get_tensor_by_name('import/' + output_name + ':0')]
+
+                run_options = tf.compat.v1.RunOptions(trace_level=tf.compat.v1.RunOptions.NO_TRACE)
+
+                output_values = sess.run(outputs, feed_dict=feed_dict, options=run_options)
+
+                num_iter = 20
+                min_time = 1e20
+                for i in range(num_iter):
+                    beg = time.time_ns()
+                    output_values = sess.run(outputs, feed_dict=feed_dict, options=run_options)
+                    end = time.time_ns()
+                    t = ((end - beg) / (10 ** 9))
+                    min_time = min(t, min_time)
+                print('{}: TensorFlow: {}s'.format(f, min_time))
 
         print('Preparing Halide inputs and outputs')
         outputs = onnx_model.graph.output
@@ -138,14 +131,16 @@ def main():
         m = __import__(model_name + '_li2018')
         f = m.__dict__[model_name + '_li2018']
         num_iter = 20
-        beg = time.time_ns()
+        min_time = 1e20
         for i in range(num_iter):
+            beg = time.time_ns()
             f(*halide_inputs, *halide_outputs)
-        end = time.time_ns()
+            end = time.time_ns()
+            t = ((end - beg) / (10 ** 9))
+            min_time = min(t, min_time)
         t = ((end - beg) / (10 ** 9)) / num_iter
         print('{}: Gradient autoscheduler: {}s'.format(f, t))
 
-        
 
 if __name__ == '__main__':
     main()
