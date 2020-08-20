@@ -90,7 +90,7 @@ echo Local number of cores detected as ${LOCAL_CORES}
 
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
-BATCH_SIZE=${LOCAL_CORES}
+BATCH_SIZE=80
 NUM_CORES=80
 EPOCHS=200
 NUM_GPUS=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
