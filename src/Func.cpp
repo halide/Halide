@@ -3137,6 +3137,13 @@ void Func::compile_to_multitarget_static_library(const std::string &filename_pre
     pipeline().compile_to_multitarget_static_library(filename_prefix, args, targets);
 }
 
+void Func::compile_to_multitarget_object_files(const std::string &filename_prefix,
+                                               const std::vector<Argument> &args,
+                                               const std::vector<Target> &targets,
+                                               const std::vector<std::string> &suffixes) {
+    pipeline().compile_to_multitarget_object_files(filename_prefix, args, targets, suffixes);
+}
+
 void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
                                const Target &target) {
     pipeline().compile_to_assembly(filename, args, fn_name, target);
