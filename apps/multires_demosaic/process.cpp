@@ -3,7 +3,6 @@
 
 #include "multires_demosaic.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "multires_demosaic_auto_schedule.h"
 #include "multires_demosaic_gradient_auto_schedule.h"
 #endif
 
@@ -28,7 +27,7 @@ int main(int argc, char **argv) {
     float g_lowres_1x1_1[16][1][1][16];
     float g_lowres_1x1_2[16][1][1][16];
     float g_conv2d[1][5][5][16];
-    float g_1x1_1[16][1][1][16];
+    float g_1x1_1[32][1][1][16];
     float g_1x1_2[16][1][1][16];
     float g_filter[1][5][5][16];
     float chroma_v[1][5][5][2];
@@ -51,8 +50,7 @@ int main(int argc, char **argv) {
     multi_way_bench({
         {"multires_demosaic Manual", [&]() { multires_demosaic(input, g_conv2d_weights, g_1x1_1_weights, g_1x1_2_weights, g_lowres_conv2d_weights, g_lowres_1x1_1_weights, g_lowres_1x1_2_weights,  g_filter_weights, chroma_v_weights, chroma_q_weights, chroma_h_weights, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"multires_demosaic Auto-scheduled", [&]() { multires_demosaic_auto_schedule(input, output); output.device_sync(); }},
-        {"multires_demosaic Gradient auto-scheduled", [&]() { multires_demosaic_gradient_auto_schedule(input, output); output.device_sync();}}
+        {"multires_demosaic Gradient auto-scheduled", [&]() { multires_demosaic_gradient_auto_schedule(input, g_conv2d_weights, g_1x1_1_weights, g_1x1_2_weights, g_lowres_conv2d_weights, g_lowres_1x1_1_weights, g_lowres_1x1_2_weights,  g_filter_weights, chroma_v_weights, chroma_q_weights, chroma_h_weights, output); output.device_sync();}}
     #endif
         }
     );

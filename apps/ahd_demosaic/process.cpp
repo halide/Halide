@@ -3,7 +3,6 @@
 
 #include "ahd_demosaic.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "ahd_demosaic_auto_schedule.h"
 #include "ahd_demosaic_gradient_auto_schedule.h"
 #endif
 
@@ -41,8 +40,8 @@ int main(int argc, char **argv) {
     multi_way_bench({
         {"ahd_demosaic Manual", [&]() { ahd_demosaic(input, g_convex_weights, g_filter_weights, chroma_v_weights, chroma_q_weights, chroma_h_weights, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"ahd_demosaic Auto-scheduled", [&]() { ahd_demosaic_auto_schedule(input, output); output.device_sync(); }},
-        {"ahd_demosaic Gradient auto-scheduled", [&]() { ahd_demosaic_gradient_auto_schedule(input, output); output.device_sync();}}
+        //{"ahd_demosaic Auto-scheduled", [&]() { ahd_demosaic_auto_schedule(input, output); output.device_sync(); }},
+        {"ahd_demosaic Gradient auto-scheduled", [&]() { ahd_demosaic_gradient_auto_schedule(input, g_convex_weights, g_filter_weights, chroma_v_weights, chroma_q_weights, chroma_h_weights, output); output.device_sync();}}
     #endif
         }
     );
