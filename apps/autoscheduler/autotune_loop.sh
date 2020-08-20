@@ -564,12 +564,12 @@ if [[ $TRAIN_ONLY != 1 ]]; then
                 waitlist+=("$!")
             done
 
-            wait "${waitlist[@]}"
             COMPILE_TIME=$((SECONDS-CUR_SECONDS))
             echo "Compile time for batch: ${COMPILE_TIME}"
 
             # benchmark them serially using rungen
             if [[ $USE_BENCHMARK_QUEUE == 0 ]]; then
+                wait "${waitlist[@]}"
                 CUR_SECONDS="$SECONDS"
                 for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID=SAMPLE_ID+NUM_GPUS)); do
                     for ((INDEX=0;INDEX<NUM_GPUS;INDEX++)); do
@@ -601,6 +601,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
     done
 
     if [[ ${BENCHMARK_QUEUE_ENABLED} == 1 && ${RETRAIN_AFTER_EACH_BATCH} == 0 ]]; then
+        wait "${waitlist[@]}"
         echo "Waiting for benchmarking to complete"
         echo "Waiting PID: ${benchmark_loop_pid}"
         wait "${benchmark_loop_pid}"
