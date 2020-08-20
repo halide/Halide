@@ -47,6 +47,7 @@ def main():
         graph_def = tf_model.graph.as_graph_def()
         new_graph_def = graph_pb2.GraphDef()
         for node in graph_def.node:
+            print(node.name)
             if node.op == 'Placeholder':
                 shape = [d.size for d in (node.attr['shape'].shape.dim)]
                 b = tf.constant(0.5, shape=shape, name=node.name)
@@ -130,6 +131,7 @@ def main():
         os.system(cmd)
         m = __import__(model_name + '_li2018')
         f = m.__dict__[model_name + '_li2018']
+        f(*halide_inputs, *halide_outputs)
         num_iter = 20
         min_time = 1e20
         for i in range(num_iter):
