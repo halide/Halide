@@ -678,7 +678,8 @@ class CheckAsyncOrder : public IRVisitor {
                                                                 << " is a consumer of " << r.name() << ", but " << r.name() << " is inside of the "
                                                                 << op->name << " Realize node, "
                                                                 << "which is scheduled as async(), so " << r.name()
-                                                                << " must be scheduled as async() too.";                    }
+                                                                << " must be scheduled as async() too.";
+                    }
                 }
             }
         } else {
