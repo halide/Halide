@@ -72,7 +72,7 @@ autotune: $(GENERATOR_BIN)/max_filter.generator $(AUTOSCHED_BIN)/featurization_t
 		$(GENERATOR_BIN)/max_filter.generator \
 		max_filter \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/max_filter.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

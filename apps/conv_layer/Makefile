@@ -72,7 +72,7 @@ autotune: $(GENERATOR_BIN)/conv_layer.generator $(AUTOSCHED_BIN)/featurization_t
 		$(GENERATOR_BIN)/conv_layer.generator \
 		conv_layer \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/conv_layer.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

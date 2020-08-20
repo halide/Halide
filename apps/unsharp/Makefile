@@ -69,7 +69,7 @@ autotune: $(GENERATOR_BIN)/unsharp.generator $(AUTOSCHED_BIN)/featurization_to_s
 		$(GENERATOR_BIN)/unsharp.generator \
 		unsharp \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/unsharp.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

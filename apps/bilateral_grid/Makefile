@@ -95,7 +95,7 @@ autotune: $(GENERATOR_BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/featurizati
 		$(GENERATOR_BIN)/bilateral_grid.generator \
 		bilateral_grid \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/bilateral_grid.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

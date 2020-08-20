@@ -5,6 +5,8 @@ if [[ $# -ne 5 && $# -ne 6 ]]; then
     exit
 fi
 
+set -e
+
 MAX_ITERATIONS=${1}
 RESUME=${2}
 TRAIN_ONLY=${3}

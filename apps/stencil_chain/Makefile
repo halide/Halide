@@ -68,7 +68,7 @@ autotune: $(GENERATOR_BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/featurizatio
 		$(GENERATOR_BIN)/stencil_chain.generator \
 		stencil_chain \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/stencil_chain.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

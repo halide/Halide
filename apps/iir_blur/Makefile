@@ -65,7 +65,7 @@ autotune: $(GENERATOR_BIN)/iir_blur.generator $(AUTOSCHED_BIN)/featurization_to_
 		$(GENERATOR_BIN)/iir_blur.generator \
 		iir_blur \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/iir_blur.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

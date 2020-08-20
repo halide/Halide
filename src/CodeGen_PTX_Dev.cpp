@@ -702,7 +702,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         if (max_regs_str.empty()) {
             max_regs_str = "64";
         }
-        string cmd = "ptxas --warn-on-spills --warn-on-local-memory-usage --maxrregcount=" + max_regs_str + " --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
+        string cmd = "ptxas --verbose --warn-on-spills --warn-on-local-memory-usage --maxrregcount=" + max_regs_str + " --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
         debug(1) << "PTX compile command: " << cmd << "\n";
         if (system(cmd.c_str()) == 0) {
             // Success. Use SASS instead of PTX to save app startup time

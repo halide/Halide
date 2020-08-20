@@ -68,7 +68,7 @@ autotune: $(GENERATOR_BIN)/lens_blur.generator $(AUTOSCHED_BIN)/featurization_to
 		$(GENERATOR_BIN)/lens_blur.generator \
 		lens_blur \
 		$(HL_TARGET)-large_buffers \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/lens_blur.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

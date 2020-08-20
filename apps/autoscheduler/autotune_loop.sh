@@ -599,10 +599,10 @@ if [[ $TRAIN_ONLY != 1 ]]; then
                 wait "${benchmark_loop_pid}"
             fi
 
-            CUR_SECONDS="$SECONDS"
-            retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
-            TRAIN_TIME=$((SECONDS-CUR_SECONDS))
-            echo "Train time for batch with ID = ${BATCH_ID}: ${TRAIN_TIME}"
+            #CUR_SECONDS="$SECONDS"
+            #retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
+            #TRAIN_TIME=$((SECONDS-CUR_SECONDS))
+            #echo "Train time for batch with ID = ${BATCH_ID}: ${TRAIN_TIME}"
         fi
     done
 
@@ -620,10 +620,10 @@ fi
 # retrain model weights on all samples seen so far
 echo Retraining model...
 
-CUR_SECONDS="$SECONDS"
-retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
-TRAIN_TIME=$((SECONDS-CUR_SECONDS))
-echo "Num batches = ${NUM_BATCHES}. Train time: ${TRAIN_TIME}"
+#CUR_SECONDS="$SECONDS"
+#retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
+#TRAIN_TIME=$((SECONDS-CUR_SECONDS))
+#echo "Num batches = ${NUM_BATCHES}. Train time: ${TRAIN_TIME}"
 
 if [[ $TRAIN_ONLY == 1 ]]; then
     echo Num batches = ${NUM_BATCHES}. Took ${SECONDS} seconds to retrain

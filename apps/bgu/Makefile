@@ -73,7 +73,7 @@ autotune: $(GENERATOR_BIN)/bgu.generator $(AUTOSCHED_BIN)/featurization_to_sampl
 		$(GENERATOR_BIN)/bgu.generator \
 		bgu \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/bgu.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

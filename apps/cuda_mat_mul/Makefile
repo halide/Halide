@@ -8,7 +8,7 @@ CUDA_SDK ?= /usr/local/cuda
 CXXFLAGS += -I $(CUDA_SDK)/include -I../support/
 LDFLAGS += -L $(CUDA_SDK)/lib64
 
-HL_TARGET := $(HL_TARGET)-cuda-cuda_capability_50
+#HL_TARGET := $(HL_TARGET)-cuda-cuda_capability_50
 
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 
@@ -70,7 +70,7 @@ autotune: $(GENERATOR_BIN)/mat_mul.generator $(AUTOSCHED_BIN)/featurization_to_s
 		$(GENERATOR_BIN)/mat_mul.generator \
 		mat_mul \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/cuda_mat_mul.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

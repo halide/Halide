@@ -73,7 +73,7 @@ autotune: $(GENERATOR_BIN)/interpolate.generator $(AUTOSCHED_BIN)/featurization_
 		$(GENERATOR_BIN)/interpolate.generator \
 		interpolate \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/interpolate.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

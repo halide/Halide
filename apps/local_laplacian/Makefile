@@ -94,7 +94,7 @@ autotune: $(GENERATOR_BIN)/local_laplacian.generator $(AUTOSCHED_BIN)/featurizat
 		$(GENERATOR_BIN)/local_laplacian.generator \
 		local_laplacian \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/local_laplacian.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

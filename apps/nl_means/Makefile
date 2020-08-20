@@ -68,7 +68,7 @@ autotune: $(GENERATOR_BIN)/nl_means.generator $(AUTOSCHED_BIN)/featurization_to_
 		$(GENERATOR_BIN)/nl_means.generator \
 		nl_means \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/nl_means.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

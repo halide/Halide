@@ -69,7 +69,7 @@ autotune: $(GENERATOR_BIN)/depthwise_separable_conv.generator $(AUTOSCHED_BIN)/f
 		$(GENERATOR_BIN)/depthwise_separable_conv.generator \
 		depthwise_separable_conv \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/depthwise_separable_conv.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

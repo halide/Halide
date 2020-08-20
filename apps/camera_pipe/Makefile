@@ -92,7 +92,7 @@ autotune: $(GENERATOR_BIN)/camera_pipe.generator $(AUTOSCHED_BIN)/featurization_
 		$(GENERATOR_BIN)/camera_pipe.generator \
 		camera_pipe \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/camera_pipe.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

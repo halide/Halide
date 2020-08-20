@@ -14,7 +14,7 @@ autotune:
 		$(CURDIR)/../onnx/bin/host/onnx_converter.generator \
 		onnx_model_generator \
 		host-cuda \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/mobilenet6.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY) \

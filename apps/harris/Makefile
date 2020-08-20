@@ -69,7 +69,7 @@ autotune: $(GENERATOR_BIN)/harris.generator $(AUTOSCHED_BIN)/featurization_to_sa
 		$(GENERATOR_BIN)/harris.generator \
 		harris \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/harris.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)
