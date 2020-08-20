@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
         {"basic_demosaic Sioutas Auto-scheduled Folded", [&]() { basic_demosaic_auto_schedule_sioutas_folded(input, g_conv2d_weights, g_1x1_1_weights, g_1x1_2_weights, g_filter_weights, chroma_v_weights, chroma_q_weights, chroma_h_weights, output); output.device_sync();}},
     #endif
     #ifndef NO_GRADIENT_AUTO_SCHEDULE
-        {"basic_demosaic Gradient auto-scheduled", [&]() { basic_demosaic_gradient_auto_schedule(input, g_convex_weights, g_filter_weights, chroma_v_weights, chroma_q_weights, chroma_h_weights, output); output.device_sync();}}
+        {"basic_demosaic Gradient auto-scheduled", [&]() { basic_demosaic_gradient_auto_schedule(input, g_conv2d_weights, g_1x1_1_weights, g_1x1_2_weights, g_filter_weights, chroma_v_weights, chroma_q_weights, chroma_h_weights, output); output.device_sync();}}
     #endif
         });
 
