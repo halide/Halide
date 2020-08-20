@@ -177,8 +177,8 @@ public:
     }
 
     Expr activation(Expr e) {
-        // relu
-        return max(e, 0);
+        // leaky relu
+        return max(e, 0) + min(e, 0) * 1e-10f;
     }
 
     Expr sigmoid(Expr e) {
