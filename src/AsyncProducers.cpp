@@ -649,9 +649,65 @@ class TightenForkNodes : public IRMutator {
     bool in_fork = false;
 };
 
+// If in realize node A there is a producer node B and producer A is async and is
+// consumer of B then B must be scheduled as async.
+class CheckAsyncOrder : public IRVisitor {
+    const map<string, Function> &env;
+
+    Scope<> in_realizes;
+    Scope<> in_consumers;
+    map<string, set<string>> realizes_around_producers;
+
+    using IRVisitor::visit;
+
+    void visit(const ProducerConsumer *op) override {
+        if (op->is_producer) {
+            for (auto r = in_realizes.cbegin(); r != in_realizes.cend(); ++r) {
+                realizes_around_producers[op->name].insert(r.name());
+            }
+            auto it = env.find(op->name);
+            internal_assert(it != env.end());
+            Function f = it->second;
+            if (f.schedule().async()) {
+                for (auto r = in_realizes.cbegin(); r != in_realizes.cend(); ++r) {
+                    if (in_consumers.contains(r.name()) && realizes_around_producers[r.name()].count(op->name)) {
+                        auto other_it = env.find(r.name());
+                        internal_assert(other_it != env.end());
+                        Function other_f = other_it->second;
+                        user_assert(other_f.schedule().async()) << "Invalid async: producer " << op->name
+                            << " is a consumer of " << r.name() << ", but " << r.name() << " is inside of the "
+                            << op->name << " Realize node, " << "which is scheduled as async(), so " << r.name()
+                            << " must be scheduled as async() too.";
+                    }
+                }
+            }
+        } else {
+            in_consumers.push(op->name);
+        }
+        IRVisitor::visit(op);
+        if (op->is_producer) {
+        } else {
+            in_consumers.pop(op->name);
+        }
+    }
+
+    void visit(const Realize *op) override {
+        ScopedBinding<> bind(in_realizes, op->name);
+        IRVisitor::visit(op);
+    }
+
+public:
+    CheckAsyncOrder(const map<string, Function> &e)
+        : env(e) {
+    }
+
+};
+
 // TODO: merge semaphores?
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
+    CheckAsyncOrder check(env);
+    s.accept(&check);
     s = TightenProducerConsumerNodes(env).mutate(s);
     s = ForkAsyncProducers(env).mutate(s);
     s = ExpandAcquireNodes().mutate(s);
