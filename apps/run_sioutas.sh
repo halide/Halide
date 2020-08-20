@@ -166,3 +166,12 @@ cd ..
 #make clean
 #make HL_TARGET=host-cuda-cuda_capability_35 test #| tail -2  >> ../results_sioutas.txt
 #cd ..
+
+#echo "mobilenet0"
+#echo "mobilenet0:" >> results_sioutas.txt
+#cd mobilenet0
+#make clean
+#make  test
+#| tail -5  >> ../results_sioutas.txt
+#cd ..
+
