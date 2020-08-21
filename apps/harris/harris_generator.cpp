@@ -75,18 +75,51 @@ public:
         if (!auto_schedule) {
             Var xi("xi"), yi("yi");
             if (get_target().has_gpu_feature()) {
-                // 0.334ms on a 2060 RTX
-                output.gpu_tile(x, y, xi, yi, 30, 14);
-                Ix.compute_at(output, x).gpu_threads(x, y);
-                Iy.compute_at(output, x).gpu_threads(x, y);
+                // 0.253ms on a 2060 RTX
+                output.gpu_tile(x, y, xi, yi, 62, 14)
+                    .unroll(xi, 2);
+                gray.compute_at(output, x)
+                    .gpu_threads(x, y)
+                    .tile(x, y, xi, yi, 3, 2)
+                    .unroll(xi)
+                    .unroll(yi);
+                gray.in()
+                    .compute_at(Iy, x)
+                    .vectorize(x, 2)
+                    .unroll(x)
+                    .unroll(y);
+                Ix.compute_at(output, x)
+                    .gpu_threads(x, y)
+                    .unroll(x, 2);
+                Iy.compute_at(output, x)
+                    .gpu_threads(x, y)
+                    .unroll(x, 2);
                 Ix.compute_with(Iy, x);
+                Ix.in()
+                    .compute_at(output, xi)
+                    .vectorize(x, 2)
+                    .unroll(x)
+                    .unroll(y);
+                Iy.in()
+                    .compute_at(output, xi)
+                    .vectorize(x, 2)
+                    .unroll(x)
+                    .unroll(y);
             } else {
                 // 0.92ms on an Intel i9-9960X using 16 threads
                 const int vec = natural_vector_size<float>();
-                output.split(y, y, yi, 32).parallel(y).vectorize(x, vec);
-                gray.store_at(output, y).compute_at(output, yi).vectorize(x, vec);
-                Ix.store_at(output, y).compute_at(output, yi).vectorize(x, vec);
-                Iy.store_at(output, y).compute_at(output, yi).vectorize(x, vec);
+                output.split(y, y, yi, 32)
+                    .parallel(y)
+                    .vectorize(x, vec);
+                gray.store_at(output, y)
+                    .compute_at(output, yi)
+                    .vectorize(x, vec);
+                Ix.store_at(output, y)
+                    .compute_at(output, yi)
+                    .vectorize(x, vec);
+                Iy.store_at(output, y)
+                    .compute_at(output, yi)
+                    .vectorize(x, vec);
                 Ix.compute_with(Iy, x);
             }
         }
