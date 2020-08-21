@@ -26,12 +26,15 @@ public:
     Output<Buffer<float>> output_{"output", 4};
 
     void generate() {
-        // The algorithm.
+        // The algorithm. It will be a generic depthwise convolution,
+        // with no assumptions about input sizes or shapes. This makes
+        // it especially challenging to schedule.
 
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), d("d"), b("b");
 
         // Pad x and y with 0.
+
         Func input_bounded =
             constant_exterior(input_, 0.f,
                               {{Expr(), Expr()},
@@ -58,12 +61,12 @@ public:
                               depthwise_filter_dom[1],
                               depthwise_filter_dom[2]) *
             shifted_input_with_offset(
-                        d / channel_multiplier,
-                        x + depthwise_filter_dom[1],
-                        y + depthwise_filter_dom[2],
-                        b);
+                d / channel_multiplier,
+                x + depthwise_filter_dom[1],
+                y + depthwise_filter_dom[2],
+                b);
         // Convolve the image point-wise: for each pixel we map from
-        // input_channels * channe_multiplier number of channels to output_channels
+        // input_channels * channel_multiplier number of channels to output_channels
         Func pointwise_convolved("pointwise_convolved");
         RDom pointwise_filter_dom(0, pointwise_filter_.dim(1).extent());
         pointwise_convolved(d, x, y, b) = bias_(d);
@@ -72,9 +75,10 @@ public:
             depthwise_convolved(pointwise_filter_dom, x, y, b);
         // ReLU
         output_(d, x, y, b) = max(pointwise_convolved(d, x, y, b), 0.f);
-        
+
         // Second layer of MobileNet v2
         const int N = 4, CI = 32, CO = 16, CM = 1, W = 112, H = 112;
+
         // The schedule.
         if (auto_schedule) {
             input_.dim(0).set_estimate(0, CI);
@@ -100,10 +104,63 @@ public:
             output_.dim(2).set_estimate(0, H);
             output_.dim(3).set_estimate(0, N);
         } else {
-            // Naive schedule
-            output_.compute_root();
-            pointwise_convolved.compute_root();
-            depthwise_convolved.compute_root();
+            Var bi, xi, yi, di, xii, yii;
+
+            output_
+                .split(x, x, xi, 8, TailStrategy::RoundUp)
+                .split(y, y, yi, 4, TailStrategy::RoundUp)
+                .split(xi, xi, xii, 4, TailStrategy::RoundUp)
+                .split(yi, yi, yii, 2, TailStrategy::RoundUp)
+                .split(d, d, di, 16, TailStrategy::RoundUp)
+                .reorder(xii, yii, di, xi, yi, d, x, y, b)
+                .gpu_threads(di, xi, yi)
+                .fuse(y, b, b)
+                .gpu_blocks(d, x, b)
+                .unroll(xii)
+                .unroll(yii);
+
+            depthwise_convolved.in()
+                .compute_root()
+                .split(x, x, xi, 4, TailStrategy::RoundUp)
+                .split(y, y, yi, 4, TailStrategy::RoundUp)
+                .split(xi, xi, xii, 2, TailStrategy::RoundUp)
+                .split(yi, yi, yii, 2, TailStrategy::RoundUp)
+                .split(d, d, di, 32, TailStrategy::RoundUp)
+                .reorder(xii, yii, di, xi, yi, d, x, y, b)
+                .gpu_threads(di, xi, yi)
+                .fuse(y, b, b)
+                .gpu_blocks(d, x, b)
+                .unroll(xii)
+                .unroll(yii);
+
+            RVar rxi, ryi, rxo, ryo;
+            depthwise_convolved
+                .compute_at(depthwise_convolved.in(), di)
+                .unroll(x)
+                .unroll(y)
+                .update()
+                .reorder(x, y, depthwise_filter_dom[1], depthwise_filter_dom[2], depthwise_filter_dom[0])
+                .unroll(x)
+                .unroll(y);
+
+            {
+                Var d = Halide::_0;
+                Var x = Halide::_1;
+                Var y = Halide::_2;
+                Var b = Halide::_3;
+                input_bounded.compute_root()
+                    .gpu_tile(d, x, y, di, xi, yi, 32, 1, 1);
+            }
+
+            pointwise_convolved.compute_at(output_, di)
+                .reorder_storage(x, d, y)
+                .reorder(x, y, d)
+                .unroll(x)
+                .unroll(y)
+                .update()
+                .reorder(x, y, pointwise_filter_dom, d)
+                .unroll(x)
+                .unroll(y);
         }
     }
 };
