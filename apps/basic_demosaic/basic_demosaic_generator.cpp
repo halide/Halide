@@ -96,6 +96,19 @@ public:
         output(c, x, y, n) = mux(c, {r, g, b});
 
         // estimates
+        input.dim(0).set_estimate(0, 1);
+        input.dim(1).set_estimate(0, 128);
+        input.dim(2).set_estimate(0, 128);
+        input.dim(3).set_estimate(0, 32);
+
+        chroma_h_weights.dim(0).set_estimate(0, 2).dim(1).set_estimate(0, 5).dim(2).set_estimate(0, 5).dim(3).set_estimate(0, 1);
+        chroma_v_weights.dim(0).set_estimate(0, 2).dim(1).set_estimate(0, 5).dim(2).set_estimate(0, 5).dim(3).set_estimate(0, 1);
+        chroma_q_weights.dim(0).set_estimate(0, 2).dim(1).set_estimate(0, 5).dim(2).set_estimate(0, 5).dim(3).set_estimate(0, 1);
+        g_conv2d_weights.dim(0).set_estimate(0, 16).dim(1).set_estimate(0, 5).dim(2).set_estimate(0, 5).dim(3).set_estimate(0, 1);
+        g_1x1_1_weights.dim(0).set_estimate(0, 16).dim(1).set_estimate(0, 1).dim(2).set_estimate(0, 1).dim(3).set_estimate(0, 16);
+        g_1x1_2_weights.dim(0).set_estimate(0, 16).dim(1).set_estimate(0, 1).dim(2).set_estimate(0, 1).dim(3).set_estimate(0, 16);
+        g_filter_weights.dim(0).set_estimate(0, 16).dim(1).set_estimate(0, 5).dim(2).set_estimate(0, 5).dim(3).set_estimate(0, 1);
+
         output.bound(output.args()[0], 0, 3);
         output.bound(output.args()[1], 0, 128);
         output.bound(output.args()[2], 0, 128);
@@ -339,7 +352,6 @@ public:
 
         if (!auto_schedule) {
             sum_reduction.update().reorder(x, y, r);
-            //sum_reduction.compute_at(this->output, xi);
         }
 
         Tensor output;
