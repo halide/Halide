@@ -143,15 +143,6 @@ public:
                 .unroll(x)
                 .unroll(y);
 
-            {
-                Var d = Halide::_0;
-                Var x = Halide::_1;
-                Var y = Halide::_2;
-                Var b = Halide::_3;
-                input_bounded.compute_root()
-                    .gpu_tile(d, x, y, di, xi, yi, 32, 1, 1);
-            }
-
             pointwise_convolved.compute_at(output_, di)
                 .reorder_storage(x, d, y)
                 .reorder(x, y, d)
