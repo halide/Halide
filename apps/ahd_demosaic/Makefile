@@ -58,7 +58,7 @@ autotune: $(GENERATOR_BIN)/ahd_demosaic.generator $(AUTOSCHED_BIN)/featurization
 		$(GENERATOR_BIN)/ahd_demosaic.generator \
 		ahd_demosaic \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_SRC)/weights/hist.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

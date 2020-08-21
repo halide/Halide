@@ -320,7 +320,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
     }
 
     int num_children = 0;
-    //ScopedStatistic<int> num_children_stat{num_children, "end phase " + std::to_string(phase) + "; num_children generated for " + node->func.name()};
+
 
     if (phase == 0) {
         // Injecting realizations

@@ -86,6 +86,7 @@ if [ $(uname -s) = "Darwin" ]; then
 else
     LOCAL_CORES=`nproc`
 fi
+LOCAL_CORES=80
 echo Local number of cores detected as ${LOCAL_CORES}
 
 # A batch of this many samples is built in parallel, and then
