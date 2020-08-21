@@ -142,6 +142,12 @@ public:
                     .reorder(x, y, c, t->r[0], t->r[1], t->r[2], n)
                     .unroll(x)
                     .unroll(y);
+                t->padded.compute_at(output, x)
+                    .tile(x, y, xi, yi, 3, 3)
+                    .reorder(xi, yi, c, n, x, y)
+                    .unroll(xi)
+                    .unroll(yi)
+                    .gpu_threads(x, y);
             }
 
             green.f.compute_root()

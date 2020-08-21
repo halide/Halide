@@ -6,6 +6,8 @@ struct Tensor {
     Halide::Func f;
     std::vector<int> shape;
     std::string name;
+    Halide::RDom r;
+    Halide::Func padded;  // defined for conv layers that pad their inputs
 };
 
 struct WeightShape {
@@ -33,7 +35,7 @@ public:
     const WeightShape chroma_h_ws = {2, 5, 5, 2, 1};
     const WeightShape chroma_q_ws = {2, 5, 5, 2, 1};
 
-    Var c, x, y, n;
+    Var c{"c"}, x{"x"}, y{"y"}, n{"n"}, xi{"xi"}, yi{"yi"};
 
     void generate() {
 
@@ -86,26 +88,104 @@ public:
         output(c, x, y, n) = mux(c, {r, g, b});
 
         // estimates
+        input.dim(0).set_estimate(0, 1);
+        input.dim(1).set_estimate(0, 128);
+        input.dim(2).set_estimate(0, 128);
+        input.dim(3).set_estimate(0, 32);
+
+        chroma_h_weights.dim(0).set_estimate(0, 2).dim(1).set_estimate(0, 5).dim(2).set_estimate(0, 5).dim(3).set_estimate(0, 1);
+        chroma_v_weights.dim(0).set_estimate(0, 2).dim(1).set_estimate(0, 5).dim(2).set_estimate(0, 5).dim(3).set_estimate(0, 1);
+        chroma_q_weights.dim(0).set_estimate(0, 2).dim(1).set_estimate(0, 5).dim(2).set_estimate(0, 5).dim(3).set_estimate(0, 1);
+        g_convex_weights.dim(0).set_estimate(0, 16).dim(1).set_estimate(0, 5).dim(2).set_estimate(0, 5).dim(3).set_estimate(0, 1);
+        g_filter_weights.dim(0).set_estimate(0, 16).dim(1).set_estimate(0, 5).dim(2).set_estimate(0, 5).dim(3).set_estimate(0, 1);
+
         output.bound(output.args()[0], 0, 3);
         output.bound(output.args()[1], 0, 128);
         output.bound(output.args()[2], 0, 128);
         output.bound(output.args()[3], 0, 32);  // batch size is 32
 
         if (!auto_schedule) {
-            raw_weights.f.compute_root();
-            final_weights.f.compute_root();
-            interpolations.f.compute_root();
-            prod.f.compute_root();
-            green_pred.f.compute_root();
-            green.f.compute_root();
-            chroma_minus_g.f.compute_root();
-            chroma_v_diff.f.compute_root();
-            chroma_h_diff.f.compute_root();
-            chroma_q_diff.f.compute_root();
-            chroma_v.f.compute_root();
-            chroma_h.f.compute_root();
-            chroma_q.f.compute_root();
-            output.compute_root();
+            Var xii, yii;
+            output.compute_root()
+                .tile(x, y, xi, yi, 32, 8)
+                .tile(xi, yi, xii, yii, 2, 2)
+                .gpu_blocks(x, y, n)
+                .gpu_threads(xi, yi)
+                .reorder(xii, yii, c, xi, yi, x, y, n)
+                .unroll(c)
+                .unroll(xii)
+                .unroll(yii);
+
+            for (Tensor *t : {&chroma_v_diff, &chroma_h_diff, &chroma_q_diff}) {
+                t->f.in()
+                    .compute_at(output, x)
+                    .tile(x, y, xi, yi, 2, 2)
+                    .reorder(xi, yi, c, n, x, y)
+                    .unroll(xi)
+                    .unroll(yi)
+                    .gpu_threads(x, y);
+                t->f.compute_at(t->f.in(), x)
+                    .reorder(x, y, c, n)
+                    .unroll(x)
+                    .unroll(y)
+                    .update()
+                    .reorder(x, y, c, t->r[0], t->r[1], t->r[2], n)
+                    .unroll(x)
+                    .unroll(y);
+                t->padded.compute_at(output, x)
+                    .tile(x, y, xi, yi, 3, 3)
+                    .reorder(xi, yi, c, n, x, y)
+                    .unroll(xi)
+                    .unroll(yi)
+                    .gpu_threads(x, y);
+            }
+
+            green.f.compute_root()
+                .tile(x, y, xi, yi, 32, 8, TailStrategy::RoundUp)
+                .tile(xi, yi, xii, yii, 2, 2)
+                .gpu_blocks(x, y, n)
+                .gpu_threads(xi, yi)
+                .reorder(xii, yii, c, xi, yi, x, y, n)
+                .unroll(c)
+                .unroll(xii)
+                .unroll(yii);
+            green_pred.f.compute_at(green.f, xi)
+                .unroll(x)
+                .unroll(y)
+                .update()
+                .unroll(x)
+                .unroll(y);
+            final_weights.f.compute_at(green.f, xi)
+                .unroll(x)
+                .unroll(y);
+
+            for (Tensor *t : {&raw_weights, &interpolations}) {
+                t->f.in()
+                    .compute_root()
+                    .tile(x, y, xi, yi, 8, 8)
+                    .tile(xi, yi, xii, yii, 2, 2)
+                    .reorder(xii, yii, c, xi, yi, x, y, n)
+                    .unroll(xii)
+                    .unroll(yii)
+                    .gpu_blocks(x, y, n)
+                    .gpu_threads(c, xi, yi);
+
+                t->f.compute_at(t->f.in(), c)
+                    .unroll(c)
+                    .unroll(x)
+                    .unroll(y)
+                    .update()
+                    .reorder(c, x, y, t->r[0], t->r[1], t->r[2])
+                    .unroll(c)
+                    .unroll(x)
+                    .unroll(y);
+
+                t->padded.compute_at(t->f.in(), x)
+                    .split(Halide::_2, y, yi, 3)
+                    .gpu_threads(Halide::_1, y)
+                    .unroll(yi)
+                    .reorder(yi, Halide::_1, y);
+            }
         }
     }
 
@@ -126,8 +206,8 @@ public:
         return {c, w, h};
     }
 
-    Tensor conv2D(const Tensor &input, const WeightShape &weight_shape, const Func &weights, const std::string &name) {
-
+    Tensor conv2D(const Tensor &input, const WeightShape &weight_shape,
+                  const Func &weights, const std::string &name) {
         int p = weight_shape.pad;
         Func padded;
         // pad input
@@ -145,14 +225,20 @@ public:
         in(c, x, y, n) = padded(c, x, y, n);
 
         RDom r(0, input.shape[0], 0, weight_shape.w, 0, weight_shape.h);
-        Func conv("conv2D");
+        Func conv(name + "_conv2D");
         conv(c, x, y, n) += (w(c, r.y, r.z, r.x) *
                              in(r.x, weight_shape.stride * x + r.y - p, weight_shape.stride * y + r.z - p, n));
+
+        if (!auto_schedule) {
+            //conv.compute_at(this->output, xi);
+        }
 
         Tensor output;
         output.f = conv;
         output.name = name;
         output.shape = compute_shape(input, weight_shape);
+        output.r = r;
+        output.padded = padded;
         return output;
     }
 
@@ -161,12 +247,22 @@ public:
         RDom r(0, classes);
         Func exp_vals("exp_vals");
         exp_vals(c, x, y, n) = fast_exp(input.f(c, x, y, n));
+        Func sum("softmax_sum");
+        sum(x, y, n) += exp_vals(r.x, x, y, n);
         Func outvals("softmax_vals");
-        outvals(c, x, y, n) = exp_vals(c, x, y, n) / sum(exp_vals(r.x, x, y, n));
+        outvals(c, x, y, n) = exp_vals(c, x, y, n) / sum(x, y, n);
+
+        if (!auto_schedule) {
+            exp_vals.compute_at(outvals, x).unroll(c);
+            sum.compute_at(outvals, x).update().unroll(r.x);
+            outvals.unroll(c);
+        }
+
         Tensor output;
         output.f = outvals;
         output.name = name;
         output.shape = input.shape;
+        output.r = r;
         return output;
     }
 
@@ -187,11 +283,16 @@ public:
         RDom r(0, t1.shape[0]);
         sum_reduction(c, x, y, n) += t1.f(r, x, y, n);
 
+        if (!auto_schedule) {
+            sum_reduction.update().reorder(x, y, r);
+        }
+
         Tensor output;
         output.f = sum_reduction;
         output.shape = t1.shape;
         output.shape[0] = 1;
         output.name = name;
+        output.r = r;
         return output;
     }
 };
