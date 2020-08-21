@@ -68,8 +68,10 @@ public:
         downsampled = avg_pool_layer(input_t, avg_pool_ws, "downsampled");
 
         g_lowres_conv2d = conv2D(downsampled, g_lowres_conv2d_ws, g_lowres_conv2d_weights, "g_lowres_conv2d");
-        g_lowres_conv1x1_1 = conv2D(g_lowres_conv2d, g_lowres_1x1_1_ws, g_lowres_1x1_1_weights, "g_lowres_1x1_1");
-        g_lowres_conv1x1_2 = conv2D(g_lowres_conv1x1_1, g_lowres_1x1_2_ws, g_lowres_1x1_2_weights, "g_lowres_1x1_2");
+ 	g_lowres_relu1 = relu_layer(g_lowres_conv2d, "g_lowres_relu1");
+        g_lowres_conv1x1_1 = conv2D(g_lowres_relu1, g_lowres_1x1_1_ws, g_lowres_1x1_1_weights, "g_lowres_1x1_1");
+ 	g_lowres_relu2 = relu_layer(g_lowres_conv1x1_1, "g_lowres_relu2");
+        g_lowres_conv1x1_2 = conv2D(g_lowres_relu2, g_lowres_1x1_2_ws, g_lowres_1x1_2_weights, "g_lowres_1x1_2");
 
         g_conv2d = conv2D(input_t, g_conv2d_ws, g_conv2d_weights, "g_conv2d");
         std::vector<int> upsampled_shape = {16, 128, 128};
@@ -89,8 +91,10 @@ public:
                                        upsampled.f(min(c, 15), x, y, n),
                                        g_conv2d.f(max(c - 16, 0), x, y, n));
 
-        g_conv1x1_1 = conv2D(stacked, g_1x1_1_ws, g_1x1_1_weights, "g_1x1_1");
-        g_conv1x1_2 = conv2D(g_conv1x1_1, g_1x1_2_ws, g_1x1_2_weights, "g_1x1_2");
+ 	g_relu1 = relu_layer(stacked, "g_relu1");
+        g_conv1x1_1 = conv2D(g_relu1, g_1x1_1_ws, g_1x1_1_weights, "g_1x1_1");
+ 	g_relu2 = relu_layer(g_conv1x1_1, "g_relu2");
+        g_conv1x1_2 = conv2D(g_relu2, g_1x1_2_ws, g_1x1_2_weights, "g_1x1_2");
 
         g_final_weights = softmax_layer(g_conv1x1_2, 16, "softmax");
         g_interpolations = conv2D(input_t, g_filter_ws, g_filter_weights, "g_filter");
@@ -293,6 +297,16 @@ public:
         output.name = name;
         output.shape = compute_shape(input, weight_shape);
 
+        return output;
+    }
+
+    Tensor relu_layer(const Tensor &input, const std::string &name) {
+        Func relu;
+        relu(c, i, j) = max(0.0f, input.f(c, i, j));
+        Tensor output;
+        output.f = relu;
+        output.shape = input.shape;
+        output.name = name;
         return output;
     }
 };
