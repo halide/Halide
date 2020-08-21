@@ -4,21 +4,12 @@ project(Halide VERSION 10.0.0)
 enable_testing()
 
 ##
-# Top level configuration
-##
-
-if (NOT "$ENV{HL_TARGET}" STREQUAL "")
-    set(Halide_TARGET "$ENV{HL_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
-else ()
-    set(Halide_TARGET "host" CACHE STRING "The target to use when compiling AOT tests")
-endif ()
-
-##
 # Set up project-wide properties
 ##
 
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
+include(HalideTargetHelpers)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
 if (NOT DEFINED BUILD_SHARED_LIBS)

@@ -25,6 +25,19 @@ if (${CMAKE_FIND_PACKAGE_NAME}_static AND ${CMAKE_FIND_PACKAGE_NAME}_shared)
     set(${CMAKE_FIND_PACKAGE_NAME}_both TRUE)
 endif ()
 
+# Set configured variables
+set(Halide_VERSION @Halide_VERSION@)
+set(Halide_VERSION_MAJOR @Halide_VERSION_MAJOR@)
+set(Halide_VERSION_MINOR @Halide_VERSION_MINOR@)
+set(Halide_VERSION_PATCH @Halide_VERSION_PATCH@)
+set(Halide_VERSION_TWEAK @Halide_VERSION_TWEAK@)
+
+set(Halide_HOST_TARGET @Halide_HOST_TARGET@)
+
+set(Halide_ENABLE_EXCEPTIONS @Halide_ENABLE_EXCEPTIONS@)
+set(Halide_ENABLE_RTTI @Halide_ENABLE_RTTI@)
+
+# Load dependencies from installed configurations
 include(CMakeFindDependencyMacro)
 find_dependency(Threads)
 
@@ -102,6 +115,7 @@ endif ()
 # Aliases are not created, so the helpers aren't available.
 if (NOT ${CMAKE_FIND_PACKAGE_NAME}_both)
     include("${CMAKE_CURRENT_LIST_DIR}/HalideGeneratorHelpers.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake")
 endif ()
 
 # Load image library dependencies
