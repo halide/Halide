@@ -27,7 +27,7 @@ if (WITH_WABT)
                          GIT_SUBMODULES "")
 
     # configuration for wabt
-    set(WITH_EXCEPTIONS ${HALIDE_ENABLE_EXCEPTIONS})
+    set(WITH_EXCEPTIONS ${Halide_ENABLE_EXCEPTIONS})
     set(BUILD_TESTS OFF)
     set(BUILD_TOOLS OFF)
     set(BUILD_LIBWASM OFF)

@@ -59,7 +59,7 @@ set_target_properties(Halide_Adams2019 PROPERTIES
 
 target_link_libraries(Halide_Adams2019 PRIVATE cost_model train_cost_model Halide::Plugin)
 
-if (NOT HALIDE_ENABLE_RTTI)
+if (NOT Halide_ENABLE_RTTI)
     target_compile_options(Halide_Adams2019 PRIVATE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
                            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fno-rtti>)

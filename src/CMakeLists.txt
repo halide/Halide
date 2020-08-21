@@ -432,7 +432,7 @@ if (WARNINGS_AS_ERRORS)
                            $<$<CXX_COMPILER_ID:MSVC>:/WX>)
 endif ()
 
-if (NOT HALIDE_ENABLE_RTTI)
+if (NOT Halide_ENABLE_RTTI)
     target_compile_options(Halide PUBLIC
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
                            $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-rtti>)
