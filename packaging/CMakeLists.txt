@@ -130,10 +130,13 @@ write_basic_package_version_file(
         HalideConfigVersion.cmake
         COMPATIBILITY SameMajorVersion)
 
+configure_file(HalideConfig.cmake HalideConfig.cmake @ONLY)
+
 install(FILES
-        ${CMAKE_CURRENT_SOURCE_DIR}/HalideConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/HalideConfig.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfigVersion.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideGeneratorHelpers.cmake
+        ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
         DESTINATION ${HALIDE_INSTALL_CMAKEDIR})
 
 ##

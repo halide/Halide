@@ -44,5 +44,6 @@ if (WIN32 AND BUILD_SHARED_LIBS)
     # Ref: https://bugs.python.org/issue36085
     # Ref: https://docs.python.org/3/whatsnew/3.8.html#bpo-36085-whatsnew
     add_custom_command(TARGET Halide_Python POST_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Halide::Halide> $<TARGET_FILE_DIR:Halide::Python>)
+                       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Halide::Halide> $<TARGET_FILE_DIR:Halide::Python>
+                       VERBATIM)
 endif ()
