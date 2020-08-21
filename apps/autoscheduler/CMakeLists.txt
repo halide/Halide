@@ -18,8 +18,8 @@ endif ()
 set(WF_CPP baseline.cpp)
 configure_file(baseline.weights baseline.weights COPYONLY)
 add_custom_command(OUTPUT ${WF_CPP}
-                   DEPENDS baseline.weights binary2cpp
                    COMMAND binary2cpp baseline_weights < baseline.weights > ${WF_CPP}
+                   DEPENDS baseline.weights binary2cpp
                    VERBATIM)
 
 # cost_model, train_cost_model

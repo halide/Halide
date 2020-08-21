@@ -277,7 +277,8 @@ function(add_halide_library TARGET)
                        -o .
                        "target=$<JOIN:${GEN_TARGETS},$<COMMA>>"
                        ${ARG_PARAMS}
-                       DEPENDS "${ARG_FROM}")
+                       DEPENDS "${ARG_FROM}" ${ARG_PLUGINS}
+                       VERBATIM)
 
     list(TRANSFORM GENERATOR_OUTPUT_FILES PREPEND "${CMAKE_CURRENT_BINARY_DIR}/")
     add_custom_target("${TARGET}.update" DEPENDS ${GENERATOR_OUTPUT_FILES})
