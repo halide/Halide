@@ -65,7 +65,8 @@ if (TARGET_NVPTX)
         set(FILTER_LIB "lesson_10_halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
         add_custom_command(OUTPUT lesson_10_halide.h "${FILTER_LIB}"
                            DEPENDS lesson_10_aot_compilation_generate
-                           COMMAND ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0" $<TARGET_FILE:lesson_10_aot_compilation_generate>)
+                           COMMAND ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0" $<TARGET_FILE:lesson_10_aot_compilation_generate>
+                           VERBATIM)
         add_custom_target(exec_lesson_10_aot_compilation_generate
                           DEPENDS lesson_10_halide.h "${FILTER_LIB}")
 

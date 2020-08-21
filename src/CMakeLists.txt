@@ -354,11 +354,11 @@ add_subdirectory(runtime)
 set(HALIDE_H "${Halide_BINARY_DIR}/include/Halide.h")
 set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
 add_custom_command(OUTPUT "${Halide_BINARY_DIR}/include/Halide.h"
-                   VERBATIM
                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
                    COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" ${HEADER_FILES} > "$<SHELL_PATH:${HALIDE_H}>"
+                   DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES}
                    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
-                   DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES})
+                   VERBATIM)
 add_custom_target(
         HalideIncludes
         ALL
@@ -432,7 +432,7 @@ if (WARNINGS_AS_ERRORS)
                            $<$<CXX_COMPILER_ID:MSVC>:/WX>)
 endif ()
 
-if (NOT HALIDE_ENABLE_RTTI)
+if (NOT Halide_ENABLE_RTTI)
     target_compile_options(Halide PUBLIC
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
                            $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-rtti>)
