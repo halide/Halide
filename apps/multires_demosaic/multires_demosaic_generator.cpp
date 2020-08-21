@@ -61,8 +61,8 @@ public:
         input_t.shape = input_shape;
 
         // green model
-        Tensor downsampled, g_lowres_conv2d, g_lowres_conv1x1_1, g_lowres_conv1x1_2;
-        Tensor upsampled, stacked, g_conv2d, g_conv1x1_1, g_conv1x1_2;
+        Tensor downsampled, g_lowres_conv2d, g_lowres_conv1x1_1, g_lowres_conv1x1_2, g_lowres_relu1, g_lowres_relu2;
+        Tensor upsampled, stacked, g_conv2d, g_conv1x1_1, g_conv1x1_2, g_relu1, g_relu2;
         Tensor g_final_weights, g_interpolations, prod, green_pred, green;
 
         downsampled = avg_pool_layer(input_t, avg_pool_ws, "downsampled");
@@ -302,7 +302,7 @@ public:
 
     Tensor relu_layer(const Tensor &input, const std::string &name) {
         Func relu;
-        relu(c, i, j) = max(0.0f, input.f(c, i, j));
+        relu(c, x, y, n) = max(0.0f, input.f(c, x, y, n));
         Tensor output;
         output.f = relu;
         output.shape = input.shape;
