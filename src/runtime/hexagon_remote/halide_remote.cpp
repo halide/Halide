@@ -114,7 +114,7 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
 volatile int power_ref_count = 0;
 
 int halide_hexagon_remote_power_hvx_on() {
-    if (power_ref_count == 0) {
+    if (__sync_fetch_and_add(&power_ref_count, 1) == 0) {
         HAP_power_request_t request;
         request.type = HAP_power_set_HVX;
         request.hvx.power_up = TRUE;
@@ -124,14 +124,12 @@ int halide_hexagon_remote_power_hvx_on() {
             return -1;
         }
     }
-    power_ref_count++;
 
     return 0;
 }
 
 int halide_hexagon_remote_power_hvx_off() {
-    power_ref_count--;
-    if (power_ref_count == 0) {
+    if (__sync_add_and_fetch(&power_ref_count, -1) == 0) {
         HAP_power_request_t request;
         request.type = HAP_power_set_HVX;
         request.hvx.power_up = FALSE;
