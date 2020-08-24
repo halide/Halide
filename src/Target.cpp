@@ -540,22 +540,15 @@ void bad_target_string(const std::string &target) {
 
 }  // namespace
 
-Target::Target(const std::string &target) {
+Target::Target(const std::string &target)
+    : os(OSUnknown), arch(ArchUnknown), bits(0) {
     Target host = get_host_target();
 
     if (target.empty()) {
         // If nothing is specified, use the full host target.
         *this = host;
     } else {
-
-        // Default to the host OS and architecture in case of partially
-        // specified targets (e.g. x86-64-cuda doesn't specify the OS, so
-        // use the host OS).
-        os = host.os;
-        arch = host.arch;
-        bits = host.bits;
-
-        if (!merge_string(*this, target)) {
+        if (!merge_string(*this, target) || has_unknowns()) {
             bad_target_string(target);
         }
     }
@@ -567,7 +560,7 @@ Target::Target(const char *s)
 
 bool Target::validate_target_string(const std::string &s) {
     Target t;
-    return merge_string(t, s);
+    return merge_string(t, s) && !t.has_unknowns();
 }
 
 std::string Target::feature_to_name(Target::Feature feature) {
@@ -643,7 +636,7 @@ bool Target::supported() const {
 #if !defined(WITH_RISCV)
     bad |= arch == Target::RISCV;
 #endif
-#if !defined(WITH_PTX)
+#if !defined(WITH_NVPTX)
     bad |= has_feature(Target::CUDA);
 #endif
 #if !defined(WITH_OPENCL)
@@ -659,6 +652,10 @@ bool Target::supported() const {
     bad |= has_feature(Target::D3D12Compute);
 #endif
     return !bad;
+}
+
+bool Target::has_unknowns() const {
+    return os == OSUnknown || arch == ArchUnknown || bits == 0;
 }
 
 void Target::set_feature(Feature f, bool value) {
@@ -816,7 +813,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
 }
 
 int Target::natural_vector_size(const Halide::Type &t) const {
-    user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0)
+    user_assert(!has_unknowns())
         << "natural_vector_size cannot be used on a Target with Unknown values.\n";
 
     const bool is_integer = t.is_int() || t.is_uint();

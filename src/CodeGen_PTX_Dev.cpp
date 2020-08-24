@@ -18,7 +18,7 @@
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
-#ifdef WITH_PTX
+#ifdef WITH_NVPTX
 namespace llvm {
 FunctionPass *createNVVMReflectPass(const StringMap<int> &Mapping);
 }
@@ -34,7 +34,7 @@ using namespace llvm;
 
 CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host)
     : CodeGen_LLVM(host) {
-#if !defined(WITH_PTX)
+#if !defined(WITH_NVPTX)
     user_error << "ptx not enabled for this build of Halide.\n";
 #endif
     user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
@@ -150,7 +150,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 void CodeGen_PTX_Dev::init_module() {
     init_context();
 
-#ifdef WITH_PTX
+#ifdef WITH_NVPTX
     module = get_initial_module_for_ptx_device(target, context);
 #endif
 }
@@ -536,7 +536,7 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
-#ifdef WITH_PTX
+#ifdef WITH_NVPTX
 
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
@@ -707,7 +707,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Null-terminate the ptx source
     buffer.push_back(0);
     return buffer;
-#else  // WITH_PTX
+#else  // WITH_NVPTX
     return vector<char>();
 #endif
 }

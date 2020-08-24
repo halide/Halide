@@ -354,11 +354,11 @@ add_subdirectory(runtime)
 set(HALIDE_H "${Halide_BINARY_DIR}/include/Halide.h")
 set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
 add_custom_command(OUTPUT "${Halide_BINARY_DIR}/include/Halide.h"
-                   VERBATIM
                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
                    COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" ${HEADER_FILES} > "$<SHELL_PATH:${HALIDE_H}>"
+                   DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES}
                    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
-                   DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES})
+                   VERBATIM)
 add_custom_target(
         HalideIncludes
         ALL
@@ -374,26 +374,35 @@ add_library(Halide
             # Including these as sources works around the need to "install" Halide_initmod
             $<TARGET_OBJECTS:Halide_initmod>)
 add_library(Halide::Halide ALIAS Halide)
-set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
-target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
+target_compile_definitions(Halide PRIVATE $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:Halide_STATIC_DEFINE>)
+
+set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_dependencies(Halide HalideIncludes)
+
+if (TARGET wabt)
+    target_link_libraries(Halide PRIVATE wabt)
+    target_compile_definitions(Halide PRIVATE WITH_WABT)
+    install(TARGETS wabt EXPORT Halide_Targets)
+endif ()
 
 ##
 # Include paths for libHalide
 ##
 
-set(HL_INCLUDE_PATH "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
-target_include_directories(Halide INTERFACE ${HL_INCLUDE_PATH})
+set(Halide_INCLUDE_PATH "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
+target_include_directories(Halide INTERFACE ${Halide_INCLUDE_PATH})
 
 ##
 # Plugin interface for Halide on weak systems
 ##
 
 add_library(Halide_Plugin INTERFACE)
+set_target_properties(Halide_Plugin PROPERTIES EXPORT_NAME Plugin)
+
 if (NOT BUILD_SHARED_LIBS)
     if (MSVC)
         message(STATUS "Notice: Halide plugins are not available when building statically with MSVC")
@@ -402,12 +411,13 @@ if (NOT BUILD_SHARED_LIBS)
         target_link_options(Halide_Plugin INTERFACE
                             $<$<CXX_COMPILER_ID:GNU>:-rdynamic>
                             $<$<CXX_COMPILER_ID:Clang,AppleClang>:-undefined dynamic_lookup>)
-        target_include_directories(Halide_Plugin INTERFACE ${HL_INCLUDE_PATH})
+        target_include_directories(Halide_Plugin INTERFACE ${Halide_INCLUDE_PATH})
         add_dependencies(Halide_Plugin Halide)
     endif ()
 else ()
     target_link_libraries(Halide_Plugin INTERFACE Halide::Halide)
 endif ()
+
 add_library(Halide::Plugin ALIAS Halide_Plugin)
 
 ##
@@ -422,7 +432,7 @@ if (WARNINGS_AS_ERRORS)
                            $<$<CXX_COMPILER_ID:MSVC>:/WX>)
 endif ()
 
-if (NOT HALIDE_ENABLE_RTTI)
+if (NOT Halide_ENABLE_RTTI)
     target_compile_options(Halide PUBLIC
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
                            $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-rtti>)

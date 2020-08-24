@@ -304,6 +304,11 @@ public:
         check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u32(u8_1));
         check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u32(clamp(u16_1, 0, 15)));
 
+        // This tests the case of vlut with > 256 elements (thus forcing us to split into
+        // multiple vluts)
+        check("vlut16(v*.b,v*.h,r*)", hvx_width * 3, in_u16(x * 3));
+        check("vlut32(v*.b,v*.b,r*)", hvx_width * 3, in_u8(x * 3));
+
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width / 1, u8_sat(i16_1));
         check("v*.b = vpack(v*.h,v*.h):sat", hvx_width / 1, i8_sat(i16_1));
         check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width / 2, u16_sat(i32_1));
