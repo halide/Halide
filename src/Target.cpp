@@ -165,37 +165,6 @@ Target calculate_host_target() {
     return {os, arch, bits, initial_features};
 }
 
-int get_cuda_capability_lower_bound(const Target &t) {
-    if (!t.has_feature(Target::CUDA)) {
-        return -1;
-    }
-    if (t.has_feature(Target::CUDACapability30)) {
-        return 30;
-    }
-    if (t.has_feature(Target::CUDACapability32)) {
-        return 32;
-    }
-    if (t.has_feature(Target::CUDACapability35)) {
-        return 35;
-    }
-    if (t.has_feature(Target::CUDACapability50)) {
-        return 50;
-    }
-    if (t.has_feature(Target::CUDACapability61)) {
-        return 61;
-    }
-    if (t.has_feature(Target::CUDACapability70)) {
-        return 70;
-    }
-    if (t.has_feature(Target::CUDACapability75)) {
-        return 75;
-    }
-    if (t.has_feature(Target::CUDACapability80)) {
-        return 80;
-    }
-    return 20;
-}
-
 bool is_using_hexagon(const Target &t) {
     return (t.has_feature(Target::HVX_64) ||
             t.has_feature(Target::HVX_128) ||
@@ -735,6 +704,37 @@ bool Target::has_gpu_feature() const {
             has_feature(OpenGLCompute));
 }
 
+int Target::get_cuda_capability_lower_bound() const {
+    if (!has_feature(Target::CUDA)) {
+        return -1;
+    }
+    if (has_feature(Target::CUDACapability30)) {
+        return 30;
+    }
+    if (has_feature(Target::CUDACapability32)) {
+        return 32;
+    }
+    if (has_feature(Target::CUDACapability35)) {
+        return 35;
+    }
+    if (has_feature(Target::CUDACapability50)) {
+        return 50;
+    }
+    if (has_feature(Target::CUDACapability61)) {
+        return 61;
+    }
+    if (has_feature(Target::CUDACapability70)) {
+        return 70;
+    }
+    if (has_feature(Target::CUDACapability75)) {
+        return 75;
+    }
+    if (has_feature(Target::CUDACapability80)) {
+        return 80;
+    }
+    return 20;
+}
+
 bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
@@ -950,8 +950,8 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
-    int cuda_a = get_cuda_capability_lower_bound(*this);
-    int cuda_b = get_cuda_capability_lower_bound(other);
+    int cuda_a = get_cuda_capability_lower_bound();
+    int cuda_b = other.get_cuda_capability_lower_bound();
 
     // get_cuda_capability_lower_bound returns -1 when unused. Casting to unsigned makes this
     // large, so min selects the true lower bound when one target doesn't specify a capability,

@@ -74,7 +74,7 @@ public:
                 RVar rxo, rxi;
 
                 if (get_target().has_feature(Target::CUDA)) {
-                    // Each thread blow will use atomic integer adds
+                    // Each thread below will use atomic integer adds
                     // to shared to compute the histogram of a single
                     // row.
                     hist_rows

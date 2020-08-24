@@ -287,10 +287,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         if (op->value.type().is_float() &&
             (op->value.type().bits() == 32 ||
              (op->value.type().bits() == 64 &&
-              (target.has_feature(Target::CUDACapability61) ||
-               target.has_feature(Target::CUDACapability70) ||
-               target.has_feature(Target::CUDACapability75) ||
-               target.has_feature(Target::CUDACapability80))))) {
+              (target.get_cuda_capability_lower_bound() >= 61)))) {
             Expr val_expr = op->value;
             Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
             Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
@@ -756,10 +753,7 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
     }
     if (t.is_float() && t.bits() == 64) {
         // double atomics are supported since CC6.1
-        return (target.has_feature(Target::CUDACapability61) ||
-                target.has_feature(Target::CUDACapability70) ||
-                target.has_feature(Target::CUDACapability75) ||
-                target.has_feature(Target::CUDACapability80));
+        return target.get_cuda_capability_lower_bound() >= 61;
     }
     return false;
 }

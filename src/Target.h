@@ -277,6 +277,11 @@ struct Target {
         }
     }
 
+    /** Get the minimum cuda capability found as an integer. Returns
+     * 20 (our minimum supported cuda compute capability) if no cuda
+     * features are set. */
+    int get_cuda_capability_lower_bound() const;
+
     /** Was libHalide compiled with support for this target? */
     bool supported() const;
 
