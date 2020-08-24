@@ -1557,6 +1557,13 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
             << ", could not find var " << vars[i].name()
             << " to reorder in the argument list.\n"
             << dump_argument_list();
+        // Check for duplicates
+        for (size_t j = 0; j < i; j++) {
+            user_assert(idx[i] != idx[j])
+                << "In schedule for " << name()
+                << ", call to reorder references " << vars[i].name()
+                << " twice.\n";
+        }
     }
 
     // It is illegal to reorder RVars if the stage is not associative
@@ -2434,6 +2441,11 @@ Func &Func::prefetch(const Internal::Parameter &param, const VarOrRVar &var, Exp
 Func &Func::reorder_storage(const Var &x, const Var &y) {
     invalidate_cache();
 
+    user_assert(x.name() != y.name())
+        << "In schedule for " << name()
+        << ", call to reorder_storage references "
+        << x.name() << " twice\n";
+
     vector<StorageDim> &dims = func.schedule().storage_dims();
     bool found_y = false;
     size_t y_loc = 0;
@@ -3135,6 +3147,13 @@ void Func::compile_to_multitarget_static_library(const std::string &filename_pre
                                                  const std::vector<Argument> &args,
                                                  const std::vector<Target> &targets) {
     pipeline().compile_to_multitarget_static_library(filename_prefix, args, targets);
+}
+
+void Func::compile_to_multitarget_object_files(const std::string &filename_prefix,
+                                               const std::vector<Argument> &args,
+                                               const std::vector<Target> &targets,
+                                               const std::vector<std::string> &suffixes) {
+    pipeline().compile_to_multitarget_object_files(filename_prefix, args, targets, suffixes);
 }
 
 void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,

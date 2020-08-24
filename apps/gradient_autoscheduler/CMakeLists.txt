@@ -24,7 +24,7 @@ set_target_properties(Halide_Li2018 PROPERTIES
 
 target_link_libraries(Halide_Li2018 PRIVATE Halide::Plugin)
 
-if (NOT HALIDE_ENABLE_RTTI)
+if (NOT Halide_ENABLE_RTTI)
     target_compile_options(Halide_Li2018 PRIVATE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
                            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fno-rtti>)
