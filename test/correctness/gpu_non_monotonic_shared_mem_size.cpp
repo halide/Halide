@@ -119,6 +119,45 @@ int main(int argc, char **argv) {
 
         g.realize(width, height);
     }
+
+    {
+        // Finally, we have a case where there is both a precomputed
+        // shared allocation and a precomputed global allocation.
+        Func f1, f2, g;
+        Var x, y;
+        f1(x, y) = x + y;
+        f2(x, y) = x + y;
+
+        const int width = 32, height = 32;
+        g(x, y) = f1(x * (width - 1 - x), y * (height - 1 - y)) +
+                  f2(x * (width - 1 - x), y * (height - 1 - y));
+
+        Var xi, yi;
+        const int tile_width = 2, tile_height = 2;
+        g.gpu_tile(x, y, xi, yi, tile_width, tile_height);
+        f1.compute_at(g, x)
+            .store_in(MemoryType::Heap);
+        f2.compute_at(g, x)
+            .store_in(MemoryType::GPUShared);
+
+        int max_elements =
+            (((tile_width - 1) * (width - 1)) *
+             ((tile_height - 1) * (height - 1)));
+        // Convert from max to extent
+        max_elements += 1;
+
+        // Convert from elements to bytes
+        max_elements *= sizeof(int);
+
+        // Multiply by the number of thread blocks, because each block
+        // getile_size its own slice of a global allocation.
+        int heap_bytes = max_elements * (width / tile_width) * (height / tile_height);
+        printf("Case 4 should use %d bytes of global memory and %d bytes of shared memory\n",
+               heap_bytes, max_elements);
+
+        g.realize(width, height);
+    }
+
     printf("Success!\n");
     return 0;
 }
