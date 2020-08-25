@@ -48,24 +48,25 @@ public:
         RDom depthwise_filter_dom(0, depthwise_filter.dim(0).extent(),
                                   0, depthwise_filter.dim(2).extent(),
                                   0, depthwise_filter.dim(3).extent());
+        // Give clearer names to the reduction over input channels (depth), x and y.
+        RVar rd = depthwise_filter_dom[0];
+        RVar rx = depthwise_filter_dom[1];
+        RVar ry = depthwise_filter_dom[2];
         depthwise_convolved(d, x, y, b) +=
-            depthwise_filter(depthwise_filter_dom[0],
-                             d,
-                             depthwise_filter_dom[1],
-                             depthwise_filter_dom[2]) *
+            depthwise_filter(rd, d, rx, ry) *
             input_bounded(d / channel_multiplier,
-                          x + depthwise_filter_dom[1] - pad_width,
-                          y + depthwise_filter_dom[2] - pad_height,
+                          x + rx - pad_width,
+                          y + ry - pad_height,
                           b);
 
         // Convolve the image point-wise: for each pixel we map from
         // input_channels * channel_multiplier number of channels to output_channels
         Func pointwise_convolved("pointwise_convolved");
-        RDom pointwise_filter_dom(0, pointwise_filter.dim(1).extent());
+        // Reduction over the channels in the depthwise output
+        RDom rc(0, pointwise_filter.dim(1).extent());
         pointwise_convolved(d, x, y, b) = bias(d);
         pointwise_convolved(d, x, y, b) +=
-            pointwise_filter(d, pointwise_filter_dom) *
-            depthwise_convolved(pointwise_filter_dom, x, y, b);
+            pointwise_filter(d, rc) * depthwise_convolved(rc, x, y, b);
 
         // ReLU
         output(d, x, y, b) = max(pointwise_convolved(d, x, y, b), 0.f);
@@ -129,7 +130,7 @@ public:
                 .unroll(x)
                 .unroll(y)
                 .unroll(d)
-                .split(pointwise_filter_dom, ro, ri, 4)
+                .split(rc, ro, ri, 4)
                 .reorder(ri, x, y, d, ro)
                 .unroll(ri);
 
@@ -181,7 +182,7 @@ public:
                 .unroll(y)
                 .unroll(d)
                 .update()
-                .reorder(d, x, y, depthwise_filter_dom[1], depthwise_filter_dom[2], depthwise_filter_dom[0])
+                .reorder(d, x, y, rx, ry, rd)
                 .unroll(x)
                 .unroll(y)
                 .unroll(d);
@@ -264,11 +265,11 @@ public:
                 .unroll(x)
                 .unroll(y)
                 .update()
-                .reorder(d, x, y, pointwise_filter_dom, b)
+                .reorder(d, x, y, rc, b)
                 .vectorize(d)
                 .unroll(x)
                 .unroll(y)
-                .split(pointwise_filter_dom, ro, ri, tile_d);
+                .split(rc, ro, ri, tile_d);
 
             depthwise_convolved
                 .store_in(MemoryType::Stack)
@@ -280,7 +281,7 @@ public:
                 .unroll(y)
                 .update()
                 .vectorize(d)
-                .reorder(x, y, d, depthwise_filter_dom[0], depthwise_filter_dom[1], depthwise_filter_dom[2], b)
+                .reorder(x, y, d, rd, rx, ry, b)
                 .unroll(x)
                 .unroll(y);
 
