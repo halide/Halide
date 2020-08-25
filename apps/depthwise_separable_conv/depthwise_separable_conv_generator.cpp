@@ -94,7 +94,7 @@ public:
             output.dim(1).set_estimate(0, W);
             output.dim(2).set_estimate(0, H);
             output.dim(3).set_estimate(0, N);
-        } else if (false && get_target().has_gpu_feature()) {
+        } else if (get_target().has_gpu_feature()) {
             // 0.100ms on a 2060 RTX super. This is 802 GFlops, which
             // is not a very large fraction of peak flops. For
             // comparison though, tensorflow 2.3 achieves 1.65ms via
