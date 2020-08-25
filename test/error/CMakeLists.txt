@@ -20,6 +20,8 @@ tests(GROUPS error
       bad_extern_split.cpp
       bad_fold.cpp
       bad_host_alignment.cpp
+      bad_reorder.cpp
+      bad_reorder_storage.cpp
       bad_rvar_order.cpp
       bad_schedule.cpp
       bad_store_at.cpp

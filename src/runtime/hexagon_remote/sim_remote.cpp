@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "dlib.h"
 #include "known_symbols.h"
 #include "log.h"
 #include "sim_protocol.h"
@@ -55,24 +54,9 @@ void halide_error(void *user_context, const char *str) {
     halide_print(user_context, str);
 }
 
-// These might not always be available.
-__attribute__((weak)) extern int mmap;
-__attribute__((weak)) extern int mprotect;
-__attribute__((weak)) extern int munmap;
-
 void *halide_get_symbol(const char *name) {
     // dlsym doesn't do anything on the simulator, and we need to
     // support mmap/mprotect/mnmap if needed.
-    static known_symbol known_syms[] = {
-        {"mmap", (char *)(&mmap)},
-        {"mprotect", (char *)(&mprotect)},
-        {"munmap", (char *)(&munmap)},
-    };
-    void *mmap_sym = lookup_symbol(name, known_syms);
-    if (mmap_sym) {
-        return mmap_sym;
-    }
-
     return get_known_symbol(name);
 }
 
@@ -94,42 +78,30 @@ static void dllib_init() {
     dlinit(3, const_cast<char **>(builtin));
 }
 
-int load_library(const char *soname, const unsigned char *code, int codeLen, bool use_dlopenbuf, handle_t *module_ptr) {
+int load_library(const char *soname, const unsigned char *code, int codeLen, handle_t *module_ptr) {
     void *lib = NULL;
-    if (use_dlopenbuf) {
-        if (!dlopenbuf) {
-            log_printf("dlopenbuf not available.\n");
-            return -1;
-        }
+    if (!dlopenbuf) {
+        log_printf("dlopenbuf not available.\n");
+        return -1;
+    }
 
-        // Open the library
-        dllib_init();
-        // We need to use RTLD_NOW, the libraries we build for Hexagon
-        // offloading do not support lazy bindin.
-        lib = dlopenbuf(soname, (const char *)code, codeLen, RTLD_LOCAL | RTLD_NOW);
-        if (!lib) {
-            halide_print(NULL, "dlopenbuf failed\n");
-            halide_print(NULL, dlerror());
-            return -1;
-        }
-    } else {
-        lib = mmap_dlopen(code, codeLen);
-        if (!lib) {
-            halide_print(NULL, "mmap_dlopen failed\n");
-            return -1;
-        }
+    // Open the library
+    dllib_init();
+    // We need to use RTLD_NOW, the libraries we build for Hexagon
+    // offloading do not support lazy bindin.
+    lib = dlopenbuf(soname, (const char *)code, codeLen, RTLD_LOCAL | RTLD_NOW);
+    if (!lib) {
+        halide_print(NULL, "dlopenbuf failed\n");
+        halide_print(NULL, dlerror());
+        return -1;
     }
 
     *module_ptr = reinterpret_cast<handle_t>(lib);
     return 0;
 }
 
-handle_t get_symbol(handle_t module_ptr, const char *name, int nameLen, bool use_dlopenbuf) {
-    if (use_dlopenbuf) {
-        return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void *>(module_ptr), name));
-    } else {
-        return reinterpret_cast<handle_t>(mmap_dlsym(reinterpret_cast<void *>(module_ptr), name));
-    }
+handle_t get_symbol(handle_t module_ptr, const char *name, int nameLen) {
+    return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void *>(module_ptr), name));
 }
 
 int run(handle_t module_ptr, handle_t function,
@@ -174,12 +146,8 @@ int run(handle_t module_ptr, handle_t function,
     return pipeline(args);
 }
 
-int release_library(handle_t module_ptr, bool use_dlopenbuf) {
-    if (use_dlopenbuf) {
-        dlclose(reinterpret_cast<void *>(module_ptr));
-    } else {
-        mmap_dlclose(reinterpret_cast<void *>(module_ptr));
-    }
+int release_library(handle_t module_ptr) {
+    dlclose(reinterpret_cast<void *>(module_ptr));
     return 0;
 }
 
@@ -236,15 +204,13 @@ int main(int argc, const char **argv) {
                 reinterpret_cast<char *>(RPC_ARG(0)),
                 reinterpret_cast<unsigned char *>(RPC_ARG(2)),
                 RPC_ARG(3),
-                RPC_ARG(4),
-                reinterpret_cast<handle_t *>(RPC_ARG(5))));
+                reinterpret_cast<handle_t *>(RPC_ARG(4))));
             break;
         case Message::GetSymbol:
             set_rpc_return(get_symbol(
                 static_cast<handle_t>(RPC_ARG(0)),
                 reinterpret_cast<const char *>(RPC_ARG(1)),
-                RPC_ARG(2),
-                RPC_ARG(3)));
+                RPC_ARG(2)));
             break;
         case Message::Run:
             set_rpc_return(run(
@@ -259,8 +225,7 @@ int main(int argc, const char **argv) {
             break;
         case Message::ReleaseLibrary:
             set_rpc_return(release_library(
-                static_cast<handle_t>(RPC_ARG(0)),
-                RPC_ARG(1)));
+                static_cast<handle_t>(RPC_ARG(0))));
             break;
         case Message::Break:
             return 0;
