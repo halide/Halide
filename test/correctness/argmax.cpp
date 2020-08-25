@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <array>
 #include <iostream>
 
 using namespace Halide;
@@ -24,24 +25,37 @@ outputs:
     Func   -- no, require explicit wrapping?
 */
 
+#if __cplusplus >= 201402L
+//#error nope
+#endif
+
 enum class ArgKind {
     Unknown,
     FrobParam,
-    InputScalar,
-    InputFunc,
-    InputBuffer,
-    OutputBuffer
+    Expr,
+    Func,
+    Pipeline,
+    Buffer,
 };
 
 std::ostream &operator<<(std::ostream &stream, ArgKind kind) {
-    static const char * const kinds[] = { "Unknown", "FrobParam", "InputScalar", "InputFunc", "InputBuffer", "OutputBuffer"};
+    static const char *const kinds[] = {
+        "Unknown",
+        "FrobParam",
+        "Expr",
+        "Func",
+        "Pipeline",
+        "Buffer"
+    };
     stream << kinds[(int)kind];
     return stream;
 }
 
 struct ArgType {
     ArgType() = default;
-    ArgType(const Type &t, ArgKind k) : type(t), kind(k) {}
+    ArgType(const Type &t, ArgKind k)
+        : type(t), kind(k) {
+    }
 
     Type type;
     ArgKind kind{ArgKind::Unknown};
@@ -63,32 +77,91 @@ private:
     template<typename T2>
     ArgType helper(T2, std::true_type) {
         static_assert(!std::is_void<typename T2::ElemType>::value, "Cannot use ArgTypeInferrer on Buffer<void>; please specify a concrete type");
-        return ArgType(type_of<typename T2::ElemType>(), ArgKind::InputBuffer);  // TODO: can't infer dims()
+        return ArgType(type_of<typename T2::ElemType>(), ArgKind::Buffer);  // TODO: can't infer dims()
     }
 
     template<typename T2>
     ArgType helper(T2, std::false_type) {
-        return ArgType(type_of<T2>(), ArgKind::Unknown);  // TODO: can't tell FrobParam vs InputScalar, must put in arg()
+        return ArgType(type_of<T2>(), ArgKind::Unknown);  // TODO: can't tell FrobParam vs Scalar, must put in arg()
     }
 };
 
 template<>
-ArgType ArgTypeInferrer<Func>::operator()() {
-    return ArgType(Type(), ArgKind::InputFunc);  // TODO: can't tell type, must put in arg()
+ArgType ArgTypeInferrer<Expr>::operator()() {
+    return ArgType(Type(), ArgKind::Expr);  // TODO: can't tell type, must put in arg()
 }
 
-struct FrobInput {
-    explicit FrobInput(const std::string &name)
-        : name(name) {};
+template<>
+ArgType ArgTypeInferrer<Func>::operator()() {
+    return ArgType(Type(), ArgKind::Func);  // TODO: can't tell type, must put in arg()
+}
 
+template<>
+ArgType ArgTypeInferrer<Pipeline>::operator()() {
+    return ArgType(Type(), ArgKind::Pipeline);  // TODO: can't tell type, must put in arg()
+}
+
+struct FrobArg {
+protected:
+    FrobArg(const std::string &name, Type t, int dim) : name(name), type(t), dim(dim), kind(ArgKind::Unknown) {}
+
+public:
     std::string name;
+    Type type;
+    int dim;  // 0 = zero-dim buffer; -1 = scalar
+    ArgKind kind;
+
+    void inspect() const {
+        if (dim < 0) {
+            std::cout << "  out: " << name << " is " << type << " (kind = " << kind << ")";
+        } else {
+            std::cout << "  out: " << name << " is Buffer<" << type << "> dim=" << dim << " (kind = " << kind << ")";
+        }
+    }
+
+    // Verify that the information we statically inferred from the C++ fn declaration
+    // matches what is declared manually for the Frob, and that the resulting
+    // FrobArg is complete and unambiguous.
+    FrobArg with_arg_type(const ArgType &arg_type) const {
+        // _halide_user_assert(type.kind == ArgKind::Func ||
+        //                     type.kind == ArgKind::Pipeline ||
+        //                     type.kind == ArgKind::Buffer)
+        //     << "Frob outputs must be Func or Buffer";
+        FrobArg r = *this;
+        r.kind = arg_type.kind;
+        return r;
+    }
 };
 
-struct FrobOutput {
-    explicit FrobOutput(const std::string &name)
-        : name(name) {};
+struct FrobInput : public FrobArg {
+protected:
+    FrobInput(const std::string &name, Type t, int dim) : FrobArg(name, t, dim) {}
+};
 
-    std::string name;
+template<typename T = void>
+struct FrobInputBuffer : public FrobInput {
+    explicit FrobInputBuffer(const std::string &name, int dim, Type t = type_of<T>())
+        : FrobInput(name, t, dim) {
+    }
+};
+
+template<typename T = void>
+struct FrobInputScalar : public FrobInput {
+    explicit FrobInputScalar(const std::string &name, Type t = type_of<T>())
+        : FrobInput(name, t, -1) {
+    }
+};
+
+struct FrobOutput : public FrobArg {
+protected:
+    FrobOutput(const std::string &name, Type t, int dim) : FrobArg(name, t, dim) {}
+};
+
+template<typename T = void>
+struct FrobOutputBuffer : public FrobOutput {
+    explicit FrobOutputBuffer(const std::string &name, int dim, Type t = type_of<T>())
+        : FrobOutput(name, t, dim) {
+    }
 };
 
 // Strip the class from a method type
@@ -126,94 +199,110 @@ public:
     void operator=(Frob &&) = delete;
 
     // Construct a Frob from an ordinary function
-    template<typename ReturnType, typename... ArgTypes, typename... FrobInputs, typename... FrobOutputs>
-    Frob(const std::string &name, ReturnType (*f)(ArgTypes...), FrobInputs ...inputs, FrobOutputs ...outputs)
+    template<typename FnReturnType, typename... FnArgTypes, typename... FrobArgTypes>
+    Frob(FnReturnType (*f)(FnArgTypes...), const std::string &name, FrobArgTypes... frob_args)
         : name_(name) {
         std::cout << "Frob-ctor1 " << name << "\n";
-        initialize(f, f, inputs..., outputs...);
+        initialize(f, f, frob_args...);
     }
 
     // Construct a Frob from a lambda function (possibly with internal state)
-    // template<typename Func, typename... FrobInputs,
-    //          typename std::enable_if<is_lambda<Func>::value>::type * = nullptr>
-    // Frob(const std::string &name, Func &&f, const FrobOutput &ret, const FrobInputs &...args)
-    //     : name_(name) {
-    //     std::cout << "Frob-ctor2 " << name << "\n";
-    //     initialize(std::forward<Func>(f), (typename function_signature<Func>::type *)nullptr, ret, args...);
-    // }
-
-    struct Arg {
-        std::string name;
-        Type type;
-        ArgKind kind;
-    };
+    template<typename Func, typename... FrobInputs, typename... FrobArgTypes,
+             typename std::enable_if<is_lambda<Func>::value>::type * = nullptr>
+    Frob(Func &&f, const std::string &name, FrobArgTypes... frob_args)
+        : name_(name) {
+        std::cout << "Frob-ctor2 " << name << "\n";
+        initialize(std::forward<Func>(f), (typename function_signature<Func>::type *)nullptr, frob_args...);
+    }
 
     const std::string &name() const {
         return name_;
     }
-    const std::vector<Arg> &inputs() const {
-        return inputs_;
-    }
-
-    const std::vector<Arg> &outputs() const {
-        return outputs_;
-    }
-
     void inspect() const {
         std::cout << "fn: " << name() << "\n";
-        for (const Arg &a : inputs()) {
-            std::cout << "  in: " << a.name << " is " << a.type << " " << a.kind << "\n";
-            // assert(a.kind != ArgKind::Unknown);
+        for (const auto &a : inputs_) {
+            std::cout << "  in: ";
+            a.inspect();
+            std::cout << "\n";
         }
-        for (const Arg &a : outputs()) {
-            std::cout << "  out: " << a.name << " is " << a.type << " " << a.kind << "\n";
-            // assert(a.kind != ArgKind::Unknown);
+        for (const auto &a : outputs_) {
+            std::cout << "  out: ";
+            a.inspect();
+            std::cout << "\n";
+        }
+    }
+
+    void validate() const {
+        _halide_user_assert(!name_.empty());
+        for (const auto &a : inputs_) {
+            assert(a.kind != ArgKind::Unknown);
+        }
+        for (const auto &a : outputs_) {
+            assert(a.kind != ArgKind::Unknown);
         }
     }
 
 protected:
+    // std::function<>  TODO
     std::string name_;
-    std::vector<Arg> inputs_;
-    std::vector<Arg> outputs_;
+    std::vector<FrobArg> inputs_;
+    std::vector<FrobArg> outputs_;
+    // std::vector<Arg> params_;
 
-    void add_input(const FrobInput &name, const ArgType &type) {
-        inputs_.push_back({name.name, type.type, type.kind});
+    void add_frob_arg(const FrobInput &input, const ArgType &type) {
+        _halide_user_assert(outputs_.empty()) << "All inputs must come before any outputs";
+        inputs_.push_back(input.with_arg_type(type)); // {input.name, type.type, type.kind});
     }
 
-    void add_output(const FrobOutput &name, const ArgType &type) {
-        outputs_.push_back({name.name, type.type, type.kind});
+    void add_frob_arg(FrobOutput output, const ArgType &type) {
+        outputs_.push_back(output.with_arg_type(type));
     }
 
-    template<typename Func, typename ReturnType, typename... ArgTypes, typename... FrobInputs, typename... FrobOutputs>
-    void initialize(Func &&f, ReturnType (*)(ArgTypes...), FrobInputs ...inputs, FrobOutputs ...outputs) {
-        static_assert(sizeof...(ArgTypes) == sizeof...(FrobInputs),
-                      "The number of argument annotations does not match the number of function arguments");
+    // void add_frob_arg(const FrobParam &param, const ArgType &type) {
+    //     params_.push_back({param.name, type.type, type.kind});
+    // }
 
-        // This is awkward, but effective for C++11.
-        int unused1[] = {0, (add_input(inputs, ArgTypeInferrer<typename std::decay<ArgTypes>::type>()()), 0)...};
-        (void)unused1;
-        int unused2[] = {0, (add_output(outputs, ArgTypeInferrer<typename std::decay<ReturnType>::type>()()), 0)...};
-        (void)unused2;
+    // TODO: C++17 could use std::apply() here instead
+    template<typename... FrobArgTypes, size_t... I>
+    void add_frob_args(
+            const std::array<ArgType, sizeof...(FrobArgTypes)> fn_arg_types,
+            const std::tuple<FrobArgTypes...> &frob_args,
+            Halide::Internal::index_sequence<I...>
+        ) {
+        (void) std::initializer_list<int>{((void)add_frob_arg(std::get<I>(frob_args), fn_arg_types[I]), 0)... };
+    }
 
-        // const ArgType ret_type = ArgTypeInferrer<typename std::decay<ReturnType>::type>()();
-        // ret_ = Arg{ret.name, ret_type.type, ret_type.kind};
+    template<typename Func, typename FnReturnType, typename... FnArgTypes, typename... FrobArgTypes>
+    void initialize(Func &&f, FnReturnType (*)(FnArgTypes...), FrobArgTypes... frob_args) {
+        static_assert(sizeof...(FrobArgTypes) >= sizeof...(FnArgTypes) + 1, "Insufficient FrobArgTypes passed");
+
+        const std::array<ArgType, sizeof...(FrobArgTypes)> fn_arg_types = {
+            ArgTypeInferrer<typename std::decay<FnArgTypes>::type>()()...,
+            ArgTypeInferrer<typename std::decay<FnReturnType>::type>()(),
+            // remainder are default-initialized to ??? for FrobParam TODO
+        };
+        add_frob_args(fn_arg_types,
+            std::forward_as_tuple(frob_args...),
+            Halide::Internal::make_index_sequence<sizeof...(FrobArgTypes)>());
     }
 };
 
-Func Flip(const Func &input, uint8_t value) {
+Pipeline Flip(const Func &input, Expr e, uint8_t value) {
     Func f;
     Var x, y;
-    f(x, y) = input(x, y) ^ value;
-    return f;
+    f(x, y) = input(x, y) ^ (e + value);
+    return Pipeline(f);
 }
-
 
 int main(int argc, char **argv) {
     Frob flipper(
-        "flip",
         Flip,
-        FrobInput("input"), FrobInput("value"),
-        FrobOutput("output")
+        "flip",
+        FrobInputBuffer<uint8_t>("input", 2),
+        FrobInputScalar<uint8_t>("e"),
+        FrobInputScalar<>("value", UInt(8)),
+        // TODO: validate that outputbuffers matches arity of pipeline?
+        FrobOutputBuffer<>("output", 2, UInt(16))
     );
     flipper.inspect();
 
