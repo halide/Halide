@@ -1320,6 +1320,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_egl,                    ///< Force use of EGL support.
 
     halide_target_feature_arm_dot_prod,  ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
+    halide_llvm_large_code_model,        ///< Use the LLVM large code model to compile
     halide_target_feature_end            ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
