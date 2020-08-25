@@ -195,6 +195,9 @@ public:
             int tile_h = 1;
             int tile_d = 1;
             const int vec = natural_vector_size<float>();
+
+            // Figure out how many registers we have in the register
+            // file on this target.
             int num_regs = 16;
             if (get_target().has_feature(Target::AVX512_Skylake) ||
                 (get_target().arch == Target::ARM &&
@@ -234,9 +237,20 @@ public:
             // Change units from vectors to elements
             tile_d *= vec;
 
+            // We're going to specialize for channel_multiplier = 1,
+            // in which case it's nice to know that depthwise_filter
+            // is dense across the second dimension.
             depthwise_filter.dim(1).set_stride(channel_multiplier);
 
+            // Unlike in the cuda schedule above, this schedule
+            // aggressively fuses the depthwise conv into the
+            // pointwise conv. We do the depthwise convolution within
+            // slices of the channel reduction loop in the pointwise
+            // convolution.
+
             Var di, xi, yi;
+            RVar ro, ri;
+
             Func(output)
                 .tile({d, x, y}, {di, xi, yi}, {tile_d, tile_w, tile_h})
                 .vectorize(di)
@@ -244,7 +258,7 @@ public:
                 .unroll(yi)
                 .fuse(y, b, b)
                 .parallel(b);
-            RVar ro, ri;
+
             pointwise_convolved.compute_at(output, d)
                 .vectorize(d)
                 .unroll(x)
@@ -255,6 +269,7 @@ public:
                 .unroll(x)
                 .unroll(y)
                 .split(pointwise_filter_dom, ro, ri, tile_d);
+
             depthwise_convolved
                 .store_in(MemoryType::Stack)
                 .bound_extent(d, tile_d)
@@ -268,12 +283,14 @@ public:
                 .reorder(x, y, d, depthwise_filter_dom[0], depthwise_filter_dom[1], depthwise_filter_dom[2], b)
                 .unroll(x)
                 .unroll(y);
+
             input_bounded
                 .store_in(MemoryType::Stack)
                 .compute_at(pointwise_convolved, ro)
                 .tile(_0, _1, di, xi, vec, 4, TailStrategy::RoundUp)
                 .vectorize(di)
                 .unroll(xi);
+
             output.specialize(channel_multiplier == 1);
         }
     }
