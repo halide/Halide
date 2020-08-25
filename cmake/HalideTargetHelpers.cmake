@@ -17,7 +17,7 @@ function(_Halide_auto_target OUTVAR)
     if (Halide_HOST_TARGET STREQUAL cmake_target)
         set(${OUTVAR} host PARENT_SCOPE)
     else ()
-        set(${OUTVAR} ${cmake} PARENT_SCOPE)
+        set(${OUTVAR} "${cmake_target}" PARENT_SCOPE)
     endif ()
 endfunction()
 

@@ -185,7 +185,7 @@ function(add_halide_library TARGET)
     ##
 
     if (crosscompiling)
-        add_library("${TARGET}" STATIC IMPORTED)
+        add_library("${TARGET}" STATIC IMPORTED GLOBAL)
         set_target_properties("${TARGET}" PROPERTIES
                               IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${GENERATOR_SOURCES}")
     else ()
@@ -260,7 +260,7 @@ function(add_halide_runtime RT)
     if (crosscompiling)
         add_custom_target("${RT}.update" DEPENDS "${GEN_OUTS}")
 
-        add_library("${RT}" STATIC IMPORTED)
+        add_library("${RT}" STATIC IMPORTED GLOBAL)
         add_dependencies("${RT}" "${RT}.update")
 
         set_target_properties("${RT}" PROPERTIES
