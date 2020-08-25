@@ -2,14 +2,6 @@
 
 extern "C" void abort();
 
-namespace Halide {
-namespace Runtime {
-namespace Internal {
-
-WEAK_INLINE void halide_abort() {
+extern "C" WEAK_INLINE void halide_abort() {
     abort();
 }
-
-}  // namespace Internal
-}  // namespace Runtime
-}  // namespace Halide
