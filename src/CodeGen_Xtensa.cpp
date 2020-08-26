@@ -493,7 +493,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t int16x32_t_aligned_load(cons
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_load(const void *base, int32_t offset) {
     uint8x64_t r;
-    xb_vecNx8* ptr = (xb_vecNx8*)((const uint8_t*)base + offset);
+    xb_vec2Nx8U* ptr = (xb_vec2Nx8U*)((const uint8_t*)base + offset);
     IVP_L2U2NX8U_XP(r, ptr, 0);
     return r;
 }
