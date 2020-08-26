@@ -362,7 +362,7 @@ Func CameraPipe::apply_curve(Func input) {
         Expr u = in % lutResample;
         Expr y0 = curve(clamp(u0, 0, 63));
         Expr y1 = curve(clamp(u0 + 1, 0, 63));
-        curved(x, y, c) = cast<uint8_t>((cast<int16_t>(y0) * lutResample + (y1 - y0) * u) / lutResample);
+        curved(x, y, c) = cast<uint8_t>((cast<uint16_t>(y0) * lutResample + (y1 - y0) * u) / lutResample);
     }
 
     return curved;

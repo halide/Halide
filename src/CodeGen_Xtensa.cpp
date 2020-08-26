@@ -980,6 +980,10 @@ inline uint32x32_t convert_to_uint32x32_t_from_int48x32_t(const int48x32_t& src)
                                 IVP_CVT32UNX48H(src));
 }
 
+HALIDE_ALWAYS_INLINE int16x64_t convert_to_int16x64_t_from_uint16x64_t(const uint16x64_t& src) {
+    return int16x64_t(int16x64_t::from_native_vector, src.native_vector[0], src.native_vector[1]);
+}
+
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_to_native(const int16x64_t& src, int index, int native_lanes, int total_lanes) {
   return src.native_vector[index];
 }
@@ -1041,6 +1045,46 @@ inline int32x16_t halide_xtensa_convert_i48_low_i32(const int48x32_t& src, int n
 
 inline int32x16_t halide_xtensa_convert_i48_high_i32(const int48x32_t& src, int native_lanes, int total_lines) {
     return IVP_CVT32SNX48H(src);
+}
+
+HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_convert_concat_i16_to_i8(const int16x32_t& a, const int16x32_t& b) {
+  xb_vec2Nx24 wide = IVP_CVT24S2NX16(b, a);
+  return IVP_PACKL2NX24(wide);
+}
+
+HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_convert_concat_i16_to_u8(const int16x32_t& a, const int16x32_t& b) {
+  xb_vec2Nx24 wide = IVP_CVT24S2NX16(b, a);
+  return IVP_PACKL2NX24(wide);
+}
+
+HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_convert_concat_u16_to_i8(const uint16x32_t& a, const uint16x32_t& b) {
+  xb_vec2Nx24 wide = IVP_CVT24U2NX16(b, a);
+  return IVP_PACKL2NX24(wide);
+}
+
+HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_convert_concat_u16_to_u8(const uint16x32_t& a, const uint16x32_t& b) {
+  xb_vec2Nx24 wide = IVP_CVT24U2NX16(b, a);
+  return IVP_PACKL2NX24(wide);
+}
+
+inline uint16x32_t halide_xtensa_convert_u8_low_u16(const uint8x64_t& src, int native_lanes, int total_lines) {
+    xb_vec2Nx24 wide = src * uint8x64_t(1);
+    return IVP_CVT16U2NX24L(wide);
+}
+
+inline uint16x32_t halide_xtensa_convert_u8_high_u16(const uint8x64_t& src, int native_lanes, int total_lines) {
+    xb_vec2Nx24 wide = src * uint8x64_t(1);
+    return IVP_CVT16U2NX24H(wide);
+}
+
+inline int16x32_t halide_xtensa_convert_u8_low_i16(const uint8x64_t& src, int native_lanes, int total_lines) {
+    xb_vec2Nx24 wide = src * uint8x64_t(1);
+    return IVP_CVT16S2NX24L(wide);
+}
+
+inline int16x32_t halide_xtensa_convert_u8_high_i16(const uint8x64_t& src, int native_lanes, int total_lines) {
+    xb_vec2Nx24 wide = src * uint8x64_t(1);
+    return IVP_CVT16S2NX24H(wide);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_concat_i32_to_i16(const int32x16_t& a, const int32x16_t& b) {

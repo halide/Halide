@@ -279,6 +279,30 @@ private:
         return call;
     }
 
+    static Expr halide_xtensa_slice_to_native_i16(Expr v0, Expr v1, Expr v2, Expr v3) {
+        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_slice_to_native",
+                               {std::move(v0), std::move(v1), std::move(v2), std::move(v3)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_slice_to_native_u16(Expr v0, Expr v1, Expr v2, Expr v3) {
+        Expr call = Call::make(wild_u16x.type(), "halide_xtensa_slice_to_native",
+                               {std::move(v0), std::move(v1), std::move(v2), std::move(v3)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_concat_from_native_i16(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_concat_from_native",
+                               {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_concat_from_native_u16(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_u16x.type(), "halide_xtensa_concat_from_native",
+                               {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
     static Expr halide_xtensa_concat_from_native_i32(Expr v0, Expr v1) {
         Expr call = Call::make(wild_i32x.type(), "halide_xtensa_concat_from_native",
                                {std::move(v0), std::move(v1)}, Call::PureExtern);
@@ -456,6 +480,10 @@ private:
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
 
             // Concat and cast.
+            {"halide_xtensa_convert_concat_i16_to_i8", i8(halide_xtensa_concat_from_native_i16(wild_i16x, wild_i16x))},
+            {"halide_xtensa_convert_concat_i16_to_u8", u8(halide_xtensa_concat_from_native_i16(wild_i16x, wild_i16x))},
+            {"halide_xtensa_convert_concat_u16_to_i8", i8(halide_xtensa_concat_from_native_u16(wild_u16x, wild_u16x))},
+            {"halide_xtensa_convert_concat_u16_to_u8", u8(halide_xtensa_concat_from_native_u16(wild_u16x, wild_u16x))},
             {"halide_xtensa_convert_concat_i32_to_i16", i16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x))},
             {"halide_xtensa_convert_concat_i32_to_u16", u16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x))},
             {"halide_xtensa_convert_concat_u32_to_i16", i16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
@@ -566,6 +594,15 @@ private:
             {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
             {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
             // Slice and convert
+            {"halide_xtensa_convert_u8_low_u16", halide_xtensa_slice_to_native_u16(u16(wild_u8x), 0, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_u8_high_u16", halide_xtensa_slice_to_native_u16(u16(wild_u8x), 1, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_u8_low_i16", halide_xtensa_slice_to_native_i16(i16(wild_u8x), 0, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_u8_high_i16", halide_xtensa_slice_to_native_i16(i16(wild_u8x), 1, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i8_low_u16", halide_xtensa_slice_to_native_u16(u16(wild_i8x), 0, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i8_high_u16", halide_xtensa_slice_to_native_u16(u16(wild_i8x), 1, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i8_low_i16", halide_xtensa_slice_to_native_i16(i16(wild_i8x), 0, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i8_high_i16", halide_xtensa_slice_to_native_i16(i16(wild_i8x), 1, wild_i32, wild_i32)},
+
             {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 0, 16, 32)},
             {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 1, 16, 32)},
             {"halide_xtensa_convert_i48_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 0, 16, 32)},
