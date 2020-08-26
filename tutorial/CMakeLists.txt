@@ -1,8 +1,5 @@
-set(IMAGES images/gray.png images/rgb.png)
-
-foreach (FILE IN LISTS IMAGES)
-    configure_file("${FILE}" "${FILE}" COPYONLY)
-endforeach ()
+configure_file(images/gray.png images/gray.png COPYONLY)
+configure_file(images/rgb.png images/rgb.png COPYONLY)
 
 function(add_tutorial source_file)
     set(options WITH_IMAGE_IO WITH_OPENMP)
@@ -111,7 +108,7 @@ add_halide_library(my_first_generator_win32 FROM lesson_15_generate
                    GENERATOR my_first_generator
                    TARGETS x86-32-windows)
 
-list(APPEND LESSON_15_EXPECTED_FILES my_first_generator_win32.lib my_first_generator_win32.h)
+list(APPEND LESSON_15_EXPECTED_FILES $<TARGET_FILE_NAME:my_first_generator_win32> my_first_generator_win32.h)
 add_dependencies(lesson_15_targets my_first_generator_win32)
 
 ##
@@ -133,9 +130,9 @@ add_halide_library(my_second_generator_3 FROM lesson_15_generate
                    PARAMS parallel=false output.type=float64)
 
 list(APPEND LESSON_15_EXPECTED_FILES
-     my_second_generator_1${CMAKE_STATIC_LIBRARY_SUFFIX} my_second_generator_1.h
-     my_second_generator_2${CMAKE_STATIC_LIBRARY_SUFFIX} my_second_generator_2.h
-     my_second_generator_3${CMAKE_STATIC_LIBRARY_SUFFIX} my_second_generator_3.h)
+     $<TARGET_FILE_NAME:my_second_generator_1> my_second_generator_1.h
+     $<TARGET_FILE_NAME:my_second_generator_2> my_second_generator_2.h
+     $<TARGET_FILE_NAME:my_second_generator_3> my_second_generator_3.h)
 
 add_dependencies(lesson_15_targets
                  my_second_generator_1

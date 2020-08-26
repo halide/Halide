@@ -12,7 +12,6 @@ extern "C" {
 #include "HAP_power.h"
 }
 
-#include "dlib.h"
 #include "known_symbols.h"
 #include "log.h"
 #include "pipeline_context.h"
@@ -45,10 +44,6 @@ void halide_error(void *user_context, const char *str) {
 
 __attribute__((weak)) void *dlopenbuf(const char *filename, const char *data, int size, int perms);
 
-static bool use_dlopenbuf() {
-    return dlopenbuf != NULL;
-}
-
 void *halide_get_symbol(const char *name) {
     // Try dlsym first. We need to try both RTLD_SELF and
     // RTLD_DEFAULT. Sometimes, RTLD_SELF finds a symbol when
@@ -62,13 +57,6 @@ void *halide_get_symbol(const char *name) {
     def = dlsym(RTLD_DEFAULT, name);
     if (def) {
         return def;
-    }
-    if (!use_dlopenbuf()) {
-        // If we aren't using dlopenbuf, also try mmap_dlsym
-        def = mmap_dlsym(RTLD_DEFAULT, name);
-        if (def) {
-            return def;
-        }
     }
 
     // dlsym has some very unpredictable behavior that makes
@@ -89,21 +77,17 @@ PipelineContext run_context(stack_alignment, stack_size);
 int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
                                        const unsigned char *code, int codeLen,
                                        handle_t *module_ptr) {
+    if (!dlopenbuf) {
+        log_printf("dlopenbuf not available.");
+        return -1;
+    }
     void *lib = NULL;
-    if (use_dlopenbuf()) {
-        // We need to use RTLD_NOW, the libraries we build for Hexagon
-        // offloading do not support lazy binding.
-        lib = dlopenbuf(soname, (const char *)code, codeLen, RTLD_GLOBAL | RTLD_NOW);
-        if (!lib) {
-            log_printf("dlopenbuf failed: %s\n", dlerror());
-            return -1;
-        }
-    } else {
-        lib = mmap_dlopen(code, codeLen);
-        if (!lib) {
-            log_printf("mmap_dlopen failed\n");
-            return -1;
-        }
+    // We need to use RTLD_NOW, the libraries we build for Hexagon
+    // offloading do not support lazy binding.
+    lib = dlopenbuf(soname, (const char *)code, codeLen, RTLD_GLOBAL | RTLD_NOW);
+    if (!lib) {
+        log_printf("dlopenbuf failed: %s\n", dlerror());
+        return -1;
     }
 
     *module_ptr = reinterpret_cast<handle_t>(lib);
@@ -325,11 +309,7 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
 }
 
 int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char *name, int nameLen, handle_t *sym_ptr) {
-    if (use_dlopenbuf()) {
-        *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void *>(module_ptr), name));
-    } else {
-        *sym_ptr = reinterpret_cast<handle_t>(mmap_dlsym(reinterpret_cast<void *>(module_ptr), name));
-    }
+    *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void *>(module_ptr), name));
     return *sym_ptr != 0 ? 0 : -1;
 }
 
@@ -445,11 +425,7 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
 }
 
 int halide_hexagon_remote_release_library(handle_t module_ptr) {
-    if (use_dlopenbuf()) {
-        dlclose(reinterpret_cast<void *>(module_ptr));
-    } else {
-        mmap_dlclose(reinterpret_cast<void *>(module_ptr));
-    }
+    dlclose(reinterpret_cast<void *>(module_ptr));
     return 0;
 }
 
