@@ -1535,6 +1535,13 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
     return tile(previous, outers, inners, factors, tails);
 }
 
+Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
+                   const std::vector<VarOrRVar> &inners,
+                   const std::vector<Expr> &factors,
+                   TailStrategy tail) {
+    return tile(previous, previous, inners, factors, tail);
+}
+
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
@@ -2249,6 +2256,14 @@ Func &Func::tile(const std::vector<VarOrRVar> &previous,
                  const std::vector<Expr> &factors,
                  TailStrategy tail) {
     Stage(func, func.definition(), 0).tile(previous, outers, inners, factors, tail);
+    return *this;
+}
+
+Func &Func::tile(const std::vector<VarOrRVar> &previous,
+                 const std::vector<VarOrRVar> &inners,
+                 const std::vector<Expr> &factors,
+                 TailStrategy tail) {
+    Stage(func, func.definition(), 0).tile(previous, inners, factors, tail);
     return *this;
 }
 
