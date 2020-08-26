@@ -388,6 +388,24 @@ Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
     }
 }
 
+Expr ulong_div(Expr num, Expr den) {
+    internal_assert(num.type() == den.type());
+    Type ty = num.type();
+    internal_assert(ty.is_uint());
+    const int times = ty.bits();
+    Expr leading_zeros, q;
+    q = make_zero(ty);
+    leading_zeros = cast(ty, count_leading_zeros(den));
+    for (int i = 1; i <= times; i++) {
+        int shift = times - i;
+        Expr new_num = num - (den << shift);
+        Expr bit_set = ((shift <= leading_zeros) && num >= (den << shift));
+        num = select(bit_set, new_num, num);
+        q = select(bit_set, cast(ty, 1 << shift) | q, q);
+    }
+    return common_subexpression_elimination(q);
+}
+
 Expr lower_euclidean_div(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
 

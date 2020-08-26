@@ -86,6 +86,10 @@ bool function_takes_user_context(const std::string &name);
  * non-positive. */
 bool can_allocation_fit_on_stack(int64_t size);
 
+/** Does a division round to zero using binary long division for unsigned int.
+ *  Returns a when b == 0. */
+Expr ulong_div(Expr a, Expr b);
+
 /** Given a Halide Euclidean division/mod operation, do constant optimizations
  * and possibly call lower_euclidean_div/lower_euclidean_mod if necessary.
  * Can introduce mulhi_shr and sorted_avg intrinsics as well as those from the
