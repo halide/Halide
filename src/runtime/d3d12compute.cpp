@@ -159,8 +159,6 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
     return symbol;
 }
 
-#define d3d12_debug_break() (*((volatile int *)NULL) = 0)
-
 #ifndef MAYBE_UNUSED
 #define MAYBE_UNUSED(x) ((void)x)
 #endif  // MAYBE_UNUSED

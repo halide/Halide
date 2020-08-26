@@ -144,12 +144,13 @@ add_library(Halide_initmod OBJECT)
 set(CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
 set(RUNTIME_CXX_FLAGS -O3
     -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables
-    #-fpic
     # Note: we don't want static locals to get thread synchronization stuff.
     -fno-threadsafe-statics)
 
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
+        # -fpic needs special treatment; see below on windows 64bits
+		set(fpic -fpic)
         if (${j} EQUAL 32)
             if (${i} MATCHES "windows_.*")
                 # win32 uses the stdcall calling convention, which is x86-specific
@@ -160,6 +161,9 @@ foreach (i IN LISTS RUNTIME_CPP)
             endif ()
         else ()
             if (${i} MATCHES "windows_.*")
+                 # must omit -fpic, otherwise clang will complain with the following:
+				 # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
+				set(fpic "")
                 set(TARGET "x86_64-unknown-windows-unknown")
             else ()
                 # generic 64-bit code
@@ -181,7 +185,7 @@ foreach (i IN LISTS RUNTIME_CPP)
             set(DEFINES ${RUNTIME_DEFINES${SUFFIX}})
 
             add_custom_command(OUTPUT "${LL}"
-                               COMMAND clang ${RUNTIME_CXX_FLAGS} ${DEFINES} -m${j} -target ${TARGET} -emit-llvm -S "$<SHELL_PATH:${SOURCE}>" -o ${LL}
+                               COMMAND clang ${RUNTIME_CXX_FLAGS} ${fpic} ${DEFINES} -m${j} -target ${TARGET} -emit-llvm -S "$<SHELL_PATH:${SOURCE}>" -o ${LL}
                                DEPENDS "${SOURCE}"
                                # Make sure that the output of this command also depends
                                # on the header files that ${SOURCE} uses
