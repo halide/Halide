@@ -1550,13 +1550,13 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
     binder->descriptorSize = descriptorSize;
 
     D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
-    TRACEPRINT("descriptor heap base for CPU: " << baseCPU.ptr << "(" << (void*)baseCPU.ptr << ")\n");
+    TRACEPRINT("descriptor heap base for CPU: " << baseCPU.ptr << "(" << (void *)baseCPU.ptr << ")\n");
     binder->CPU[UAV].ptr = (baseCPU.ptr += descriptorSize * 0);
     binder->CPU[CBV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
     binder->CPU[SRV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);
 
     D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
-    TRACEPRINT("descriptor heap base for GPU: " << baseGPU.ptr << "(" << (void*)baseGPU.ptr << ")\n");
+    TRACEPRINT("descriptor heap base for GPU: " << baseGPU.ptr << "(" << (void *)baseGPU.ptr << ")\n");
     binder->GPU[UAV].ptr = (baseGPU.ptr += descriptorSize * 0);
     binder->GPU[CBV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
     binder->GPU[SRV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);

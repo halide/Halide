@@ -150,7 +150,7 @@ set(RUNTIME_CXX_FLAGS -O3
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
         # -fpic needs special treatment; see below on windows 64bits
-		set(fpic -fpic)
+        set(fpic -fpic)
         if (${j} EQUAL 32)
             if (${i} MATCHES "windows_.*")
                 # win32 uses the stdcall calling convention, which is x86-specific
@@ -161,9 +161,9 @@ foreach (i IN LISTS RUNTIME_CPP)
             endif ()
         else ()
             if (${i} MATCHES "windows_.*")
-                 # must omit -fpic, otherwise clang will complain with the following:
-				 # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
-				set(fpic "")
+                # must omit -fpic, otherwise clang will complain with the following:
+                # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
+                set(fpic "")
                 set(TARGET "x86_64-unknown-windows-unknown")
             else ()
                 # generic 64-bit code
