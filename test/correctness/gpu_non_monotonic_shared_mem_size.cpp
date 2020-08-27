@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
         max_elements *= sizeof(int);
 
         // Multiply by the number of thread blocks, because each block
-        // getile_size its own slice of a global allocation.
+        // gets its own slice of a global allocation.
         max_elements *= (width / tile_width) * (height / tile_height);
         printf("Case 3 should use %d bytes of global memory\n", max_elements);
 
@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
         max_elements *= sizeof(int);
 
         // Multiply by the number of thread blocks, because each block
-        // getile_size its own slice of a global allocation.
+        // gets its own slice of a global allocation.
         int heap_bytes = max_elements * (width / tile_width) * (height / tile_height);
         printf("Case 4 should use %d bytes of global memory and %d bytes of shared memory\n",
                heap_bytes, max_elements);
