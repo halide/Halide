@@ -363,6 +363,14 @@ private:
                     auto interval_bounds = bounds_of_expr_in_scope(s.size, scope);
                     user_assert(interval_bounds.has_upper_bound())
                         << "Couldn't infer bounds for " << s.name << " shared memory allocation\n";
+                    // In theory we could precompute the allocation
+                    // size if there's no upper bound too, but for the
+                    // assert above to fail we'd have to encounter an
+                    // expression that is_monotonic detects as
+                    // increasing, decreasing, or constant, but is
+                    // somehow unbounded. It's probable that no such
+                    // expression exists. is_monotonic is generally
+                    // less capable than bounds_of_expr_in_scope.
                     s.size = interval_bounds.max;
                 }
             }
