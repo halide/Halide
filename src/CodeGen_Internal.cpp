@@ -152,7 +152,11 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
     }
 }
 
-#if LLVM_VERSION >= 110
+#if LLVM_VERSION >= 120
+const llvm::ElementCount element_count(int e) {
+    return llvm::ElementCount::getFixed(e);
+}
+#elif LLVM_VERSION >= 110
 const llvm::ElementCount element_count(int e) {
     return llvm::ElementCount(e, /*scalable*/ false);
 }

@@ -1,8 +1,5 @@
-set(IMAGES images/gray.png images/rgb.png)
-
-foreach (FILE IN LISTS IMAGES)
-    configure_file("${FILE}" "${FILE}" COPYONLY)
-endforeach ()
+configure_file(images/gray.png images/gray.png COPYONLY)
+configure_file(images/rgb.png images/rgb.png COPYONLY)
 
 function(add_tutorial source_file)
     set(options WITH_IMAGE_IO WITH_OPENMP)
@@ -54,7 +51,7 @@ if (TARGET_NVPTX)
     if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
         # TODO: Requires custom build rules to work under wasm.
         message(WARNING "Not all tutorials build under WASM.")
-    else()
+    else ()
         # Tutorial 10 requires that we build generation code, then run it,
         # so we can build the final executable.
         add_tutorial(lesson_10_aot_compilation_generate.cpp)
@@ -65,7 +62,8 @@ if (TARGET_NVPTX)
         set(FILTER_LIB "lesson_10_halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
         add_custom_command(OUTPUT lesson_10_halide.h "${FILTER_LIB}"
                            DEPENDS lesson_10_aot_compilation_generate
-                           COMMAND ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0" $<TARGET_FILE:lesson_10_aot_compilation_generate>)
+                           COMMAND ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0" $<TARGET_FILE:lesson_10_aot_compilation_generate>
+                           VERBATIM)
         add_custom_target(exec_lesson_10_aot_compilation_generate
                           DEPENDS lesson_10_halide.h "${FILTER_LIB}")
 
@@ -110,7 +108,7 @@ add_halide_library(my_first_generator_win32 FROM lesson_15_generate
                    GENERATOR my_first_generator
                    TARGETS x86-32-windows)
 
-list(APPEND LESSON_15_EXPECTED_FILES my_first_generator_win32.lib my_first_generator_win32.h)
+list(APPEND LESSON_15_EXPECTED_FILES $<TARGET_FILE_NAME:my_first_generator_win32> my_first_generator_win32.h)
 add_dependencies(lesson_15_targets my_first_generator_win32)
 
 ##
@@ -132,9 +130,9 @@ add_halide_library(my_second_generator_3 FROM lesson_15_generate
                    PARAMS parallel=false output.type=float64)
 
 list(APPEND LESSON_15_EXPECTED_FILES
-     my_second_generator_1${CMAKE_STATIC_LIBRARY_SUFFIX} my_second_generator_1.h
-     my_second_generator_2${CMAKE_STATIC_LIBRARY_SUFFIX} my_second_generator_2.h
-     my_second_generator_3${CMAKE_STATIC_LIBRARY_SUFFIX} my_second_generator_3.h)
+     $<TARGET_FILE_NAME:my_second_generator_1> my_second_generator_1.h
+     $<TARGET_FILE_NAME:my_second_generator_2> my_second_generator_2.h
+     $<TARGET_FILE_NAME:my_second_generator_3> my_second_generator_3.h)
 
 add_dependencies(lesson_15_targets
                  my_second_generator_1
@@ -193,7 +191,7 @@ add_tutorial(lesson_20_cloning_funcs.cpp)
 if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
     # TODO: Requires custom build rules to work under wasm
     message(WARNING "Not all tutorials build under WASM.")
-else()
+else ()
     add_executable(lesson_21_auto_scheduler_generate lesson_21_auto_scheduler_generate.cpp)
     target_link_libraries(lesson_21_auto_scheduler_generate PRIVATE Halide::Generator)
 
@@ -208,4 +206,4 @@ else()
 
     add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND lesson_21_auto_scheduler_run)
     set_tests_properties(tutorial_lesson_21_auto_scheduler_run PROPERTIES LABELS tutorial)
-endif()
+endif ()

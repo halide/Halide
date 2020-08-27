@@ -1,6 +1,6 @@
 // GitHub source: from https://github.com/tanakh/cmdline
 // Modifications made in-place to remove the use of exceptions,
-// flagged with WITH_EXCEPTIONS
+// flagged with HALIDE_WITH_EXCEPTIONS
 
 /*
   Copyright (c) 2009, Hideyuki Tanaka
@@ -59,7 +59,7 @@ namespace cmdline {
 
 namespace detail {
 
-#ifdef WITH_EXCEPTIONS
+#ifdef HALIDE_WITH_EXCEPTIONS
 inline void throw_bad_cast() {
     throw std::bad_cast();
 }
@@ -184,7 +184,7 @@ inline std::string readable_typename<int>() {
 
 //-----
 
-#ifdef WITH_EXCEPTIONS
+#ifdef HALIDE_WITH_EXCEPTIONS
 class cmdline_error : public std::exception {
 public:
     cmdline_error(const std::string &msg)
@@ -783,7 +783,7 @@ private:
         }
 
         bool set(const std::string &value) override {
-#ifdef WITH_EXCEPTIONS
+#ifdef HALIDE_WITH_EXCEPTIONS
             try {
                 actual = read(value);
                 has = true;

@@ -1535,6 +1535,13 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
     return tile(previous, outers, inners, factors, tails);
 }
 
+Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
+                   const std::vector<VarOrRVar> &inners,
+                   const std::vector<Expr> &factors,
+                   TailStrategy tail) {
+    return tile(previous, previous, inners, factors, tail);
+}
+
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
@@ -1557,6 +1564,13 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
             << ", could not find var " << vars[i].name()
             << " to reorder in the argument list.\n"
             << dump_argument_list();
+        // Check for duplicates
+        for (size_t j = 0; j < i; j++) {
+            user_assert(idx[i] != idx[j])
+                << "In schedule for " << name()
+                << ", call to reorder references " << vars[i].name()
+                << " twice.\n";
+        }
     }
 
     // It is illegal to reorder RVars if the stage is not associative
@@ -2246,6 +2260,14 @@ Func &Func::tile(const std::vector<VarOrRVar> &previous,
 }
 
 Func &Func::tile(const std::vector<VarOrRVar> &previous,
+                 const std::vector<VarOrRVar> &inners,
+                 const std::vector<Expr> &factors,
+                 TailStrategy tail) {
+    Stage(func, func.definition(), 0).tile(previous, inners, factors, tail);
+    return *this;
+}
+
+Func &Func::tile(const std::vector<VarOrRVar> &previous,
                  const std::vector<VarOrRVar> &outers,
                  const std::vector<VarOrRVar> &inners,
                  const std::vector<Expr> &factors,
@@ -2433,6 +2455,11 @@ Func &Func::prefetch(const Internal::Parameter &param, const VarOrRVar &var, Exp
 
 Func &Func::reorder_storage(const Var &x, const Var &y) {
     invalidate_cache();
+
+    user_assert(x.name() != y.name())
+        << "In schedule for " << name()
+        << ", call to reorder_storage references "
+        << x.name() << " twice\n";
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
     bool found_y = false;
@@ -2993,13 +3020,19 @@ Realization Func::realize(const Target &target,
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
                               const Target &target,
                               const ParamMap &param_map) {
-    user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
-    vector<Buffer<>> outputs(func.outputs());
-    vector<int> sizes;
+    vector<int32_t> sizes;
     if (x_size) sizes.push_back(x_size);
     if (y_size) sizes.push_back(y_size);
     if (z_size) sizes.push_back(z_size);
     if (w_size) sizes.push_back(w_size);
+    infer_input_bounds(sizes, target, param_map);
+}
+
+void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
+                              const Target &target,
+                              const ParamMap &param_map) {
+    user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
+    vector<Buffer<>> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         Buffer<> im(func.output_types()[i], nullptr, sizes);
         outputs[i] = std::move(im);
@@ -3129,6 +3162,13 @@ void Func::compile_to_multitarget_static_library(const std::string &filename_pre
                                                  const std::vector<Argument> &args,
                                                  const std::vector<Target> &targets) {
     pipeline().compile_to_multitarget_static_library(filename_prefix, args, targets);
+}
+
+void Func::compile_to_multitarget_object_files(const std::string &filename_prefix,
+                                               const std::vector<Argument> &args,
+                                               const std::vector<Target> &targets,
+                                               const std::vector<std::string> &suffixes) {
+    pipeline().compile_to_multitarget_object_files(filename_prefix, args, targets, suffixes);
 }
 
 void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,

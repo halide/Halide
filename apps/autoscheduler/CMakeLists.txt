@@ -5,7 +5,8 @@
 
 if (NOT BUILD_SHARED_LIBS)
     if (MSVC)
-        message(FATAL_ERROR "Autoscheduler plugins cannot be built against static Halide on Windows")
+        message(WARNING "Autoscheduler plugins cannot be built against static Halide on Windows")
+        return()
     endif ()
 
     # Need to enable exports for the plugins to find Halide's symbols.
@@ -17,8 +18,8 @@ endif ()
 set(WF_CPP baseline.cpp)
 configure_file(baseline.weights baseline.weights COPYONLY)
 add_custom_command(OUTPUT ${WF_CPP}
-                   DEPENDS baseline.weights binary2cpp
                    COMMAND binary2cpp baseline_weights < baseline.weights > ${WF_CPP}
+                   DEPENDS baseline.weights binary2cpp
                    VERBATIM)
 
 # cost_model, train_cost_model
@@ -58,7 +59,7 @@ set_target_properties(Halide_Adams2019 PROPERTIES
 
 target_link_libraries(Halide_Adams2019 PRIVATE cost_model train_cost_model Halide::Plugin)
 
-if (NOT HALIDE_ENABLE_RTTI)
+if (NOT Halide_ENABLE_RTTI)
     target_compile_options(Halide_Adams2019 PRIVATE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
                            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fno-rtti>)

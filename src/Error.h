@@ -52,7 +52,7 @@ public:
 };
 
 /** The default error reporter logs to stderr, then throws an exception
- * (if WITH_EXCEPTIONS) or calls abort (if not). This allows customization
+ * (if HALIDE_WITH_EXCEPTIONS) or calls abort (if not). This allows customization
  * of that behavior if a more gentle response to error reporting is desired.
  * Note that error_reporter is expected to remain valid across all Halide usage;
  * it is up to the caller to ensure that this is the case (and to do any
