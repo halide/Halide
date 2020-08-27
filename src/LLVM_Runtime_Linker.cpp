@@ -801,6 +801,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
     if (module_type != ModuleGPU) {
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
+            // Windows has a unique abort, but everyone else uses POSIX
+            if (t.os == Target::Windows) {
+                modules.push_back(get_initmod_windows_abort(c, bits_64, debug));
+            } else {
+                modules.push_back(get_initmod_posix_abort(c, bits_64, debug));
+            }
+
             // OS-dependent modules
             if (t.os == Target::Linux) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -1090,12 +1097,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
     } else if (module_type == ModuleAOT) {
         modules.push_back(get_initmod_module_aot_ref_count(c, bits_64, debug));
-    }
-
-    if (t.os == Target::Windows) {
-        modules.push_back(get_initmod_windows_abort(c, bits_64, debug));
-    } else {
-        modules.push_back(get_initmod_posix_abort(c, bits_64, debug));
     }
 
     if (module_type == ModuleAOT || module_type == ModuleGPU) {
