@@ -165,33 +165,51 @@ foreach (i IN LISTS RUNTIME_CPP)
 
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
 
-        set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DLLVM_VERSION=${LLVM_VERSION} -DBITS_${j})
+        set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DBITS_${j})
         set(RUNTIME_DEFINES_debug -g -DDEBUG_RUNTIME ${RUNTIME_DEFINES})
 
         foreach (SUFFIX IN ITEMS "" "_debug")
-            set(LL "initmod.${i}_${j}${SUFFIX}.ll")
-            set(BC "initmod.${i}_${j}${SUFFIX}.bc")
+            set(basename "initmod.${i}_${j}${SUFFIX}")
+            set(LL "${basename}.ll")
+            set(BC "${basename}.bc")
             set(INITMOD "_initmod_${i}_${j}${SUFFIX}.cpp")
             set(SYMBOL "halide_internal_initmod_${i}_${j}${SUFFIX}")
 
-            set(DEFINES ${RUNTIME_DEFINES${SUFFIX}})
+            set(clang_flags ${RUNTIME_CXX_FLAGS} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S)
+
+            # Dep-files are subtle and require clang to run using *just* the right
+            # relative paths to the build root, NOT the Halide build root. This is
+            # a perfect storm of bad behavior from CMake, Ninja, and Clang.
+            file(RELATIVE_PATH ll_path "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/${LL}")
+            file(TO_NATIVE_PATH "${ll_path}" ll_path)
+
+            if (CMAKE_GENERATOR MATCHES "Ninja")
+                list(APPEND clang_flags -MD -MF "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}/${basename}.d>")
+                set(dep_args DEPFILE "${CMAKE_CURRENT_BINARY_DIR}/${basename}.d")
+            elseif (NOT CMAKE_GENERATOR MATCHES "Make")
+                message(STATUS "Notice: ${CMAKE_GENERATOR} does not support depfile dependencies. Incremental builds may fail.")
+                set(dep_args "")
+            endif ()
 
             add_custom_command(OUTPUT "${LL}"
-                               COMMAND clang ${RUNTIME_CXX_FLAGS} ${DEFINES} -m${j} -target ${TARGET} -emit-llvm -S "$<SHELL_PATH:${SOURCE}>" -o ${LL}
+                               COMMAND clang ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
                                DEPENDS "${SOURCE}"
-                               # Make sure that the output of this command also depends
-                               # on the header files that ${SOURCE} uses
-                               # Note: Only works for makefile generator
+                               # Note: IMPLICIT_DEPENDS only works for Makefile generators, ${dep_args} handles Ninja.
                                IMPLICIT_DEPENDS CXX "${SOURCE}"
+                               WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+                               ${dep_args}
                                VERBATIM)
+
             add_custom_command(OUTPUT "${BC}"
                                COMMAND llvm-as "${LL}" -o "${BC}"
                                DEPENDS "${LL}"
                                VERBATIM)
+
             add_custom_command(OUTPUT "${INITMOD}"
                                COMMAND binary2cpp ${SYMBOL} < "${BC}" > "${INITMOD}"
                                DEPENDS "${BC}" binary2cpp
                                VERBATIM)
+
             target_sources(Halide_initmod PRIVATE ${INITMOD})
         endforeach ()
     endforeach ()
@@ -199,14 +217,12 @@ endforeach ()
 
 
 foreach (i IN LISTS RUNTIME_LL)
-    set(LL "${CMAKE_CURRENT_SOURCE_DIR}/${i}.ll")
-
+    set(LL "${i}.ll")
     set(BC "initmod.${i}.bc")
-
     set(INITMOD "_initmod_${i}.cpp")
 
     add_custom_command(OUTPUT "${BC}"
-                       COMMAND llvm-as "$<SHELL_PATH:${LL}>" -o "${BC}"
+                       COMMAND llvm-as "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" -o "${BC}"
                        DEPENDS "${LL}"
                        VERBATIM)
     add_custom_command(OUTPUT "${INITMOD}"
@@ -228,7 +244,7 @@ foreach (i IN LISTS RUNTIME_BC)
 endforeach ()
 
 add_custom_command(OUTPUT "_initmod_inlined_c.cpp"
-                   COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "${CMAKE_CURRENT_SOURCE_DIR}/halide_buffer_t.cpp" > "_initmod_inlined_c.cpp"
+                   COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_buffer_t.cpp>" > "_initmod_inlined_c.cpp"
                    DEPENDS "halide_buffer_t.cpp" binary2cpp
                    VERBATIM)
 target_sources(Halide_initmod PRIVATE "_initmod_inlined_c.cpp")
@@ -236,7 +252,7 @@ target_sources(Halide_initmod PRIVATE "_initmod_inlined_c.cpp")
 foreach (i IN LISTS RUNTIME_HEADER_FILES)
     string(REPLACE "." "_" SYM_NAME "${i}")
     add_custom_command(OUTPUT "_initmod_${SYM_NAME}.cpp"
-                       COMMAND binary2cpp "halide_internal_runtime_header_${SYM_NAME}" < "${CMAKE_CURRENT_SOURCE_DIR}/${i}" > "_initmod_${SYM_NAME}.cpp"
+                       COMMAND binary2cpp "halide_internal_runtime_header_${SYM_NAME}" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${i}>" > "_initmod_${SYM_NAME}.cpp"
                        DEPENDS "${i}" binary2cpp
                        VERBATIM)
     target_sources(Halide_initmod PRIVATE "_initmod_${SYM_NAME}.cpp")
