@@ -121,7 +121,7 @@ else ()
                            $<$<COMPILE_LANG_AND_ID:CXX,GCC,Clang,AppleClang>:-fno-rtti>)
 endif ()
 
-option(Halide_ENABLE_EXCEPTIONS "Enable exceptions" YES)
+option(Halide_ENABLE_EXCEPTIONS "Enable exceptions" ON)
 if (Halide_ENABLE_EXCEPTIONS)
     message(STATUS "Compiling Halide WITH exceptions.")
     target_compile_definitions(Halide_LanguageOptions INTERFACE HALIDE_WITH_EXCEPTIONS)
