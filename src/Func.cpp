@@ -1535,6 +1535,13 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
     return tile(previous, outers, inners, factors, tails);
 }
 
+Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
+                   const std::vector<VarOrRVar> &inners,
+                   const std::vector<Expr> &factors,
+                   TailStrategy tail) {
+    return tile(previous, previous, inners, factors, tail);
+}
+
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
@@ -1557,6 +1564,13 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
             << ", could not find var " << vars[i].name()
             << " to reorder in the argument list.\n"
             << dump_argument_list();
+        // Check for duplicates
+        for (size_t j = 0; j < i; j++) {
+            user_assert(idx[i] != idx[j])
+                << "In schedule for " << name()
+                << ", call to reorder references " << vars[i].name()
+                << " twice.\n";
+        }
     }
 
     // It is illegal to reorder RVars if the stage is not associative
@@ -2246,6 +2260,14 @@ Func &Func::tile(const std::vector<VarOrRVar> &previous,
 }
 
 Func &Func::tile(const std::vector<VarOrRVar> &previous,
+                 const std::vector<VarOrRVar> &inners,
+                 const std::vector<Expr> &factors,
+                 TailStrategy tail) {
+    Stage(func, func.definition(), 0).tile(previous, inners, factors, tail);
+    return *this;
+}
+
+Func &Func::tile(const std::vector<VarOrRVar> &previous,
                  const std::vector<VarOrRVar> &outers,
                  const std::vector<VarOrRVar> &inners,
                  const std::vector<Expr> &factors,
@@ -2433,6 +2455,11 @@ Func &Func::prefetch(const Internal::Parameter &param, const VarOrRVar &var, Exp
 
 Func &Func::reorder_storage(const Var &x, const Var &y) {
     invalidate_cache();
+
+    user_assert(x.name() != y.name())
+        << "In schedule for " << name()
+        << ", call to reorder_storage references "
+        << x.name() << " twice\n";
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
     bool found_y = false;

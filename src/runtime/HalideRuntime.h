@@ -1260,6 +1260,10 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cuda_capability32,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
     halide_target_feature_cuda_capability35,  ///< Enable CUDA compute capability 3.5 (Kepler)
     halide_target_feature_cuda_capability50,  ///< Enable CUDA compute capability 5.0 (Maxwell)
+    halide_target_feature_cuda_capability61,  ///< Enable CUDA compute capability 6.1 (Pascal)
+    halide_target_feature_cuda_capability70,  ///< Enable CUDA compute capability 7.0 (Volta)
+    halide_target_feature_cuda_capability75,  ///< Enable CUDA compute capability 7.5 (Turing)
+    halide_target_feature_cuda_capability80,  ///< Enable CUDA compute capability 8.0 (Ampere)
 
     halide_target_feature_opencl,       ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets
@@ -1296,7 +1300,6 @@ typedef enum halide_target_feature_t {
     halide_target_feature_trace_stores,           ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations,     ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
     halide_target_feature_trace_pipeline,         ///< Trace the pipeline.
-    halide_target_feature_cuda_capability61,      ///< Enable CUDA compute capability 6.1 (Pascal)
     halide_target_feature_hvx_v65,                ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66,                ///< Enable Hexagon v66 architecture.
     halide_target_feature_cl_half,                ///< Enable half support on OpenCL targets

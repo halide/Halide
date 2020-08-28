@@ -78,6 +78,7 @@ add_app_test(c_backend)
 add_app_test(camera_pipe)
 add_app_test(conv_layer)
 add_app_test(cuda_mat_mul)
+add_app_test(depthwise_separable_conv)
 #add_app_test(glsl)  # TODO(#4937): bugged; not built by Makefile
 add_app_test(harris)
 add_app_test(hist)
