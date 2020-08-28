@@ -79,16 +79,27 @@ function(add_halide_library TARGET)
         set(ARG_FUNCTION_NAME "${TARGET}")
     endif ()
 
+    # If no TARGETS argument, use Halide_TARGET instead
     if (NOT ARG_TARGETS)
-        if (NOT "${Halide_TARGET}" STREQUAL "")
-            set(ARG_TARGETS "${Halide_TARGET}")
-        else ()
-            _Halide_auto_target(ARG_TARGETS)
-        endif ()
-    elseif (ARG_TARGETS MATCHES "cmake")
-        _Halide_auto_target(target)
-        list(TRANSFORM ARG_TARGETS REPLACE "cmake" "${target}")
+        set(ARG_TARGETS "${Halide_TARGET}")
     endif ()
+
+    # If still no TARGET, try to use host, but if that would
+    # cross-compile, then default to 'cmake' and warn.
+    if (NOT ARG_TARGETS)
+        if (Halide_HOST_TARGET STREQUAL Halide_CMAKE_TARGET)
+            set(ARG_TARGETS host)
+        else ()
+            message(AUTHOR_WARNING
+                    "Targets must be manually specified to add_halide_library when cross-compiling. "
+                    "The default 'host' target ${Halide_HOST_TARGET} differs from the active CMake "
+                    "target ${Halide_CMAKE_TARGET}. Using ${Halide_CMAKE_TARGET} to compile ${TARGET}. "
+                    "This might result in performance degradation from missing arch flags (eg. avx).")
+            set(ARG_TARGETS "${Halide_CMAKE_TARGET}")
+        endif ()
+    endif ()
+
+    list(TRANSFORM ARG_TARGETS REPLACE "cmake" "${Halide_CMAKE_TARGET}")
 
     list(APPEND ARG_FEATURES no_runtime)
     list(JOIN ARG_FEATURES "-" ARG_FEATURES)
@@ -104,8 +115,8 @@ function(add_halide_library TARGET)
     else ()
         # If we're not using an existing runtime, create one.
         if (NOT ARG_USE_RUNTIME)
-            add_halide_runtime("${TARGET}.runtime" FROM ${ARG_FROM}
-                               TARGETS ${ARG_TARGETS})
+            _Halide_add_halide_runtime("${TARGET}.runtime" FROM ${ARG_FROM}
+                                       TARGETS ${ARG_TARGETS})
             set(ARG_USE_RUNTIME "${TARGET}.runtime")
         elseif (NOT TARGET ${ARG_USE_RUNTIME})
             message(FATAL_ERROR "Invalid runtime target ${ARG_USE_RUNTIME}")
@@ -185,7 +196,7 @@ function(add_halide_library TARGET)
     ##
 
     if (crosscompiling)
-        add_library("${TARGET}" STATIC IMPORTED)
+        add_library("${TARGET}" STATIC IMPORTED GLOBAL)
         set_target_properties("${TARGET}" PROPERTIES
                               IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${GENERATOR_SOURCES}")
     else ()
@@ -232,7 +243,7 @@ endfunction()
 # Function for creating a standalone runtime from a generator.
 ##
 
-function(add_halide_runtime RT)
+function(_Halide_add_halide_runtime RT)
     cmake_parse_arguments(ARG "" "FROM" "TARGETS" ${ARGN})
     _Halide_get_platform_details(
             generator_cmd
@@ -260,7 +271,7 @@ function(add_halide_runtime RT)
     if (crosscompiling)
         add_custom_target("${RT}.update" DEPENDS "${GEN_OUTS}")
 
-        add_library("${RT}" STATIC IMPORTED)
+        add_library("${RT}" STATIC IMPORTED GLOBAL)
         add_dependencies("${RT}" "${RT}.update")
 
         set_target_properties("${RT}" PROPERTIES
@@ -298,9 +309,8 @@ function(_Halide_get_platform_details OUT_GEN OUT_XC OUT_OBJ OUT_STATIC)
         set(${OUT_GEN} ${ARG_FROM} PARENT_SCOPE)
     endif ()
 
-    _Halide_triple(halide_triple "${ARGN}")
-    _Halide_cmake_target(cmake_triple)
-    if (NOT cmake_triple STREQUAL halide_triple)
+    _Halide_get_triple(halide_triple "${ARGN}")
+    if (NOT Halide_CMAKE_TARGET STREQUAL halide_triple)
         set("${OUT_XC}" 1 PARENT_SCOPE)
     else ()
         set("${OUT_XC}" 0 PARENT_SCOPE)

@@ -424,20 +424,6 @@ add_library(Halide::Plugin ALIAS Halide_Plugin)
 # Set compiler options for libHalide
 ##
 
-option(WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
-if (WARNINGS_AS_ERRORS)
-    target_compile_options(Halide
-                           PRIVATE
-                           $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Werror>
-                           $<$<CXX_COMPILER_ID:MSVC>:/WX>)
-endif ()
-
-if (NOT Halide_ENABLE_RTTI)
-    target_compile_options(Halide PUBLIC
-                           $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
-                           $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-rtti>)
-endif ()
-
 target_compile_options(Halide
                        PRIVATE
                        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
@@ -471,7 +457,7 @@ target_compile_options(Halide
                        # so compiling its files in parallel should not oversubscribe the system
                        $<$<CXX_COMPILER_ID:MSVC>:/MP>
 
-                       # To compile LLVM headers following was taken from LLVM CMake files:
+                       # To compile LLVM headers, the following was taken from LLVM CMake files:
                        # Disable sized deallocation if the flag is supported. MSVC fails to compile
                        # the operator new overload in LLVM/IR/Function.h and Instruction.h otherwise.
                        # See LLVM PR: 23513 (https://llvm.org/bugs/show_bug.cgi?id=23513)
@@ -510,7 +496,7 @@ if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
 endif ()
 
-option(HALIDE_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
-if (HALIDE_USE_CODEMODEL_LARGE)
+option(Halide_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
+if (Halide_USE_CODEMODEL_LARGE)
     target_compile_definitions(Halide PRIVATE HALIDE_USE_CODEMODEL_LARGE)
 endif ()
