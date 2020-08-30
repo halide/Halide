@@ -420,6 +420,8 @@ endif ()
 
 add_library(Halide::Plugin ALIAS Halide_Plugin)
 
+add_subdirectory(plugins)
+
 ##
 # Set compiler options for libHalide
 ##

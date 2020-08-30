@@ -89,12 +89,3 @@ add_app_test(resize)
 add_app_test(stencil_chain)
 add_app_test(unsharp)
 add_app_test(wavelet)
-
-# Add the autoschedulers.
-# TODO(#4053): refactor into separate modules
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
-    # Don't attempt to build these for wasm yet.
-else ()
-    add_subdirectory(autoscheduler)
-    add_subdirectory(gradient_autoscheduler)
-endif ()
