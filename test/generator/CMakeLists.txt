@@ -161,8 +161,7 @@ if (TARGET generator_aot_autograd)
                        GRADIENT_DESCENT
                        FROM autograd.generator
                        GENERATOR autograd
-                       AUTOSCHEDULER Halide::Mullapudi2016
-                       PARAMS auto_schedule=true)
+                       AUTOSCHEDULER Halide::Mullapudi2016)
     target_link_libraries(generator_aot_autograd PRIVATE autograd_grad)
 endif ()
 

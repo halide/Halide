@@ -19,8 +19,7 @@ target_link_libraries(lens_blur.generator PRIVATE Halide::Generator Halide::Tool
 add_halide_library(lens_blur FROM lens_blur.generator)
 add_halide_library(lens_blur_auto_schedule FROM lens_blur.generator
                    GENERATOR lens_blur
-                   AUTOSCHEDULER Halide::Mullapudi2016
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(lens_blur_filter process.cpp)

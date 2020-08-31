@@ -22,7 +22,6 @@ target_link_libraries(demo_gradient.generator PRIVATE Halide::Generator)
 add_halide_library(demo_gradient FROM demo_gradient.generator
                    GENERATOR demo
                    FUNCTION_NAME demo
-                   PARAMS auto_schedule=true
                    AUTOSCHEDULER Halide::Li2018
                    REGISTRATION DEMO_REGISTRATION_FILE)
 

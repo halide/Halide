@@ -19,8 +19,7 @@ target_link_libraries(local_laplacian.generator PRIVATE Halide::Generator Halide
 add_halide_library(local_laplacian FROM local_laplacian.generator)
 add_halide_library(local_laplacian_auto_schedule FROM local_laplacian.generator
                    GENERATOR local_laplacian
-                   AUTOSCHEDULER Halide::Mullapudi2016
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(local_laplacian_process process.cpp)

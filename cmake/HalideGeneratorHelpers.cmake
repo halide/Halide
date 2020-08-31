@@ -185,10 +185,10 @@ function(add_halide_library TARGET)
             list(APPEND ARG_PLUGINS "${ARG_AUTOSCHEDULER}")
             string(REGEX REPLACE ".*::(.*)" "\\1" ARG_AUTOSCHEDULER "${ARG_AUTOSCHEDULER}")
         elseif (NOT ARG_PLUGINS)
-            # TODO(#4053): this is spurious when the default autoscheduler is requested
             message(AUTHOR_WARNING "AUTOSCHEDULER set to a scheduler name but no plugins were loaded")
         endif ()
         set(GEN_AUTOSCHEDULER -s "${ARG_AUTOSCHEDULER}")
+        list(PREPEND ARG_PARAMS auto_schedule=true)
     endif ()
 
     ##

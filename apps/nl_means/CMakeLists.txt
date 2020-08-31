@@ -19,8 +19,7 @@ target_link_libraries(nl_means.generator PRIVATE Halide::Generator Halide::Tools
 add_halide_library(nl_means FROM nl_means.generator)
 add_halide_library(nl_means_auto_schedule FROM nl_means.generator
                    GENERATOR nl_means
-                   AUTOSCHEDULER Halide::Mullapudi2016
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(nl_means_process process.cpp)

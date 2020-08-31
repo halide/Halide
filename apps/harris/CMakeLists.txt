@@ -19,8 +19,7 @@ target_link_libraries(harris.generator PRIVATE Halide::Generator Halide::Tools)
 add_halide_library(harris FROM harris.generator)
 add_halide_library(harris_auto_schedule FROM harris.generator
                    GENERATOR harris
-                   AUTOSCHEDULER Halide::Mullapudi2016
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(harris_filter filter.cpp)

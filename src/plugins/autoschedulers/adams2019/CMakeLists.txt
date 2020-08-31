@@ -67,7 +67,6 @@ add_executable(demo.generator demo_generator.cpp)
 target_link_libraries(demo.generator PRIVATE Halide::Generator)
 
 add_halide_library(demo FROM demo.generator
-                   PARAMS auto_schedule=true
                    AUTOSCHEDULER Halide::Adams2019
                    REGISTRATION DEMO_REGISTRATION_FILE)
 
@@ -88,7 +87,6 @@ add_executable(included_schedule_file.generator included_schedule_file_generator
 target_link_libraries(included_schedule_file.generator PRIVATE Halide::Generator)
 
 add_halide_library(included_schedule_file FROM included_schedule_file.generator
-                   PARAMS auto_schedule=true
                    AUTOSCHEDULER Halide::Adams2019
                    REGISTRATION included_schedule_reg)
 
