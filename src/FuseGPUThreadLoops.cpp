@@ -5,6 +5,7 @@
 #include "Bounds.h"
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
+#include "CompilerLogger.h"
 #include "ExprUsesVar.h"
 #include "FuseGPUThreadLoops.h"
 #include "IR.h"
@@ -12,7 +13,9 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Monotonic.h"
 #include "Simplify.h"
+#include "Solve.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -242,6 +245,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
         IntInterval liveness;    // Start and end of the barrier stage at which this allocation is used.
         MemoryType memory_type;  // Should be GPUShared or Heap
         bool striped_over_threads;
+        bool size_computed_on_host;
     };
 
     struct AllocGroup {
@@ -300,6 +304,24 @@ private:
 
     bool may_merge_allocs_of_different_type;
 
+    // A loop on the host used to compute the shared memory size
+    Stmt host_side_preamble;
+
+    void precompute_allocation_size(SharedAllocation &s) {
+        Expr val = Load::make(Int(32), s.name + ".shared_size", 0,
+                              Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+        Stmt update_size = Store::make(s.name + ".shared_size", max(s.size, val), 0,
+                                       Parameter{}, const_true(), ModulusRemainder{});
+
+        if (host_side_preamble.defined()) {
+            host_side_preamble = Block::make(host_side_preamble, update_size);
+        } else {
+            host_side_preamble = update_size;
+        }
+        s.size_computed_on_host = true;
+        s.size = Variable::make(Int(32), s.name + ".shared_size_var");
+    }
+
     Stmt visit(const For *op) override {
         bool is_thread_loop = CodeGen_GPU_Dev::is_gpu_thread_var(op->name);
         ScopedValue<bool> old_in_threads(in_threads, in_threads || is_thread_loop);
@@ -307,6 +329,10 @@ private:
         // Set aside the allocations we've found so far.
         vector<SharedAllocation> old;
         old.swap(allocations);
+
+        // And any preamble
+        Stmt old_preamble = host_side_preamble;
+        host_side_preamble = Stmt();
 
         // Find allocations inside the loop body
         Stmt body = mutate(op->body);
@@ -317,11 +343,36 @@ private:
         for (SharedAllocation &s : allocations) {
             // If the size depends on the loop variable, take the max
             // over all loop iterations
-            if (expr_uses_var(s.size, op->name)) {
-                auto interval_bounds = bounds_of_expr_in_scope(s.size, scope);
-                user_assert(interval_bounds.has_upper_bound())
-                    << "Couldn't infer bounds for " << s.name << " shared memory allocation\n";
-                s.size = interval_bounds.max;
+            if (expr_uses_var(s.size, op->name) && !s.size_computed_on_host) {
+                s.size = simplify(common_subexpression_elimination(s.size));
+                // It's worth working extra hard to remove any
+                // repeated dependence on the block var
+                s.size = solve_expression(s.size, op->name).result;
+                s.size = simplify(common_subexpression_elimination(s.size));
+                auto result = is_monotonic(s.size, op->name);
+                if (result == Monotonic::Unknown) {
+                    debug(1)
+                        << "Shared allocation for " << s.name
+                        << " has a size that is non-monontonic in the gpu block variable " << op->name
+                        << ": " << s.size << "\n";
+                    if (get_compiler_logger()) {
+                        get_compiler_logger()->record_non_monotonic_loop_var(op->name, s.size);
+                    }
+                    precompute_allocation_size(s);
+                } else {
+                    auto interval_bounds = bounds_of_expr_in_scope(s.size, scope);
+                    user_assert(interval_bounds.has_upper_bound())
+                        << "Couldn't infer bounds for " << s.name << " shared memory allocation\n";
+                    // In theory we could precompute the allocation
+                    // size if there's no upper bound too, but for the
+                    // assert above to fail we'd have to encounter an
+                    // expression that is_monotonic detects as
+                    // increasing, decreasing, or constant, but is
+                    // somehow unbounded. It's probable that no such
+                    // expression exists. is_monotonic is generally
+                    // less capable than bounds_of_expr_in_scope.
+                    s.size = interval_bounds.max;
+                }
             }
             if (in_threads && op->is_parallel()) {
                 // For parallel inner loops, make a separate slice per loop iteration
@@ -336,7 +387,24 @@ private:
             allocations.swap(old);
         }
 
-        return For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
+        Expr new_min = mutate(op->min);
+        Expr new_extent = mutate(op->extent);
+
+        if (host_side_preamble.defined()) {
+            string loop_name = unique_name('t');
+            Expr v = Variable::make(Int(32), loop_name);
+            host_side_preamble = substitute(op->name, v, host_side_preamble);
+            host_side_preamble = For::make(loop_name, new_min, new_extent,
+                                           ForType::Serial, DeviceAPI::None, host_side_preamble);
+            if (old_preamble.defined()) {
+                host_side_preamble = Block::make(old_preamble, host_side_preamble);
+            }
+        } else {
+            host_side_preamble = old_preamble;
+        }
+
+        return For::make(op->name, new_min, new_extent,
+                         op->for_type, op->device_api, body);
     }
 
     Stmt visit(const Block *op) override {
@@ -354,6 +422,29 @@ private:
         } else {
             return IRMutator::visit(op);
         }
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        Expr condition = mutate(op->condition);
+        Stmt before_preamble = host_side_preamble;
+        host_side_preamble = Stmt();
+        Stmt then_case = mutate(op->then_case);
+        Stmt then_preamble = host_side_preamble;
+        host_side_preamble = Stmt();
+        Stmt else_case = mutate(op->else_case);
+        Stmt else_preamble = host_side_preamble;
+
+        if (then_preamble.defined()) {
+            host_side_preamble = IfThenElse::make(condition, then_preamble, else_preamble);
+        } else if (else_preamble.defined()) {
+            host_side_preamble = IfThenElse::make(!condition, else_preamble);
+        }
+        if (before_preamble.defined() && host_side_preamble.defined()) {
+            host_side_preamble = Block::make(before_preamble, host_side_preamble);
+        } else if (before_preamble.defined()) {
+            host_side_preamble = before_preamble;
+        }
+        return IfThenElse::make(condition, then_case, else_case);
     }
 
     int alloc_node_counter = 0;
@@ -390,7 +481,7 @@ private:
         }
         alloc.size = simplify(alloc.size);
         alloc.memory_type = op->memory_type;
-
+        alloc.size_computed_on_host = false;
         alloc.striped_over_threads = in_threads;
 
         if (alloc.memory_type == MemoryType::Auto) {
@@ -458,6 +549,8 @@ private:
         Expr value = mutate(op->value);
 
         // Set aside the allocations we've found so far.
+        Stmt old_preamble = host_side_preamble;
+        host_side_preamble = Stmt();
         vector<SharedAllocation> old;
         old.swap(allocations);
 
@@ -465,9 +558,22 @@ private:
 
         // Wrap let expression for any allocations found within
         for (SharedAllocation &s : allocations) {
-            if (expr_uses_var(s.size, op->name)) {
+            if (expr_uses_var(s.size, op->name) && !s.size_computed_on_host) {
                 s.size = Let::make(op->name, op->value, s.size);
                 s.size = simplify(s.size);
+            }
+        }
+
+        if (host_side_preamble.defined() &&
+            stmt_uses_var(host_side_preamble, op->name)) {
+            host_side_preamble = LetStmt::make(op->name, op->value, host_side_preamble);
+        }
+
+        if (old_preamble.defined()) {
+            if (host_side_preamble.defined()) {
+                host_side_preamble = Block::make(old_preamble, host_side_preamble);
+            } else {
+                host_side_preamble = old_preamble;
             }
         }
 
@@ -836,9 +942,6 @@ public:
 
         for (const auto &alloc : global_allocations) {
             Expr total_size = alloc.size;
-            for (int d = 0; d < bs.blocks_dimensions(); d++) {
-                total_size *= bs.num_blocks(d);
-            }
 
             Expr device_interface = make_device_interface_call(device_api);
             string buffer_name = alloc.name + ".buffer";
@@ -849,9 +952,16 @@ public:
             builder.extents.push_back(total_size);
             builder.strides.emplace_back(1);
             builder.type = alloc.type;
-            builder.dimensions = 1;
-            Expr buffer = builder.build();
+            builder.dimensions = 1 + bs.blocks_dimensions();
 
+            for (int d = 0; d < bs.blocks_dimensions(); d++) {
+                Expr next_stride =
+                    builder.strides.back() *
+                    builder.extents.back();
+                builder.strides.push_back(next_stride);
+                builder.extents.emplace_back(bs.num_blocks(d));
+            }
+            Expr buffer = builder.build();
             Expr allocate_heap_call = Call::make(Int(32), "halide_device_malloc",
                                                  {buffer_var, device_interface}, Call::Extern);
             string allocate_heap_result_var_name = unique_name('t');
@@ -867,7 +977,41 @@ public:
                                buffer, "halide_device_free_as_destructor");
         }
 
+        s = compute_shared_memory_sizes_on_host(s);
+
         return s;
+    }
+
+    Stmt compute_shared_memory_sizes_on_host(Stmt result) {
+        if (!host_side_preamble.defined()) return result;
+
+        // Make all the let stmts that define the size vars
+        for (auto &alloc : allocations) {
+            if (alloc.size_computed_on_host) {
+                string alloc_name = alloc.name + ".shared_size";
+                string var_name = alloc.name + ".shared_size_var";
+                Expr val = Load::make(Int(32), alloc_name, 0,
+                                      Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+                result = LetStmt::make(var_name, val, result);
+                alloc.size = Variable::make(Int(32), var_name);
+            }
+        }
+
+        // Prefix the preamble
+        result = Block::make(host_side_preamble, result);
+
+        // Wrap the preamble in all the allocation nodes
+        for (auto &alloc : allocations) {
+            if (alloc.size_computed_on_host) {
+                string alloc_name = alloc.name + ".shared_size";
+                Stmt init = Store::make(alloc_name, 0, 0,
+                                        Parameter{}, const_true(), ModulusRemainder{});
+                result = Block::make(init, result);
+                result = Allocate::make(alloc_name, Int(32), MemoryType::Stack, {1}, const_true(), result);
+            }
+        }
+
+        return result;
     }
 
     ExtractSharedAndHeapAllocations(DeviceAPI d)
