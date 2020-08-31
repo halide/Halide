@@ -163,7 +163,7 @@ void ValueTracker::track_values(const std::string &name, const std::vector<Expr>
         if (history[i].size() > max_unique_values) {
             std::ostringstream o;
             o << "Saw too many unique values in ValueTracker[" + std::to_string(i) + "]; "
-              << "expected a maximum of " << max_unique_values << ":\n";
+              << "expected a maximum of " << max_unique_values << ": \n";
             for (auto e : history[i]) {
                 o << "    " << e << "\n";
             }
