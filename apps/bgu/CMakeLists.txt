@@ -19,6 +19,7 @@ target_link_libraries(bgu.generator PRIVATE Halide::Generator Halide::Tools)
 add_halide_library(bgu FROM bgu.generator)
 add_halide_library(bgu_auto_schedule FROM bgu.generator
                    GENERATOR bgu
+                   AUTOSCHEDULER Halide::Mullapudi2016
                    PARAMS auto_schedule=true)
 
 # Main executable

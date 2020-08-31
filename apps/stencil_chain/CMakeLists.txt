@@ -19,6 +19,7 @@ target_link_libraries(stencil_chain.generator PRIVATE Halide::Generator Halide::
 add_halide_library(stencil_chain FROM stencil_chain.generator)
 add_halide_library(stencil_chain_auto_schedule FROM stencil_chain.generator
                    GENERATOR stencil_chain
+                   AUTOSCHEDULER Halide::Mullapudi2016
                    PARAMS auto_schedule=true)
 
 # Main executable

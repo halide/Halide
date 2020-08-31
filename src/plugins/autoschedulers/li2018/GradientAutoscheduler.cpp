@@ -1,19 +1,16 @@
-#include "ASLog.h"
-#include "Errors.h"
+#include "halide_li2018_export.h"
+
 #include "Halide.h"
-
-namespace Halide {
-namespace Internal {
-namespace Autoscheduler {
-
-namespace {
+#include <numeric>
+using namespace Halide;
+using namespace Halide::Internal;
 
 std::map<std::string, Box> inference_bounds(const std::vector<Function> &functions,
                                             const std::vector<Box> &output_bounds) {
     std::vector<Func> funcs;
     funcs.reserve(functions.size());
     for (const auto &f : functions) {
-        funcs.push_back(Func(f));
+        funcs.emplace_back(f);
     }
     return inference_bounds(funcs, output_bounds);
 }
@@ -817,8 +814,6 @@ void apply_schedule(const MachineParams &params,
     schedule_source << ";\n";
 }
 
-}  // namespace
-
 void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
                        const MachineParams &params,
@@ -910,7 +905,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     // Traverse from the consumers to the producers
     for (auto it = order.rbegin(); it != order.rend(); it++) {
         Func func(env[*it]);
-        aslog(1) << "[gradient_autoscheduler] Processing function:" << *it << "\n";
+        debug(1) << "[gradient_autoscheduler] Processing function:" << *it << "\n";
         // Get the bounds in integer constant by substitute all the parameters' estimates.
         Box bounds = func_bounds[*it];
         std::vector<int> int_bounds = get_int_bounds(bounds);
@@ -925,27 +920,22 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     auto_scheduler_results->scheduler_name = "Li2018";
     auto_scheduler_results->schedule_source = schedule_source.str();
-    aslog(1) << schedule_source.str() << "\n";
+    debug(1) << schedule_source.str() << "\n";
 }
 
-// Halide uses a plugin architecture for registering custom
-// autoschedulers. We register our autoscheduler using a static
-// constructor.
-struct RegisterGradientAutoscheduler {
-    RegisterGradientAutoscheduler() {
-        aslog(1) << "Registering autoscheduler 'Li2018'...\n";
-        Pipeline::add_autoscheduler("Li2018", *this);
-    }
+extern "C" {
+HALIDE_LI2018_EXPORT
+const char *AutoschedulerName() {
+    debug(1) << "Registering autoscheduler 'Li2018'...\n";
+    return "Li2018";
+}
 
-    void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
-        std::vector<Function> outputs;
-        for (Func f : p.outputs()) {
-            outputs.push_back(f.function());
-        }
-        generate_schedule(outputs, target, params, results);
+HALIDE_LI2018_EXPORT
+void AutoschedulerRun(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
+    std::vector<Function> outputs;
+    for (Func f : p.outputs()) {
+        outputs.push_back(f.function());
     }
-} register_auto_scheduler;
-
-}  // namespace Autoscheduler
-}  // namespace Internal
-}  // namespace Halide
+    generate_schedule(outputs, target, params, results);
+}
+}

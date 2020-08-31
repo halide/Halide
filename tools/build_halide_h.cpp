@@ -82,13 +82,15 @@ int main(int argc, char **files) {
     fprintf(stdout, "\n");
     fprintf(stdout,
             "// Clean up macros used inside Halide headers\n"
+            "#ifndef Halide_ERROR_MACROS\n"
             "#undef user_assert\n"
             "#undef user_error\n"
             "#undef user_warning\n"
             "#undef internal_error\n"
             "#undef internal_assert\n"
             "#undef halide_runtime_error\n"
-            "#undef HALIDE_EXPORT\n\n"
+            "#undef HALIDE_EXPORT\n"
+            "#endif  // Halide_ERROR_MACROS\n\n"
             "#endif  // HALIDE_H\n");
 
     return 0;

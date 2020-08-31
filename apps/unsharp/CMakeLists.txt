@@ -19,6 +19,7 @@ target_link_libraries(unsharp.generator PRIVATE Halide::Generator Halide::Tools)
 add_halide_library(unsharp FROM unsharp.generator)
 add_halide_library(unsharp_auto_schedule FROM unsharp.generator
                    GENERATOR unsharp
+                   AUTOSCHEDULER Halide::Mullapudi2016
                    PARAMS auto_schedule=true)
 
 # Main executable

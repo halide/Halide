@@ -24,6 +24,7 @@ add_halide_library(bilateral_grid_auto_schedule FROM bilateral_grid.generator
                    GENERATOR bilateral_grid
                    STMT bilateral_grid_auto_schedule_STMT
                    SCHEDULE bilateral_grid_auto_schedule_SCHEDULE
+                   AUTOSCHEDULER Halide::Mullapudi2016
                    PARAMS auto_schedule=true)
 
 # Main executable

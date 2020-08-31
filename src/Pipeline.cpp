@@ -3,7 +3,6 @@
 #include <utility>
 
 #include "Argument.h"
-#include "AutoSchedule.h"
 #include "CodeGen_Internal.h"
 #include "FindCalls.h"
 #include "Func.h"
@@ -180,32 +179,14 @@ vector<Func> Pipeline::outputs() const {
 }
 
 /* static */
-void Pipeline::auto_schedule_Mullapudi2016(const Pipeline &pipeline, const Target &target,
-                                           const MachineParams &arch_params, AutoSchedulerResults *outputs) {
-    AutoSchedulerResults results;
-    results.target = target;
-    results.machine_params_string = arch_params.to_string();
-
-    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "The Mullapudi2016 autoscheduler is not supported for the target: " << target;
-    results.scheduler_name = "Mullapudi2016";
-    results.schedule_source = generate_schedules(pipeline.contents->outputs, target, arch_params);
-    // this autoscheduler has no featurization
-
-    *outputs = results;
-}
-
-/* static */
 std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
-    static std::map<std::string, AutoSchedulerFn> autoschedulers = {
-        {"Mullapudi2016", auto_schedule_Mullapudi2016}};
+    static std::map<std::string, AutoSchedulerFn> autoschedulers = {};
     return autoschedulers;
 }
 
 /* static */
 std::string &Pipeline::get_default_autoscheduler_name() {
-    static std::string autoscheduler_name = "Mullapudi2016";
+    static std::string autoscheduler_name = "";
     return autoscheduler_name;
 }
 
@@ -226,7 +207,9 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
 
 AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) {
     auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
-    internal_assert(autoscheduler_fn != nullptr);
+    internal_assert(autoscheduler_fn)
+        << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
+        << "Did you remember to load the plugin?";
 
     AutoSchedulerResults results;
     results.target = target;

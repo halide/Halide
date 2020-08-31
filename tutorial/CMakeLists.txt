@@ -198,6 +198,7 @@ else ()
     add_halide_library(auto_schedule_false FROM lesson_21_auto_scheduler_generate
                        GENERATOR auto_schedule_gen PARAMS auto_schedule=false)
     add_halide_library(auto_schedule_true FROM lesson_21_auto_scheduler_generate
+                       AUTOSCHEDULER Halide::Mullapudi2016
                        GENERATOR auto_schedule_gen PARAMS auto_schedule=true machine_params=32,16777216,40)
 
     add_executable(lesson_21_auto_scheduler_run lesson_21_auto_scheduler_run.cpp)

@@ -21,6 +21,7 @@ target_link_libraries(conv_layer.generator
 add_halide_library(conv_layer FROM conv_layer.generator)
 add_halide_library(conv_layer_auto_schedule FROM conv_layer.generator
                    GENERATOR conv_layer
+                   AUTOSCHEDULER Halide::Mullapudi2016
                    PARAMS auto_schedule=true)
 
 # Main executable

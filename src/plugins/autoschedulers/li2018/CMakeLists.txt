@@ -1,34 +1,17 @@
-# ================================================================================
-# Halide autoscheduler plugins rely on weak linking to work with static libraries.
-# This is not standard C++ and only works on Linux / macOS. Nothing special needs
-# to be done when linking to a shared version of Halide, however.
-
-if (NOT BUILD_SHARED_LIBS)
-    if (MSVC)
-        message(WARNING "Autoscheduler plugins cannot be built against static Halide on Windows")
-        return()
-    endif ()
-
-    # Need to enable exports for the plugins to find Halide's symbols.
-    set(CMAKE_ENABLE_EXPORTS ON)
-endif ()
-
-# =================================
-# Define the autoscheduler library.
-
-add_library(Halide_Li2018 MODULE GradientAutoscheduler.cpp ASLog.cpp)
+add_library(Halide_Li2018 MODULE GradientAutoscheduler.cpp)
 add_library(Halide::Li2018 ALIAS Halide_Li2018)
+
+include(GenerateExportHeader)
+generate_export_header(Halide_Li2018)
+target_include_directories(Halide_Li2018 PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
+
+target_link_libraries(Halide_Li2018 PRIVATE Halide::Halide)
+target_compile_definitions(Halide_Li2018 PRIVATE Halide_ERROR_MACROS)
+
 set_target_properties(Halide_Li2018 PROPERTIES
                       EXPORT_NAME Li2018
                       OUTPUT_NAME gradient_autoscheduler)
 
-target_link_libraries(Halide_Li2018 PRIVATE Halide::Plugin)
-
-if (NOT Halide_ENABLE_RTTI)
-    target_compile_options(Halide_Li2018 PRIVATE
-                           $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
-                           $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fno-rtti>)
-endif ()
 
 # ==========================================================
 # TODO(#4053): move these to a separate folder since they're tests.
@@ -53,17 +36,8 @@ set_tests_properties(demo_gradient_autoscheduler PROPERTIES LABELS Li2018)
 
 ##
 
-# Hack to include all symbols in the gradient autoscheduler test.
-# DerivativeUtils.h/inference_bounds is not used elsewhere and so doesn't get linked to the test.
-unset(WHOLE_ARCHIVE)
-unset(NO_WHOLE_ARCHIVE)
-if (NOT BUILD_SHARED_LIBS)
-    set(WHOLE_ARCHIVE $<$<CXX_COMPILER_ID:GNU,Clang>:-Wl,-whole-archive> $<$<CXX_COMPILER_ID:AppleClang>:-Wl,-all_load>)
-    set(NO_WHOLE_ARCHIVE $<$<CXX_COMPILER_ID:GNU,Clang>:-Wl,-no-whole-archive> $<$<CXX_COMPILER_ID:AppleClang>:-Wl,-noall_load>)
-endif ()
-
 add_executable(gradient_autoscheduler_test_cpp test.cpp)
-target_link_libraries(gradient_autoscheduler_test_cpp PRIVATE ${WHOLE_ARCHIVE} Halide::Halide ${NO_WHOLE_ARCHIVE})
+target_link_libraries(gradient_autoscheduler_test_cpp PRIVATE Halide::Halide)
 
 add_test(NAME gradient_autoscheduler_test_cpp
          COMMAND gradient_autoscheduler_test_cpp

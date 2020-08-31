@@ -19,6 +19,7 @@ target_link_libraries(hist.generator PRIVATE Halide::Generator Halide::Tools)
 add_halide_library(hist FROM hist.generator)
 add_halide_library(hist_auto_schedule FROM hist.generator
                    GENERATOR hist
+                   AUTOSCHEDULER Halide::Mullapudi2016
                    PARAMS auto_schedule=true)
 
 # Main executable

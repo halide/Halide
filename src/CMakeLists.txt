@@ -15,7 +15,6 @@ set(HEADER_FILES
     AssociativeOpsTable.h
     Associativity.h
     AsyncProducers.h
-    AutoSchedule.h
     AutoScheduleUtils.h
     BoundaryConditions.h
     Bounds.h
@@ -180,7 +179,6 @@ set(SOURCE_FILES
     AssociativeOpsTable.cpp
     Associativity.cpp
     AsyncProducers.cpp
-    AutoSchedule.cpp
     AutoScheduleUtils.cpp
     BoundaryConditions.cpp
     Bounds.cpp
@@ -397,32 +395,6 @@ set(Halide_INCLUDE_PATH "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 target_include_directories(Halide INTERFACE ${Halide_INCLUDE_PATH})
 
 ##
-# Plugin interface for Halide on weak systems
-##
-
-add_library(Halide_Plugin INTERFACE)
-set_target_properties(Halide_Plugin PROPERTIES EXPORT_NAME Plugin)
-
-if (NOT BUILD_SHARED_LIBS)
-    if (MSVC)
-        message(STATUS "Notice: Halide plugins are not available when building statically with MSVC")
-    else ()
-        target_link_libraries(Halide_Plugin INTERFACE Halide::LanguageOptions)
-        target_link_options(Halide_Plugin INTERFACE
-                            $<$<CXX_COMPILER_ID:GNU>:-rdynamic>
-                            $<$<CXX_COMPILER_ID:Clang,AppleClang>:-undefined dynamic_lookup>)
-        target_include_directories(Halide_Plugin INTERFACE ${Halide_INCLUDE_PATH})
-        add_dependencies(Halide_Plugin Halide)
-    endif ()
-else ()
-    target_link_libraries(Halide_Plugin INTERFACE Halide::Halide)
-endif ()
-
-add_library(Halide::Plugin ALIAS Halide_Plugin)
-
-add_subdirectory(plugins)
-
-##
 # Set compiler options for libHalide
 ##
 
@@ -496,3 +468,9 @@ option(Halide_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
 if (Halide_USE_CODEMODEL_LARGE)
     target_compile_definitions(Halide PRIVATE HALIDE_USE_CODEMODEL_LARGE)
 endif ()
+
+##
+# Add compiler plugins (ie. autoschedulers) to the build.
+##
+
+add_subdirectory(plugins)

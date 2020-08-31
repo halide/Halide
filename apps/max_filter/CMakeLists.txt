@@ -19,6 +19,7 @@ target_link_libraries(max_filter.generator PRIVATE Halide::Generator Halide::Too
 add_halide_library(max_filter FROM max_filter.generator)
 add_halide_library(max_filter_auto_schedule FROM max_filter.generator
                    GENERATOR max_filter
+                   AUTOSCHEDULER Halide::Mullapudi2016
                    PARAMS auto_schedule=true)
 
 # Main executable
