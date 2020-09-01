@@ -139,7 +139,9 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
 #if LLVM_VERSION >= 120
 int get_vector_num_elements(llvm::Type *t) {
     if (t->isVectorTy()) {
-        return dyn_cast<llvm::FixedVectorType>(t)->getNumElements();
+        auto *vt = dyn_cast<llvm::FixedVectorType>(t);
+        internal_assert(vt) << "Called get_vector_num_elements on a scalable vector type\n";
+        return vt->getNumElements();
     } else {
         return 1;
     }
