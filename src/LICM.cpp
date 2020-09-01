@@ -84,6 +84,12 @@ class LiftLoopInvariants : public IRMutator {
                 return false;
             }
         }
+        if (const Call *call = e.as<Call>()) {
+            if (call->is_intrinsic(Call::strict_float)) {
+                // Don't lift strict_float markers. They're free.
+                return should_lift(call->args[0]);
+            }
+        }
         return true;
     }
 
