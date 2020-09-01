@@ -59,8 +59,8 @@ void test_expr(T value) {
 
 template<typename T>
 void test_expr_range() {
-    test_expr<T>((T) 0);
-    test_expr<T>((T) 1);
+    test_expr<T>((T)0);
+    test_expr<T>((T)1);
 }
 
 int main(int argc, char **argv) {
