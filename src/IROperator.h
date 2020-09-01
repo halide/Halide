@@ -339,8 +339,8 @@ Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
 /** Cast an expression to the halide type corresponding to the C++ type T. */
 template<typename T>
-inline Expr cast(Expr a) {
-    return cast(type_of<T>(), std::move(a));
+inline ExprT<T> cast(Expr a) {
+    return cast(type_of<T>(), std::move(a)).template typed<T>();
 }
 
 /** Cast an expression to a new type. */

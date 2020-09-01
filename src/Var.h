@@ -22,7 +22,7 @@ class Var {
      * construction of the Var to avoid making a fresh Expr every time
      * the Var is used in a context in which is will be converted to
      * one. */
-    Expr e;
+    ExprT<int> e;
 
 public:
     /** Construct a Var with the given name */
@@ -155,7 +155,7 @@ public:
     //}
 
     /** A Var can be treated as an Expr of type Int(32) */
-    operator const Expr &() const {
+    operator const ExprT<int> &() const {
         return e;
     }
 
@@ -178,7 +178,7 @@ struct ImplicitVar {
     operator Var() const {
         return to_var();
     }
-    operator Expr() const {
+    operator ExprT<int>() const {
         return to_var();
     }
 };
