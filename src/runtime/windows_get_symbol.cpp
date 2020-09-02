@@ -8,14 +8,16 @@ extern "C" {
 #define WIN32API __stdcall
 #endif
 
+typedef unsigned short WCHAR;
+
 int WIN32API MultiByteToWideChar(
     unsigned int CodePage,
     unsigned long dwFlags,
     const char *lpMultiByteStr,
     int cbMultiByte,
-    wchar_t *lpWideCharStr,
+    WCHAR *lpWideCharStr,
     int cchWideChar);
-WIN32API void *LoadLibraryW(const wchar_t *);
+WIN32API void *LoadLibraryW(const WCHAR *);
 WIN32API void *GetProcAddress(void *, const char *);
 WIN32API unsigned SetErrorMode(unsigned);
 #define SEM_FAILCRITICALERRORS 0x0001
@@ -32,7 +34,7 @@ WEAK void *halide_default_load_library(const char *name) {
     void *lib = NULL;
     int wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, NULL, 0);
     if (wide_len > 0) {
-        wchar_t *wide_lib = (wchar_t *)malloc(wide_len * sizeof(*wide_lib));
+        WCHAR *wide_lib = (WCHAR *)malloc(wide_len * sizeof(*wide_lib));
         wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, wide_lib, wide_len);
         if (wide_len > 0) {
             lib = LoadLibraryW(wide_lib);
