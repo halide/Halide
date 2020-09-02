@@ -30,13 +30,15 @@ public:
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), d("d"), b("b");
 
-        // Pad x and y with 0
-        Func input_bounded =
-            BoundaryConditions::constant_exterior(input,
-                                                  0.0f,
-                                                  {{Expr(), Expr()},
-                                                   {0, input.dim(1).extent()},
-                                                   {0, input.dim(2).extent()}});
+        // Pad x and y with 0. Unfortunately the built-in boundary
+        // condition helpers cause unwanted loop partitioning.
+        Func input_bounded;
+        Expr in_bounds = (x >= 0 && x < input.dim(1).extent() &&
+                          y >= 0 && y < input.dim(2).extent());
+        Expr clamped_x = clamp(x, 0, input.dim(1).max());
+        Expr clamped_y = clamp(y, 0, input.dim(2).max());
+        input_bounded(d, x, y, b) =
+            select(in_bounds, input(d, clamped_x, clamped_y, b), 0.0f);
 
         Expr channel_multiplier = depthwise_filter.dim(0).extent();
 
@@ -96,10 +98,10 @@ public:
             output.dim(2).set_estimate(0, H);
             output.dim(3).set_estimate(0, N);
         } else if (get_target().has_gpu_feature()) {
-            // 0.100ms on a 2060 RTX super. This is 802 GFlops, which
-            // is not a very large fraction of peak flops. For
-            // comparison though, tensorflow 2.3 achieves 1.65ms via
-            // cudnn 7.
+            // 0.066ms on a 2060 RTX super. This is about 1.2 TFlops,
+            // which is not a very large fraction of peak. For
+            // comparison though, tensorflow 2.3 achieves 0.13ms via
+            // cudnn 7. So we're twice as fast.
 
             // We'll do the depthwise convolution and pointwise
             // convolution as two separate kernels. In principle they
@@ -108,9 +110,9 @@ public:
             // shared if you do that.
 
             Var xi, yi, di, dii, xii, yii;
-            RVar ro, ri;
+            RVar roo, ro, ri;
 
-            // The pointwise convolution kernel
+            // The pointwise convolution kernel. Produces a 4x4 tile of output.
             Func(output)
                 .tile({d, x, y}, {di, xi, yi}, {16, 4, 4})
                 .tile({di, xi, yi}, {dii, xii, yii}, {1, 2, 2})
@@ -130,23 +132,24 @@ public:
                 .unroll(x)
                 .unroll(y)
                 .unroll(d)
-                .split(rc, ro, ri, 4)
-                .reorder(ri, x, y, d, ro)
+                .split(rc, roo, ro, 32)
+                .split(ro, ro, ri, 4)
+                .reorder(ri, x, y, d, ro, roo)
                 .unroll(ri);
 
-            // We're going to call in() on depthwise_convolved three
-            // times! The first will be to give it a compute_root
-            // wrapper to do the accumulation in registers. The second
-            // will be staging tiles of it into shared in the
-            // pointwise kernel. The third will be staging the loads
-            // from shared into registers. We write them in reverse order below:
+            // We're going to call in() on depthwise_convolved twice.
+            // The first will be to give it a wrapper to do the
+            // accumulation in registers before writing the result to
+            // shared. The second will be staging the loads from
+            // shared into registers. We write them in reverse order
+            // below:
 
             // We can do 4-wide vectorized loads from shared memory if
             // we unroll the reduction loop by a factor of four above
             // and stage the loads from the depthwise_convolved
             // output.
+
             depthwise_convolved.in()
-                .in()
                 .in()
                 .compute_at(pointwise_convolved, x)
                 .bound_extent(d, 4)
@@ -154,24 +157,13 @@ public:
                 .unroll(x)
                 .unroll(y);
 
-            // Stage a tile depthwise_convolved into shared memory for
-            // each tile of pointwise_convolved.
+            // The depthwise convolution kernel. Produces a 4x4 tile
+            // of intermediate state, storing the result in shared.
             depthwise_convolved.in()
-                .in()
                 .compute_at(output, d)
-                .tile({d, x, y}, {di, xi, yi}, {16, 2, 2}, TailStrategy::RoundUp)
-                .unroll(xi)
-                .unroll(yi)
-                .gpu_threads(di, x, y);
-
-            // The depthwise convolution kernel
-            depthwise_convolved.in()
-                .compute_root()
-                .tile({d, x, y}, {di, xi, yi}, {32, 4, 4})
+                .tile({d, x, y}, {di, xi, yi}, {32, 4, 4}, TailStrategy::RoundUp)
                 .tile({di, xi, yi}, {dii, xii, yii}, {2, 2, 2})
                 .gpu_threads(di, xi, yi)
-                .fuse(y, b, b)
-                .gpu_blocks(d, x, b)
                 .unroll(xii)
                 .unroll(yii)
                 .unroll(dii);
@@ -189,8 +181,8 @@ public:
         } else {
             // CPU schedule
 
-            // 0.146ms on an Intel i9-9960X using 16 threads pinned to 3.0 GHz,
-            // which is only about 18% of peak flops.
+            // 0.13ms on an Intel i9-9960X using 16 threads pinned to 3.0 GHz,
+            // which is only about 20% of peak flops.
 
             int tile_w = 1;
             int tile_h = 1;
@@ -238,11 +230,6 @@ public:
             // Change units from vectors to elements
             tile_d *= vec;
 
-            // We're going to specialize for channel_multiplier = 1,
-            // in which case it's nice to know that depthwise_filter
-            // is dense across the second dimension.
-            depthwise_filter.dim(1).set_stride(channel_multiplier);
-
             // Unlike in the cuda schedule above, this schedule
             // aggressively fuses the depthwise conv into the
             // pointwise conv. We do the depthwise convolution within
@@ -288,11 +275,23 @@ public:
             input_bounded
                 .store_in(MemoryType::Stack)
                 .compute_at(pointwise_convolved, ro)
-                .tile(_0, _1, di, xi, vec, 4, TailStrategy::RoundUp)
+                .tile(d, x, di, xi, vec, 4, TailStrategy::RoundUp)
                 .vectorize(di)
                 .unroll(xi);
+        }
 
-            output.specialize(channel_multiplier == 1);
+        if (!auto_schedule) {
+            // We're going to specialize both schedules for channel_multiplier = 1,
+            // in which case it's nice to know that depthwise_filter
+            // is dense across the second dimension.
+            depthwise_filter.dim(1).set_stride(channel_multiplier);
+            Expr intermediate_channels = pointwise_filter.dim(1).extent();
+            // We'll also specialize for a multiple-of-32 intermediate
+            // channels, and a 3x3 conv.
+            output.specialize(channel_multiplier == 1 &&
+                              intermediate_channels == (intermediate_channels / 32) * 32 &&
+                              depthwise_filter.dim(2).extent() == 3 &&
+                              depthwise_filter.dim(3).extent() == 3);
         }
     }
 };
