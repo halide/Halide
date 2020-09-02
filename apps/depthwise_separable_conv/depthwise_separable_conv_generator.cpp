@@ -110,7 +110,7 @@ public:
             // shared if you do that.
 
             Var xi, yi, di, dii, xii, yii;
-            RVar roo, ro, ri;
+            RVar ro, ri;
 
             // The pointwise convolution kernel. Produces a 4x4 tile of output.
             Func(output)
@@ -132,9 +132,8 @@ public:
                 .unroll(x)
                 .unroll(y)
                 .unroll(d)
-                .split(rc, roo, ro, 32)
-                .split(ro, ro, ri, 4)
-                .reorder(ri, x, y, d, ro, roo)
+                .split(rc, ro, ri, 4)
+                .reorder(ri, x, y, d, ro)
                 .unroll(ri);
 
             // We're going to call in() on depthwise_convolved twice.
