@@ -12,7 +12,6 @@ set(RUNTIME_CPP
     cache
     can_use_target
     cuda
-    d3d12compute
     destructors
     device_interface
     errors
@@ -84,6 +83,7 @@ set(RUNTIME_CPP
     windows_abort
     windows_clock
     windows_cuda
+    windows_d3d12compute_x86
     windows_get_symbol
     windows_io
     windows_opencl
@@ -99,7 +99,6 @@ set(RUNTIME_LL
     aarch64
     arm
     arm_no_neon
-    d3d12_abi_patch_64
     hvx_128
     hvx_64
     mips
@@ -144,12 +143,14 @@ add_library(Halide_initmod OBJECT)
 
 set(CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
 set(RUNTIME_CXX_FLAGS -O3
-    -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fpic
+    -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables
     # Note: we don't want static locals to get thread synchronization stuff.
     -fno-threadsafe-statics)
 
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
+        # -fpic needs special treatment; see below on windows 64bits
+        set(fpic -fpic)
         if (${j} EQUAL 32)
             if (${i} MATCHES "windows_.*")
                 # win32 uses the stdcall calling convention, which is x86-specific
@@ -159,8 +160,15 @@ foreach (i IN LISTS RUNTIME_CPP)
                 set(TARGET "le32-unknown-nacl-unknown")
             endif ()
         else ()
-            # generic 64-bit code
-            set(TARGET "le64-unknown-unknown-unknown")
+            if (${i} MATCHES "windows_.*")
+                # must omit -fpic, otherwise clang will complain with the following:
+                # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
+                set(fpic "")
+                set(TARGET "x86_64-unknown-windows-unknown")
+            else ()
+                # generic 64-bit code
+                set(TARGET "le64-unknown-unknown-unknown")
+            endif ()
         endif ()
 
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
@@ -175,7 +183,7 @@ foreach (i IN LISTS RUNTIME_CPP)
             set(INITMOD "_initmod_${i}_${j}${SUFFIX}.cpp")
             set(SYMBOL "halide_internal_initmod_${i}_${j}${SUFFIX}")
 
-            set(clang_flags ${RUNTIME_CXX_FLAGS} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S)
+            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S)
 
             # Dep-files are subtle and require clang to run using *just* the right
             # relative paths to the build root, NOT the Halide build root. This is

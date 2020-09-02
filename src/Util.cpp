@@ -39,6 +39,38 @@
 #include <mach-o/dyld.h>
 #endif
 
+#ifdef _WIN32
+namespace {
+
+std::string from_utf16(LPCWSTR pStr) {
+    int len = wcslen(pStr);
+
+    int mblen = WideCharToMultiByte(CP_UTF8, 0, pStr, len, nullptr, 0, nullptr, nullptr);
+    internal_assert(mblen) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+
+    std::string str(mblen, 0);
+
+    mblen = WideCharToMultiByte(CP_UTF8, 0, pStr, len, &str[0], (int)str.size(), nullptr, nullptr);
+    internal_assert(mblen) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+
+    return str;
+}
+
+std::wstring from_utf8(const std::string &str) {
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), nullptr, 0);
+    internal_assert(wlen) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+
+    std::wstring wstr(wlen, 0);
+
+    wlen = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &wstr[0], (int)wstr.size());
+    internal_assert(wlen) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+
+    return wstr;
+}
+
+}  // namespace
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -277,8 +309,9 @@ void ensure_no_file_exists(const std::string &name) {
 
 void dir_rmdir(const std::string &name) {
 #ifdef _MSC_VER
-    BOOL r = RemoveDirectoryA(name.c_str());
-    internal_assert(r != 0) << "Unable to remove dir: " << name << ":" << GetLastError() << "\n";
+    std::wstring wname = from_utf8(name);
+    internal_assert(RemoveDirectoryW(wname.c_str()))
+        << "RemoveDirectoryW() failed to remove " << name << "; error " << GetLastError() << "\n";
 #else
     int r = ::rmdir(name.c_str());
     internal_assert(r == 0) << "Unable to remove dir: " << name << "\n";
@@ -322,10 +355,14 @@ std::string get_windows_tmp_dir() {
     if (!tmp_dir.empty()) {
         return tmp_dir;
     }
-    char local_app_data_path[MAX_PATH];
-    DWORD ret = SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, local_app_data_path);
-    internal_assert(ret == 0) << "Unable to get Local AppData folder.";
-    std::string tmp = local_app_data_path;
+
+    PWSTR wlocal_path;
+    HRESULT ret = SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &wlocal_path);
+    internal_assert(ret == S_OK) << "Unable to get Local AppData folder; error " << GetLastError() << "\n";
+
+    std::string tmp = from_utf16(wlocal_path);
+    CoTaskMemFree(wlocal_path);
+
     tmp = replace_all(tmp, "\\", "/");
     if (tmp.back() != '/') tmp += '/';
     tmp += "Temp/";
@@ -342,13 +379,16 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
                     suffix.find("\\") == string::npos);
 #ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
-    // directory, which is... problematic.
-    std::string tmp_dir = get_windows_tmp_dir();
-    char tmp_file[MAX_PATH];
-    // Note that GetTempFileNameA() actually creates the file.
-    DWORD ret = GetTempFileNameA(tmp_dir.c_str(), prefix.c_str(), 0, tmp_file);
-    internal_assert(ret != 0);
-    return std::string(tmp_file);
+    // directory Unfortunately, that requires ADMIN privileges, which are not
+    // guaranteed here.
+    std::wstring tmp_dir = from_utf8(get_windows_tmp_dir());
+    std::wstring wprefix = from_utf8(prefix);
+
+    WCHAR tmp_file[MAX_PATH];
+    // Note that GetTempFileNameW() actually creates the file.
+    DWORD ret = GetTempFileNameW(tmp_dir.c_str(), wprefix.c_str(), 0, tmp_file);
+    internal_assert(ret != 0) << "GetTempFileNameW() failed; error " << GetLastError() << "\n";
+    return from_utf16(tmp_file);
 #else
     std::string templ = "/tmp/" + prefix + "XXXXXX" + suffix;
     // Copy into a temporary buffer, since mkstemp modifies the buffer in place.
@@ -385,8 +425,9 @@ std::string dir_make_temp() {
             name << (int)guid.Data4[i];
         }
         std::string dir = tmp_dir + name.str();
-        BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
-        if (result) {
+        std::wstring wdir = from_utf8(dir);
+        BOOL success = CreateDirectoryW(wdir.c_str(), nullptr);
+        if (success) {
             debug(1) << "temp dir is: " << dir << "\n";
             return dir;
         }
@@ -528,28 +569,23 @@ void load_plugin(const std::string &lib_name) {
         lib_path += ".dll";
     }
 
-    int wide_len = MultiByteToWideChar(CP_UTF8, 0, lib_path.c_str(), -1, nullptr, 0);
-    if (wide_len < 1) {
-        user_error << "Failed to load: " << lib_path << " (unconvertible character)\n";
-    }
+    std::wstring wide_lib = from_utf8(lib_path);
+    HMODULE library = LoadLibraryW(wide_lib.c_str());
+    if (!library) {
+        DWORD error = GetLastError();
+        LPWSTR message = nullptr;
+        FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                       nullptr, error, 0, reinterpret_cast<LPWSTR>(&message), 0, nullptr);
 
-    std::vector<wchar_t> wide_lib(wide_len);
-    wide_len = MultiByteToWideChar(CP_UTF8, 0, lib_path.c_str(), -1, wide_lib.data(), wide_len);
-    if (wide_len < 1) {
-        user_error << "Failed to load: " << lib_path << " (unconvertible character)\n";
-    }
+        user_assert(message)
+            << "Failed to load: " << lib_path << ".\n"
+            << "FormatMessage failed while processing error in LoadLibraryW (errno "
+            << error << ").\n";
 
-    if (!LoadLibraryW(wide_lib.data())) {
-        DWORD last_err = GetLastError();
-        LPVOID last_err_msg;
-        FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                           FORMAT_MESSAGE_IGNORE_INSERTS,
-                       nullptr, last_err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                       reinterpret_cast<LPSTR>(&last_err_msg), 0, nullptr);
-        std::string err_msg(static_cast<char *>(last_err_msg));
-        LocalFree(last_err_msg);
+        std::string err_msg = from_utf16(message);
+        LocalFree(message);
         user_error << "Failed to load: " << lib_path << ";\n"
-                   << "LoadLibraryW failed with error " << last_err << ": "
+                   << "LoadLibraryW failed with error " << error << ": "
                    << err_msg << "\n";
     }
 #else
