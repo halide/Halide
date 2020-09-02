@@ -179,7 +179,11 @@ function(add_halide_library TARGET)
 
     set(GEN_AUTOSCHEDULER "")
     if (ARG_AUTOSCHEDULER)
-        if ("${ARG_AUTOSCHEDULER}" MATCHES "::" AND TARGET "${ARG_AUTOSCHEDULER}")
+        if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
+            if (NOT TARGET "${ARG_AUTOSCHEDULER}")
+                message(FATAL_ERROR "Autoscheduler ${ARG_AUTOSCHEDULER} does not exist.")
+            endif ()
+
             # Convention: if the argument names a target like "Namespace::Scheduler" then
             # it is assumed to be a MODULE target providing a scheduler named "Scheduler".
             list(APPEND ARG_PLUGINS "${ARG_AUTOSCHEDULER}")

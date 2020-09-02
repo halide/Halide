@@ -1,17 +1,4 @@
-add_library(Halide_Li2018 MODULE GradientAutoscheduler.cpp)
-add_library(Halide::Li2018 ALIAS Halide_Li2018)
-
-include(GenerateExportHeader)
-generate_export_header(Halide_Li2018)
-target_include_directories(Halide_Li2018 PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
-
-target_link_libraries(Halide_Li2018 PRIVATE Halide::Halide)
-target_compile_definitions(Halide_Li2018 PRIVATE Halide_ERROR_MACROS)
-
-set_target_properties(Halide_Li2018 PROPERTIES
-                      EXPORT_NAME Li2018
-                      OUTPUT_NAME gradient_autoscheduler)
-
+add_autoscheduler(NAME Li2018 SOURCES GradientAutoscheduler.cpp)
 
 # ==========================================================
 # TODO(#4053): move these to a separate folder since they're tests.
@@ -35,16 +22,18 @@ set_tests_properties(demo_gradient_autoscheduler PROPERTIES LABELS Li2018)
 
 ##
 
-add_executable(gradient_autoscheduler_test_cpp test.cpp)
-target_link_libraries(gradient_autoscheduler_test_cpp PRIVATE Halide::Halide)
+if (BUILD_SHARED_LIBS)
+    add_executable(gradient_autoscheduler_test_cpp test.cpp)
+    target_link_libraries(gradient_autoscheduler_test_cpp PRIVATE Halide::Halide)
 
-add_test(NAME gradient_autoscheduler_test_cpp
-         COMMAND gradient_autoscheduler_test_cpp
-         WORKING_DIRECTORY $<TARGET_FILE_DIR:Halide_Li2018>)
+    add_test(NAME gradient_autoscheduler_test_cpp
+             COMMAND gradient_autoscheduler_test_cpp
+             WORKING_DIRECTORY $<TARGET_FILE_DIR:Halide_Li2018>)
 
-set_tests_properties(gradient_autoscheduler_test_cpp PROPERTIES
-                     LABELS Li2018
-                     ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Li2018>")
+    set_tests_properties(gradient_autoscheduler_test_cpp PROPERTIES
+                         LABELS Li2018
+                         ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Li2018>")
+endif ()
 
 ##
 

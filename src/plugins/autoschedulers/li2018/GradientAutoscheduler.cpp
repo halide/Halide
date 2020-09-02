@@ -1,16 +1,20 @@
-#include "halide_li2018_export.h"
-
+#include "Errors.h"
 #include "Halide.h"
-#include <numeric>
-using namespace Halide;
-using namespace Halide::Internal;
+#include "HalidePlugin.h"
+#include "autoscheduler_export.h"
+
+namespace Halide {
+namespace Internal {
+namespace Autoscheduler {
+
+namespace {
 
 std::map<std::string, Box> inference_bounds(const std::vector<Function> &functions,
                                             const std::vector<Box> &output_bounds) {
     std::vector<Func> funcs;
     funcs.reserve(functions.size());
     for (const auto &f : functions) {
-        funcs.emplace_back(f);
+        funcs.push_back(Func(f));
     }
     return inference_bounds(funcs, output_bounds);
 }
@@ -814,6 +818,8 @@ void apply_schedule(const MachineParams &params,
     schedule_source << ";\n";
 }
 
+}  // namespace
+
 void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
                        const MachineParams &params,
@@ -923,19 +929,18 @@ void generate_schedule(const std::vector<Function> &outputs,
     debug(1) << schedule_source.str() << "\n";
 }
 
-extern "C" {
-HALIDE_LI2018_EXPORT
-const char *AutoschedulerName() {
-    debug(1) << "Registering autoscheduler 'Li2018'...\n";
-    return "Li2018";
-}
-
-HALIDE_LI2018_EXPORT
-void AutoschedulerRun(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
-    std::vector<Function> outputs;
-    for (Func f : p.outputs()) {
-        outputs.push_back(f.function());
+struct Li2018 {
+    void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
+        std::vector<Function> outputs;
+        for (Func f : p.outputs()) {
+            outputs.push_back(f.function());
+        }
+        generate_schedule(outputs, target, params, results);
     }
-    generate_schedule(outputs, target, params, results);
-}
-}
+};
+
+REGISTER_AUTOSCHEDULER(Li2018)
+
+}  // namespace Autoscheduler
+}  // namespace Internal
+}  // namespace Halide

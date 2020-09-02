@@ -1,4 +1,5 @@
-#include "halide_mullapudi2016_export.h"
+#include "HalidePlugin.h"
+#include "autoscheduler_export.h"
 
 #include <algorithm>
 #include <map>
@@ -6,9 +7,10 @@
 #include <set>
 #include <utility>
 
-#include <Halide.h>
-using namespace Halide;
-using namespace Halide::Internal;
+#include "Halide.h"
+
+namespace Halide {
+namespace Internal {
 
 using std::make_pair;
 using std::map;
@@ -3159,11 +3161,9 @@ bool inline_unbounded(const vector<Function> &outputs,
 
 }  // anonymous namespace
 
-/** Generate schedules for Funcs within a pipeline. The Funcs should not already
- * have specializations or schedules as the current auto-scheduler does not take
- * into account user-defined schedules or specializations. This applies the
- * schedules and returns a string representation of the schedules. The target
- * architecture is specified by 'target'. */
+// Generate schedules for all functions in the pipeline required to compute the
+// outputs. This applies the schedules and returns a string representation of
+// the schedules. The target architecture is specified by 'target'.
 string generate_schedules(const vector<Function> &outputs, const Target &target,
                           const MachineParams &arch_params) {
     // Make an environment map which is used throughout the auto scheduling process.
@@ -3370,29 +3370,29 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     return sched_string;
 }
 
-extern "C" {
-HALIDE_MULLAPUDI2016_EXPORT
-const char *AutoschedulerName() {
-    return "Mullapudi2016";
-}
+struct Mullapudi2016 {
+    void operator()(const Pipeline &pipeline, const Target &target, const MachineParams &arch_params, AutoSchedulerResults *outputs) {
+        AutoSchedulerResults results;
+        results.target = target;
+        results.machine_params_string = arch_params.to_string();
 
-HALIDE_MULLAPUDI2016_EXPORT
-void AutoschedulerRun(const Pipeline &pipeline, const Target &target, const MachineParams &arch_params, AutoSchedulerResults *outputs) {
-    AutoSchedulerResults results;
-    results.target = target;
-    results.machine_params_string = arch_params.to_string();
+        user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                    target.arch == Target::POWERPC || target.arch == Target::MIPS)
+            << "The Mullapudi2016 autoscheduler is not supported for the target: " << target.to_string();
+        results.scheduler_name = "Mullapudi2016";
+        std::vector<Function> pipeline_outputs;
+        for (Func f : pipeline.outputs()) {
+            pipeline_outputs.push_back(f.function());
+        }
+        results.schedule_source = generate_schedules(pipeline_outputs, target, arch_params);
+        // this autoscheduler has no featurization
 
-    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "The Mullapudi2016 autoscheduler is not supported for the target: " << target.to_string();
-    results.scheduler_name = AutoschedulerName();
-    std::vector<Function> pipeline_outputs;
-    for (Func f : pipeline.outputs()) {
-        pipeline_outputs.push_back(f.function());
+        *outputs = results;
     }
-    results.schedule_source = generate_schedules(pipeline_outputs, target, arch_params);
-    // this autoscheduler has no featurization
+};
 
-    *outputs = results;
-}
-}
+REGISTER_AUTOSCHEDULER(Mullapudi2016)
+
+}  // namespace Internal
+
+}  // namespace Halide

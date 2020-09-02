@@ -473,4 +473,9 @@ endif ()
 # Add compiler plugins (ie. autoschedulers) to the build.
 ##
 
-add_subdirectory(plugins)
+if (BUILD_SHARED_LIBS)
+    message(STATUS "Building autoschedulers")
+    add_subdirectory(plugins)
+else ()
+    message(STATUS "Not building autoschedulers (static Halide)")
+endif ()

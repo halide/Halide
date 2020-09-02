@@ -64,7 +64,8 @@
   TODO: expose these settings by adding some means to pass args to
   generator plugins instead of environment vars.
 */
-#include "halide_adams2019_export.h"
+#include "HalidePlugin.h"
+#include "autoscheduler_export.h"
 
 #include <algorithm>
 #include <chrono>
@@ -72,18 +73,26 @@
 #include <iostream>
 #include <queue>
 #include <random>
+#include <set>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "ASLog.h"
 #include "AutoSchedule.h"
+#include "CostModel.h"
 #include "DefaultCostModel.h"
+#include "Errors.h"
+#include "Featurization.h"
+#include "FunctionDAG.h"
+#include "Halide.h"
 #include "LoopNest.h"
-
-#include <Halide.h>
+#include "NetworkSize.h"
+#include "PerfectHashMap.h"
 
 #ifdef _WIN32
 #include <io.h>
+#define _isatty isatty;
 #endif
 
 namespace Halide {
@@ -132,7 +141,7 @@ struct ProgressBar {
 
 private:
     uint32_t counter = 0;
-    const bool draw_progress_bar = _isatty(2);
+    const bool draw_progress_bar = isatty(2);
 };
 
 // Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
@@ -1313,6 +1322,18 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 }
 
+struct Adams2019 {
+    void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
+        std::vector<Function> outputs;
+        for (Func f : p.outputs()) {
+            outputs.push_back(f.function());
+        }
+        Autoscheduler::generate_schedule(outputs, target, params, results);
+    }
+};
+
+REGISTER_AUTOSCHEDULER(Adams2019)
+
 // An alternative entrypoint for other uses
 void find_and_apply_schedule(FunctionDAG &dag,
                              const std::vector<Function> &outputs,
@@ -1358,20 +1379,3 @@ void destroy<Autoscheduler::State>(const Autoscheduler::State *t) {
 
 }  // namespace Internal
 }  // namespace Halide
-
-extern "C" {
-HALIDE_ADAMS2019_EXPORT
-const char *AutoschedulerName() {
-    Halide::Internal::aslog(1) << "Registering autoscheduler 'Adams2019'...\n";
-    return "Adams2019";
-}
-
-HALIDE_ADAMS2019_EXPORT
-void AutoschedulerRun(const Halide::Pipeline &p, const Halide::Target &target, const Halide::MachineParams &params, Halide::AutoSchedulerResults *results) {
-    std::vector<Halide::Internal::Function> outputs;
-    for (Halide::Func f : p.outputs()) {
-        outputs.push_back(f.function());
-    }
-    Halide::Internal::Autoscheduler::generate_schedule(outputs, target, params, results);
-}
-}

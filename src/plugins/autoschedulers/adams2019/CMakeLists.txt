@@ -25,36 +25,23 @@ add_executable(retrain_cost_model
                Weights.cpp
                retrain_cost_model.cpp
                ${WF_CPP})
-target_include_directories(retrain_cost_model
-                           PRIVATE
-                           # TODO(#4053): relocate. just for cmdline.h
-                           ${PROJECT_SOURCE_DIR}/apps/support)
-target_link_libraries(retrain_cost_model PRIVATE cost_model train_cost_model Halide::Halide)
+target_link_libraries(retrain_cost_model PRIVATE cost_model train_cost_model Halide::Halide Halide::Plugin)
 
 ##
 # Main autoscheduler library
 ##
 
-add_library(Halide_Adams2019
-            MODULE
-            ASLog.cpp
-            AutoSchedule.cpp
-            DefaultCostModel.cpp
-            FunctionDAG.cpp
-            LoopNest.cpp
-            Weights.cpp
-            ${WF_CPP})
-add_library(Halide::Adams2019 ALIAS Halide_Adams2019)
+add_autoscheduler(NAME Adams2019
+                  SOURCES
+                  ASLog.cpp
+                  AutoSchedule.cpp
+                  DefaultCostModel.cpp
+                  FunctionDAG.cpp
+                  LoopNest.cpp
+                  Weights.cpp
+                  ${WF_CPP})
 
-include(GenerateExportHeader)
-generate_export_header(Halide_Adams2019)
-target_include_directories(Halide_Adams2019 PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
-
-target_link_libraries(Halide_Adams2019 PRIVATE cost_model train_cost_model Halide::Halide)
-
-set_target_properties(Halide_Adams2019 PROPERTIES
-                      EXPORT_NAME Adams2019
-                      OUTPUT_NAME auto_schedule)
+target_link_libraries(Halide_Adams2019 PRIVATE cost_model train_cost_model)
 
 ##
 # Tests and demos
@@ -116,16 +103,18 @@ target_link_libraries(weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 # =================================================================
 # Smaller tests
 
-add_executable(test_apps_autoscheduler test.cpp)
-target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
+if (BUILD_SHARED_LIBS)
+    add_executable(test_apps_autoscheduler test.cpp)
+    target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 
-add_test(NAME test_apps_autoscheduler
-         COMMAND test_apps_autoscheduler
-         WORKING_DIRECTORY $<TARGET_FILE_DIR:Halide_Adams2019>)
+    add_test(NAME test_apps_autoscheduler
+             COMMAND test_apps_autoscheduler
+             WORKING_DIRECTORY $<TARGET_FILE_DIR:Halide_Adams2019>)
 
-set_tests_properties(test_apps_autoscheduler PROPERTIES
-                     LABELS Adams2019
-                     ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>;HL_TARGET=${Halide_TARGET}")
+    set_tests_properties(test_apps_autoscheduler PROPERTIES
+                         LABELS Adams2019
+                         ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>;HL_TARGET=${Halide_TARGET}")
+endif ()
 
 ##
 
@@ -140,7 +129,7 @@ set_tests_properties(test_perfect_hash_map
 ##
 
 add_executable(test_function_dag test_function_dag.cpp FunctionDAG.cpp ASLog.cpp)
-target_link_libraries(test_function_dag PRIVATE Halide::Halide Halide::Tools)
+target_link_libraries(test_function_dag PRIVATE Halide::Halide Halide::Tools Halide::Plugin)
 
 add_test(NAME test_function_dag COMMAND test_function_dag)
 set_tests_properties(test_function_dag

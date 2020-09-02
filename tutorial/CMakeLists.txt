@@ -188,10 +188,7 @@ add_tutorial(lesson_19_wrapper_funcs.cpp)
 add_tutorial(lesson_20_cloning_funcs.cpp)
 
 # Lesson 21
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
-    # TODO: Requires custom build rules to work under wasm
-    message(WARNING "Not all tutorials build under WASM.")
-else ()
+if (TARGET Halide::Mullapudi2016)
     add_executable(lesson_21_auto_scheduler_generate lesson_21_auto_scheduler_generate.cpp)
     target_link_libraries(lesson_21_auto_scheduler_generate PRIVATE Halide::Generator)
 

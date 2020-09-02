@@ -153,9 +153,7 @@ halide_define_aot_test(async_parallel
 
 # autograd_aottest.cpp
 # autograd_generator.cpp
-halide_define_aot_test(autograd
-                       # Requires Mullapudi2016 autoscheduler, which doesn't support wasm
-                       ENABLE_IF NOT ${USING_WASM}) 
+halide_define_aot_test(autograd ENABLE_IF TARGET Halide::Mullapudi2016)
 if (TARGET generator_aot_autograd)
     add_halide_library(autograd_grad
                        GRADIENT_DESCENT

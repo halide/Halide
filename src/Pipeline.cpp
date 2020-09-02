@@ -207,7 +207,7 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
 
 AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) {
     auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
-    internal_assert(autoscheduler_fn)
+    user_assert(autoscheduler_fn)
         << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
         << "Did you remember to load the plugin?";
 
