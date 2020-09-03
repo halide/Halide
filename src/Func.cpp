@@ -42,8 +42,8 @@ using namespace Internal;
 
 namespace {
 
-template <typename DimType>
-std::string dump_dim_list(const vector<DimType>& dims) {
+template<typename DimType>
+std::string dump_dim_list(const vector<DimType> &dims) {
     std::ostringstream oss;
     oss << "Vars:";
     for (size_t i = 0; i < dims.size(); i++) {
@@ -53,7 +53,7 @@ std::string dump_dim_list(const vector<DimType>& dims) {
     return oss.str();
 }
 
-}
+}  // namespace
 
 Func::Func(const string &name)
     : func(unique_name(name)) {
