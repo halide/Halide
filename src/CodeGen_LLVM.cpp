@@ -32,6 +32,10 @@
 #include "Simplify.h"
 #include "Util.h"
 
+namespace llvm {
+bool TimePassesIsEnabled;
+}  // namespace llvm
+
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
 
 // VS2013 isn't fully C++11 compatible, but it supports enough of what Halide
@@ -1215,6 +1219,11 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
 
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
+
+    static bool print_llvm_pass_timing = (get_env_variable("HL_PRINT_LLVM_PASS_TIMING") == "1");
+    if (print_llvm_pass_timing) {
+      llvm::TimePassesIsEnabled = true;
+    }
 
     auto time_start = std::chrono::high_resolution_clock::now();
 
