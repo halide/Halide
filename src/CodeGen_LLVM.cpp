@@ -417,6 +417,11 @@ void CodeGen_LLVM::initialize_llvm() {
 #include <llvm/Config/AsmPrinters.def>
 #include <utility>
 #undef LLVM_ASM_PRINTER
+
+      bool print_llvm_pass_timing = (get_env_variable("HL_PRINT_LLVM_PASS_TIMING") == "1");
+      if (print_llvm_pass_timing) {
+        llvm::TimePassesIsEnabled = true;
+      }
     });
 }
 
@@ -1219,11 +1224,6 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
 
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
-
-    static bool print_llvm_pass_timing = (get_env_variable("HL_PRINT_LLVM_PASS_TIMING") == "1");
-    if (print_llvm_pass_timing) {
-      llvm::TimePassesIsEnabled = true;
-    }
 
     auto time_start = std::chrono::high_resolution_clock::now();
 
