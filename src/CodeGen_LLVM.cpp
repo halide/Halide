@@ -418,10 +418,10 @@ void CodeGen_LLVM::initialize_llvm() {
 #include <utility>
 #undef LLVM_ASM_PRINTER
 
-      bool print_llvm_pass_timing = (get_env_variable("HL_PRINT_LLVM_PASS_TIMING") == "1");
-      if (print_llvm_pass_timing) {
-        llvm::TimePassesIsEnabled = true;
-      }
+        bool print_llvm_pass_timing = (get_env_variable("HL_PRINT_LLVM_PASS_TIMING") == "1");
+        if (print_llvm_pass_timing) {
+            llvm::TimePassesIsEnabled = true;
+        }
     });
 }
 
