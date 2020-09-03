@@ -33,7 +33,7 @@
 #include "Util.h"
 
 namespace llvm {
-bool TimePassesIsEnabled;
+extern bool TimePassesIsEnabled;
 }  // namespace llvm
 
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
