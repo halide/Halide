@@ -387,6 +387,7 @@ inline Buffer<> allocate_buffer(const halide_type_t &type, const Shape &shape) {
     if (b.number_of_elements() > 0) {
         b.check_overflow();
         b.allocate();
+        b.set_host_dirty();
     }
     return b;
 }
@@ -874,6 +875,10 @@ struct ArgData {
         }
 
         buffer_value = allocate_buffer(metadata->type, new_shape);
+
+        // allocate_buffer conservatively sets host dirty. Don't waste
+        // time copying output buffers to device.
+        buffer_value.set_host_dirty(false);
 
         info() << "Output " << name << ": BoundsQuery result is " << constrained_shape;
         info() << "Output " << name << ": Shape is " << get_shape(buffer_value);

@@ -9,7 +9,6 @@
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
-#include "EliminateBoolVectors.h"
 #include "HexagonOptimize.h"
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -2091,14 +2090,11 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
 
         // Create a condition value for which elements of the range are valid
         // for this index.
-        Value *use_index = builder->CreateICmpSGE(indices, minus_one);
+        Value *use_index = builder->CreateICmpSGT(indices, minus_one);
 
         // After we've eliminated the invalid elements, we can
         // truncate to 8 bits, as vlut requires.
         indices = call_intrin(i8x_t, "halide.hexagon.pack.vh", {indices});
-        use_index = (lut_ty->getScalarSizeInBits() == 8) ?
-                        call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index}) :
-                        use_index;
 
         int range_extent_i = std::min(max_index - min_index_i, 255);
         Value *range_i = vlut256(slice_vector(lut, min_index_i, range_extent_i),

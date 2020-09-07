@@ -2399,25 +2399,34 @@ private:
 
         internal_assert(f.defined());
 
-        if (TBase::has_static_halide_type) {
-            Buffer<> other(f.output_types().at(0), nullptr, std::vector<int>(f.dimensions(), 1));
-            user_assert(T::can_convert_from(other))
-                << "Cannot assign to the Output \"" << this->name()
-                << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
-        }
-
         if (this->types_defined()) {
             const auto &my_types = this->types();
             user_assert(my_types.size() == f.output_types().size())
-                << "Output " << this->name() << " requires a Func with " << my_types.size() << " type(s) but tried to assign one with " << f.output_types().size() << " type(s)\n";
+                << "Cannot assign Func \"" << f.name()
+                << "\" to Output \"" << this->name() << "\"\n"
+                << "Output " << this->name()
+                << " is declared to have " << my_types.size() << " tuple elements"
+                << " but Func " << f.name()
+                << " has " << f.output_types().size() << " tuple elements.\n";
             for (size_t i = 0; i < my_types.size(); i++) {
                 user_assert(my_types[i] == f.output_types().at(i))
-                    << "Output " << this->name() << " should have type[" << i << "]=" << my_types[i] << " but saw type[" << i << "]=" << f.output_types().at(i) << "\n";
+                    << "Cannot assign Func \"" << f.name()
+                    << "\" to Output \"" << this->name() << "\"\n"
+                    << (my_types.size() > 1 ? "In tuple element " + std::to_string(i) + ", " : "")
+                    << "Output " << this->name()
+                    << " has declared type " << my_types[i]
+                    << " but Func " << f.name()
+                    << " has type " << f.output_types().at(i) << "\n";
             }
         }
         if (this->dims_defined()) {
             user_assert(f.dimensions() == this->dims())
-                << "Output " << this->name() << " should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
+                << "Cannot assign Func \"" << f.name()
+                << "\" to Output \"" << this->name() << "\"\n"
+                << "Output " << this->name()
+                << " has declared dimensionality " << this->dims()
+                << " but Func " << f.name()
+                << " has dimensionality " << f.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);

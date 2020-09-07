@@ -1,17 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(Halide VERSION 1.0.0)
+project(Halide VERSION 10.0.0)
 
 enable_testing()
-
-##
-# Top level configuration
-##
-
-if (NOT "$ENV{HL_TARGET}" STREQUAL "")
-    set(HL_TARGET "$ENV{HL_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
-else ()
-    set(HL_TARGET "host" CACHE STRING "The target to use when compiling AOT tests")
-endif ()
 
 ##
 # Set up project-wide properties
@@ -19,6 +9,7 @@ endif ()
 
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
+include(HalideTargetHelpers)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
 if (NOT DEFINED BUILD_SHARED_LIBS)
@@ -38,10 +29,10 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(CMAKE_OBJECT_PATH_MAX 260)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
 
-    message("Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
+    message(STATUS "Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
 endif ()
 
-# Export all symbols on Windows to match GCC/Clang behavior on Linux / macOS
+# Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 # Require standard C++14
@@ -84,14 +75,14 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
     option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
     if (WITH_PYTHON_BINDINGS)
-        if (HALIDE_ENABLE_RTTI AND HALIDE_ENABLE_EXCEPTIONS)
+        if (Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS)
             message(STATUS "Building Python bindings enabled")
             add_subdirectory(python_bindings)
         else ()
-            if (NOT HALIDE_ENABLE_RTTI)
+            if (NOT Halide_ENABLE_RTTI)
                 message(WARNING "Building Python bindings disabled: must compile with RTTI")
             endif ()
-            if (NOT HALIDE_ENABLE_EXCEPTIONS)
+            if (NOT Halide_ENABLE_EXCEPTIONS)
                 message(WARNING "Building Python bindings disabled: must compile with exceptions")
             endif ()
             set(WITH_PYTHON_BINDINGS OFF CACHE BOOL "Build Python bindings" FORCE)

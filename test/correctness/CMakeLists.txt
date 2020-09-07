@@ -139,6 +139,7 @@ tests(GROUPS correctness
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
       gpu_non_contiguous_copy.cpp
+      gpu_non_monotonic_shared_mem_size.cpp
       gpu_object_lifetime_1.cpp
       gpu_object_lifetime_2.cpp
       gpu_object_lifetime_3.cpp

@@ -262,8 +262,8 @@ public:
         Expr native_vector_size = schedule_features(n, idx++, w);
         Expr num_vectors = schedule_features(n, idx++, w);
         Expr num_scalars = schedule_features(n, idx++, w);
-        Expr vector_loads_per_vector = schedule_features(n, idx++, w);
         Expr scalar_loads_per_vector = schedule_features(n, idx++, w);
+        Expr vector_loads_per_vector = schedule_features(n, idx++, w);
         Expr scalar_loads_per_scalar = schedule_features(n, idx++, w);
         Expr bytes_at_task = schedule_features(n, idx++, w);
         Expr innermost_bytes_at_task = schedule_features(n, idx++, w);
@@ -296,9 +296,9 @@ public:
         // Next comes a long list of plausible terms to capture the cost of loads.
         Expr load_cost = (num_realizations * unique_lines_read_per_realization * relu1(5, w, n) +
                           num_realizations * unique_bytes_read_per_realization * relu1(6, w, n) +
-                          num_vectors * vector_loads_per_vector * relu1(7, w, n) +
+                          num_vectors * scalar_loads_per_vector * relu1(7, w, n) +
                           num_scalars * scalar_loads_per_scalar * relu1(8, w, n) +
-                          num_vectors * scalar_loads_per_vector * relu1(9, w, n) +
+                          num_vectors * vector_loads_per_vector * relu1(9, w, n) +
                           num_scalars * unique_bytes_read_per_vector * relu1(10, w, n) +
                           num_vectors * unique_bytes_read_per_vector * relu1(11, w, n) +
                           num_scalars * unique_lines_read_per_vector * relu1(12, w, n) +

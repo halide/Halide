@@ -31,8 +31,8 @@ public:
         // input.extent() would tell the calling kernel we can cope with any size
         // input, so it would always pass us 1x1 tiles.)
 
-        Func input_clamped = Halide::BoundaryConditions::repeat_edge(
-            input, 0, width, 0, height);
+        Func input_clamped =
+            Halide::BoundaryConditions::repeat_edge(input, {{0, width}, {0, height}});
 
         blur(x, y, c) =
             (input_clamped(x - 1, y, c) + input_clamped(x + 1, y, c) +
