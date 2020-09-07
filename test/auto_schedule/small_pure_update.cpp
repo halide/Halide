@@ -1,8 +1,14 @@
 #include "Halide.h"
-
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] Autoschedulers do not support WebAssembly.\n");
+        return 0;
+    }
+
+    load_plugin(argv[1]);
+
     Buffer<float> in(13, 17);
     ImageParam in_param(Float(32), 2);
 

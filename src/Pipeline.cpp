@@ -187,6 +187,9 @@ std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
 /* static */
 std::string &Pipeline::get_default_autoscheduler_name() {
     static std::string autoscheduler_name = "";
+    if (autoscheduler_name.empty() && !get_autoscheduler_map().empty()) {
+        autoscheduler_name = get_autoscheduler_map().begin()->first;
+    }
     return autoscheduler_name;
 }
 

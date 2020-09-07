@@ -108,8 +108,7 @@ if (BUILD_SHARED_LIBS)
     target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 
     add_test(NAME test_apps_autoscheduler
-             COMMAND test_apps_autoscheduler
-             WORKING_DIRECTORY $<TARGET_FILE_DIR:Halide_Adams2019>)
+             COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019>)
 
     set_tests_properties(test_apps_autoscheduler PROPERTIES
                          LABELS Adams2019

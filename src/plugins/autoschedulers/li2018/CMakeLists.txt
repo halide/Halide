@@ -27,12 +27,9 @@ if (BUILD_SHARED_LIBS)
     target_link_libraries(gradient_autoscheduler_test_cpp PRIVATE Halide::Halide)
 
     add_test(NAME gradient_autoscheduler_test_cpp
-             COMMAND gradient_autoscheduler_test_cpp
-             WORKING_DIRECTORY $<TARGET_FILE_DIR:Halide_Li2018>)
+             COMMAND gradient_autoscheduler_test_cpp $<TARGET_FILE:Halide_Li2018>)
 
-    set_tests_properties(gradient_autoscheduler_test_cpp PROPERTIES
-                         LABELS Li2018
-                         ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Li2018>")
+    set_tests_properties(gradient_autoscheduler_test_cpp PROPERTIES LABELS Li2018)
 endif ()
 
 ##
