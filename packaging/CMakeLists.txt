@@ -24,9 +24,14 @@ endforeach ()
 # Main library exports
 ##
 
-# TODO(#4053): add autoschedulers when refactored
+set(optional_targets "")
+foreach (target IN ITEMS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016)
+    if (TARGET ${target})
+        list(APPEND optional_targets ${target})
+    endif ()
+endforeach ()
 
-install(TARGETS Halide Halide_Generator Halide_RunGenMain
+install(TARGETS Halide Halide_Generator Halide_RunGenMain ${optional_targets}
         EXPORT Halide_Targets
 
         RUNTIME
