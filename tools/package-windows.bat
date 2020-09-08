@@ -12,6 +12,8 @@ cmake -G "Visual Studio 16 2019" -Thost=x64 -A x64 ^
       -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake ^
       -DWITH_TESTS=NO -DWITH_APPS=NO -DWITH_TUTORIALS=NO ^
       -DWITH_DOCS=YES -DWITH_UTILS=NO -DWITH_PYTHON_BINDINGS=NO ^
+      "-DCMAKE_INSTALL_BINDIR=bin/$<CONFIG>" "-DCMAKE_INSTALL_LIBDIR=lib/$<CONFIG>" ^
+      "-DHALIDE_INSTALL_CMAKEDIR=lib" ^
       -S . -B build/shared
 
 if %errorlevel% neq 0 goto return
@@ -33,6 +35,8 @@ cmake -G "Visual Studio 16 2019" -Thost=x64 -A x64 ^
       -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake ^
       -DWITH_TESTS=NO -DWITH_APPS=NO -DWITH_TUTORIALS=NO ^
       -DWITH_DOCS=YES -DWITH_UTILS=NO -DWITH_PYTHON_BINDINGS=NO ^
+      "-DCMAKE_INSTALL_BINDIR=bin/$<CONFIG>" "-DCMAKE_INSTALL_LIBDIR=lib/$<CONFIG>" ^
+      "-DHALIDE_INSTALL_CMAKEDIR=lib" ^
       -S . -B build/static
 
 if %errorlevel% neq 0 goto return
