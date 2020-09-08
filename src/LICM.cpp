@@ -84,6 +84,18 @@ class LiftLoopInvariants : public IRMutator {
                 return false;
             }
         }
+        if (const Call *call = e.as<Call>()) {
+            if (call->is_intrinsic(Call::strict_float) ||
+                call->is_intrinsic(Call::likely) ||
+                call->is_intrinsic(Call::likely_if_innermost) ||
+                call->is_intrinsic(Call::reinterpret)) {
+                // Don't lift these intrinsics. They're free.
+                return should_lift(call->args[0]);
+            }
+            if (call->is_intrinsic(Call::size_of_halide_buffer_t)) {
+                return true;
+            }
+        }
         return true;
     }
 

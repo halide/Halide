@@ -23,6 +23,10 @@ typedef unsigned int qurt_thread_t;
 
 // clang-format off
 
+/**
+ * \defgroup qurt_thread_macros QURT threading macros
+ * @{
+ */
 #define QURT_HTHREAD_L1I_PREFETCH 0x1 /**< Enables hardware L1 instruction cache prefetching. */
 #define QURT_HTHREAD_L1D_PREFETCH 0x2 /**< Enables hardware L1 data cache prefetching. */
 #define QURT_HTHREAD_L2I_PREFETCH 0x4 /**< Enables hardware L2 instruction cache prefetching. */
@@ -40,7 +44,7 @@ typedef unsigned int qurt_thread_t;
 #define QURT_THREAD_ATTR_AFFINITY_DEFAULT (-1)                                    /**< */
 #define QURT_THREAD_ATTR_BUS_PRIO_DEFAULT 255                                     /**< */
 #define QURT_THREAD_ATTR_TIMETEST_ID_DEFAULT (-2)                                 /**< */
-/** @} */                                                                         /* end_addtogroup thread_macros */
+/** @} */
 
 // clang-format on
 

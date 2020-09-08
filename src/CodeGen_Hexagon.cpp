@@ -9,7 +9,6 @@
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
-#include "EliminateBoolVectors.h"
 #include "HexagonOptimize.h"
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -79,6 +78,10 @@ Stmt call_halide_qurt_hvx_unlock() {
 // Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
 // as a destructor if successful.
 Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
+    user_assert(target.features_any_of(
+        {Halide::Target::HVX_128, Halide::Target::HVX_64}))
+        << "Must specify either HVX_64 or HVX_128 (but not both).\n";
+
     // Modify the stmt to add a call to halide_qurt_hvx_lock, and
     // register a destructor to call halide_qurt_hvx_unlock.
     Stmt check_hvx_lock = call_halide_qurt_hvx_lock(target);
@@ -1338,17 +1341,20 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
                     // We know it is a scalar type. We can have 8 bit, 16 bit or 32 bit
                     // types only.
                     unsigned bits = arg_types[i].bits();
+                    const char *fn_name = "";
                     switch (bits) {
                     case 8:
-                        fn = module->getFunction("halide.hexagon.dup4.b");
+                        fn_name = "halide.hexagon.dup4.b";
                         break;
                     case 16:
-                        fn = module->getFunction("halide.hexagon.dup2.h");
+                        fn_name = "halide.hexagon.dup2.h";
                         break;
                     default:
                         internal_error
                             << "unhandled broadcast_scalar_word in define_hvx_intrinsic";
                     }
+                    fn = module->getFunction(fn_name);
+                    internal_assert(fn) << "Unable to find function " << fn_name << " in define_hvx_intrinsic.";
                     args[i] = builder->CreateCall(fn, {args[i]});
                 } else if (args[i]->getType()->isIntegerTy()) {
                     args[i] =
@@ -2084,14 +2090,11 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
 
         // Create a condition value for which elements of the range are valid
         // for this index.
-        Value *use_index = builder->CreateICmpSGE(indices, minus_one);
+        Value *use_index = builder->CreateICmpSGT(indices, minus_one);
 
         // After we've eliminated the invalid elements, we can
         // truncate to 8 bits, as vlut requires.
         indices = call_intrin(i8x_t, "halide.hexagon.pack.vh", {indices});
-        use_index = (lut_ty->getScalarSizeInBits() == 8) ?
-                        call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index}) :
-                        use_index;
 
         int range_extent_i = std::min(max_index - min_index_i, 255);
         Value *range_i = vlut256(slice_vector(lut, min_index_i, range_extent_i),

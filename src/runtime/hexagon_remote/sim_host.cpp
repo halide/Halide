@@ -18,7 +18,6 @@ typedef unsigned int handle_t;
 std::unique_ptr<HexagonWrapper> sim;
 
 bool debug_mode = false;
-bool use_dlopenbuf = true;
 
 int init_sim() {
     if (sim) return 0;
@@ -114,11 +113,6 @@ int init_sim() {
     // Control use of dlopenbuf. This is to enable testing of the
     // custom implementation of dlopen, which is not used whenever
     // dlopenbuf is available.
-    const char *use = getenv("HL_HEXAGON_USE_DLOPENBUF");
-    if (use && !atoi(use)) {
-        use_dlopenbuf = false;
-    }
-
     status = sim->EndOfConfiguration();
     if (status != HEX_STAT_SUCCESS) {
         printf("HexagonWrapper::EndOfConfiguration failed: %d\n", status);
@@ -366,7 +360,7 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen, const 
     remote_buffer remote_module_ptr(module_ptr, 4);
 
     // Run the init kernels command.
-    ret = send_message(Message::LoadLibrary, {remote_soname.data, sonameLen, remote_code.data, codeLen, use_dlopenbuf, remote_module_ptr.data});
+    ret = send_message(Message::LoadLibrary, {remote_soname.data, sonameLen, remote_code.data, codeLen, remote_module_ptr.data});
     if (ret != 0) return ret;
 
     // Get the module ptr.
@@ -385,7 +379,7 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char *name, i
     remote_buffer remote_name(name, nameLen);
 
     // Run the init kernels command.
-    *sym = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen, use_dlopenbuf});
+    *sym = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen});
 
     return *sym != 0 ? 0 : -1;
 }
@@ -467,7 +461,7 @@ int halide_hexagon_remote_release_library(handle_t module_ptr) {
             printf("%s\n", Buf);
         }
     }
-    return send_message(Message::ReleaseLibrary, {static_cast<int>(module_ptr), use_dlopenbuf});
+    return send_message(Message::ReleaseLibrary, {static_cast<int>(module_ptr)});
 }
 
 DLLEXPORT

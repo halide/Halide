@@ -5,8 +5,9 @@
 
 if (NOT BUILD_SHARED_LIBS)
     if (MSVC)
-        message(FATAL_ERROR "Autoscheduler plugins cannot be built against static Halide on Windows")
-    endif()
+        message(WARNING "Autoscheduler plugins cannot be built against static Halide on Windows")
+        return()
+    endif ()
 
     # Need to enable exports for the plugins to find Halide's symbols.
     set(CMAKE_ENABLE_EXPORTS ON)
@@ -23,7 +24,7 @@ set_target_properties(Halide_Li2018 PROPERTIES
 
 target_link_libraries(Halide_Li2018 PRIVATE Halide::Plugin)
 
-if (NOT HALIDE_ENABLE_RTTI)
+if (NOT Halide_ENABLE_RTTI)
     target_compile_options(Halide_Li2018 PRIVATE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
                            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-fno-rtti>)

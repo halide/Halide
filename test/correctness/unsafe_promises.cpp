@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
         f(x) = lut(unsafe_promise_clamped(in(x), Expr(), 99));
 
-        f.infer_input_bounds(10);
+        f.infer_input_bounds({10});
         Buffer<float> lut_bounds = lut.get();
 
         assert(lut_bounds.dim(0).min() == 0 && lut_bounds.dim(0).extent() == 100);
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
 
         f(x) = lut(unsafe_promise_clamped(in(x), 10, Expr()));
 
-        f.infer_input_bounds(10);
+        f.infer_input_bounds({10});
         Buffer<float> lut_bounds = lut.get();
 
         assert(lut_bounds.dim(0).min() == 10 && lut_bounds.dim(0).extent() == 246);

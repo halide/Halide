@@ -20,6 +20,8 @@ tests(GROUPS error
       bad_extern_split.cpp
       bad_fold.cpp
       bad_host_alignment.cpp
+      bad_reorder.cpp
+      bad_reorder_storage.cpp
       bad_rvar_order.cpp
       bad_schedule.cpp
       bad_store_at.cpp
@@ -42,6 +44,7 @@ tests(GROUPS error
       implicit_args.cpp
       impossible_constraints.cpp
       init_def_should_be_all_vars.cpp
+      incomplete_target.cpp
       inspect_loop_level.cpp
       lerp_float_weight_out_of_range.cpp
       lerp_mismatch.cpp

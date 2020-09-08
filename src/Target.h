@@ -75,6 +75,9 @@ struct Target {
         CUDACapability35 = halide_target_feature_cuda_capability35,
         CUDACapability50 = halide_target_feature_cuda_capability50,
         CUDACapability61 = halide_target_feature_cuda_capability61,
+        CUDACapability70 = halide_target_feature_cuda_capability70,
+        CUDACapability75 = halide_target_feature_cuda_capability75,
+        CUDACapability80 = halide_target_feature_cuda_capability80,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
@@ -150,6 +153,10 @@ struct Target {
 
     /** Check if a target string is valid. */
     static bool validate_target_string(const std::string &s);
+
+    /** Return true if any of the arch/bits/os fields are "unknown"/0;
+        return false otherwise. */
+    bool has_unknowns() const;
 
     void set_feature(Feature f, bool value = true);
 
@@ -269,6 +276,11 @@ struct Target {
             return (((uint64_t)1) << 31) - 1;
         }
     }
+
+    /** Get the minimum cuda capability found as an integer. Returns
+     * 20 (our minimum supported cuda compute capability) if no cuda
+     * features are set. */
+    int get_cuda_capability_lower_bound() const;
 
     /** Was libHalide compiled with support for this target? */
     bool supported() const;
