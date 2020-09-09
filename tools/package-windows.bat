@@ -66,8 +66,8 @@ cmake -G "Visual Studio 16 2019" -Thost=x64 -A x64 ^
 if %errorlevel% neq 0 goto return
 
 REM LLVM Debug + Halide exceeds the COFF 4GB limit!!
-REM cmake --build build/static --config Debug
-cmake --build build/static --config Release
+REM cmake --build "%halide_build_root%/static" --config Debug
+cmake --build "%halide_build_root%/static" --config Release
 
 pushd "%halide_build_root%\static"
 cpack -C "Release"
