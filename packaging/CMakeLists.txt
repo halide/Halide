@@ -10,33 +10,41 @@ set(HALIDE_INSTALL_CMAKEDIR
     CACHE STRING "Path to Halide cmake files")
 
 ##
+# Optional dependencies
+##
+
+set(optional_dependencies "")
+foreach (target IN ITEMS wabt)
+    if (TARGET ${target})
+        list(APPEND optional_dependencies ${target})
+    endif ()
+endforeach ()
+
+##
 # Main library exports
 ##
 
 # TODO(#4053): add autoschedulers when refactored
 
-# Sends Debug -> Debug, Release/MinSizeRel/RelWithDebInfo -> Release
-set(CONFIG_DIR $<IF:$<CONFIG:Debug>,Debug,Release>)
-
 install(TARGETS Halide Halide_Generator Halide_RunGenMain
         EXPORT Halide_Targets
 
         RUNTIME
-        DESTINATION ${CMAKE_INSTALL_BINDIR}/${CONFIG_DIR}
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
         COMPONENT Halide_Runtime
 
         LIBRARY
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/${CONFIG_DIR}
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
         COMPONENT Halide_Runtime
         NAMELINK_COMPONENT Halide_Development
 
         ARCHIVE
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/${CONFIG_DIR}
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
         COMPONENT Halide_Development
 
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-install(TARGETS Halide_LLVM
+install(TARGETS Halide_LLVM ${optional_dependencies}
         EXPORT Halide_Targets)
 
 install(TARGETS Halide_Tools Halide_ImageIO Halide_LanguageOptions
@@ -143,7 +151,9 @@ install(FILES
 # Documentation
 ##
 
-# See /doc/CMakeLists.txt. This way, special install logic isn't needed.
+if (WITH_DOCS)
+    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html/ TYPE DOC)
+endif ()
 
 ##
 # Actual packaging

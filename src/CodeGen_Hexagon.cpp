@@ -2090,7 +2090,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
 
         // Create a condition value for which elements of the range are valid
         // for this index.
-        Value *use_index = builder->CreateICmpSGE(indices, minus_one);
+        Value *use_index = builder->CreateICmpSGT(indices, minus_one);
 
         // After we've eliminated the invalid elements, we can
         // truncate to 8 bits, as vlut requires.

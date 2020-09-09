@@ -40,6 +40,21 @@ using std::vector;
 
 using namespace Internal;
 
+namespace {
+
+template<typename DimType>
+std::string dump_dim_list(const vector<DimType> &dims) {
+    std::ostringstream oss;
+    oss << "Vars:";
+    for (size_t i = 0; i < dims.size(); i++) {
+        oss << " " << dims[i].var;
+    }
+    oss << "\n";
+    return oss.str();
+}
+
+}  // namespace
+
 Func::Func(const string &name)
     : func(unique_name(name)) {
 }
@@ -365,13 +380,7 @@ void Stage::set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api) {
 }
 
 std::string Stage::dump_argument_list() const {
-    std::ostringstream oss;
-    oss << "Vars:";
-    for (size_t i = 0; i < definition.schedule().dims().size(); i++) {
-        oss << " " << definition.schedule().dims()[i].var;
-    }
-    oss << "\n";
-    return oss.str();
+    return dump_dim_list(definition.schedule().dims());
 }
 
 namespace {
@@ -2473,8 +2482,10 @@ Func &Func::reorder_storage(const Var &x, const Var &y) {
             return *this;
         }
     }
-    user_error << "Could not find variables " << x.name()
-               << " and " << y.name() << " to reorder in schedule.\n";
+    user_error << "In schedule for " << name()
+               << ", could not find variables " << x.name()
+               << " and " << y.name() << " to reorder.\n"
+               << dump_dim_list(dims);
     return *this;
 }
 
@@ -2506,8 +2517,10 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
             return *this;
         }
     }
-    user_error << "Could not find variable " << dim.name()
-               << " to align the storage of.\n";
+    user_error << "In schedule for " << name()
+               << ", could not find var " << dim.name()
+               << " to align the storage of.\n"
+               << dump_dim_list(func.schedule().storage_dims());
     return *this;
 }
 
@@ -2522,8 +2535,10 @@ Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) 
             return *this;
         }
     }
-    user_error << "Could not find variable " << dim.name()
-               << " to fold the storage of.\n";
+    user_error << "In schedule for " << name()
+               << ", could not find var " << dim.name()
+               << " to fold the storage of.\n"
+               << dump_dim_list(func.schedule().storage_dims());
     return *this;
 }
 

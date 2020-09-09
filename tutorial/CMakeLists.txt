@@ -19,11 +19,11 @@ function(add_tutorial source_file)
                          ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
                          LABELS tutorial)
 
-    if (${args_WITH_IMAGE_IO})
+    if (args_WITH_IMAGE_IO)
         target_link_libraries(${name} PRIVATE Halide::ImageIO)
     endif ()
 
-    if (${args_WITH_OPENMP})
+    if (args_WITH_OPENMP)
         if (TARGET OpenMP::OpenMP_CXX)
             target_link_libraries(${name} PRIVATE OpenMP::OpenMP_CXX)
         else ()
