@@ -387,7 +387,6 @@ add_dependencies(Halide HalideIncludes)
 if (TARGET wabt)
     target_link_libraries(Halide PRIVATE wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
-    install(TARGETS wabt EXPORT Halide_Targets)
 endif ()
 
 ##
