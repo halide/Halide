@@ -4,6 +4,21 @@ set halide_source="%~1"
 set halide_build_root="%~2"
 set halide_arch="%~3"
 
+if not exist "%VCPKG_ROOT%\.vcpkg-root" (
+    echo Must define VCPKG_ROOT to be the root of the VCPKG install
+    goto return
+)
+
+if not exist "%LLVM_DIR%\LLVMConfig.cmake" (
+    echo Must set specific LLVM_DIR for packaging
+    goto return
+)
+
+if not exist "%Clang_DIR%\ClangConfig.cmake" (
+    echo Must set specific Clang_DIR for packaging
+    goto return
+)
+
 if "%halide_source%" == "" (
     echo Usage: %~0 "<source-dir>" "<build-dir>" [Win32,x64,ARM,ARM64]
     goto return
@@ -19,14 +34,11 @@ if "%halide_arch%" == "" (
     goto return
 )
 
-if not exist "%VCPKG_ROOT%\.vcpkg-root" (
-    echo Must define VCPKG_ROOT to be the root of the VCPKG install
-    goto return
-)
-
 REM Ninja Multi-Config in 3.18 has some sort of bug. Very disappointing.
 cmake -G "Visual Studio 16 2019" -Thost=x64 -A "%halide_arch%" ^
       "-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" ^
+      "-DLLVM_DIR=%LLVM_DIR%" ^
+      "-DClang_DIR=%Clang_DIR%" ^
       -DBUILD_SHARED_LIBS=YES ^
       -DWITH_TESTS=NO ^
       -DWITH_APPS=NO ^
@@ -55,6 +67,8 @@ REM REM REM REM REM REM REM REM REM REM REM REM REM REM REM REM REM REM REM REM
 REM Ninja Multi-Config in 3.18 has some sort of bug. Very disappointing.
 cmake -G "Visual Studio 16 2019" -Thost=x64 -A "%halide_arch%" ^
       "-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" ^
+      "-DLLVM_DIR=%LLVM_DIR%" ^
+      "-DClang_DIR=%Clang_DIR%" ^
       -DBUILD_SHARED_LIBS=NO ^
       -DHalide_BUNDLE_LLVM=YES ^
       -DWITH_TESTS=NO ^
