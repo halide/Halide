@@ -1177,7 +1177,7 @@ class VectorSubs : public IRMutator {
         }
 
         const Ramp *r = replacement.as<Ramp>();
-        internal_assert(r) << "Expected replacement in VectorSubs to be a ramp\n";
+        internal_assert(r) << "Expected replacement in VectorSubs to be a ramp.\n";
         return For::make(var, r->base, r->lanes, ForType::Serial, DeviceAPI::None, s);
     }
 
