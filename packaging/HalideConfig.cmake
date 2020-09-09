@@ -127,7 +127,7 @@ foreach (comp IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_comps)
 
     # ${comp} is either PNG or JPEG, and this works for both packages
     if (NOT TARGET ${comp}::${comp})
-        unset(extraArgs)
+        set(extraArgs "")
         if (${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
             list(APPEND extraArgs QUIET)
         endif ()

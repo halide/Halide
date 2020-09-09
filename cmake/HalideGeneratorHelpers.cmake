@@ -177,7 +177,7 @@ function(add_halide_library TARGET)
     # Attach an autoscheduler if the user requested it
     ##
 
-    unset(GEN_AUTOSCHEDULER)
+    set(GEN_AUTOSCHEDULER "")
     if (ARG_AUTOSCHEDULER)
         if ("${ARG_AUTOSCHEDULER}" MATCHES "::" AND TARGET "${ARG_AUTOSCHEDULER}")
             # Convention: if the argument names a target like "Namespace::Scheduler" then
@@ -207,7 +207,7 @@ function(add_halide_library TARGET)
     endif ()
 
     # Load the plugins and setup dependencies
-    unset(GEN_PLUGINS)
+    set(GEN_PLUGINS "")
     if (ARG_PLUGINS)
         foreach (p IN LISTS ARG_PLUGINS)
             list(APPEND GEN_PLUGINS "$<TARGET_FILE:${p}>")
@@ -254,7 +254,7 @@ function(_Halide_add_halide_runtime RT)
 
     if (crosscompiling)
         set(GEN_OUTS "${RT}${static_library_suffix}")
-        unset(GEN_ARGS)
+        set(GEN_ARGS "")
     else ()
         set(GEN_OUTS "${RT}${object_suffix}")
         set(GEN_ARGS -e object)

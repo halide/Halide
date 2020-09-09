@@ -101,7 +101,7 @@ target_link_libraries(lesson_15_generate PRIVATE Halide::Generator)
 ## Hack to build the libraries
 
 add_custom_target(lesson_15_targets)
-unset(LESSON_15_EXPECTED_FILES)
+set(LESSON_15_EXPECTED_FILES "")
 
 ##
 add_halide_library(my_first_generator_win32 FROM lesson_15_generate
