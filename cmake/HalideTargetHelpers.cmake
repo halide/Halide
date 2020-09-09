@@ -1,14 +1,4 @@
 ##
-# Cache variable to control the global target for add_halide_library.
-##
-
-if (NOT "$ENV{HL_TARGET}" STREQUAL "")
-    set(Halide_TARGET "$ENV{HL_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
-else ()
-    set(Halide_TARGET "" CACHE STRING "The target to use when compiling AOT tests")
-endif ()
-
-##
 # Utilities for manipulating Halide target triples
 ##
 
@@ -53,4 +43,14 @@ endif ()
 if (NOT Halide_CMAKE_TARGET)
     _Halide_cmake_target(Halide_CMAKE_TARGET)
     message(STATUS "Halide detected active CMake target `${Halide_CMAKE_TARGET}`")
+endif ()
+
+##
+# Cache variable to control the global target for add_halide_library.
+##
+
+if (NOT "$ENV{HL_TARGET}" STREQUAL "")
+    set(Halide_TARGET "$ENV{HL_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
+else ()
+    set(Halide_TARGET "${Halide_CMAKE_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
 endif ()

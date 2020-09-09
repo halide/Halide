@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Halide VERSION 10.0.0)
+project(Halide VERSION 12.0.0)
 
 enable_testing()
 
@@ -10,6 +10,9 @@ enable_testing()
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(HalideTargetHelpers)
+include(HalideGeneratorHelpers)
+include(MakeShellPath)
+include(CMakeDependentOption)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
 if (NOT DEFINED BUILD_SHARED_LIBS)
@@ -25,7 +28,7 @@ endif ()
 # Windows has file name length restrictions and lacks an RPATH mechanism.
 # We work around this by setting a path max and putting all exes / dlls in
 # the same output directory.
-if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+if (CMAKE_SYSTEM_NAME MATCHES "Windows")
     set(CMAKE_OBJECT_PATH_MAX 260)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
 
@@ -52,13 +55,6 @@ add_subdirectory(dependencies)
 
 add_subdirectory(src)
 add_subdirectory(tools)
-
-##
-# Add helper functions to the build
-##
-
-include(HalideGeneratorHelpers)
-include(MakeShellPath)
 
 ##
 # Add tests, apps, tutorials, etc. if we're not being imported into another CMake project.
