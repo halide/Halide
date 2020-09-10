@@ -33,7 +33,7 @@ if (WITH_WABT)
     set(BUILD_LIBWASM OFF)
     FetchContent_MakeAvailable(wabt)
 
-    set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+    set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
     # TODO: we want to require unique prefixes to include these files, to avoid ambiguity;
     # this means we have to prefix with "wabt-src/...", which is less bad than other alternatives,

@@ -103,11 +103,9 @@ public:
             // comparison though, tensorflow 2.3 achieves 0.13ms via
             // cudnn 7. So we're twice as fast.
 
-            // We'll do the depthwise convolution and pointwise
-            // convolution as two separate kernels. In principle they
-            // could be fused, but it's hard to get a compatible
-            // thread block and fit everything into registers and
-            // shared if you do that.
+            // This schedule fuses the depthwise conv into the pointwise
+            // conv. The results of the depthwise conv are computed inside
+            // the outer of the two pointwise reduction loops.
 
             Var xi, yi, di, dii, xii, yii;
             RVar ro, ri;
@@ -229,9 +227,8 @@ public:
             // Change units from vectors to elements
             tile_d *= vec;
 
-            // Unlike in the cuda schedule above, this schedule
-            // aggressively fuses the depthwise conv into the
-            // pointwise conv. We do the depthwise convolution within
+            // This schedule aggressively fuses the depthwise conv into
+            // the pointwise conv. We do the depthwise convolution within
             // slices of the channel reduction loop in the pointwise
             // convolution.
 

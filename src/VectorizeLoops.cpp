@@ -788,40 +788,9 @@ class VectorSubs : public IRMutator {
     }
 
     Stmt visit(const Provide *op) override {
-        vector<Expr> new_args(op->args.size());
-        vector<Expr> new_values(op->values.size());
-        bool changed = false;
-
-        // Mutate the args
-        int max_lanes = 0;
-        for (size_t i = 0; i < op->args.size(); i++) {
-            Expr old_arg = op->args[i];
-            Expr new_arg = mutate(old_arg);
-            if (!new_arg.same_as(old_arg)) changed = true;
-            new_args[i] = new_arg;
-            max_lanes = std::max(new_arg.type().lanes(), max_lanes);
-        }
-
-        for (size_t i = 0; i < op->args.size(); i++) {
-            Expr old_value = op->values[i];
-            Expr new_value = mutate(old_value);
-            if (!new_value.same_as(old_value)) changed = true;
-            new_values[i] = new_value;
-            max_lanes = std::max(new_value.type().lanes(), max_lanes);
-        }
-
-        if (!changed) {
-            return op;
-        } else {
-            // Widen the args to have the same lanes as the max lanes found
-            for (size_t i = 0; i < new_args.size(); i++) {
-                new_args[i] = widen(new_args[i], max_lanes);
-            }
-            for (size_t i = 0; i < new_values.size(); i++) {
-                new_values[i] = widen(new_values[i], max_lanes);
-            }
-            return Provide::make(op->name, new_values, new_args);
-        }
+        internal_error << "Vectorizing a Provide node is unimplemented. "
+                       << "Vectorization usually runs after storage flattening.\n";
+        return Stmt();
     }
 
     Stmt visit(const Store *op) override {
@@ -1208,7 +1177,7 @@ class VectorSubs : public IRMutator {
         }
 
         const Ramp *r = replacement.as<Ramp>();
-        internal_assert(r) << "Expected replacement in VectorSubs to be a ramp\n";
+        internal_assert(r) << "Expected replacement in VectorSubs to be a ramp.\n";
         return For::make(var, r->base, r->lanes, ForType::Serial, DeviceAPI::None, s);
     }
 

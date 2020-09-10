@@ -43,14 +43,10 @@ function(add_app_test NAME)
     endif ()
 
     set(cmakeDefinitionOpts
-        # TODO: enable verbose here temporarily, to try to track down flaky Windows failures
-        "-DCMAKE_VERBOSE_MAKEFILE=ON"
         "-DCMAKE_PREFIX_PATH=${HALIDE_DIR}"
         "-DCMAKE_BUILD_TYPE=$<CONFIG>"
-        "-DLLVM_DIR=${LLVM_DIR}")
-    if (NOT "${Halide_TARGET}" STREQUAL "")
-        list(APPEND cmakeDefinitionOpts "-DHalide_TARGET=${Halide_TARGET}")
-    endif ()
+        "-DLLVM_DIR=${LLVM_DIR}"
+        "-DHalide_TARGET=${Halide_TARGET}")
 
     add_test(NAME ${NAME}
              COMMAND ${CMAKE_CTEST_COMMAND}
