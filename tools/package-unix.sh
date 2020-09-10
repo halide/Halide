@@ -3,6 +3,10 @@
 halide_source="$1"
 halide_build_root="$2"
 
+# TODO: this temporary, until release branches for Halide are created.
+# Remove as soon as that is done.
+[ -z "$Halide_VERSION" ] && echo "Must set specific Halide_VERSION for packaging" && exit
+
 [ -z "$LLVM_DIR" ] && echo "Must set specific LLVM_DIR for packaging" && exit
 [ -z "$Clang_DIR" ] && echo "Must set specific Clang_DIR for packaging" && exit
 [ -z "$halide_source" ] && echo "Usage: $0 <source-dir> <build-dir>" && exit
@@ -13,6 +17,7 @@ cmake -G Ninja \
   -DBUILD_SHARED_LIBS=YES \
   -DLLVM_DIR="$LLVM_DIR" \
   -DClang_DIR="$Clang_DIR" \
+  -DHalide_VERSION="$Halide_VERSION" \
   -DWITH_TESTS=NO \
   -DWITH_APPS=NO \
   -DWITH_TUTORIALS=NO \
@@ -28,6 +33,7 @@ cmake -G Ninja \
   -DHalide_BUNDLE_LLVM=YES \
   -DLLVM_DIR="$LLVM_DIR" \
   -DClang_DIR="$Clang_DIR" \
+  -DHalide_VERSION="$Halide_VERSION" \
   -DWITH_TESTS=NO \
   -DWITH_APPS=NO \
   -DWITH_TUTORIALS=NO \

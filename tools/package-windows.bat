@@ -4,6 +4,13 @@ set halide_source="%~1"
 set halide_build_root="%~2"
 set halide_arch="%~3"
 
+REM TODO: this temporary, until release branches for Halide are created.
+REM Remove as soon as that is done.
+if "%Halide_VERSION%" == "" (
+    echo Must set specific Halide_VERSION for packaging
+    goto return
+)
+
 if not exist "%VCPKG_ROOT%\.vcpkg-root" (
     echo Must define VCPKG_ROOT to be the root of the VCPKG install
     goto return
@@ -39,6 +46,7 @@ cmake -G "Visual Studio 16 2019" -Thost=x64 -A "%halide_arch%" ^
       "-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" ^
       "-DLLVM_DIR=%LLVM_DIR%" ^
       "-DClang_DIR=%Clang_DIR%" ^
+      "-DHalide_VERSION=%Halide_VERSION%" ^
       -DBUILD_SHARED_LIBS=YES ^
       -DWITH_TESTS=NO ^
       -DWITH_APPS=NO ^
