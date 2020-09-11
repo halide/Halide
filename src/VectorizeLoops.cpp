@@ -1087,29 +1087,15 @@ class VectorSubs : public IRMutator {
 
         // Rewrite loads and stores to this allocation like so:
         // foo[x] -> foo[x*lanes + v]
-        vector<string> vs;
         for (const auto &vv : vectorized_vars) {
-            string v = unique_name('v');
-            body = RewriteAccessToVectorAlloc(v, op->name, vv.lanes).mutate(body);
-            vs.push_back(v);
-            scope.push(v, Variable::make(Int(32), vv.name + ".from_zero"));
+            body = RewriteAccessToVectorAlloc(vv.name + ".from_zero", op->name, vv.lanes).mutate(body);
         }
 
         body = mutate(body);
-        for (const auto &v : vs) {
-            scope.pop(v);
-        }
 
-        // Replace the widened 'v' with the actual ramp
-        // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(...)]
-        for (size_t ix = 0; ix < vectorized_vars.size(); ix++) {
-            for (const auto &widened_var : widened_vars[vs[ix]]) {
-                body = substitute(widened_var.first, widened_var.second, body);
-            }
-
+        for (const auto &vv : vectorized_vars) {
             // The variable itself could still exist inside an inner scalarized block.
-            body = substitute(vs[ix], Variable::make(Int(32), vectorized_vars[ix].name), body);
-            widened_vars[vs[ix]].clear();
+            body = substitute(vv.name + ".from_zero", Variable::make(Int(32), vv.name), body);
         }
 
         return Allocate::make(op->name, op->type, op->memory_type, new_extents, op->condition, body, new_expr, op->free_function);
