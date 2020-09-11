@@ -7,17 +7,13 @@ function(add_autoscheduler)
     add_library(Halide_${arg_NAME} MODULE ${arg_SOURCES})
     add_library(Halide::${arg_NAME} ALIAS Halide_${arg_NAME})
 
-    include(GenerateExportHeader)
-    generate_export_header(Halide_${arg_NAME} BASE_NAME autoscheduler)
-    target_include_directories(Halide_${arg_NAME} PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
-
+    target_compile_definitions(Halide_${arg_NAME} PRIVATE Halide_EXPORTS)
     target_link_libraries(Halide_${arg_NAME} PRIVATE Halide::Plugin)
 
     string(TOLOWER "${arg_NAME}" name_lower)
     set_target_properties(Halide_${arg_NAME} PROPERTIES
                           EXPORT_NAME ${arg_NAME}
                           OUTPUT_NAME autoschedule_${name_lower})
-
 endfunction()
 
 add_subdirectory(common)

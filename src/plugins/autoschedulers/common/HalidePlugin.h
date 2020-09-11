@@ -4,7 +4,7 @@
 #include "Errors.h"
 
 #define REGISTER_AUTOSCHEDULER(NAME)                                  \
-    struct AUTOSCHEDULER_EXPORT Register##NAME {                      \
+    struct HALIDE_EXPORT Register##NAME {                             \
         Register##NAME() {                                            \
             debug(1) << "Registering autoscheduler '" #NAME "'...\n"; \
             Pipeline::add_autoscheduler(#NAME, NAME());               \

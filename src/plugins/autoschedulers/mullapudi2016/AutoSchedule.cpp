@@ -1,5 +1,4 @@
 #include "HalidePlugin.h"
-#include "autoscheduler_export.h"
 
 #include <algorithm>
 #include <map>

@@ -1,7 +1,6 @@
 #include "Errors.h"
 #include "Halide.h"
 #include "HalidePlugin.h"
-#include "autoscheduler_export.h"
 
 namespace Halide {
 namespace Internal {

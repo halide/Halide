@@ -65,7 +65,6 @@
   generator plugins instead of environment vars.
 */
 #include "HalidePlugin.h"
-#include "autoscheduler_export.h"
 
 #include <algorithm>
 #include <chrono>
