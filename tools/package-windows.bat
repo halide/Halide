@@ -1,37 +1,44 @@
 @echo off
 
-set halide_source="%~1"
-set halide_build_root="%~2"
-set halide_arch="%~3"
+set halide_source=%~1
+set halide_build_root=%~2
+set halide_arch=%~3
+
+REM TODO: this temporary, until release branches for Halide are created.
+REM Remove as soon as that is done.
+if "%Halide_VERSION%" == "" (
+    echo Must set specific Halide_VERSION for packaging
+    goto error
+)
 
 if not exist "%VCPKG_ROOT%\.vcpkg-root" (
     echo Must define VCPKG_ROOT to be the root of the VCPKG install
-    goto return
+    goto error
 )
 
 if not exist "%LLVM_DIR%\LLVMConfig.cmake" (
     echo Must set specific LLVM_DIR for packaging
-    goto return
+    goto error
 )
 
 if not exist "%Clang_DIR%\ClangConfig.cmake" (
     echo Must set specific Clang_DIR for packaging
-    goto return
+    goto error
 )
 
 if "%halide_source%" == "" (
     echo Usage: %~0 "<source-dir>" "<build-dir>" [Win32,x64,ARM,ARM64]
-    goto return
+    goto error
 )
 
 if "%halide_build_root%" == "" (
     echo Usage: %~0 "<source-dir>" "<build-dir>" [Win32,x64,ARM,ARM64]
-    goto return
+    goto error
 )
 
 if "%halide_arch%" == "" (
     echo Usage: %~0 "<source-dir>" "<build-dir>" [Win32,x64,ARM,ARM64]
-    goto return
+    goto error
 )
 
 REM Ninja Multi-Config in 3.18 has some sort of bug. Very disappointing.
@@ -39,6 +46,7 @@ cmake -G "Visual Studio 16 2019" -Thost=x64 -A "%halide_arch%" ^
       "-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" ^
       "-DLLVM_DIR=%LLVM_DIR%" ^
       "-DClang_DIR=%Clang_DIR%" ^
+      "-DHalide_VERSION=%Halide_VERSION%" ^
       -DBUILD_SHARED_LIBS=YES ^
       -DWITH_TESTS=NO ^
       -DWITH_APPS=NO ^
@@ -51,16 +59,19 @@ cmake -G "Visual Studio 16 2019" -Thost=x64 -A "%halide_arch%" ^
       "-DHALIDE_INSTALL_CMAKEDIR=lib" ^
       -S "%halide_source%" ^
       -B "%halide_build_root%"
-
-if %errorlevel% neq 0 goto return
+if ERRORLEVEL 1 goto error
 
 REM We don't distribute Debug binaries because they aren't useful
 REM cmake --build %halide_build_root% --config Debug
 cmake --build "%halide_build_root%" --config Release
+if ERRORLEVEL 1 goto error
 
 pushd "%halide_build_root%"
 cpack -C "Release"
+if ERRORLEVEL 1 goto error
 popd
 
-:return
 exit /b
+
+:error
+exit /b 1
