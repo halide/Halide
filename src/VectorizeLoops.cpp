@@ -740,7 +740,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    Stmt wrap_extracted_lets_lanes(const Stmt& body, const string& vectorized_name, const Expr& mutated_value) {
+    Stmt wrap_extracted_lets_lanes(const Stmt &body, const string &vectorized_name, const Expr &mutated_value) {
         // Inner code might have extracted my lanes using
         // extract_lane, which introduces a shuffle_vector. If
         // so we should define separate lets for the lanes and
@@ -1141,7 +1141,6 @@ class VectorSubs : public IRMutator {
                 !is_one(store->predicate)) {
                 break;
             }
-
 
             b = vector_scope.get(get_widened_var_name(var_b->name));
             Expr store_index = mutate(store->index);
