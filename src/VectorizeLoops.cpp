@@ -191,7 +191,7 @@ struct InterleavedRamp {
     int lanes, repetitions;
 };
 
-bool is_interleaved_ramp(const Expr &e, const std::map<string, Expr> &widened_vars, InterleavedRamp *result) {
+bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRamp *result) {
     if (const Ramp *r = e.as<Ramp>()) {
         result->base = r->base;
         result->stride = r->stride;
@@ -206,8 +206,8 @@ bool is_interleaved_ramp(const Expr &e, const std::map<string, Expr> &widened_va
         return true;
     } else if (const Add *add = e.as<Add>()) {
         InterleavedRamp ra;
-        if (is_interleaved_ramp(add->a, widened_vars, &ra) &&
-            is_interleaved_ramp(add->b, widened_vars, result) &&
+        if (is_interleaved_ramp(add->a, scope, &ra) &&
+            is_interleaved_ramp(add->b, scope, result) &&
             (ra.repetitions == 0 ||
              result->repetitions == 0 ||
              ra.repetitions == result->repetitions)) {
@@ -220,8 +220,8 @@ bool is_interleaved_ramp(const Expr &e, const std::map<string, Expr> &widened_va
         }
     } else if (const Sub *sub = e.as<Sub>()) {
         InterleavedRamp ra;
-        if (is_interleaved_ramp(sub->a, widened_vars, &ra) &&
-            is_interleaved_ramp(sub->b, widened_vars, result) &&
+        if (is_interleaved_ramp(sub->a, scope, &ra) &&
+            is_interleaved_ramp(sub->b, scope, result) &&
             (ra.repetitions == 0 ||
              result->repetitions == 0 ||
              ra.repetitions == result->repetitions)) {
@@ -234,7 +234,7 @@ bool is_interleaved_ramp(const Expr &e, const std::map<string, Expr> &widened_va
         }
     } else if (const Mul *mul = e.as<Mul>()) {
         const int64_t *b = nullptr;
-        if (is_interleaved_ramp(mul->a, widened_vars, result) &&
+        if (is_interleaved_ramp(mul->a, scope, result) &&
             (b = as_const_int(mul->b))) {
             result->base = simplify(result->base * (int)(*b));
             result->stride = simplify(result->stride * (int)(*b));
@@ -242,7 +242,7 @@ bool is_interleaved_ramp(const Expr &e, const std::map<string, Expr> &widened_va
         }
     } else if (const Div *div = e.as<Div>()) {
         const int64_t *b = nullptr;
-        if (is_interleaved_ramp(div->a, widened_vars, result) &&
+        if (is_interleaved_ramp(div->a, scope, result) &&
             (b = as_const_int(div->b)) &&
             is_one(result->stride) &&
             (result->repetitions == 1 ||
@@ -256,9 +256,8 @@ bool is_interleaved_ramp(const Expr &e, const std::map<string, Expr> &widened_va
             return true;
         }
     } else if (const Variable *var = e.as<Variable>()) {
-        auto it = widened_vars.find(var->name);
-        if (it != widened_vars.end()) {
-            return is_interleaved_ramp(it->second, widened_vars, result);
+        if (scope.contains(var->name)) {
+            return is_interleaved_ramp(scope.get(var->name), scope, result);
         }
     }
     return false;
@@ -474,19 +473,17 @@ class VectorSubs : public IRMutator {
     // is updated when vectorized_vars list is updated.
     std::map<string, Expr> replacements;
 
-    // Widened vars for different loop levels.
-    std::map<string, std::map<string, Expr>> widened_vars;
-
-    // Same as above, but all gathered together.
-    std::map<string, Expr> widened_vars_list;
-
     const Target &target;
 
     bool in_hexagon;  // Are we inside the hexagon loop?
 
     // A scope containing lets and letstmts whose values became
-    // vectors.
+    // vectors. Expressions are original, non-vectorized expressions.
     Scope<Expr> scope;
+
+    // The same set of Exprs, indexed by the vectorized var name and
+    // holding vectorized expression.
+    Scope<Expr> vector_scope;
 
     // A stack of all containing lets. We need to reinject the scalar
     // version of them if we scalarize inner code.
@@ -521,28 +518,12 @@ class VectorSubs : public IRMutator {
         return name + ".widened." + vectorized_vars.back().name;
     }
 
-    Expr get_mutated_var_from_scope(const string &name) {
-        string widened_name = get_widened_var_name(name);
-        Expr mutated;
-        // Depending on the current loop level, we may need to
-        // widen variable differently.
-        if (widened_vars[name].count(widened_name) > 0) {
-            mutated = widened_vars[name][widened_name];
-        } else {
-            mutated = mutate(scope.get(name));
-            widened_vars[name][widened_name] = mutated;
-            widened_vars_list[widened_name] = mutated;
-        }
-
-        return mutated;
-    }
-
     Expr visit(const Variable *op) override {
         if (replacements.count(op->name) > 0) {
             return replacements[op->name];
         } else if (scope.contains(op->name)) {
-            Expr mutated = get_mutated_var_from_scope(op->name);
-            return Variable::make(mutated.type(), get_widened_var_name(op->name));
+            string widened_name = get_widened_var_name(op->name);
+            return Variable::make(vector_scope.get(widened_name).type(), widened_name);
         } else {
             return op;
         }
@@ -735,46 +716,80 @@ class VectorSubs : public IRMutator {
 
         // If the value was vectorized by this mutator, add a new name to
         // the scope for the vectorized value expression.
+        string vectorized_name;
         if (was_vectorized) {
+            vectorized_name = get_widened_var_name(op->name);
             scope.push(op->name, op->value);
+            vector_scope.push(vectorized_name, mutated_value);
         }
 
         Expr mutated_body = mutate(op->body);
 
-        if (was_vectorized) {
-            scope.pop(op->name);
-        }
-
         InterleavedRamp ir;
-        if (is_interleaved_ramp(mutated_value, widened_vars_list, &ir)) {
-            for (const auto &widened_var : widened_vars[op->name]) {
-                mutated_body = substitute(widened_var.first, widened_var.second, mutated_body);
-            }
-            widened_vars[op->name].clear();
-            return mutated_body;
+        if (is_interleaved_ramp(mutated_value, vector_scope, &ir)) {
+            return substitute(vectorized_name, mutated_value, mutated_body);
         } else if (mutated_value.same_as(op->value) &&
                    mutated_body.same_as(op->body)) {
             return op;
         } else if (was_vectorized) {
-            for (const auto &widened_var : widened_vars[op->name]) {
-                mutated_body = Let::make(widened_var.first, widened_var.second, mutated_body);
-            }
-            widened_vars[op->name].clear();
-            return mutated_body;
+            scope.pop(op->name);
+            vector_scope.pop(vectorized_name);
+            return Let::make(vectorized_name, mutated_value, mutated_body);
         } else {
             return Let::make(op->name, mutated_value, mutated_body);
         }
     }
 
+    Stmt wrap_extracted_lets_lanes(const Stmt& body, const string& vectorized_name, const Expr& mutated_value) {
+        // Inner code might have extracted my lanes using
+        // extract_lane, which introduces a shuffle_vector. If
+        // so we should define separate lets for the lanes and
+        // get it to use those instead.
+        Stmt mutated_body = ReplaceShuffleVectors(vectorized_name).mutate(body);
+
+        // Check if inner code wants my individual lanes.
+        Type t = mutated_value.type();
+        for (int i = 0; i < t.lanes(); i++) {
+            string lane_name = vectorized_name + ".lane." + std::to_string(i);
+            if (stmt_uses_var(mutated_body, lane_name)) {
+                mutated_body =
+                    LetStmt::make(lane_name, extract_lane(mutated_value, i), mutated_body);
+            }
+        }
+
+        // Inner code may also have wanted my max or min lane
+        bool uses_min_lane = stmt_uses_var(mutated_body, vectorized_name + ".min_lane");
+        bool uses_max_lane = stmt_uses_var(mutated_body, vectorized_name + ".max_lane");
+
+        if (uses_min_lane || uses_max_lane) {
+            Interval i = bounds_of_lanes(mutated_value);
+
+            if (uses_min_lane) {
+                mutated_body =
+                    LetStmt::make(vectorized_name + ".min_lane", i.min, mutated_body);
+            }
+
+            if (uses_max_lane) {
+                mutated_body =
+                    LetStmt::make(vectorized_name + ".max_lane", i.max, mutated_body);
+            }
+        }
+
+        return mutated_body;
+    }
+
     Stmt visit(const LetStmt *op) override {
         Expr mutated_value = mutate(op->value);
+        string vectorized_name = op->name;
 
         // Check if the value was vectorized by this mutator.
         bool was_vectorized = (!op->value.type().is_vector() &&
                                mutated_value.type().is_vector());
 
         if (was_vectorized) {
+            vectorized_name = get_widened_var_name(op->name);
             scope.push(op->name, op->value);
+            vector_scope.push(vectorized_name, mutated_value);
             // Also keep track of the original let, in case inner code scalarizes.
             containing_lets.emplace_back(op->name, op->value);
         }
@@ -784,65 +799,19 @@ class VectorSubs : public IRMutator {
         if (was_vectorized) {
             containing_lets.pop_back();
             scope.pop(op->name);
+            vector_scope.pop(vectorized_name);
 
-            for (const auto &widened_var : widened_vars[op->name]) {
-                const string &widened_name = widened_var.first;
-                const Expr &widened_value = widened_var.second;
-
-                // Inner code might have extracted my lanes using
-                // extract_lane, which introduces a shuffle_vector. If
-                // so we should define separate lets for the lanes and
-                // get it to use those instead.
-                mutated_body = ReplaceShuffleVectors(widened_name).mutate(mutated_body);
-
-                // Check if inner code wants my individual lanes.
-                Type t = widened_value.type();
-                for (int i = 0; i < t.lanes(); i++) {
-                    string lane_name = widened_name + ".lane." + std::to_string(i);
-                    if (stmt_uses_var(mutated_body, lane_name)) {
-                        mutated_body =
-                            LetStmt::make(lane_name, extract_lane(widened_value, i), mutated_body);
-                    }
-                }
-
-                // Inner code may also have wanted my max or min lane
-                bool uses_min_lane = stmt_uses_var(mutated_body, widened_name + ".min_lane");
-                bool uses_max_lane = stmt_uses_var(mutated_body, widened_name + ".max_lane");
-
-                if (uses_min_lane || uses_max_lane) {
-                    Interval i = bounds_of_lanes(widened_value);
-
-                    if (uses_min_lane) {
-                        mutated_body =
-                            LetStmt::make(widened_name + ".min_lane", i.min, mutated_body);
-                    }
-
-                    if (uses_max_lane) {
-                        mutated_body =
-                            LetStmt::make(widened_name + ".max_lane", i.max, mutated_body);
-                    }
-                }
-            }
+            mutated_body = wrap_extracted_lets_lanes(mutated_body, vectorized_name, mutated_value);
         }
 
         InterleavedRamp ir;
-        if (is_interleaved_ramp(mutated_value, widened_vars_list, &ir)) {
-            for (const auto &widened_var : widened_vars[op->name]) {
-                mutated_body = substitute(widened_var.first, widened_var.second, mutated_body);
-            }
-            widened_vars[op->name].clear();
-            return mutated_body;
+        if (is_interleaved_ramp(mutated_value, vector_scope, &ir)) {
+            return substitute(vectorized_name, mutated_value, mutated_body);
         } else if (mutated_value.same_as(op->value) &&
                    mutated_body.same_as(op->body)) {
             return op;
-        } else if (was_vectorized) {
-            for (const auto &widened_var : widened_vars[op->name]) {
-                mutated_body = LetStmt::make(widened_var.first, widened_var.second, mutated_body);
-            }
-            widened_vars[op->name].clear();
-            return mutated_body;
         } else {
-            return LetStmt::make(op->name, mutated_value, mutated_body);
+            return LetStmt::make(vectorized_name, mutated_value, mutated_body);
         }
     }
 
@@ -1037,7 +1006,24 @@ class VectorSubs : public IRMutator {
 
             vectorized_vars.push_back({op->name, min, (int)extent_int->value});
             update_replacements();
+            for (auto it = scope.cbegin(); it != scope.cend(); ++it) {
+                string vectorized_name = get_widened_var_name(it.name());
+                Expr vectorized_value = mutate(it.value());
+                vector_scope.push(vectorized_name, vectorized_value);
+            }
             body = mutate(body);
+            for (auto it = scope.cbegin(); it != scope.cend(); ++it) {
+                string vectorized_name = get_widened_var_name(it.name());
+                Expr vectorized_value = vector_scope.get(vectorized_name);
+                vector_scope.pop(vectorized_name);
+                body = wrap_extracted_lets_lanes(body, vectorized_name, vectorized_value);
+                InterleavedRamp ir;
+                if (is_interleaved_ramp(vectorized_value, vector_scope, &ir)) {
+                    body = substitute(vectorized_name, vectorized_value, body);
+                } else {
+                    body = LetStmt::make(vectorized_name, vectorized_value, body);
+                }
+            }
             vectorized_vars.pop_back();
             update_replacements();
             return body;
@@ -1182,7 +1168,8 @@ class VectorSubs : public IRMutator {
                 break;
             }
 
-            b = get_mutated_var_from_scope(var_b->name);
+
+            b = vector_scope.get(get_widened_var_name(var_b->name));
             Expr store_index = mutate(store->index);
             Expr load_index = mutate(load_a->index);
 
@@ -1192,8 +1179,8 @@ class VectorSubs : public IRMutator {
             Expr test;
             if (store_index.type().is_scalar()) {
                 test = simplify(load_index == store_index);
-            } else if (is_interleaved_ramp(store_index, widened_vars_list, &store_ir) &&
-                       is_interleaved_ramp(load_index, widened_vars_list, &load_ir) &&
+            } else if (is_interleaved_ramp(store_index, vector_scope, &store_ir) &&
+                       is_interleaved_ramp(load_index, vector_scope, &load_ir) &&
                        store_ir.repetitions == load_ir.repetitions &&
                        store_ir.lanes == load_ir.lanes) {
                 test = simplify(store_ir.base == load_ir.base &&
