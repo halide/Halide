@@ -470,12 +470,12 @@ if (Halide_USE_CODEMODEL_LARGE)
 endif ()
 
 ##
-# Add compiler plugins (ie. autoschedulers) to the build.
+# Add autoschedulers to the build.
 ##
 
 if (BUILD_SHARED_LIBS)
     message(STATUS "Building autoschedulers")
-    add_subdirectory(plugins)
+    add_subdirectory(autoschedulers)
 else ()
     message(STATUS "Not building autoschedulers (static Halide)")
 endif ()
