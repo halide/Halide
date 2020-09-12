@@ -1,9 +1,9 @@
 THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 SRC  = $(strip $(shell dirname $(THIS_MAKEFILE)))
-HALIDE_ROOT = $(realpath $(SRC)/../../../../)
+HALIDE_ROOT = $(realpath $(SRC)/../../../)
 COMMON_DIR =  $(realpath $(SRC)/../common/)
 
-HALIDE_DISTRIB_PATH ?= $(realpath $(SRC)/../../../../distrib)
+HALIDE_DISTRIB_PATH ?= $(HALIDE_SRC_ROOT)/distrib
 include $(HALIDE_ROOT)/apps/support/Makefile.inc
 
 CXXFLAGS += -I$(COMMON_DIR)

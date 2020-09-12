@@ -1079,7 +1079,7 @@ test_tutorial: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
 test_opengl: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=opengl_%)
-test_auto_schedule: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=auto_schedule_%)
+test_auto_schedule: test_mullapudi2016 test_li2018 test_adams2019
 
 .PHONY: test_correctness_multi_gpu
 test_correctness_multi_gpu: correctness_gpu_multi_device
@@ -1845,10 +1845,24 @@ tutorial_%: $(BIN_DIR)/tutorial_% $(TMP_DIR)/images/rgb.png $(TMP_DIR)/images/gr
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
-auto_schedule_%: $(BIN_DIR)/auto_schedule_%
+test_mullapudi2016: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=auto_schedule_%)
+
+# These tests were written for the Mullapudi2016 autoscheduler.
+# TODO: either make them work with all autoschedulers or move them under src/autoschedulers/mullapudi2016
+auto_schedule_%: $(BIN_DIR)/auto_schedule_% $(DISTRIB_DIR)/bin/libautoschedule_mullapudi2016.$(SHARED_EXT)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$<
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(DISTRIB_DIR))/bin/libautoschedule_mullapudi2016.$(SHARED_EXT)
 	@-echo
+
+# The other autoschedulers contain their own tests
+test_adams2019: distrib
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+
+test_li2018: distrib build_python_bindings
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/li2018/Makefile test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings 
 
 time_compilation_test_%: $(BIN_DIR)/test_%
 	$(TIME_COMPILATION) compile_times_correctness.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_test_%=test_%)
@@ -1864,7 +1878,6 @@ time_compilation_generator_%: $(BIN_DIR)/%.generator
 
 TEST_APPS=\
 	HelloMatlab \
-	autoscheduler \
 	bilateral_grid \
 	bgu \
 	blur \
@@ -1872,7 +1885,6 @@ TEST_APPS=\
 	camera_pipe \
 	conv_layer \
 	fft \
-	gradient_autoscheduler \
 	hist \
 	interpolate \
 	lens_blur \
@@ -2169,17 +2181,17 @@ $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT): \
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
 
 $(DISTRIB_DIR)/bin/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT)
-	$(MAKE) -f $(SRC_DIR)/plugins/autoschedulers/$*/Makefile bin/libautoschedule_$*.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(DISTRIB_DIR)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/$*/Makefile bin/libautoschedule_$*.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	cp $(BIN_DIR)/libautoschedule_$*.so $(DISTRIB_DIR)/bin; 
 
 # Adams2019 also includes autotuning tools
 $(DISTRIB_DIR)/bin/libautoschedule_adams2019.$(SHARED_EXT): $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT)
-	$(MAKE) -f $(SRC_DIR)/plugins/autoschedulers/adams2019/Makefile bin/libautoschedule_adams2019.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(DISTRIB_DIR) bin/retrain_cost_model bin/featurization_to_sample bin/get_host_target
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile bin/libautoschedule_adams2019.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) bin/retrain_cost_model bin/featurization_to_sample bin/get_host_target
 	cp $(BIN_DIR)/libautoschedule_adams2019.so $(DISTRIB_DIR)/bin/
 	cp $(BIN_DIR)/retrain_cost_model $(DISTRIB_DIR)/bin/
 	cp $(BIN_DIR)/featurization_to_sample $(DISTRIB_DIR)/bin/
 	cp $(BIN_DIR)/get_host_target $(DISTRIB_DIR)/bin/
-	cp $(SRC_DIR)/plugins/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
+	cp $(SRC_DIR)/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
 
 .PHONY: autoschedulers
 autoschedulers: \

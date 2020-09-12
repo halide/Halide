@@ -1,14 +1,14 @@
 THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 SRC  = $(strip $(shell dirname $(THIS_MAKEFILE)))
-HALIDE_ROOT = $(realpath $(SRC)/../../../../)
+HALIDE_SRC_ROOT = $(realpath $(SRC)/../../../)
 COMMON_DIR =  $(realpath $(SRC)/../common/)
 
 # Assume an in-tree build of a halide distro exists. Most uses of this
 # Makefile should probably set this variable explicitly.
-HALIDE_DISTRIB_PATH ?= $(realpath $(SRC)/../../../../distrib)
+HALIDE_DISTRIB_PATH ?= $(HALIDE_SRC_ROOT)/distrib
 
 # The example uses a generator, though the autoscheduler itself does not require one
-include $(HALIDE_ROOT)/apps/support/Makefile.inc
+include $(HALIDE_SRC_ROOT)/apps/support/Makefile.inc
 
 CXXFLAGS += -I$(COMMON_DIR)
 
@@ -19,7 +19,7 @@ $(BIN)/libautoschedule_li2018.so: $(SRC)/GradientAutoscheduler.cpp $(LIB_HALIDE)
 # Demonstrate a JIT-based use of gradient autoscheuler
 $(BIN)/test: $(SRC)/test.cpp $(BIN)/libautoschedule_li2018.so
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) test.cpp -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(SRC)/test.cpp -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Demonstrate a generator-based use of gradient autoscheuler
 $(GENERATOR_BIN)/demo.generator: $(SRC)/demo_generator.cpp $(GENERATOR_DEPS)
@@ -47,7 +47,7 @@ run_test_cpp: $(BIN)/test
 run_test_py: $(SRC)/test.py $(BIN)/libautoschedule_li2018.so
 	PYTHONPATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin:$$PYTHONPATH \
 		LD_LIBRARY_PATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin \
-		$(PYTHON) test.py
+		$(PYTHON) $(SRC)/test.py
 
 build: $(BIN)/test $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.so
 

@@ -1,12 +1,14 @@
 THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 SRC = $(strip $(shell dirname $(THIS_MAKEFILE)))
-HALIDE_SRC_ROOT = $(realpath $(SRC)/../../../../)
+HALIDE_SRC_ROOT = $(realpath $(SRC)/../../../)
 COMMON_DIR ?= $(realpath $(SRC)/../common/)
 
 HALIDE_DISTRIB_PATH ?= $(HALIDE_SRC_ROOT)/distrib
 
 $(info Looking for Halide distro at $(HALIDE_DISTRIB_PATH). If this is incorrect, set the make variable HALIDE_DISTRIB_PATH)
 
+# Don't include an autoscheduler in the generator deps
+AUTOSCHEDULER=
 include $(HALIDE_SRC_ROOT)/apps/support/Makefile.inc
 
 CXXFLAGS += -I$(COMMON_DIR)
