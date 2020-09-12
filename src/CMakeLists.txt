@@ -361,10 +361,8 @@ add_custom_command(OUTPUT "${Halide_BINARY_DIR}/include/Halide.h"
                    DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES}
                    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
                    VERBATIM)
-add_custom_target(
-        HalideIncludes
-        ALL
-        DEPENDS "${Halide_BINARY_DIR}/include/Halide.h")
+add_custom_target(HalideIncludes ALL
+                  DEPENDS "${Halide_BINARY_DIR}/include/Halide.h")
 
 ##
 # Define the Halide library target.
@@ -381,14 +379,16 @@ target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
 target_compile_definitions(Halide PRIVATE $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:Halide_STATIC_DEFINE>)
 
-set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(Halide PROPERTIES
+                      POSITION_INDEPENDENT_CODE ON
+                      VERSION ${Halide_VERSION}
+                      SOVERSION ${Halide_VERSION_MAJOR})
 
 add_dependencies(Halide HalideIncludes)
 
 if (TARGET wabt)
     target_link_libraries(Halide PRIVATE wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
-    install(TARGETS wabt EXPORT Halide_Targets)
 endif ()
 
 ##
@@ -458,12 +458,6 @@ target_compile_options(Halide
                        # source files in parallel; the Halide library itself is a "knot" point of the build graph,
                        # so compiling its files in parallel should not oversubscribe the system
                        $<$<CXX_COMPILER_ID:MSVC>:/MP>
-
-                       # To compile LLVM headers, the following was taken from LLVM CMake files:
-                       # Disable sized deallocation if the flag is supported. MSVC fails to compile
-                       # the operator new overload in LLVM/IR/Function.h and Instruction.h otherwise.
-                       # See LLVM PR: 23513 (https://llvm.org/bugs/show_bug.cgi?id=23513)
-                       $<$<CXX_COMPILER_ID:MSVC>:/Zc:sizedDealloc->
                        )
 
 target_compile_definitions(Halide

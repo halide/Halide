@@ -1,3 +1,7 @@
+if (NOT CMAKE_GENERATOR MATCHES "Make|Ninja")
+    message(STATUS "Notice: ${CMAKE_GENERATOR} does not support depfile dependencies. Incremental builds may fail.")
+endif ()
+
 # Keep these lists in alphabetical order.
 set(RUNTIME_CPP
     aarch64_cpu_features
@@ -151,8 +155,8 @@ foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
         # -fpic needs special treatment; see below on windows 64bits
         set(fpic -fpic)
-        if (${j} EQUAL 32)
-            if (${i} MATCHES "windows_.*")
+        if (j EQUAL 32)
+            if (i MATCHES "windows_.*")
                 # win32 uses the stdcall calling convention, which is x86-specific
                 set(TARGET "i386-unknown-unknown-unknown")
             else ()
@@ -160,7 +164,7 @@ foreach (i IN LISTS RUNTIME_CPP)
                 set(TARGET "le32-unknown-nacl-unknown")
             endif ()
         else ()
-            if (${i} MATCHES "windows_.*")
+            if (i MATCHES "windows_.*")
                 # must omit -fpic, otherwise clang will complain with the following:
                 # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
                 set(fpic "")
@@ -195,7 +199,6 @@ foreach (i IN LISTS RUNTIME_CPP)
                 list(APPEND clang_flags -MD -MF "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}/${basename}.d>")
                 set(dep_args DEPFILE "${CMAKE_CURRENT_BINARY_DIR}/${basename}.d")
             elseif (NOT CMAKE_GENERATOR MATCHES "Make")
-                message(STATUS "Notice: ${CMAKE_GENERATOR} does not support depfile dependencies. Incremental builds may fail.")
                 set(dep_args "")
             endif ()
 

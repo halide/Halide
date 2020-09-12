@@ -10,33 +10,41 @@ set(HALIDE_INSTALL_CMAKEDIR
     CACHE STRING "Path to Halide cmake files")
 
 ##
+# Optional dependencies
+##
+
+set(optional_dependencies "")
+foreach (target IN ITEMS wabt)
+    if (TARGET ${target})
+        list(APPEND optional_dependencies ${target})
+    endif ()
+endforeach ()
+
+##
 # Main library exports
 ##
 
 # TODO(#4053): add autoschedulers when refactored
 
-# Sends Debug -> Debug, Release/MinSizeRel/RelWithDebInfo -> Release
-set(CONFIG_DIR $<IF:$<CONFIG:Debug>,Debug,Release>)
-
 install(TARGETS Halide Halide_Generator Halide_RunGenMain
         EXPORT Halide_Targets
 
         RUNTIME
-        DESTINATION ${CMAKE_INSTALL_BINDIR}/${CONFIG_DIR}
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
         COMPONENT Halide_Runtime
 
         LIBRARY
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/${CONFIG_DIR}
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
         COMPONENT Halide_Runtime
         NAMELINK_COMPONENT Halide_Development
 
         ARCHIVE
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/${CONFIG_DIR}
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
         COMPONENT Halide_Development
 
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-install(TARGETS Halide_LLVM
+install(TARGETS Halide_LLVM ${optional_dependencies}
         EXPORT Halide_Targets)
 
 install(TARGETS Halide_Tools Halide_ImageIO Halide_LanguageOptions
@@ -143,18 +151,33 @@ install(FILES
 # Documentation
 ##
 
-# See /doc/CMakeLists.txt. This way, special install logic isn't needed.
+if (WITH_DOCS)
+    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html/ TYPE DOC)
+endif ()
 
 ##
 # Actual packaging
 ##
 
-set(CPACK_PACKAGE_VENDOR "Halide")
+set(CPACK_PACKAGE_NAME Halide)
+set(CPACK_PACKAGE_VENDOR Halide)
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Halide compiler and libraries")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY ${CPACK_PACKAGE_NAME})
+set(CPACK_PACKAGE_VERSION_MAJOR ${Halide_VERSION_MAJOR})
+set(CPACK_PACKAGE_VERSION_MINOR ${Halide_VERSION_MINOR})
+set(CPACK_PACKAGE_VERSION_PATCH ${Halide_VERSION_PATCH})
+set(CPACK_VERBATIM_VARIABLES YES)
+# set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_LIST_DIR}/Description.txt")
+# set(CPACK_RESOURCE_FILE_WELCOME "${CMAKE_CURRENT_LIST_DIR}/Welcome.txt")
 set(CPACK_RESOURCE_FILE_LICENSE "${Halide_SOURCE_DIR}/LICENSE.txt")
+set(CPACK_RESOURCE_FILE_README "${Halide_SOURCE_DIR}/README.md")
+
+set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${Halide_VERSION}-${Halide_CMAKE_TARGET}")
+
 if (WIN32)
-    set(CPACK_GENERATOR "ZIP")
+    set(CPACK_GENERATOR ZIP)
 else ()
-    set(CPACK_GENERATOR "TGZ")
+    set(CPACK_GENERATOR TGZ)
 endif ()
 
 include(CPack)
