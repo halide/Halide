@@ -399,7 +399,6 @@ SOURCE_FILES = \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
   AsyncProducers.cpp \
-  AutoSchedule.cpp \
   AutoScheduleUtils.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
@@ -573,7 +572,6 @@ HEADER_FILES = \
   AssociativeOpsTable.h \
   Associativity.h \
   AsyncProducers.h \
-  AutoSchedule.h \
   AutoScheduleUtils.h \
   BoundaryConditions.h \
   Bounds.h \
@@ -2128,8 +2126,9 @@ $(BUILD_DIR)/halide_config.%: $(ROOT_DIR)/tools/halide_config.%.tpl
 	       | sed -e 's;@HALIDE_LLVM_CXX_FLAGS_RAW@;${LLVM_CXX_FLAGS};g' > $@
 
 
-$(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
-                           $(BIN_DIR)/libHalide.$(SHARED_EXT) \
+$(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT): \
+			   $(LIB_DIR)/libHalide.a \
+	       		   $(BIN_DIR)/libHalide.$(SHARED_EXT) \
                            $(INCLUDE_DIR)/Halide.h \
                            $(RUNTIME_EXPORTED_INCLUDES) \
                            $(ROOT_DIR)/README*.md \
@@ -2168,6 +2167,30 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
+
+$(DISTRIB_DIR)/bin/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT)
+	$(MAKE) -f $(SRC_DIR)/plugins/autoschedulers/$*/Makefile bin/libautoschedule_$*.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(DISTRIB_DIR)
+	cp $(BIN_DIR)/libautoschedule_$*.so $(DISTRIB_DIR)/bin; 
+
+# Adams2019 also includes autotuning tools
+$(DISTRIB_DIR)/bin/libautoschedule_adams2019.$(SHARED_EXT): $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT)
+	$(MAKE) -f $(SRC_DIR)/plugins/autoschedulers/adams2019/Makefile bin/libautoschedule_adams2019.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(DISTRIB_DIR) bin/retrain_cost_model bin/featurization_to_sample bin/get_host_target
+	cp $(BIN_DIR)/libautoschedule_adams2019.so $(DISTRIB_DIR)/bin/
+	cp $(BIN_DIR)/retrain_cost_model $(DISTRIB_DIR)/bin/
+	cp $(BIN_DIR)/featurization_to_sample $(DISTRIB_DIR)/bin/
+	cp $(BIN_DIR)/get_host_target $(DISTRIB_DIR)/bin/
+	cp $(SRC_DIR)/plugins/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
+
+.PHONY: autoschedulers
+autoschedulers: \
+$(DISTRIB_DIR)/bin/libautoschedule_mullapudi2016.$(SHARED_EXT) \
+$(DISTRIB_DIR)/bin/libautoschedule_li2018.$(SHARED_EXT) \
+$(DISTRIB_DIR)/bin/libautoschedule_adams2019.$(SHARED_EXT)
+
+.PHONY: distrib
+distrib: $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT) autoschedulers
+
+$(DISTRIB_DIR)/halide.tgz: distrib
 	ln -sf $(DISTRIB_DIR) halide
 	tar -czf $(BUILD_DIR)/halide.tgz \
 		halide/bin \
@@ -2179,10 +2202,6 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/halide_config.*
 	rm -rf halide
 	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
-
-
-.PHONY: distrib
-distrib: $(DISTRIB_DIR)/halide.tgz
 
 $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h $(ROOT_DIR)/tools/halide_trace_config.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -L$(BIN_DIR) -o $@

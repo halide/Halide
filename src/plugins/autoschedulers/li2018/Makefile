@@ -1,23 +1,35 @@
-include ../support/Makefile.inc
+THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
+SRC  = $(strip $(shell dirname $(THIS_MAKEFILE)))
+HALIDE_ROOT = $(realpath $(SRC)/../../../../)
+COMMON_DIR =  $(realpath $(SRC)/../common/)
 
-$(BIN)/libgradient_autoscheduler.so: GradientAutoscheduler.cpp ASLog.cpp $(LIB_HALIDE)
+# Assume an in-tree build of a halide distro exists. Most uses of this
+# Makefile should probably set this variable explicitly.
+HALIDE_DISTRIB_PATH ?= $(realpath $(SRC)/../../../../distrib)
+
+# The example uses a generator, though the autoscheduler itself does not require one
+include $(HALIDE_ROOT)/apps/support/Makefile.inc
+
+CXXFLAGS += -I$(COMMON_DIR)
+
+$(BIN)/libautoschedule_li2018.so: $(SRC)/GradientAutoscheduler.cpp $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS)
 
 # Demonstrate a JIT-based use of gradient autoscheuler
-$(BIN)/test: test.cpp $(BIN)/libgradient_autoscheduler.so
+$(BIN)/test: $(SRC)/test.cpp $(BIN)/libautoschedule_li2018.so
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) test.cpp -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Demonstrate a generator-based use of gradient autoscheuler
-$(GENERATOR_BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/demo.generator: $(SRC)/demo_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Use the -p flag to the generator to load the autoscheduler as a plugin
-$(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(BIN)/libgradient_autoscheduler.so
+$(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(BIN)/libautoschedule_li2018.so
 	@mkdir -p $(@D)
-	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* auto_schedule=true -p $(BIN)/libgradient_autoscheduler.so -s Li2018
+	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* auto_schedule=true -p $(BIN)/libautoschedule_li2018.so -s Li2018
 
 $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN)/%/demo.a
 	@mkdir -p $(@D)
@@ -26,18 +38,18 @@ $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN
 .PHONY: build test clean run_test_cpp run_test_py test_generator
 
 # demonstrates single-shot use of the autoscheduler
-test_generator: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libgradient_autoscheduler.so
+test_generator: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.so
 	$< --benchmarks=all --benchmark_min_time=1 --estimate_all
 
 run_test_cpp: $(BIN)/test
-	LD_LIBRARY_PATH=$(BIN) $<
+	LD_LIBRARY_PATH=$(BIN) $< $(BIN)/libautoschedule_li2018.so
 
-run_test_py: test.py $(BIN)/libgradient_autoscheduler.so
+run_test_py: $(SRC)/test.py $(BIN)/libautoschedule_li2018.so
 	PYTHONPATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin:$$PYTHONPATH \
 		LD_LIBRARY_PATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin \
 		$(PYTHON) test.py
 
-build: $(BIN)/test $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libgradient_autoscheduler.so
+build: $(BIN)/test $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.so
 
 test: run_test_cpp run_test_py test_generator
 
