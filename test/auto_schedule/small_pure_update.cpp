@@ -7,6 +7,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
     load_plugin(argv[1]);
 
     Buffer<float> in(13, 17);

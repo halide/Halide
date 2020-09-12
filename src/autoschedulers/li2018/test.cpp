@@ -3,6 +3,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
     load_plugin(argv[1]);
 
     MachineParams params(32, 16000000, 40);
