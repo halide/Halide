@@ -2182,16 +2182,18 @@ $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT): \
 
 $(DISTRIB_DIR)/bin/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT)
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/$*/Makefile bin/libautoschedule_$*.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
-	cp $(BIN_DIR)/libautoschedule_$*.so $(DISTRIB_DIR)/bin; 
+	cp $(BIN_DIR)/libautoschedule_$*.$(SHARED_EXT) $(DISTRIB_DIR)/bin
+	install_name_tool -id $(CURDIR)/$@ $(CURDIR)/$@
 
 # Adams2019 also includes autotuning tools
 $(DISTRIB_DIR)/bin/libautoschedule_adams2019.$(SHARED_EXT): $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT)
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile bin/libautoschedule_adams2019.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) bin/retrain_cost_model bin/featurization_to_sample bin/get_host_target
-	cp $(BIN_DIR)/libautoschedule_adams2019.so $(DISTRIB_DIR)/bin/
+	cp $(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT) $(DISTRIB_DIR)/bin/
 	cp $(BIN_DIR)/retrain_cost_model $(DISTRIB_DIR)/bin/
 	cp $(BIN_DIR)/featurization_to_sample $(DISTRIB_DIR)/bin/
 	cp $(BIN_DIR)/get_host_target $(DISTRIB_DIR)/bin/
 	cp $(SRC_DIR)/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
+	install_name_tool -id $(CURDIR)/$@ $(CURDIR)/$@
 
 .PHONY: autoschedulers
 autoschedulers: \

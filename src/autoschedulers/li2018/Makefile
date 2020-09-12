@@ -12,12 +12,12 @@ include $(HALIDE_SRC_ROOT)/apps/support/Makefile.inc
 
 CXXFLAGS += -I$(COMMON_DIR)
 
-$(BIN)/libautoschedule_li2018.so: $(SRC)/GradientAutoscheduler.cpp $(LIB_HALIDE)
+$(BIN)/libautoschedule_li2018.$(SHARED_EXT): $(SRC)/GradientAutoscheduler.cpp $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS)
 
 # Demonstrate a JIT-based use of gradient autoscheuler
-$(BIN)/test: $(SRC)/test.cpp $(BIN)/libautoschedule_li2018.so
+$(BIN)/test: $(SRC)/test.cpp $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(SRC)/test.cpp -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
@@ -27,9 +27,9 @@ $(GENERATOR_BIN)/demo.generator: $(SRC)/demo_generator.cpp $(GENERATOR_DEPS)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Use the -p flag to the generator to load the autoscheduler as a plugin
-$(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(BIN)/libautoschedule_li2018.so
+$(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 	@mkdir -p $(@D)
-	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* auto_schedule=true -p $(BIN)/libautoschedule_li2018.so -s Li2018
+	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* auto_schedule=true -p $(BIN)/libautoschedule_li2018.$(SHARED_EXT) -s Li2018
 
 $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN)/%/demo.a
 	@mkdir -p $(@D)
@@ -38,18 +38,18 @@ $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN
 .PHONY: build test clean run_test_cpp run_test_py test_generator
 
 # demonstrates single-shot use of the autoscheduler
-test_generator: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.so
+test_generator: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 	$< --benchmarks=all --benchmark_min_time=1 --estimate_all
 
 run_test_cpp: $(BIN)/test
-	LD_LIBRARY_PATH=$(BIN) $< $(BIN)/libautoschedule_li2018.so
+	LD_LIBRARY_PATH=$(BIN) $< $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 
-run_test_py: $(SRC)/test.py $(BIN)/libautoschedule_li2018.so
+run_test_py: $(SRC)/test.py $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 	PYTHONPATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin:$$PYTHONPATH \
 		LD_LIBRARY_PATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin \
 		$(PYTHON) $(SRC)/test.py
 
-build: $(BIN)/test $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.so
+build: $(BIN)/test $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 
 test: run_test_cpp run_test_py test_generator
 

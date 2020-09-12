@@ -137,7 +137,11 @@ LIBHALIDE_LDFLAGS_STATIC ?=  -L $(dir $(LIB_HALIDE_STATIC)) -lHalide $(LDFLAGS)
 AUTOSCHEDULER ?= mullapudi2016
 ifneq ($(AUTOSCHEDULER),)
 LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/bin/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT) 
+ifeq ($(UNAME), Darwin)
+LIBHALIDE_LDFLAGS +=  -Wl,-force_load $(HALIDE_DISTRIB_PATH)/bin/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
+else
 LIBHALIDE_LDFLAGS +=  -Wl,--no-as-needed -lautoschedule_$(AUTOSCHEDULER) -Wl,--as-needed
+endif
 endif
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)

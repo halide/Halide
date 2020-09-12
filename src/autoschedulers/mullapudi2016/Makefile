@@ -8,6 +8,6 @@ include $(HALIDE_ROOT)/apps/support/Makefile.inc
 
 CXXFLAGS += -I$(COMMON_DIR)
 
-$(BIN)/libautoschedule_mullapudi2016.so: $(SRC)/AutoSchedule.cpp $(LIB_HALIDE)
+$(BIN)/libautoschedule_mullapudi2016.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS)
