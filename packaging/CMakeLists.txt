@@ -60,6 +60,11 @@ install(TARGETS Halide_Runtime
         EXPORT Halide_Interfaces
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
+if (TARGET Halide_Adams2019)
+    install(TARGETS retrain_cost_model featurization_to_sample get_host_target weightsdir_to_weightsfile
+            EXPORT Halide_Interfaces)
+endif ()
+
 # Captures both the runtime and Halide.h
 install(DIRECTORY ${Halide_BINARY_DIR}/include/ TYPE INCLUDE FILES_MATCHING PATTERN "include/*.h")
 
@@ -80,6 +85,7 @@ install(FILES
 
 install(DIRECTORY ${Halide_SOURCE_DIR}/tools
         TYPE DATA
+        COMPONENT Halide_Development
         FILES_MATCHING
         PATTERN "*.h"
         PATTERN "*.cpp"
@@ -87,6 +93,10 @@ install(DIRECTORY ${Halide_SOURCE_DIR}/tools
         PATTERN "binary2cpp.cpp" EXCLUDE
         PATTERN "build_halide_h.cpp" EXCLUDE
         PATTERN "find_inverse.cpp" EXCLUDE)
+
+install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/tools
+        COMPONENT Halide_Development)
 
 ##
 # Tutorial
@@ -124,7 +134,9 @@ if (Halide_SHARED_LLVM OR (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM))
         file(APPEND "${depFile}" "find_dependency(LLD CONFIG HINTS \"\${LLVM_DIR}/../lld\")\n")
     endif ()
 
-    install(FILES "${depFile}" DESTINATION ${HALIDE_INSTALL_CMAKEDIR})
+    install(FILES "${depFile}"
+            DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+            COMPONENT Halide_Development)
 endif ()
 
 install(EXPORT Halide_Targets
@@ -150,14 +162,17 @@ install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfigVersion.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideGeneratorHelpers.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
-        DESTINATION ${HALIDE_INSTALL_CMAKEDIR})
+        DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+        COMPONENT Halide_Development)
 
 ##
 # Documentation
 ##
 
 if (WITH_DOCS)
-    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html/ TYPE DOC)
+    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html/
+            TYPE DOC
+            COMPONENT Halide_Documentation)
 endif ()
 
 ##
