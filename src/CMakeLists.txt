@@ -373,7 +373,10 @@ add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
-target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
+target_compile_definitions(Halide
+                           PRIVATE
+                           $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>
+                           $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:WITH_INTROSPECTION>)
 
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON

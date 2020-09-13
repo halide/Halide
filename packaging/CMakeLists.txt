@@ -60,10 +60,27 @@ install(TARGETS Halide_Runtime
         EXPORT Halide_Interfaces
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-if (TARGET Halide_Adams2019)
-    install(TARGETS retrain_cost_model featurization_to_sample get_host_target weightsdir_to_weightsfile
-            EXPORT Halide_Interfaces)
+set(exes "")
+foreach (exe IN ITEMS retrain_cost_model featurization_to_sample get_host_target weightsdir_to_weightsfile)
+    if (TARGET ${exe})
+        list(APPEND exes ${exe})
+    endif ()
+endforeach ()
+
+file(RELATIVE_PATH lib_dir
+     ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}
+     ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR})
+
+if (APPLE)
+    set(rbase @loader_path)
+else ()
+    set(rbase $ORIGIN)
 endif ()
+
+set_target_properties(${exes} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+
+install(TARGETS ${exes}
+        EXPORT Halide_Interfaces)
 
 # Captures both the runtime and Halide.h
 install(DIRECTORY ${Halide_BINARY_DIR}/include/ TYPE INCLUDE FILES_MATCHING PATTERN "include/*.h")
