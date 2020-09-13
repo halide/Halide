@@ -113,6 +113,10 @@ install(DIRECTORY ${Halide_SOURCE_DIR}/tools
 
 install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
         DESTINATION ${CMAKE_INSTALL_DATADIR}/tools
+        PERMISSIONS
+        OWNER_READ OWNER_WRITE OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
         COMPONENT Halide_Development)
 
 ##
