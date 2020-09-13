@@ -5,12 +5,12 @@
 // parallelization, unrolling, and tiling.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_05 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_05
+// g++ lesson_05*.cpp -g -I ../include -L ../lib -lHalide -lpthread -ldl -o lesson_05 -std=c++11
+// LD_LIBRARY_PATH=../lib ./lesson_05
 
 // On os x:
-// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -o lesson_05 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_05
+// g++ lesson_05*.cpp -g -I ../include -L ../lib -lHalide -o lesson_05 -std=c++11
+// DYLD_LIBRARY_PATH=../lib ./lesson_05
 
 // If you have the entire Halide source tree, you can also build it by
 // running:

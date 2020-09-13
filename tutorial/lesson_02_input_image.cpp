@@ -4,12 +4,12 @@
 // them.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_02*.cpp -g -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_02 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_02
+// g++ lesson_02*.cpp -g -I ../include -I ../tools -L ../lib -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_02 -std=c++11
+// LD_LIBRARY_PATH=../lib ./lesson_02
 
 // On os x:
-// g++ lesson_02*.cpp -g -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_02 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_02
+// g++ lesson_02*.cpp -g -I ../include -I ../tools -L ../lib -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_02 -std=c++11
+// DYLD_LIBRARY_PATH=../lib ./lesson_02
 
 // If you have the entire Halide source tree, you can also build it by
 // running:

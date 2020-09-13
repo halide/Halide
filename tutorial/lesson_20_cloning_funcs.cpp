@@ -4,12 +4,12 @@
 // a Func.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_20*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_20 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_20
+// g++ lesson_20*.cpp -g -I ../include -L ../lib -lHalide -lpthread -ldl -o lesson_20 -std=c++11
+// LD_LIBRARY_PATH=../lib ./lesson_20
 
 // On os x:
-// g++ lesson_20*.cpp -g -I ../include -L ../bin -lHalide -o lesson_20 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_20
+// g++ lesson_20*.cpp -g -I ../include -L ../lib -lHalide -o lesson_20 -std=c++11
+// DYLD_LIBRARY_PATH=../lib ./lesson_20
 
 // If you have the entire Halide source tree, you can also build it by
 // running:

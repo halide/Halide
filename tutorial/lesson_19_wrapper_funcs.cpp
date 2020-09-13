@@ -5,12 +5,12 @@
 // from a Func or an ImageParam.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_19*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_19 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_19
+// g++ lesson_19*.cpp -g -I ../include -L ../lib -lHalide -lpthread -ldl -o lesson_19 -std=c++11
+// LD_LIBRARY_PATH=../lib ./lesson_19
 
 // On os x:
-// g++ lesson_19*.cpp -g -I ../include -L ../bin -lHalide -o lesson_19 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_19
+// g++ lesson_19*.cpp -g -I ../include -L ../lib -lHalide -o lesson_19 -std=c++11
+// DYLD_LIBRARY_PATH=../lib ./lesson_19
 
 // If you have the entire Halide source tree, you can also build it by
 // running:

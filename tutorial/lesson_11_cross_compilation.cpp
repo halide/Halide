@@ -4,12 +4,12 @@
 // generate code for any platform from any platform.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_11*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_11
-// LD_LIBRARY_PATH=../bin ./lesson_11
+// g++ lesson_11*.cpp -g -std=c++11 -I ../include -L ../lib -lHalide -lpthread -ldl -o lesson_11
+// LD_LIBRARY_PATH=../lib ./lesson_11
 
 // On os x:
-// g++ lesson_11*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -o lesson_11
-// DYLD_LIBRARY_PATH=../bin ./lesson_11
+// g++ lesson_11*.cpp -g -std=c++11 -I ../include -L ../lib -lHalide -o lesson_11
+// DYLD_LIBRARY_PATH=../lib ./lesson_11
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
