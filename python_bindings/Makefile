@@ -26,7 +26,7 @@ USE_EXPORT_DYNAMIC=
 endif
 endif
 
-LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
+LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/lib/libHalide.$(SHARED_EXT)
 
 SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
 

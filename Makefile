@@ -2138,7 +2138,7 @@ $(BUILD_DIR)/halide_config.%: $(ROOT_DIR)/tools/halide_config.%.tpl
 	       | sed -e 's;@HALIDE_LLVM_CXX_FLAGS_RAW@;${LLVM_CXX_FLAGS};g' > $@
 
 
-$(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT): \
+$(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 			   $(LIB_DIR)/libHalide.a \
 	       		   $(BIN_DIR)/libHalide.$(SHARED_EXT) \
                            $(INCLUDE_DIR)/Halide.h \
@@ -2154,7 +2154,7 @@ $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT): \
 	         $(DISTRIB_DIR)/tutorial/images \
 	         $(DISTRIB_DIR)/tools \
 	         $(DISTRIB_DIR)/tutorial/figures
-	cp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/bin
+	cp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/lib
 	cp $(LIB_DIR)/libHalide.a $(DISTRIB_DIR)/lib
 	cp $(INCLUDE_DIR)/Halide.h $(DISTRIB_DIR)/include
 	cp $(INCLUDE_DIR)/HalideBuffer.h $(DISTRIB_DIR)/include
@@ -2180,20 +2180,29 @@ $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
 
-$(DISTRIB_DIR)/bin/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/$*/Makefile bin/libautoschedule_$*.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
-	cp $(BIN_DIR)/libautoschedule_$*.$(SHARED_EXT) $(DISTRIB_DIR)/bin
+	cp $(BIN_DIR)/libautoschedule_$*.$(SHARED_EXT) $(DISTRIB_DIR)/lib
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$@ $(CURDIR)/$@
 endif
 
 # Adams2019 also includes autotuning tools
-$(DISTRIB_DIR)/bin/libautoschedule_adams2019.$(SHARED_EXT): $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile bin/libautoschedule_adams2019.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) bin/retrain_cost_model bin/featurization_to_sample bin/get_host_target
-	cp $(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT) $(DISTRIB_DIR)/bin/
-	cp $(BIN_DIR)/retrain_cost_model $(DISTRIB_DIR)/bin/
-	cp $(BIN_DIR)/featurization_to_sample $(DISTRIB_DIR)/bin/
-	cp $(BIN_DIR)/get_host_target $(DISTRIB_DIR)/bin/
+	cp $(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT) $(DISTRIB_DIR)/lib/
+	# Make rpath relative
+ifeq ($(UNAME), Darwin)
+	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
+		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+		install_name_tool -add_rpath '@executable_path/../lib' $(DISTRIB_DIR)/bin/$${TOOL};  \
+	done
+else
+	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
+		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+		patchelf --set-rpath '$$ORIGIN/../lib' $(DISTRIB_DIR)/bin/$${TOOL};  \
+	done
+endif 
 	cp $(SRC_DIR)/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$@ $(CURDIR)/$@
@@ -2201,12 +2210,12 @@ endif
 
 .PHONY: autoschedulers
 autoschedulers: \
-$(DISTRIB_DIR)/bin/libautoschedule_mullapudi2016.$(SHARED_EXT) \
-$(DISTRIB_DIR)/bin/libautoschedule_li2018.$(SHARED_EXT) \
-$(DISTRIB_DIR)/bin/libautoschedule_adams2019.$(SHARED_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) \
+$(DISTRIB_DIR)/lib/libautoschedule_li2018.$(SHARED_EXT) \
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT)
 
 .PHONY: distrib
-distrib: $(DISTRIB_DIR)/bin/libHalide.$(SHARED_EXT) autoschedulers
+distrib: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT) autoschedulers
 
 $(DISTRIB_DIR)/halide.tgz: distrib
 	ln -sf $(DISTRIB_DIR) halide
