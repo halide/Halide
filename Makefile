@@ -2179,6 +2179,9 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
+ifeq ($(UNAME), Darwin)
+	install_name_tool -id @rpath/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+endif
 
 $(DISTRIB_DIR)/lib/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/$*/Makefile bin/libautoschedule_$*.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
