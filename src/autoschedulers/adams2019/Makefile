@@ -11,6 +11,13 @@ $(info Looking for Halide distro at $(HALIDE_DISTRIB_PATH). If this is incorrect
 AUTOSCHEDULER=
 include $(HALIDE_SRC_ROOT)/apps/support/Makefile.inc
 
+# Add the relative location of libHalide.so in the rpath in a distro
+ifeq ($(UNAME), Darwin)
+LIBHALIDE_LDFLAGS += '-Wl,-rpath,@executable_path/../lib'
+else
+LIBHALIDE_LDFLAGS += '-Wl,-rpath,$$ORIGIN/../lib'
+endif
+
 CXXFLAGS += -I$(COMMON_DIR)
 
 AUTOSCHED_WEIGHT_OBJECTS=$(BIN)/baseline_weights.o

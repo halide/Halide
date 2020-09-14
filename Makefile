@@ -2191,18 +2191,9 @@ endif
 $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile bin/libautoschedule_adams2019.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) bin/retrain_cost_model bin/featurization_to_sample bin/get_host_target
 	cp $(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT) $(DISTRIB_DIR)/lib/
-	# Make rpath relative
-ifeq ($(UNAME), Darwin)
 	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
 		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
-		install_name_tool -add_rpath '@executable_path/../lib' $(DISTRIB_DIR)/bin/$${TOOL};  \
 	done
-else
-	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
-		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
-		patchelf --set-rpath '$$ORIGIN/../lib' $(DISTRIB_DIR)/bin/$${TOOL};  \
-	done
-endif 
 	cp $(SRC_DIR)/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$@ $(CURDIR)/$@
