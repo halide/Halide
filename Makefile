@@ -2179,12 +2179,15 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
+ifeq ($(UNAME), Darwin)
+	install_name_tool -id @rpath/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+endif
 
 $(DISTRIB_DIR)/lib/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/$*/Makefile bin/libautoschedule_$*.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	cp $(BIN_DIR)/libautoschedule_$*.$(SHARED_EXT) $(DISTRIB_DIR)/lib
 ifeq ($(UNAME), Darwin)
-	install_name_tool -id $(CURDIR)/$@ $(CURDIR)/$@
+	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
 
 # Adams2019 also includes autotuning tools
@@ -2196,7 +2199,7 @@ $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT): $(DISTRIB_DIR)/lib/l
 	done
 	cp $(SRC_DIR)/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
 ifeq ($(UNAME), Darwin)
-	install_name_tool -id $(CURDIR)/$@ $(CURDIR)/$@
+	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
 
 .PHONY: autoschedulers

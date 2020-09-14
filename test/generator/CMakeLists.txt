@@ -153,7 +153,7 @@ halide_define_aot_test(async_parallel
 
 # autograd_aottest.cpp
 # autograd_generator.cpp
-halide_define_aot_test(autograd ENABLE_IF TARGET Halide::Mullapudi2016)
+halide_define_aot_test(autograd ENABLE_IF TARGET Halide::Mullapudi2016 AND NOT ${USING_WASM})
 if (TARGET generator_aot_autograd)
     add_halide_library(autograd_grad
                        GRADIENT_DESCENT
