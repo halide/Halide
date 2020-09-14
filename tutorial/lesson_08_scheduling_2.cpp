@@ -1,12 +1,12 @@
 // Halide tutorial lesson 8: Scheduling multi-stage pipelines
 
 // On linux, you can compile and run it like so:
-// g++ lesson_08*.cpp -g -std=c++11 -I ../include -L ../lib -lHalide -lpthread -ldl -o lesson_08
-// LD_LIBRARY_PATH=../lib ./lesson_08
+// g++ lesson_08*.cpp -g -std=c++11 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_08
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_08
 
 // On os x:
-// g++ lesson_08*.cpp -g -std=c++11 -I ../include -L ../lib -lHalide -o lesson_08
-// DYLD_LIBRARY_PATH=../lib ./lesson_08
+// g++ lesson_08*.cpp -g -std=c++11 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_08
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_08
 
 // If you have the entire Halide source tree, you can also build it by
 // running:

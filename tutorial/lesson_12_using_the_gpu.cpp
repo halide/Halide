@@ -3,12 +3,12 @@
 // This lesson demonstrates how to use Halide to run code on a GPU using OpenCL.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_12*.cpp -g -std=c++11 -I ../include -I ../tools -L ../lib -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_12
-// LD_LIBRARY_PATH=../lib ./lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_12
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_12
 
 // On os x:
-// g++ lesson_12*.cpp -g -std=c++11 -I ../include -I ../tools -L ../lib -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_12
-// DYLD_LIBRARY_PATH=../lib ./lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_12
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_12
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
