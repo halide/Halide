@@ -14,8 +14,10 @@ add_custom_command(OUTPUT ${WF_CPP}
 add_executable(cost_model.generator cost_model_generator.cpp)
 target_link_libraries(cost_model.generator PRIVATE Halide::Generator)
 
-add_halide_library(cost_model FROM cost_model.generator)
+add_halide_library(cost_model FROM cost_model.generator
+                   TARGETS cmake)
 add_halide_library(train_cost_model FROM cost_model.generator
+                   TARGETS cmake
                    USE_RUNTIME cost_model.runtime)
 
 # retrain_cost_model
@@ -54,6 +56,7 @@ add_executable(demo.generator demo_generator.cpp)
 target_link_libraries(demo.generator PRIVATE Halide::Generator)
 
 add_halide_library(demo FROM demo.generator
+                   TARGETS cmake
                    AUTOSCHEDULER Halide::Adams2019
                    REGISTRATION DEMO_REGISTRATION_FILE)
 
@@ -74,6 +77,7 @@ add_executable(included_schedule_file.generator included_schedule_file_generator
 target_link_libraries(included_schedule_file.generator PRIVATE Halide::Generator)
 
 add_halide_library(included_schedule_file FROM included_schedule_file.generator
+                   TARGETS cmake
                    AUTOSCHEDULER Halide::Adams2019
                    REGISTRATION included_schedule_reg)
 
