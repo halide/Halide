@@ -43,14 +43,10 @@ function(add_app_test NAME)
     endif ()
 
     set(cmakeDefinitionOpts
-        # TODO: enable verbose here temporarily, to try to track down flaky Windows failures
-        "-DCMAKE_VERBOSE_MAKEFILE=ON"
         "-DCMAKE_PREFIX_PATH=${HALIDE_DIR}"
         "-DCMAKE_BUILD_TYPE=$<CONFIG>"
-        "-DLLVM_DIR=${LLVM_DIR}")
-    if (NOT "${Halide_TARGET}" STREQUAL "")
-        list(APPEND cmakeDefinitionOpts "-DHalide_TARGET=${Halide_TARGET}")
-    endif ()
+        "-DLLVM_DIR=${LLVM_DIR}"
+        "-DHalide_TARGET=${Halide_TARGET}")
 
     add_test(NAME ${NAME}
              COMMAND ${CMAKE_CTEST_COMMAND}
@@ -78,6 +74,7 @@ add_app_test(c_backend)
 add_app_test(camera_pipe)
 add_app_test(conv_layer)
 add_app_test(cuda_mat_mul)
+add_app_test(depthwise_separable_conv)
 #add_app_test(glsl)  # TODO(#4937): bugged; not built by Makefile
 add_app_test(harris)
 add_app_test(hist)

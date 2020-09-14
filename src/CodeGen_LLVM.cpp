@@ -3538,7 +3538,7 @@ void CodeGen_LLVM::create_assertion(Value *cond, const Expr &message, llvm::Valu
     VectorType *vt = dyn_cast<VectorType>(cond->getType());
     if (vt) {
         Value *scalar_cond = builder->CreateExtractElement(cond, ConstantInt::get(i32_t, 0));
-        for (unsigned i = 1; i < vt->getNumElements(); i++) {
+        for (int i = 1; i < get_vector_num_elements(vt); i++) {
             Value *lane = builder->CreateExtractElement(cond, ConstantInt::get(i32_t, i));
             scalar_cond = builder->CreateAnd(scalar_cond, lane);
         }

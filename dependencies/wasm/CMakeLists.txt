@@ -27,13 +27,13 @@ if (WITH_WABT)
                          GIT_SUBMODULES "")
 
     # configuration for wabt
-    set(WITH_EXCEPTIONS ${HALIDE_ENABLE_EXCEPTIONS})
+    set(WITH_EXCEPTIONS ${Halide_ENABLE_EXCEPTIONS})
     set(BUILD_TESTS OFF)
     set(BUILD_TOOLS OFF)
     set(BUILD_LIBWASM OFF)
     FetchContent_MakeAvailable(wabt)
 
-    set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+    set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
     # TODO: we want to require unique prefixes to include these files, to avoid ambiguity;
     # this means we have to prefix with "wabt-src/...", which is less bad than other alternatives,
@@ -139,9 +139,9 @@ function(add_wasm_executable TARGET)
     endforeach ()
 
     add_custom_command(OUTPUT "${TARGET}.wasm" "${TARGET}.js"
+                       COMMAND ${EMCC} ${EMCC_FLAGS} ${INCLUDES} ${SRCS} ${DEPS} -o "${TARGET}.js"
                        DEPENDS ${SRCS} ${DEPS}
-                       VERBATIM
-                       COMMAND ${EMCC} ${EMCC_FLAGS} ${INCLUDES} ${SRCS} ${DEPS} -o "${TARGET}.js")
+                       VERBATIM)
 
     add_custom_target("${TARGET}" ALL
                       DEPENDS "${TARGET}.wasm" "${TARGET}.js")
