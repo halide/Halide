@@ -478,11 +478,11 @@ class VectorSubs : public IRMutator {
     bool in_hexagon;  // Are we inside the hexagon loop?
 
     // A scope containing lets and letstmts whose values became
-    // vectors. Expressions are original, non-vectorized expressions.
+    // vectors. Contains are original, non-vectorized expressions.
     Scope<Expr> scope;
 
-    // The same set of Exprs, indexed by the vectorized var name and
-    // holding vectorized expression.
+    // Based on the same set of Exprs, but indexed by the vectorized
+    // var name and holding vectorized expression.
     Scope<Expr> vector_scope;
 
     // A stack of all containing lets. We need to reinject the scalar
