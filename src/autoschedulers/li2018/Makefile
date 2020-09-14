@@ -12,9 +12,15 @@ include $(HALIDE_SRC_ROOT)/apps/support/Makefile.inc
 
 CXXFLAGS += -I$(COMMON_DIR)
 
+ifeq ($(UNAME), Darwin)
+HALIDE_RPATH_FOR_LIB += '-Wl,-rpath,@loader_path'
+else
+HALIDE_RPATH_FOR_LIB += '-Wl,-rpath,$$ORIGIN'
+endif
+
 $(BIN)/libautoschedule_li2018.$(SHARED_EXT): $(SRC)/GradientAutoscheduler.cpp $(LIB_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
 
 # Demonstrate a JIT-based use of gradient autoscheuler
 $(BIN)/test: $(SRC)/test.cpp $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
@@ -49,7 +55,7 @@ run_test_py: $(SRC)/test.py $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 		LD_LIBRARY_PATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin \
 		$(PYTHON) $(SRC)/test.py
 
-build: $(BIN)/test $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
+\build: $(BIN)/test $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 
 test: run_test_cpp run_test_py test_generator
 

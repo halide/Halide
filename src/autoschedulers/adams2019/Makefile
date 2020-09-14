@@ -13,9 +13,11 @@ include $(HALIDE_SRC_ROOT)/apps/support/Makefile.inc
 
 # Add the relative location of libHalide.so in the rpath in a distro
 ifeq ($(UNAME), Darwin)
-LIBHALIDE_LDFLAGS += '-Wl,-rpath,@executable_path/../lib'
+HALIDE_RPATH_FOR_BIN = '-Wl,-rpath,@executable_path/../lib'
+HALIDE_RPATH_FOR_LIB = '-Wl,-rpath,@loader_path'
 else
-LIBHALIDE_LDFLAGS += '-Wl,-rpath,$$ORIGIN/../lib'
+HALIDE_RPATH_FOR_BIN = '-Wl,-rpath,$$ORIGIN/../lib'
+HALIDE_RPATH_FOR_LIB = '-Wl,-rpath,$$ORIGIN'
 endif
 
 CXXFLAGS += -I$(COMMON_DIR)
@@ -73,7 +75,7 @@ $(BIN)/libautoschedule_adams2019.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 				$(GENERATOR_DEPS) \
 				$(BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
 
 $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 				$(SRC)/ASLog.cpp \
@@ -87,16 +89,15 @@ $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 				$(AUTOSCHED_WEIGHT_OBJECTS) \
 				$(BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_OPEN_MP)
+	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_OPEN_MP) $(HALIDE_RPATH_FOR_BIN)
 
 $(BIN)/featurization_to_sample: $(SRC)/featurization_to_sample.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $< $(OPTIMIZE) -o $@
+	$(CXX) $(CXXFLAGS) $< $(OPTIMIZE) -o $@ 
 
 $(BIN)/get_host_target: $(SRC)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) $(OPTIMIZE) -o $@
-
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) $(OPTIMIZE) -o $@ $(HALIDE_RPATH_FOR_BIN)
 $(BIN)/weightsdir_to_weightsfile: $(SRC)/weightsdir_to_weightsfile.cpp $(SRC)/Weights.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@

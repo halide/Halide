@@ -1500,7 +1500,13 @@ $(FILTERS_DIR)/external_code.halide_generated.cpp: $(BIN_DIR)/external_code.gene
 
 $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) 
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad  -d 1 target=$(TARGET)-no_runtime auto_schedule=true -p $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
+	# FIXME: The autoscheduler looks for libHalide in the same
+	# directory, which is normally a distro. But the generator
+	# tests use bin/libHalide.so instead of a distro. For now,
+	# just copy the autoscheduler to a place where it won't
+	# confuse the linker.
+	cp $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) $(BIN_DIR)
+	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime auto_schedule=true -d 1 -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
@@ -1849,9 +1855,9 @@ test_mullapudi2016: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=a
 
 # These tests were written for the Mullapudi2016 autoscheduler.
 # TODO: either make them work with all autoschedulers or move them under src/autoschedulers/mullapudi2016
-auto_schedule_%: $(BIN_DIR)/auto_schedule_% $(DISTRIB_DIR)/bin/libautoschedule_mullapudi2016.$(SHARED_EXT)
+auto_schedule_%: $(BIN_DIR)/auto_schedule_% $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(DISTRIB_DIR))/bin/libautoschedule_mullapudi2016.$(SHARED_EXT)
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(BIN_DIR))/libautoschedule_mullapudi2016.$(SHARED_EXT)
 	@-echo
 
 # The other autoschedulers contain their own tests
