@@ -7,6 +7,7 @@ add_executable(demo_gradient.generator demo_generator.cpp)
 target_link_libraries(demo_gradient.generator PRIVATE Halide::Generator)
 
 add_halide_library(demo_gradient FROM demo_gradient.generator
+                   TARGETS cmake
                    GENERATOR demo
                    FUNCTION_NAME demo
                    AUTOSCHEDULER Halide::Li2018
