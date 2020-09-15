@@ -1,7 +1,7 @@
 #include "HexagonOptimize.h"
 #include "Bounds.h"
-#include "CodeGen_Internal.h"
 #include "CSE.h"
+#include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
 #include "ExprUsesVar.h"
 #include "HexagonAlignment.h"
