@@ -89,7 +89,7 @@ bool can_allocation_fit_on_stack(int64_t size);
 
 /** Does a division round to zero using binary long division for unsigned int.
  *  Returns a when b == 0. */
-Expr unsigned_long_div(Expr a, const Expr b,
+Expr unsigned_long_div(Expr a, const Expr &b,
                        const Scope<Interval> &bounds = Scope<Interval>::empty_scope());
 
 /** Given a Halide Euclidean division/mod operation, do constant optimizations
