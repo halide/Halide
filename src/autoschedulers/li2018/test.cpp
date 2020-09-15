@@ -3,10 +3,12 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    // Loads libgradient_autoscheduler.so (or gradient_autoscheduler.dll),
-    // which is presumed to be in current library search path
-    load_plugin("gradient_autoscheduler");
-    Pipeline::set_default_autoscheduler_name("Li2018");
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
+    load_plugin(argv[1]);
 
     MachineParams params(32, 16000000, 40);
     Target target;

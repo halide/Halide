@@ -22,8 +22,10 @@
 
 #include "runtime/HalideRuntime.h"
 
-#ifndef HALIDE_EXPORT
-#if defined(_MSC_VER) && !defined(Halide_STATIC_DEFINE)
+#ifdef Halide_STATIC_DEFINE
+#define HALIDE_EXPORT
+#else
+#if defined(_MSC_VER)
 // Halide_EXPORTS is quietly defined by CMake when building a shared library
 #ifdef Halide_EXPORTS
 #define HALIDE_EXPORT __declspec(dllexport)
@@ -31,7 +33,7 @@
 #define HALIDE_EXPORT __declspec(dllimport)
 #endif
 #else
-#define HALIDE_EXPORT
+#define HALIDE_EXPORT __attribute__((visibility("default")))
 #endif
 #endif
 

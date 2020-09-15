@@ -399,7 +399,6 @@ SOURCE_FILES = \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
   AsyncProducers.cpp \
-  AutoSchedule.cpp \
   AutoScheduleUtils.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
@@ -573,7 +572,6 @@ HEADER_FILES = \
   AssociativeOpsTable.h \
   Associativity.h \
   AsyncProducers.h \
-  AutoSchedule.h \
   AutoScheduleUtils.h \
   BoundaryConditions.h \
   Bounds.h \
@@ -1081,7 +1079,7 @@ test_tutorial: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
 test_opengl: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=opengl_%)
-test_auto_schedule: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=auto_schedule_%)
+test_auto_schedule: test_mullapudi2016 test_li2018 test_adams2019
 
 .PHONY: test_correctness_multi_gpu
 test_correctness_multi_gpu: correctness_gpu_multi_device
@@ -1500,9 +1498,15 @@ $(FILTERS_DIR)/external_code.halide_generated.cpp: $(BIN_DIR)/external_code.gene
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g external_code -e c_source -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=false
 
-$(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator
+$(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) 
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad  -d 1 target=$(TARGET)-no_runtime auto_schedule=true
+	# FIXME: The autoscheduler looks for libHalide in the same
+	# directory, which is normally a distro. But the generator
+	# tests use bin/libHalide.so instead of a distro. For now,
+	# just copy the autoscheduler to a place where it won't
+	# confuse the linker.
+	cp $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) $(BIN_DIR)
+	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime auto_schedule=true -d 1 -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
@@ -1755,11 +1759,13 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 # ...in that order.
 LESSON_21_MACHINE_PARAMS = 32,16777216,40
 
-$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21_auto_scheduler_run.cpp $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate
+$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21_auto_scheduler_run.cpp $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) 
 	@-mkdir -p $(TMP_DIR)
 	# Run the generator
 	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_false target=host            auto_schedule=false
-	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_true  target=host-no_runtime auto_schedule=true machine_params=$(LESSON_21_MACHINE_PARAMS)
+	# FIXME: The relative path of the autoscheduler and libHalide must be preserved on OS X, or it tries to load the wrong libHalide.dylib
+	cp $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) $(BIN_DIR)
+	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_true  target=host-no_runtime auto_schedule=true machine_params=$(LESSON_21_MACHINE_PARAMS) -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
 	# Compile the runner
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
 	-I$(INCLUDE_DIR) -L$(BIN_DIR) -I $(TMP_DIR) $(TMP_DIR)/auto_schedule_*.a \
@@ -1847,10 +1853,24 @@ tutorial_%: $(BIN_DIR)/tutorial_% $(TMP_DIR)/images/rgb.png $(TMP_DIR)/images/gr
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
-auto_schedule_%: $(BIN_DIR)/auto_schedule_%
+test_mullapudi2016: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=auto_schedule_%)
+
+# These tests were written for the Mullapudi2016 autoscheduler.
+# TODO: either make them work with all autoschedulers or move them under src/autoschedulers/mullapudi2016
+auto_schedule_%: $(BIN_DIR)/auto_schedule_% $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$<
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(BIN_DIR))/libautoschedule_mullapudi2016.$(SHARED_EXT)
 	@-echo
+
+# The other autoschedulers contain their own tests
+test_adams2019: distrib
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+
+test_li2018: distrib build_python_bindings
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/li2018/Makefile test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings 
 
 time_compilation_test_%: $(BIN_DIR)/test_%
 	$(TIME_COMPILATION) compile_times_correctness.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_test_%=test_%)
@@ -1866,7 +1886,6 @@ time_compilation_generator_%: $(BIN_DIR)/%.generator
 
 TEST_APPS=\
 	HelloMatlab \
-	autoscheduler \
 	bilateral_grid \
 	bgu \
 	blur \
@@ -1874,7 +1893,6 @@ TEST_APPS=\
 	camera_pipe \
 	conv_layer \
 	fft \
-	gradient_autoscheduler \
 	hist \
 	interpolate \
 	lens_blur \
@@ -2128,8 +2146,9 @@ $(BUILD_DIR)/halide_config.%: $(ROOT_DIR)/tools/halide_config.%.tpl
 	       | sed -e 's;@HALIDE_LLVM_CXX_FLAGS_RAW@;${LLVM_CXX_FLAGS};g' > $@
 
 
-$(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
-                           $(BIN_DIR)/libHalide.$(SHARED_EXT) \
+$(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
+			   $(LIB_DIR)/libHalide.a \
+	       		   $(BIN_DIR)/libHalide.$(SHARED_EXT) \
                            $(INCLUDE_DIR)/Halide.h \
                            $(RUNTIME_EXPORTED_INCLUDES) \
                            $(ROOT_DIR)/README*.md \
@@ -2143,7 +2162,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	         $(DISTRIB_DIR)/tutorial/images \
 	         $(DISTRIB_DIR)/tools \
 	         $(DISTRIB_DIR)/tutorial/figures
-	cp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/bin
+	cp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/lib
 	cp $(LIB_DIR)/libHalide.a $(DISTRIB_DIR)/lib
 	cp $(INCLUDE_DIR)/Halide.h $(DISTRIB_DIR)/include
 	cp $(INCLUDE_DIR)/HalideBuffer.h $(DISTRIB_DIR)/include
@@ -2168,6 +2187,39 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
+ifeq ($(UNAME), Darwin)
+	install_name_tool -id @rpath/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+endif
+
+$(DISTRIB_DIR)/lib/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/$*/Makefile bin/libautoschedule_$*.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+	cp $(BIN_DIR)/libautoschedule_$*.$(SHARED_EXT) $(DISTRIB_DIR)/lib
+ifeq ($(UNAME), Darwin)
+	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
+endif
+
+# Adams2019 also includes autotuning tools
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile bin/libautoschedule_adams2019.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) bin/retrain_cost_model bin/featurization_to_sample bin/get_host_target
+	cp $(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT) $(DISTRIB_DIR)/lib/
+	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
+		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+	done
+	cp $(SRC_DIR)/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
+ifeq ($(UNAME), Darwin)
+	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
+endif
+
+.PHONY: autoschedulers
+autoschedulers: \
+$(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) \
+$(DISTRIB_DIR)/lib/libautoschedule_li2018.$(SHARED_EXT) \
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT)
+
+.PHONY: distrib
+distrib: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT) autoschedulers
+
+$(DISTRIB_DIR)/halide.tgz: distrib
 	ln -sf $(DISTRIB_DIR) halide
 	tar -czf $(BUILD_DIR)/halide.tgz \
 		halide/bin \
@@ -2179,10 +2231,6 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/halide_config.*
 	rm -rf halide
 	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
-
-
-.PHONY: distrib
-distrib: $(DISTRIB_DIR)/halide.tgz
 
 $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h $(ROOT_DIR)/tools/halide_trace_config.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -L$(BIN_DIR) -o $@
