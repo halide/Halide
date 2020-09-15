@@ -1081,11 +1081,13 @@ private:
             // that they generate.
             internal_assert(op->args.size() == 3);
             return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
-        } else if (!op->type.is_float() && op->is_intrinsic(Call::div_round_to_zero) && op->type.lanes() > 1) {
+        } else if (op->is_intrinsic(Call::div_round_to_zero) &&
+                   !op->type.is_float() && op->type.lanes() > 1) {
             internal_assert(op->args.size() == 2);
             Expr a = mutate(op->args[0]);
             Expr b = mutate(op->args[1]);
-            debug(1) << "Using long div: (num: " << a << "); (den: " << b << ")\n";
+            debug(1) << "Using long division: (num: " << a << "); (den: " << b
+                     << ")\n";
             if (a.type().is_uint()) {
                 return unsigned_long_div(a, b, bounds);
             }
@@ -1093,7 +1095,8 @@ private:
             Type ty = a.type().with_code(Type::UInt);
             Expr a_unsigned = cast(ty, abs(a));
             Expr b_unsigned = cast(ty, abs(b));
-            Expr q = cast(a.type(), unsigned_long_div(a_unsigned, b_unsigned, bounds));
+            Expr q = cast(a.type(),
+                          unsigned_long_div(a_unsigned, b_unsigned, bounds));
             // Check the sign required for the quotient.
             Expr a_neg = a >> make_const(a.type(), (a.type().bits() - 1));
             Expr b_neg = b >> make_const(a.type(), (a.type().bits() - 1));

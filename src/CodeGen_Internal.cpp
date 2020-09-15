@@ -388,7 +388,7 @@ Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
     }
 }
 
-Expr unsigned_long_div(Expr num, Expr den, const Scope<Interval> &bounds) {
+Expr unsigned_long_div(Expr num, const Expr den, const Scope<Interval> &bounds) {
     internal_assert(num.type() == den.type());
     internal_assert(num.type().is_uint());
     Type ty = num.type();
