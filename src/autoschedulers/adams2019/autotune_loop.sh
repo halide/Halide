@@ -117,7 +117,7 @@ make_featurization() {
         target=${HL_TARGET} \
         auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
-        -p ${AUTOSCHED_BIN}/libauto_schedule.so \
+        -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.so \
         -s Adams2019 \
           2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 

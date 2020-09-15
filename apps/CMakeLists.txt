@@ -26,7 +26,7 @@ function(add_app_test NAME)
         return()
     endif ()
 
-    unset(cmakeToolchainOpts)
+    set(cmakeToolchainOpts "")
     if (NOT "${CMAKE_TOOLCHAIN_FILE}" STREQUAL "")
         list(APPEND cmakeToolchainOpts "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
         if (NOT "${VCPKG_CHAINLOAD_TOOLCHAIN_FILE}" STREQUAL "")
@@ -34,7 +34,7 @@ function(add_app_test NAME)
         endif ()
     endif ()
 
-    unset(cmakeGenOpts)
+    set(cmakeGenOpts "")
     if (NOT "${CMAKE_GENERATOR_TOOLSET}" STREQUAL "")
         list(APPEND cmakeGenOpts --build-generator-toolset "${CMAKE_GENERATOR_TOOLSET}")
     endif ()
@@ -89,12 +89,3 @@ add_app_test(resize)
 add_app_test(stencil_chain)
 add_app_test(unsharp)
 add_app_test(wavelet)
-
-# Add the autoschedulers.
-# TODO(#4053): refactor into separate modules
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
-    # Don't attempt to build these for wasm yet.
-else ()
-    add_subdirectory(autoscheduler)
-    add_subdirectory(gradient_autoscheduler)
-endif ()

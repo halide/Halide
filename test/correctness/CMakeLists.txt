@@ -14,7 +14,6 @@ tests(GROUPS correctness
       atomic_tuples.cpp
       atomics.cpp
       autodiff.cpp
-      autoschedule_small_pure_update.cpp
       autotune_bug.cpp
       autotune_bug_2.cpp
       autotune_bug_3.cpp
