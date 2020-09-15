@@ -421,45 +421,6 @@ Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
     return body;
 }
 
-// Replace Div Nodes with long division if lanes > 1.
-class LongDiv : public IRMutator {
-    using IRMutator::visit;
-
-    Expr visit(const Div *op) override {
-        if (!op->type.is_float() && op->type.lanes() > 1) {
-            debug(1) << "Reached Div: a:" << op->a <<  " b:" << op->b << "\n";
-            return mutate(lower_int_uint_div(op->a, op->b));
-        }
-        return IRMutator::visit(op);
-    }
-
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::div_round_to_zero) && op->type.lanes() > 1) {
-            internal_assert(op->args.size() == 2);
-            Expr a = op->args[0];
-            Expr b = op->args[1];
-            if (a.type().is_uint()) {
-                return mutate(ulong_div(a, b));
-            } else if (a.type().is_int()) {
-                // Use unsigned div for signed integer division.
-                Type ty = a.type().with_code(Type::UInt);
-                Expr a_unsigned = cast(ty, abs(a));
-                Expr b_unsigned = cast(ty, abs(b));
-                Expr q = cast(a.type(), ulong_div(a_unsigned, b_unsigned));
-                Expr a_neg = a >> make_const(a.type(), (a.type().bits() - 1));
-                Expr b_neg = b >> make_const(a.type(), (a.type().bits() - 1));
-                return mutate(q * ((a_neg ^ b_neg) | 1));
-            }
-        }
-        return IRMutator::visit(op);
-    }
-};
-
-// Replace Div Nodes with long division if lanes > 1.
-Stmt long_div(const Stmt &s) {
-    return LongDiv().mutate(s);
-}
-
 }  // namespace
 
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
@@ -468,7 +429,6 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     CodeGen_Posix::begin_func(f.linkage, simple_name, extern_name, f.args);
 
     Stmt body = f.body;
-
 
     debug(1) << "Unpredicating loads and stores...\n";
     // Replace dense vector predicated loads with sloppy scalarized
@@ -514,11 +474,6 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     body = simplify(body);
     debug(2) << "Lowering after forwarding stores:\n"
              << body << "\n\n";
-
-    // Replace div with long div if lanes > 1
-    debug(1) << "Replacing div with long_div...\n";
-    body = long_div(body);
-    body = common_subexpression_elimination(body);
 
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon instructions...\n";

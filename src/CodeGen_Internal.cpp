@@ -388,20 +388,38 @@ Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
     }
 }
 
-Expr ulong_div(Expr num, Expr den) {
+Expr unsigned_long_div(Expr num, Expr den, const Scope<Interval> &bounds) {
     internal_assert(num.type() == den.type());
+    internal_assert(num.type().is_uint());
     Type ty = num.type();
-    internal_assert(ty.is_uint());
-    const int times = ty.bits();
     Expr leading_zeros, q;
     q = make_zero(ty);
     leading_zeros = cast(ty, count_leading_zeros(den));
+
+    // Run bounds analysis to estimate the range of result.
+    Expr extent_upper = find_constant_bound(num / den, Direction::Upper, bounds);
+    const uint64_t *upper_value = as_const_uint(extent_upper);
+
+    // Each iteration of the loop below checks for a bit in the result.
+    const int times = ty.bits();
     for (int i = 1; i <= times; i++) {
+        // Check if the bit at 'shift' index should be set in the result.
         int shift = times - i;
-        Expr new_num = num - (den << shift);
-        Expr bit_set = ((shift <= leading_zeros) && num >= (den << shift));
+        Expr shift_expr = make_const(ty, shift);
+        // Skip iteration for long division if possible.
+        if (upper_value && (*upper_value < (1 << shift))) {
+            debug(1) << "Skipping iteration for long div as "
+                     << "(max_quotient: " << *upper_value << ") < "
+                     << (1 << shift) << ")\n";
+            continue;
+        }
+        Expr new_num = num - (den << shift_expr);
+        // Don't drop any set bits from den after shift. The bit is set if
+        // den << shift is no more than num.
+        Expr bit_set = ((shift_expr <= leading_zeros) && num >= (den << shift_expr));
+        // Update the numerator and the quotient.
         num = select(bit_set, new_num, num);
-        q = select(bit_set, cast(ty, 1 << shift) | q, q);
+        q = select(bit_set, make_const(ty, 1 << shift) | q, q);
     }
     return common_subexpression_elimination(q);
 }

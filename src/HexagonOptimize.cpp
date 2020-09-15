@@ -1,5 +1,6 @@
 #include "HexagonOptimize.h"
 #include "Bounds.h"
+#include "CodeGen_Internal.h"
 #include "CSE.h"
 #include "ConciseCasts.h"
 #include "ExprUsesVar.h"
@@ -441,6 +442,7 @@ class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
 
+    Scope<Interval> bounds;
     Target target;
 
     Expr visit(const Mul *op) override {
@@ -1079,9 +1081,54 @@ private:
             // that they generate.
             internal_assert(op->args.size() == 3);
             return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
+        } else if (!op->type.is_float() && op->is_intrinsic(Call::div_round_to_zero) && op->type.lanes() > 1) {
+            internal_assert(op->args.size() == 2);
+            Expr a = mutate(op->args[0]);
+            Expr b = mutate(op->args[1]);
+            debug(1) << "Using long div: (num: " << a << "); (den: " << b << ")\n";
+            if (a.type().is_uint()) {
+                return unsigned_long_div(a, b, bounds);
+            }
+            // Use unsigned long div for signed integer division.
+            Type ty = a.type().with_code(Type::UInt);
+            Expr a_unsigned = cast(ty, abs(a));
+            Expr b_unsigned = cast(ty, abs(b));
+            Expr q = cast(a.type(), unsigned_long_div(a_unsigned, b_unsigned, bounds));
+            // Check the sign required for the quotient.
+            Expr a_neg = a >> make_const(a.type(), (a.type().bits() - 1));
+            Expr b_neg = b >> make_const(a.type(), (a.type().bits() - 1));
+            return q * ((a_neg ^ b_neg) | 1);
         } else {
             return IRMutator::visit(op);
         }
+    }
+
+    template<typename NodeType, typename T>
+    NodeType visit_let(const T *op) {
+        // We only care about vector lets.
+        if (op->value.type().is_vector()) {
+            bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        }
+        NodeType node = IRMutator::visit(op);
+        if (op->value.type().is_vector()) {
+            bounds.pop(op->name);
+        }
+        return node;
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let<Expr>(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let<Stmt>(op);
+    }
+
+    Expr visit(const Div *op) override {
+        if (!op->type.is_float() && op->type.lanes() > 1) {
+            return mutate(lower_int_uint_div(op->a, op->b));
+        }
+        return IRMutator::visit(op);
     }
 
 public:

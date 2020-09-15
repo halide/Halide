@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 
+#include "Bounds.h"
 #include "Closure.h"
 #include "Expr.h"
 #include "Scope.h"
@@ -88,7 +89,7 @@ bool can_allocation_fit_on_stack(int64_t size);
 
 /** Does a division round to zero using binary long division for unsigned int.
  *  Returns a when b == 0. */
-Expr ulong_div(Expr a, Expr b);
+Expr unsigned_long_div(Expr a, Expr b, const Scope<Interval> &bounds = Scope<Interval>::empty_scope());
 
 /** Given a Halide Euclidean division/mod operation, do constant optimizations
  * and possibly call lower_euclidean_div/lower_euclidean_mod if necessary.
