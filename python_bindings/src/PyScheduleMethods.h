@@ -36,7 +36,10 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
              py::arg("x"), py::arg("y"), py::arg("xo"), py::arg("yo"), py::arg("xi"), py::arg("yi"), py::arg("xfactor"), py::arg("yfactor"), py::arg("tail") = TailStrategy::Auto)
         .def("tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, const Expr &, TailStrategy)) & T::tile,
              py::arg("x"), py::arg("y"), py::arg("xi"), py::arg("yi"), py::arg("xfactor"), py::arg("yfactor"), py::arg("tail") = TailStrategy::Auto)
-
+        .def("tile", (T & (T::*)(const std::vector<VarOrRVar> &, const std::vector<VarOrRVar> &, const std::vector<VarOrRVar> &, const std::vector<Expr> &, TailStrategy)) & T::tile,
+             py::arg("previous"), py::arg("outers"), py::arg("inners"), py::arg("factors"), py::arg("tail") = TailStrategy::Auto)
+        .def("tile", (T & (T::*)(const std::vector<VarOrRVar> &, const std::vector<VarOrRVar> &, const std::vector<Expr> &, TailStrategy)) & T::tile,
+             py::arg("previous"), py::arg("inners"), py::arg("factors"), py::arg("tail") = TailStrategy::Auto)
         .def("reorder", (T & (T::*)(const std::vector<VarOrRVar> &)) & T::reorder, py::arg("vars"))
         .def("reorder", [](T &t, const py::args &args) -> T & {
             return t.reorder(args_to_vector<VarOrRVar>(args));

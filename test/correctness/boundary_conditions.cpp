@@ -203,24 +203,24 @@ bool test_all(int vector_width, Target t) {
         // Func input.
         success &= check_repeat_edge(
             input,
-            repeat_edge(input_f, 0, W, 0, H),
+            repeat_edge(input_f, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Image input.
         success &= check_repeat_edge(
             input,
-            repeat_edge(input, 0, W, 0, H),
+            repeat_edge(input, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Undefined bounds.
         success &= check_repeat_edge(
             input,
-            repeat_edge(input, Expr(), Expr(), 0, H),
+            repeat_edge(input, {{Expr(), Expr()}, {0, H}}),
             0, W, test_min, test_extent,
             vector_width, t);
         success &= check_repeat_edge(
             input,
-            repeat_edge(input, 0, W, Expr(), Expr()),
+            repeat_edge(input, {{0, W}, {Expr(), Expr()}}),
             test_min, test_extent, 0, H,
             vector_width, t);
         // Implicitly determined bounds.
@@ -241,24 +241,24 @@ bool test_all(int vector_width, Target t) {
         // Func input.
         success &= check_constant_exterior(
             input, exterior,
-            constant_exterior(input_f, exterior, 0, W, 0, H),
+            constant_exterior(input_f, exterior, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Image input.
         success &= check_constant_exterior(
             input, exterior,
-            constant_exterior(input, exterior, 0, W, 0, H),
+            constant_exterior(input, exterior, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Undefined bounds.
         success &= check_constant_exterior(
             input, exterior,
-            constant_exterior(input, exterior, Expr(), Expr(), 0, H),
+            constant_exterior(input, exterior, {{Expr(), Expr()}, {0, H}}),
             0, W, test_min, test_extent,
             vector_width, t);
         success &= check_constant_exterior(
             input, exterior,
-            constant_exterior(input, exterior, 0, W, Expr(), Expr()),
+            constant_exterior(input, exterior, {{0, W}, {Expr(), Expr()}}),
             test_min, test_extent, 0, H,
             vector_width, t);
         // Implicitly determined bounds.
@@ -277,24 +277,24 @@ bool test_all(int vector_width, Target t) {
         // Func input.
         success &= check_repeat_image(
             input,
-            repeat_image(input_f, 0, W, 0, H),
+            repeat_image(input_f, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Image input.
         success &= check_repeat_image(
             input,
-            repeat_image(input, 0, W, 0, H),
+            repeat_image(input, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Undefined bounds.
         success &= check_repeat_image(
             input,
-            repeat_image(input, Expr(), Expr(), 0, H),
+            repeat_image(input, {{Expr(), Expr()}, {0, H}}),
             0, W, test_min, test_extent,
             vector_width, t);
         success &= check_repeat_image(
             input,
-            repeat_image(input, 0, W, Expr(), Expr()),
+            repeat_image(input, {{0, W}, {Expr(), Expr()}}),
             test_min, test_extent, 0, H,
             vector_width, t);
         // Implicitly determined bounds.
@@ -313,24 +313,24 @@ bool test_all(int vector_width, Target t) {
         // Func input.
         success &= check_mirror_image(
             input,
-            mirror_image(input_f, 0, W, 0, H),
+            mirror_image(input_f, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Image input.
         success &= check_mirror_image(
             input,
-            mirror_image(input, 0, W, 0, H),
+            mirror_image(input, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Undefined bounds.
         success &= check_mirror_image(
             input,
-            mirror_image(input, Expr(), Expr(), 0, H),
+            mirror_image(input, {{Expr(), Expr()}, {0, H}}),
             0, W, test_min, test_extent,
             vector_width, t);
         success &= check_mirror_image(
             input,
-            mirror_image(input, 0, W, Expr(), Expr()),
+            mirror_image(input, {{0, W}, {Expr(), Expr()}}),
             test_min, test_extent, 0, H,
             vector_width, t);
         // Implicitly determined bounds.
@@ -349,24 +349,24 @@ bool test_all(int vector_width, Target t) {
         // Func input.
         success &= check_mirror_interior(
             input,
-            mirror_interior(input_f, 0, W, 0, H),
+            mirror_interior(input_f, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Image input.
         success &= check_mirror_interior(
             input,
-            mirror_interior(input, 0, W, 0, H),
+            mirror_interior(input, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Undefined bounds.
         success &= check_mirror_interior(
             input,
-            mirror_interior(input, Expr(), Expr(), 0, H),
+            mirror_interior(input, {{Expr(), Expr()}, {0, H}}),
             0, W, test_min, test_extent,
             vector_width, t);
         success &= check_mirror_interior(
             input,
-            mirror_interior(input, 0, W, Expr(), Expr()),
+            mirror_interior(input, {{0, W}, {Expr(), Expr()}}),
             test_min, test_extent, 0, H,
             vector_width, t);
         // Implicitly determined bounds.
@@ -391,6 +391,10 @@ int main(int argc, char **argv) {
         target.has_feature(Target::D3D12Compute)) {
         // https://github.com/halide/Halide/issues/2148
         vector_width_max = 4;
+    }
+    if (target.arch == Target::WebAssembly) {
+        // The wasm jit is very slow, so shorten this test here.
+        vector_width_max = 8;
     }
     for (int vector_width = 1; vector_width <= vector_width_max; vector_width *= 2) {
         std::cout << "Testing vector_width: " << vector_width << "\n";

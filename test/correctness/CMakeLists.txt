@@ -14,7 +14,6 @@ tests(GROUPS correctness
       atomic_tuples.cpp
       atomics.cpp
       autodiff.cpp
-      autoschedule_small_pure_update.cpp
       autotune_bug.cpp
       autotune_bug_2.cpp
       autotune_bug_3.cpp
@@ -139,6 +138,7 @@ tests(GROUPS correctness
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
       gpu_non_contiguous_copy.cpp
+      gpu_non_monotonic_shared_mem_size.cpp
       gpu_object_lifetime_1.cpp
       gpu_object_lifetime_2.cpp
       gpu_object_lifetime_3.cpp
@@ -344,44 +344,43 @@ tests(GROUPS correctness
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
 
 # Tests which use external funcs need to enable exports.
-foreach (TEST IN ITEMS
-         correctness_async
-         correctness_atomics
-         correctness_c_function
-         correctness_compute_at_split_rvar
-         correctness_concat
-         correctness_custom_lowering_pass
-         correctness_extern_bounds_inference
-         correctness_extern_consumer
-         correctness_extern_consumer_tiled
-         correctness_extern_error
-         correctness_extern_output_expansion
-         correctness_extern_partial
-         correctness_extern_producer
-         correctness_extern_reorder_storage
-         correctness_extern_sort
-         correctness_extern_stage
-         correctness_extern_stage_on_device
-         correctness_handle
-         correctness_image_of_lists
-         correctness_lazy_convolution
-         correctness_loop_invariant_extern_calls
-         correctness_make_struct
-         correctness_many_small_extern_stages
-         correctness_memoize
-         correctness_memoize_cloned
-         correctness_multiple_outputs_extern
-         correctness_non_nesting_extern_bounds_query
-         correctness_parallel_fork
-         correctness_pipeline_set_jit_externs_func
-         correctness_process_some_tiles
-         correctness_side_effects
-         correctness_skip_stages
-         correctness_skip_stages_external_array_functions
-         correctness_sliding_backwards
-         correctness_sliding_over_guard_with_if
-         correctness_sliding_reduction
-         correctness_sliding_window
-         correctness_storage_folding)
-    set_target_properties(${TEST} PROPERTIES ENABLE_EXPORTS TRUE)
-endforeach ()
+set_target_properties(correctness_async
+                      correctness_atomics
+                      correctness_c_function
+                      correctness_compute_at_split_rvar
+                      correctness_concat
+                      correctness_custom_lowering_pass
+                      correctness_extern_bounds_inference
+                      correctness_extern_consumer
+                      correctness_extern_consumer_tiled
+                      correctness_extern_error
+                      correctness_extern_output_expansion
+                      correctness_extern_partial
+                      correctness_extern_producer
+                      correctness_extern_reorder_storage
+                      correctness_extern_sort
+                      correctness_extern_stage
+                      correctness_extern_stage_on_device
+                      correctness_handle
+                      correctness_image_of_lists
+                      correctness_lazy_convolution
+                      correctness_loop_invariant_extern_calls
+                      correctness_make_struct
+                      correctness_many_small_extern_stages
+                      correctness_memoize
+                      correctness_memoize_cloned
+                      correctness_multiple_outputs_extern
+                      correctness_non_nesting_extern_bounds_query
+                      correctness_parallel_fork
+                      correctness_pipeline_set_jit_externs_func
+                      correctness_process_some_tiles
+                      correctness_side_effects
+                      correctness_skip_stages
+                      correctness_skip_stages_external_array_functions
+                      correctness_sliding_backwards
+                      correctness_sliding_over_guard_with_if
+                      correctness_sliding_reduction
+                      correctness_sliding_window
+                      correctness_storage_folding
+                      PROPERTIES ENABLE_EXPORTS TRUE)
+

@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
     // is if you use a boundary condition helper:
 
     {
-        Func g = BoundaryConditions::repeat_edge(f, 0, 100);
+        Func g = BoundaryConditions::repeat_edge(f, {{0, 100}});
         count_partitions(g, 3);
     }
 
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
         Func g;
         g(x, y) = x + y;
         g.compute_root();
-        Func h = BoundaryConditions::mirror_image(g, 0, 10, 0, 10);
+        Func h = BoundaryConditions::mirror_image(g, {{0, 10}, {0, 10}});
         count_partitions(h, 5);
     }
 
@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
     // slice of the loop where *all* of the boundary conditions and
     // splitting logic simplify away.
     {
-        Func g = BoundaryConditions::mirror_interior(f, 0, 10);
+        Func g = BoundaryConditions::mirror_interior(f, {{0, 10}});
         Func h;
         Param<int> t1, t2;
         h(x) = g(x - 1) + g(x + 1);

@@ -45,6 +45,8 @@ public:
         use_vsx = target.has_feature(Target::VSX);
         use_power_arch_2_07 = target.has_feature(Target::POWER_ARCH_2_07);
         use_wasm_simd128 = target.has_feature(Target::WasmSimd128);
+        use_wasm_sat_float_to_int = target.has_feature(Target::WasmSatFloatToInt);
+        use_wasm_sign_ext = target.has_feature(Target::WasmSignExt);
     }
 
     void add_tests() override {
@@ -535,58 +537,58 @@ public:
         for (int w = 1; w <= 4; w++) {
 
             // VABA     I       -       Absolute Difference and Accumulate
-            check(arm32 ? "vaba.s8" : "saba", 8 * w, i8_1 + absd(i8_2, i8_3));
-            check(arm32 ? "vaba.u8" : "uaba", 8 * w, u8_1 + absd(u8_2, u8_3));
-            check(arm32 ? "vaba.s16" : "saba", 4 * w, i16_1 + absd(i16_2, i16_3));
-            check(arm32 ? "vaba.u16" : "uaba", 4 * w, u16_1 + absd(u16_2, u16_3));
-            check(arm32 ? "vaba.s32" : "saba", 2 * w, i32_1 + absd(i32_2, i32_3));
-            check(arm32 ? "vaba.u32" : "uaba", 2 * w, u32_1 + absd(u32_2, u32_3));
+            check(arm32 ? "vaba.s8" : "saba*v*b", 8 * w, i8_1 + absd(i8_2, i8_3));
+            check(arm32 ? "vaba.u8" : "uaba*v*b", 8 * w, u8_1 + absd(u8_2, u8_3));
+            check(arm32 ? "vaba.s16" : "saba*v*h", 4 * w, i16_1 + absd(i16_2, i16_3));
+            check(arm32 ? "vaba.u16" : "uaba*v*h", 4 * w, u16_1 + absd(u16_2, u16_3));
+            check(arm32 ? "vaba.s32" : "saba*v*s", 2 * w, i32_1 + absd(i32_2, i32_3));
+            check(arm32 ? "vaba.u32" : "uaba*v*s", 2 * w, u32_1 + absd(u32_2, u32_3));
 
             // VABAL    I       -       Absolute Difference and Accumulate Long
-            check(arm32 ? "vabal.s8" : "sabal", 8 * w, i16_1 + absd(i8_2, i8_3));
-            check(arm32 ? "vabal.u8" : "uabal", 8 * w, u16_1 + absd(u8_2, u8_3));
-            check(arm32 ? "vabal.s16" : "sabal", 4 * w, i32_1 + absd(i16_2, i16_3));
-            check(arm32 ? "vabal.u16" : "uabal", 4 * w, u32_1 + absd(u16_2, u16_3));
-            check(arm32 ? "vabal.s32" : "sabal", 2 * w, i64_1 + absd(i32_2, i32_3));
-            check(arm32 ? "vabal.u32" : "uabal", 2 * w, u64_1 + absd(u32_2, u32_3));
+            check(arm32 ? "vabal.s8" : "sabal*v*h*v*b", 8 * w, i16_1 + absd(i8_2, i8_3));
+            check(arm32 ? "vabal.u8" : "uabal*v*h*v*b", 8 * w, u16_1 + absd(u8_2, u8_3));
+            check(arm32 ? "vabal.s16" : "sabal*v*s*v*h", 4 * w, i32_1 + absd(i16_2, i16_3));
+            check(arm32 ? "vabal.u16" : "uabal*v*s*v*h", 4 * w, u32_1 + absd(u16_2, u16_3));
+            check(arm32 ? "vabal.s32" : "sabal*v*d*v*s", 2 * w, i64_1 + absd(i32_2, i32_3));
+            check(arm32 ? "vabal.u32" : "uabal*v*d*v*s", 2 * w, u64_1 + absd(u32_2, u32_3));
 
             // VABD     I, F    -       Absolute Difference
-            check(arm32 ? "vabd.s8" : "sabd", 8 * w, absd(i8_2, i8_3));
-            check(arm32 ? "vabd.u8" : "uabd", 8 * w, absd(u8_2, u8_3));
-            check(arm32 ? "vabd.s16" : "sabd", 4 * w, absd(i16_2, i16_3));
-            check(arm32 ? "vabd.u16" : "uabd", 4 * w, absd(u16_2, u16_3));
-            check(arm32 ? "vabd.s32" : "sabd", 2 * w, absd(i32_2, i32_3));
-            check(arm32 ? "vabd.u32" : "uabd", 2 * w, absd(u32_2, u32_3));
+            check(arm32 ? "vabd.s8" : "sabd*v*b", 8 * w, absd(i8_2, i8_3));
+            check(arm32 ? "vabd.u8" : "uabd*v*b", 8 * w, absd(u8_2, u8_3));
+            check(arm32 ? "vabd.s16" : "sabd*v*h", 4 * w, absd(i16_2, i16_3));
+            check(arm32 ? "vabd.u16" : "uabd*v*h", 4 * w, absd(u16_2, u16_3));
+            check(arm32 ? "vabd.s32" : "sabd*v*s", 2 * w, absd(i32_2, i32_3));
+            check(arm32 ? "vabd.u32" : "uabd*v*s", 2 * w, absd(u32_2, u32_3));
 
             // Via widening, taking abs, then narrowing
-            check(arm32 ? "vabd.s8" : "sabd", 8 * w, u8(abs(i16(i8_2) - i8_3)));
-            check(arm32 ? "vabd.u8" : "uabd", 8 * w, u8(abs(i16(u8_2) - u8_3)));
-            check(arm32 ? "vabd.s16" : "sabd", 4 * w, u16(abs(i32(i16_2) - i16_3)));
-            check(arm32 ? "vabd.u16" : "uabd", 4 * w, u16(abs(i32(u16_2) - u16_3)));
-            check(arm32 ? "vabd.s32" : "sabd", 2 * w, u32(abs(i64(i32_2) - i32_3)));
-            check(arm32 ? "vabd.u32" : "uabd", 2 * w, u32(abs(i64(u32_2) - u32_3)));
+            check(arm32 ? "vabd.s8" : "sabd*v*b", 8 * w, u8(abs(i16(i8_2) - i8_3)));
+            check(arm32 ? "vabd.u8" : "uabd*v*b", 8 * w, u8(abs(i16(u8_2) - u8_3)));
+            check(arm32 ? "vabd.s16" : "sabd*v*h", 4 * w, u16(abs(i32(i16_2) - i16_3)));
+            check(arm32 ? "vabd.u16" : "uabd*v*h", 4 * w, u16(abs(i32(u16_2) - u16_3)));
+            check(arm32 ? "vabd.s32" : "sabd*v*s", 2 * w, u32(abs(i64(i32_2) - i32_3)));
+            check(arm32 ? "vabd.u32" : "uabd*v*s", 2 * w, u32(abs(i64(u32_2) - u32_3)));
 
             // VABDL    I       -       Absolute Difference Long
-            check(arm32 ? "vabdl.s8" : "sabdl", 8 * w, i16(absd(i8_2, i8_3)));
-            check(arm32 ? "vabdl.u8" : "uabdl", 8 * w, u16(absd(u8_2, u8_3)));
-            check(arm32 ? "vabdl.s16" : "sabdl", 4 * w, i32(absd(i16_2, i16_3)));
-            check(arm32 ? "vabdl.u16" : "uabdl", 4 * w, u32(absd(u16_2, u16_3)));
-            check(arm32 ? "vabdl.s32" : "sabdl", 2 * w, i64(absd(i32_2, i32_3)));
-            check(arm32 ? "vabdl.u32" : "uabdl", 2 * w, u64(absd(u32_2, u32_3)));
+            check(arm32 ? "vabdl.s8" : "sabdl*v*b", 8 * w, i16(absd(i8_2, i8_3)));
+            check(arm32 ? "vabdl.u8" : "uabdl*v*b", 8 * w, u16(absd(u8_2, u8_3)));
+            check(arm32 ? "vabdl.s16" : "sabdl*v*h", 4 * w, i32(absd(i16_2, i16_3)));
+            check(arm32 ? "vabdl.u16" : "uabdl*v*h", 4 * w, u32(absd(u16_2, u16_3)));
+            check(arm32 ? "vabdl.s32" : "sabdl*v*s", 2 * w, i64(absd(i32_2, i32_3)));
+            check(arm32 ? "vabdl.u32" : "uabdl*v*s", 2 * w, u64(absd(u32_2, u32_3)));
 
             // Via widening then taking an abs
-            check(arm32 ? "vabdl.s8" : "sabdl", 8 * w, abs(i16(i8_2) - i16(i8_3)));
-            check(arm32 ? "vabdl.u8" : "uabdl", 8 * w, abs(i16(u8_2) - i16(u8_3)));
-            check(arm32 ? "vabdl.s16" : "sabdl", 4 * w, abs(i32(i16_2) - i32(i16_3)));
-            check(arm32 ? "vabdl.u16" : "uabdl", 4 * w, abs(i32(u16_2) - i32(u16_3)));
-            check(arm32 ? "vabdl.s32" : "sabdl", 2 * w, abs(i64(i32_2) - i64(i32_3)));
-            check(arm32 ? "vabdl.u32" : "uabdl", 2 * w, abs(i64(u32_2) - i64(u32_3)));
+            check(arm32 ? "vabdl.s8" : "sabdl*v*b", 8 * w, abs(i16(i8_2) - i16(i8_3)));
+            check(arm32 ? "vabdl.u8" : "uabdl*v*b", 8 * w, abs(i16(u8_2) - i16(u8_3)));
+            check(arm32 ? "vabdl.s16" : "sabdl*v*h", 4 * w, abs(i32(i16_2) - i32(i16_3)));
+            check(arm32 ? "vabdl.u16" : "uabdl*v*h", 4 * w, abs(i32(u16_2) - i32(u16_3)));
+            check(arm32 ? "vabdl.s32" : "sabdl*v*s", 2 * w, abs(i64(i32_2) - i64(i32_3)));
+            check(arm32 ? "vabdl.u32" : "uabdl*v*s", 2 * w, abs(i64(u32_2) - i64(u32_3)));
 
             // VABS     I, F    F, D    Absolute
-            check(arm32 ? "vabs.f32" : "fabs", 2 * w, abs(f32_1));
-            check(arm32 ? "vabs.s32" : "abs", 2 * w, abs(i32_1));
-            check(arm32 ? "vabs.s16" : "abs", 4 * w, abs(i16_1));
-            check(arm32 ? "vabs.s8" : "abs", 8 * w, abs(i8_1));
+            check(arm32 ? "vabs.f32" : "fabs*v*s", 2 * w, abs(f32_1));
+            check(arm32 ? "vabs.s32" : "abs*v*s", 2 * w, abs(i32_1));
+            check(arm32 ? "vabs.s16" : "abs*v*h", 4 * w, abs(i16_1));
+            check(arm32 ? "vabs.s8" : "abs*v*b", 8 * w, abs(i8_1));
 
             // VACGE    F       -       Absolute Compare Greater Than or Equal
             // VACGT    F       -       Absolute Compare Greater Than
@@ -594,43 +596,43 @@ public:
             // VACLT    F       -       Absolute Compare Less Than
 
             // VADD     I, F    F, D    Add
-            check(arm32 ? "vadd.i8" : "add", 8 * w, i8_1 + i8_2);
-            check(arm32 ? "vadd.i8" : "add", 8 * w, u8_1 + u8_2);
-            check(arm32 ? "vadd.i16" : "add", 4 * w, i16_1 + i16_2);
-            check(arm32 ? "vadd.i16" : "add", 4 * w, u16_1 + u16_2);
-            check(arm32 ? "vadd.i32" : "add", 2 * w, i32_1 + i32_2);
-            check(arm32 ? "vadd.i32" : "add", 2 * w, u32_1 + u32_2);
-            check(arm32 ? "vadd.f32" : "fadd", 2 * w, f32_1 + f32_2);
-            check(arm32 ? "vadd.i64" : "add", 2 * w, i64_1 + i64_2);
-            check(arm32 ? "vadd.i64" : "add", 2 * w, u64_1 + u64_2);
+            check(arm32 ? "vadd.i8" : "add*v*b", 8 * w, i8_1 + i8_2);
+            check(arm32 ? "vadd.i8" : "add*v*b", 8 * w, u8_1 + u8_2);
+            check(arm32 ? "vadd.i16" : "add*v*h", 4 * w, i16_1 + i16_2);
+            check(arm32 ? "vadd.i16" : "add*v*h", 4 * w, u16_1 + u16_2);
+            check(arm32 ? "vadd.i32" : "add*v*s", 2 * w, i32_1 + i32_2);
+            check(arm32 ? "vadd.i32" : "add*v*s", 2 * w, u32_1 + u32_2);
+            check(arm32 ? "vadd.f32" : "fadd*v*s", 2 * w, f32_1 + f32_2);
+            check(arm32 ? "vadd.i64" : "add*v*d", 2 * w, i64_1 + i64_2);
+            check(arm32 ? "vadd.i64" : "add*v*d", 2 * w, u64_1 + u64_2);
 
             // VADDHN   I       -       Add and Narrow Returning High Half
-            check(arm32 ? "vaddhn.i16" : "addhn", 8 * w, i8((i16_1 + i16_2) / 256));
-            check(arm32 ? "vaddhn.i16" : "addhn", 8 * w, u8((u16_1 + u16_2) / 256));
-            check(arm32 ? "vaddhn.i32" : "addhn", 4 * w, i16((i32_1 + i32_2) / 65536));
-            check(arm32 ? "vaddhn.i32" : "addhn", 4 * w, i16((i32_1 + i32_2) >> cast<unsigned>(16)));
-            check(arm32 ? "vaddhn.i32" : "addhn", 4 * w, i16((i32_1 + i32_2) >> cast<int>(16)));
-            check(arm32 ? "vaddhn.i32" : "addhn", 4 * w, i16((i32_1 + i32_2) << cast<int>(-16)));
-            check(arm32 ? "vaddhn.i32" : "addhn", 4 * w, u16((u32_1 + u32_2) / 65536));
-            check(arm32 ? "vaddhn.i32" : "addhn", 4 * w, u16((u32_1 + u32_2) >> cast<unsigned>(16)));
-            check(arm32 ? "vaddhn.i32" : "addhn", 4 * w, u16((u32_1 + u32_2) >> cast<int>(16)));
-            check(arm32 ? "vaddhn.i32" : "addhn", 4 * w, u16((u32_1 + u32_2) << cast<int>(-16)));
+            check(arm32 ? "vaddhn.i16" : "addhn*v*h", 8 * w, i8((i16_1 + i16_2) / 256));
+            check(arm32 ? "vaddhn.i16" : "addhn*v*h", 8 * w, u8((u16_1 + u16_2) / 256));
+            check(arm32 ? "vaddhn.i32" : "addhn*v*s", 4 * w, i16((i32_1 + i32_2) / 65536));
+            check(arm32 ? "vaddhn.i32" : "addhn*v*s", 4 * w, i16((i32_1 + i32_2) >> cast<unsigned>(16)));
+            check(arm32 ? "vaddhn.i32" : "addhn*v*s", 4 * w, i16((i32_1 + i32_2) >> cast<int>(16)));
+            check(arm32 ? "vaddhn.i32" : "addhn*v*s", 4 * w, i16((i32_1 + i32_2) << cast<int>(-16)));
+            check(arm32 ? "vaddhn.i32" : "addhn*v*s", 4 * w, u16((u32_1 + u32_2) / 65536));
+            check(arm32 ? "vaddhn.i32" : "addhn*v*s", 4 * w, u16((u32_1 + u32_2) >> cast<unsigned>(16)));
+            check(arm32 ? "vaddhn.i32" : "addhn*v*s", 4 * w, u16((u32_1 + u32_2) >> cast<int>(16)));
+            check(arm32 ? "vaddhn.i32" : "addhn*v*s", 4 * w, u16((u32_1 + u32_2) << cast<int>(-16)));
 
             // VADDL    I       -       Add Long
-            check(arm32 ? "vaddl.s8" : "saddl", 8 * w, i16(i8_1) + i16(i8_2));
-            check(arm32 ? "vaddl.u8" : "uaddl", 8 * w, u16(u8_1) + u16(u8_2));
-            check(arm32 ? "vaddl.s16" : "saddl", 4 * w, i32(i16_1) + i32(i16_2));
-            check(arm32 ? "vaddl.u16" : "uaddl", 4 * w, u32(u16_1) + u32(u16_2));
-            check(arm32 ? "vaddl.s32" : "saddl", 2 * w, i64(i32_1) + i64(i32_2));
-            check(arm32 ? "vaddl.u32" : "uaddl", 2 * w, u64(u32_1) + u64(u32_2));
+            check(arm32 ? "vaddl.s8" : "saddl*v*b", 8 * w, i16(i8_1) + i16(i8_2));
+            check(arm32 ? "vaddl.u8" : "uaddl*v*b", 8 * w, u16(u8_1) + u16(u8_2));
+            check(arm32 ? "vaddl.s16" : "saddl*v*h", 4 * w, i32(i16_1) + i32(i16_2));
+            check(arm32 ? "vaddl.u16" : "uaddl*v*h", 4 * w, u32(u16_1) + u32(u16_2));
+            check(arm32 ? "vaddl.s32" : "saddl*v*s", 2 * w, i64(i32_1) + i64(i32_2));
+            check(arm32 ? "vaddl.u32" : "uaddl*v*s", 2 * w, u64(u32_1) + u64(u32_2));
 
             // VADDW    I       -       Add Wide
-            check(arm32 ? "vaddw.s8" : "saddw", 8 * w, i8_1 + i16_1);
-            check(arm32 ? "vaddw.u8" : "uaddw", 8 * w, u8_1 + u16_1);
-            check(arm32 ? "vaddw.s16" : "saddw", 4 * w, i16_1 + i32_1);
-            check(arm32 ? "vaddw.u16" : "uaddw", 4 * w, u16_1 + u32_1);
-            check(arm32 ? "vaddw.s32" : "saddw", 2 * w, i32_1 + i64_1);
-            check(arm32 ? "vaddw.u32" : "uaddw", 2 * w, u32_1 + u64_1);
+            check(arm32 ? "vaddw.s8" : "saddw*v*h*v*b", 8 * w, i8_1 + i16_1);
+            check(arm32 ? "vaddw.u8" : "uaddw*v*h*v*b", 8 * w, u8_1 + u16_1);
+            check(arm32 ? "vaddw.s16" : "saddw*v*s*v*h", 4 * w, i16_1 + i32_1);
+            check(arm32 ? "vaddw.u16" : "uaddw*v*s*v*h", 4 * w, u16_1 + u32_1);
+            check(arm32 ? "vaddw.s32" : "saddw*v*d*v*s", 2 * w, i32_1 + i64_1);
+            check(arm32 ? "vaddw.u32" : "uaddw*v*d*v*s", 2 * w, u32_1 + u64_1);
 
             // VAND     X       -       Bitwise AND
             // Not implemented in front-end yet
@@ -643,16 +645,16 @@ public:
             // skip these ones
 
             // VBSL     X       -       Bitwise Select
-            check(arm32 ? "vbsl" : "bsl", 2 * w, select(f32_1 > f32_2, 1.0f, 2.0f));
+            check(arm32 ? "vbsl" : "bsl*v*b", 2 * w, select(f32_1 > f32_2, 1.0f, 2.0f));
 
             // VCEQ     I, F    -       Compare Equal
-            check(arm32 ? "vceq.i8" : "cmeq", 8 * w, select(i8_1 == i8_2, i8(1), i8(2)));
-            check(arm32 ? "vceq.i8" : "cmeq", 8 * w, select(u8_1 == u8_2, u8(1), u8(2)));
-            check(arm32 ? "vceq.i16" : "cmeq", 4 * w, select(i16_1 == i16_2, i16(1), i16(2)));
-            check(arm32 ? "vceq.i16" : "cmeq", 4 * w, select(u16_1 == u16_2, u16(1), u16(2)));
-            check(arm32 ? "vceq.i32" : "cmeq", 2 * w, select(i32_1 == i32_2, i32(1), i32(2)));
-            check(arm32 ? "vceq.i32" : "cmeq", 2 * w, select(u32_1 == u32_2, u32(1), u32(2)));
-            check(arm32 ? "vceq.f32" : "fcmeq", 2 * w, select(f32_1 == f32_2, 1.0f, 2.0f));
+            check(arm32 ? "vceq.i8" : "cmeq*v*b", 8 * w, select(i8_1 == i8_2, i8(1), i8(2)));
+            check(arm32 ? "vceq.i8" : "cmeq*v*b", 8 * w, select(u8_1 == u8_2, u8(1), u8(2)));
+            check(arm32 ? "vceq.i16" : "cmeq*v*h", 4 * w, select(i16_1 == i16_2, i16(1), i16(2)));
+            check(arm32 ? "vceq.i16" : "cmeq*v*h", 4 * w, select(u16_1 == u16_2, u16(1), u16(2)));
+            check(arm32 ? "vceq.i32" : "cmeq*v*s", 2 * w, select(i32_1 == i32_2, i32(1), i32(2)));
+            check(arm32 ? "vceq.i32" : "cmeq*v*s", 2 * w, select(u32_1 == u32_2, u32(1), u32(2)));
+            check(arm32 ? "vceq.f32" : "fcmeq*v*s", 2 * w, select(f32_1 == f32_2, 1.0f, 2.0f));
 
             // VCGE     I, F    -       Compare Greater Than or Equal
 #if 0
@@ -674,13 +676,13 @@ public:
 #endif
 
             // VCGT     I, F    -       Compare Greater Than
-            check(arm32 ? "vcgt.s8" : "cmgt", 8 * w, select(i8_1 > i8_2, i8(1), i8(2)));
-            check(arm32 ? "vcgt.u8" : "cmhi", 8 * w, select(u8_1 > u8_2, u8(1), u8(2)));
-            check(arm32 ? "vcgt.s16" : "cmgt", 4 * w, select(i16_1 > i16_2, i16(1), i16(2)));
-            check(arm32 ? "vcgt.u16" : "cmhi", 4 * w, select(u16_1 > u16_2, u16(1), u16(2)));
-            check(arm32 ? "vcgt.s32" : "cmgt", 2 * w, select(i32_1 > i32_2, i32(1), i32(2)));
-            check(arm32 ? "vcgt.u32" : "cmhi", 2 * w, select(u32_1 > u32_2, u32(1), u32(2)));
-            check(arm32 ? "vcgt.f32" : "fcmgt", 2 * w, select(f32_1 > f32_2, 1.0f, 2.0f));
+            check(arm32 ? "vcgt.s8" : "cmgt*v*b", 8 * w, select(i8_1 > i8_2, i8(1), i8(2)));
+            check(arm32 ? "vcgt.u8" : "cmhi*v*b", 8 * w, select(u8_1 > u8_2, u8(1), u8(2)));
+            check(arm32 ? "vcgt.s16" : "cmgt*v*h", 4 * w, select(i16_1 > i16_2, i16(1), i16(2)));
+            check(arm32 ? "vcgt.u16" : "cmhi*v*h", 4 * w, select(u16_1 > u16_2, u16(1), u16(2)));
+            check(arm32 ? "vcgt.s32" : "cmgt*v*s", 2 * w, select(i32_1 > i32_2, i32(1), i32(2)));
+            check(arm32 ? "vcgt.u32" : "cmhi*v*s", 2 * w, select(u32_1 > u32_2, u32(1), u32(2)));
+            check(arm32 ? "vcgt.f32" : "fcmgt*v*s", 2 * w, select(f32_1 > f32_2, 1.0f, 2.0f));
 
             // VCLS     I       -       Count Leading Sign Bits
             // VCLZ     I       -       Count Leading Zeros
@@ -689,15 +691,15 @@ public:
             // We skip these ones
 
             // VCVT     I, F, H I, F, D, H      Convert Between Floating-Point and 32-bit Integer Types
-            check(arm32 ? "vcvt.f32.u32" : "ucvtf", 2 * w, f32(u32_1));
-            check(arm32 ? "vcvt.f32.s32" : "scvtf", 2 * w, f32(i32_1));
-            check(arm32 ? "vcvt.u32.f32" : "fcvtzu", 2 * w, u32(f32_1));
-            check(arm32 ? "vcvt.s32.f32" : "fcvtzs", 2 * w, i32(f32_1));
+            check(arm32 ? "vcvt.f32.u32" : "ucvtf*v*s", 2 * w, f32(u32_1));
+            check(arm32 ? "vcvt.f32.s32" : "scvtf*v*s", 2 * w, f32(i32_1));
+            check(arm32 ? "vcvt.u32.f32" : "fcvtzu*v*s", 2 * w, u32(f32_1));
+            check(arm32 ? "vcvt.s32.f32" : "fcvtzs*v*s", 2 * w, i32(f32_1));
             // skip the fixed point conversions for now
 
             // VDIV     -       F, D    Divide
             // This doesn't actually get vectorized in 32-bit. Not sure cortex processors can do vectorized division.
-            check(arm32 ? "vdiv.f32" : "fdiv", 2 * w, f32_1 / f32_2);
+            check(arm32 ? "vdiv.f32" : "fdiv*v*s", 2 * w, f32_1 / f32_2);
             check(arm32 ? "vdiv.f64" : "fdiv", 2 * w, f64_1 / f64_2);
 
             // VDUP     X       -       Duplicate
@@ -722,26 +724,26 @@ public:
 #endif
 
             // VHADD    I       -       Halving Add
-            check(arm32 ? "vhadd.s8" : "shadd", 8 * w, i8((i16(i8_1) + i16(i8_2)) / 2));
-            check(arm32 ? "vhadd.u8" : "uhadd", 8 * w, u8((u16(u8_1) + u16(u8_2)) / 2));
-            check(arm32 ? "vhadd.s16" : "shadd", 4 * w, i16((i32(i16_1) + i32(i16_2)) / 2));
-            check(arm32 ? "vhadd.u16" : "uhadd", 4 * w, u16((u32(u16_1) + u32(u16_2)) / 2));
-            check(arm32 ? "vhadd.s32" : "shadd", 2 * w, i32((i64(i32_1) + i64(i32_2)) / 2));
-            check(arm32 ? "vhadd.u32" : "uhadd", 2 * w, u32((u64(u32_1) + u64(u32_2)) / 2));
+            check(arm32 ? "vhadd.s8" : "shadd*v*b", 8 * w, i8((i16(i8_1) + i16(i8_2)) / 2));
+            check(arm32 ? "vhadd.u8" : "uhadd*v*b", 8 * w, u8((u16(u8_1) + u16(u8_2)) / 2));
+            check(arm32 ? "vhadd.s16" : "shadd*v*h", 4 * w, i16((i32(i16_1) + i32(i16_2)) / 2));
+            check(arm32 ? "vhadd.u16" : "uhadd*v*h", 4 * w, u16((u32(u16_1) + u32(u16_2)) / 2));
+            check(arm32 ? "vhadd.s32" : "shadd*v*s", 2 * w, i32((i64(i32_1) + i64(i32_2)) / 2));
+            check(arm32 ? "vhadd.u32" : "uhadd*v*s", 2 * w, u32((u64(u32_1) + u64(u32_2)) / 2));
 
             // Halide doesn't define overflow behavior for i32 so we
             // can use vhadd instruction. We can't use it for unsigned u8,i16,u16,u32.
-            check(arm32 ? "vhadd.s32" : "shadd", 2 * w, (i32_1 + i32_2) / 2);
+            check(arm32 ? "vhadd.s32" : "shadd*v*s", 2 * w, (i32_1 + i32_2) / 2);
 
             // VHSUB    I       -       Halving Subtract
-            check(arm32 ? "vhsub.s8" : "shsub", 8 * w, i8((i16(i8_1) - i16(i8_2)) / 2));
-            check(arm32 ? "vhsub.u8" : "uhsub", 8 * w, u8((u16(u8_1) - u16(u8_2)) / 2));
-            check(arm32 ? "vhsub.s16" : "shsub", 4 * w, i16((i32(i16_1) - i32(i16_2)) / 2));
-            check(arm32 ? "vhsub.u16" : "uhsub", 4 * w, u16((u32(u16_1) - u32(u16_2)) / 2));
-            check(arm32 ? "vhsub.s32" : "shsub", 2 * w, i32((i64(i32_1) - i64(i32_2)) / 2));
-            check(arm32 ? "vhsub.u32" : "uhsub", 2 * w, u32((u64(u32_1) - u64(u32_2)) / 2));
+            check(arm32 ? "vhsub.s8" : "shsub*v*b", 8 * w, i8((i16(i8_1) - i16(i8_2)) / 2));
+            check(arm32 ? "vhsub.u8" : "uhsub*v*b", 8 * w, u8((u16(u8_1) - u16(u8_2)) / 2));
+            check(arm32 ? "vhsub.s16" : "shsub*v*h", 4 * w, i16((i32(i16_1) - i32(i16_2)) / 2));
+            check(arm32 ? "vhsub.u16" : "uhsub*v*h", 4 * w, u16((u32(u16_1) - u32(u16_2)) / 2));
+            check(arm32 ? "vhsub.s32" : "shsub*v*s", 2 * w, i32((i64(i32_1) - i64(i32_2)) / 2));
+            check(arm32 ? "vhsub.u32" : "uhsub*v*s", 2 * w, u32((u64(u32_1) - u64(u32_2)) / 2));
 
-            check(arm32 ? "vhsub.s32" : "shsub", 2 * w, (i32_1 - i32_2) / 2);
+            check(arm32 ? "vhsub.s32" : "shsub*v*s", 2 * w, (i32_1 - i32_2) / 2);
 
             // VLD1     X       -       Load Single-Element Structures
             // dense loads with unknown alignments should use vld1 variants
@@ -788,136 +790,136 @@ public:
             // We generally generate vld instead
 
             // VMAX     I, F    -       Maximum
-            check(arm32 ? "vmax.s8" : "smax", 8 * w, max(i8_1, i8_2));
-            check(arm32 ? "vmax.u8" : "umax", 8 * w, max(u8_1, u8_2));
-            check(arm32 ? "vmax.s16" : "smax", 4 * w, max(i16_1, i16_2));
-            check(arm32 ? "vmax.u16" : "umax", 4 * w, max(u16_1, u16_2));
-            check(arm32 ? "vmax.s32" : "smax", 2 * w, max(i32_1, i32_2));
-            check(arm32 ? "vmax.u32" : "umax", 2 * w, max(u32_1, u32_2));
-            check(arm32 ? "vmax.f32" : "fmax", 2 * w, max(f32_1, f32_2));
+            check(arm32 ? "vmax.s8" : "smax*v*b", 8 * w, max(i8_1, i8_2));
+            check(arm32 ? "vmax.u8" : "umax*v*b", 8 * w, max(u8_1, u8_2));
+            check(arm32 ? "vmax.s16" : "smax*v*h", 4 * w, max(i16_1, i16_2));
+            check(arm32 ? "vmax.u16" : "umax*v*h", 4 * w, max(u16_1, u16_2));
+            check(arm32 ? "vmax.s32" : "smax*v*s", 2 * w, max(i32_1, i32_2));
+            check(arm32 ? "vmax.u32" : "umax*v*s", 2 * w, max(u32_1, u32_2));
+            check(arm32 ? "vmax.f32" : "fmax*v*s", 2 * w, max(f32_1, f32_2));
 
             // VMIN     I, F    -       Minimum
-            check(arm32 ? "vmin.s8" : "smin", 8 * w, min(i8_1, i8_2));
-            check(arm32 ? "vmin.u8" : "umin", 8 * w, min(u8_1, u8_2));
-            check(arm32 ? "vmin.s16" : "smin", 4 * w, min(i16_1, i16_2));
-            check(arm32 ? "vmin.u16" : "umin", 4 * w, min(u16_1, u16_2));
-            check(arm32 ? "vmin.s32" : "smin", 2 * w, min(i32_1, i32_2));
-            check(arm32 ? "vmin.u32" : "umin", 2 * w, min(u32_1, u32_2));
-            check(arm32 ? "vmin.f32" : "fmin", 2 * w, min(f32_1, f32_2));
+            check(arm32 ? "vmin.s8" : "smin*v*b", 8 * w, min(i8_1, i8_2));
+            check(arm32 ? "vmin.u8" : "umin*v*b", 8 * w, min(u8_1, u8_2));
+            check(arm32 ? "vmin.s16" : "smin*v*h", 4 * w, min(i16_1, i16_2));
+            check(arm32 ? "vmin.u16" : "umin*v*h", 4 * w, min(u16_1, u16_2));
+            check(arm32 ? "vmin.s32" : "smin*v*s", 2 * w, min(i32_1, i32_2));
+            check(arm32 ? "vmin.u32" : "umin*v*s", 2 * w, min(u32_1, u32_2));
+            check(arm32 ? "vmin.f32" : "fmin*v*s", 2 * w, min(f32_1, f32_2));
 
             // VMLA     I, F    F, D    Multiply Accumulate
-            check(arm32 ? "vmla.i8" : "mla", 8 * w, i8_1 + i8_2 * i8_3);
-            check(arm32 ? "vmla.i8" : "mla", 8 * w, u8_1 + u8_2 * u8_3);
-            check(arm32 ? "vmla.i16" : "mla", 4 * w, i16_1 + i16_2 * i16_3);
-            check(arm32 ? "vmla.i16" : "mla", 4 * w, u16_1 + u16_2 * u16_3);
-            check(arm32 ? "vmla.i32" : "mla", 2 * w, i32_1 + i32_2 * i32_3);
-            check(arm32 ? "vmla.i32" : "mla", 2 * w, u32_1 + u32_2 * u32_3);
+            check(arm32 ? "vmla.i8" : "mla*v*b", 8 * w, i8_1 + i8_2 * i8_3);
+            check(arm32 ? "vmla.i8" : "mla*v*b", 8 * w, u8_1 + u8_2 * u8_3);
+            check(arm32 ? "vmla.i16" : "mla*v*h", 4 * w, i16_1 + i16_2 * i16_3);
+            check(arm32 ? "vmla.i16" : "mla*v*h", 4 * w, u16_1 + u16_2 * u16_3);
+            check(arm32 ? "vmla.i32" : "mla*v*s", 2 * w, i32_1 + i32_2 * i32_3);
+            check(arm32 ? "vmla.i32" : "mla*v*s", 2 * w, u32_1 + u32_2 * u32_3);
             if (w == 1 || w == 2) {
                 // Older llvms don't always fuse this at non-native widths
                 // TODO: Re-enable this after fixing https://github.com/halide/Halide/issues/3477
                 // check(arm32 ? "vmla.f32" : "fmla", 2*w, f32_1 + f32_2*f32_3);
                 if (!arm32)
-                    check(arm32 ? "vmla.f32" : "fmla", 2 * w, f32_1 + f32_2 * f32_3);
+                    check(arm32 ? "vmla.f32" : "fmla*v*s", 2 * w, f32_1 + f32_2 * f32_3);
             }
 
             // VMLS     I, F    F, D    Multiply Subtract
-            check(arm32 ? "vmls.i8" : "mls", 8 * w, i8_1 - i8_2 * i8_3);
-            check(arm32 ? "vmls.i8" : "mls", 8 * w, u8_1 - u8_2 * u8_3);
-            check(arm32 ? "vmls.i16" : "mls", 4 * w, i16_1 - i16_2 * i16_3);
-            check(arm32 ? "vmls.i16" : "mls", 4 * w, u16_1 - u16_2 * u16_3);
-            check(arm32 ? "vmls.i32" : "mls", 2 * w, i32_1 - i32_2 * i32_3);
-            check(arm32 ? "vmls.i32" : "mls", 2 * w, u32_1 - u32_2 * u32_3);
+            check(arm32 ? "vmls.i8" : "mls*v*b", 8 * w, i8_1 - i8_2 * i8_3);
+            check(arm32 ? "vmls.i8" : "mls*v*b", 8 * w, u8_1 - u8_2 * u8_3);
+            check(arm32 ? "vmls.i16" : "mls*v*h", 4 * w, i16_1 - i16_2 * i16_3);
+            check(arm32 ? "vmls.i16" : "mls*v*h", 4 * w, u16_1 - u16_2 * u16_3);
+            check(arm32 ? "vmls.i32" : "mls*v*s", 2 * w, i32_1 - i32_2 * i32_3);
+            check(arm32 ? "vmls.i32" : "mls*v*s", 2 * w, u32_1 - u32_2 * u32_3);
             if (w == 1 || w == 2) {
                 // Older llvms don't always fuse this at non-native widths
                 // TODO: Re-enable this after fixing https://github.com/halide/Halide/issues/3477
                 // check(arm32 ? "vmls.f32" : "fmls", 2*w, f32_1 - f32_2*f32_3);
                 if (!arm32)
-                    check(arm32 ? "vmls.f32" : "fmls", 2 * w, f32_1 - f32_2 * f32_3);
+                    check(arm32 ? "vmls.f32" : "fmls*v*s", 2 * w, f32_1 - f32_2 * f32_3);
             }
 
             // VMLAL    I       -       Multiply Accumulate Long
             // Try to trick LLVM into generating a zext instead of a sext by making
             // LLVM think the operand never has a leading 1 bit. zext breaks LLVM's
             // pattern matching of mlal.
-            check(arm32 ? "vmlal.s8" : "smlal", 8 * w, i16_1 + i16(i8_2 & 0x3) * i8_3);
-            check(arm32 ? "vmlal.u8" : "umlal", 8 * w, u16_1 + u16(u8_2) * u8_3);
-            check(arm32 ? "vmlal.s16" : "smlal", 4 * w, i32_1 + i32(i16_2 & 0x3) * i16_3);
-            check(arm32 ? "vmlal.u16" : "umlal", 4 * w, u32_1 + u32(u16_2) * u16_3);
-            check(arm32 ? "vmlal.s32" : "smlal", 2 * w, i64_1 + i64(i32_2 & 0x3) * i32_3);
-            check(arm32 ? "vmlal.u32" : "umlal", 2 * w, u64_1 + u64(u32_2) * u32_3);
+            check(arm32 ? "vmlal.s8" : "smlal*v*h*v*b", 8 * w, i16_1 + i16(i8_2 & 0x3) * i8_3);
+            check(arm32 ? "vmlal.u8" : "umlal*v*h*v*b", 8 * w, u16_1 + u16(u8_2) * u8_3);
+            check(arm32 ? "vmlal.s16" : "smlal*v*s*v*h", 4 * w, i32_1 + i32(i16_2 & 0x3) * i16_3);
+            check(arm32 ? "vmlal.u16" : "umlal*v*s*v*h", 4 * w, u32_1 + u32(u16_2) * u16_3);
+            check(arm32 ? "vmlal.s32" : "smlal*v*d*v*s", 2 * w, i64_1 + i64(i32_2 & 0x3) * i32_3);
+            check(arm32 ? "vmlal.u32" : "umlal*v*d*v*s", 2 * w, u64_1 + u64(u32_2) * u32_3);
 
             // VMLSL    I       -       Multiply Subtract Long
-            check(arm32 ? "vmlsl.s8" : "smlsl", 8 * w, i16_1 - i16(i8_2 & 0x3) * i8_3);
-            check(arm32 ? "vmlsl.u8" : "umlsl", 8 * w, u16_1 - u16(u8_2) * u8_3);
-            check(arm32 ? "vmlsl.s16" : "smlsl", 4 * w, i32_1 - i32(i16_2 & 0x3) * i16_3);
-            check(arm32 ? "vmlsl.u16" : "umlsl", 4 * w, u32_1 - u32(u16_2) * u16_3);
-            check(arm32 ? "vmlsl.s32" : "smlsl", 2 * w, i64_1 - i64(i32_2 & 0x3) * i32_3);
-            check(arm32 ? "vmlsl.u32" : "umlsl", 2 * w, u64_1 - u64(u32_2) * u32_3);
+            check(arm32 ? "vmlsl.s8" : "smlsl*v*h*v*b", 8 * w, i16_1 - i16(i8_2 & 0x3) * i8_3);
+            check(arm32 ? "vmlsl.u8" : "umlsl*v*h*v*b", 8 * w, u16_1 - u16(u8_2) * u8_3);
+            check(arm32 ? "vmlsl.s16" : "smlsl*v*s*v*h", 4 * w, i32_1 - i32(i16_2 & 0x3) * i16_3);
+            check(arm32 ? "vmlsl.u16" : "umlsl*v*s*v*h", 4 * w, u32_1 - u32(u16_2) * u16_3);
+            check(arm32 ? "vmlsl.s32" : "smlsl*v*d*v*s", 2 * w, i64_1 - i64(i32_2 & 0x3) * i32_3);
+            check(arm32 ? "vmlsl.u32" : "umlsl*v*d*v*s", 2 * w, u64_1 - u64(u32_2) * u32_3);
 
             // VMOV     X       F, D    Move Register or Immediate
             // This is for loading immediates, which we won't do in the inner loop anyway
 
             // VMOVL    I       -       Move Long
             // For aarch64, llvm does a widening shift by 0 instead of using the sxtl instruction.
-            check(arm32 ? "vmovl.s8" : "sshll", 8 * w, i16(i8_1));
-            check(arm32 ? "vmovl.u8" : "ushll", 8 * w, u16(u8_1));
-            check(arm32 ? "vmovl.u8" : "ushll", 8 * w, i16(u8_1));
-            check(arm32 ? "vmovl.s16" : "sshll", 4 * w, i32(i16_1));
-            check(arm32 ? "vmovl.u16" : "ushll", 4 * w, u32(u16_1));
-            check(arm32 ? "vmovl.u16" : "ushll", 4 * w, i32(u16_1));
-            check(arm32 ? "vmovl.s32" : "sshll", 2 * w, i64(i32_1));
-            check(arm32 ? "vmovl.u32" : "ushll", 2 * w, u64(u32_1));
-            check(arm32 ? "vmovl.u32" : "ushll", 2 * w, i64(u32_1));
+            check(arm32 ? "vmovl.s8" : "sshll*v*b", 8 * w, i16(i8_1));
+            check(arm32 ? "vmovl.u8" : "ushll*v*b", 8 * w, u16(u8_1));
+            check(arm32 ? "vmovl.u8" : "ushll*v*b", 8 * w, i16(u8_1));
+            check(arm32 ? "vmovl.s16" : "sshll*v*h", 4 * w, i32(i16_1));
+            check(arm32 ? "vmovl.u16" : "ushll*v*h", 4 * w, u32(u16_1));
+            check(arm32 ? "vmovl.u16" : "ushll*v*h", 4 * w, i32(u16_1));
+            check(arm32 ? "vmovl.s32" : "sshll*v*s", 2 * w, i64(i32_1));
+            check(arm32 ? "vmovl.u32" : "ushll*v*s", 2 * w, u64(u32_1));
+            check(arm32 ? "vmovl.u32" : "ushll*v*s", 2 * w, i64(u32_1));
 
             // VMOVN    I       -       Move and Narrow
-            check(arm32 ? "vmovn.i16" : "xtn", 8 * w, i8(i16_1));
-            check(arm32 ? "vmovn.i16" : "xtn", 8 * w, u8(u16_1));
-            check(arm32 ? "vmovn.i32" : "xtn", 4 * w, i16(i32_1));
-            check(arm32 ? "vmovn.i32" : "xtn", 4 * w, u16(u32_1));
-            check(arm32 ? "vmovn.i64" : "xtn", 2 * w, i32(i64_1));
-            check(arm32 ? "vmovn.i64" : "xtn", 2 * w, u32(u64_1));
+            check(arm32 ? "vmovn.i16" : "xtn*v*h", 8 * w, i8(i16_1));
+            check(arm32 ? "vmovn.i16" : "xtn*v*h", 8 * w, u8(u16_1));
+            check(arm32 ? "vmovn.i32" : "xtn*v*s", 4 * w, i16(i32_1));
+            check(arm32 ? "vmovn.i32" : "xtn*v*s", 4 * w, u16(u32_1));
+            check(arm32 ? "vmovn.i64" : "xtn*v*d", 2 * w, i32(i64_1));
+            check(arm32 ? "vmovn.i64" : "xtn*v*d", 2 * w, u32(u64_1));
 
             // VMRS     X       F, D    Move Advanced SIMD or VFP Register to ARM compute Engine
             // VMSR     X       F, D    Move ARM Core Register to Advanced SIMD or VFP
             // trust llvm to use this correctly
 
             // VMUL     I, F, P F, D    Multiply
-            check(arm32 ? "vmul.f64" : "fmul", 2 * w, f64_2 * f64_1);
-            check(arm32 ? "vmul.i8" : "mul", 8 * w, i8_2 * i8_1);
-            check(arm32 ? "vmul.i8" : "mul", 8 * w, u8_2 * u8_1);
-            check(arm32 ? "vmul.i16" : "mul", 4 * w, i16_2 * i16_1);
-            check(arm32 ? "vmul.i16" : "mul", 4 * w, u16_2 * u16_1);
-            check(arm32 ? "vmul.i32" : "mul", 2 * w, i32_2 * i32_1);
-            check(arm32 ? "vmul.i32" : "mul", 2 * w, u32_2 * u32_1);
-            check(arm32 ? "vmul.f32" : "fmul", 2 * w, f32_2 * f32_1);
+            check(arm32 ? "vmul.f64" : "fmul*v*d", 2 * w, f64_2 * f64_1);
+            check(arm32 ? "vmul.i8" : "mul*v*b", 8 * w, i8_2 * i8_1);
+            check(arm32 ? "vmul.i8" : "mul*v*b", 8 * w, u8_2 * u8_1);
+            check(arm32 ? "vmul.i16" : "mul*v*h", 4 * w, i16_2 * i16_1);
+            check(arm32 ? "vmul.i16" : "mul*v*h", 4 * w, u16_2 * u16_1);
+            check(arm32 ? "vmul.i32" : "mul*v*s", 2 * w, i32_2 * i32_1);
+            check(arm32 ? "vmul.i32" : "mul*v*s", 2 * w, u32_2 * u32_1);
+            check(arm32 ? "vmul.f32" : "fmul*v*s", 2 * w, f32_2 * f32_1);
 
             // VMULL    I, F, P -       Multiply Long
-            check(arm32 ? "vmull.s8" : "smull", 8 * w, i16(i8_1) * i8_2);
-            check(arm32 ? "vmull.u8" : "umull", 8 * w, u16(u8_1) * u8_2);
-            check(arm32 ? "vmull.s16" : "smull", 4 * w, i32(i16_1) * i16_2);
-            check(arm32 ? "vmull.u16" : "umull", 4 * w, u32(u16_1) * u16_2);
-            check(arm32 ? "vmull.s32" : "smull", 2 * w, i64(i32_1) * i32_2);
-            check(arm32 ? "vmull.u32" : "umull", 2 * w, u64(u32_1) * u32_2);
+            check(arm32 ? "vmull.s8" : "smull*v*b", 8 * w, i16(i8_1) * i8_2);
+            check(arm32 ? "vmull.u8" : "umull*v*b", 8 * w, u16(u8_1) * u8_2);
+            check(arm32 ? "vmull.s16" : "smull*v*h", 4 * w, i32(i16_1) * i16_2);
+            check(arm32 ? "vmull.u16" : "umull*v*h", 4 * w, u32(u16_1) * u16_2);
+            check(arm32 ? "vmull.s32" : "smull*v*s", 2 * w, i64(i32_1) * i32_2);
+            check(arm32 ? "vmull.u32" : "umull*v*s", 2 * w, u64(u32_1) * u32_2);
 
             // integer division by a constant should use fixed point unsigned
             // multiplication, which is done by using a widening multiply
             // followed by a narrowing
-            check(arm32 ? "vmull.u8" : "umull", 8 * w, i8_1 / 37);
-            check(arm32 ? "vmull.u8" : "umull", 8 * w, u8_1 / 37);
-            check(arm32 ? "vmull.u16" : "umull", 4 * w, i16_1 / 37);
-            check(arm32 ? "vmull.u16" : "umull", 4 * w, u16_1 / 37);
-            check(arm32 ? "vmull.u32" : "umull", 2 * w, i32_1 / 37);
-            check(arm32 ? "vmull.u32" : "umull", 2 * w, u32_1 / 37);
+            check(arm32 ? "vmull.u8" : "umull*v*b", 8 * w, i8_1 / 37);
+            check(arm32 ? "vmull.u8" : "umull*v*b", 8 * w, u8_1 / 37);
+            check(arm32 ? "vmull.u16" : "umull*v*h", 4 * w, i16_1 / 37);
+            check(arm32 ? "vmull.u16" : "umull*v*h", 4 * w, u16_1 / 37);
+            check(arm32 ? "vmull.u32" : "umull*v*s", 2 * w, i32_1 / 37);
+            check(arm32 ? "vmull.u32" : "umull*v*s", 2 * w, u32_1 / 37);
 
             // VMVN     X       -       Bitwise NOT
             // check("vmvn", ~bool1);
 
             // VNEG     I, F    F, D    Negate
-            check(arm32 ? "vneg.s8" : "neg", 8 * w, -i8_1);
-            check(arm32 ? "vneg.s16" : "neg", 4 * w, -i16_1);
-            check(arm32 ? "vneg.s32" : "neg", 2 * w, -i32_1);
-            check(arm32 ? "vneg.f32" : "fneg", 4 * w, -f32_1);
-            check(arm32 ? "vneg.f64" : "fneg", 2 * w, -f64_1);
+            check(arm32 ? "vneg.s8" : "neg*v*b", 8 * w, -i8_1);
+            check(arm32 ? "vneg.s16" : "neg*v*h", 4 * w, -i16_1);
+            check(arm32 ? "vneg.s32" : "neg*v*s", 2 * w, -i32_1);
+            check(arm32 ? "vneg.f32" : "fneg*v*s", 4 * w, -f32_1);
+            check(arm32 ? "vneg.f64" : "fneg*v*d", 2 * w, -f64_1);
 
             // VNMLA    -       F, D    Negative Multiply Accumulate
             // VNMLS    -       F, D    Negative Multiply Subtract
@@ -954,87 +956,87 @@ public:
                     };
 
                     // VPADD    I, F    -       Pairwise Add
-                    check(arm32 ? "vpadd.i8" : "addp", 16, sum_(in_i8(f * x + r)));
-                    check(arm32 ? "vpadd.i8" : "addp", 16, sum_(in_u8(f * x + r)));
-                    check(arm32 ? "vpadd.i16" : "addp", 8, sum_(in_i16(f * x + r)));
-                    check(arm32 ? "vpadd.i16" : "addp", 8, sum_(in_u16(f * x + r)));
-                    check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_i32(f * x + r)));
-                    check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_u32(f * x + r)));
-                    check(arm32 ? "vpadd.f32" : "addp", 4, sum_(in_f32(f * x + r)));
+                    check(arm32 ? "vpadd.i8" : "addp*v*b", 16, sum_(in_i8(f * x + r)));
+                    check(arm32 ? "vpadd.i8" : "addp*v*b", 16, sum_(in_u8(f * x + r)));
+                    check(arm32 ? "vpadd.i16" : "addp*v*h", 8, sum_(in_i16(f * x + r)));
+                    check(arm32 ? "vpadd.i16" : "addp*v*h", 8, sum_(in_u16(f * x + r)));
+                    check(arm32 ? "vpadd.i32" : "addp*v*s", 4, sum_(in_i32(f * x + r)));
+                    check(arm32 ? "vpadd.i32" : "addp*v*s", 4, sum_(in_u32(f * x + r)));
+                    check(arm32 ? "vpadd.f32" : "addp*v*s", 4, sum_(in_f32(f * x + r)));
                     // In 32-bit, we don't have a pairwise op for doubles,
                     // and expect to just get vadd instructions on d
                     // registers.
-                    check(arm32 ? "vadd.f64" : "addp", 4, sum_(in_f64(f * x + r)));
+                    check(arm32 ? "vadd.f64" : "addp*v*d", 4, sum_(in_f64(f * x + r)));
 
                     if (f == 2) {
                         // VPADAL   I       -       Pairwise Add and Accumulate Long
 
                         // If we're reducing by a factor of two, we can
                         // use the forms with an accumulator
-                        check(arm32 ? "vpadal.s8" : "sadalp", 16, sum_(i16(in_i8(f * x + r))));
-                        check(arm32 ? "vpadal.u8" : "uadalp", 16, sum_(i16(in_u8(f * x + r))));
-                        check(arm32 ? "vpadal.u8" : "uadalp", 16, sum_(u16(in_u8(f * x + r))));
+                        check(arm32 ? "vpadal.s8" : "sadalp*v*h*v*b", 16, sum_(i16(in_i8(f * x + r))));
+                        check(arm32 ? "vpadal.u8" : "uadalp*v*h*v*b", 16, sum_(i16(in_u8(f * x + r))));
+                        check(arm32 ? "vpadal.u8" : "uadalp**v*h*v*b", 16, sum_(u16(in_u8(f * x + r))));
 
-                        check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i16(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u16(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(u32(in_u16(f * x + r))));
+                        check(arm32 ? "vpadal.s16" : "sadalp*v*s*v*h", 8, sum_(i32(in_i16(f * x + r))));
+                        check(arm32 ? "vpadal.u16" : "uadalp*v*s*v*h", 8, sum_(i32(in_u16(f * x + r))));
+                        check(arm32 ? "vpadal.u16" : "uadalp*v*s*v*h", 8, sum_(u32(in_u16(f * x + r))));
 
-                        check(arm32 ? "vpadal.s32" : "sadalp", 4, sum_(i64(in_i32(f * x + r))));
-                        check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(i64(in_u32(f * x + r))));
-                        check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(u64(in_u32(f * x + r))));
+                        check(arm32 ? "vpadal.s32" : "sadalp*v*d*v*s", 4, sum_(i64(in_i32(f * x + r))));
+                        check(arm32 ? "vpadal.u32" : "uadalp*v*d*v*s", 4, sum_(i64(in_u32(f * x + r))));
+                        check(arm32 ? "vpadal.u32" : "uadalp*v*d*v*s", 4, sum_(u64(in_u32(f * x + r))));
                     } else {
                         // VPADDL   I       -       Pairwise Add Long
 
                         // If we're reducing by more than that, that's not
                         // possible.
-                        check(arm32 ? "vpaddl.s8" : "saddlp", 16, sum_(i16(in_i8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 16, sum_(i16(in_u8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 16, sum_(u16(in_u8(f * x + r))));
+                        check(arm32 ? "vpaddl.s8" : "saddlp*v*h*v*b", 16, sum_(i16(in_i8(f * x + r))));
+                        check(arm32 ? "vpaddl.u8" : "uaddlp*v*h*v*b", 16, sum_(i16(in_u8(f * x + r))));
+                        check(arm32 ? "vpaddl.u8" : "uaddlp*v*h*v*b", 16, sum_(u16(in_u8(f * x + r))));
 
-                        check(arm32 ? "vpaddl.s16" : "saddlp", 8, sum_(i32(in_i16(f * x + r))));
-                        check(arm32 ? "vpaddl.u16" : "uaddlp", 8, sum_(i32(in_u16(f * x + r))));
-                        check(arm32 ? "vpaddl.u16" : "uaddlp", 8, sum_(u32(in_u16(f * x + r))));
+                        check(arm32 ? "vpaddl.s16" : "saddlp*v*s*v*h", 8, sum_(i32(in_i16(f * x + r))));
+                        check(arm32 ? "vpaddl.u16" : "uaddlp*v*s*v*h", 8, sum_(i32(in_u16(f * x + r))));
+                        check(arm32 ? "vpaddl.u16" : "uaddlp*v*s*v*h", 8, sum_(u32(in_u16(f * x + r))));
 
-                        check(arm32 ? "vpaddl.s32" : "saddlp", 4, sum_(i64(in_i32(f * x + r))));
-                        check(arm32 ? "vpaddl.u32" : "uaddlp", 4, sum_(i64(in_u32(f * x + r))));
-                        check(arm32 ? "vpaddl.u32" : "uaddlp", 4, sum_(u64(in_u32(f * x + r))));
+                        check(arm32 ? "vpaddl.s32" : "saddlp*v*d*v*s", 4, sum_(i64(in_i32(f * x + r))));
+                        check(arm32 ? "vpaddl.u32" : "uaddlp*v*d*v*s", 4, sum_(i64(in_u32(f * x + r))));
+                        check(arm32 ? "vpaddl.u32" : "uaddlp*v*d*v*s", 4, sum_(u64(in_u32(f * x + r))));
 
                         // If we're widening the type by a factor of four
                         // as well as reducing by a factor of four, we
                         // expect vpaddl followed by vpadal
-                        check(arm32 ? "vpaddl.s8" : "saddlp", 8, sum_(i32(in_i8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(i32(in_u8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(u32(in_u8(f * x + r))));
-                        check(arm32 ? "vpaddl.s16" : "saddlp", 4, sum_(i64(in_i16(f * x + r))));
-                        check(arm32 ? "vpaddl.u16" : "uaddlp", 4, sum_(i64(in_u16(f * x + r))));
-                        check(arm32 ? "vpaddl.u16" : "uaddlp", 4, sum_(u64(in_u16(f * x + r))));
+                        check(arm32 ? "vpaddl.s8" : "saddlp*v*h*v*b", 8, sum_(i32(in_i8(f * x + r))));
+                        check(arm32 ? "vpaddl.u8" : "uaddlp*v*h*v*b", 8, sum_(i32(in_u8(f * x + r))));
+                        check(arm32 ? "vpaddl.u8" : "uaddlp*v*h*v*b", 8, sum_(u32(in_u8(f * x + r))));
+                        check(arm32 ? "vpaddl.s16" : "saddlp*v*s*v*h", 4, sum_(i64(in_i16(f * x + r))));
+                        check(arm32 ? "vpaddl.u16" : "uaddlp*v*s*v*h", 4, sum_(i64(in_u16(f * x + r))));
+                        check(arm32 ? "vpaddl.u16" : "uaddlp*v*s*v*h", 4, sum_(u64(in_u16(f * x + r))));
 
                         // Note that when going from u8 to i32 like this,
                         // the vpaddl is unsigned and the vpadal is a
                         // signed, because the intermediate type is u16
-                        check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i8(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u8(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(u32(in_u8(f * x + r))));
-                        check(arm32 ? "vpadal.s32" : "sadalp", 4, sum_(i64(in_i16(f * x + r))));
-                        check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(i64(in_u16(f * x + r))));
-                        check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(u64(in_u16(f * x + r))));
+                        check(arm32 ? "vpadal.s16" : "sadalp*v*s*v*h", 8, sum_(i32(in_i8(f * x + r))));
+                        check(arm32 ? "vpadal.u16" : "uadalp*v*s*v*h", 8, sum_(i32(in_u8(f * x + r))));
+                        check(arm32 ? "vpadal.u16" : "uadalp*v*s*v*h", 8, sum_(u32(in_u8(f * x + r))));
+                        check(arm32 ? "vpadal.s32" : "sadalp*v*d*v*s", 4, sum_(i64(in_i16(f * x + r))));
+                        check(arm32 ? "vpadal.u32" : "uadalp*v*d*v*s", 4, sum_(i64(in_u16(f * x + r))));
+                        check(arm32 ? "vpadal.u32" : "uadalp*v*d*v*s", 4, sum_(u64(in_u16(f * x + r))));
                     }
 
                     // VPMAX    I, F    -       Pairwise Maximum
-                    check(arm32 ? "vpmax.s8" : "smaxp", 16, maximum(in_i8(f * x + r)));
-                    check(arm32 ? "vpmax.u8" : "umaxp", 16, maximum(in_u8(f * x + r)));
-                    check(arm32 ? "vpmax.s16" : "smaxp", 8, maximum(in_i16(f * x + r)));
-                    check(arm32 ? "vpmax.u16" : "umaxp", 8, maximum(in_u16(f * x + r)));
-                    check(arm32 ? "vpmax.s32" : "smaxp", 4, maximum(in_i32(f * x + r)));
-                    check(arm32 ? "vpmax.u32" : "umaxp", 4, maximum(in_u32(f * x + r)));
+                    check(arm32 ? "vpmax.s8" : "smaxp*v*b", 16, maximum(in_i8(f * x + r)));
+                    check(arm32 ? "vpmax.u8" : "umaxp*v*b", 16, maximum(in_u8(f * x + r)));
+                    check(arm32 ? "vpmax.s16" : "smaxp*v*h", 8, maximum(in_i16(f * x + r)));
+                    check(arm32 ? "vpmax.u16" : "umaxp*v*h", 8, maximum(in_u16(f * x + r)));
+                    check(arm32 ? "vpmax.s32" : "smaxp*v*s", 4, maximum(in_i32(f * x + r)));
+                    check(arm32 ? "vpmax.u32" : "umaxp*v*s", 4, maximum(in_u32(f * x + r)));
 
                     // VPMIN    I, F    -       Pairwise Minimum
-                    check(arm32 ? "vpmin.s8" : "sminp", 16, minimum(in_i8(f * x + r)));
-                    check(arm32 ? "vpmin.u8" : "uminp", 16, minimum(in_u8(f * x + r)));
-                    check(arm32 ? "vpmin.s16" : "sminp", 8, minimum(in_i16(f * x + r)));
-                    check(arm32 ? "vpmin.u16" : "uminp", 8, minimum(in_u16(f * x + r)));
-                    check(arm32 ? "vpmin.s32" : "sminp", 4, minimum(in_i32(f * x + r)));
-                    check(arm32 ? "vpmin.u32" : "uminp", 4, minimum(in_u32(f * x + r)));
+                    check(arm32 ? "vpmin.s8" : "sminp*v*b", 16, minimum(in_i8(f * x + r)));
+                    check(arm32 ? "vpmin.u8" : "uminp*v*b", 16, minimum(in_u8(f * x + r)));
+                    check(arm32 ? "vpmin.s16" : "sminp*v*h", 8, minimum(in_i16(f * x + r)));
+                    check(arm32 ? "vpmin.u16" : "uminp*v*h", 8, minimum(in_u16(f * x + r)));
+                    check(arm32 ? "vpmin.s32" : "sminp*v*s", 4, minimum(in_i32(f * x + r)));
+                    check(arm32 ? "vpmin.u32" : "uminp*v*s", 4, minimum(in_u32(f * x + r)));
                 }
 
                 // UDOT/SDOT
@@ -1042,8 +1044,8 @@ public:
                     for (int f : {4, 8}) {
                         RDom r(0, f);
                         for (int v : {2, 4}) {
-                            check("udot", v, sum(u32(in_u8(f * x + r)) * in_u8(f * x + r + 32)));
-                            check("sdot", v, sum(i32(in_i8(f * x + r)) * in_i8(f * x + r + 32)));
+                            check("udot*v*b", v, sum(u32(in_u8(f * x + r)) * in_u8(f * x + r + 32)));
+                            check("sdot*v*b", v, sum(i32(in_i8(f * x + r)) * in_i8(f * x + r + 32)));
                         }
                     }
                 }
@@ -1065,16 +1067,16 @@ public:
 #endif
 
             // VQADD    I       -       Saturating Add
-            check(arm32 ? "vqadd.s8" : "sqadd", 8 * w, i8_sat(i16(i8_1) + i16(i8_2)));
-            check(arm32 ? "vqadd.s16" : "sqadd", 4 * w, i16_sat(i32(i16_1) + i32(i16_2)));
-            check(arm32 ? "vqadd.s32" : "sqadd", 2 * w, i32_sat(i64(i32_1) + i64(i32_2)));
+            check(arm32 ? "vqadd.s8" : "sqadd*v*b", 8 * w, i8_sat(i16(i8_1) + i16(i8_2)));
+            check(arm32 ? "vqadd.s16" : "sqadd*v*h", 4 * w, i16_sat(i32(i16_1) + i32(i16_2)));
+            check(arm32 ? "vqadd.s32" : "sqadd*v*s", 2 * w, i32_sat(i64(i32_1) + i64(i32_2)));
 
-            check(arm32 ? "vqadd.u8" : "uqadd", 8 * w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-            check(arm32 ? "vqadd.u16" : "uqadd", 4 * w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+            check(arm32 ? "vqadd.u8" : "uqadd*v*b", 8 * w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
+            check(arm32 ? "vqadd.u16" : "uqadd*v*h", 4 * w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
 
             // Check the case where we add a constant that could be narrowed
-            check(arm32 ? "vqadd.u8" : "uqadd", 8 * w, u8(min(u16(u8_1) + 17, max_u8)));
-            check(arm32 ? "vqadd.u16" : "uqadd", 4 * w, u16(min(u32(u16_1) + 17, max_u16)));
+            check(arm32 ? "vqadd.u8" : "uqadd*v*b", 8 * w, u8(min(u16(u8_1) + 17, max_u8)));
+            check(arm32 ? "vqadd.u16" : "uqadd*v*h", 4 * w, u16(min(u32(u16_1) + 17, max_u16)));
 
             // Can't do larger ones because we only have i32 constants
 
@@ -1085,28 +1087,28 @@ public:
             // Not sure why I'd use these
 
             // VQMOVN   I       -       Saturating Move and Narrow
-            check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(i16_1));
-            check(arm32 ? "vqmovn.s32" : "sqxtn", 4 * w, i16_sat(i32_1));
-            check(arm32 ? "vqmovn.s64" : "sqxtn", 2 * w, i32_sat(i64_1));
-            check(arm32 ? "vqmovn.u16" : "uqxtn", 8 * w, u8(min(u16_1, max_u8)));
-            check(arm32 ? "vqmovn.u32" : "uqxtn", 4 * w, u16(min(u32_1, max_u16)));
-            check(arm32 ? "vqmovn.u64" : "uqxtn", 2 * w, u32(min(u64_1, max_u32)));
+            check(arm32 ? "vqmovn.s16" : "sqxtn*v*h", 8 * w, i8_sat(i16_1));
+            check(arm32 ? "vqmovn.s32" : "sqxtn*v*s", 4 * w, i16_sat(i32_1));
+            check(arm32 ? "vqmovn.s64" : "sqxtn*v*d", 2 * w, i32_sat(i64_1));
+            check(arm32 ? "vqmovn.u16" : "uqxtn*v*b", 8 * w, u8(min(u16_1, max_u8)));
+            check(arm32 ? "vqmovn.u32" : "uqxtn*v*h", 4 * w, u16(min(u32_1, max_u16)));
+            check(arm32 ? "vqmovn.u64" : "uqxtn*v*d", 2 * w, u32(min(u64_1, max_u32)));
 
             // VQMOVUN  I       -       Saturating Move and Unsigned Narrow
-            check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(i16_1));
-            check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(i32_1));
-            check(arm32 ? "vqmovun.s64" : "sqxtun", 2 * w, u32_sat(i64_1));
+            check(arm32 ? "vqmovun.s16" : "sqxtun*v*h", 8 * w, u8_sat(i16_1));
+            check(arm32 ? "vqmovun.s32" : "sqxtun*v*s", 4 * w, u16_sat(i32_1));
+            check(arm32 ? "vqmovun.s64" : "sqxtun*v*d", 2 * w, u32_sat(i64_1));
 
             // VQNEG    I       -       Saturating Negate
-            check(arm32 ? "vqneg.s8" : "sqneg", 8 * w, -max(i8_1, -max_i8));
-            check(arm32 ? "vqneg.s16" : "sqneg", 4 * w, -max(i16_1, -max_i16));
-            check(arm32 ? "vqneg.s32" : "sqneg", 2 * w, -max(i32_1, -max_i32));
+            check(arm32 ? "vqneg.s8" : "sqneg*v*b", 8 * w, -max(i8_1, -max_i8));
+            check(arm32 ? "vqneg.s16" : "sqneg*v*h", 4 * w, -max(i16_1, -max_i16));
+            check(arm32 ? "vqneg.s32" : "sqneg*v*s", 2 * w, -max(i32_1, -max_i32));
 
             // VQRDMULH I       -       Saturating Rounding Doubling Multiply Returning High Half
             // Note: division in Halide always rounds down (not towards
             // zero). Otherwise these patterns would be more complicated.
-            check(arm32 ? "vqrdmulh.s16" : "sqrdmulh", 4 * w, i16_sat((i32(i16_1) * i32(i16_2) + (1 << 14)) / (1 << 15)));
-            check(arm32 ? "vqrdmulh.s32" : "sqrdmulh", 2 * w, i32_sat((i64(i32_1) * i64(i32_2) + (1 << 30)) / (Expr(int64_t(1)) << 31)));
+            check(arm32 ? "vqrdmulh.s16" : "sqrdmulh*v*h", 4 * w, i16_sat((i32(i16_1) * i32(i16_2) + (1 << 14)) / (1 << 15)));
+            check(arm32 ? "vqrdmulh.s32" : "sqrdmulh*v*s", 2 * w, i32_sat((i64(i32_1) * i64(i32_2) + (1 << 30)) / (Expr(int64_t(1)) << 31)));
 
             // VQRSHL   I       -       Saturating Rounding Shift Left
             // VQRSHRN  I       -       Saturating Rounding Shift Right Narrow
@@ -1114,39 +1116,39 @@ public:
             // We use the non-rounding form of these (at worst we do an extra add)
 
             // VQSHL    I       -       Saturating Shift Left
-            check(arm32 ? "vqshl.s8" : "sqshl", 8 * w, i8_sat(i16(i8_1) * 16));
-            check(arm32 ? "vqshl.s16" : "sqshl", 4 * w, i16_sat(i32(i16_1) * 16));
-            check(arm32 ? "vqshl.s32" : "sqshl", 2 * w, i32_sat(i64(i32_1) * 16));
-            check(arm32 ? "vqshl.u8" : "uqshl", 8 * w, u8(min(u16(u8_1) * 16, max_u8)));
-            check(arm32 ? "vqshl.u16" : "uqshl", 4 * w, u16(min(u32(u16_1) * 16, max_u16)));
-            check(arm32 ? "vqshl.u32" : "uqshl", 2 * w, u32(min(u64(u32_1) * 16, max_u32)));
+            check(arm32 ? "vqshl.s8" : "sqshl*v*b", 8 * w, i8_sat(i16(i8_1) * 16));
+            check(arm32 ? "vqshl.s16" : "sqshl*v*h", 4 * w, i16_sat(i32(i16_1) * 16));
+            check(arm32 ? "vqshl.s32" : "sqshl*v*s", 2 * w, i32_sat(i64(i32_1) * 16));
+            check(arm32 ? "vqshl.u8" : "uqshl*v*b", 8 * w, u8(min(u16(u8_1) * 16, max_u8)));
+            check(arm32 ? "vqshl.u16" : "uqshl*v*h", 4 * w, u16(min(u32(u16_1) * 16, max_u16)));
+            check(arm32 ? "vqshl.u32" : "uqshl*v*s", 2 * w, u32(min(u64(u32_1) * 16, max_u32)));
 
             // VQSHLU   I       -       Saturating Shift Left Unsigned
-            check(arm32 ? "vqshlu.s8" : "sqshlu", 8 * w, u8_sat(i16(i8_1) * 16));
-            check(arm32 ? "vqshlu.s16" : "sqshlu", 4 * w, u16_sat(i32(i16_1) * 16));
-            check(arm32 ? "vqshlu.s32" : "sqshlu", 2 * w, u32_sat(i64(i32_1) * 16));
+            check(arm32 ? "vqshlu.s8" : "sqshlu*v*b", 8 * w, u8_sat(i16(i8_1) * 16));
+            check(arm32 ? "vqshlu.s16" : "sqshlu*v*h", 4 * w, u16_sat(i32(i16_1) * 16));
+            check(arm32 ? "vqshlu.s32" : "sqshlu*v*s", 2 * w, u32_sat(i64(i32_1) * 16));
 
             // VQSHRN   I       -       Saturating Shift Right Narrow
             // VQSHRUN  I       -       Saturating Shift Right Unsigned Narrow
-            check(arm32 ? "vqshrn.s16" : "sqshrn", 8 * w, i8_sat(i16_1 / 16));
-            check(arm32 ? "vqshrn.s32" : "sqshrn", 4 * w, i16_sat(i32_1 / 16));
-            check(arm32 ? "vqshrn.s64" : "sqshrn", 2 * w, i32_sat(i64_1 / 16));
-            check(arm32 ? "vqshrun.s16" : "sqshrun", 8 * w, u8_sat(i16_1 / 16));
-            check(arm32 ? "vqshrun.s32" : "sqshrun", 4 * w, u16_sat(i32_1 / 16));
-            check(arm32 ? "vqshrun.s64" : "sqshrun", 2 * w, u32_sat(i64_1 / 16));
-            check(arm32 ? "vqshrn.u16" : "uqshrn", 8 * w, u8(min(u16_1 / 16, max_u8)));
-            check(arm32 ? "vqshrn.u32" : "uqshrn", 4 * w, u16(min(u32_1 / 16, max_u16)));
-            check(arm32 ? "vqshrn.u64" : "uqshrn", 2 * w, u32(min(u64_1 / 16, max_u32)));
+            check(arm32 ? "vqshrn.s16" : "sqshrn*v*h", 8 * w, i8_sat(i16_1 / 16));
+            check(arm32 ? "vqshrn.s32" : "sqshrn*v*s", 4 * w, i16_sat(i32_1 / 16));
+            check(arm32 ? "vqshrn.s64" : "sqshrn*v*d", 2 * w, i32_sat(i64_1 / 16));
+            check(arm32 ? "vqshrun.s16" : "sqshrun*v*h", 8 * w, u8_sat(i16_1 / 16));
+            check(arm32 ? "vqshrun.s32" : "sqshrun*v*s", 4 * w, u16_sat(i32_1 / 16));
+            check(arm32 ? "vqshrun.s64" : "sqshrun*v*d", 2 * w, u32_sat(i64_1 / 16));
+            check(arm32 ? "vqshrn.u16" : "uqshrn*v*h", 8 * w, u8(min(u16_1 / 16, max_u8)));
+            check(arm32 ? "vqshrn.u32" : "uqshrn*v*s", 4 * w, u16(min(u32_1 / 16, max_u16)));
+            check(arm32 ? "vqshrn.u64" : "uqshrn*v*d", 2 * w, u32(min(u64_1 / 16, max_u32)));
 
             // VQSUB    I       -       Saturating Subtract
-            check(arm32 ? "vqsub.s8" : "sqsub", 8 * w, i8_sat(i16(i8_1) - i16(i8_2)));
-            check(arm32 ? "vqsub.s16" : "sqsub", 4 * w, i16_sat(i32(i16_1) - i32(i16_2)));
-            check(arm32 ? "vqsub.s32" : "sqsub", 2 * w, i32_sat(i64(i32_1) - i64(i32_2)));
+            check(arm32 ? "vqsub.s8" : "sqsub*v*b", 8 * w, i8_sat(i16(i8_1) - i16(i8_2)));
+            check(arm32 ? "vqsub.s16" : "sqsub*v*h", 4 * w, i16_sat(i32(i16_1) - i32(i16_2)));
+            check(arm32 ? "vqsub.s32" : "sqsub*v*s", 2 * w, i32_sat(i64(i32_1) - i64(i32_2)));
 
             // N.B. Saturating subtracts are expressed by widening to a *signed* type
-            check(arm32 ? "vqsub.u8" : "uqsub", 8 * w, u8_sat(i16(u8_1) - i16(u8_2)));
-            check(arm32 ? "vqsub.u16" : "uqsub", 4 * w, u16_sat(i32(u16_1) - i32(u16_2)));
-            check(arm32 ? "vqsub.u32" : "uqsub", 2 * w, u32_sat(i64(u32_1) - i64(u32_2)));
+            check(arm32 ? "vqsub.u8" : "uqsub*v*b", 8 * w, u8_sat(i16(u8_1) - i16(u8_2)));
+            check(arm32 ? "vqsub.u16" : "uqsub*v*h", 4 * w, u16_sat(i32(u16_1) - i32(u16_2)));
+            check(arm32 ? "vqsub.u32" : "uqsub*v*s", 2 * w, u32_sat(i64(u32_1) - i64(u32_2)));
 
             // VRADDHN  I       -       Rounding Add and Narrow Returning High Half
 #if 0
@@ -1158,10 +1160,10 @@ public:
 #endif
 
             // VRECPE   I, F    -       Reciprocal Estimate
-            check(arm32 ? "vrecpe.f32" : "frecpe", 2 * w, fast_inverse(f32_1));
+            check(arm32 ? "vrecpe.f32" : "frecpe*v*s", 2 * w, fast_inverse(f32_1));
 
             // VRECPS   F       -       Reciprocal Step
-            check(arm32 ? "vrecps.f32" : "frecps", 2 * w, fast_inverse(f32_1));
+            check(arm32 ? "vrecps.f32" : "frecps*v*s", 2 * w, fast_inverse(f32_1));
 
             // VREV16   X       -       Reverse in Halfwords
             // VREV32   X       -       Reverse in Words
@@ -1172,12 +1174,12 @@ public:
             // it generates vtbl instructions.
 
             // VRHADD   I       -       Rounding Halving Add
-            check(arm32 ? "vrhadd.s8" : "srhadd", 8 * w, i8((i16(i8_1) + i16(i8_2) + 1) / 2));
-            check(arm32 ? "vrhadd.u8" : "urhadd", 8 * w, u8((u16(u8_1) + u16(u8_2) + 1) / 2));
-            check(arm32 ? "vrhadd.s16" : "srhadd", 4 * w, i16((i32(i16_1) + i32(i16_2) + 1) / 2));
-            check(arm32 ? "vrhadd.u16" : "urhadd", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
-            check(arm32 ? "vrhadd.s32" : "srhadd", 2 * w, i32((i64(i32_1) + i64(i32_2) + 1) / 2));
-            check(arm32 ? "vrhadd.u32" : "urhadd", 2 * w, u32((u64(u32_1) + u64(u32_2) + 1) / 2));
+            check(arm32 ? "vrhadd.s8" : "srhadd*v*b", 8 * w, i8((i16(i8_1) + i16(i8_2) + 1) / 2));
+            check(arm32 ? "vrhadd.u8" : "urhadd*v*b", 8 * w, u8((u16(u8_1) + u16(u8_2) + 1) / 2));
+            check(arm32 ? "vrhadd.s16" : "srhadd*v*h", 4 * w, i16((i32(i16_1) + i32(i16_2) + 1) / 2));
+            check(arm32 ? "vrhadd.u16" : "urhadd*v*h", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
+            check(arm32 ? "vrhadd.s32" : "srhadd*v*s", 2 * w, i32((i64(i32_1) + i64(i32_2) + 1) / 2));
+            check(arm32 ? "vrhadd.u32" : "urhadd*v*s", 2 * w, u32((u64(u32_1) + u64(u32_2) + 1) / 2));
 
             // VRSHL    I       -       Rounding Shift Left
             // VRSHR    I       -       Rounding Shift Right
@@ -1195,96 +1197,96 @@ public:
             // Boo rounding ops
 
             // VSHL     I       -       Shift Left
-            check(arm32 ? "vshl.i64" : "shl", 2 * w, i64_1 * 16);
-            check(arm32 ? "vshl.i8" : "shl", 8 * w, i8_1 * 16);
-            check(arm32 ? "vshl.i16" : "shl", 4 * w, i16_1 * 16);
-            check(arm32 ? "vshl.i32" : "shl", 2 * w, i32_1 * 16);
-            check(arm32 ? "vshl.i64" : "shl", 2 * w, u64_1 * 16);
-            check(arm32 ? "vshl.i8" : "shl", 8 * w, u8_1 * 16);
-            check(arm32 ? "vshl.i16" : "shl", 4 * w, u16_1 * 16);
-            check(arm32 ? "vshl.i32" : "shl", 2 * w, u32_1 * 16);
+            check(arm32 ? "vshl.i64" : "shl*v*d", 2 * w, i64_1 * 16);
+            check(arm32 ? "vshl.i8" : "shl*v*b", 8 * w, i8_1 * 16);
+            check(arm32 ? "vshl.i16" : "shl*v*h", 4 * w, i16_1 * 16);
+            check(arm32 ? "vshl.i32" : "shl*v*s", 2 * w, i32_1 * 16);
+            check(arm32 ? "vshl.i64" : "shl*v*d", 2 * w, u64_1 * 16);
+            check(arm32 ? "vshl.i8" : "shl*v*b", 8 * w, u8_1 * 16);
+            check(arm32 ? "vshl.i16" : "shl*v*h", 4 * w, u16_1 * 16);
+            check(arm32 ? "vshl.i32" : "shl*v*s", 2 * w, u32_1 * 16);
 
             // VSHLL    I       -       Shift Left Long
-            check(arm32 ? "vshll.s8" : "sshll", 8 * w, i16(i8_1) * 16);
-            check(arm32 ? "vshll.s16" : "sshll", 4 * w, i32(i16_1) * 16);
-            check(arm32 ? "vshll.s32" : "sshll", 2 * w, i64(i32_1) * 16);
-            check(arm32 ? "vshll.u8" : "ushll", 8 * w, u16(u8_1) * 16);
-            check(arm32 ? "vshll.u16" : "ushll", 4 * w, u32(u16_1) * 16);
-            check(arm32 ? "vshll.u32" : "ushll", 2 * w, u64(u32_1) * 16);
+            check(arm32 ? "vshll.s8" : "sshll*v*b", 8 * w, i16(i8_1) * 16);
+            check(arm32 ? "vshll.s16" : "sshll*v*h", 4 * w, i32(i16_1) * 16);
+            check(arm32 ? "vshll.s32" : "sshll*v*s", 2 * w, i64(i32_1) * 16);
+            check(arm32 ? "vshll.u8" : "ushll*v*b", 8 * w, u16(u8_1) * 16);
+            check(arm32 ? "vshll.u16" : "ushll*v*h", 4 * w, u32(u16_1) * 16);
+            check(arm32 ? "vshll.u32" : "ushll*v*s", 2 * w, u64(u32_1) * 16);
 
             // VSHR     I       -       Shift Right
-            check(arm32 ? "vshr.s64" : "sshr", 2 * w, i64_1 / 16);
-            check(arm32 ? "vshr.s8" : "sshr", 8 * w, i8_1 / 16);
-            check(arm32 ? "vshr.s16" : "sshr", 4 * w, i16_1 / 16);
-            check(arm32 ? "vshr.s32" : "sshr", 2 * w, i32_1 / 16);
-            check(arm32 ? "vshr.u64" : "ushr", 2 * w, u64_1 / 16);
-            check(arm32 ? "vshr.u8" : "ushr", 8 * w, u8_1 / 16);
-            check(arm32 ? "vshr.u16" : "ushr", 4 * w, u16_1 / 16);
-            check(arm32 ? "vshr.u32" : "ushr", 2 * w, u32_1 / 16);
+            check(arm32 ? "vshr.s64" : "sshr*v*d", 2 * w, i64_1 / 16);
+            check(arm32 ? "vshr.s8" : "sshr*v*b", 8 * w, i8_1 / 16);
+            check(arm32 ? "vshr.s16" : "sshr*v*h", 4 * w, i16_1 / 16);
+            check(arm32 ? "vshr.s32" : "sshr*v*s", 2 * w, i32_1 / 16);
+            check(arm32 ? "vshr.u64" : "ushr*v*d", 2 * w, u64_1 / 16);
+            check(arm32 ? "vshr.u8" : "ushr*v*b", 8 * w, u8_1 / 16);
+            check(arm32 ? "vshr.u16" : "ushr*v*h", 4 * w, u16_1 / 16);
+            check(arm32 ? "vshr.u32" : "ushr*v*s", 2 * w, u32_1 / 16);
 
             // VSHRN    I       -       Shift Right Narrow
-            check(arm32 ? "vshrn.i16" : "shrn", 8 * w, i8(i16_1 / 256));
-            check(arm32 ? "vshrn.i32" : "shrn", 4 * w, i16(i32_1 / 65536));
-            check(arm32 ? "vshrn.i16" : "shrn", 8 * w, u8(u16_1 / 256));
-            check(arm32 ? "vshrn.i32" : "shrn", 4 * w, u16(u32_1 / 65536));
-            check(arm32 ? "vshrn.i16" : "shrn", 8 * w, i8(i16_1 / 16));
-            check(arm32 ? "vshrn.i32" : "shrn", 4 * w, i16(i32_1 / 16));
-            check(arm32 ? "vshrn.i16" : "shrn", 8 * w, u8(u16_1 / 16));
-            check(arm32 ? "vshrn.i32" : "shrn", 4 * w, u16(u32_1 / 16));
+            check(arm32 ? "vshrn.i16" : "shrn*v*h", 8 * w, i8(i16_1 / 256));
+            check(arm32 ? "vshrn.i32" : "shrn*v*s", 4 * w, i16(i32_1 / 65536));
+            check(arm32 ? "vshrn.i16" : "shrn*v*h", 8 * w, u8(u16_1 / 256));
+            check(arm32 ? "vshrn.i32" : "shrn*v*s", 4 * w, u16(u32_1 / 65536));
+            check(arm32 ? "vshrn.i16" : "shrn*v*h", 8 * w, i8(i16_1 / 16));
+            check(arm32 ? "vshrn.i32" : "shrn*v*s", 4 * w, i16(i32_1 / 16));
+            check(arm32 ? "vshrn.i16" : "shrn*v*h", 8 * w, u8(u16_1 / 16));
+            check(arm32 ? "vshrn.i32" : "shrn*v*s", 4 * w, u16(u32_1 / 16));
 
             // VSLI     X       -       Shift Left and Insert
             // I guess this could be used for (x*256) | (y & 255)? We don't do bitwise ops on integers, so skip it.
 
             // VSQRT    -       F, D    Square Root
-            check(arm32 ? "vsqrt.f32" : "fsqrt", 4 * w, sqrt(f32_1));
-            check(arm32 ? "vsqrt.f64" : "fsqrt", 2 * w, sqrt(f64_1));
+            check(arm32 ? "vsqrt.f32" : "fsqrt*v*s", 4 * w, sqrt(f32_1));
+            check(arm32 ? "vsqrt.f64" : "fsqrt*v*d", 2 * w, sqrt(f64_1));
 
             // VSRA     I       -       Shift Right and Accumulate
-            check(arm32 ? "vsra.s64" : "ssra", 2 * w, i64_2 + i64_1 / 16);
-            check(arm32 ? "vsra.s8" : "ssra", 8 * w, i8_2 + i8_1 / 16);
-            check(arm32 ? "vsra.s16" : "ssra", 4 * w, i16_2 + i16_1 / 16);
-            check(arm32 ? "vsra.s32" : "ssra", 2 * w, i32_2 + i32_1 / 16);
-            check(arm32 ? "vsra.u64" : "usra", 2 * w, u64_2 + u64_1 / 16);
-            check(arm32 ? "vsra.u8" : "usra", 8 * w, u8_2 + u8_1 / 16);
-            check(arm32 ? "vsra.u16" : "usra", 4 * w, u16_2 + u16_1 / 16);
-            check(arm32 ? "vsra.u32" : "usra", 2 * w, u32_2 + u32_1 / 16);
+            check(arm32 ? "vsra.s64" : "ssra*v*d", 2 * w, i64_2 + i64_1 / 16);
+            check(arm32 ? "vsra.s8" : "ssra*v*b", 8 * w, i8_2 + i8_1 / 16);
+            check(arm32 ? "vsra.s16" : "ssra*v*h", 4 * w, i16_2 + i16_1 / 16);
+            check(arm32 ? "vsra.s32" : "ssra*v*s", 2 * w, i32_2 + i32_1 / 16);
+            check(arm32 ? "vsra.u64" : "usra*v*d", 2 * w, u64_2 + u64_1 / 16);
+            check(arm32 ? "vsra.u8" : "usra*v*b", 8 * w, u8_2 + u8_1 / 16);
+            check(arm32 ? "vsra.u16" : "usra*v*h", 4 * w, u16_2 + u16_1 / 16);
+            check(arm32 ? "vsra.u32" : "usra*v*s", 2 * w, u32_2 + u32_1 / 16);
 
             // VSRI     X       -       Shift Right and Insert
             // See VSLI
 
             // VSUB     I, F    F, D    Subtract
-            check(arm32 ? "vsub.i64" : "sub", 2 * w, i64_1 - i64_2);
-            check(arm32 ? "vsub.i64" : "sub", 2 * w, u64_1 - u64_2);
-            check(arm32 ? "vsub.f32" : "fsub", 4 * w, f32_1 - f32_2);
-            check(arm32 ? "vsub.i8" : "sub", 8 * w, i8_1 - i8_2);
-            check(arm32 ? "vsub.i8" : "sub", 8 * w, u8_1 - u8_2);
-            check(arm32 ? "vsub.i16" : "sub", 4 * w, i16_1 - i16_2);
-            check(arm32 ? "vsub.i16" : "sub", 4 * w, u16_1 - u16_2);
-            check(arm32 ? "vsub.i32" : "sub", 2 * w, i32_1 - i32_2);
-            check(arm32 ? "vsub.i32" : "sub", 2 * w, u32_1 - u32_2);
-            check(arm32 ? "vsub.f32" : "fsub", 2 * w, f32_1 - f32_2);
+            check(arm32 ? "vsub.i64" : "sub*v*d", 2 * w, i64_1 - i64_2);
+            check(arm32 ? "vsub.i64" : "sub*v*d", 2 * w, u64_1 - u64_2);
+            check(arm32 ? "vsub.f32" : "fsub*v*s", 4 * w, f32_1 - f32_2);
+            check(arm32 ? "vsub.i8" : "sub*v*b", 8 * w, i8_1 - i8_2);
+            check(arm32 ? "vsub.i8" : "sub*v*b", 8 * w, u8_1 - u8_2);
+            check(arm32 ? "vsub.i16" : "sub*v*h", 4 * w, i16_1 - i16_2);
+            check(arm32 ? "vsub.i16" : "sub*v*h", 4 * w, u16_1 - u16_2);
+            check(arm32 ? "vsub.i32" : "sub*v*s", 2 * w, i32_1 - i32_2);
+            check(arm32 ? "vsub.i32" : "sub*v*s", 2 * w, u32_1 - u32_2);
+            check(arm32 ? "vsub.f32" : "fsub*v*s", 2 * w, f32_1 - f32_2);
 
             // VSUBHN   I       -       Subtract and Narrow
-            check(arm32 ? "vsubhn.i16" : "subhn", 8 * w, i8((i16_1 - i16_2) / 256));
-            check(arm32 ? "vsubhn.i16" : "subhn", 8 * w, u8((u16_1 - u16_2) / 256));
-            check(arm32 ? "vsubhn.i32" : "subhn", 4 * w, i16((i32_1 - i32_2) / 65536));
-            check(arm32 ? "vsubhn.i32" : "subhn", 4 * w, u16((u32_1 - u32_2) / 65536));
+            check(arm32 ? "vsubhn.i16" : "subhn*v*h", 8 * w, i8((i16_1 - i16_2) / 256));
+            check(arm32 ? "vsubhn.i16" : "subhn*v*h", 8 * w, u8((u16_1 - u16_2) / 256));
+            check(arm32 ? "vsubhn.i32" : "subhn*v*s", 4 * w, i16((i32_1 - i32_2) / 65536));
+            check(arm32 ? "vsubhn.i32" : "subhn*v*s", 4 * w, u16((u32_1 - u32_2) / 65536));
 
             // VSUBL    I       -       Subtract Long
-            check(arm32 ? "vsubl.s8" : "ssubl", 8 * w, i16(i8_1) - i16(i8_2));
-            check(arm32 ? "vsubl.u8" : "usubl", 8 * w, u16(u8_1) - u16(u8_2));
-            check(arm32 ? "vsubl.s16" : "ssubl", 4 * w, i32(i16_1) - i32(i16_2));
-            check(arm32 ? "vsubl.u16" : "usubl", 4 * w, u32(u16_1) - u32(u16_2));
-            check(arm32 ? "vsubl.s32" : "ssubl", 2 * w, i64(i32_1) - i64(i32_2));
-            check(arm32 ? "vsubl.u32" : "usubl", 2 * w, u64(u32_1) - u64(u32_2));
+            check(arm32 ? "vsubl.s8" : "ssubl*v*b", 8 * w, i16(i8_1) - i16(i8_2));
+            check(arm32 ? "vsubl.u8" : "usubl*v*b", 8 * w, u16(u8_1) - u16(u8_2));
+            check(arm32 ? "vsubl.s16" : "ssubl*v*h", 4 * w, i32(i16_1) - i32(i16_2));
+            check(arm32 ? "vsubl.u16" : "usubl*v*h", 4 * w, u32(u16_1) - u32(u16_2));
+            check(arm32 ? "vsubl.s32" : "ssubl*v*s", 2 * w, i64(i32_1) - i64(i32_2));
+            check(arm32 ? "vsubl.u32" : "usubl*v*s", 2 * w, u64(u32_1) - u64(u32_2));
 
             // VSUBW    I       -       Subtract Wide
-            check(arm32 ? "vsubw.s8" : "ssubw", 8 * w, i16_1 - i8_1);
-            check(arm32 ? "vsubw.u8" : "usubw", 8 * w, u16_1 - u8_1);
-            check(arm32 ? "vsubw.s16" : "ssubw", 4 * w, i32_1 - i16_1);
-            check(arm32 ? "vsubw.u16" : "usubw", 4 * w, u32_1 - u16_1);
-            check(arm32 ? "vsubw.s32" : "ssubw", 2 * w, i64_1 - i32_1);
-            check(arm32 ? "vsubw.u32" : "usubw", 2 * w, u64_1 - u32_1);
+            check(arm32 ? "vsubw.s8" : "ssubw*v*h*v*b", 8 * w, i16_1 - i8_1);
+            check(arm32 ? "vsubw.u8" : "usubw*v*h*v*b", 8 * w, u16_1 - u8_1);
+            check(arm32 ? "vsubw.s16" : "ssubw*v*s*v*h", 4 * w, i32_1 - i16_1);
+            check(arm32 ? "vsubw.u16" : "usubw*v*s*v*h", 4 * w, u32_1 - u16_1);
+            check(arm32 ? "vsubw.s32" : "ssubw*v*d*v*s", 2 * w, i64_1 - i32_1);
+            check(arm32 ? "vsubw.u32" : "usubw*v*d*v*s", 2 * w, u64_1 - u32_1);
 
             // VST1     X       -       Store single-element structures
             check(arm32 ? "vst1.8" : "st", 8 * w, i8_1);
@@ -1490,23 +1492,6 @@ public:
         }
     }
 
-// Although the Wasm simd128 spec has operations for i64 and f64,
-// neither the current LLVM backend nor the current V8 actually support
-// them, and there is talk of them being dropped. Relevant checks left in
-// but disabled for now.
-#define EXPECT_WASM_64_BIT_TYPES 0
-
-#if EXPECT_WASM_64_BIT_TYPES
-#define WASM64(...)  \
-    do {             \
-        __VA_ARGS__; \
-    } while (0);
-#else
-#define WASM64(...) \
-    do {            \
-    } while (0);
-#endif
-
     void check_wasm_all() {
         Expr f64_1 = in_f64(x), f64_2 = in_f64(x + 16), f64_3 = in_f64(x + 32);
         Expr f32_1 = in_f32(x), f32_2 = in_f32(x + 16), f32_3 = in_f32(x + 32);
@@ -1530,15 +1515,43 @@ public:
         check("f32.abs", 1, abs(f32_1));
         check("f32.neg", 1, -f32_1);
 
+        if (use_wasm_sat_float_to_int) {
+            check("i32.trunc_sat_f32_s", 1, i32(f32_1));
+            check("i32.trunc_sat_f32_u", 1, u32(f32_1));
+            check("i32.trunc_sat_f64_s", 1, i32(f64_1));
+            check("i32.trunc_sat_f64_u", 1, u32(f64_1));
+
+            check("i64.trunc_sat_f32_s", 1, i64(f32_1));
+            check("i64.trunc_sat_f32_u", 1, u64(f32_1));
+            check("i64.trunc_sat_f64_s", 1, i64(f64_1));
+            check("i64.trunc_sat_f64_u", 1, u64(f64_1));
+        }
+
+        if (use_wasm_sign_ext) {
+            // TODO(https://github.com/halide/Halide/issues/5130):
+            // current LLVM doesn't reliably emit i32.extend8_s here --
+            // but the same bitcode does work when run thru llc. Very odd.
+            //
+            // check("i32.extend8_s", 1, i32(i8(x) ^ 1));
+            // check("i32.extend16_s", 1, i32(i16(x) ^ 1));
+            // check("i64.extend8_s", 1, i64(i8(x) ^ 1));
+            // check("i64.extend16_s", 1, i32(i16(x) ^ 1));
+            // check("i64.extend32_s", 1, i64(i32(x) ^ 1));
+        }
+
         if (use_wasm_simd128) {
             for (int w = 1; w <= 4; w <<= 1) {
+                // create arbitrary 16-byte constant
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("v128.constant", 16 * w, u8_1 * u8(42 + x));
+
                 // Create vector with identical lanes
                 check("i8x16.splat", 16 * w, u8_1 * u8(42));
                 check("i16x8.splat", 8 * w, u16_1 * u16(42));
                 check("i32x4.splat", 4 * w, u32_1 * u32(42));
-                WASM64(check("i64x2.splat", 2 * w, u64_1 * u64(42));)
+                check("i64x2.splat", 2 * w, u64_1 * u64(42));
                 check("f32x4.splat", 8 * w, f32_1 * f32(42));
-                WASM64(check("f64x2.splat", 4 * w, f64_1 * f64(42));)
+                check("f64x2.splat", 4 * w, f64_1 * f64(42));
 
                 // Extract lane as a scalar (extract_lane)
                 // Replace lane value (replace_lane)
@@ -1550,32 +1563,36 @@ public:
                 check("v8x16.shuffle", 8 * w, in_u16(2 * x));
                 check("v8x16.shuffle", 4 * w, in_u32(2 * x));
 
-                // Shuffling using variable indices
-                // check("v8x16.shuffle", 16*w, in_u8(in_u8(x+32)));  -- TODO: fails to generate, but is this the right expr?
+                // Swizzling using variable indices
+                // (This fails to generate, but that's not entirely surprising -- I don't
+                // think we ever attempt to emit the most general-purpose swizzles in Halide
+                // code, so this may or may not be a defect.)
+                // check("v8x16.swizzle", 16*w, in_u8(in_u8(x+32)));
 
                 // Integer addition
                 check("i8x16.add", 16 * w, i8_1 + i8_2);
                 check("i16x8.add", 8 * w, i16_1 + i16_2);
                 check("i32x4.add", 4 * w, i32_1 + i32_2);
-                WASM64(check("i64x2.add", 2 * w, i64_1 + i64_2);)
+                check("i64x2.add", 2 * w, i64_1 + i64_2);
 
                 // Integer subtraction
                 check("i8x16.sub", 16 * w, i8_1 - i8_2);
                 check("i16x8.sub", 8 * w, i16_1 - i16_2);
                 check("i32x4.sub", 4 * w, i32_1 - i32_2);
-                WASM64(check("i64x2.sub", 2 * w, i64_1 - i64_2);)
+                check("i64x2.sub", 2 * w, i64_1 - i64_2);
 
                 // Integer multiplication
-                check("i8x16.mul", 16 * w, i8_1 * i8_2);
+                // WASM-simd doesn't have an i8x16.mul operation.
+                // check("i8x16.mul", 16 * w, i8_1 * i8_2);
                 check("i16x8.mul", 8 * w, i16_1 * i16_2);
                 check("i32x4.mul", 4 * w, i32_1 * i32_2);
-                WASM64(check("i64x2.mul", 2 * w, i64_1 * i64_2);)
+                check("i64x2.mul", 2 * w, i64_1 * i64_2);
 
                 // Integer negation
                 check("i8x16.neg", 16 * w, -i8_1);
                 check("i16x8.neg", 8 * w, -i16_1);
                 check("i32x4.neg", 4 * w, -i32_1);
-                WASM64(check("i64x2.neg", 2 * w, -i64_1);)
+                check("i64x2.neg", 2 * w, -i64_1);
 
                 // Saturating integer addition
                 check("i8x16.add_saturate_s", 16 * w, i8_sat(i16(i8_1) + i16(i8_2)));
@@ -1589,58 +1606,116 @@ public:
                 check("i8x16.sub_saturate_u", 16 * w, u8_sat(i16(u8_1) - i16(u8_2)));
                 check("i16x8.sub_saturate_u", 8 * w, u16_sat(i32(u16_1) - i32(u16_2)));
 
-                // These aren't being generated, known bug: https://bugs.chromium.org/p/v8/issues/detail?id=8934
-                // Left shift by scalar
-                /*
-                check("i8x16.shl",   16*w, i8_1 << i32(x));
-                check("i16x8.shl",   8*w, i16_1 << x);
-                check("i32x4.shl",   4*w, i32_1 << x);
-                WASM64( check("i64x2.shl",   2*w, i64_1 << x); )
-                */
+                // Lane-wise integer minimum
+                check("i8x16.min_s", 16 * w, min(i8_1, i8_2));
+                check("i16x8.min_s", 8 * w, min(i16_1, i16_2));
+                check("i32x4.min_s", 4 * w, min(i32_1, i32_2));
+                check("i8x16.min_u", 16 * w, min(u8_1, u8_2));
+                check("i16x8.min_u", 8 * w, min(u16_1, u16_2));
+                check("i32x4.min_u", 4 * w, min(u32_1, u32_2));
 
-                // Right shift by scalar
-                /*
-                check("i8x16.shr_s",   16*w, i8_1 >> x);
-                check("i16x8.shr_s",   8*w, i16_1 >> x);
-                check("i32x4.shr_s",   4*w, i32_1 >> x);
-                WASM64( check("i64x2.shr_s",   2*w, i64_1 >> x); )
-                check("i8x16.shr_u",   16*w, u8_1 >> x);
-                check("i16x8.shr_u",   8*w, u16_1 >> x);
-                check("i32x4.shr_u",   4*w, u32_1 >> x);
-                WASM64( check("i64x2.shr_u",   2*w, u64_1 >> x); )
-                */
+                // Lane-wise integer maximum
+                check("i8x16.max_s", 16 * w, max(i8_1, i8_2));
+                check("i16x8.max_s", 8 * w, max(i16_1, i16_2));
+                check("i32x4.max_s", 4 * w, max(i32_1, i32_2));
+                check("i8x16.max_u", 16 * w, max(u8_1, u8_2));
+                check("i16x8.max_u", 8 * w, max(u16_1, u16_2));
+                check("i32x4.max_u", 4 * w, max(u32_1, u32_2));
+
+                // Lane-wise integer rounding average
+                check("i8x16.avgr_u", 8 * w, u8((u16(u8_1) + u16(u8_2) + 1) / 2));
+                check("i8x16.avgr_u", 8 * w, u8((u16(u8_1) + u16(u8_2) + 1) >> 1));
+                check("i16x8.avgr_u", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
+                check("i16x8.avgr_u", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) >> 1));
+
+                // Lane-wise integer absolute value
+                check("i8x16.abs", 16 * w, abs(i8_1));
+                check("i16x8.abs", 8 * w, abs(i16_1));
+                check("i32x4.abs", 4 * w, abs(i32_1));
+
+                // Left shift by constant scalar
+                check("i8x16.shl", 16 * w, i8_1 << i8(7));
+                check("i16x8.shl", 8 * w, i16_1 << i16(7));
+                check("i32x4.shl", 4 * w, i32_1 << i32(7));
+                check("i64x2.shl", 2 * w, i64_1 << i64(7));
+                check("i8x16.shl", 16 * w, u8_1 << u8(7));
+                check("i16x8.shl", 8 * w, u16_1 << u16(7));
+                check("i32x4.shl", 4 * w, u32_1 << u32(7));
+                check("i64x2.shl", 2 * w, u64_1 << u64(7));
+
+                // Left shift by variable-but-uniform-across-all-lanes scalar
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i8x16.shl",   16*w, i8_1 << in_i8(0));
+                // check("i16x8.shl",   8*w, i16_1 << in_i16(0));
+                // check("i32x4.shl",   4*w, i32_1 << in_i32(0));
+                // check("i64x2.shl",   2*w, i64_1 << in_i64(0));
+                // check("i8x16.shl",   16*w, u8_1 << in_u8(0));
+                // check("i16x8.shl",   8*w, u16_1 << in_u16(0));
+                // check("i32x4.shl",   4*w, u32_1 << in_u32(0));
+                // check("i64x2.shl",   2*w, u64_1 << in_u64(0));
+
+                // Right shift by constant scalar
+                check("i8x16.shr_s", 16 * w, i8_1 >> i8(7));
+                check("i16x8.shr_s", 8 * w, i16_1 >> i16(7));
+                check("i32x4.shr_s", 4 * w, i32_1 >> i32(7));
+                check("i64x2.shr_s", 2 * w, i64_1 >> i64(7));
+                check("i8x16.shr_u", 16 * w, u8_1 >> i8(7));
+                check("i16x8.shr_u", 8 * w, u16_1 >> i16(7));
+                check("i32x4.shr_u", 4 * w, u32_1 >> i32(7));
+                check("i64x2.shr_u", 2 * w, u64_1 >> i64(7));
+
+                // Right shift by variable-but-uniform-across-all-lanes scalar
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i8x16.shr_s",   16*w, i8_1 >> in_i8(0));
+                // check("i16x8.shr_s",   8*w, i16_1 >> in_i16(0));
+                // check("i32x4.shr_s",   4*w, i32_1 >> in_i32(0));
+                // check("i64x2.shr_s",   2*w, i64_1 >> in_i64(0));
+                // check("i8x16.shr_u",   16*w, u8_1 >> in_i8(0));
+                // check("i16x8.shr_u",   8*w, u16_1 >> in_i16(0));
+                // check("i32x4.shr_u",   4*w, u32_1 >> in_i32(0));
+                // check("i64x2.shr_u",   2*w, u64_1 >> in_i64(0));
 
                 // Bitwise logic
                 check("v128.and", 16 * w, i8_1 & i8_2);
                 check("v128.and", 8 * w, i16_1 & i16_2);
                 check("v128.and", 4 * w, i32_1 & i32_2);
-                WASM64(check("v128.and", 2 * w, i64_1 & i64_2);)
+                check("v128.and", 2 * w, i64_1 & i64_2);
 
                 check("v128.or", 16 * w, i8_1 | i8_2);
                 check("v128.or", 8 * w, i16_1 | i16_2);
                 check("v128.or", 4 * w, i32_1 | i32_2);
-                WASM64(check("v128.or", 2 * w, i64_1 | i64_2);)
+                check("v128.or", 2 * w, i64_1 | i64_2);
 
                 check("v128.xor", 16 * w, i8_1 ^ i8_2);
                 check("v128.xor", 8 * w, i16_1 ^ i16_2);
                 check("v128.xor", 4 * w, i32_1 ^ i32_2);
-                WASM64(check("v128.xor", 2 * w, i64_1 ^ i64_2);)
+                check("v128.xor", 2 * w, i64_1 ^ i64_2);
 
                 check("v128.not", 16 * w, ~i8_1);
                 check("v128.not", 8 * w, ~i16_1);
                 check("v128.not", 4 * w, ~i32_1);
-                WASM64(check("v128.not", 2 * w, ~i64_1);)
+                check("v128.not", 2 * w, ~i64_1);
+
+                check("v128.andnot", 16 * w, i8_1 & ~i8_2);
+                check("v128.andnot", 8 * w, i16_1 & ~i16_2);
+                check("v128.andnot", 4 * w, i32_1 & ~i32_2);
+                check("v128.andnot", 2 * w, i64_1 & ~i64_2);
 
                 // Bitwise select
                 check("v128.bitselect", 16 * w, ((u8_1 & u8_3) | (u8_2 & ~u8_3)));
                 check("v128.bitselect", 8 * w, ((u16_1 & u16_3) | (u16_2 & ~u16_3)));
                 check("v128.bitselect", 4 * w, ((u32_1 & u32_3) | (u32_2 & ~u32_3)));
-                WASM64(check("v128.bitselect", 2 * w, ((u64_1 & u64_3) | (u64_2 & ~u64_3)));)
+                check("v128.bitselect", 2 * w, ((u64_1 & u64_3) | (u64_2 & ~u64_3)));
 
                 check("v128.bitselect", 16 * w, select(bool_1, u8_1, u8_2));
                 check("v128.bitselect", 8 * w, select(bool_1, u16_1, u16_2));
-                // check("v128.bitselect",   4*w, select(bool_1, u32_1, u32_2)); )
-                WASM64(check("v128.bitselect", 2 * w, select(bool_1, u64_1, u64_2));)
+                if (Halide::Internal::get_llvm_version() >= 120) {
+                    // TODO: check whether these fixes are backported to LLVM 11.x
+                    check("v128.bitselect", 4 * w, select(bool_1, u32_1, u32_2));
+                    check("v128.bitselect", 2 * w, select(bool_1, u64_1, u64_2));
+                    check("v128.bitselect", 4 * w, select(bool_1, f32_1, f32_2));
+                    check("v128.bitselect", 2 * w, select(bool_1, f64_1, f64_2));
+                }
 
                 // Any lane true
                 // All lanes true
@@ -1651,14 +1726,14 @@ public:
                 check("i16x8.eq", 8 * w, i16_1 == i16_2);
                 check("i32x4.eq", 4 * w, i32_1 == i32_2);
                 check("f32x4.eq", 4 * w, f32_1 == f32_2);
-                WASM64(check("f64x2.eq", 2 * w, f64_1 == f64_2);)
+                check("f64x2.eq", 2 * w, f64_1 == f64_2);
 
                 // Non-equality
                 check("i8x16.ne", 16 * w, i8_1 != i8_2);
                 check("i16x8.ne", 8 * w, i16_1 != i16_2);
                 check("i32x4.ne", 4 * w, i32_1 != i32_2);
                 check("f32x4.ne", 4 * w, f32_1 != f32_2);
-                WASM64(check("f64x2.ne", 2 * w, f64_1 != f64_2);)
+                check("f64x2.ne", 2 * w, f64_1 != f64_2);
 
                 // Less than
                 check("i8x16.lt_s", 16 * w, i8_1 < i8_2);
@@ -1668,7 +1743,7 @@ public:
                 check("i16x8.lt_u", 8 * w, u16_1 < u16_2);
                 check("i32x4.lt_u", 4 * w, u32_1 < u32_2);
                 check("f32x4.lt", 4 * w, f32_1 < f32_2);
-                WASM64(check("f64x2.lt", 2 * w, f64_1 < f64_2);)
+                check("f64x2.lt", 2 * w, f64_1 < f64_2);
 
                 // Less than or equal
                 check("i8x16.le_s", 16 * w, i8_1 <= i8_2);
@@ -1678,7 +1753,7 @@ public:
                 check("i16x8.le_u", 8 * w, u16_1 <= u16_2);
                 check("i32x4.le_u", 4 * w, u32_1 <= u32_2);
                 check("f32x4.le", 4 * w, f32_1 <= f32_2);
-                WASM64(check("f64x2.lt", 2 * w, f64_1 <= f64_2);)
+                check("f64x2.le", 2 * w, f64_1 <= f64_2);
 
                 // Greater than
                 // SKIPPED: Halide aggressively simplifies > into <= so we shouldn't see these
@@ -1689,7 +1764,7 @@ public:
                 // check("i16x8.gt_u",   8*w, u16_1 > u16_2);
                 // check("i32x4.gt_u",   4*w, u32_1 > u32_2);
                 // check("f32x4.gt",     4*w, f32_1 > f32_2);
-                WASM64(check("f64x2.gt", 2 * w, f64_1 > f64_2);)
+                // check("f64x2.gt", 2 * w, f64_1 > f64_2);
 
                 // Greater than or equal
                 // SKIPPED: Halide aggressively simplifies >= into < so we shouldn't see these
@@ -1700,74 +1775,103 @@ public:
                 // check("i16x8.ge_u",   8*w, u16_1 >= u16_2);
                 // check("i32x4.ge_u",   4*w, u32_1 >= u32_2);
                 // check("f32x4.ge",     4*w, f32_1 >= f32_2);
-                WASM64(check("f64x2.lt", 2 * w, f64_1 <= f64_2);)
+                // check("f64x2.ge", 2 * w, f64_1 >= f64_2);
 
                 // Load
                 check("v128.load", 16 * w, i8_1);
                 check("v128.load", 8 * w, i16_1);
                 check("v128.load", 4 * w, i32_1);
                 check("v128.load", 4 * w, f32_1);
-                WASM64(check("v128.load", 2 * w, f64_1);)
+                check("v128.load", 2 * w, f64_1);
+
+                // Load vector with identical lanes
+                check("v8x16.load_splat", 16 * w, in_u8(0));
+                check("v16x8.load_splat", 8 * w, in_u16(0));
+                check("v32x4.load_splat", 4 * w, in_u32(0));
+                check("v64x2.load_splat", 2 * w, in_u64(0));
+
+                // Load and Extend
+                if (w == 1) {
+                    check("i16x8.load8x8_s", 8 * w, i16(i8_1));
+                    check("i16x8.load8x8_u", 8 * w, u16(u8_1));
+                    check("i32x4.load16x4_s", 4 * w, i32(i16_1));
+                    check("i32x4.load16x4_u", 4 * w, u32(u16_1));
+                    check("i64x2.load32x2_s", 2 * w, i64(i32_1));
+                    check("i64x2.load32x2_u", 2 * w, u64(u32_1));
+                }
+
+                // Integer to integer narrowing
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i8x16.narrow_i16x8_s", 16*w, i8(i16_1));
+                // check("i8x16.narrow_i16x8_u", 16*w, u8(u16_1));
+                // check("i16x8.narrow_i32x4_s", 8*w, i16(i32_1));
+                // check("i16x8.narrow_i32x4_u", 8*w, u8(u16_1));
+
+                // Integer to integer widening
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i16x8.widen_low_i8x16_s", 8*w, i8(x) * 2);
+                // check("i16x8.widen_high_i8x16_s", 8*w, i16(i8_1));
+                // check("i32x4.widen_low_i16x8_s", 4*w, i32(i16_1));
+                // check("i32x4.widen_high_i16x8_s", 4*w, i32(i16_1));
+                // check("i16x8.widen_low_i8x16_u", 8*w, u16(u8_1));
+                // check("i16x8.widen_high_i8x16_u", 8*w, u16(u8_1));
+                // check("i32x4.widen_low_i16x8_u", 4*w, u32(u16_1));
+                // check("i32x4.widen_high_i16x8_u", 4*w, u32(u16_1));
 
                 // Store
                 check("v128.store", 16 * w, i8_1);
                 check("v128.store", 8 * w, i16_1);
                 check("v128.store", 4 * w, i32_1);
                 check("v128.store", 4 * w, f32_1);
-                WASM64(check("v128.store", 2 * w, f64_1);)
+                check("v128.store", 2 * w, f64_1);
 
                 // Negation
                 check("f32x4.neg", 4 * w, -f32_1);
-                WASM64(check("f64x2.neg", 2 * w, -f64_1);)
+                check("f64x2.neg", 2 * w, -f64_1);
 
                 // Absolute value
                 check("f32x4.abs", 4 * w, abs(f32_1));
-                WASM64(check("f64x2.abs", 2 * w, abs(f64_1));)
+                check("f64x2.abs", 2 * w, abs(f64_1));
 
                 // NaN-propagating minimum
                 check("f32x4.min", 4 * w, min(f32_1, f32_2));
-                WASM64(check("f64x2.min", 2 * w, min(f64_1, f64_2));)
+                check("f64x2.min", 2 * w, min(f64_1, f64_2));
 
                 // NaN-propagating maximum
                 check("f32x4.max", 4 * w, max(f32_1, f32_2));
-                WASM64(check("f64x2.max", 2 * w, max(f64_1, f64_2));)
+                check("f64x2.max", 2 * w, max(f64_1, f64_2));
 
                 // Floating-point addition
                 check("f32x4.add", 4 * w, f32_1 + f32_2);
-                WASM64(check("f64x2.add", 2 * w, f64_1 + f64_2);)
+                check("f64x2.add", 2 * w, f64_1 + f64_2);
 
                 // Floating-point subtraction
                 check("f32x4.sub", 4 * w, f32_1 - f32_2);
-                WASM64(check("f64x2.sub", 2 * w, f64_1 - f64_2);)
+                check("f64x2.sub", 2 * w, f64_1 - f64_2);
 
                 // Floating-point division
-                // check("f32x4.div",   4*w, f32_1 / f32_2);  -- TODO: known bug, https://bugs.chromium.org/p/v8/issues/detail?id=8460
-                WASM64(check("f64x2.div", 2 * w, f64_1 / f64_2);)
+                check("f32x4.div", 4 * w, f32_1 / f32_2);
+                check("f64x2.div", 2 * w, f64_1 / f64_2);
 
                 // Floating-point multiplication
                 check("f32x4.mul", 4 * w, f32_1 * f32_2);
-                WASM64(check("f64x2.mul", 2 * w, f64_1 * f64_2);)
+                check("f64x2.mul", 2 * w, f64_1 * f64_2);
 
                 // Square root
-                // check("f32x4.sqrt",   4*w, sqrt(f32_1));  -- TODO: known bug, https://bugs.chromium.org/p/v8/issues/detail?id=8460
-                WASM64(check("f64x2.sqrt", 2 * w, sqrt(f64_1));)
+                check("f32x4.sqrt", 4 * w, sqrt(f32_1));
+                check("f64x2.sqrt", 2 * w, sqrt(f64_1));
 
                 // Integer to floating point
                 check("f32x4.convert_i32x4_s", 8 * w, cast<float>(i32_1));
                 check("f32x4.convert_i32x4_u", 8 * w, cast<float>(u32_1));
-                WASM64(check("f64x2.convert_i64x2_s", 8 * w, cast<double>(i64_1));)
-                WASM64(check("f64x2.convert_i64x2_u", 8 * w, cast<double>(u64_1));)
 
                 // Floating point to integer with saturation
                 check("i32x4.trunc_sat_f32x4_s", 8 * w, cast<int32_t>(f32_1));
                 check("i32x4.trunc_sat_f32x4_u", 8 * w, cast<uint32_t>(f32_1));
-                WASM64(check("i64x2.trunc_sat_f64x2_s", 8 * w, cast<int64_t>(f64_1));)
-                WASM64(check("i64x2.trunc_sat_f64x2_u", 8 * w, cast<uint64_t>(f64_1));)
             }
         }
     }
 
-#undef WASM64
 private:
     bool use_avx2{false};
     bool use_avx512{false};
@@ -1778,6 +1882,8 @@ private:
     bool use_ssse3{false};
     bool use_vsx{false};
     bool use_wasm_simd128{false};
+    bool use_wasm_sat_float_to_int{false};
+    bool use_wasm_sign_ext{false};
     const Var x{"x"}, y{"y"};
 };
 }  // namespace
@@ -1787,6 +1893,12 @@ int main(int argc, char **argv) {
     Target hl_target = get_target_from_environment();
     printf("host is:      %s\n", host.to_string().c_str());
     printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
+
+    if (Halide::Internal::get_llvm_version() < 110 &&
+        hl_target.arch == Target::WebAssembly) {
+        printf("[SKIP] WebAssembly simd code is only supported with LLVM 11+ (saw %d).\n", Halide::Internal::get_llvm_version());
+        return 0;
+    }
 
     SimdOpCheck test(hl_target);
 

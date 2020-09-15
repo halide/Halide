@@ -38,26 +38,39 @@ endif ()
 function(add_halide_test TARGET)
     set(options EXPECT_FAILURE)
     set(oneValueArgs WORKING_DIRECTORY)
-    set(multiValueArgs GROUPS)
+    set(multiValueArgs GROUPS COMMAND ARGS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
+    if (NOT args_COMMAND)
+        set(args_COMMAND ${TARGET})
+    endif ()
+
     add_test(NAME ${TARGET}
-             COMMAND ${TARGET}
+             COMMAND ${args_COMMAND} ${args_ARGS}
              WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
 
     set_tests_properties(${TARGET} PROPERTIES
                          LABELS "${args_GROUPS}"
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
                          PASS_REGULAR_EXPRESSION "Success!"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
-    if (${args_EXPECT_FAILURE})
-        set_tests_properties(${TARGET} PROPERTIES WILL_FAIL true)
-    endif ()
+                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+                         WILL_FAIL ${args_EXPECT_FAILURE})
+
+    # Add a meta-target for each group, to allow us to build by group easily
+    foreach (GROUP IN LISTS args_GROUPS)
+        set(META_TARGET build_${GROUP})
+        if (NOT TARGET ${META_TARGET})
+            add_custom_target(${META_TARGET})
+        endif ()
+        add_dependencies(${META_TARGET} ${TARGET})
+    endforeach ()
+
 endfunction()
 
 function(tests)
     set(options EXPECT_FAILURE)
     set(oneValueArgs)
-    set(multiValueArgs SOURCES GROUPS)
+    set(multiValueArgs SOURCES GROUPS ARGS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     list(GET args_GROUPS 0 PRIMARY_GROUP)
@@ -76,10 +89,10 @@ function(tests)
         endif ()
 
         if (args_EXPECT_FAILURE)
-            add_halide_test("${TARGET}" GROUPS ${args_GROUPS} EXPECT_FAILURE)
+            add_halide_test("${TARGET}" ARGS ${args_ARGS} GROUPS ${args_GROUPS} EXPECT_FAILURE)
             target_link_libraries("${TARGET}" PRIVATE Halide::ExpectAbort)
         else ()
-            add_halide_test("${TARGET}" GROUPS ${args_GROUPS})
+            add_halide_test("${TARGET}" ARGS ${args_ARGS} GROUPS ${args_GROUPS})
         endif ()
     endforeach ()
 

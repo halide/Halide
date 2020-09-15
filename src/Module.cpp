@@ -36,25 +36,27 @@ namespace Internal {
 // We really don't want to vary the file extensions based on target flags,
 // and in practice, it's extremely unlikely that anyone needs to rely on this
 // being pure C output (vs possibly C++).
-std::map<Output, OutputInfo> get_output_info(const Target &target) {
+std::map<Output, const OutputInfo> get_output_info(const Target &target) {
+    constexpr bool IsMulti = true;
+    constexpr bool IsSingle = false;
     const bool is_windows_coff = target.os == Target::Windows;
-    std::map<Output, OutputInfo> ext = {
-        {Output::assembly, {"assembly", ".s"}},
-        {Output::bitcode, {"bitcode", ".bc"}},
-        {Output::c_header, {"c_header", ".h"}},
-        {Output::c_source, {"c_source", ".halide_generated.cpp"}},
-        {Output::compiler_log, {"compiler_log", ".halide_compiler_log"}},
-        {Output::cpp_stub, {"cpp_stub", ".stub.h"}},
-        {Output::featurization, {"featurization", ".featurization"}},
-        {Output::llvm_assembly, {"llvm_assembly", ".ll"}},
-        {Output::object, {"object", is_windows_coff ? ".obj" : ".o"}},
-        {Output::python_extension, {"python_extension", ".py.cpp"}},
-        {Output::pytorch_wrapper, {"pytorch_wrapper", ".pytorch.h"}},
-        {Output::registration, {"registration", ".registration.cpp"}},
-        {Output::schedule, {"schedule", ".schedule.h"}},
-        {Output::static_library, {"static_library", is_windows_coff ? ".lib" : ".a"}},
-        {Output::stmt, {"stmt", ".stmt"}},
-        {Output::stmt_html, {"stmt_html", ".stmt.html"}},
+    std::map<Output, const OutputInfo> ext = {
+        {Output::assembly, {"assembly", ".s", IsMulti}},
+        {Output::bitcode, {"bitcode", ".bc", IsMulti}},
+        {Output::c_header, {"c_header", ".h", IsSingle}},
+        {Output::c_source, {"c_source", ".halide_generated.cpp", IsSingle}},
+        {Output::compiler_log, {"compiler_log", ".halide_compiler_log", IsSingle}},
+        {Output::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
+        {Output::featurization, {"featurization", ".featurization", IsMulti}},
+        {Output::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
+        {Output::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
+        {Output::python_extension, {"python_extension", ".py.cpp", IsSingle}},
+        {Output::pytorch_wrapper, {"pytorch_wrapper", ".pytorch.h", IsSingle}},
+        {Output::registration, {"registration", ".registration.cpp", IsSingle}},
+        {Output::schedule, {"schedule", ".schedule.h", IsSingle}},
+        {Output::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
+        {Output::stmt, {"stmt", ".stmt", IsMulti}},
+        {Output::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
         {Output::stmt_json, {"stmt_json", ".stmt.json"}},
     };
     return ext;
@@ -145,14 +147,6 @@ void validate_outputs(const std::map<Output, std::string> &in) {
 
 bool contains(const std::map<Output, std::string> &in, const Output &key) {
     return in.find(key) != in.end();
-}
-
-std::map<Output, std::string> add_suffixes(const std::map<Output, std::string> &in, const std::string &suffix) {
-    std::map<Output, std::string> out;
-    for (auto it : in) {
-        out[it.first] = add_suffix(it.second, suffix);
-    }
-    return out;
 }
 
 void emit_registration(const Module &m, std::ostream &stream) {
@@ -753,35 +747,62 @@ public:
 void compile_multitarget(const std::string &fn_name,
                          const std::map<Output, std::string> &output_files,
                          const std::vector<Target> &targets,
+                         const std::vector<std::string> &suffixes,
                          const ModuleFactory &module_factory,
                          const CompilerLoggerFactory &compiler_logger_factory) {
     validate_outputs(output_files);
 
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";
     user_assert(!targets.empty()) << "Must specify at least one target.\n";
+    user_assert(suffixes.empty() || suffixes.size() == targets.size())
+        << "The suffixes list must be empty or the same length as the targets list.\n";
 
     // The final target in the list is considered "baseline", and is used
-    // for (e.g.) the runtime and shared code. It is often just os-arch-bits
+    // for (e.g.) the runtime and shared code. It is often just arch-bits-os
     // with no other features (though this is *not* a requirement).
     const Target &base_target = targets.back();
 
     // JIT makes no sense.
     user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
 
+    const auto suffix_for_entry = [&](int i) -> std::string {
+        const std::string suffix = "-" + (suffixes.empty() ? targets[i].to_string() : suffixes[i]);
+        return suffix;
+    };
+
+    const auto add_suffixes = [&](const std::map<Output, std::string> &in, const std::string &suffix) -> std::map<Output, std::string> {
+        // is_multi doesn't vary by Target, so we can pass an empty target here safely
+        auto output_info = get_output_info(Target());
+        std::map<Output, std::string> out = in;
+        for (auto &it : out) {
+            if (output_info[it.first].is_multi) {
+                out[it.first] = add_suffix(it.second, suffix);
+            }
+        }
+        return out;
+    };
+
     // If only one target, don't bother with the runtime feature detection wrapping.
     const bool needs_wrapper = (targets.size() > 1);
     if (targets.size() == 1) {
         debug(1) << "compile_multitarget: single target is " << base_target.to_string() << "\n";
         ScopedCompilerLogger activate(compiler_logger_factory, fn_name, base_target);
+
+        // If we want to have single-output object files use the target suffix, we'd
+        // want to do this instead:
+        //
+        //     auto sub_out = add_suffixes(output_files, suffix_for_entry(0));
+        //     module_factory(fn_name, base_target).compile(sub_out);
+        //
+        // This would make the filename outputs more symmetrical (ie the same for n=1 as for n>1)
+        // but at the expense of breaking existing users. So for now, we're going to continue
+        // with the legacy treatment below:
         module_factory(fn_name, base_target).compile(output_files);
         return;
     }
 
-    // You can't ask for .o files when doing this; it's not really useful,
-    // and would complicate output (we might have to do multiple passes
-    // if different values for NoRuntime are specified)... so just forbid
-    // it up front.
-    user_assert(!contains(output_files, Output::object)) << "Cannot request object for compile_multitarget.\n";
+    user_assert(((int)contains(output_files, Output::object) + (int)contains(output_files, Output::static_library)) == 1)
+        << "compile_multitarget() expects exactly one of 'object' and 'static_library' to be specified when multiple targets are specified.\n";
 
     // For safety, the runtime must be built only with features common to all
     // of the targets; given an unusual ordering like
@@ -803,7 +824,10 @@ void compile_multitarget(const std::string &fn_name,
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
-    for (const Target &target : targets) {
+
+    for (size_t i = 0; i < targets.size(); ++i) {
+        const Target &target = targets[i];
+
         // arch-bits-os must be identical across all targets.
         if (target.os != base_target.os ||
             target.arch != base_target.arch ||
@@ -830,7 +854,7 @@ void compile_multitarget(const std::string &fn_name,
         }
 
         // Each sub-target has a function name that is the 'real' name plus a suffix
-        std::string suffix = "_" + replace_all(target.to_string(), "-", "_");
+        std::string suffix = suffix_for_entry(i);
         std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
@@ -848,12 +872,15 @@ void compile_multitarget(const std::string &fn_name,
             base_target_args = sub_module.get_function_by_name(sub_fn_name).args;
 
             auto sub_out = add_suffixes(output_files, suffix);
-            internal_assert(contains(output_files, Output::static_library));
-            sub_out[Output::object] = temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), suffix, target);
+            if (contains(output_files, Output::static_library)) {
+                sub_out[Output::object] = temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), suffix, target);
+                sub_out.erase(Output::static_library);
+            }
             sub_out.erase(Output::registration);
             sub_out.erase(Output::schedule);
+            sub_out.erase(Output::c_header);
             if (contains(sub_out, Output::compiler_log)) {
-                sub_out[Output::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(Output::static_library), suffix, target);
+                sub_out[Output::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(Output::compiler_log), suffix, target);
             }
             debug(1) << "compile_multitarget: compile_sub_target " << sub_out[Output::object] << "\n";
             sub_module.compile(sub_out);
@@ -905,9 +932,12 @@ void compile_multitarget(const std::string &fn_name,
                 runtime_target.set_feature((Target::Feature)i);
             }
         }
+        std::string runtime_path = contains(output_files, Output::static_library) ?
+                                       temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), "_runtime", runtime_target) :
+                                       add_suffix(output_files.at(Output::object), "_runtime");
+
         std::map<Output, std::string> runtime_out =
-            {{Output::object,
-              temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), "_runtime", runtime_target)}};
+            {{Output::object, runtime_path}};
         debug(1) << "compile_multitarget: compile_standalone_runtime " << runtime_out.at(Output::object) << "\n";
         compile_standalone_runtime(runtime_out, runtime_target);
     }
@@ -939,8 +969,11 @@ void compile_multitarget(const std::string &fn_name,
         Module wrapper_module(fn_name, wrapper_target);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
-        std::map<Output, std::string> wrapper_out = {{Output::object,
-                                                      temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), "_wrapper", base_target, /* in_front*/ true)}};
+        std::string wrapper_path = contains(output_files, Output::static_library) ?
+                                       temp_obj_dir.add_temp_object_file(output_files.at(Output::static_library), "_wrapper", base_target, /* in_front*/ true) :
+                                       add_suffix(output_files.at(Output::object), "_wrapper");
+
+        std::map<Output, std::string> wrapper_out = {{Output::object, wrapper_path}};
         debug(1) << "compile_multitarget: wrapper " << wrapper_out.at(Output::object) << "\n";
         wrapper_module.compile(wrapper_out);
     }

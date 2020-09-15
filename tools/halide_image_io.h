@@ -2061,7 +2061,6 @@ struct ImageTypeConversion {
         const auto converter = [](DstElemType &dst_elem, SrcElemType src_elem) {
             dst_elem = Internal::convert<DstElemType>(src_elem);
         };
-        // TODO: do we need src.copy_to_host() here?
         dst.for_each_value(converter, src);
         dst.set_host_dirty();
 
@@ -2343,6 +2342,9 @@ void save_image(ImageType &im, const std::string &filename) {
 // (Note that the input image is unaffected!)
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckFail>
 void convert_and_save_image(ImageType &im, const std::string &filename) {
+    // We'll be doing any conversion on the CPU
+    im.copy_to_host();
+
     std::set<FormatInfo> info;
     (void)save_query<ImageType, check>(filename, &info);
     const FormatInfo best = Internal::best_save_format(im, info);

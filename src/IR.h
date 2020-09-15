@@ -345,11 +345,10 @@ struct Provide : public StmtNode<Provide> {
 
 /** Allocate a scratch area called with the given name, type, and
  * size. The buffer lives for at most the duration of the body
- * statement, within which it is freed. It is an error for an allocate
- * node not to contain a free node of the same buffer. Allocation only
- * occurs if the condition evaluates to true. Within the body of the
- * allocation, defines a symbol with the given name and the type
- * Handle(). */
+ * statement, within which it may or may not be freed explicitly with
+ * a Free node with a matching name. Allocation only occurs if the
+ * condition evaluates to true. Within the body of the allocation,
+ * defines a symbol with the given name and the type Handle(). */
 struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
@@ -510,11 +509,14 @@ struct Call : public ExprNode<Call> {
         div_round_to_zero,
         dynamic_shuffle,
         extract_mask_element,
-        gather,
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
         gpu_thread_barrier,
+        hvx_gather,
+        hvx_scatter,
+        hvx_scatter_acc,
+        hvx_scatter_release,
         if_then_else,
         if_then_else_mask,
         image_load,
@@ -536,9 +538,6 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
-        scatter,
-        scatter_acc,
-        scatter_release,
         select_mask,
         shift_left,
         shift_right,

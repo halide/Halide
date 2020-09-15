@@ -95,7 +95,7 @@ using std::vector;
 #define InitializeARMAsmPrinter() InitializeAsmPrinter(ARM)
 #endif
 
-#ifdef WITH_PTX
+#ifdef WITH_NVPTX
 #define InitializeNVPTXTarget() InitializeTarget(NVPTX)
 #define InitializeNVPTXAsmParser() InitializeAsmParser(NVPTX)
 #define InitializeNVPTXAsmPrinter() InitializeAsmPrinter(NVPTX)
@@ -577,8 +577,11 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile_trampolines(
         const std::string &callee_name = e.first;
         const std::string wrapper_name = callee_name + suffix;
         llvm::FunctionType *fn_type = codegen->signature_to_type(e.second);
-        llvm::Function *callee = llvm::Function::Create(fn_type,
-                                                        llvm::Function::ExternalLinkage, callee_name, codegen->module.get());
+        // callee might already be present for builtins, e.g. halide_print
+        llvm::Function *callee = codegen->module->getFunction(callee_name);
+        if (!callee) {
+            callee = llvm::Function::Create(fn_type, llvm::Function::ExternalLinkage, callee_name, codegen->module.get());
+        }
         codegen->add_argv_wrapper(callee, wrapper_name, /*result_in_argv*/ true);
     }
     return codegen->finish_codegen();
@@ -1407,7 +1410,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
 
     // TODO: skip this correctness check for bool vectors,
     // as eliminate_bool_vectors() will cause a discrepancy for some backends
-    // (eg OpenCL, HVX); for now we're just ignoring the assert, but
+    // (eg OpenCL, HVX, WASM); for now we're just ignoring the assert, but
     // in the long run we should improve the smarts. See https://github.com/halide/Halide/issues/4194.
     const bool is_bool_vector = e.type().is_bool() && e.type().lanes() > 1;
     // TODO: skip this correctness check for prefetch, because the return type
@@ -3528,7 +3531,7 @@ void CodeGen_LLVM::create_assertion(Value *cond, const Expr &message, llvm::Valu
     VectorType *vt = dyn_cast<VectorType>(cond->getType());
     if (vt) {
         Value *scalar_cond = builder->CreateExtractElement(cond, ConstantInt::get(i32_t, 0));
-        for (unsigned i = 1; i < vt->getNumElements(); i++) {
+        for (int i = 1; i < get_vector_num_elements(vt); i++) {
             Value *lane = builder->CreateExtractElement(cond, ConstantInt::get(i32_t, i));
             scalar_cond = builder->CreateAnd(scalar_cond, lane);
         }
@@ -4160,6 +4163,10 @@ void CodeGen_LLVM::visit(const Store *op) {
 }
 
 void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
+    if (target.has_feature(Target::NoAsserts)) {
+        return;
+    }
+
     if (asserts.size() < 4) {
         for (const auto *a : asserts) {
             codegen(Stmt(a));

@@ -19,7 +19,7 @@ target_link_libraries(iir_blur.generator PRIVATE Halide::Generator)
 add_halide_library(iir_blur FROM iir_blur.generator)
 add_halide_library(iir_blur_auto_schedule FROM iir_blur.generator
                    GENERATOR iir_blur
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(iir_blur_filter filter.cpp)

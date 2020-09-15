@@ -1,10 +1,4 @@
 ##
-# Option controlling whether apps are built internally or at test time, externally.
-##
-
-option(APPS_INTERNAL "Build apps as part of the internal build" OFF)
-
-##
 # Test apps from the perspective of a consuming project.
 ##
 
@@ -27,15 +21,12 @@ set_tests_properties(create_halide_distrib PROPERTIES
                      DEPENDS delete_halide_distrib)
 
 function(add_app_test NAME)
-    # Either add the apps to the build directly or add them as external tests
-    if (APPS_INTERNAL)
-        # Add a stubbed-out find module for Halide so that the apps can build as part of the parent build.
-        list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
-        add_subdirectory(${NAME})
+    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+        # Don't attempt to build these for wasm yet.
         return()
     endif ()
 
-    unset(cmakeToolchainOpts)
+    set(cmakeToolchainOpts "")
     if (NOT "${CMAKE_TOOLCHAIN_FILE}" STREQUAL "")
         list(APPEND cmakeToolchainOpts "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
         if (NOT "${VCPKG_CHAINLOAD_TOOLCHAIN_FILE}" STREQUAL "")
@@ -43,7 +34,7 @@ function(add_app_test NAME)
         endif ()
     endif ()
 
-    unset(cmakeGenOpts)
+    set(cmakeGenOpts "")
     if (NOT "${CMAKE_GENERATOR_TOOLSET}" STREQUAL "")
         list(APPEND cmakeGenOpts --build-generator-toolset "${CMAKE_GENERATOR_TOOLSET}")
     endif ()
@@ -52,19 +43,15 @@ function(add_app_test NAME)
     endif ()
 
     set(cmakeDefinitionOpts
-        # TODO: enable verbose here temporarily, to try to track down flaky Windows failures
-        "-DCMAKE_VERBOSE_MAKEFILE=ON"
         "-DCMAKE_PREFIX_PATH=${HALIDE_DIR}"
         "-DCMAKE_BUILD_TYPE=$<CONFIG>"
-        "-DLLVM_DIR=${LLVM_DIR}")
-    if (NOT "${HL_TARGET}" STREQUAL "")
-        list(APPEND cmakeDefinitionOpts "-DHL_TARGET=${HL_TARGET}")
-    endif ()
+        "-DLLVM_DIR=${LLVM_DIR}"
+        "-DHalide_TARGET=${Halide_TARGET}")
 
     add_test(NAME ${NAME}
              COMMAND ${CMAKE_CTEST_COMMAND}
              --output-on-failure
-             --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/${NAME}" "${CMAKE_CURRENT_BINARY_DIR}/app_test_${NAME}"
+             --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/${NAME}" "${CMAKE_CURRENT_BINARY_DIR}/${NAME}"
              --build-generator "${CMAKE_GENERATOR}"
              ${cmakeGenOpts}
              --build-config "$<CONFIG>"
@@ -75,6 +62,7 @@ function(add_app_test NAME)
     set_tests_properties(${NAME} PROPERTIES
                          FIXTURES_REQUIRED apps
                          LABELS apps
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET}"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endfunction()
 
@@ -86,6 +74,7 @@ add_app_test(c_backend)
 add_app_test(camera_pipe)
 add_app_test(conv_layer)
 add_app_test(cuda_mat_mul)
+add_app_test(depthwise_separable_conv)
 #add_app_test(glsl)  # TODO(#4937): bugged; not built by Makefile
 add_app_test(harris)
 add_app_test(hist)
@@ -100,8 +89,3 @@ add_app_test(resize)
 add_app_test(stencil_chain)
 add_app_test(unsharp)
 add_app_test(wavelet)
-
-# Add the autoschedulers.
-# TODO(#4053): refactor into separate modules
-add_subdirectory(autoscheduler)
-add_subdirectory(gradient_autoscheduler)

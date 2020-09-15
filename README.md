@@ -25,15 +25,6 @@ To see some example code, look in the tutorials directory.
 If you've acquired a full source distribution and want to build Halide, see the
 notes below.
 
-# Build Status
-
-| Linux                         |
-| ----------------------------- |
-| [![linux build status][1]][2] |
-
-[1]: https://travis-ci.org/halide/Halide.svg?branch=master
-[2]: https://travis-ci.org/halide/Halide
-
 # Building Halide with Make
 
 ### TL;DR
@@ -56,7 +47,7 @@ works well on OS X and Ubuntu.)
 If you want to build it yourself, first check it out from GitHub:
 
 ```
-% git clone https://github.com/llvm/llvm-project.git --depth 1 -b release/10.x
+% git clone --depth 1 --branch llvmorg-10.0.0 https://github.com/llvm/llvm-project.git
 ```
 
 (If you want to build LLVM 9.x, use branch `release/9.x`; for current trunk, use
@@ -217,7 +208,7 @@ Follow these steps if you want to build LLVM yourself. First, download LLVM's
 sources (these instructions use the latest 10.0 release)
 
 ```
-D:\> git clone https://github.com/llvm/llvm-project.git --depth 1 -b release/10.x
+D:\> git clone --depth 1 --branch llvmorg-10.0.0 https://github.com/llvm/llvm-project.git
 ```
 
 For a 64-bit build, run:

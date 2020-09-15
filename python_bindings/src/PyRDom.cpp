@@ -13,7 +13,12 @@ void define_rvar(py::module &m) {
             .def(py::init([](const RDom &r) -> RVar { return r; }))
             .def("min", &RVar::min)
             .def("extent", &RVar::extent)
-            .def("name", &RVar::name);
+            .def("name", &RVar::name)
+            .def("__repr__", [](const RVar &v) -> std::string {
+                std::ostringstream o;
+                o << "<halide.RVar " << v << ">";
+                return o.str();
+            });
 
     py::implicitly_convertible<RDom, RVar>();
 
@@ -43,7 +48,12 @@ void define_rdom(py::module &m) {
             .def_readonly("x", &RDom::x)
             .def_readonly("y", &RDom::y)
             .def_readonly("z", &RDom::z)
-            .def_readonly("w", &RDom::w);
+            .def_readonly("w", &RDom::w)
+            .def("__repr__", [](const RDom &r) -> std::string {
+                std::ostringstream o;
+                o << "<halide.RDom " << r << ">";
+                return o.str();
+            });
 
     add_binary_operators(rdom_class);
 }

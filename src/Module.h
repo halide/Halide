@@ -57,8 +57,23 @@ namespace Internal {
 
 struct OutputInfo {
     std::string name, extension;
+
+    // `is_multi` indicates how these outputs are generated
+    // when using the compile_to_multitarget_xxx() APIs (or via the
+    // Generator command-line mode):
+    //
+    // - If `is_multi` is true, then a separate file of this Output type is
+    //   generated for each target in the multitarget (e.g. object files,
+    //   assembly files, etc). Each of the files will have a suffix appended
+    //   that is based on the specific subtarget.
+    //
+    // - If `is_multi` is false, then only one file of this Output type
+    //   regardless of how many targets are in the multitarget. No additional
+    //   suffix will be appended to the filename.
+    //
+    bool is_multi{false};
 };
-std::map<Output, OutputInfo> get_output_info(const Target &target);
+std::map<Output, const OutputInfo> get_output_info(const Target &target);
 
 /** Definition of an argument to a LoweredFunc. This is similar to
  * Argument, except it enables passing extra information useful to
@@ -210,6 +225,7 @@ using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLo
 void compile_multitarget(const std::string &fn_name,
                          const std::map<Output, std::string> &output_files,
                          const std::vector<Target> &targets,
+                         const std::vector<std::string> &suffixes,
                          const ModuleFactory &module_factory,
                          const CompilerLoggerFactory &compiler_logger_factory = nullptr);
 
