@@ -5,7 +5,7 @@
 #else  // BITS_64
 
 // Debugging utilities for back-end developers:
-#define HALIDE_D3D12_TRACE (0)
+#define HALIDE_D3D12_TRACE (1)
 #define HALIDE_D3D12_DEBUG_LAYER (0)
 #define HALIDE_D3D12_DEBUG_SHADERS (0)
 #define HALIDE_D3D12_PROFILING (0)
@@ -43,6 +43,69 @@
 #define COBJMACROS
 #endif
 #include "mini_d3d12.h"
+
+// Mini Win32
+
+#if !defined(WINBASEAPI)
+#if !defined(_KERNEL32_)
+#define WINBASEAPI DECLSPEC_IMPORT
+#else
+#define WINBASEAPI
+#endif
+#endif
+
+#define _Ret_maybenull_
+#define _Post_ptr_invalid_
+
+#define STATUS_WAIT_0       ((DWORD   )0x00000000L) 
+#define WAIT_OBJECT_0       ((STATUS_WAIT_0 ) + 0 )
+
+extern "C" {
+
+WINBASEAPI
+BOOL
+WINAPI
+CloseHandle(
+    _In_ _Post_ptr_invalid_ HANDLE hObject
+    );
+
+WINBASEAPI
+_Ret_maybenull_
+HANDLE
+WINAPI
+CreateEventA(
+    _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
+    _In_ BOOL bManualReset,
+    _In_ BOOL bInitialState,
+    _In_opt_ LPCSTR lpName
+    );
+
+WINBASEAPI
+_Ret_maybenull_
+HANDLE
+WINAPI
+CreateEventW(
+    _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
+    _In_ BOOL bManualReset,
+    _In_ BOOL bInitialState,
+    _In_opt_ LPCWSTR lpName
+    );
+
+WINBASEAPI
+DWORD
+WINAPI
+WaitForSingleObject(
+    _In_ HANDLE hHandle,
+    _In_ DWORD dwMilliseconds
+    );
+
+}
+
+#ifdef UNICODE
+#define CreateEvent  CreateEventW
+#else
+#define CreateEvent  CreateEventA
+#endif // !UNICODE
 
 // For all intents and purposes, we always want to use COMPUTE command lists
 // (and queues) ...
@@ -541,6 +604,7 @@ struct d3d12_library {
 struct d3d12_function {
     ID3DBlob *shaderBlob;
     ID3D12RootSignature *rootSignature;
+    d3d12_compute_pipeline_state* pipeline_state;
 };
 
 enum ResourceBindingSlots {
@@ -600,9 +664,66 @@ WEAK d3d12_command_queue *queue = NULL;
 WEAK ID3D12Fence *queue_fence = NULL;
 WEAK volatile uint64_t queue_last_signal /*__attribute__((aligned(8)))*/ = 0;
 WEAK ID3D12RootSignature *rootSignature = NULL;
-
 WEAK d3d12_buffer upload = {};    // staging buffer to transfer data to the device
 WEAK d3d12_buffer readback = {};  // staging buffer to retrieve data from the device
+
+WEAK HANDLE hFenceEvent = NULL;
+
+WEAK d3d12_command_allocator* cmd_allocator_main = NULL;
+
+struct d3d12_frame
+{
+    d3d12_compute_command_list *cmd_list;
+    d3d12_binder *desc_binder;
+    d3d12_buffer args_buffer;
+    uint64_t fence_signal;
+};
+
+static const int MaxFrames = 8;
+WEAK d3d12_frame frame_pool [MaxFrames] = { };
+static uint64_t frame_selector = 0;
+
+static void wait_until_completed(d3d12_compute_command_list *cmdList);
+static d3d12_command_list *new_compute_command_list(d3d12_device *device, d3d12_command_allocator *allocator);
+static d3d12_binder *new_descriptor_binder(d3d12_device *device);
+static void commit_command_list(d3d12_compute_command_list *cmdList);
+
+static d3d12_frame* acquire_frame(d3d12_device *device) {
+    TRACELOG;
+
+    // check for completed frames
+    UINT64 fence_signal = queue_fence->GetCompletedValue();
+    uint64_t i = frame_selector % MaxFrames;
+    d3d12_frame &frame = frame_pool[i];
+    if (fence_signal < frame.fence_signal) {
+        // no frame available: must stall and wait
+        TRACEPRINT("too many in-flight/pending frames: stalling...\n");
+        wait_until_completed(frame.cmd_list);
+    }
+
+    // initialize the frame object in the pool the first time through
+    if (frame.cmd_list == NULL) {
+        frame.cmd_list = new_compute_command_list(device, cmd_allocator_main);
+        if (frame.cmd_list == NULL) {
+            return NULL;
+        }
+        frame.desc_binder = new_descriptor_binder(device);
+        if (frame.desc_binder == NULL) {
+            return NULL;
+        }
+    } else {
+        (*frame.cmd_list)->Reset((*cmd_allocator_main), NULL);
+    }
+
+    ++frame_selector;
+    return &frame;
+}
+
+static void enqueue_frame(d3d12_frame *frame) {
+    TRACELOG;
+    commit_command_list(frame->cmd_list);
+    frame->fence_signal = frame->cmd_list->signal;
+}
 
 template<typename d3d12_T>
 static void release_d3d12_object(d3d12_T *obj) {
@@ -691,6 +812,7 @@ void release_d3d12_object<d3d12_function>(d3d12_function *function) {
     TRACELOG;
     Release_ID3D12Object(function->shaderBlob);
     Release_ID3D12Object(function->rootSignature);
+    release_object(function->pipeline_state);
     d3d12_free(function);
 }
 
@@ -1438,6 +1560,8 @@ WEAK d3d12_command_queue *new_command_queue(d3d12_device *device) {
     queue_fence = fence;
     __atomic_store_n(&queue_last_signal, 0, __ATOMIC_SEQ_CST);
 
+    hFenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+
     return reinterpret_cast<d3d12_command_queue *>(commandQueue);
 }
 
@@ -1550,13 +1674,13 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
     binder->descriptorSize = descriptorSize;
 
     D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
-    TRACEPRINT("descriptor heap base for CPU: " << baseCPU.ptr << "(" << (void *)baseCPU.ptr << ")\n");
+    TRACEPRINT("descriptor heap base for CPU: " << baseCPU.ptr << " (" << (void *)baseCPU.ptr << ")\n");
     binder->CPU[UAV].ptr = (baseCPU.ptr += descriptorSize * 0);
     binder->CPU[CBV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
     binder->CPU[SRV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);
 
     D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
-    TRACEPRINT("descriptor heap base for GPU: " << baseGPU.ptr << "(" << (void *)baseGPU.ptr << ")\n");
+    TRACEPRINT("descriptor heap base for GPU: " << baseGPU.ptr << " (" << (void *)baseGPU.ptr << ")\n");
     binder->GPU[UAV].ptr = (baseGPU.ptr += descriptorSize * 0);
     binder->GPU[CBV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
     binder->GPU[SRV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);
@@ -1711,6 +1835,14 @@ static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_librar
     function->rootSignature = rootSignature;
     rootSignature->AddRef();
 
+    d3d12_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(device, function);
+    if (pipeline_state == 0) {
+        d3d12_halt("D3D12Compute: Could not allocate pipeline state.");
+        release_object(function);
+        return nullptr;
+    }
+    function->pipeline_state = pipeline_state;
+
     // cache the compiled function for future use:
     library->cache.store(user_context, (const uint8_t *)key.str(), key.size(), &function);
 
@@ -1827,23 +1959,27 @@ static void commit_command_list(d3d12_compute_command_list *cmdList) {
 static void wait_until_completed(d3d12_compute_command_list *cmdList) {
     TRACELOG;
 
-    // TODO(marcos): perhaps replace the busy-wait loop below by a blocking wait event?
-    // HANDLE hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-    // queue->fence->SetEventOnCompletion(cmdList->signal, hEvent);
-    // WaitForSingleObject(hEvent, INFINITE);
-    // CloseHandle(hEvent);
+    HRESULT device_status_before = (*device)->GetDeviceRemovedReason();
 
-    HRESULT result_before = (*device)->GetDeviceRemovedReason();
-
-    while (queue_fence->GetCompletedValue() < cmdList->signal) {
+    while (queue_fence->GetCompletedValue() < cmdList->signal)
+        ;
+/*
+    HRESULT result = queue_fence->SetEventOnCompletion(cmdList->signal, hFenceEvent);
+    if (FAILED(result)) {
+        TRACEPRINT("ERROR: Unable to associate D3D12 Fence with Windows Event");
     }
-
-    HRESULT result_after = (*device)->GetDeviceRemovedReason();
-    if (FAILED(result_after)) {
+    DWORD timeout_ms = 15000;
+    result = WaitForSingleObject(hFenceEvent, timeout_ms);
+    if (result != WAIT_OBJECT_0) {
+        D3DErrorCheck(result, hFenceEvent, NULL, "Unable to wait for Fence Event");
+    }
+*/
+    HRESULT device_status_after = (*device)->GetDeviceRemovedReason();
+    if (FAILED(device_status_after)) {
         d3d12_halt(
             "Device Lost! GetDeviceRemovedReason(): "
-            << "before: " << (void *)(int64_t)result_before << " | "
-            << "after: " << (void *)(int64_t)result_after);
+            << "before: " << (void *)(int64_t)device_status_before << " | "
+            << "after: " << (void *)(int64_t)device_status_after);
     }
 }
 
@@ -2214,6 +2350,15 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
             return halide_error_code_generic_error;
         }
 
+        cmd_allocator_main = new_command_allocator<HALIDE_D3D12_COMMAND_LIST_TYPE>(device);
+        if (cmd_allocator_main == NULL) {
+            release_object(queue);
+            Release_ID3D12Object(rootSignature);
+            release_object(device);
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
+            return halide_error_code_generic_error;
+        }
+
         // NOTE(marcos): a small amount of hard-coded staging buffer storage is
         // sufficient to get started as suballocations will grow them as needed
         size_t heap_size = 4 * 1024 * 1024;
@@ -2484,6 +2629,11 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
             release_object(queue);
             queue = NULL;
 
+            CloseHandle(hFenceEvent);
+            hFenceEvent = NULL;
+
+            release_object(cmd_allocator_main);
+
             release_object(device);
             device = NULL;
         }
@@ -2658,18 +2808,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
     StartCapturingGPUActivity();
 #endif
 
-    d3d12_command_allocator *command_allocator = new_command_allocator<HALIDE_D3D12_COMMAND_LIST_TYPE>(device);
-    if (command_allocator == 0) {
-        d3d12_halt("D3D12Compute: Could not create compute command allocator.");
-        return halide_error_code_device_run_failed;
-    }
-
-    d3d12_compute_command_list *cmdList = new_compute_command_list(device, command_allocator);
-    if (cmdList == 0) {
-        d3d12_halt("D3D12Compute: Could not create compute command list.");
-        return halide_error_code_device_run_failed;
-    }
-
     halide_assert(user_context, state_ptr);
     module_state *state = (module_state *)state_ptr;
 
@@ -2678,13 +2816,13 @@ WEAK int halide_d3d12compute_run(void *user_context,
     halide_assert(user_context, function);
 
     // prepare buffer resource binding:
-    d3d12_binder *binder = new_descriptor_binder(device);
-    d3d12_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(d3d12_context.device, function);
-    if (pipeline_state == 0) {
-        d3d12_halt("D3D12Compute: Could not allocate pipeline state.");
-        release_object(function);
-        return halide_error_code_device_run_failed;
-    }
+    d3d12_compute_pipeline_state *pipeline_state = function->pipeline_state;
+
+    d3d12_frame *frame = acquire_frame(device);
+    d3d12_compute_command_list *cmdList = frame->cmd_list;
+    d3d12_binder *binder = frame->desc_binder;
+    d3d12_buffer &args_buffer = frame->args_buffer;
+
     set_compute_pipeline_state(cmdList, pipeline_state, function, binder);
 
     // pack all non-buffer arguments into a single "constant" allocation block:
@@ -2706,15 +2844,17 @@ WEAK int halide_d3d12compute_run(void *user_context,
         total_args_size = (total_args_size + argsize - 1) & ~(argsize - 1);
         total_args_size += argsize;
     }
-    d3d12_buffer args_buffer = {};
     if (total_args_size > 0) {
         // Direct3D 12 expects constant buffers to have sizes multiple of 256:
         size_t constant_buffer_size = (total_args_size + 255) & ~255;
-        args_buffer = new_constant_buffer(d3d12_context.device, constant_buffer_size);
-        if (!args_buffer) {
-            d3d12_halt("D3D12Compute: Could not allocate arguments buffer.");
-            release_object(function);
-            return halide_error_code_device_run_failed;
+        if (constant_buffer_size > args_buffer.sizeInBytes) {
+            release_object(&args_buffer);
+            args_buffer = new_constant_buffer(d3d12_context.device, constant_buffer_size);
+            if (!args_buffer) {
+                d3d12_halt("D3D12Compute: Could not allocate arguments buffer.");
+                release_object(function);
+                return halide_error_code_device_run_failed;
+            }
         }
         uint8_t *args_ptr = (uint8_t *)buffer_contents(&args_buffer);
         size_t offset = 0;
@@ -2811,9 +2951,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         compute_barrier(cmdList, buffer);
     }
 
-    commit_command_list(cmdList);
-
-    wait_until_completed(cmdList);
+    enqueue_frame(frame);
 
 #if HALIDE_D3D12_RENDERDOC
     FinishCapturingGPUActivity();
@@ -2828,11 +2966,11 @@ WEAK int halide_d3d12compute_run(void *user_context,
     release_object(profiler);
 #endif
 
-    release_object(cmdList);
-    release_object(command_allocator);
-    release_object(&args_buffer);
-    release_object(pipeline_state);
-    release_object(binder);
+    //release_object(cmdList);
+    //release_object(command_allocator);
+    //release_object(&args_buffer);
+    //release_object(pipeline_state);
+    //release_object(binder);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
