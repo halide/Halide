@@ -1,4 +1,5 @@
 #include "Util.h"
+#include "AutoScheduleUtils.h"
 #include "Debug.h"
 #include "Error.h"
 #include "Introspection.h"
@@ -573,7 +574,7 @@ void load_plugin(const std::string &lib_name) {
     // and this is only called when load_plugin is called anyway.
     // (If there is a better, portable way to ensure this function
     // isn't dead-stripped, then let's do that instead.)
-    (void) Halide::inline_all_trivial_functions({}, {}, {});
+    (void)Halide::inline_all_trivial_functions({}, {}, {});
 
 #ifdef _WIN32
     std::string lib_path = lib_name;
