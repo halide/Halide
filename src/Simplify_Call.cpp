@@ -511,9 +511,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // so this optimization should be safe.
 
         internal_assert(op->args.size() == 3);
-        Expr cond_value = mutate(op->args[0], bounds);
-        Expr true_value = mutate(op->args[1], bounds);
-        Expr false_value = mutate(op->args[2], bounds);
+        Expr cond_value = mutate(op->args[0], nullptr);
+        Expr true_value = mutate(op->args[1], nullptr);
+        Expr false_value = mutate(op->args[2], nullptr);
 
         // Ignore likelies for our purposes here
         Expr cond = cond_value;
