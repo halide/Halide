@@ -574,6 +574,8 @@ struct d3d12_buffer {
     void *mapped;
     volatile uint64_t ref_count /*__attribute__((aligned(8)))*/;
 
+    uint64_t signal;
+
     operator bool() const {
         return resource != NULL;
     }
@@ -1956,15 +1958,15 @@ static void commit_command_list(d3d12_compute_command_list *cmdList) {
     (*queue)->Signal(queue_fence, cmdList->signal);
 }
 
-static void wait_until_completed(d3d12_compute_command_list *cmdList) {
+static void wait_until_signaled(uint64_t signal) {
     TRACELOG;
 
     HRESULT device_status_before = (*device)->GetDeviceRemovedReason();
-
-    while (queue_fence->GetCompletedValue() < cmdList->signal)
-        ;
 /*
-    HRESULT result = queue_fence->SetEventOnCompletion(cmdList->signal, hFenceEvent);
+    while (queue_fence->GetCompletedValue() < signal)
+        ;
+*/
+    HRESULT result = queue_fence->SetEventOnCompletion(signal, hFenceEvent);
     if (FAILED(result)) {
         TRACEPRINT("ERROR: Unable to associate D3D12 Fence with Windows Event");
     }
@@ -1973,7 +1975,7 @@ static void wait_until_completed(d3d12_compute_command_list *cmdList) {
     if (result != WAIT_OBJECT_0) {
         D3DErrorCheck(result, hFenceEvent, NULL, "Unable to wait for Fence Event");
     }
-*/
+
     HRESULT device_status_after = (*device)->GetDeviceRemovedReason();
     if (FAILED(device_status_after)) {
         d3d12_halt(
@@ -1981,6 +1983,11 @@ static void wait_until_completed(d3d12_compute_command_list *cmdList) {
             << "before: " << (void *)(int64_t)device_status_before << " | "
             << "after: " << (void *)(int64_t)device_status_after);
     }
+}
+
+static void wait_until_completed(d3d12_compute_command_list *cmdList) {
+    TRACELOG;
+    wait_until_signaled(cmdList->signal);
 }
 
 class D3D12ContextHolder {
@@ -2906,6 +2913,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     if (args_buffer) {
         // always bind argument buffer at constant buffer binding 0
         int32_t cb_index = 0;  // a.k.a. register(c0)
+        args_buffer.signal = queue_last_signal;
         set_input_buffer(binder, &args_buffer, cb_index);
     }
 
@@ -2918,6 +2926,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
         halide_buffer_t *hbuffer = (halide_buffer_t *)args[i];
         d3d12_buffer *buffer = peel_buffer(hbuffer);
+        buffer->signal = queue_last_signal;
         set_input_buffer(binder, buffer, uav_index);  // register(u#)
         uav_index++;
     }
@@ -2952,6 +2961,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     }
 
     enqueue_frame(frame);
+    //wait_until_completed(frame->cmd_list);
 
 #if HALIDE_D3D12_RENDERDOC
     FinishCapturingGPUActivity();
@@ -3276,6 +3286,11 @@ WEAK int halide_d3d12compute_detach_buffer(void *user_context, struct halide_buf
 
     d3d12_buffer *dbuffer = peel_buffer(buf);
     unwrap_buffer(buf);
+
+    //uint64_t sig = queue_fence->GetCompletedValue();
+    //if (sig <= dbuffer->signal)
+    //    TRACEPRINT("MEGA ERROR THAT SHOULD NOT HAPPEN");
+    wait_until_signaled(dbuffer->signal + 1);
 
     // it is safe to simply call release_d3d12_object() here:
     // if 'buf' holds an user resource (from halide_d3d12compute_wrap_buffer),
