@@ -506,6 +506,38 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else {
             return Call::make(op->type, op->name, {arg}, op->call_type);
         }
+    } else if (op->is_intrinsic(Call::if_then_else)) {
+        // Note that this call promises to evaluate exactly one of the conditions,
+        // so this optimization should be safe.
+
+        internal_assert(op->args.size() == 3);
+        Expr cond_value = mutate(op->args[0], bounds);
+        Expr true_value = mutate(op->args[1], bounds);
+        Expr false_value = mutate(op->args[2], bounds);
+
+        // Ignore likelies for our purposes here
+        Expr cond = cond_value;
+        if (const Call *c = cond.as<Call>()) {
+            if (c->is_intrinsic(Call::likely) ||
+                op->is_intrinsic(Call::likely_if_innermost)) {
+                cond = c->args[0];
+            }
+        }
+
+        if (is_one(cond)) {
+            return true_value;
+        } else if (is_zero(cond)) {
+            return false_value;
+        } else if (cond_value.same_as(op->args[0]) &&
+                   true_value.same_as(op->args[1]) &&
+                   false_value.same_as(op->args[2])) {
+            return op;
+        } else {
+            return Internal::Call::make(op->type,
+                                        Call::if_then_else,
+                                        {std::move(cond_value), std::move(true_value), std::move(false_value)},
+                                        op->call_type);
+        }
     } else if (op->call_type == Call::PureExtern) {
         // TODO: This could probably be simplified into a single map-lookup
         // with a bit more cleverness; not sure if the reduced lookup time
