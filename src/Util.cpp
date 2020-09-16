@@ -2,6 +2,7 @@
 #include "AutoScheduleUtils.h"
 #include "Debug.h"
 #include "Error.h"
+#include "Function.h"
 #include "Introspection.h"
 #include <atomic>
 #include <chrono>
