@@ -1255,6 +1255,7 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12
     buffer.format = DXGI_FORMAT_UNKNOWN;
     buffer.mallocd = false;
     buffer.host_mirror = NULL;
+    buffer.signal = 0;
     __atomic_store_n(&buffer.ref_count, 0, __ATOMIC_SEQ_CST);
 
     return buffer;
@@ -1949,26 +1950,38 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
     }
 }
 
+static uint64_t queue_insert_checkpoint() {
+    uint64_t signal = __atomic_add_fetch(&queue_last_signal, 1, __ATOMIC_SEQ_CST);  // ++queue_last_signal
+    (*queue)->Signal(queue_fence, signal);
+    return signal;
+}
+
 static void commit_command_list(d3d12_compute_command_list *cmdList) {
     TRACELOG;
     end_recording(cmdList);
     ID3D12CommandList *lists[] = {(*cmdList)};
     (*queue)->ExecuteCommandLists(1, lists);
-    cmdList->signal = __atomic_add_fetch(&queue_last_signal, 1, __ATOMIC_SEQ_CST);  // ++last_signal
-    (*queue)->Signal(queue_fence, cmdList->signal);
+    cmdList->signal = queue_insert_checkpoint();
 }
 
 static void wait_until_signaled(uint64_t signal) {
     TRACELOG;
 
+    uint64_t current_signal = queue_fence->GetCompletedValue();
+    if (current_signal >= signal) {
+        TRACEPRINT("Already synced up!\n");
+        return;
+    }
+
     HRESULT device_status_before = (*device)->GetDeviceRemovedReason();
-/*
-    while (queue_fence->GetCompletedValue() < signal)
-        ;
-*/
+
+    // busy waiting / spin-lock
+    //while (queue_fence->GetCompletedValue() < signal) ;
+
+    TRACEPRINT("Now syncing on queue signal #" << signal << "...\n");
     HRESULT result = queue_fence->SetEventOnCompletion(signal, hFenceEvent);
     if (FAILED(result)) {
-        TRACEPRINT("ERROR: Unable to associate D3D12 Fence with Windows Event");
+        TRACEPRINT("ERROR: Unable to associate D3D12 Fence with Windows Event\n");
     }
     DWORD timeout_ms = 15000;
     result = WaitForSingleObject(hFenceEvent, timeout_ms);
@@ -1988,6 +2001,12 @@ static void wait_until_signaled(uint64_t signal) {
 static void wait_until_completed(d3d12_compute_command_list *cmdList) {
     TRACELOG;
     wait_until_signaled(cmdList->signal);
+}
+
+static void wait_until_idle() {
+    TRACELOG;
+    uint64_t signal = __atomic_load_n(&queue_last_signal, __ATOMIC_SEQ_CST);
+    wait_until_signaled(signal);
 }
 
 class D3D12ContextHolder {
@@ -2127,34 +2146,33 @@ static void synchronize_host_and_device_buffer_contents(d3d12_copy_command_list 
 static void d3d12compute_device_sync_internal(d3d12_device *device, d3d12_buffer *dev_buffer) {
     TRACELOG;
 
-    // NOTE(marcos): a copy/dma command list would be ideal here, but it would
-    // also require a dedicated copy command queue to submit it... for now just
-    // use the main compute queue and issue copies via compute command lists.
-    //static const D3D12_COMMAND_LIST_TYPE Type = D3D12_COMMAND_LIST_TYPE_COPY;
-
-    static const D3D12_COMMAND_LIST_TYPE Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
-    d3d12_command_allocator *sync_command_allocator = new_command_allocator<Type>(device);
-    d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
-    if (dev_buffer != NULL) {
-        if (is_buffer_managed(dev_buffer)) {
-            synchronize_host_and_device_buffer_contents(blitCmdList, dev_buffer);
-        }
-    }
-    commit_command_list(blitCmdList);
-    wait_until_completed(blitCmdList);
-
-    if (dev_buffer != NULL) {
-        if (dev_buffer->xfer != NULL) {
-            // for now, we expect to have been the only one with pending transfer on the staging buffer:
-            d3d12_buffer *staging_buffer = dev_buffer->xfer->staging;
-            uint64_t use_count = __atomic_sub_fetch(&staging_buffer->ref_count, 1, __ATOMIC_SEQ_CST);
-            halide_assert(user_context, (use_count == 0));
-            dev_buffer->xfer = NULL;
-        }
+    // sync request not tied to buffer operation
+    if (dev_buffer == NULL) {
+        return wait_until_idle();
     }
 
-    release_object(blitCmdList);
-    release_object(sync_command_allocator);
+    if (is_buffer_managed(dev_buffer)) {
+        // NOTE(marcos): a copy/dma command list would be ideal here, but it would
+        // also require a dedicated copy command queue to submit it... for now just
+        // use the main compute queue and issue copies via compute command lists.
+        //static const D3D12_COMMAND_LIST_TYPE Type = D3D12_COMMAND_LIST_TYPE_COPY;
+        static const D3D12_COMMAND_LIST_TYPE Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
+        d3d12_command_allocator *sync_command_allocator = new_command_allocator<Type>(device);
+        d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
+        synchronize_host_and_device_buffer_contents(blitCmdList, dev_buffer);
+        commit_command_list(blitCmdList);
+        wait_until_completed(blitCmdList);
+        release_object(blitCmdList);
+        release_object(sync_command_allocator);
+    }
+
+    if (dev_buffer->xfer != NULL) {
+        // for now, we expect to have been the only one with pending transfer on the staging buffer:
+        d3d12_buffer *staging_buffer = dev_buffer->xfer->staging;
+        uint64_t use_count = __atomic_sub_fetch(&staging_buffer->ref_count, 1, __ATOMIC_SEQ_CST);
+        halide_assert(user_context, (use_count == 0));
+        dev_buffer->xfer = NULL;
+    }
 }
 
 static int d3d12compute_buffer_copy(d3d12_device *device,
@@ -2909,11 +2927,13 @@ WEAK int halide_d3d12compute_run(void *user_context,
         halide_assert(user_context, offset == total_args_size);
     }
 
+    uint64_t checkpoint = __atomic_load_n(&queue_last_signal, __ATOMIC_SEQ_CST);
+
     // setup/bind the argument buffer:
     if (args_buffer) {
         // always bind argument buffer at constant buffer binding 0
         int32_t cb_index = 0;  // a.k.a. register(c0)
-        args_buffer.signal = queue_last_signal;
+        args_buffer.signal = checkpoint;
         set_input_buffer(binder, &args_buffer, cb_index);
     }
 
@@ -2926,7 +2946,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
         halide_buffer_t *hbuffer = (halide_buffer_t *)args[i];
         d3d12_buffer *buffer = peel_buffer(hbuffer);
-        buffer->signal = queue_last_signal;
+        buffer->signal = checkpoint;
         set_input_buffer(binder, buffer, uav_index);  // register(u#)
         uav_index++;
     }
