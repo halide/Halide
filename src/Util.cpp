@@ -563,6 +563,18 @@ int get_llvm_version() {
 }  // namespace Internal
 
 void load_plugin(const std::string &lib_name) {
+    // TODO: this is an ugly hack. inline_all_trivial_functions()
+    // isn't used by libHalide, but it is used by the Li2018
+    // autoscheduler plugin, so we need it to be present in the final
+    // libHalide. Unfortunately, build environments that static-link
+    // generators might deadstrip this function, causing Li2018
+    // to fail at load time. This useless call ensures that the function
+    // is kept around; calling it with empty arguments is close to free
+    // and this is only called when load_plugin is called anyway.
+    // (If there is a better, portable way to ensure this function
+    // isn't dead-stripped, then let's do that instead.)
+    (void) Halide::Internal::inline_all_trivial_functions({}, {}, {});
+
 #ifdef _WIN32
     std::string lib_path = lib_name;
     if (lib_path.find('.') == std::string::npos) {
