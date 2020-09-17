@@ -1082,21 +1082,26 @@ private:
             internal_assert(op->args.size() == 3);
             return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
         } else if (op->is_intrinsic(Call::div_round_to_zero) &&
-                   !op->type.is_float() && op->type.lanes() > 1) {
+                   !op->type.is_float() && op->type.is_vector()) {
             internal_assert(op->args.size() == 2);
-            Expr a = mutate(op->args[0]);
-            Expr b = mutate(op->args[1]);
-            debug(1) << "Using long division: (num: " << a << "); (den: " << b
-                     << ")\n";
+            Expr a = op->args[0];
+            Expr b = op->args[1];
+            // Run bounds analysis to estimate the range of result.
+            Expr extent_upper = find_constant_bound(a / b, Direction::Upper, bounds);
+            const uint64_t *upper_bound = as_const_uint(extent_upper);
+
+            a = mutate(a);
+            b = mutate(b);
+            debug(1) << "Using long div: (num: " << a << "); (den: " << b << ")\n";
             if (a.type().is_uint()) {
-                return unsigned_long_div(a, b, bounds);
+                return unsigned_long_div(a, b, upper_bound);
             }
             // Use unsigned long div for signed integer division.
             Type ty = a.type().with_code(Type::UInt);
             Expr a_unsigned = cast(ty, abs(a));
             Expr b_unsigned = cast(ty, abs(b));
             Expr q = cast(a.type(),
-                          unsigned_long_div(a_unsigned, b_unsigned, bounds));
+                          unsigned_long_div(a_unsigned, b_unsigned, upper_bound));
             // Check the sign required for the quotient.
             Expr a_neg = a >> make_const(a.type(), (a.type().bits() - 1));
             Expr b_neg = b >> make_const(a.type(), (a.type().bits() - 1));
@@ -1128,7 +1133,7 @@ private:
     }
 
     Expr visit(const Div *op) override {
-        if (!op->type.is_float() && op->type.lanes() > 1) {
+        if (!op->type.is_float() && op->type.is_vector()) {
             return mutate(lower_int_uint_div(op->a, op->b));
         }
         return IRMutator::visit(op);
