@@ -12,8 +12,8 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED COMPONENTS Halide)
 
 # Find BLAS-es
-unset(DEFAULT_BLAS)
-unset(BLAS_TARGETS)
+set(DEFAULT_BLAS "")
+set(BLAS_TARGETS "")
 set(BLAS_VENDORS OpenBLAS ATLAS Apple Generic)
 
 # ATLAS is weird and has extra requirements

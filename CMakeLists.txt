@@ -91,7 +91,7 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         message(STATUS "Building Python bindings disabled")
     endif ()
 
-    option(WITH_APPS "Build apps" ON)
+    cmake_dependent_option(WITH_APPS "Build apps" ON "BUILD_SHARED_LIBS" OFF)
     if (WITH_APPS)
         message(STATUS "Building apps enabled")
         add_subdirectory(apps)

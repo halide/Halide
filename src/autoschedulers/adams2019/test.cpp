@@ -3,10 +3,12 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    // Loads lib auto_schedule.so (or auto_schedule.dll),
-    // which is presumed to be in current library search path
-    load_plugin("auto_schedule");
-    Pipeline::set_default_autoscheduler_name("Adams2019");
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
+    load_plugin(argv[1]);
 
     MachineParams params(32, 16000000, 40);
     // Use a fixed target for the analysis to get consistent results from this test.

@@ -24,9 +24,14 @@ endforeach ()
 # Main library exports
 ##
 
-# TODO(#4053): add autoschedulers when refactored
+set(optional_targets "")
+foreach (target IN ITEMS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016)
+    if (TARGET ${target})
+        list(APPEND optional_targets ${target})
+    endif ()
+endforeach ()
 
-install(TARGETS Halide Halide_Generator Halide_RunGenMain
+install(TARGETS Halide Halide_Generator Halide_RunGenMain ${optional_targets}
         EXPORT Halide_Targets
 
         RUNTIME
@@ -55,6 +60,28 @@ install(TARGETS Halide_Runtime
         EXPORT Halide_Interfaces
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
+set(exes "")
+foreach (exe IN ITEMS retrain_cost_model featurization_to_sample get_host_target weightsdir_to_weightsfile)
+    if (TARGET ${exe})
+        list(APPEND exes ${exe})
+    endif ()
+endforeach ()
+
+file(RELATIVE_PATH lib_dir
+     ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}
+     ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR})
+
+if (APPLE)
+    set(rbase @loader_path)
+else ()
+    set(rbase $ORIGIN)
+endif ()
+
+set_target_properties(${exes} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+
+install(TARGETS ${exes}
+        EXPORT Halide_Interfaces)
+
 # Captures both the runtime and Halide.h
 install(DIRECTORY ${Halide_BINARY_DIR}/include/ TYPE INCLUDE FILES_MATCHING PATTERN "include/*.h")
 
@@ -75,6 +102,7 @@ install(FILES
 
 install(DIRECTORY ${Halide_SOURCE_DIR}/tools
         TYPE DATA
+        COMPONENT Halide_Development
         FILES_MATCHING
         PATTERN "*.h"
         PATTERN "*.cpp"
@@ -82,6 +110,14 @@ install(DIRECTORY ${Halide_SOURCE_DIR}/tools
         PATTERN "binary2cpp.cpp" EXCLUDE
         PATTERN "build_halide_h.cpp" EXCLUDE
         PATTERN "find_inverse.cpp" EXCLUDE)
+
+install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/tools
+        PERMISSIONS
+        OWNER_READ OWNER_WRITE OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
+        COMPONENT Halide_Development)
 
 ##
 # Tutorial
@@ -119,7 +155,9 @@ if (Halide_SHARED_LLVM OR (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM))
         file(APPEND "${depFile}" "find_dependency(LLD CONFIG HINTS \"\${LLVM_DIR}/../lld\")\n")
     endif ()
 
-    install(FILES "${depFile}" DESTINATION ${HALIDE_INSTALL_CMAKEDIR})
+    install(FILES "${depFile}"
+            DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+            COMPONENT Halide_Development)
 endif ()
 
 install(EXPORT Halide_Targets
@@ -145,14 +183,17 @@ install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfigVersion.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideGeneratorHelpers.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
-        DESTINATION ${HALIDE_INSTALL_CMAKEDIR})
+        DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+        COMPONENT Halide_Development)
 
 ##
 # Documentation
 ##
 
 if (WITH_DOCS)
-    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html/ TYPE DOC)
+    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html/
+            TYPE DOC
+            COMPONENT Halide_Documentation)
 endif ()
 
 ##

@@ -21,7 +21,7 @@ target_link_libraries(depthwise_separable_conv.generator
 add_halide_library(depthwise_separable_conv FROM depthwise_separable_conv.generator)
 add_halide_library(depthwise_separable_conv_auto_schedule FROM depthwise_separable_conv.generator
                    GENERATOR depthwise_separable_conv
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(depthwise_separable_conv_process process.cpp)

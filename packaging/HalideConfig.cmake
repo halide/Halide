@@ -62,7 +62,7 @@ macro(_Halide_include TYPE CAUSE)
     include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-${TYPE}.cmake")
 
     if (NOT ${CMAKE_FIND_PACKAGE_NAME}_both)
-        foreach (target IN ITEMS Halide Generator RunGenMain)
+        foreach (target IN ITEMS Halide Generator RunGenMain Adams2019 Li2018 Mullapudi2016)
             if (NOT TARGET Halide::${TYPE}::${target})
                 continue()
             endif ()
@@ -127,7 +127,7 @@ foreach (comp IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_comps)
 
     # ${comp} is either PNG or JPEG, and this works for both packages
     if (NOT TARGET ${comp}::${comp})
-        unset(extraArgs)
+        set(extraArgs "")
         if (${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
             list(APPEND extraArgs QUIET)
         endif ()
