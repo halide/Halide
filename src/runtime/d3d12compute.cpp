@@ -2850,28 +2850,42 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     set_compute_pipeline_state(cmdList, pipeline_state, function, binder);
 
-    // pack all non-buffer arguments into a single "constant" allocation block:
-    size_t total_args_size = 0;
+    // introspect kernel arguments and extract useful type and size information:
+    size_t num_kernel_args = 0;
+    for (size_t i = 0; arg_sizes[i] != 0; i++) {
+        ++num_kernel_args;
+    }
+    d3d12_buffer **buffer_args = (d3d12_buffer **)__builtin_alloca(num_kernel_args*sizeof(d3d12_buffer *));
+    size_t num_buffer_args = 0;
+    size_t total_uniform_args_size = 0;
     for (size_t i = 0; arg_sizes[i] != 0; i++) {
         if (arg_is_buffer[i]) {
-            continue;
+            halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
+            halide_buffer_t *hbuffer = (halide_buffer_t *)args[i];
+            d3d12_buffer *buffer = peel_buffer(hbuffer);
+            buffer_args[num_buffer_args] = buffer;
+            ++num_buffer_args;
+        } else {
+            // Here, it's safe to mimic the Metal back-end behavior which enforces
+            // natural alignment for all types in structures: each arg_sizes[i] has
+            // to be a power-of-two and have the subsequent field start on the next
+            // multiple of that power-of-two.
+            halide_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
+            // We can ignore vector arguments since they never show up in constant
+            // blocks. Having to worry about scalar parameters only is convenient
+            // since in HLSL SM 5.1 all scalar types are 32bit:
+            halide_assert(user_context, arg_sizes[i] <= 4);
+            size_t argsize = 4;  // force argument to 32bit
+            total_uniform_args_size = (total_uniform_args_size + argsize - 1) & ~(argsize - 1);
+            total_uniform_args_size += argsize;
         }
-        // Here, it's safe to mimic the Metal back-end behavior which enforces
-        // natural alignment for all types in structures: each arg_sizes[i] has
-        // to be a power-of-two and have the subsequent field start on the next
-        // multiple of that power-of-two.
-        halide_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
-        // We can ignore vector arguments since they never show up in constant
-        // blocks. Having to worry about scalar parameters only is convenient
-        // since in HLSL SM 5.1 all scalar types are 32bit:
-        halide_assert(user_context, arg_sizes[i] <= 4);
-        size_t argsize = 4;  // force argument to 32bit
-        total_args_size = (total_args_size + argsize - 1) & ~(argsize - 1);
-        total_args_size += argsize;
     }
-    if (total_args_size > 0) {
+
+    // pack all non-buffer arguments into a single "constant" allocation block:
+    bool has_uniform_arguments = (total_uniform_args_size > 0);
+    if (has_uniform_arguments) {
         // Direct3D 12 expects constant buffers to have sizes multiple of 256:
-        size_t constant_buffer_size = (total_args_size + 255) & ~255;
+        size_t constant_buffer_size = (total_uniform_args_size + 255) & ~255;
         if (constant_buffer_size > args_buffer.sizeInBytes) {
             release_object(&args_buffer);
             args_buffer = new_constant_buffer(d3d12_context.device, constant_buffer_size);
@@ -2924,31 +2938,21 @@ WEAK int halide_d3d12compute_run(void *user_context,
                                         "int32("
                            << (int32_t &)*arg.i << ")\n");
         }
-        halide_assert(user_context, offset == total_args_size);
+        halide_assert(user_context, offset == total_uniform_args_size);
     }
 
-    uint64_t checkpoint = __atomic_load_n(&queue_last_signal, __ATOMIC_SEQ_CST);
-
     // setup/bind the argument buffer:
-    if (args_buffer) {
+    if (has_uniform_arguments) {
         // always bind argument buffer at constant buffer binding 0
         int32_t cb_index = 0;  // a.k.a. register(c0)
-        args_buffer.signal = checkpoint;
         set_input_buffer(binder, &args_buffer, cb_index);
     }
 
     // setup/bind actual buffers:
-    int32_t uav_index = 0;
-    for (size_t i = 0; arg_sizes[i] != 0; i++) {
-        if (!arg_is_buffer[i]) {
-            continue;
-        }
-        halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-        halide_buffer_t *hbuffer = (halide_buffer_t *)args[i];
-        d3d12_buffer *buffer = peel_buffer(hbuffer);
-        buffer->signal = checkpoint;
+    for (size_t i = 0; i < num_buffer_args; i++) {
+        d3d12_buffer *buffer = buffer_args[i];
+        int32_t uav_index = (int32_t)i;
         set_input_buffer(binder, buffer, uav_index);  // register(u#)
-        uav_index++;
     }
 
 #if HALIDE_D3D12_PROFILING
@@ -2971,17 +2975,20 @@ WEAK int halide_d3d12compute_run(void *user_context,
     // in fact, only buffers written to by the dispatch will need barriers, and
     // only when later bound for read. For now, Halide does not provide enough
     // context for chosing the right time to place transition barriers.
-    for (size_t i = 0; arg_sizes[i] != 0; i++) {
-        if (!arg_is_buffer[i]) {
-            continue;
-        }
-        halide_buffer_t *hbuffer = (halide_buffer_t *)args[i];
-        d3d12_buffer *buffer = peel_buffer(hbuffer);
+    for (size_t i = 0; i < num_buffer_args; i++) {
+        d3d12_buffer *buffer = buffer_args[i];
         compute_barrier(cmdList, buffer);
     }
 
     enqueue_frame(frame);
-    //wait_until_completed(frame->cmd_list);
+
+    // broadcast fence signal checkpoint to the buffers being used
+    uint64_t checkpoint = frame->fence_signal;
+    args_buffer.signal = checkpoint;
+    for (size_t i = 0; i < num_buffer_args; i++) {
+        d3d12_buffer *buffer = buffer_args[i];
+        buffer->signal = checkpoint;
+    }
 
 #if HALIDE_D3D12_RENDERDOC
     FinishCapturingGPUActivity();
@@ -3310,7 +3317,7 @@ WEAK int halide_d3d12compute_detach_buffer(void *user_context, struct halide_buf
     //uint64_t sig = queue_fence->GetCompletedValue();
     //if (sig <= dbuffer->signal)
     //    TRACEPRINT("MEGA ERROR THAT SHOULD NOT HAPPEN");
-    wait_until_signaled(dbuffer->signal + 1);
+    wait_until_signaled(dbuffer->signal);
 
     // it is safe to simply call release_d3d12_object() here:
     // if 'buf' holds an user resource (from halide_d3d12compute_wrap_buffer),
