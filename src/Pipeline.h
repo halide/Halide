@@ -148,9 +148,6 @@ private:
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
-    static void auto_schedule_Mullapudi2016(const Pipeline &pipeline, const Target &target,
-                                            const MachineParams &arch_params, AutoSchedulerResults *outputs);
-
     static std::map<std::string, AutoSchedulerFn> &get_autoscheduler_map();
 
     static std::string &get_default_autoscheduler_name();

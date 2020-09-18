@@ -64,6 +64,8 @@
   TODO: expose these settings by adding some means to pass args to
   generator plugins instead of environment vars.
 */
+#include "HalidePlugin.h"
+
 #include <algorithm>
 #include <chrono>
 #include <fstream>
@@ -98,7 +100,6 @@ namespace Autoscheduler {
 
 using std::map;
 using std::pair;
-using std::set;
 using std::string;
 using std::vector;
 
@@ -1319,15 +1320,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 }
 
-// Halide uses a plugin architecture for registering custom
-// autoschedulers. We register our autoscheduler using a static
-// constructor.
-struct RegisterAutoscheduler {
-    RegisterAutoscheduler() {
-        aslog(1) << "Registering autoscheduler 'Adams2019'...\n";
-        Pipeline::add_autoscheduler("Adams2019", *this);
-    }
-
+struct Adams2019 {
     void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (Func f : p.outputs()) {
@@ -1335,7 +1328,9 @@ struct RegisterAutoscheduler {
         }
         Autoscheduler::generate_schedule(outputs, target, params, results);
     }
-} register_auto_scheduler;
+};
+
+REGISTER_AUTOSCHEDULER(Adams2019)
 
 // An alternative entrypoint for other uses
 void find_and_apply_schedule(FunctionDAG &dag,

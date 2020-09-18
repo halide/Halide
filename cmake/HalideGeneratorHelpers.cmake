@@ -177,18 +177,22 @@ function(add_halide_library TARGET)
     # Attach an autoscheduler if the user requested it
     ##
 
-    unset(GEN_AUTOSCHEDULER)
+    set(GEN_AUTOSCHEDULER "")
     if (ARG_AUTOSCHEDULER)
-        if ("${ARG_AUTOSCHEDULER}" MATCHES "::" AND TARGET "${ARG_AUTOSCHEDULER}")
+        if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
+            if (NOT TARGET "${ARG_AUTOSCHEDULER}")
+                message(FATAL_ERROR "Autoscheduler ${ARG_AUTOSCHEDULER} does not exist.")
+            endif ()
+
             # Convention: if the argument names a target like "Namespace::Scheduler" then
             # it is assumed to be a MODULE target providing a scheduler named "Scheduler".
             list(APPEND ARG_PLUGINS "${ARG_AUTOSCHEDULER}")
             string(REGEX REPLACE ".*::(.*)" "\\1" ARG_AUTOSCHEDULER "${ARG_AUTOSCHEDULER}")
         elseif (NOT ARG_PLUGINS)
-            # TODO(#4053): this is spurious when the default autoscheduler is requested
             message(AUTHOR_WARNING "AUTOSCHEDULER set to a scheduler name but no plugins were loaded")
         endif ()
         set(GEN_AUTOSCHEDULER -s "${ARG_AUTOSCHEDULER}")
+        list(PREPEND ARG_PARAMS auto_schedule=true)
     endif ()
 
     ##
@@ -207,7 +211,7 @@ function(add_halide_library TARGET)
     endif ()
 
     # Load the plugins and setup dependencies
-    unset(GEN_PLUGINS)
+    set(GEN_PLUGINS "")
     if (ARG_PLUGINS)
         foreach (p IN LISTS ARG_PLUGINS)
             list(APPEND GEN_PLUGINS "$<TARGET_FILE:${p}>")
@@ -254,7 +258,7 @@ function(_Halide_add_halide_runtime RT)
 
     if (crosscompiling)
         set(GEN_OUTS "${RT}${static_library_suffix}")
-        unset(GEN_ARGS)
+        set(GEN_ARGS "")
     else ()
         set(GEN_OUTS "${RT}${object_suffix}")
         set(GEN_ARGS -e object)

@@ -19,11 +19,11 @@ function(add_tutorial source_file)
                          ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
                          LABELS tutorial)
 
-    if (${args_WITH_IMAGE_IO})
+    if (args_WITH_IMAGE_IO)
         target_link_libraries(${name} PRIVATE Halide::ImageIO)
     endif ()
 
-    if (${args_WITH_OPENMP})
+    if (args_WITH_OPENMP)
         if (TARGET OpenMP::OpenMP_CXX)
             target_link_libraries(${name} PRIVATE OpenMP::OpenMP_CXX)
         else ()
@@ -101,7 +101,7 @@ target_link_libraries(lesson_15_generate PRIVATE Halide::Generator)
 ## Hack to build the libraries
 
 add_custom_target(lesson_15_targets)
-unset(LESSON_15_EXPECTED_FILES)
+set(LESSON_15_EXPECTED_FILES "")
 
 ##
 add_halide_library(my_first_generator_win32 FROM lesson_15_generate
@@ -188,17 +188,17 @@ add_tutorial(lesson_19_wrapper_funcs.cpp)
 add_tutorial(lesson_20_cloning_funcs.cpp)
 
 # Lesson 21
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
-    # TODO: Requires custom build rules to work under wasm
-    message(WARNING "Not all tutorials build under WASM.")
-else ()
+if (TARGET Halide::Mullapudi2016)
     add_executable(lesson_21_auto_scheduler_generate lesson_21_auto_scheduler_generate.cpp)
     target_link_libraries(lesson_21_auto_scheduler_generate PRIVATE Halide::Generator)
 
     add_halide_library(auto_schedule_false FROM lesson_21_auto_scheduler_generate
+                       TARGETS cmake
                        GENERATOR auto_schedule_gen PARAMS auto_schedule=false)
     add_halide_library(auto_schedule_true FROM lesson_21_auto_scheduler_generate
-                       GENERATOR auto_schedule_gen PARAMS auto_schedule=true machine_params=32,16777216,40)
+                       TARGETS cmake
+                       AUTOSCHEDULER Halide::Mullapudi2016
+                       GENERATOR auto_schedule_gen PARAMS machine_params=32,16777216,40)
 
     add_executable(lesson_21_auto_scheduler_run lesson_21_auto_scheduler_run.cpp)
     target_link_libraries(lesson_21_auto_scheduler_run PRIVATE

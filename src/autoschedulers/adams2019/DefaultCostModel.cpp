@@ -29,7 +29,6 @@ namespace {
 using Halide::Internal::aslog;
 using Halide::Internal::PipelineFeatures;
 using Halide::Internal::ScheduleFeatures;
-using Halide::Internal::Weights;
 using Halide::Runtime::Buffer;
 
 bool ends_with(const std::string &str, const std::string &suffix) {

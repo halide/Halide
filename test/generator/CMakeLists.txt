@@ -5,7 +5,7 @@
 function(halide_define_aot_test NAME)
     set(options OMIT_DEFAULT_GENERATOR)
     set(oneValueArgs FUNCTION_NAME)
-    set(multiValueArgs GEN_DEPS EXTRA_LIBS ENABLE_IF FEATURES PARAMS TARGET)
+    set(multiValueArgs GEN_DEPS EXTRA_LIBS ENABLE_IF FEATURES PARAMS GEN_TARGET)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
@@ -21,7 +21,7 @@ function(halide_define_aot_test NAME)
         add_halide_library(${NAME}
                            FROM "${NAME}.generator"
                            PARAMS "${args_PARAMS}"
-                           TARGETS "${args_TARGET}"
+                           TARGETS "${args_GEN_TARGET}"
                            FUNCTION_NAME "${args_FUNCTION_NAME}"
                            FEATURES "${args_FEATURES}")
         list(APPEND DEPS ${NAME} ${NAME}.runtime)
@@ -153,15 +153,13 @@ halide_define_aot_test(async_parallel
 
 # autograd_aottest.cpp
 # autograd_generator.cpp
-halide_define_aot_test(autograd
-                       # Requires Mullapudi2016 autoscheduler, which doesn't support wasm
-                       ENABLE_IF NOT ${USING_WASM}) 
+halide_define_aot_test(autograd ENABLE_IF TARGET Halide::Mullapudi2016 AND NOT ${USING_WASM})
 if (TARGET generator_aot_autograd)
     add_halide_library(autograd_grad
                        GRADIENT_DESCENT
                        FROM autograd.generator
                        GENERATOR autograd
-                       PARAMS "auto_schedule=true")
+                       AUTOSCHEDULER Halide::Mullapudi2016)
     target_link_libraries(generator_aot_autograd PRIVATE autograd_grad)
 endif ()
 
@@ -323,7 +321,7 @@ set(metadata_tester_params
     array_outputs8.size=2
     array_outputs9.size=2)
 
-halide_define_aot_test(metadata_tester 
+halide_define_aot_test(metadata_tester
                        EXTRA_LIBS metadata_tester_ucon
                        PARAMS ${metadata_tester_params})
 add_halide_library(metadata_tester_ucon
@@ -341,7 +339,7 @@ halide_define_aot_test(msan FEATURES msan)
 halide_define_aot_test(multitarget
                        # Multitarget doesn't apply to WASM
                        ENABLE_IF NOT ${USING_WASM}
-                       TARGET cmake cmake-no_bounds_query
+                       GEN_TARGET cmake-no_bounds_query cmake
                        FEATURES c_plus_plus_name_mangling
                        FUNCTION_NAME HalideTest::multitarget)
 
@@ -349,7 +347,7 @@ halide_define_aot_test(multitarget
 # nested_externs_generator.cpp
 halide_define_aot_test(nested_externs
                        OMIT_DEFAULT_GENERATOR
-                       EXTRA_LIBS 
+                       EXTRA_LIBS
                        nested_externs_root
                        nested_externs_inner
                        nested_externs_combine
@@ -404,7 +402,7 @@ halide_define_aot_test(user_context_insanity FEATURES user_context)
 
 # variable_num_threads_aottest.cpp
 # variable_num_threads_generator.cpp
-halide_define_aot_test(variable_num_threads 
+halide_define_aot_test(variable_num_threads
                        # Requires threading support, not yet available for wasm tests
                        ENABLE_IF NOT ${USING_WASM})
 

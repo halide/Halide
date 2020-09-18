@@ -1,20 +1,12 @@
+#include "HalidePlugin.h"
+
 #include <algorithm>
+#include <map>
 #include <regex>
+#include <set>
 #include <utility>
 
-#include "AutoSchedule.h"
-#include "AutoScheduleUtils.h"
-#include "ExprUsesVar.h"
-#include "FindCalls.h"
-#include "Func.h"
-#include "IREquality.h"
-#include "Inline.h"
-#include "ParallelRVar.h"
-#include "RealizationOrder.h"
-#include "RegionCosts.h"
-#include "Scope.h"
-#include "Simplify.h"
-#include "Util.h"
+#include "Halide.h"
 
 namespace Halide {
 namespace Internal {
@@ -3376,6 +3368,29 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 
     return sched_string;
 }
+
+struct Mullapudi2016 {
+    void operator()(const Pipeline &pipeline, const Target &target, const MachineParams &arch_params, AutoSchedulerResults *outputs) {
+        AutoSchedulerResults results;
+        results.target = target;
+        results.machine_params_string = arch_params.to_string();
+
+        user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                    target.arch == Target::POWERPC || target.arch == Target::MIPS)
+            << "The Mullapudi2016 autoscheduler is not supported for the target: " << target.to_string();
+        results.scheduler_name = "Mullapudi2016";
+        std::vector<Function> pipeline_outputs;
+        for (Func f : pipeline.outputs()) {
+            pipeline_outputs.push_back(f.function());
+        }
+        results.schedule_source = generate_schedules(pipeline_outputs, target, arch_params);
+        // this autoscheduler has no featurization
+
+        *outputs = results;
+    }
+};
+
+REGISTER_AUTOSCHEDULER(Mullapudi2016)
 
 }  // namespace Internal
 
