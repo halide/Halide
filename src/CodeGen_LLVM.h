@@ -112,6 +112,9 @@ protected:
     // @{
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
+    virtual std::string mabi() const {
+        return "";
+    }
     virtual bool use_soft_float_abi() const = 0;
     virtual bool use_pic() const;
     // @}
