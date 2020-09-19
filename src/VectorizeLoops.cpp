@@ -332,7 +332,7 @@ class SerializeLoops : public IRMutator {
 
     Stmt visit(const For *op) override {
         if (op->for_type == ForType::Vectorized) {
-            return For::make(op->name, mutate(op->min), mutate(op->extent),
+            return For::make(op->name, op->min, op->extent,
                              ForType::Serial, op->device_api, mutate(op->body));
         }
 
