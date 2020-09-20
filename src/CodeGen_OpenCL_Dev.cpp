@@ -899,7 +899,7 @@ void CodeGen_OpenCL_Dev::init_module() {
 
     // There does not appear to be a reliable way to safely ignore unused
     // variables in OpenCL C. See https://github.com/halide/Halide/issues/4918.
-    src_stream << "#define halide_unused(x)";
+    src_stream << "#define halide_unused(x) \n";
 
     if (target.has_feature(Target::CLDoubles)) {
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"
