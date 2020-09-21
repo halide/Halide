@@ -38,7 +38,7 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
     if (value.same_as(op->value)) {
         return op;
     } else {
-        return Broadcast::make(value, op->type.lanes());
+        return Broadcast::make(value, op->lanes);
     }
 }
 
@@ -220,7 +220,7 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *bounds) {
     ExprInfo base_bounds, stride_bounds;
     Expr base = mutate(op->base, &base_bounds);
     Expr stride = mutate(op->stride, &stride_bounds);
-    const int lanes = op->type.lanes();
+    const int lanes = op->lanes;
 
     if (bounds && no_overflow_int(op->type)) {
         bounds->min_defined = base_bounds.min_defined && stride_bounds.min_defined;
@@ -245,8 +245,8 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *bounds) {
     // but it helps to have as many rules as possible written as
     // formal rewrites, so that they can be formally verified,
     // etc.
-    auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride, lanes), op->type);
-    if (rewrite(ramp(x, 0), broadcast(x, lanes))) {
+    auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride), op->type);
+    if (rewrite(ramp(x, 0), broadcast(x))) {
         return rewrite.result;
     }
 

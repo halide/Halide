@@ -114,7 +114,7 @@ WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_RISCV ?= $(findstring riscv, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
-WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
+WITH_NVPTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 # AMDGPU target is WIP
 WITH_AMDGPU ?= $(findstring amdgpu, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
@@ -141,9 +141,9 @@ MIPS_LLVM_CONFIG_LIB=$(if $(WITH_MIPS), mips, )
 POWERPC_CXX_FLAGS=$(if $(WITH_POWERPC), -DWITH_POWERPC, )
 POWERPC_LLVM_CONFIG_LIB=$(if $(WITH_POWERPC), powerpc, )
 
-PTX_CXX_FLAGS=$(if $(WITH_PTX), -DWITH_PTX, )
-PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
-PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_PTX), libdevice.compute_20.10.bc libdevice.compute_30.10.bc libdevice.compute_35.10.bc, )
+PTX_CXX_FLAGS=$(if $(WITH_NVPTX), -DWITH_NVPTX, )
+PTX_LLVM_CONFIG_LIB=$(if $(WITH_NVPTX), nvptx, )
+PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_NVPTX), libdevice.compute_20.10.bc libdevice.compute_30.10.bc libdevice.compute_35.10.bc, )
 
 AMDGPU_CXX_FLAGS=$(if $(WITH_AMDGPU), -DWITH_AMDGPU, )
 AMDGPU_LLVM_CONFIG_LIB=$(if $(WITH_AMDGPU), amdgpu, )
@@ -167,7 +167,7 @@ RISCV_CXX_FLAGS=$(if $(WITH_RISCV), -DWITH_RISCV, )
 RISCV_LLVM_CONFIG_LIB=$(if $(WITH_RISCV), riscv, )
 
 INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
-EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS -fexceptions, )
+EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DHALIDE_WITH_EXCEPTIONS -fexceptions, )
 
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON, )
 HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
@@ -275,7 +275,7 @@ ifeq ($(WITH_LLVM_INSIDE_SHARED_LIBHALIDE), )
 TEST_LD_FLAGS += -Wl,--rpath=$(LLVM_LIBDIR)
 endif
 
-ifneq ($(WITH_PTX), )
+ifneq ($(WITH_NVPTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
 TEST_CUDA = 1
 endif
@@ -399,7 +399,6 @@ SOURCE_FILES = \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
   AsyncProducers.cpp \
-  AutoSchedule.cpp \
   AutoScheduleUtils.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
@@ -450,6 +449,7 @@ SOURCE_FILES = \
   Expr.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
+  FlattenNestedRamps.cpp \
   Float16.cpp \
   Func.cpp \
   Function.cpp \
@@ -575,7 +575,6 @@ HEADER_FILES = \
   AssociativeOpsTable.h \
   Associativity.h \
   AsyncProducers.h \
-  AutoSchedule.h \
   AutoScheduleUtils.h \
   BoundaryConditions.h \
   Bounds.h \
@@ -630,6 +629,7 @@ HEADER_FILES = \
   ExternFuncArgument.h \
   FastIntegerDivide.h \
   FindCalls.h \
+  FlattenNestedRamps.h \
   Float16.h \
   Func.h \
   Function.h \
@@ -746,7 +746,6 @@ RUNTIME_CPP_COMPONENTS = \
   cache \
   can_use_target \
   cuda \
-  d3d12compute \
   destructors \
   device_interface \
   errors \
@@ -818,6 +817,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_abort \
   windows_clock \
   windows_cuda \
+  windows_d3d12compute_x86 \
   windows_get_symbol \
   windows_io \
   windows_opencl \
@@ -832,7 +832,6 @@ RUNTIME_LL_COMPONENTS = \
   aarch64 \
   arm \
   arm_no_neon \
-  d3d12_abi_patch_64 \
   hvx_64 \
   hvx_128 \
   mips \
@@ -974,23 +973,33 @@ $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 RUNTIME_TRIPLE_32 = "le32-unknown-nacl-unknown"
 RUNTIME_TRIPLE_64 = "le64-unknown-unknown-unknown"
 
-# win32 is tied to x86 due to the use of the __stdcall calling convention
+# windows-specific modules use the __stdcall calling convention
 RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
+RUNTIME_TRIPLE_WIN_64 = "x86_64-unknown-windows-unknown"
 
 # -std=gnu++98 is deliberate; we do NOT want c++11 here,
 # as we don't want static locals to get thread synchronization stuff.
-RUNTIME_CXX_FLAGS = -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fpic -std=gnu++98
-$(BUILD_DIR)/initmod.%_64.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
-	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
+RUNTIME_CXX_FLAGS = -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -std=gnu++98
 
 $(BUILD_DIR)/initmod.windows_%_32.ll: $(SRC_DIR)/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_32.d
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -fpic -m32 -target $(RUNTIME_TRIPLE_WIN_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_32.d
+
+$(BUILD_DIR)/initmod.windows_%_64.ll: $(SRC_DIR)/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_64.d
+
+$(BUILD_DIR)/initmod.%_64.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -fpic -m64 -target $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
 
 $(BUILD_DIR)/initmod.%_32.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -fpic -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
+
+$(BUILD_DIR)/initmod.windows_%_64_debug.ll: $(SRC_DIR)/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_32_debug.d
 
 $(BUILD_DIR)/initmod.%_64_debug.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
@@ -1076,7 +1085,7 @@ test_tutorial: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
 test_opengl: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=opengl_%)
-test_auto_schedule: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=auto_schedule_%)
+test_auto_schedule: test_mullapudi2016 test_li2018 test_adams2019
 
 .PHONY: test_correctness_multi_gpu
 test_correctness_multi_gpu: correctness_gpu_multi_device
@@ -1495,9 +1504,15 @@ $(FILTERS_DIR)/external_code.halide_generated.cpp: $(BIN_DIR)/external_code.gene
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g external_code -e c_source -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=false
 
-$(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator
+$(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) 
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad  -d 1 target=$(TARGET)-no_runtime auto_schedule=true
+	# FIXME: The autoscheduler looks for libHalide in the same
+	# directory, which is normally a distro. But the generator
+	# tests use bin/libHalide.so instead of a distro. For now,
+	# just copy the autoscheduler to a place where it won't
+	# confuse the linker.
+	cp $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) $(BIN_DIR)
+	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime auto_schedule=true -d 1 -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
@@ -1750,11 +1765,13 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 # ...in that order.
 LESSON_21_MACHINE_PARAMS = 32,16777216,40
 
-$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21_auto_scheduler_run.cpp $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate
+$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21_auto_scheduler_run.cpp $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) 
 	@-mkdir -p $(TMP_DIR)
 	# Run the generator
 	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_false target=host            auto_schedule=false
-	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_true  target=host-no_runtime auto_schedule=true machine_params=$(LESSON_21_MACHINE_PARAMS)
+	# FIXME: The relative path of the autoscheduler and libHalide must be preserved on OS X, or it tries to load the wrong libHalide.dylib
+	cp $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) $(BIN_DIR)
+	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_true  target=host-no_runtime auto_schedule=true machine_params=$(LESSON_21_MACHINE_PARAMS) -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
 	# Compile the runner
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
 	-I$(INCLUDE_DIR) -L$(BIN_DIR) -I $(TMP_DIR) $(TMP_DIR)/auto_schedule_*.a \
@@ -1842,10 +1859,24 @@ tutorial_%: $(BIN_DIR)/tutorial_% $(TMP_DIR)/images/rgb.png $(TMP_DIR)/images/gr
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
-auto_schedule_%: $(BIN_DIR)/auto_schedule_%
+test_mullapudi2016: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=auto_schedule_%)
+
+# These tests were written for the Mullapudi2016 autoscheduler.
+# TODO: either make them work with all autoschedulers or move them under src/autoschedulers/mullapudi2016
+auto_schedule_%: $(BIN_DIR)/auto_schedule_% $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$<
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(BIN_DIR))/libautoschedule_mullapudi2016.$(SHARED_EXT)
 	@-echo
+
+# The other autoschedulers contain their own tests
+test_adams2019: distrib
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+
+test_li2018: distrib build_python_bindings
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/li2018/Makefile test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings 
 
 time_compilation_test_%: $(BIN_DIR)/test_%
 	$(TIME_COMPILATION) compile_times_correctness.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_test_%=test_%)
@@ -1861,7 +1892,6 @@ time_compilation_generator_%: $(BIN_DIR)/%.generator
 
 TEST_APPS=\
 	HelloMatlab \
-	autoscheduler \
 	bilateral_grid \
 	bgu \
 	blur \
@@ -1869,7 +1899,6 @@ TEST_APPS=\
 	camera_pipe \
 	conv_layer \
 	fft \
-	gradient_autoscheduler \
 	hist \
 	interpolate \
 	lens_blur \
@@ -2123,8 +2152,9 @@ $(BUILD_DIR)/halide_config.%: $(ROOT_DIR)/tools/halide_config.%.tpl
 	       | sed -e 's;@HALIDE_LLVM_CXX_FLAGS_RAW@;${LLVM_CXX_FLAGS};g' > $@
 
 
-$(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
-                           $(BIN_DIR)/libHalide.$(SHARED_EXT) \
+$(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
+			   $(LIB_DIR)/libHalide.a \
+	       		   $(BIN_DIR)/libHalide.$(SHARED_EXT) \
                            $(INCLUDE_DIR)/Halide.h \
                            $(RUNTIME_EXPORTED_INCLUDES) \
                            $(ROOT_DIR)/README*.md \
@@ -2138,7 +2168,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	         $(DISTRIB_DIR)/tutorial/images \
 	         $(DISTRIB_DIR)/tools \
 	         $(DISTRIB_DIR)/tutorial/figures
-	cp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/bin
+	cp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/lib
 	cp $(LIB_DIR)/libHalide.a $(DISTRIB_DIR)/lib
 	cp $(INCLUDE_DIR)/Halide.h $(DISTRIB_DIR)/include
 	cp $(INCLUDE_DIR)/HalideBuffer.h $(DISTRIB_DIR)/include
@@ -2163,6 +2193,39 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
+ifeq ($(UNAME), Darwin)
+	install_name_tool -id @rpath/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+endif
+
+$(DISTRIB_DIR)/lib/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/$*/Makefile bin/libautoschedule_$*.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+	cp $(BIN_DIR)/libautoschedule_$*.$(SHARED_EXT) $(DISTRIB_DIR)/lib
+ifeq ($(UNAME), Darwin)
+	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
+endif
+
+# Adams2019 also includes autotuning tools
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile bin/libautoschedule_adams2019.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) bin/retrain_cost_model bin/featurization_to_sample bin/get_host_target
+	cp $(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT) $(DISTRIB_DIR)/lib/
+	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
+		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+	done
+	cp $(SRC_DIR)/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
+ifeq ($(UNAME), Darwin)
+	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
+endif
+
+.PHONY: autoschedulers
+autoschedulers: \
+$(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) \
+$(DISTRIB_DIR)/lib/libautoschedule_li2018.$(SHARED_EXT) \
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT)
+
+.PHONY: distrib
+distrib: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT) autoschedulers
+
+$(DISTRIB_DIR)/halide.tgz: distrib
 	ln -sf $(DISTRIB_DIR) halide
 	tar -czf $(BUILD_DIR)/halide.tgz \
 		halide/bin \
@@ -2174,10 +2237,6 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/halide_config.*
 	rm -rf halide
 	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
-
-
-.PHONY: distrib
-distrib: $(DISTRIB_DIR)/halide.tgz
 
 $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h $(ROOT_DIR)/tools/halide_trace_config.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -L$(BIN_DIR) -o $@

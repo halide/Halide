@@ -124,14 +124,25 @@ LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
 LIB_HALIDE_STATIC = $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 
-LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
+LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/lib/libHalide.$(SHARED_EXT)
 
-GENERATOR_DEPS ?= $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
+GENERATOR_DEPS ?= $(LIB_AUTOSCHEDULER) $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 GENERATOR_DEPS_STATIC ?= $(LIB_HALIDE_STATIC) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 
 # Generators which use autoscheduler plugin need to specify the linker where to find libHalide.so required by the plugin.
 LIBHALIDE_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lHalide $(LDFLAGS)
-LIBHALIDE_LDFLAGS_STATIC ?=  -L $(dir $(LIB_HALIDE_STATIC)) -lHalide $(LDFLAGS)
+LIBHALIDE_LDFLAGS_STATIC ?= $(LIB_HALIDE_STATIC) $(LDFLAGS)
+
+# Autoschedulers. Mullapudi2016 is currently the default, because it's fast. 
+AUTOSCHEDULER ?= mullapudi2016
+ifneq ($(AUTOSCHEDULER),)
+LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT) 
+ifeq ($(UNAME), Darwin)
+LIBHALIDE_LDFLAGS +=  -Wl,-force_load $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
+else
+LIBHALIDE_LDFLAGS +=  -Wl,--no-as-needed -lautoschedule_$(AUTOSCHEDULER) -Wl,--as-needed
+endif
+endif
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)

@@ -165,28 +165,6 @@ Target calculate_host_target() {
     return {os, arch, bits, initial_features};
 }
 
-int get_cuda_capability_lower_bound(const Target &t) {
-    if (!t.has_feature(Target::CUDA)) {
-        return -1;
-    }
-    if (t.has_feature(Target::CUDACapability30)) {
-        return 30;
-    }
-    if (t.has_feature(Target::CUDACapability32)) {
-        return 32;
-    }
-    if (t.has_feature(Target::CUDACapability35)) {
-        return 35;
-    }
-    if (t.has_feature(Target::CUDACapability50)) {
-        return 50;
-    }
-    if (t.has_feature(Target::CUDACapability61)) {
-        return 61;
-    }
-    return 20;
-}
-
 bool is_using_hexagon(const Target &t) {
     return (t.has_feature(Target::HVX_64) ||
             t.has_feature(Target::HVX_128) ||
@@ -244,8 +222,14 @@ Target::Feature calculate_host_cuda_capability(Target t) {
         return Target::CUDACapability35;
     } else if (ver < 61) {
         return Target::CUDACapability50;
-    } else {
+    } else if (ver < 70) {
         return Target::CUDACapability61;
+    } else if (ver < 75) {
+        return Target::CUDACapability70;
+    } else if (ver < 80) {
+        return Target::CUDACapability75;
+    } else {
+        return Target::CUDACapability80;
     }
 }
 
@@ -316,6 +300,9 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cuda_capability_35", Target::CUDACapability35},
     {"cuda_capability_50", Target::CUDACapability50},
     {"cuda_capability_61", Target::CUDACapability61},
+    {"cuda_capability_70", Target::CUDACapability70},
+    {"cuda_capability_75", Target::CUDACapability75},
+    {"cuda_capability_80", Target::CUDACapability80},
     {"opencl", Target::OpenCL},
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
@@ -473,7 +460,10 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::CUDACapability32) &&
         !t.has_feature(Target::CUDACapability35) &&
         !t.has_feature(Target::CUDACapability50) &&
-        !t.has_feature(Target::CUDACapability61)) {
+        !t.has_feature(Target::CUDACapability61) &&
+        !t.has_feature(Target::CUDACapability70) &&
+        !t.has_feature(Target::CUDACapability75) &&
+        !t.has_feature(Target::CUDACapability80)) {
         // Detect host cuda capability
         t.set_feature(get_host_cuda_capability(t));
     }
@@ -541,22 +531,15 @@ void bad_target_string(const std::string &target) {
 
 }  // namespace
 
-Target::Target(const std::string &target) {
+Target::Target(const std::string &target)
+    : os(OSUnknown), arch(ArchUnknown), bits(0) {
     Target host = get_host_target();
 
     if (target.empty()) {
         // If nothing is specified, use the full host target.
         *this = host;
     } else {
-
-        // Default to the host OS and architecture in case of partially
-        // specified targets (e.g. x86-64-cuda doesn't specify the OS, so
-        // use the host OS).
-        os = host.os;
-        arch = host.arch;
-        bits = host.bits;
-
-        if (!merge_string(*this, target)) {
+        if (!merge_string(*this, target) || has_unknowns()) {
             bad_target_string(target);
         }
     }
@@ -568,7 +551,7 @@ Target::Target(const char *s)
 
 bool Target::validate_target_string(const std::string &s) {
     Target t;
-    return merge_string(t, s);
+    return merge_string(t, s) && !t.has_unknowns();
 }
 
 std::string Target::feature_to_name(Target::Feature feature) {
@@ -644,7 +627,7 @@ bool Target::supported() const {
 #if !defined(WITH_RISCV)
     bad |= arch == Target::RISCV;
 #endif
-#if !defined(WITH_PTX)
+#if !defined(WITH_NVPTX)
     bad |= has_feature(Target::CUDA);
 #endif
 #if !defined(WITH_OPENCL)
@@ -660,6 +643,10 @@ bool Target::supported() const {
     bad |= has_feature(Target::D3D12Compute);
 #endif
     return !bad;
+}
+
+bool Target::has_unknowns() const {
+    return os == OSUnknown || arch == ArchUnknown || bits == 0;
 }
 
 void Target::set_feature(Feature f, bool value) {
@@ -716,6 +703,37 @@ bool Target::has_gpu_feature() const {
             has_feature(Metal) ||
             has_feature(D3D12Compute) ||
             has_feature(OpenGLCompute));
+}
+
+int Target::get_cuda_capability_lower_bound() const {
+    if (!has_feature(Target::CUDA)) {
+        return -1;
+    }
+    if (has_feature(Target::CUDACapability30)) {
+        return 30;
+    }
+    if (has_feature(Target::CUDACapability32)) {
+        return 32;
+    }
+    if (has_feature(Target::CUDACapability35)) {
+        return 35;
+    }
+    if (has_feature(Target::CUDACapability50)) {
+        return 50;
+    }
+    if (has_feature(Target::CUDACapability61)) {
+        return 61;
+    }
+    if (has_feature(Target::CUDACapability70)) {
+        return 70;
+    }
+    if (has_feature(Target::CUDACapability75)) {
+        return 75;
+    }
+    if (has_feature(Target::CUDACapability80)) {
+        return 80;
+    }
+    return 20;
 }
 
 bool Target::supports_type(const Type &t) const {
@@ -817,7 +835,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
 }
 
 int Target::natural_vector_size(const Halide::Type &t) const {
-    user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0)
+    user_assert(!has_unknowns())
         << "natural_vector_size cannot be used on a Target with Unknown values.\n";
 
     const bool is_integer = t.is_int() || t.is_uint();
@@ -883,12 +901,12 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (a) must be included if either target has the feature (union)
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
-    const std::array<Feature, 15> union_features = {{// These are true union features.
+    const std::array<Feature, 18> union_features = {{// These are true union features.
                                                      CUDA, OpenCL, OpenGL, OpenGLCompute, Metal, D3D12Compute, NoNEON,
 
                                                      // These features are actually intersection-y, but because targets only record the _highest_,
                                                      // we have to put their union in the result and then take a lower bound.
-                                                     CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61,
+                                                     CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61, CUDACapability70, CUDACapability75, CUDACapability80,
                                                      HVX_v62, HVX_v65, HVX_v66}};
 
     const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
@@ -933,8 +951,8 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
-    int cuda_a = get_cuda_capability_lower_bound(*this);
-    int cuda_b = get_cuda_capability_lower_bound(other);
+    int cuda_a = get_cuda_capability_lower_bound();
+    int cuda_b = other.get_cuda_capability_lower_bound();
 
     // get_cuda_capability_lower_bound returns -1 when unused. Casting to unsigned makes this
     // large, so min selects the true lower bound when one target doesn't specify a capability,
@@ -945,6 +963,9 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     if (cuda_capability < 35) output.features.reset(CUDACapability35);
     if (cuda_capability < 50) output.features.reset(CUDACapability50);
     if (cuda_capability < 61) output.features.reset(CUDACapability61);
+    if (cuda_capability < 70) output.features.reset(CUDACapability70);
+    if (cuda_capability < 75) output.features.reset(CUDACapability75);
+    if (cuda_capability < 80) output.features.reset(CUDACapability80);
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);

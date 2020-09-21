@@ -21,15 +21,21 @@ int main(int argc, char **argv) {
         printf("to_string failure: %s\n", ts.c_str());
         return -1;
     }
-    if (!Target::validate_target_string(ts)) {
+    // Note, this should *not* validate, since validate_target_string
+    // now returns false if any of arch-bits-os are undefined
+    if (Target::validate_target_string(ts)) {
         printf("validate_target_string failure: %s\n", ts.c_str());
         return -1;
     }
-    t2 = Target(ts);
-    if (t2 != t1) {
-        printf("roundtrip failure: %s\n", ts.c_str());
-        return -1;
-    }
+
+    // Don't attempt to roundtrip this: trying to create
+    // a Target with unknown portions will now assert-fail.
+    //
+    // t2 = Target(ts);
+    // if (t2 != t1) {
+    //     printf("roundtrip failure: %s\n", ts.c_str());
+    //     return -1;
+    // }
 
     // Full specification round-trip:
     t1 = Target(Target::Linux, Target::X86, 32, {Target::SSE41});

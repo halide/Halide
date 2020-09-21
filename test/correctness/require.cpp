@@ -67,7 +67,7 @@ static void test(int vector_width) {
 
     ImageParam input(Int(32), 2);
     Expr h = require(p1 == p2, p1);
-    Func clamped = BoundaryConditions::repeat_edge(input, 0, 64, 0, h);
+    Func clamped = BoundaryConditions::repeat_edge(input, {{0, 64}, {0, h}});
     clamped.set_error_handler(&halide_error);
 
     Buffer<int32_t> input_buf(64, 64);

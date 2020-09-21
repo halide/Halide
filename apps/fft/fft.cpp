@@ -905,7 +905,7 @@ Func fft2d_c2r(ComplexFunc c,
     // Add a boundary condition to prevent scheduling from causing the
     // algorithms below to reach out of the bounds we promise to define in
     // forward FFTs.
-    c = ComplexFunc(repeat_edge((Func)c, Expr(0), Expr(N0), Expr(0), Expr((N1 + 1) / 2 + 1)));
+    c = ComplexFunc(repeat_edge((Func)c, {{Expr(0), Expr(N0)}, {Expr(0), Expr((N1 + 1) / 2 + 1)}}));
 
     // If this FFT is small, the logic related to zipping and unzipping
     // the FFT may be expensive compared to just brute forcing with a complex
@@ -1020,7 +1020,7 @@ Func fft2d_c2r(ComplexFunc c,
                        target,
                        &twiddle_cache);
 
-        ComplexFunc dft_padded = ComplexFunc(repeat_edge((Func)dft, Expr(), Expr(), Expr(0), Expr(N1)));
+        ComplexFunc dft_padded = ComplexFunc(repeat_edge((Func)dft, {{Expr(), Expr()}, {Expr(0), Expr(N1)}}));
 
         // Extract the real inverse DFTs.
         Expr unzip_n0 = (n0 / (zip_width * 2)) * zip_width + (n0 % zip_width);

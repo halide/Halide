@@ -18,7 +18,7 @@
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
-#ifdef WITH_PTX
+#ifdef WITH_NVPTX
 namespace llvm {
 FunctionPass *createNVVMReflectPass(const StringMap<int> &Mapping);
 }
@@ -34,7 +34,7 @@ using namespace llvm;
 
 CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host)
     : CodeGen_LLVM(host) {
-#if !defined(WITH_PTX)
+#if !defined(WITH_NVPTX)
     user_error << "ptx not enabled for this build of Halide.\n";
 #endif
     user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
@@ -150,7 +150,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 void CodeGen_PTX_Dev::init_module() {
     init_context();
 
-#ifdef WITH_PTX
+#ifdef WITH_NVPTX
     module = get_initial_module_for_ptx_device(target, context);
 #endif
 }
@@ -287,7 +287,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         if (op->value.type().is_float() &&
             (op->value.type().bits() == 32 ||
              (op->value.type().bits() == 64 &&
-              target.has_feature(Target::CUDACapability61)))) {
+              (target.get_cuda_capability_lower_bound() >= 61)))) {
             Expr val_expr = op->value;
             Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
             Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
@@ -502,7 +502,13 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    if (target.has_feature(Target::CUDACapability61)) {
+    if (target.has_feature(Target::CUDACapability80)) {
+        return "sm_80";
+    } else if (target.has_feature(Target::CUDACapability75)) {
+        return "sm_75";
+    } else if (target.has_feature(Target::CUDACapability70)) {
+        return "sm_70";
+    } else if (target.has_feature(Target::CUDACapability61)) {
         return "sm_61";
     } else if (target.has_feature(Target::CUDACapability50)) {
         return "sm_50";
@@ -518,7 +524,12 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.has_feature(Target::CUDACapability61)) {
+    if (target.has_feature(Target::CUDACapability80)) {
+        return "+ptx70";
+    } else if (target.has_feature(Target::CUDACapability70) ||
+               target.has_feature(Target::CUDACapability75)) {
+        return "+ptx60";
+    } else if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
                                        Target::CUDACapability50})) {
@@ -536,7 +547,7 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
-#ifdef WITH_PTX
+#ifdef WITH_NVPTX
 
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
@@ -707,7 +718,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Null-terminate the ptx source
     buffer.push_back(0);
     return buffer;
-#else  // WITH_PTX
+#else  // WITH_NVPTX
     return vector<char>();
 #endif
 }
@@ -742,7 +753,7 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
     }
     if (t.is_float() && t.bits() == 64) {
         // double atomics are supported since CC6.1
-        return target.has_feature(Target::CUDACapability61);
+        return target.get_cuda_capability_lower_bound() >= 61;
     }
     return false;
 }

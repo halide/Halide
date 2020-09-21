@@ -9,7 +9,6 @@
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
-#include "EliminateBoolVectors.h"
 #include "HexagonOptimize.h"
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -2091,14 +2090,11 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
 
         // Create a condition value for which elements of the range are valid
         // for this index.
-        Value *use_index = builder->CreateICmpSGE(indices, minus_one);
+        Value *use_index = builder->CreateICmpSGT(indices, minus_one);
 
         // After we've eliminated the invalid elements, we can
         // truncate to 8 bits, as vlut requires.
         indices = call_intrin(i8x_t, "halide.hexagon.pack.vh", {indices});
-        use_index = (lut_ty->getScalarSizeInBits() == 8) ?
-                        call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index}) :
-                        use_index;
 
         int range_extent_i = std::min(max_index - min_index_i, 255);
         Value *range_i = vlut256(slice_vector(lut, min_index_i, range_extent_i),
@@ -2410,7 +2406,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         return;
     }
 
-    if (op->is_intrinsic(Call::gather)) {
+    if (op->is_intrinsic(Call::hvx_gather)) {
         internal_assert(op->args.size() == 5);
         internal_assert(op->type.bits() == 16 || op->type.bits() == 32);
         int index_lanes = op->type.lanes();
@@ -2437,15 +2433,15 @@ void CodeGen_Hexagon::visit(const Call *op) {
             value = builder->CreateCall(fn, args);
         }
         return;
-    } else if (op->is_intrinsic(Call::scatter) ||
-               op->is_intrinsic(Call::scatter_acc)) {
+    } else if (op->is_intrinsic(Call::hvx_scatter) ||
+               op->is_intrinsic(Call::hvx_scatter_acc)) {
         internal_assert(op->args.size() == 4);
         internal_assert(op->type.bits() == 16 || op->type.bits() == 32);
         int index_lanes = op->type.lanes();
         int intrin_lanes = native_vector_bits() / op->type.bits();
 
         string name = "halide.hexagon.vscatter";
-        name += (op->name == "scatter_acc") ? "_acc" : "";
+        name += op->is_intrinsic(Call::hvx_scatter_acc) ? "_acc" : "";
         name += (op->type.bits() == 16) ? ".h.h" : ".w.w";
         llvm::Function *fn = module->getFunction(name);
 
@@ -2464,7 +2460,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
             value = builder->CreateCall(fn, args);
         }
         return;
-    } else if (op->is_intrinsic(Call::scatter_release)) {
+    } else if (op->is_intrinsic(Call::hvx_scatter_release)) {
         internal_assert(op->args.size() == 1);
         Value *ptr = codegen(op->args[0]);
         llvm::Function *fn = module->getFunction("halide.hexagon.scatter.release");

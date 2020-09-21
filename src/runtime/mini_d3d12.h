@@ -4,7 +4,6 @@
 #ifdef __clang__
 //    #define __stdcall __attribute__ ((stdcall))
 #pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wignored-attributes"
 #pragma clang diagnostic ignored "-Wunknown-pragmas"
 #pragma clang diagnostic ignored "-Wunused-value"
 #define __export
