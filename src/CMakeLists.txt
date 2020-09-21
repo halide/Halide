@@ -68,6 +68,7 @@ set(HEADER_FILES
     ExternFuncArgument.h
     FastIntegerDivide.h
     FindCalls.h
+    FlattenNestedRamps.h
     Float16.h
     Func.h
     Function.h
@@ -228,6 +229,7 @@ set(SOURCE_FILES
     Expr.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
+    FlattenNestedRamps.cpp
     Float16.cpp
     Func.cpp
     Function.cpp

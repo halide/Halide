@@ -746,6 +746,10 @@ struct Shuffle : public ExprNode<Shuffle> {
     static Expr make_concat(const std::vector<Expr> &vectors);
 
     /** Convenience constructor for making a shuffle representing a
+     * broadcast of a vector. */
+    static Expr make_broadcast(Expr vector, int lanes);
+
+    /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */
     static Expr make_slice(Expr vector, int begin, int stride, int size);
 
