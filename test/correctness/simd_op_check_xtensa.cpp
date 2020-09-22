@@ -84,7 +84,7 @@ public:
         int vector_width = 64;
 
         // 48-bit math
-        check("halide_xtensa_widen_mul_i48", vector_width / 2, i32(i16_1) * i32(i16_2));
+        // check("halide_xtensa_widen_mul_i48", vector_width / 2, i32(i16_1) * i32(i16_2));
         check("halide_xtensa_widen_mul_u48", vector_width / 2, u32(u16_1) * u32(u16_2));
         check("halide_xtensa_widen_pair_mul_i48", vector_width / 2, i32(i16_1) * i32(i16_2) + i32(i16_3) * i32(i16_4));
         check("IVP_MULUUPNX16", vector_width / 2, u32(u16_1) * u32(u16_2) + u32(u16_3) * u32(u16_4));
