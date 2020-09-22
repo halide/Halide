@@ -62,54 +62,54 @@
 #define _Ret_maybenull_
 #define _Post_ptr_invalid_
 
-#define STATUS_WAIT_0       ((DWORD   )0x00000000L) 
-#define WAIT_OBJECT_0       ((STATUS_WAIT_0 ) + 0 )
+#define STATUS_WAIT_0 ((DWORD)0x00000000L) 
+#define WAIT_OBJECT_0 ((STATUS_WAIT_0) + 0)
 
 extern "C" {
 
-WINBASEAPI
-BOOL
-WINAPI
-CloseHandle(
-    _In_ _Post_ptr_invalid_ HANDLE hObject
-    );
+    WINBASEAPI
+    BOOL
+    WINAPI
+    CloseHandle(
+        _In_ _Post_ptr_invalid_ HANDLE hObject
+        );
 
-WINBASEAPI
-_Ret_maybenull_
-HANDLE
-WINAPI
-CreateEventA(
-    _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
-    _In_ BOOL bManualReset,
-    _In_ BOOL bInitialState,
-    _In_opt_ LPCSTR lpName
-    );
+    WINBASEAPI
+    _Ret_maybenull_
+    HANDLE
+    WINAPI
+    CreateEventA(
+        _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
+        _In_ BOOL bManualReset,
+        _In_ BOOL bInitialState,
+        _In_opt_ LPCSTR lpName
+        );
 
-WINBASEAPI
-_Ret_maybenull_
-HANDLE
-WINAPI
-CreateEventW(
-    _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
-    _In_ BOOL bManualReset,
-    _In_ BOOL bInitialState,
-    _In_opt_ LPCWSTR lpName
-    );
+    WINBASEAPI
+    _Ret_maybenull_
+    HANDLE
+    WINAPI
+    CreateEventW(
+        _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
+        _In_ BOOL bManualReset,
+        _In_ BOOL bInitialState,
+        _In_opt_ LPCWSTR lpName
+        );
 
-WINBASEAPI
-DWORD
-WINAPI
-WaitForSingleObject(
-    _In_ HANDLE hHandle,
-    _In_ DWORD dwMilliseconds
-    );
+    WINBASEAPI
+    DWORD
+    WINAPI
+    WaitForSingleObject(
+        _In_ HANDLE hHandle,
+        _In_ DWORD dwMilliseconds
+        );
 
 }
 
 #ifdef UNICODE
-#define CreateEvent  CreateEventW
+#define CreateEvent CreateEventW
 #else
-#define CreateEvent  CreateEventA
+#define CreateEvent CreateEventA
 #endif // !UNICODE
 
 // For all intents and purposes, we always want to use COMPUTE command lists
@@ -176,43 +176,46 @@ struct trace : public Printer<BasicPrinter, sizeof(trace_buf)> {
 #ifdef HALIDE_D3D12_TRACE_TIME
 #define TRACETIME_CHECKPOINT() halide_current_time_ns(user_context)
 //#define TRACETIME_REPORT(t0,t1) TRACEPRINT("Time: " << (t1 - t0) / 1.0e6 << " ms\n")
-#define TRACETIME_REPORT(t0,t1,...) TRACEPRINT(__VA_ARGS__ << (t1 - t0) / 1000 << " us\n")
+#define TRACETIME_REPORT(t0, t1, ...) TRACEPRINT(__VA_ARGS__ << (t1 - t0) / 1000 << " us\n")
 #else
 #define TRACETIME_CHECKPOINT() 0
-#define TRACETIME_REPORT(t0,t1,...)
+#define TRACETIME_REPORT(t0, t1, ...)
 #endif//HALIDE_D3D12_TRACE_TIME
 
 struct TraceScope {
-    #ifdef HALIDE_D3D12_TRACE_TIME
-    const char *_func;
-    uint64_t t0;
-    #endif
     TraceScope(const char *func) {
         TRACEPRINT("[@] " << func << "\n");
-        #ifdef HALIDE_D3D12_TRACE_TIME
+#ifdef HALIDE_D3D12_TRACE_TIME
         _func = func;
         t0 = TRACETIME_CHECKPOINT();
-        #endif
+#endif
         ScopedSpinLock lock(&trace_lock);
         trace_indent++;
     }
+
     ~TraceScope() {
-        #ifdef HALIDE_D3D12_TRACE_TIME
+#ifdef HALIDE_D3D12_TRACE_TIME
         uint64_t t1 = TRACETIME_CHECKPOINT();
-        if ((t1 - t0) >= (HALIDE_D3D12_TRACE_TIME_THRESHOLD * 1000)) { // 100 us
+        if ((t1 - t0) >= (HALIDE_D3D12_TRACE_TIME_THRESHOLD * 1000)) {  // *1000 : microseconds to nanoseconds
             TRACETIME_REPORT(t0, t1, "Time [" << _func << "]: ");
         }
-        #endif
+#endif
         ScopedSpinLock lock(&trace_lock);
         trace_indent--;
     }
+
+#ifdef HALIDE_D3D12_TRACE_TIME
+    const char *_func;
+    uint64_t t0;
+#endif
 };
 
-#define TRACE_SCOPE(name) TraceScope trace_scope__ (name)
+#define TRACE_SCOPE(name) TraceScope trace_scope__(name)
 #define TRACELOG TRACE_SCOPE(__FUNCTION__)
 
 #else
 typedef SinkPrinter trace;
+#define TRACE_SCOPE(name)
 #define TRACELOG
 #define TRACEPRINT(msg)
 #endif
@@ -645,7 +648,7 @@ struct d3d12_library {
 struct d3d12_function {
     ID3DBlob *shaderBlob;
     ID3D12RootSignature *rootSignature;
-    d3d12_compute_pipeline_state* pipeline_state;
+    d3d12_compute_pipeline_state *pipeline_state;
 };
 
 enum ResourceBindingSlots {
@@ -716,10 +719,9 @@ WEAK d3d12_buffer readback = {};  // staging buffer to retrieve data from the de
 
 WEAK HANDLE hFenceEvent = NULL;
 
-WEAK d3d12_command_allocator* cmd_allocator_main = NULL;
+WEAK d3d12_command_allocator *cmd_allocator_main = NULL;
 
-struct d3d12_frame
-{
+struct d3d12_frame {
     d3d12_compute_command_list *cmd_list;
     d3d12_binder *desc_binder;
     d3d12_buffer args_buffer;
@@ -727,7 +729,7 @@ struct d3d12_frame
 };
 
 static const int MaxFrames = 8;
-WEAK d3d12_frame frame_pool [MaxFrames] = { };
+WEAK d3d12_frame frame_pool[MaxFrames] = {};
 static uint64_t frame_selector = 0;
 
 static void wait_until_completed(d3d12_compute_command_list *cmdList);
@@ -735,7 +737,7 @@ static d3d12_command_list *new_compute_command_list(d3d12_device *device, d3d12_
 static d3d12_binder *new_descriptor_binder(d3d12_device *device);
 static void commit_command_list(d3d12_compute_command_list *cmdList);
 
-static d3d12_frame* acquire_frame(d3d12_device *device) {
+static d3d12_frame *acquire_frame(d3d12_device *device) {
     TRACELOG;
 
     // check for completed frames
@@ -1829,7 +1831,7 @@ static void dump_shader(const char *source, ID3DBlob *compiler_msgs = NULL) {
         << source << "\n";
 }
 
-static d3d12_function* d3d12_compile_shader(d3d12_device *device, d3d12_library *library, const char *name,
+static d3d12_function *d3d12_compile_shader(d3d12_device *device, d3d12_library *library, const char *name,
                                             int shared_mem_bytes, int threadsX, int threadsY, int threadsZ) {
     TRACELOG;
 
@@ -2901,7 +2903,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         for (size_t i = 0; arg_sizes[i] != 0; i++) {
             ++num_kernel_args;
         }
-        buffer_args = (d3d12_buffer **)__builtin_alloca(num_kernel_args*sizeof(d3d12_buffer *));
+        buffer_args = (d3d12_buffer **)__builtin_alloca(num_kernel_args * sizeof(d3d12_buffer *));
         for (size_t i = 0; arg_sizes[i] != 0; i++) {
             if (arg_is_buffer[i]) {
                 halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
@@ -2978,10 +2980,10 @@ WEAK int halide_d3d12compute_run(void *user_context,
                 offset = (offset + argsize - 1) & ~(argsize - 1);
                 offset += argsize;
                 TRACEPRINT("args[" << i << "] is " << arg_sizes[i] << " bytes"
-                           " : float(" << *arg.f << ")"
-                           " or uint32(" << *arg.i << ")"
-                           " or int32(" << (int32_t &)*arg.i << ")"
-                           "\n");
+                           << " : float(" << *arg.f << ")"
+                           << " or uint32(" << *arg.i << ")"
+                           << " or int32(" << (int32_t &)*arg.i << ")"
+                           << "\n");
             }
             halide_assert(user_context, offset == total_uniform_args_size);
         }
