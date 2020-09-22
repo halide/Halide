@@ -5,10 +5,12 @@
 #else  // BITS_64
 
 // Debugging utilities for back-end developers:
-#define HALIDE_D3D12_TRACE (1)
+#define HALIDE_D3D12_TRACE (0)
 #define HALIDE_D3D12_DEBUG_LAYER (0)
 #define HALIDE_D3D12_DEBUG_SHADERS (0)
 #define HALIDE_D3D12_PROFILING (0)
+#define HALIDE_D3D12_TRACE_TIME (0)
+#define HALIDE_D3D12_TRACE_TIME_THRESHOLD (100) /* in microseconds */
 #define HALIDE_D3D12_PIX (0)
 #define HALIDE_D3D12_RENDERDOC (0)
 
@@ -18,6 +20,9 @@
 
 #undef HALIDE_D3D12_TRACE
 #define HALIDE_D3D12_TRACE (1)
+
+#undef HALIDE_D3D12_TRACE_TIME
+#define HALIDE_D3D12_TRACE_TIME (1)
 
 #undef HALIDE_D3D12_DEBUG_LAYER
 #define HALIDE_D3D12_DEBUG_LAYER (1)
@@ -165,22 +170,45 @@ struct trace : public Printer<BasicPrinter, sizeof(trace_buf)> {
         }
     }
 };
+
+#define TRACEPRINT(msg) trace() << msg;
+
+#ifdef HALIDE_D3D12_TRACE_TIME
+#define TRACETIME_CHECKPOINT() halide_current_time_ns(user_context)
+//#define TRACETIME_REPORT(t0,t1) TRACEPRINT("Time: " << (t1 - t0) / 1.0e6 << " ms\n")
+#define TRACETIME_REPORT(t0,t1) TRACEPRINT("Time [" << __FUNCTION__ << "]: " << (t1 - t0) / 1000 << " us\n")
+#else
+#define TRACETIME_CHECKPOINT() 0
+#define TRACETIME_REPORT(t0,t1)
+#endif//HALIDE_D3D12_TRACE_TIME
+
 struct TraceScope {
-    TraceScope() {
+    #ifdef HALIDE_D3D12_TRACE_TIME
+    const char *_func;
+    uint64_t t0;
+    #endif
+    TraceScope(const char *func) {
+        TRACEPRINT("[@] " << func << "\n");
+        #ifdef HALIDE_D3D12_TRACE_TIME
+        _func = func;
+        t0 = TRACETIME_CHECKPOINT();
+        #endif
         ScopedSpinLock lock(&trace_lock);
         trace_indent++;
     }
     ~TraceScope() {
+        #ifdef HALIDE_D3D12_TRACE_TIME
+        uint64_t t1 = TRACETIME_CHECKPOINT();
+        if ((t1 - t0) >= (HALIDE_D3D12_TRACE_TIME_THRESHOLD * 1000)) { // 100 us
+            TRACEPRINT("Time [" << _func << "]: " << (t1 - t0) / 1000 << " us\n")
+        }
+        #endif
         ScopedSpinLock lock(&trace_lock);
         trace_indent--;
     }
 };
 
-#define TRACELOG                               \
-    trace() << "[@] " << __FUNCTION__ << "\n"; \
-    TraceScope trace_scope__;
-
-#define TRACEPRINT(msg) trace() << msg;
+#define TRACELOG TraceScope trace_scope__ (__FUNCTION__);
 
 #else
 typedef SinkPrinter trace;
@@ -258,7 +286,12 @@ static void d3d12_free(void *p) {
 template<typename T>
 static T *malloct() {
     TRACELOG;
-    T *p = (T *)d3d12_malloc(sizeof(T));
+    T *p = NULL;
+    TRACEPRINT("allocating " << d3d12typename(p) << "\n");
+    p = (T *)d3d12_malloc(sizeof(T));
+#ifdef DEBUG_RUNTIME
+    *p = zero_struct<T>();
+#endif
     return p;
 }
 
@@ -276,10 +309,15 @@ template<typename ID3D12T>
 static const char *d3d12typename(ID3D12T *) {
     return "UNKNOWN";
 }
+
+#ifdef HALIDE_D3D12_TRACE
 #define D3D12TYPENAME(T)                    \
     static const char *d3d12typename(T *) { \
         return #T;                          \
     }
+#else
+#define D3D12TYPENAME(T)
+#endif
 // d3d12.h
 D3D12TYPENAME(ID3D12Device)
 D3D12TYPENAME(ID3D12Debug)
@@ -641,6 +679,12 @@ struct d3d12_profiler {
     UINT max_queries;
 };
 
+D3D12TYPENAME(d3d12_buffer)
+D3D12TYPENAME(d3d12_profiler)
+D3D12TYPENAME(d3d12_command_list)
+D3D12TYPENAME(d3d12_binder)
+D3D12TYPENAME(d3d12_function)
+
 static size_t number_of_elements(void *user_context, const halide_buffer_t *buffer) {
     // halide_buffer_t::number_of_elements() does not necessarily map to D3D12
     // Buffer View 'NumElements' since the former does not account for "hidden"
@@ -699,7 +743,7 @@ static d3d12_frame* acquire_frame(d3d12_device *device) {
     d3d12_frame &frame = frame_pool[i];
     if (fence_signal < frame.fence_signal) {
         // no frame available: must stall and wait
-        TRACEPRINT("too many in-flight/pending frames: stalling...\n");
+        TRACEPRINT("WARNING: [PERFORMANCE] too many in-flight/pending frames: stalling...\n");
         wait_until_completed(frame.cmd_list);
     }
 
@@ -718,6 +762,7 @@ static d3d12_frame* acquire_frame(d3d12_device *device) {
     }
 
     ++frame_selector;
+
     return &frame;
 }
 
@@ -1031,7 +1076,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
         // (see: ID3D12Device::CheckFeatureSupport)
         Release_ID3D12Object(dxgiAdapter);
         dxgiAdapter = adapter;
-        break;  // <- for now, just pick the first (non-software) adapter
+        //break;  // <- for now, just pick the first (non-software) adapter
     }
 
     if (dxgiAdapter == NULL) {
@@ -1735,6 +1780,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
 
 static d3d12_library *new_library_with_source(d3d12_device *device, const char *source, size_t source_len) {
     TRACELOG;
+
     // Unlike Metal, Direct3D 12 does not have the concept of a "shader library"
     // We can emulate the library functionality by caching the source code until
     // the entry point is known since D3DCompile() requires the entry point name
@@ -1747,6 +1793,7 @@ static d3d12_library *new_library_with_source(d3d12_device *device, const char *
         library->source[i] = source[i];
     }
     library->source[source_len] = '\0';
+
     return library;
 }
 
@@ -1762,30 +1809,15 @@ static void dump_shader(const char *source, ID3DBlob *compiler_msgs = NULL) {
         << source << "\n";
 }
 
-static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_library *library, const char *name, size_t name_len,
-                                              int shared_mem_bytes, int threadsX, int threadsY, int threadsZ) {
+static d3d12_function* d3d12_compile_shader(d3d12_device *device, d3d12_library *library, const char *name,
+                                            int shared_mem_bytes, int threadsX, int threadsY, int threadsZ) {
     TRACELOG;
 
     // Round shared memory size up to a non-zero multiple of 16
-    TRACEPRINT("groupshared memory size before modification: " << shared_mem_bytes << "\n");
+    TRACEPRINT("groupshared memory size before modification: " << shared_mem_bytes << " bytes\n");
     shared_mem_bytes = ((shared_mem_bytes > 0 ? shared_mem_bytes : 1) + 0xF) & ~0xF;
-    TRACEPRINT("groupshared memory size: " << shared_mem_bytes << " bytes.\n");
+    TRACEPRINT("groupshared memory size after modification: " << shared_mem_bytes << " bytes.\n");
     TRACEPRINT("numthreads( " << threadsX << ", " << threadsY << ", " << threadsZ << " )\n");
-
-    // consult the compiled function cache in the library first:
-    d3d12_function *function = NULL;
-    Printer<StringStreamPrinter, 256> key(NULL);
-    key << name << "_(" << threadsX << "," << threadsY << "," << threadsZ << ")_[" << shared_mem_bytes << "]";
-    halide_assert(user_context, (key.size() < key.capacity() - 1));  // make sure key fits into the stream
-    int not_found = library->cache.lookup(user_context, (const uint8_t *)key.str(), key.size(), &function);
-    if (!not_found) {
-        halide_assert(user_context, (function != NULL));
-        TRACEPRINT("-- function has been found in the cache!\n");
-        return function;
-    }
-
-    // function has not been cached yet: must compile it
-    halide_assert(user_context, (function == NULL));
 
     const char *source = library->source;
     int source_size = library->source_length;
@@ -1833,7 +1865,7 @@ static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_librar
         Release_ID3D12Object(errorMsgs);
     }
 
-    function = malloct<d3d12_function>();
+    d3d12_function *function = malloct<d3d12_function>();
     function->shaderBlob = shaderBlob;
     function->rootSignature = rootSignature;
     rootSignature->AddRef();
@@ -1846,8 +1878,33 @@ static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_librar
     }
     function->pipeline_state = pipeline_state;
 
-    // cache the compiled function for future use:
-    library->cache.store(user_context, (const uint8_t *)key.str(), key.size(), &function);
+    return function;
+}
+
+static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_library *library, const char *name, size_t name_len,
+                                              int shared_mem_bytes, int threadsX, int threadsY, int threadsZ) {
+    TRACELOG;
+
+    // consult the compiled function cache in the library first:
+    d3d12_function *function = NULL;
+    Printer<StringStreamPrinter, 256> key(NULL);
+    key << name << "_(" << threadsX << "," << threadsY << "," << threadsZ << ")_[" << shared_mem_bytes << "]";
+    halide_assert(user_context, (key.size() < key.capacity() - 1));  // make sure key fits into the stream
+    int not_found = library->cache.lookup(user_context, (const uint8_t *)key.str(), key.size(), &function);
+    if (not_found) {
+        // function has not been cached yet: must compile it
+        halide_assert(user_context, (function == NULL));
+        function = d3d12_compile_shader(device, library, name, shared_mem_bytes, threadsX, threadsY, threadsZ);
+        if (function == NULL) {
+            return NULL;
+        }
+        // cache the compiled function for future use:
+        library->cache.store(user_context, (const uint8_t *)key.str(), key.size(), &function);
+    } else {
+        TRACEPRINT("function has been found in the cache!\n");
+    }
+
+    halide_assert(user_context, (function != NULL));
 
     return function;
 }
@@ -2003,6 +2060,11 @@ static void wait_until_completed(d3d12_compute_command_list *cmdList) {
     wait_until_signaled(cmdList->signal);
 }
 
+static void wait_until_completed(d3d12_frame *frame) {
+    TRACELOG;
+    wait_until_completed(frame->cmd_list);
+}
+
 static void wait_until_idle() {
     TRACELOG;
     uint64_t signal = __atomic_load_n(&queue_last_signal, __ATOMIC_SEQ_CST);
@@ -2156,14 +2218,11 @@ static void d3d12compute_device_sync_internal(d3d12_device *device, d3d12_buffer
         // also require a dedicated copy command queue to submit it... for now just
         // use the main compute queue and issue copies via compute command lists.
         //static const D3D12_COMMAND_LIST_TYPE Type = D3D12_COMMAND_LIST_TYPE_COPY;
-        static const D3D12_COMMAND_LIST_TYPE Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
-        d3d12_command_allocator *sync_command_allocator = new_command_allocator<Type>(device);
-        d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
+        d3d12_frame *frame = acquire_frame(device);
+        d3d12_compute_command_list *blitCmdList = frame->cmd_list;
         synchronize_host_and_device_buffer_contents(blitCmdList, dev_buffer);
-        commit_command_list(blitCmdList);
-        wait_until_completed(blitCmdList);
-        release_object(blitCmdList);
-        release_object(sync_command_allocator);
+        enqueue_frame(frame);
+        wait_until_completed(frame);
     }
 
     if (dev_buffer->xfer != NULL) {
@@ -2234,19 +2293,13 @@ static int d3d12compute_buffer_copy(d3d12_device *device,
     // ReadWrite, ReadOnly and WriteOnly are shader usage hints, not copy hints
     // (there's no need to worry about them during device-to-device transfers)
 
-    // TODO(marcos): this command list allocation is overkill: needs refactoring
-
-    static const D3D12_COMMAND_LIST_TYPE Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
-    d3d12_command_allocator *sync_command_allocator = new_command_allocator<Type>(device);
-    d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
-
+    d3d12_frame *frame = acquire_frame(device);
+    d3d12_compute_command_list *blitCmdList = frame->cmd_list;
     buffer_copy_command(blitCmdList, src, dst, src_byte_offset, dst_byte_offset, num_bytes);
+    enqueue_frame(frame);
 
-    commit_command_list(blitCmdList);
-    wait_until_completed(blitCmdList);
-
-    release_object(blitCmdList);
-    release_object(sync_command_allocator);
+    // TODO(marcos): we probably don't need to wait on device-device transfers...
+    //wait_until_completed(frame);
 
     return 0;
 }
@@ -2316,6 +2369,7 @@ struct module_state {
     d3d12_library *library;
     module_state *next;
 };
+D3D12TYPENAME(module_state)
 WEAK module_state *state_list = NULL;
 
 }  // namespace D3D12Compute
@@ -2327,6 +2381,73 @@ using namespace Halide::Runtime::Internal;
 using namespace Halide::Runtime::Internal::D3D12Compute;
 
 extern "C" {
+
+static int d3d12_create_context(void *user_context) {
+    TRACELOG;
+
+    int status = halide_error_code_success;
+
+    halide_assert(user_context, (device == NULL));
+    device = D3D12CreateSystemDefaultDevice(user_context);
+    if (device == NULL) {
+        status = halide_error_code_generic_error;
+    }
+
+    if (status == halide_error_code_success) {
+        halide_assert(user_context, (rootSignature == NULL));
+        rootSignature = D3D12CreateMasterRootSignature((*device));
+        if (rootSignature == NULL) {
+            status = halide_error_code_generic_error;
+        }
+    }
+
+    if (status == halide_error_code_success) {
+        halide_assert(user_context, (queue == NULL));
+        queue = new_command_queue(device);
+        if (queue == NULL) {
+            status = halide_error_code_generic_error;
+        }
+    }
+
+    if (status == halide_error_code_success) {
+        halide_assert(cmd_allocator_main, (cmd_allocator_main == NULL));
+        cmd_allocator_main = new_command_allocator<HALIDE_D3D12_COMMAND_LIST_TYPE>(device);
+        if (cmd_allocator_main == NULL) {
+            status = halide_error_code_generic_error;
+        }
+    }
+
+    if (status == halide_error_code_success) {
+        // NOTE(marcos): a small amount of hard-coded staging buffer storage is
+        // sufficient to get started as suballocations will grow them as needed
+        halide_assert(cmd_allocator_main, (upload == NULL));
+        halide_assert(cmd_allocator_main, (readback == NULL));
+        size_t heap_size = 4 * 1024 * 1024;
+        upload = new_upload_buffer(device, heap_size);
+        readback = new_readback_buffer(device, heap_size);
+    }
+
+    if (status != halide_error_code_success) {
+        if (cmd_allocator_main) {
+            release_object(cmd_allocator_main);
+            cmd_allocator_main = NULL;
+        }
+        if (queue) {
+            release_object(queue);
+            queue = NULL;
+        }
+        if (rootSignature) {
+            Release_ID3D12Object(rootSignature);
+            rootSignature = NULL;
+        }
+        if (device) {
+            release_object(device);
+            device = NULL;
+        }
+    }
+
+    return status;
+}
 
 // The default implementation of halide_d3d12compute_acquire_context uses the global
 // pointers above, and serializes access with a spin lock.
@@ -2341,54 +2462,20 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
                                              halide_d3d12compute_command_queue **queue_ret, bool create) {
     TRACELOG;
 
+#ifdef HALIDE_D3D12_TRACE_TIME
+    halide_start_clock(user_context);
+#endif
+
     halide_assert(user_context, &thread_lock != NULL);
     while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {
     }
 
-#ifdef DEBUG_RUNTIME
-    halide_start_clock(user_context);
-#endif
-
     if (create && (device == NULL)) {
-        device = D3D12CreateSystemDefaultDevice(user_context);
-        if (device == NULL) {
-            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
-            return halide_error_code_generic_error;
+        int status = d3d12_create_context(user_context);
+        if (status != halide_error_code_success) {
+            halide_d3d12compute_release_context(user_context);
+            return status;
         }
-
-        halide_assert(user_context, (rootSignature == NULL));
-        rootSignature = D3D12CreateMasterRootSignature((*device));
-        if (rootSignature == NULL) {
-            release_object(device);
-            device = NULL;
-            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
-            return halide_error_code_generic_error;
-        }
-
-        halide_assert(user_context, (queue == NULL));
-        queue = new_command_queue(device);
-        if (queue == NULL) {
-            Release_ID3D12Object(rootSignature);
-            release_object(device);
-            device = NULL;
-            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
-            return halide_error_code_generic_error;
-        }
-
-        cmd_allocator_main = new_command_allocator<HALIDE_D3D12_COMMAND_LIST_TYPE>(device);
-        if (cmd_allocator_main == NULL) {
-            release_object(queue);
-            Release_ID3D12Object(rootSignature);
-            release_object(device);
-            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
-            return halide_error_code_generic_error;
-        }
-
-        // NOTE(marcos): a small amount of hard-coded staging buffer storage is
-        // sufficient to get started as suballocations will grow them as needed
-        size_t heap_size = 4 * 1024 * 1024;
-        upload = new_upload_buffer(device, heap_size);
-        readback = new_readback_buffer(device, heap_size);
     }
 
     // If the device has already been initialized,
@@ -2397,6 +2484,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
 
     *device_ret = device;
     *queue_ret = queue;
+
     return 0;
 }
 
@@ -2452,23 +2540,18 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 
     TRACEPRINT("(user_context: " << user_context << ", buf: " << buf << ")\n");
 
-    size_t size = buf->size_in_bytes();
-    halide_assert(user_context, size != 0);
     if (buf->device) {
         // This buffer already has a device allocation
         return 0;
     }
 
+    size_t size = buf->size_in_bytes();
+    halide_assert(user_context, size != 0);
+
     // Check all strides positive
     for (int i = 0; i < buf->dimensions; i++) {
         halide_assert(user_context, buf->dim[i].stride >= 0);
     }
-
-    TRACEPRINT("allocating " << *buf << "\n");
-
-#ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-#endif
 
     D3D12ContextHolder d3d12_context(user_context, true);
     if (d3d12_context.error != 0) {
@@ -2486,11 +2569,6 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
         return halide_error_code_device_wrap_native_failed;
     }
 
-#ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT("Time: " << (t_after - t_before) / 1.0e6 << " ms\n");
-#endif
-
     return 0;
 }
 
@@ -2503,16 +2581,7 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *bu
         return 0;
     }
 
-#ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-#endif
-
     halide_d3d12compute_detach_buffer(user_context, buf);
-
-#ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT("Time: " << (t_after - t_before) / 1.0e6 << " ms\n");
-#endif
 
     return 0;
 }
@@ -2537,31 +2606,13 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
         return d3d12_context.error;
     }
 
-#ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-#endif
-
     if (state->library == NULL) {
-#ifdef DEBUG_RUNTIME
-        uint64_t t_before_compile = halide_current_time_ns(user_context);
-#endif
-
         state->library = new_library_with_source(d3d12_context.device, source, source_size);
         if (state->library == 0) {
             d3d12_halt("D3D12Compute: new_library_with_source failed.");
             return halide_error_code_out_of_memory;
         }
-
-#ifdef DEBUG_RUNTIME
-        uint64_t t_after_compile = halide_current_time_ns(user_context);
-        TRACEPRINT("Time for halide_d3d12compute_initialize_kernels compilation: " << (t_after_compile - t_before_compile) / 1.0e6 << " ms\n");
-#endif
     }
-
-#ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT("Time for halide_d3d12compute_initialize_kernels: " << (t_after - t_before) / 1.0e6 << " ms\n");
-#endif
 
     return 0;
 }
@@ -2592,21 +2643,12 @@ static void halide_d3d12compute_device_sync_internal(d3d12_device *device, struc
 WEAK int halide_d3d12compute_device_sync(void *user_context, struct halide_buffer_t *buffer) {
     TRACELOG;
 
-#ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-#endif
-
     D3D12ContextHolder d3d12_context(user_context, true);
     if (d3d12_context.error != 0) {
         return d3d12_context.error;
     }
 
     halide_d3d12compute_device_sync_internal(d3d12_context.device, buffer);
-
-#ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT("Time for halide_d3d12compute_device_sync: " << (t_after - t_before) / 1.0e6 << " ms\n");
-#endif
 
     return 0;
 }
@@ -2708,10 +2750,6 @@ static int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
 WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t *buffer) {
     TRACELOG;
 
-#ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-#endif
-
     halide_assert(user_context, buffer);
     halide_assert(user_context, buffer->host && buffer->device);
 
@@ -2749,20 +2787,11 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
     d3d12compute_buffer_copy(d3d12_context.device, staging, dev_buffer,
                              staging_byte_offset, dev_byte_offset, total_size);
 
-#ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT("Time: " << (t_after - t_before) / 1.0e6 << " ms\n");
-#endif
-
     return 0;
 }
 
 WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *buffer) {
     TRACELOG;
-
-#ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-#endif
 
     halide_assert(user_context, buffer);
     halide_assert(user_context, buffer->host && buffer->device);
@@ -2794,11 +2823,6 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
     c.dst = reinterpret_cast<uint64_t>(buffer->host) + 0;
     copy_memory(c, user_context);
 
-#ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT("Time: " << (t_after - t_before) / 1.0e6 << " ms\n");
-#endif
-
     return 0;
 }
 
@@ -2816,10 +2840,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
                                  int num_coords_dim0,
                                  int num_coords_dim1) {
     TRACELOG;
-
-#ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-#endif
 
     D3D12ContextHolder d3d12_context(user_context, true);
     if (d3d12_context.error != 0) {
@@ -3003,17 +3023,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
     release_object(profiler);
 #endif
 
-    //release_object(cmdList);
-    //release_object(command_allocator);
-    //release_object(&args_buffer);
-    //release_object(pipeline_state);
-    //release_object(binder);
-
-#ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT("Time for halide_d3d12compute_device_run: " << (t_after - t_before) / 1.0e6 << " ms\n");
-#endif
-
     return 0;
 }
 
@@ -3084,10 +3093,6 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
     {
         TRACEPRINT(
             "(user_context: " << user_context << ", src: " << src << ", dst: " << dst << ")\n");
-
-#ifdef DEBUG_RUNTIME
-        uint64_t t_before = halide_current_time_ns(user_context);
-#endif
 
         // Device only case
         if (!from_host && !to_host) {
@@ -3184,11 +3189,6 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                 }
             }
         }
-
-#ifdef DEBUG_RUNTIME
-        uint64_t t_after = halide_current_time_ns(user_context);
-        TRACEPRINT("    Time: " << (t_after - t_before) / 1.0e6 << " ms\n");
-#endif
     }
 
     return err;
@@ -3316,7 +3316,7 @@ WEAK int halide_d3d12compute_detach_buffer(void *user_context, struct halide_buf
 
     //uint64_t sig = queue_fence->GetCompletedValue();
     //if (sig <= dbuffer->signal)
-    //    TRACEPRINT("MEGA ERROR THAT SHOULD NOT HAPPEN");
+    //    TRACEPRINT("MEGA ERROR THAT SHOULD NOT HAPPEN\n");
     wait_until_signaled(dbuffer->signal);
 
     // it is safe to simply call release_d3d12_object() here:
