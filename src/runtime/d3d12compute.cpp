@@ -176,10 +176,10 @@ struct trace : public Printer<BasicPrinter, sizeof(trace_buf)> {
 #ifdef HALIDE_D3D12_TRACE_TIME
 #define TRACETIME_CHECKPOINT() halide_current_time_ns(user_context)
 //#define TRACETIME_REPORT(t0,t1) TRACEPRINT("Time: " << (t1 - t0) / 1.0e6 << " ms\n")
-#define TRACETIME_REPORT(t0,t1) TRACEPRINT("Time [" << __FUNCTION__ << "]: " << (t1 - t0) / 1000 << " us\n")
+#define TRACETIME_REPORT(t0,t1,...) TRACEPRINT(__VA_ARGS__ << (t1 - t0) / 1000 << " us\n")
 #else
 #define TRACETIME_CHECKPOINT() 0
-#define TRACETIME_REPORT(t0,t1)
+#define TRACETIME_REPORT(t0,t1,...)
 #endif//HALIDE_D3D12_TRACE_TIME
 
 struct TraceScope {
@@ -200,7 +200,7 @@ struct TraceScope {
         #ifdef HALIDE_D3D12_TRACE_TIME
         uint64_t t1 = TRACETIME_CHECKPOINT();
         if ((t1 - t0) >= (HALIDE_D3D12_TRACE_TIME_THRESHOLD * 1000)) { // 100 us
-            TRACEPRINT("Time [" << _func << "]: " << (t1 - t0) / 1000 << " us\n")
+            TRACETIME_REPORT(t0, t1, "Time [" << _func << "]: ");
         }
         #endif
         ScopedSpinLock lock(&trace_lock);
@@ -208,7 +208,8 @@ struct TraceScope {
     }
 };
 
-#define TRACELOG TraceScope trace_scope__ (__FUNCTION__);
+#define TRACE_SCOPE(name) TraceScope trace_scope__ (name)
+#define TRACELOG TRACE_SCOPE(__FUNCTION__)
 
 #else
 typedef SinkPrinter trace;
@@ -1045,6 +1046,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
     }
 
     halide_assert(user_context, (dxgiAdapter == NULL));
+    size_t vram_max = 0;
     for (int i = 0;; ++i) {
         IDXGIAdapter1 *adapter = NULL;
         HRESULT result = dxgiFactory->EnumAdapters1(i, &adapter);
@@ -1064,9 +1066,9 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
             Description[i] = desc.Description[i];
         }
         Description[127] = '\0';
-        TRACEPRINT("-- Adapter #" << i << ": " << Description << "\n");
+        TRACEPRINT("Adapter #" << i << ": " << Description << "\n");
         if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
-            TRACEPRINT("-- this is a software adapter (skipping)\n");
+            TRACEPRINT("(this is a software adapter; skipping...)\n");
             Release_ID3D12Object(adapter);
             continue;
         }
@@ -1074,14 +1076,32 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
         // unfortunately, most of the adapter capabilities can only be queried
         // after a logical device for it is created...
         // (see: ID3D12Device::CheckFeatureSupport)
-        Release_ID3D12Object(dxgiAdapter);
-        dxgiAdapter = adapter;
-        //break;  // <- for now, just pick the first (non-software) adapter
+        // for now, just pick the one with the most amount of dedicated VRAM
+        if (desc.DedicatedVideoMemory > vram_max) {
+            TRACEPRINT("(this is the best device so far...)\n");
+            vram_max = desc.DedicatedVideoMemory;
+            Release_ID3D12Object(dxgiAdapter);
+            dxgiAdapter = adapter;
+        }
     }
 
     if (dxgiAdapter == NULL) {
         d3d12_halt("Unable to find a suitable D3D12 Adapter.");
         return NULL;
+    }
+
+    {
+        DXGI_ADAPTER_DESC1 desc = {};
+        if (FAILED(dxgiAdapter->GetDesc1(&desc))) {
+            d3d12_halt("Unable to retrieve information (DXGI_ADAPTER_DESC1) about the selectd adapter.");
+            return NULL;
+        }
+        char Description[128];
+        for (int i = 0; i < 128; ++i) {
+            Description[i] = desc.Description[i];
+        }
+        Description[127] = '\0';
+        TRACEPRINT("Device selected: " << Description << "\n");
     }
 
 #if 0
@@ -2008,6 +2028,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
 }
 
 static uint64_t queue_insert_checkpoint() {
+    TRACELOG;
     uint64_t signal = __atomic_add_fetch(&queue_last_signal, 1, __ATOMIC_SEQ_CST);  // ++queue_last_signal
     (*queue)->Signal(queue_fence, signal);
     return signal;
@@ -2866,106 +2887,111 @@ WEAK int halide_d3d12compute_run(void *user_context,
     d3d12_frame *frame = acquire_frame(device);
     d3d12_compute_command_list *cmdList = frame->cmd_list;
     d3d12_binder *binder = frame->desc_binder;
-    d3d12_buffer &args_buffer = frame->args_buffer;
+    d3d12_buffer &uniform_buffer = frame->args_buffer;
 
     set_compute_pipeline_state(cmdList, pipeline_state, function, binder);
 
     // introspect kernel arguments and extract useful type and size information:
     size_t num_kernel_args = 0;
-    for (size_t i = 0; arg_sizes[i] != 0; i++) {
-        ++num_kernel_args;
-    }
-    d3d12_buffer **buffer_args = (d3d12_buffer **)__builtin_alloca(num_kernel_args*sizeof(d3d12_buffer *));
+    d3d12_buffer **buffer_args = NULL;
     size_t num_buffer_args = 0;
     size_t total_uniform_args_size = 0;
-    for (size_t i = 0; arg_sizes[i] != 0; i++) {
-        if (arg_is_buffer[i]) {
-            halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            halide_buffer_t *hbuffer = (halide_buffer_t *)args[i];
-            d3d12_buffer *buffer = peel_buffer(hbuffer);
-            buffer_args[num_buffer_args] = buffer;
-            ++num_buffer_args;
-        } else {
-            // Here, it's safe to mimic the Metal back-end behavior which enforces
-            // natural alignment for all types in structures: each arg_sizes[i] has
-            // to be a power-of-two and have the subsequent field start on the next
-            // multiple of that power-of-two.
-            halide_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
-            // We can ignore vector arguments since they never show up in constant
-            // blocks. Having to worry about scalar parameters only is convenient
-            // since in HLSL SM 5.1 all scalar types are 32bit:
-            halide_assert(user_context, arg_sizes[i] <= 4);
-            size_t argsize = 4;  // force argument to 32bit
-            total_uniform_args_size = (total_uniform_args_size + argsize - 1) & ~(argsize - 1);
-            total_uniform_args_size += argsize;
+    {
+        TRACE_SCOPE("kernel args introspection");
+        for (size_t i = 0; arg_sizes[i] != 0; i++) {
+            ++num_kernel_args;
+        }
+        buffer_args = (d3d12_buffer **)__builtin_alloca(num_kernel_args*sizeof(d3d12_buffer *));
+        for (size_t i = 0; arg_sizes[i] != 0; i++) {
+            if (arg_is_buffer[i]) {
+                halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
+                halide_buffer_t *hbuffer = (halide_buffer_t *)args[i];
+                d3d12_buffer *buffer = peel_buffer(hbuffer);
+                buffer_args[num_buffer_args] = buffer;
+                ++num_buffer_args;
+            } else {
+                // Here, it's safe to mimic the Metal back-end behavior which enforces
+                // natural alignment for all types in structures: each arg_sizes[i] has
+                // to be a power-of-two and have the subsequent field start on the next
+                // multiple of that power-of-two.
+                halide_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
+                // We can ignore vector arguments since they never show up in constant
+                // blocks. Having to worry about scalar parameters only is convenient
+                // since in HLSL SM 5.1 all scalar types are 32bit:
+                halide_assert(user_context, arg_sizes[i] <= 4);
+                size_t argsize = 4;  // force argument to 32bit
+                total_uniform_args_size = (total_uniform_args_size + argsize - 1) & ~(argsize - 1);
+                total_uniform_args_size += argsize;
+            }
         }
     }
 
     // pack all non-buffer arguments into a single "constant" allocation block:
-    bool has_uniform_arguments = (total_uniform_args_size > 0);
-    if (has_uniform_arguments) {
-        // Direct3D 12 expects constant buffers to have sizes multiple of 256:
-        size_t constant_buffer_size = (total_uniform_args_size + 255) & ~255;
-        if (constant_buffer_size > args_buffer.sizeInBytes) {
-            release_object(&args_buffer);
-            args_buffer = new_constant_buffer(d3d12_context.device, constant_buffer_size);
-            if (!args_buffer) {
-                d3d12_halt("D3D12Compute: Could not allocate arguments buffer.");
-                release_object(function);
-                return halide_error_code_device_run_failed;
+    bool has_uniform_arguments = false;
+    {
+        has_uniform_arguments = (total_uniform_args_size > 0);
+        if (has_uniform_arguments) {
+            TRACE_SCOPE("uniform buffer packing");
+            // Direct3D 12 expects constant buffers to have sizes multiple of 256:
+            size_t constant_buffer_size = (total_uniform_args_size + 255) & ~255;
+            if (constant_buffer_size > uniform_buffer.sizeInBytes) {
+                release_object(&uniform_buffer);
+                uniform_buffer = new_constant_buffer(device, constant_buffer_size);
+                if (!uniform_buffer) {
+                    release_object(function);
+                    d3d12_halt("D3D12Compute: Could not allocate arguments buffer.");
+                    return halide_error_code_out_of_memory;
+                }
             }
+            uint8_t *args_ptr = (uint8_t *)buffer_contents(&uniform_buffer);
+            size_t offset = 0;
+            for (size_t i = 0; arg_sizes[i] != 0; i++) {
+                if (arg_is_buffer[i]) {
+                    continue;
+                }
+                halide_assert(user_context, arg_sizes[i] <= 4);
+                union {
+                    void *p;
+                    float *f;
+                    uint8_t *b;
+                    uint16_t *s;
+                    uint32_t *i;
+                } arg;
+                arg.p = args[i];
+                size_t argsize = 4;
+                uint32_t val = 0;
+                switch (arg_sizes[i]) {
+                case 1:
+                    val = *arg.b;
+                    break;
+                case 2:
+                    val = *arg.s;
+                    break;
+                case 4:
+                    val = *arg.i;
+                    break;
+                default:
+                    halide_assert(user_context, false);
+                    break;
+                }
+                memcpy(&args_ptr[offset], &val, argsize);
+                offset = (offset + argsize - 1) & ~(argsize - 1);
+                offset += argsize;
+                TRACEPRINT("args[" << i << "] is " << arg_sizes[i] << " bytes"
+                           " : float(" << *arg.f << ")"
+                           " or uint32(" << *arg.i << ")"
+                           " or int32(" << (int32_t &)*arg.i << ")"
+                           "\n");
+            }
+            halide_assert(user_context, offset == total_uniform_args_size);
         }
-        uint8_t *args_ptr = (uint8_t *)buffer_contents(&args_buffer);
-        size_t offset = 0;
-        for (size_t i = 0; arg_sizes[i] != 0; i++) {
-            if (arg_is_buffer[i]) {
-                continue;
-            }
-            halide_assert(user_context, arg_sizes[i] <= 4);
-            union {
-                void *p;
-                float *f;
-                uint8_t *b;
-                uint16_t *s;
-                uint32_t *i;
-            } arg;
-            arg.p = args[i];
-            size_t argsize = 4;
-            uint32_t val = 0;
-            switch (arg_sizes[i]) {
-            case 1:
-                val = *arg.b;
-                break;
-            case 2:
-                val = *arg.s;
-                break;
-            case 4:
-                val = *arg.i;
-                break;
-            default:
-                halide_assert(user_context, false);
-                break;
-            }
-            memcpy(&args_ptr[offset], &val, argsize);
-            offset = (offset + argsize - 1) & ~(argsize - 1);
-            offset += argsize;
-            TRACEPRINT(
-                ">>> arg " << (int)i << " has size " << (int)arg_sizes[i] << " : "
-                                                                             "float("
-                           << *arg.f << ") or "
-                                        "uint32("
-                           << *arg.i << ") or "
-                                        "int32("
-                           << (int32_t &)*arg.i << ")\n");
-        }
-        halide_assert(user_context, offset == total_uniform_args_size);
     }
 
     // setup/bind the argument buffer:
     if (has_uniform_arguments) {
         // always bind argument buffer at constant buffer binding 0
         int32_t cb_index = 0;  // a.k.a. register(c0)
-        set_input_buffer(binder, &args_buffer, cb_index);
+        set_input_buffer(binder, &uniform_buffer, cb_index);
     }
 
     // setup/bind actual buffers:
@@ -3004,7 +3030,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     // broadcast fence signal checkpoint to the buffers being used
     uint64_t checkpoint = frame->fence_signal;
-    args_buffer.signal = checkpoint;
+    uniform_buffer.signal = checkpoint;
     for (size_t i = 0; i < num_buffer_args; i++) {
         d3d12_buffer *buffer = buffer_args[i];
         buffer->signal = checkpoint;
