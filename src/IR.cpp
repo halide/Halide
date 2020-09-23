@@ -3,6 +3,7 @@
 #include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
+#include <numeric>
 #include <utility>
 
 namespace Halide {
@@ -251,13 +252,11 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
 Expr Ramp::make(Expr base, Expr stride, int lanes) {
     internal_assert(base.defined()) << "Ramp of undefined\n";
     internal_assert(stride.defined()) << "Ramp of undefined\n";
-    internal_assert(base.type().is_scalar()) << "Ramp with vector base\n";
-    internal_assert(stride.type().is_scalar()) << "Ramp with vector stride\n";
     internal_assert(lanes > 1) << "Ramp of lanes <= 1\n";
     internal_assert(stride.type() == base.type()) << "Ramp of mismatched types\n";
 
     Ramp *node = new Ramp;
-    node->type = base.type().with_lanes(lanes);
+    node->type = base.type().with_lanes(lanes * base.type().lanes());
     node->base = std::move(base);
     node->stride = std::move(stride);
     node->lanes = lanes;
@@ -266,11 +265,10 @@ Expr Ramp::make(Expr base, Expr stride, int lanes) {
 
 Expr Broadcast::make(Expr value, int lanes) {
     internal_assert(value.defined()) << "Broadcast of undefined\n";
-    internal_assert(value.type().is_scalar()) << "Broadcast of vector\n";
     internal_assert(lanes != 1) << "Broadcast of lanes 1\n";
 
     Broadcast *node = new Broadcast;
-    node->type = value.type().with_lanes(lanes);
+    node->type = value.type().with_lanes(lanes * value.type().lanes());
     node->value = std::move(value);
     node->lanes = lanes;
     return node;
@@ -764,6 +762,16 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
     }
 
     return make(vectors, indices);
+}
+
+Expr Shuffle::make_broadcast(Expr vector, int lanes) {
+    std::vector<int> indices(lanes * vector.type().lanes());
+    for (int ix = 0; ix < lanes; ix++) {
+        std::iota(indices.begin() + ix * vector.type().lanes(),
+                  indices.begin() + (ix + 1) * vector.type().lanes(), 0);
+    }
+
+    return make({std::move(vector)}, indices);
 }
 
 Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {

@@ -56,8 +56,8 @@ cmake -G "Visual Studio 16 2019" -Thost=x64 -A "%halide_arch%" ^
       -DWITH_PYTHON_BINDINGS=NO ^
       "-DCMAKE_INSTALL_BINDIR=bin/$<CONFIG>" ^
       "-DCMAKE_INSTALL_LIBDIR=lib/$<CONFIG>" ^
-      "-DHALIDE_INSTALL_CMAKEDIR=lib" ^
-      "-DHALIDE_INSTALL_DATADIR=share/Halide" ^
+      "-DCMAKE_INSTALL_DATADIR=share/Halide" ^
+      "-DHALIDE_INSTALL_CMAKEDIR=lib/cmake/Halide" ^
       -S "%halide_source%" ^
       -B "%halide_build_root%"
 if ERRORLEVEL 1 goto error
