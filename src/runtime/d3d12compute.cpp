@@ -2890,61 +2890,67 @@ WEAK int halide_d3d12compute_run(void *user_context,
     halide_assert(user_context, state_ptr);
     module_state *state = (module_state *)state_ptr;
 
-    d3d12_function *function = new_function_with_name(device, state->library, entry_name, strlen(entry_name),
-                                                      shared_mem_bytes, threadsX, threadsY, threadsZ);
-    halide_assert(user_context, function);
-
-    // prepare buffer resource binding:
-    d3d12_compute_pipeline_state *pipeline_state = function->pipeline_state;
-
     d3d12_frame *frame = acquire_frame(device);
     d3d12_compute_command_list *cmdList = frame->cmd_list;
     d3d12_binder *binder = frame->desc_binder;
     d3d12_buffer &uniform_buffer = frame->args_buffer;
 
-    set_compute_pipeline_state(cmdList, pipeline_state, function, binder);
-
-    // introspect kernel arguments and extract useful type and size information:
-    size_t num_kernel_args = 0;
-    d3d12_buffer **buffer_args = NULL;
-    size_t num_buffer_args = 0;
-    size_t total_uniform_args_size = 0;
+    // kernel code setup:
+    d3d12_function *function = NULL;
+    d3d12_compute_pipeline_state *pipeline_state = NULL;
     {
-        TRACE_SCOPE("kernel args introspection");
-        for (size_t i = 0; arg_sizes[i] != 0; i++) {
-            ++num_kernel_args;
-        }
-        buffer_args = (d3d12_buffer **)__builtin_alloca(num_kernel_args * sizeof(d3d12_buffer *));
-        for (size_t i = 0; arg_sizes[i] != 0; i++) {
-            if (arg_is_buffer[i]) {
-                halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-                halide_buffer_t *hbuffer = (halide_buffer_t *)args[i];
-                d3d12_buffer *buffer = peel_buffer(hbuffer);
-                buffer_args[num_buffer_args] = buffer;
-                ++num_buffer_args;
-            } else {
-                // Here, it's safe to mimic the Metal back-end behavior which enforces
-                // natural alignment for all types in structures: each arg_sizes[i] has
-                // to be a power-of-two and have the subsequent field start on the next
-                // multiple of that power-of-two.
-                halide_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
-                // We can ignore vector arguments since they never show up in constant
-                // blocks. Having to worry about scalar parameters only is convenient
-                // since in HLSL SM 5.1 all scalar types are 32bit:
-                halide_assert(user_context, arg_sizes[i] <= 4);
-                size_t argsize = 4;  // force argument to 32bit
-                total_uniform_args_size = (total_uniform_args_size + argsize - 1) & ~(argsize - 1);
-                total_uniform_args_size += argsize;
-            }
-        }
+        TRACE_SCOPE("kernel shader selection");
+        function = new_function_with_name(device, state->library, entry_name, strlen(entry_name),
+                                          shared_mem_bytes, threadsX, threadsY, threadsZ);
+        halide_assert(user_context, function);
+        pipeline_state = function->pipeline_state;
+        set_compute_pipeline_state(cmdList, pipeline_state, function, binder);
     }
 
-    // pack all non-buffer arguments into a single "constant" allocation block:
-    bool has_uniform_arguments = false;
+    // kernel argument(s) setup:
+    d3d12_buffer **buffer_args = NULL;
+    size_t num_buffer_args = 0;
     {
-        has_uniform_arguments = (total_uniform_args_size > 0);
+        TRACE_SCOPE("kernel argument setup");
+
+        size_t total_uniform_args_size = 0;
+        {
+            TRACE_SCOPE("kernel args introspection");
+
+            size_t num_kernel_args = 0;
+            for (size_t i = 0; arg_sizes[i] != 0; i++) {
+                ++num_kernel_args;
+            }
+
+            buffer_args = (d3d12_buffer **)__builtin_alloca(num_kernel_args * sizeof(d3d12_buffer *));
+            for (size_t i = 0; arg_sizes[i] != 0; i++) {
+                if (arg_is_buffer[i]) {
+                    halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
+                    halide_buffer_t *hbuffer = (halide_buffer_t *)args[i];
+                    d3d12_buffer *buffer = peel_buffer(hbuffer);
+                    buffer_args[num_buffer_args] = buffer;
+                    ++num_buffer_args;
+                } else {
+                    // Here, it's safe to mimic the Metal back-end behavior which enforces
+                    // natural alignment for all types in structures: each arg_sizes[i] has
+                    // to be a power-of-two and have the subsequent field start on the next
+                    // multiple of that power-of-two.
+                    halide_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
+                    // We can ignore vector arguments since they never show up in constant
+                    // blocks. Having to worry about scalar parameters only is convenient
+                    // since in HLSL SM 5.1 all scalar types are 32bit:
+                    halide_assert(user_context, arg_sizes[i] <= 4);
+                    size_t argsize = 4;  // force argument to 32bit
+                    total_uniform_args_size = (total_uniform_args_size + argsize - 1) & ~(argsize - 1);
+                    total_uniform_args_size += argsize;
+                }
+            }
+        }
+
+        // pack all non-buffer arguments into a single "constant" allocation block:
+        bool has_uniform_arguments = (total_uniform_args_size > 0);
         if (has_uniform_arguments) {
-            TRACE_SCOPE("uniform buffer packing");
+            TRACE_SCOPE("argument buffer packing");
             // Direct3D 12 expects constant buffers to have sizes multiple of 256:
             size_t constant_buffer_size = (total_uniform_args_size + 255) & ~255;
             if (constant_buffer_size > uniform_buffer.sizeInBytes) {
@@ -2991,27 +2997,31 @@ WEAK int halide_d3d12compute_run(void *user_context,
                 offset = (offset + argsize - 1) & ~(argsize - 1);
                 offset += argsize;
                 TRACEPRINT("args[" << i << "] is " << arg_sizes[i] << " bytes"
-                                   << " : float(" << *arg.f << ")"
-                                   << " or uint32(" << *arg.i << ")"
-                                   << " or int32(" << (int32_t &)*arg.i << ")"
-                                   << "\n");
+                                << " : float(" << *arg.f << ")"
+                                << " or uint32(" << *arg.i << ")"
+                                << " or int32(" << (int32_t &)*arg.i << ")"
+                                << "\n");
             }
             halide_assert(user_context, offset == total_uniform_args_size);
         }
-    }
 
-    // setup/bind the argument buffer:
-    if (has_uniform_arguments) {
-        // always bind argument buffer at constant buffer binding 0
-        int32_t cb_index = 0;  // a.k.a. register(c0)
-        set_input_buffer(binder, &uniform_buffer, cb_index);
-    }
+        {
+            TRACE_SCOPE("descriptor binding");
 
-    // setup/bind actual buffers:
-    for (size_t i = 0; i < num_buffer_args; i++) {
-        d3d12_buffer *buffer = buffer_args[i];
-        int32_t uav_index = (int32_t)i;
-        set_input_buffer(binder, buffer, uav_index);  // register(u#)
+            // setup/bind the argument buffer:
+            if (has_uniform_arguments) {
+                // always bind argument buffer at constant buffer binding 0
+                int32_t cb_index = 0;  // a.k.a. register(c0)
+                set_input_buffer(binder, &uniform_buffer, cb_index);
+            }
+
+            // setup/bind actual buffers:
+            for (size_t i = 0; i < num_buffer_args; i++) {
+                d3d12_buffer *buffer = buffer_args[i];
+                int32_t uav_index = (int32_t)i;
+                set_input_buffer(binder, buffer, uav_index);  // register(u#)
+            }
+        }
     }
 
 #if HALIDE_D3D12_PROFILING
@@ -3030,13 +3040,16 @@ WEAK int halide_d3d12compute_run(void *user_context,
     end_profiling(cmdList, profiler);
 #endif
 
-    // TODO(marcos): avoid placing UAV barriers all the time after a dispatch...
-    // in fact, only buffers written to by the dispatch will need barriers, and
-    // only when later bound for read. For now, Halide does not provide enough
-    // context for chosing the right time to place transition barriers.
-    for (size_t i = 0; i < num_buffer_args; i++) {
-        d3d12_buffer *buffer = buffer_args[i];
-        compute_barrier(cmdList, buffer);
+    {
+        TRACE_SCOPE("pipeline barriers");
+        // TODO(marcos): avoid placing UAV barriers all the time after a dispatch...
+        // in fact, only buffers written to by the dispatch will need barriers, and
+        // only when later bound for read. For now, Halide does not provide enough
+        // context for chosing the right time to place transition barriers.
+        for (size_t i = 0; i < num_buffer_args; i++) {
+            d3d12_buffer *buffer = buffer_args[i];
+            compute_barrier(cmdList, buffer);
+        }
     }
 
     enqueue_frame(frame);
