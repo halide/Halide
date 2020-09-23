@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Halide VERSION 10.0.0)
+project(Halide VERSION 11.0.0)
 
 enable_testing()
 
