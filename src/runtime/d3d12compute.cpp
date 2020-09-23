@@ -71,8 +71,7 @@ WINBASEAPI
 BOOL
     WINAPI
     CloseHandle(
-        _In_ _Post_ptr_invalid_ HANDLE hObject
-        );
+        _In_ _Post_ptr_invalid_ HANDLE hObject);
 
 WINBASEAPI
 _Ret_maybenull_
@@ -99,8 +98,7 @@ DWORD
 WINAPI
 WaitForSingleObject(
     _In_ HANDLE hHandle,
-    _In_ DWORD dwMilliseconds
-    );
+    _In_ DWORD dwMilliseconds);
 
 }
 
