@@ -387,8 +387,8 @@ set_target_properties(Halide PROPERTIES
 
 add_dependencies(Halide HalideIncludes)
 
-if (TARGET wabt)
-    target_link_libraries(Halide PRIVATE wabt)
+if (TARGET wabt-obj)
+    target_link_libraries(Halide PRIVATE wabt-obj)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 endif ()
 
