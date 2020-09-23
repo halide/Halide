@@ -170,7 +170,10 @@ struct trace : public Printer<BasicPrinter, sizeof(trace_buf)> {
 
 #ifdef HALIDE_D3D12_TRACE_TIME
 #define TRACETIME_CHECKPOINT() halide_current_time_ns(user_context)
-//#define TRACETIME_REPORT(t0,t1) TRACEPRINT("Time: " << (t1 - t0) / 1.0e6 << " ms\n")
+// NOTE(marcos): we used to report time in milliseconds as float/double with
+// "(t1 - t0) / 1.0e6", but that tends to print some really annoying exponents
+// like '4.2500e-2' which can be misleading when observing/comparing values...
+// prefer printing in microseconds as integers to avoid these shenannigans:
 #define TRACETIME_REPORT(t0, t1, ...) TRACEPRINT(__VA_ARGS__ << (t1 - t0) / 1000 << " us\n")
 #else
 #define TRACETIME_CHECKPOINT() 0
@@ -178,7 +181,7 @@ struct trace : public Printer<BasicPrinter, sizeof(trace_buf)> {
 #endif
 
 struct TraceScope {
-    TraceScope(const char *func) {
+    explicit TraceScope(const char *func) {
         TRACEPRINT("[@] " << func << "\n");
 #ifdef HALIDE_D3D12_TRACE_TIME
         _func = func;
@@ -2039,6 +2042,31 @@ static void commit_command_list(d3d12_compute_command_list *cmdList) {
     cmdList->signal = queue_insert_checkpoint();
 }
 
+static bool spinlock_until_signaled(uint64_t signal) {
+    TRACELOG;
+    while (queue_fence->GetCompletedValue() < signal)
+        ;
+    return true;
+}
+
+static bool block_until_signaled(uint64_t signal) {
+    TRACELOG;
+
+    TRACEPRINT("Now syncing on queue signal #" << signal << "...\n");
+    HRESULT result = queue_fence->SetEventOnCompletion(signal, hFenceEvent);
+    if (FAILED(result)) {
+        TRACEPRINT("ERROR: Unable to associate D3D12 Fence with Windows Event\n");
+    }
+
+    const DWORD timeout_ms = 15000;
+    result = WaitForSingleObject(hFenceEvent, timeout_ms);
+    if (result != WAIT_OBJECT_0) {
+        D3DErrorCheck(result, hFenceEvent, NULL, "Unable to wait for Fence Event");
+    }
+
+    return result == WAIT_OBJECT_0;
+}
+
 static void wait_until_signaled(uint64_t signal) {
     TRACELOG;
 
@@ -2050,19 +2078,7 @@ static void wait_until_signaled(uint64_t signal) {
 
     HRESULT device_status_before = (*device)->GetDeviceRemovedReason();
 
-    // busy waiting / spin-lock
-    //while (queue_fence->GetCompletedValue() < signal) ;
-
-    TRACEPRINT("Now syncing on queue signal #" << signal << "...\n");
-    HRESULT result = queue_fence->SetEventOnCompletion(signal, hFenceEvent);
-    if (FAILED(result)) {
-        TRACEPRINT("ERROR: Unable to associate D3D12 Fence with Windows Event\n");
-    }
-    DWORD timeout_ms = 15000;
-    result = WaitForSingleObject(hFenceEvent, timeout_ms);
-    if (result != WAIT_OBJECT_0) {
-        D3DErrorCheck(result, hFenceEvent, NULL, "Unable to wait for Fence Event");
-    }
+    block_until_signaled(signal);
 
     HRESULT device_status_after = (*device)->GetDeviceRemovedReason();
     if (FAILED(device_status_after)) {
@@ -3337,9 +3353,6 @@ WEAK int halide_d3d12compute_detach_buffer(void *user_context, struct halide_buf
     d3d12_buffer *dbuffer = peel_buffer(buf);
     unwrap_buffer(buf);
 
-    //uint64_t sig = queue_fence->GetCompletedValue();
-    //if (sig <= dbuffer->signal)
-    //    TRACEPRINT("MEGA ERROR THAT SHOULD NOT HAPPEN\n");
     wait_until_signaled(dbuffer->signal);
 
     // it is safe to simply call release_d3d12_object() here:
