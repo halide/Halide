@@ -62,47 +62,45 @@
 #define _Ret_maybenull_
 #define _Post_ptr_invalid_
 
-#define STATUS_WAIT_0 ((DWORD)0x00000000L) 
+#define STATUS_WAIT_0 ((DWORD)0x00000000L)
 #define WAIT_OBJECT_0 ((STATUS_WAIT_0) + 0)
 
 extern "C" {
 
-    WINBASEAPI
-    BOOL
+WINBASEAPI
+BOOL
     WINAPI
     CloseHandle(
         _In_ _Post_ptr_invalid_ HANDLE hObject
         );
 
-    WINBASEAPI
-    _Ret_maybenull_
+WINBASEAPI
+_Ret_maybenull_
     HANDLE
-    WINAPI
-    CreateEventA(
-        _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
-        _In_ BOOL bManualReset,
-        _In_ BOOL bInitialState,
-        _In_opt_ LPCSTR lpName
-        );
+        WINAPI
+        CreateEventA(
+            _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
+            _In_ BOOL bManualReset,
+            _In_ BOOL bInitialState,
+            _In_opt_ LPCSTR lpName);
 
-    WINBASEAPI
-    _Ret_maybenull_
+WINBASEAPI
+_Ret_maybenull_
     HANDLE
-    WINAPI
-    CreateEventW(
-        _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
-        _In_ BOOL bManualReset,
-        _In_ BOOL bInitialState,
-        _In_opt_ LPCWSTR lpName
-        );
+        WINAPI
+        CreateEventW(
+            _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
+            _In_ BOOL bManualReset,
+            _In_ BOOL bInitialState,
+            _In_opt_ LPCWSTR lpName);
 
-    WINBASEAPI
-    DWORD
-    WINAPI
-    WaitForSingleObject(
-        _In_ HANDLE hHandle,
-        _In_ DWORD dwMilliseconds
-        );
+WINBASEAPI
+DWORD
+WINAPI
+WaitForSingleObject(
+    _In_ HANDLE hHandle,
+    _In_ DWORD dwMilliseconds
+    );
 
 }
 
@@ -110,7 +108,7 @@ extern "C" {
 #define CreateEvent CreateEventW
 #else
 #define CreateEvent CreateEventA
-#endif // !UNICODE
+#endif  // !UNICODE
 
 // For all intents and purposes, we always want to use COMPUTE command lists
 // (and queues) ...
@@ -180,7 +178,7 @@ struct trace : public Printer<BasicPrinter, sizeof(trace_buf)> {
 #else
 #define TRACETIME_CHECKPOINT() 0
 #define TRACETIME_REPORT(t0, t1, ...)
-#endif//HALIDE_D3D12_TRACE_TIME
+#endif
 
 struct TraceScope {
     TraceScope(const char *func) {
@@ -2980,10 +2978,10 @@ WEAK int halide_d3d12compute_run(void *user_context,
                 offset = (offset + argsize - 1) & ~(argsize - 1);
                 offset += argsize;
                 TRACEPRINT("args[" << i << "] is " << arg_sizes[i] << " bytes"
-                           << " : float(" << *arg.f << ")"
-                           << " or uint32(" << *arg.i << ")"
-                           << " or int32(" << (int32_t &)*arg.i << ")"
-                           << "\n");
+                                   << " : float(" << *arg.f << ")"
+                                   << " or uint32(" << *arg.i << ")"
+                                   << " or int32(" << (int32_t &)*arg.i << ")"
+                                   << "\n");
             }
             halide_assert(user_context, offset == total_uniform_args_size);
         }
