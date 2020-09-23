@@ -1891,7 +1891,7 @@ static d3d12_function *d3d12_compile_shader(d3d12_device *device, d3d12_library 
     if (pipeline_state == 0) {
         d3d12_halt("D3D12Compute: Could not allocate pipeline state.");
         release_object(function);
-        return nullptr;
+        return NULL;
     }
     function->pipeline_state = pipeline_state;
 
