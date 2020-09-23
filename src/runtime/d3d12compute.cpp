@@ -719,6 +719,14 @@ WEAK HANDLE hFenceEvent = NULL;
 
 WEAK d3d12_command_allocator *cmd_allocator_main = NULL;
 
+// NOTE(marcos): the term "frame" here is borrowed from graphics to delineate the
+// lifetime of a kernel dispatch; more specifically, a number of "expensive" API
+// objects is necessary for each dispatch, and they must remain alive and immutable
+// until the kernel has finished executing on the device, at which point these API
+// objects can be reclaimed and reused for subsequent kernel dispatches.
+// As there's not enough information about full Pipelines and Stages in the runtime
+// back-end to possibly group these API objects together in a more coarse "frame",
+// each kernel dispatch must be seen as a "frame" on its own for lifetime tracking.
 struct d3d12_frame {
     d3d12_compute_command_list *cmd_list;
     d3d12_binder *desc_binder;
