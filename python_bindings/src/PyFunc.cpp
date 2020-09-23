@@ -195,6 +195,7 @@ void define_func(py::module &m) {
             .def("store_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::store_at, py::arg("f"), py::arg("var"))
             .def("store_at", (Func & (Func::*)(LoopLevel)) & Func::store_at, py::arg("loop_level"))
 
+            .def("async_", &Func::async)
             .def("memoize", &Func::memoize)
             .def("compute_inline", &Func::compute_inline)
             .def("compute_root", &Func::compute_root)
@@ -227,6 +228,7 @@ void define_func(py::module &m) {
             .def("compile_to_static_library", &Func::compile_to_static_library, py::arg("filename_prefix"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = get_target_from_environment())
 
             .def("compile_to_multitarget_static_library", &Func::compile_to_multitarget_static_library, py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"))
+            .def("compile_to_multitarget_object_files", &Func::compile_to_multitarget_object_files, py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"), py::arg("suffixes"))
 
             // TODO: useless until Module is defined.
             .def("compile_to_module", &Func::compile_to_module, py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = get_target_from_environment())

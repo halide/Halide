@@ -183,7 +183,7 @@ function(transfer_locations)
 
             message(VERBOSE "Transferring ${languages}[${cfg}] objects from ${lib} to ${ARG_TO}")
 
-            unset(globs)
+            set(globs "")
             foreach (lang IN LISTS languages)
                 list(APPEND globs "${stage}/*${CMAKE_${lang}_OUTPUT_EXTENSION}")
             endforeach ()

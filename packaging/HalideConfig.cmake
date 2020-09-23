@@ -25,6 +25,19 @@ if (${CMAKE_FIND_PACKAGE_NAME}_static AND ${CMAKE_FIND_PACKAGE_NAME}_shared)
     set(${CMAKE_FIND_PACKAGE_NAME}_both TRUE)
 endif ()
 
+# Set configured variables
+set(Halide_VERSION @Halide_VERSION@)
+set(Halide_VERSION_MAJOR @Halide_VERSION_MAJOR@)
+set(Halide_VERSION_MINOR @Halide_VERSION_MINOR@)
+set(Halide_VERSION_PATCH @Halide_VERSION_PATCH@)
+set(Halide_VERSION_TWEAK @Halide_VERSION_TWEAK@)
+
+set(Halide_HOST_TARGET @Halide_HOST_TARGET@)
+
+set(Halide_ENABLE_EXCEPTIONS @Halide_ENABLE_EXCEPTIONS@)
+set(Halide_ENABLE_RTTI @Halide_ENABLE_RTTI@)
+
+# Load dependencies from installed configurations
 include(CMakeFindDependencyMacro)
 find_dependency(Threads)
 
@@ -49,20 +62,18 @@ macro(_Halide_include TYPE CAUSE)
     include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-${TYPE}.cmake")
 
     if (NOT ${CMAKE_FIND_PACKAGE_NAME}_both)
-        # In CMake <= 3.17, ALIAS targets may not refer to non-global targets.
-        # this means that multiple different versions of Halide may not be used
-        # in a single project via find_package until 3.18
-        if (CMAKE_VERSION VERSION_LESS 3.18)
-            set_target_properties(Halide::${TYPE}::Halide
-                                  Halide::${TYPE}::Generator
-                                  Halide::${TYPE}::RunGenMain
-                                  PROPERTIES
-                                  IMPORTED_GLOBAL TRUE)
-        endif ()
-
-        add_library(Halide::Halide ALIAS Halide::${TYPE}::Halide)
-        add_library(Halide::Generator ALIAS Halide::${TYPE}::Generator)
-        add_library(Halide::RunGenMain ALIAS Halide::${TYPE}::RunGenMain)
+        foreach (target IN ITEMS Halide Generator RunGenMain Adams2019 Li2018 Mullapudi2016)
+            if (NOT TARGET Halide::${TYPE}::${target})
+                continue()
+            endif ()
+            if (CMAKE_VERSION VERSION_LESS 3.18)
+                # In CMake <= 3.17, ALIAS targets may not refer to non-global targets, so we
+                # are forced to promote here. This means that multiple different versions of
+                # Halide may not be used  in a single project via find_package until 3.18
+                set_target_properties(Halide::${TYPE}::${target} PROPERTIES IMPORTED_GLOBAL TRUE)
+            endif ()
+            add_library(Halide::${target} ALIAS Halide::${TYPE}::${target})
+        endforeach ()
     endif ()
 endmacro()
 
@@ -102,6 +113,7 @@ endif ()
 # Aliases are not created, so the helpers aren't available.
 if (NOT ${CMAKE_FIND_PACKAGE_NAME}_both)
     include("${CMAKE_CURRENT_LIST_DIR}/HalideGeneratorHelpers.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake")
 endif ()
 
 # Load image library dependencies
@@ -115,7 +127,7 @@ foreach (comp IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_comps)
 
     # ${comp} is either PNG or JPEG, and this works for both packages
     if (NOT TARGET ${comp}::${comp})
-        unset(extraArgs)
+        set(extraArgs "")
         if (${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
             list(APPEND extraArgs QUIET)
         endif ()

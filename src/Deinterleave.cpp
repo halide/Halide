@@ -2,6 +2,7 @@
 
 #include "CSE.h"
 #include "Debug.h"
+#include "FlattenNestedRamps.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -208,8 +209,24 @@ private:
 
     Expr visit(const Broadcast *op) override {
         if (new_lanes == 1) {
-            return op->value;
+            if (op->value.type().lanes() == 1) {
+                return op->value;
+            } else {
+                int old_starting_lane = starting_lane;
+                int old_lane_stride = lane_stride;
+                starting_lane = starting_lane % op->value.type().lanes();
+                lane_stride = op->value.type().lanes();
+                Expr e = mutate(op->value);
+                starting_lane = old_starting_lane;
+                lane_stride = old_lane_stride;
+                return e;
+            }
         }
+        if (op->value.type().lanes() > 1) {
+            // There is probably a more efficient way to this.
+            return mutate(flatten_nested_ramps(op));
+        }
+
         return Broadcast::make(op->value, new_lanes);
     }
 
@@ -228,7 +245,21 @@ private:
     }
 
     Expr visit(const Ramp *op) override {
-        Expr expr = op->base + starting_lane * op->stride;
+        int base_lanes = op->base.type().lanes();
+        if (base_lanes > 1) {
+            if (new_lanes == 1) {
+                int index = starting_lane / base_lanes;
+                Expr expr = op->base + cast(op->base.type(), index) * op->stride;
+                ScopedValue<int> old_starting_lane(starting_lane, starting_lane % base_lanes);
+                ScopedValue<int> old_lane_stride(lane_stride, base_lanes);
+                expr = mutate(expr);
+                return expr;
+            } else {
+                // There is probably a more efficient way to this.
+                return mutate(flatten_nested_ramps(op));
+            }
+        }
+        Expr expr = op->base + cast(op->base.type(), starting_lane) * op->stride;
         internal_assert(expr.type() == op->base.type());
         if (new_lanes > 1) {
             expr = Ramp::make(expr, op->stride * lane_stride, new_lanes);
