@@ -86,9 +86,10 @@ bool function_takes_user_context(const std::string &name);
  * non-positive. */
 bool can_allocation_fit_on_stack(int64_t size);
 
-/** Does a division round to zero using binary long division for unsigned int.
+/** Does a div_round_to_zero using binary long division for int/uint.
+ *  max_abs is the max value of abs(a/b)
  *  Returns a when b == 0. */
-Expr unsigned_long_div(Expr a, const Expr &b, const uint64_t *max_value = nullptr);
+Expr long_div(const Expr &a, const Expr &b, const uint64_t *max_abs = nullptr);
 
 /** Given a Halide Euclidean division/mod operation, do constant optimizations
  * and possibly call lower_euclidean_div/lower_euclidean_mod if necessary.

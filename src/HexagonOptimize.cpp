@@ -1087,25 +1087,11 @@ private:
             Expr a = op->args[0];
             Expr b = op->args[1];
             // Run bounds analysis to estimate the range of result.
-            Expr extent_upper = find_constant_bound(a / b, Direction::Upper, bounds);
+            Expr extent_upper = find_constant_bound(abs(a / b), Direction::Upper, bounds);
             const uint64_t *upper_bound = as_const_uint(extent_upper);
-
             a = mutate(a);
             b = mutate(b);
-            debug(1) << "Using long div: (num: " << a << "); (den: " << b << ")\n";
-            if (a.type().is_uint()) {
-                return unsigned_long_div(a, b, upper_bound);
-            }
-            // Use unsigned long div for signed integer division.
-            Type ty = a.type().with_code(Type::UInt);
-            Expr a_unsigned = cast(ty, abs(a));
-            Expr b_unsigned = cast(ty, abs(b));
-            Expr q = cast(a.type(),
-                          unsigned_long_div(a_unsigned, b_unsigned, upper_bound));
-            // Check the sign required for the quotient.
-            Expr a_neg = a >> make_const(a.type(), (a.type().bits() - 1));
-            Expr b_neg = b >> make_const(a.type(), (a.type().bits() - 1));
-            return q * ((a_neg ^ b_neg) | 1);
+            return long_div(a, b, upper_bound);
         } else {
             return IRMutator::visit(op);
         }
@@ -1113,14 +1099,9 @@ private:
 
     template<typename NodeType, typename T>
     NodeType visit_let(const T *op) {
-        // We only care about vector lets.
-        if (op->value.type().is_vector()) {
-            bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
-        }
+        bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
         NodeType node = IRMutator::visit(op);
-        if (op->value.type().is_vector()) {
-            bounds.pop(op->name);
-        }
+        bounds.pop(op->name);
         return node;
     }
 

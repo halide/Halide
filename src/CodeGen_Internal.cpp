@@ -261,6 +261,7 @@ bool can_allocation_fit_on_stack(int64_t size) {
 
 Expr lower_int_uint_div(const Expr &a, const Expr &b) {
     // Detect if it's a small int division
+    internal_assert(a.type() == b.type());
     const int64_t *const_int_divisor = as_const_int(b);
     const uint64_t *const_uint_divisor = as_const_uint(b);
 
@@ -422,6 +423,21 @@ Expr unsigned_long_div(Expr num, const Expr &den, const uint64_t *upper_bound) {
         q = select(bit_set, make_const(ty, uint64_t(1) << shift) | q, q);
     }
     return common_subexpression_elimination(q);
+}
+
+Expr long_div(const Expr &num, const Expr &den, const uint64_t *max_abs) {
+    debug(1) << "Using long div: (num: " << num << "); (den: " << den << ")\n";
+    internal_assert(num.type() == den.type());
+    Expr num_pos = abs(num);
+    Expr den_pos = abs(den);
+    Expr q = cast(num.type(), unsigned_long_div(num_pos, den_pos, max_abs));
+    // Correct the signs for quotient for signed integer division.
+    if (num.type().is_int()) {
+        Expr num_neg = num >> make_const(num.type(), (num.type().bits() - 1));
+        Expr den_neg = den >> make_const(num.type(), (num.type().bits() - 1));
+        q = q * ((num_neg ^ den_neg) | 1);
+    }
+    return simplify(common_subexpression_elimination(q));
 }
 
 Expr lower_euclidean_div(Expr a, Expr b) {
