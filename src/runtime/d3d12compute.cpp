@@ -99,7 +99,6 @@ WINAPI
 WaitForSingleObject(
     _In_ HANDLE hHandle,
     _In_ DWORD dwMilliseconds);
-
 }
 
 #ifdef UNICODE
