@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     in_param.set_estimates({{0, 13}, {0, 17}});
 
     Pipeline p(h);
-    p.auto_schedule(Target("host"));
+    p.auto_schedule(get_jit_target_from_environment());
 
     in_param.set(in);
 

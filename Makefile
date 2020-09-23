@@ -1079,7 +1079,7 @@ test_tutorial: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
 test_opengl: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=opengl_%)
-test_auto_schedule: test_mullapudi2016 test_li2018 test_adams2019
+test_auto_schedule: test_mullapudi2016 test_li2018 test_adams2019 test_sioutas2020
 
 .PHONY: test_correctness_multi_gpu
 test_correctness_multi_gpu: correctness_gpu_multi_device
@@ -1765,7 +1765,7 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21
 	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_false target=host            auto_schedule=false
 	# FIXME: The relative path of the autoscheduler and libHalide must be preserved on OS X, or it tries to load the wrong libHalide.dylib
 	cp $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) $(BIN_DIR)
-	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_true  target=host-no_runtime auto_schedule=true machine_params=$(LESSON_21_MACHINE_PARAMS) -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
+	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_true  target=host-no_runtime auto_schedule=true machine_params=$(LESSON_21_MACHINE_PARAMS) -p $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
 	# Compile the runner
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
 	-I$(INCLUDE_DIR) -L$(BIN_DIR) -I $(TMP_DIR) $(TMP_DIR)/auto_schedule_*.a \
@@ -1853,13 +1853,21 @@ tutorial_%: $(BIN_DIR)/tutorial_% $(TMP_DIR)/images/rgb.png $(TMP_DIR)/images/gr
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
-test_mullapudi2016: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=auto_schedule_%)
+test_mullapudi2016: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=mullapudi2016_auto_schedule_%)
+test_sioutas2020: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=sioutas2020_auto_schedule_%)
 
-# These tests were written for the Mullapudi2016 autoscheduler.
-# TODO: either make them work with all autoschedulers or move them under src/autoschedulers/mullapudi2016
-auto_schedule_%: $(BIN_DIR)/auto_schedule_% $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT)
+# These tests were written for the Mullapudi2016 autoscheduler. We
+# also use them to test the sioutas2020 autoscheduler.
+# TODO: either make them work with all autoschedulers or move them
+# under src/autoschedulers/mullapudi2016
+mullapudi2016_auto_schedule_%: $(BIN_DIR)/auto_schedule_% $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(BIN_DIR))/libautoschedule_mullapudi2016.$(SHARED_EXT)
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(DISTRIB_DIR))/lib/libautoschedule_mullapudi2016.$(SHARED_EXT)
+	@-echo
+
+sioutas2020_auto_schedule_%: $(BIN_DIR)/auto_schedule_% $(DISTRIB_DIR)/lib/libautoschedule_sioutas2020.$(SHARED_EXT)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(DISTRIB_DIR))/lib/libautoschedule_sioutas2020.$(SHARED_EXT)
 	@-echo
 
 # The other autoschedulers contain their own tests
@@ -2214,6 +2222,7 @@ endif
 autoschedulers: \
 $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) \
 $(DISTRIB_DIR)/lib/libautoschedule_li2018.$(SHARED_EXT) \
+$(DISTRIB_DIR)/lib/libautoschedule_sioutas2020.$(SHARED_EXT) \
 $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT)
 
 .PHONY: distrib

@@ -25,7 +25,7 @@ endforeach ()
 ##
 
 set(optional_targets "")
-foreach (target IN ITEMS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016)
+foreach (target IN ITEMS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Sioutas2020)
     if (TARGET ${target})
         list(APPEND optional_targets ${target})
     endif ()

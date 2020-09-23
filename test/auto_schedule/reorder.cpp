@@ -91,6 +91,7 @@ double run_test_2(bool auto_schedule) {
     Buffer<uint8_t> out(left_im.width(), left_im.height(), 32, 3);
     double t = benchmark(3, 10, [&]() {
         p.realize(out);
+        out.device_sync();
     });
 
     return t * 1000;
@@ -131,6 +132,7 @@ double run_test_3(bool auto_schedule) {
     Buffer<int> out(1024, 1024, 3);
     double t = benchmark(3, 10, [&]() {
         p.realize(out);
+        out.device_sync();
     });
 
     return t * 1000;

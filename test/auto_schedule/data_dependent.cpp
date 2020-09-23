@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     Var x("x"), y("y"), c("c");
 
     Func f("f");
-    f(x, y, c) = print_when(x < 0, input(x, y) * input(c, c));
+    f(x, y, c) = input(x, y) * input(c, c);
 
     Func g("g");
     g(x, y) = (f(x, y, input(x, y) % 10) + f(x + 1, y, (input(x, y) - 1) % 10)) / 2;

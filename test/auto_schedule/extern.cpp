@@ -132,6 +132,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (get_jit_target_from_environment().has_gpu_feature()) {
+        printf("[SKIP] Skipping CPU-side extern stage test for GPU target.\n");
+        return 0;
+    }
+
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
         return 1;

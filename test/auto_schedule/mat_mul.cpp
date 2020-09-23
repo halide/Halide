@@ -116,6 +116,7 @@ double run_test(bool auto_schedule) {
     Buffer<float> result(size, size);
     double t = benchmark(3, 10, [&]() {
         p.realize(result);
+        result.device_sync();
     });
 
     return t * 1000;
