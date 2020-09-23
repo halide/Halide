@@ -3005,10 +3005,10 @@ WEAK int halide_d3d12compute_run(void *user_context,
                 offset = (offset + argsize - 1) & ~(argsize - 1);
                 offset += argsize;
                 TRACEPRINT("args[" << i << "] is " << arg_sizes[i] << " bytes"
-                                << " : float(" << *arg.f << ")"
-                                << " or uint32(" << *arg.i << ")"
-                                << " or int32(" << (int32_t &)*arg.i << ")"
-                                << "\n");
+                                   << " : float(" << *arg.f << ")"
+                                   << " or uint32(" << *arg.i << ")"
+                                   << " or int32(" << (int32_t &)*arg.i << ")"
+                                   << "\n");
             }
             halide_assert(user_context, offset == total_uniform_args_size);
         }
