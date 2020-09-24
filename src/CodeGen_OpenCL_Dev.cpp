@@ -707,11 +707,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
         return;
     } else {
         // Should have been freed internally
-        if (allocations.contains(op->name)) {
-            internal_assert(allocations.contains(op->name));
-            allocations.pop(op->name);
-            stream << get_indent() << "#undef " << get_memory_space(op->name) << "\n";
-        }
+        internal_assert(allocations.contains(op->name));
+        allocations.pop(op->name);
+        stream << get_indent() << "#undef " << get_memory_space(op->name) << "\n";
     }
 }
 

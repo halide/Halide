@@ -619,8 +619,6 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         return ctx.error_code;
     }
 
-    // std::cout << src;
-
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
@@ -1204,7 +1202,7 @@ WEAK int halide_opencl_detach_cl_mem(void *user_context, halide_buffer_t *buf) {
         return 0;
     }
     halide_assert(user_context, buf->device_interface == &opencl_device_interface ||
-                                buf->device_interface == &opencl_image_device_interface);
+                                    buf->device_interface == &opencl_image_device_interface);
     free((device_handle *)buf->device);
     buf->device = 0;
     buf->device_interface->impl->release_module();
@@ -1217,7 +1215,7 @@ WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, halide_buffer_t *buf
         return 0;
     }
     halide_assert(user_context, buf->device_interface == &opencl_device_interface ||
-                                buf->device_interface == &opencl_image_device_interface);
+                                    buf->device_interface == &opencl_image_device_interface);
     return (uintptr_t)((device_handle *)buf->device)->mem;
 }
 
@@ -1786,6 +1784,28 @@ WEAK int halide_opencl_image_wrap_cl_mem(void *user_context, struct halide_buffe
 #endif
     return 0;
 }
+
+WEAK int halide_opencl_image_device_crop(void *user_context,
+                                         const struct halide_buffer_t *src,
+                                         struct halide_buffer_t *dst) {
+    halide_assert(user_context, false && "crop not supported on opencl image objects");
+    return -1;
+}
+
+WEAK int halide_opencl_image_device_slice(void *user_context,
+                                          const struct halide_buffer_t *src,
+                                          int slice_dim,
+                                          int slice_pos,
+                                          struct halide_buffer_t *dst) {
+    halide_assert(user_context, false && "slice not supported on opencl image objects");
+    return -1;
+}
+
+WEAK int halide_opencl_image_device_release_crop(void *user_context,
+                                                 struct halide_buffer_t *buf) {
+    halide_assert(user_context, false && "crop not supported on opencl image objects");
+    return -1;
+}
 }
 
 namespace Halide {
@@ -1805,10 +1825,10 @@ WEAK halide_device_interface_impl_t opencl_image_device_interface_impl = {
     halide_opencl_image_device_and_host_malloc,
     halide_opencl_image_device_and_host_free,
     halide_opencl_image_buffer_copy,
-    nullptr,  //halide_opencl_image_device_crop,
-    nullptr,  //halide_opencl_image_device_slice,
-    nullptr,  //halide_opencl_image_device_release_crop,
-    halide_opencl_wrap_cl_mem,
+    halide_opencl_image_device_crop,
+    halide_opencl_image_device_slice,
+    halide_opencl_image_device_release_crop,
+    halide_opencl_image_wrap_cl_mem,
     halide_opencl_detach_cl_mem,
 };
 
