@@ -5,7 +5,7 @@
 #else  // BITS_64
 
 // Debugging utilities for back-end developers:
-#define HALIDE_D3D12_TRACE (1)
+#define HALIDE_D3D12_TRACE (0)
 #define HALIDE_D3D12_DEBUG_LAYER (0)
 #define HALIDE_D3D12_DEBUG_SHADERS (0)
 #define HALIDE_D3D12_PROFILING (0)
@@ -2625,6 +2625,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
         if (d3d12_buf != NULL) {
             TRACEPRINT("serving request from allocation cache: " << size << " bytes from capacity of " << best_fit_size << "\n");
             buffer_pool[best_fit_index] = NULL;
+            wait_until_signaled(d3d12_buf->signal);
         }
     }
 
@@ -2661,7 +2662,7 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *bu
     d3d12_buffer *dbuffer = peel_buffer(buf);
     TRACEPRINT("d3d12_buffer: " << dbuffer << "\n");
 
-    wait_until_signaled(dbuffer->signal);
+    //wait_until_signaled(dbuffer->signal);
 
     bool cached = false;
     if (halide_can_reuse_device_allocations(user_context)) {
@@ -2686,6 +2687,7 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *bu
         // actually freeing the underlying resource object;
         // if 'buf' holds an internally managed resource, it will either be freed
         // or have its reference count decreased (when 'buf' is a device_crop).
+        wait_until_signaled(dbuffer->signal);
         release_d3d12_object(dbuffer);
     }
 
