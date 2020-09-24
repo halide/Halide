@@ -260,7 +260,8 @@ private:
             args[0] = op->name;
             args[1] = buffer_var;
             for (size_t i = 0; i < op->args.size(); i++) {
-                args.push_back(op->args[i]);
+                Expr min = Variable::make(Int(32), op->name + ".min." + std::to_string(i));
+                args.push_back(op->args[i] - min);
             }
             args.push_back(value);
             Expr store = Call::make(value.type(), Call::image_store_texture,
@@ -278,7 +279,6 @@ private:
 
             debug(2) << " load call to " << op->name << " " << textures.count(op->name) << "\n";
             if (op->param.defined()) {
-
                 debug(2) << "     is param: "
                          << " " << op->param.name() << " "
                          << "\n";

@@ -5,8 +5,7 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int argc, char **argv) {
-    setenv("HL_JIT_TARGET", "host-opencl", 1);
-    setenv("HL_DEBUG_CODEGEN", "2", 1);
+    // setenv("HL_JIT_TARGET", "host-opencl-debug", 1);
 
     Target t = get_jit_target_from_environment();
 
@@ -105,6 +104,40 @@ int main(int argc, char **argv) {
                     return -1;
                 }
             }
+        }
+        {
+            // 1D offset
+            Buffer<int> input(100);
+            input.set_min(5);
+            input.fill(10);
+            ImageParam param(Int(32), 1);
+            param.set(input);
+            param.store_in(memory_type);  // check float stores
+
+            Func f("f"), g("g");
+            Var x("x"), xi("xi");
+            Var y("y");
+
+            f(x) = cast<float>(x);
+            g(x) = param(x) + cast<int>(f(2 * x));
+
+            g.gpu_tile(x, xi, 16, TailStrategy::GuardWithIf);
+
+            f.compute_root().store_in(memory_type).gpu_blocks(x);  // store f as integer
+            g.store_in(memory_type);
+
+            Buffer<int> out(10);
+            out.set_min(10);
+            g.realize(out);
+            out.copy_to_host();
+            for (int x = 10; x < 20; x++) {
+                int correct = 2 * x + 10;
+                if (out(x) != correct) {
+                    printf("out[1D-shift][%d](%d) = %d instead of %d\n", (int)memory_type, x, out(x), correct);
+                    return -1;
+                }
+            }
+            return 0;
         }
     }
 
