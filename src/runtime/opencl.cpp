@@ -1592,17 +1592,26 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
     desc.image_height = buf->dimensions >= 2 ? buf->dim[1].extent : 1;
     desc.image_depth = buf->dimensions >= 3 ? buf->dim[1].extent : 1;
     desc.image_array_size = 1;
-    desc.image_row_pitch = buf->dimensions >= 2 ? buf->dim[1].stride * buf->type.bytes() : 0;
-    desc.image_slice_pitch = buf->dimensions >= 3 ? buf->dim[2].stride * buf->type.bytes() : 0;
+    // desc.image_row_pitch = buf->dimensions >= 2 ? buf->dim[1].stride * buf->type.bytes() : 0;
+    // desc.image_slice_pitch = buf->dimensions >= 3 ? buf->dim[2].stride * buf->type.bytes() : 0;
+    desc.image_row_pitch = 0;
+    halide_assert(user_context, buf->dimensions < 2 || buf->dim[1].stride == buf->dim[0].extent);
+    desc.image_slice_pitch = 0;
+    halide_assert(user_context, buf->dimensions < 3 || buf->dim[2].stride == buf->dim[0].extent * buf->dim[1].extent);
     desc.num_mip_levels = 0;
     desc.num_samples = 0;
     desc.buffer = NULL;
 
-    debug(user_context) << "      desc=(\n";
-    debug(user_context) << "        " << (int)desc.image_type << ",\n";
-    debug(user_context) << "        " << (int)desc.image_width << ", " << (int)desc.image_height << ", " << (int)desc.image_depth << ",\n";
-    debug(user_context) << "        " << (int)desc.image_array_size << ", " << (int)desc.image_row_pitch << ", " << (int)desc.image_slice_pitch << ",\n";
-    debug(user_context) << "        " << (void *)desc.buffer << ")\n";
+    debug(user_context) << "      desc=("
+                        << (int)desc.image_type << ", "
+                        << (int)desc.image_width << ", "
+                        << (int)desc.image_height << ", "
+                        << (int)desc.image_depth << ", "
+                        << (int)desc.image_array_size << ", "
+                        << (int)desc.image_row_pitch << ", "
+                        << (int)desc.image_slice_pitch << ", "
+                        << (void *)desc.buffer
+                        << ")\n";
 
     cl_int err;
     debug(user_context) << "    clCreateImage -> " << (int)size << " ";
@@ -1696,12 +1705,16 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
             size_t region[] = {
                 static_cast<size_t>(dst->dim[0].extent),
                 dim >= 2 ? static_cast<size_t>(dst->dim[1].extent) : 1,
-                dim >= 3 ? static_cast<size_t>(dst->dim[1].extent) : 1};
-            int row_pitch = dst->dimensions >= 2 ? dst->dim[1].stride * dst->type.bytes() : 0;
-            int slice_pitch = dst->dimensions >= 3 ? dst->dim[2].stride * dst->type.bytes() : 0;
+                dim >= 3 ? static_cast<size_t>(dst->dim[2].extent) : 1};
+
+            // int row_pitch = dst->dimensions >= 2 ? dst->dim[1].stride * dst->type.bytes() : 0;
+            // int slice_pitch = dst->dimensions >= 3 ? dst->dim[2].stride * dst->type.bytes() : 0;
+            halide_assert(user_context, dst->dimensions < 2 || dst->dim[1].stride == dst->dim[0].extent);
+            halide_assert(user_context, dst->dimensions < 3 || dst->dim[2].stride == dst->dim[0].extent * dst->dim[1].extent);
+
             err = clEnqueueReadImage(ctx.cmd_queue, ((device_handle *)c.src)->mem,
                                      CL_FALSE, offset, region,
-                                     row_pitch, slice_pitch,
+                                     /* row_pitch */ 0, /* slice_pitch */ 0,
                                      dst->host, 0, NULL, NULL);
         } else if (from_host && !to_host) {
             int dim = src->dimensions;
@@ -1709,11 +1722,13 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
             size_t region[] = {
                 static_cast<size_t>(src->dim[0].extent),
                 dim >= 2 ? static_cast<size_t>(src->dim[1].extent) : 1,
-                dim >= 3 ? static_cast<size_t>(src->dim[1].extent) : 1};
-            int row_pitch = dim >= 2 ? src->dim[1].stride * src->type.bytes() : 0;
-            int slice_pitch = dim >= 3 ? src->dim[2].stride * src->type.bytes() : 0;
+                dim >= 3 ? static_cast<size_t>(src->dim[2].extent) : 1};
+            // int row_pitch = dim >= 2 ? src->dim[1].stride * src->type.bytes() : 0;
+            // int slice_pitch = dim >= 3 ? src->dim[2].stride * src->type.bytes() : 0;
+            halide_assert(user_context, src->dimensions < 2 || src->dim[1].stride == src->dim[0].extent);
+            halide_assert(user_context, src->dimensions < 3 || src->dim[2].stride == src->dim[0].extent * src->dim[1].extent);
             err = clEnqueueWriteImage(ctx.cmd_queue, ((device_handle *)c.dst)->mem,
-                                      CL_FALSE, offset, region, row_pitch, slice_pitch, src->host,
+                                      CL_FALSE, offset, region, /* row_pitch */ 0, /* slice_pitch */ 0, src->host,
                                       0, NULL, NULL);
         } else if (!from_host && !to_host) {
             halide_assert(user_context, false && "image to image copies not implemented");
