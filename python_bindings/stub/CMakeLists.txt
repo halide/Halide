@@ -7,7 +7,7 @@ if (NOT TARGET Halide::PyStubs)
     set_target_properties(Halide_PyStubs PROPERTIES
                           EXPORT_NAME PyStubs
                           VISIBILITY_INLINES_HIDDEN TRUE
-                          POSITION_INDEPENDENT_CODE TRUE)
+                          POSITION_INDEPENDENT_CODE ON)
 endif ()
 
 include(${CMAKE_CURRENT_LIST_DIR}/AddHalideGeneratorPython.cmake)

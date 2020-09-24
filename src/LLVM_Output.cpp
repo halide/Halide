@@ -434,11 +434,24 @@ namespace {
 
 std::string get_current_directory() {
 #ifdef _WIN32
-    std::string dir;
-    char p[MAX_PATH];
-    DWORD ret = GetCurrentDirectoryA(MAX_PATH, p);
-    internal_assert(ret != 0) << "GetCurrentDirectoryA() failed";
-    dir = p;
+    DWORD dir_buf_size = GetCurrentDirectoryW(0, nullptr);
+    internal_assert(dir_buf_size) << "GetCurrentDirectoryW() failed; error " << GetLastError() << "\n";
+
+    // GetCurrentDirectoryW returns a _buffer size_, not a character count.
+    // std::wstring null-terminates on its own, so don't count that here.
+    std::wstring wdir(dir_buf_size - 1, 0);
+
+    DWORD ret = GetCurrentDirectoryW(dir_buf_size, &wdir[0]);
+    internal_assert(ret) << "GetCurrentDirectoryW() failed; error " << GetLastError() << "\n";
+
+    int dir_len = WideCharToMultiByte(CP_UTF8, 0, &wdir[0], (int)wdir.size(), nullptr, 0, nullptr, nullptr);
+    internal_assert(dir_len) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+
+    std::string dir(dir_len, 0);
+
+    ret = WideCharToMultiByte(CP_UTF8, 0, &wdir[0], (int)wdir.size(), &dir[0], (int)dir.size(), nullptr, nullptr);
+    internal_assert(ret) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+
     return dir;
 #else
     std::string dir;
@@ -454,7 +467,14 @@ std::string get_current_directory() {
 
 void set_current_directory(const std::string &d) {
 #ifdef _WIN32
-    internal_assert(SetCurrentDirectoryA(d.c_str())) << "SetCurrentDirectoryA() failed";
+    int n_chars = MultiByteToWideChar(CP_UTF8, 0, &d[0], (int)d.size(), nullptr, 0);
+    internal_assert(n_chars) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+
+    std::wstring wd(n_chars, 0);
+    int ret = MultiByteToWideChar(CP_UTF8, 0, &d[0], (int)d.size(), &wd[0], wd.size());
+    internal_assert(ret) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+
+    internal_assert(SetCurrentDirectoryW(wd.c_str())) << "SetCurrentDirectoryW() failed; error " << GetLastError() << "\n";
 #else
     internal_assert(chdir(d.c_str()) == 0) << "chdir() failed";
 #endif

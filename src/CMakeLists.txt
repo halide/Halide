@@ -15,7 +15,6 @@ set(HEADER_FILES
     AssociativeOpsTable.h
     Associativity.h
     AsyncProducers.h
-    AutoSchedule.h
     AutoScheduleUtils.h
     BoundaryConditions.h
     Bounds.h
@@ -69,6 +68,7 @@ set(HEADER_FILES
     ExternFuncArgument.h
     FastIntegerDivide.h
     FindCalls.h
+    FlattenNestedRamps.h
     Float16.h
     Func.h
     Function.h
@@ -180,7 +180,6 @@ set(SOURCE_FILES
     AssociativeOpsTable.cpp
     Associativity.cpp
     AsyncProducers.cpp
-    AutoSchedule.cpp
     AutoScheduleUtils.cpp
     BoundaryConditions.cpp
     Bounds.cpp
@@ -230,6 +229,7 @@ set(SOURCE_FILES
     Expr.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
+    FlattenNestedRamps.cpp
     Float16.cpp
     Func.cpp
     Function.cpp
@@ -354,15 +354,13 @@ add_subdirectory(runtime)
 set(HALIDE_H "${Halide_BINARY_DIR}/include/Halide.h")
 set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
 add_custom_command(OUTPUT "${Halide_BINARY_DIR}/include/Halide.h"
-                   VERBATIM
                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
                    COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" ${HEADER_FILES} > "$<SHELL_PATH:${HALIDE_H}>"
+                   DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES}
                    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
-                   DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES})
-add_custom_target(
-        HalideIncludes
-        ALL
-        DEPENDS "${Halide_BINARY_DIR}/include/Halide.h")
+                   VERBATIM)
+add_custom_target(HalideIncludes ALL
+                  DEPENDS "${Halide_BINARY_DIR}/include/Halide.h")
 
 ##
 # Define the Halide library target.
@@ -377,16 +375,21 @@ add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
-target_compile_definitions(Halide PRIVATE $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:Halide_STATIC_DEFINE>)
+target_compile_definitions(Halide
+                           PRIVATE
+                           $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>
+                           $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:WITH_INTROSPECTION>)
 
-set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(Halide PROPERTIES
+                      POSITION_INDEPENDENT_CODE ON
+                      VERSION ${Halide_VERSION}
+                      SOVERSION ${Halide_VERSION_MAJOR})
 
 add_dependencies(Halide HalideIncludes)
 
-if (TARGET wabt)
-    target_link_libraries(Halide PRIVATE wabt)
+if (TARGET wabt-obj)
+    target_link_libraries(Halide PRIVATE wabt-obj)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
-    install(TARGETS wabt EXPORT Halide_Targets)
 endif ()
 
 ##
@@ -397,46 +400,8 @@ set(Halide_INCLUDE_PATH "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 target_include_directories(Halide INTERFACE ${Halide_INCLUDE_PATH})
 
 ##
-# Plugin interface for Halide on weak systems
-##
-
-add_library(Halide_Plugin INTERFACE)
-set_target_properties(Halide_Plugin PROPERTIES EXPORT_NAME Plugin)
-
-if (NOT BUILD_SHARED_LIBS)
-    if (MSVC)
-        message(STATUS "Notice: Halide plugins are not available when building statically with MSVC")
-    else ()
-        target_link_libraries(Halide_Plugin INTERFACE Halide::LanguageOptions)
-        target_link_options(Halide_Plugin INTERFACE
-                            $<$<CXX_COMPILER_ID:GNU>:-rdynamic>
-                            $<$<CXX_COMPILER_ID:Clang,AppleClang>:-undefined dynamic_lookup>)
-        target_include_directories(Halide_Plugin INTERFACE ${Halide_INCLUDE_PATH})
-        add_dependencies(Halide_Plugin Halide)
-    endif ()
-else ()
-    target_link_libraries(Halide_Plugin INTERFACE Halide::Halide)
-endif ()
-
-add_library(Halide::Plugin ALIAS Halide_Plugin)
-
-##
 # Set compiler options for libHalide
 ##
-
-option(WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
-if (WARNINGS_AS_ERRORS)
-    target_compile_options(Halide
-                           PRIVATE
-                           $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Werror>
-                           $<$<CXX_COMPILER_ID:MSVC>:/WX>)
-endif ()
-
-if (NOT HALIDE_ENABLE_RTTI)
-    target_compile_options(Halide PUBLIC
-                           $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
-                           $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-rtti>)
-endif ()
 
 target_compile_options(Halide
                        PRIVATE
@@ -470,12 +435,6 @@ target_compile_options(Halide
                        # source files in parallel; the Halide library itself is a "knot" point of the build graph,
                        # so compiling its files in parallel should not oversubscribe the system
                        $<$<CXX_COMPILER_ID:MSVC>:/MP>
-
-                       # To compile LLVM headers following was taken from LLVM CMake files:
-                       # Disable sized deallocation if the flag is supported. MSVC fails to compile
-                       # the operator new overload in LLVM/IR/Function.h and Instruction.h otherwise.
-                       # See LLVM PR: 23513 (https://llvm.org/bugs/show_bug.cgi?id=23513)
-                       $<$<CXX_COMPILER_ID:MSVC>:/Zc:sizedDealloc->
                        )
 
 target_compile_definitions(Halide
@@ -510,7 +469,18 @@ if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
 endif ()
 
-option(HALIDE_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
-if (HALIDE_USE_CODEMODEL_LARGE)
+option(Halide_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
+if (Halide_USE_CODEMODEL_LARGE)
     target_compile_definitions(Halide PRIVATE HALIDE_USE_CODEMODEL_LARGE)
+endif ()
+
+##
+# Add autoschedulers to the build.
+##
+
+if (BUILD_SHARED_LIBS)
+    message(STATUS "Building autoschedulers enabled")
+    add_subdirectory(autoschedulers)
+else ()
+    message(STATUS "Building autoschedulers disabled (static Halide)")
 endif ()

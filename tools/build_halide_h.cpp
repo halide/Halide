@@ -88,7 +88,6 @@ int main(int argc, char **files) {
             "#undef internal_error\n"
             "#undef internal_assert\n"
             "#undef halide_runtime_error\n"
-            "#undef HALIDE_EXPORT\n\n"
             "#endif  // HALIDE_H\n");
 
     return 0;

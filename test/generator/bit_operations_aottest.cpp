@@ -46,5 +46,6 @@ int main(int argc, char **argv) {
         assert(output64(i) == _count_leading_zeros(input64(i)));
     }
 
+    printf("Success!\n");
     return 0;
 }

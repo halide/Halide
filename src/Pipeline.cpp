@@ -3,7 +3,6 @@
 #include <utility>
 
 #include "Argument.h"
-#include "AutoSchedule.h"
 #include "CodeGen_Internal.h"
 #include "FindCalls.h"
 #include "Func.h"
@@ -47,6 +46,15 @@ std::map<Output, std::string> static_library_outputs(const string &filename_pref
     std::map<Output, std::string> outputs = {
         {Output::c_header, filename_prefix + ext.at(Output::c_header).extension},
         {Output::static_library, filename_prefix + ext.at(Output::static_library).extension},
+    };
+    return outputs;
+}
+
+std::map<Output, std::string> object_file_outputs(const string &filename_prefix, const Target &target) {
+    auto ext = get_output_info(target);
+    std::map<Output, std::string> outputs = {
+        {Output::c_header, filename_prefix + ext.at(Output::c_header).extension},
+        {Output::object, filename_prefix + ext.at(Output::object).extension},
     };
     return outputs;
 }
@@ -171,32 +179,17 @@ vector<Func> Pipeline::outputs() const {
 }
 
 /* static */
-void Pipeline::auto_schedule_Mullapudi2016(const Pipeline &pipeline, const Target &target,
-                                           const MachineParams &arch_params, AutoSchedulerResults *outputs) {
-    AutoSchedulerResults results;
-    results.target = target;
-    results.machine_params_string = arch_params.to_string();
-
-    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "The Mullapudi2016 autoscheduler is not supported for the target: " << target;
-    results.scheduler_name = "Mullapudi2016";
-    results.schedule_source = generate_schedules(pipeline.contents->outputs, target, arch_params);
-    // this autoscheduler has no featurization
-
-    *outputs = results;
-}
-
-/* static */
 std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
-    static std::map<std::string, AutoSchedulerFn> autoschedulers = {
-        {"Mullapudi2016", auto_schedule_Mullapudi2016}};
+    static std::map<std::string, AutoSchedulerFn> autoschedulers = {};
     return autoschedulers;
 }
 
 /* static */
 std::string &Pipeline::get_default_autoscheduler_name() {
-    static std::string autoscheduler_name = "Mullapudi2016";
+    static std::string autoscheduler_name = "";
+    if (autoscheduler_name.empty() && !get_autoscheduler_map().empty()) {
+        autoscheduler_name = get_autoscheduler_map().begin()->first;
+    }
     return autoscheduler_name;
 }
 
@@ -217,7 +210,9 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
 
 AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) {
     auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
-    internal_assert(autoscheduler_fn != nullptr);
+    user_assert(autoscheduler_fn)
+        << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
+        << "Did you remember to load the plugin?";
 
     AutoSchedulerResults results;
     results.target = target;
@@ -344,7 +339,18 @@ void Pipeline::compile_to_multitarget_static_library(const std::string &filename
         return compile_to_module(args, name, target);
     };
     auto outputs = static_library_outputs(filename_prefix, targets.back());
-    compile_multitarget(generate_function_name(), outputs, targets, module_producer);
+    compile_multitarget(generate_function_name(), outputs, targets, {}, module_producer);
+}
+
+void Pipeline::compile_to_multitarget_object_files(const std::string &filename_prefix,
+                                                   const std::vector<Argument> &args,
+                                                   const std::vector<Target> &targets,
+                                                   const std::vector<std::string> &suffixes) {
+    auto module_producer = [this, &args](const std::string &name, const Target &target) -> Module {
+        return compile_to_module(args, name, target);
+    };
+    auto outputs = object_file_outputs(filename_prefix, targets.back());
+    compile_multitarget(generate_function_name(), outputs, targets, suffixes, module_producer);
 }
 
 void Pipeline::compile_to_file(const string &filename_prefix,

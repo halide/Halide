@@ -26,7 +26,7 @@ USE_EXPORT_DYNAMIC=
 endif
 endif
 
-LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
+LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/lib/libHalide.$(SHARED_EXT)
 
 SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
 
@@ -46,9 +46,7 @@ CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 # DON'T link libpython* - leave those symbols to lazily resolve at load time
 # Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
 LDFLAGS += -lz $(USE_EXPORT_DYNAMIC)
-ifeq ($(UNAME), Linux)
-  LDFLAGS += -Wl,-rpath=$(dir $(LIBHALIDE))
-endif
+LDFLAGS += -Wl,-rpath,$(dir $(LIBHALIDE))
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/src/%.cpp=$(BIN)/src/%.o)

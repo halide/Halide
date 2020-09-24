@@ -23,6 +23,7 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
+#include "FlattenNestedRamps.h"
 #include "Func.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
@@ -432,9 +433,18 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after lowering unsafe promises:\n"
              << s << "\n\n";
 
+    debug(1) << "Flattening nested ramps...\n";
+    s = flatten_nested_ramps(s);
+    debug(2) << "Lowering after flatenning nested ramps:\n"
+             << s << "\n\n";
+
+    debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);
     s = simplify(s);
     s = hoist_loop_invariant_values(s);
+    debug(2) << "Lowering after removing dead allocations and hoisting loop invariant values:\n"
+             << s << "\n\n";
+
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 
