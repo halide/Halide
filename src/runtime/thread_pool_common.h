@@ -19,6 +19,8 @@ int gettid() {
 #define log_message(stuff)
 #endif
 
+extern "C" bool halide_disable_atomics = true;
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {
@@ -43,9 +45,13 @@ struct work {
     // which condition variable is the owner sleeping on. NULL if it isn't sleeping.
     bool owner_is_sleeping;
 
+    // TODO(zvookin): This is a lot of space to burn. Verify the cache
+    // isolation makes enough difference.
+    char dummy1[128];
     // For leaf parallel for operations, use an atomic to handle indexing
     // to avoid contention on the queue mutex for each loop trip.
     int64_t leaf_index_atomic;
+    char dummy2[128];
   
     ALWAYS_INLINE bool make_runnable() {
         for (; next_semaphore < task.num_semaphores; next_semaphore++) {
@@ -199,6 +205,7 @@ WEAK void dump_job_state() {
 WEAK void worker_thread(void *);
 
 WEAK void worker_thread_already_locked(work *owned_job) {
+    bool disable_atomics = halide_disable_atomics;
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
@@ -349,7 +356,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                 job->next_job = work_queue.jobs;
                 work_queue.jobs = job;
             }
-        } else if (job->task.extent == 1 || !job->task.is_leaf) {
+        } else if (disable_atomics || job->task.extent == 1 || !job->task.is_leaf) {
             // Claim a task from it.
             work myjob = *job;
             job->task.min++;
@@ -373,40 +380,71 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             }
             halide_mutex_lock(&work_queue.mutex);
         } else { // leaf parallel for, use atomic index
-          //          print(NULL) << "Leaf case entry min: " << job->task.min << " extent: " << job->task.extent << " atomic index " << job->leaf_index_atomic << "\n";
             int64_t *atomic_index = &job->leaf_index_atomic;
             work myjob = *job;
             // Claim a task from it.
             int64_t limit = (int64_t)myjob.task.min + (int64_t)myjob.task.extent;
               
-            // Release the lock and do tasks.
-            halide_mutex_unlock(&work_queue.mutex);
             int64_t index;
-            while ((index = Synchronization::atomic_fetch_add_acquire_release(atomic_index, (int64_t)1)) < limit) {
-                if (myjob.task_fn) {
-                    result = halide_do_task(myjob.user_context, myjob.task_fn,
-                                            (int)index, myjob.task.closure);
-                } else {
-                    result = halide_do_loop_task(myjob.user_context, myjob.task.fn,
-                                                 (int)index, 1,
-                                                 myjob.task.closure, job);
+            Synchronization::atomic_load_acquire(atomic_index, &index);
+
+#define USE_FETCH_ADD 0
+#define RELOAD_INDEX 1
+            int executed = -1;
+#if !USE_FETCH_ADD
+            int cas_spins = 0;
+#endif
+            if (index < limit) {
+                // Release the lock and do tasks.
+                halide_mutex_unlock(&work_queue.mutex);
+                executed = 0;
+
+
+#if USE_FETCH_ADD
+                while ((index = Synchronization::atomic_fetch_add_acquire_release(atomic_index, (int64_t)1)) < limit) {
+#else
+                while (index < limit) {
+                    int64_t next_index = index + 1;
+                    if (!Synchronization::atomic_cas_weak_relaxed_relaxed(atomic_index, &index, &next_index)) {
+                        cas_spins++;
+                        continue;
+                    }
+#endif
+                    executed++;
+                    if (myjob.task_fn) {
+                        result = halide_do_task(myjob.user_context, myjob.task_fn,
+                                                (int)index, myjob.task.closure);
+                    } else {
+                        result = halide_do_loop_task(myjob.user_context, myjob.task.fn,
+                                                     (int)index, 1,
+                                                     myjob.task.closure, job);
+                    }
+#if !USE_FETCH_ADD
+#if RELOAD_INDEX
+                    Synchronization::atomic_load_acquire(atomic_index, &index);
+#else
+                    index = next_index;
+#endif
+#endif
+                }
+                halide_mutex_lock(&work_queue.mutex);
+
+                // Job queue state may have changed, so refind prev_ptr
+                if (job->task.extent != 0) {
+                    prev_ptr = &work_queue.jobs;
+                    work *job_search = work_queue.jobs;
+                    while (job_search != NULL && job_search != job) {
+                        prev_ptr = &job_search->next_job;
+                        job_search = job_search->next_job;
+                    }
+                    halide_assert(NULL, (job == job_search) && "Job not found on queue.");
                 }
             }
-            halide_mutex_lock(&work_queue.mutex);
-            //          print(NULL) << "Leaf case exit min: " << job->task.min << " extent: " << job->task.extent << " atomic index " << job->leaf_index_atomic << "\n";
+
             if (job->task.extent != 0) {
                 job->task.min += job->task.extent;
                 job->task.extent = 0;
-                prev_ptr = &work_queue.jobs;
-                work *job_search = work_queue.jobs;
-                while (job_search != NULL && job_search != job) {
-                    prev_ptr = &job_search->next_job;
-                    job_search = job_search->next_job;
-                }
-                halide_assert(NULL, (job == job_search) && "Job not found on queue.");
-                if (job == job_search) {
-                    *prev_ptr = job->next_job;
-                }
+                *prev_ptr = job->next_job;
             }
         }
 

@@ -99,6 +99,11 @@ ALWAYS_INLINE T atomic_fetch_add_acquire_release(T *addr, T val) {
 }
 
 template<typename T>
+ALWAYS_INLINE T atomic_fetch_add_relaxed(T *addr, T val) {
+    return __sync_fetch_and_add(addr, val);
+}
+
+template<typename T>
 ALWAYS_INLINE bool cas_strong_sequentially_consistent_helper(T *addr, T *expected, T *desired) {
     T oldval = *expected;
     T gotval = __sync_val_compare_and_swap(addr, oldval, *desired);
@@ -110,7 +115,8 @@ ALWAYS_INLINE bool atomic_cas_strong_release_relaxed(uintptr_t *addr, uintptr_t 
     return cas_strong_sequentially_consistent_helper(addr, expected, desired);
 }
 
-ALWAYS_INLINE bool atomic_cas_weak_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+template<typename T>
+ALWAYS_INLINE bool atomic_cas_weak_release_relaxed(T *addr, T *expected, T *desired) {
     return cas_strong_sequentially_consistent_helper(addr, expected, desired);
 }
 
@@ -119,7 +125,8 @@ ALWAYS_INLINE bool atomic_cas_weak_relacq_relaxed(T *addr, T *expected, T *desir
     return cas_strong_sequentially_consistent_helper(addr, expected, desired);
 }
 
-ALWAYS_INLINE bool atomic_cas_weak_relaxed_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+template<typename T>
+ALWAYS_INLINE bool atomic_cas_weak_relaxed_relaxed(T *addr, T *expected, T *desired) {
     return cas_strong_sequentially_consistent_helper(addr, expected, desired);
 }
 
@@ -171,6 +178,11 @@ ALWAYS_INLINE T atomic_fetch_add_acquire_release(T *addr, T val) {
     return __atomic_fetch_add(addr, val, __ATOMIC_ACQ_REL);
 }
 
+template<typename T>
+ALWAYS_INLINE T atomic_fetch_add_relaxed(T *addr, T val) {
+    return __atomic_fetch_add(addr, val, __ATOMIC_RELAXED);
+}
+
 ALWAYS_INLINE bool atomic_cas_strong_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
     return __atomic_compare_exchange(addr, expected, desired, false, __ATOMIC_RELEASE, __ATOMIC_RELAXED);
 }
@@ -180,11 +192,14 @@ ALWAYS_INLINE bool atomic_cas_weak_relacq_relaxed(T *addr, T *expected, T *desir
     return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
 }
 
-ALWAYS_INLINE bool atomic_cas_weak_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+template<typename T>
+ALWAYS_INLINE bool atomic_cas_weak_release_relaxed(T *addr, T *expected, T *desired) {
     return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_RELEASE, __ATOMIC_RELAXED);
 }
 
-ALWAYS_INLINE bool atomic_cas_weak_relaxed_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+
+template<typename T>
+ALWAYS_INLINE bool atomic_cas_weak_relaxed_relaxed(T *addr, T *expected, T *desired) {
     return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 }
 
