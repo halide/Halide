@@ -32,7 +32,12 @@
 #include "Simplify.h"
 #include "Util.h"
 
-static_assert(__cplusplus >= 201703L, "Halide requires C++17; please upgrade your compiler.");
+// MSVC won't set __cplusplus correctly unless certain compiler flags are set
+// (and CMake doesn't set those flags for you even if you specify C++17),
+// so we need to check against _MSVC_LANG as well, for completeness.
+#if !(__cplusplus >= 201703L || _MSVC_LANG >= 201703L)
+#error "Halide requires C++17 or later; please upgrade your compiler."
+#endif
 
 namespace Halide {
 

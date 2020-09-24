@@ -47,9 +47,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
-# MSVC won't set __cplusplus correctly unless this flag is also set
-add_compile_options($<$<CXX_COMPILER_ID:MSVC>:-Zc:__cplusplus>)
-
 ##
 # Import dependencies
 ##
