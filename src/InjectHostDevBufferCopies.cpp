@@ -573,7 +573,8 @@ class InjectBufferCopies : public IRMutator {
 
     public:
         InjectCombinedAllocation(string b, Type t, vector<Expr> e, Expr c, Expr d)
-            : buffer(std::move(b)), type(t), extents(std::move(e)), condition(std::move(c)), device_interface(d) {
+            : buffer(std::move(b)), type(t), extents(std::move(e)),
+              condition(std::move(c)), device_interface(std::move(d)) {
         }
     };
 

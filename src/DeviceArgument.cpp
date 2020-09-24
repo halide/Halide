@@ -52,8 +52,6 @@ void HostClosure::visit(const Call *op) {
 
         internal_assert(string_imm);
 
-
-
         std::string bufname = string_imm->value;
         Buffer &ref = buffers[bufname];
         ref.type = op->type;
