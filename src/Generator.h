@@ -1785,6 +1785,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(ImageParam, dim)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, host_alignment)
     HALIDE_FORWARD_METHOD(ImageParam, set_host_alignment)
+    HALIDE_FORWARD_METHOD(ImageParam, store_in)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, dimensions)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, left)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, right)

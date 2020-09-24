@@ -129,6 +129,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     case MemoryType::GPUShared:
         out << "GPUShared";
         break;
+    case MemoryType::GPUTexture:
+        out << "GPUTexture";
+        break;
     case MemoryType::LockedCache:
         out << "LockedCache";
         break;

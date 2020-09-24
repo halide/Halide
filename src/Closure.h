@@ -55,11 +55,14 @@ public:
         /** The buffer is written to. */
         bool write;
 
+        /** The buffer is a texture */
+        bool texture;
+
         /** The size of the buffer if known, otherwise zero. */
         size_t size;
 
         Buffer()
-            : dimensions(0), read(false), write(false), size(0) {
+            : dimensions(0), read(false), write(false), texture(false), size(0) {
         }
     };
 

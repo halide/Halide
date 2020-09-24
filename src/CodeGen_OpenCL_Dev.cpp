@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <sstream>
 #include <utility>
+#include <array>
 
 #include "CSE.h"
 #include "CodeGen_Internal.h"
@@ -242,6 +243,128 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         } else {
             CodeGen_C::visit(op);
         }
+    } else if (op->is_intrinsic(Call::image_load_texture)) {
+        // image_load(<image name>, <buffer>, <x>, <x-extent>, <y>,
+         // <y-extent>, <z>, <z-extent>)
+         int dims = (op->args.size() - 2) / 2;
+         internal_assert(dims >= 1 && dims <= 3);
+         const StringImm *string_imm = op->args[0].as<StringImm>();
+         if (!string_imm) {
+             internal_assert(op->args[0].as<Broadcast>());
+             string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+         }
+         internal_assert(string_imm);
+         Type arg_type = op->args[2].type();
+         internal_assert(arg_type.lanes() <= 16);
+         internal_assert(arg_type.lanes() == op->type.lanes());
+
+          string type_suffix;
+         if (op->type.is_int()) {
+             type_suffix = "i";
+         } else if (op->type.is_uint()) {
+             type_suffix = "ui";
+         } else if (op->type.is_float()) {
+             type_suffix = "f";
+         } else {
+             internal_error << "Invalid type for read_image: " << op->type << "\n";
+         }
+
+          std::array<string, 3> coord;
+         for (int i = 0; i < dims; i++) {
+             coord[i] = print_expr(op->args[i*2 + 2]);
+         }
+         vector<string> results(arg_type.lanes());
+         // For vectorized reads, codegen as a sequence of read_image calls
+         for (int i = 0; i < arg_type.lanes(); i++) {
+             ostringstream rhs;
+             rhs << "read_image" << type_suffix << "(" << print_name(string_imm->value) << ", ";
+             string idx = arg_type.is_vector() ? string(".s") + vector_elements[i] : "";
+             switch (dims) {
+             case 1:
+                 rhs << coord[0] << idx << ").s0";
+                 break;
+             case 2:
+                 rhs << "(int2)(" << coord[0] << idx << ", " << coord[1] << idx << ")).s0";
+                 break;
+             case 3:
+                 rhs << "(int4)(" << coord[0] << idx << ", " << coord[1] << idx
+                     << ", " << coord[2] << idx << ", 0)).s0";
+                 break;
+             }
+             print_assignment(op->type.with_bits(32).with_lanes(1), rhs.str());
+             results[i] = id;
+         }
+
+          if (op->type.is_vector()) {
+             // Combine all results into a single vector
+             ostringstream rhs;
+             rhs << "(" << print_type(op->type) << ")(";
+             for (int i = 0; i < op->type.lanes(); i++) {
+                 rhs << results[i];
+                 if (i < op->type.lanes() -1) {
+                     rhs << ", ";
+                 }
+             }
+             rhs << ")";
+             print_assignment(op->type, rhs.str());
+         }
+         if (op->type.bits() != 32) {
+             // Widen to the correct type
+             print_assignment(op->type, "convert_" + print_type(op->type) + "(" + id + ")");
+         }
+     } else if (op->is_intrinsic(Call::image_store_texture)) {
+         // image_store(<image name>, <buffer>, <x>, <y>, <z>, <value>)
+         const StringImm *string_imm = op->args[0].as<StringImm>();
+         if (!string_imm) {
+             internal_assert(op->args[0].as<Broadcast>());
+             string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+         }
+         internal_assert(string_imm);
+         int dims = op->args.size() - 3;
+         internal_assert(dims >= 1 && dims <= 3);
+         Type arg_type = op->args[2].type();
+         internal_assert(arg_type.lanes() <= 16);
+         Type value_type = op->args.back().type();
+         internal_assert(arg_type.lanes() == value_type.lanes());
+
+          string type_suffix;
+         if (op->type.is_int()) {
+             type_suffix = "i";
+         } else if (op->type.is_uint()) {
+             type_suffix = "ui";
+         } else if (op->type.is_float()) {
+             type_suffix = "f";
+         } else {
+             internal_error << "Invalid type for write_image: " << op->type << "\n";
+         }
+
+          std::array<string, 3> coord;
+         for (int i = 0; i < dims; i++) {
+             coord[i] = print_expr(op->args[i + 2]);
+         }
+         string value = print_expr(op->args.back());
+         // For vectorized writes, codegen as a sequence of write_image calls
+         for (int i = 0; i < arg_type.lanes(); i++) {
+             ostringstream write_image;
+             write_image << "write_image" << type_suffix << "(" << print_name(string_imm->value) << ", ";
+             string idx = arg_type.is_vector() ? string(".s") + vector_elements[i] : "";
+             switch (dims) {
+             case 1:
+                 write_image << coord[0] << idx;
+                 break;
+             case 2:
+                 write_image << "(int2)(" << coord[0] << idx << ", " << coord[1] << idx << ")";
+                 break;
+             case 3:
+                 write_image << "(int4)(" << coord[0] << idx << ", " << coord[1] << idx
+                             << ", " << coord[2] << idx << ", 0)";
+                 break;
+             }
+             write_image << ", (" << print_type(value_type.with_bits(32).with_lanes(4))
+                         << ")(" << value << idx << ", 0, 0, 0));\n";
+            //  do_indent();
+             stream << write_image.str();
+         }
     } else {
         CodeGen_C::visit(op);
     }
@@ -590,9 +713,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
         return;
     } else {
         // Should have been freed internally
-        internal_assert(allocations.contains(op->name));
-        allocations.pop(op->name);
-        stream << get_indent() << "#undef " << get_memory_space(op->name) << "\n";
+        if (allocations.contains(op->name)) {
+            internal_assert(allocations.contains(op->name));
+            allocations.pop(op->name);
+            stream << get_indent() << "#undef " << get_memory_space(op->name) << "\n";
+        }
     }
 }
 
@@ -765,11 +890,27 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     stream << "__kernel void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            stream << " " << get_memory_space(args[i].name) << " ";
-            if (!args[i].write) stream << "const ";
-            stream << print_type(args[i].type) << " *"
-                   << "restrict "
-                   << print_name(args[i].name);
+            if (args[i].is_texture) {
+                int dims = args[i].dimensions;
+                internal_assert(dims >= 1 && dims <= 3) << "dims = " << dims << "\n";
+                if (args[i].read && args[i].write) {
+                    stream << " __read_write ";
+                } else if (args[i].read) {
+                    stream << " __read_only ";
+                } else if (args[i].write) {
+                    stream << " __write_only ";
+                } else {
+                    internal_error << "CL Image argument " << args[i].name
+                                   << " is neither read nor write";
+                }
+                stream << "image" << dims << "d_t ";
+            } else {
+                stream << " " << get_memory_space(args[i].name) << " ";
+                if (!args[i].write) stream << "const ";
+                stream << print_type(args[i].type) << " *"
+                       << "restrict ";
+            }
+            stream << print_name(args[i].name);
             Allocation alloc;
             alloc.type = args[i].type;
             allocations.push(args[i].name, alloc);
@@ -797,7 +938,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
         void visit(const Allocate *op) override {
             if (op->memory_type == MemoryType::GPUShared) {
                 internal_assert(alloc == nullptr)
-                    << "Found multiple shared allocations in metal kernel\n";
+                    << "Found multiple shared allocations in opencl kernel\n";
                 alloc = op;
             }
         }

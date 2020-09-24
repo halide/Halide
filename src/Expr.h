@@ -368,6 +368,10 @@ enum class MemoryType {
      * across GPU threads within the same block. */
     GPUShared,
 
+    /** Allocation is stored in GPU texture memory and accessed through
+     * hardware sampler */
+    GPUTexture,
+
     /** Allocate Locked Cache Memory to act as local memory */
     LockedCache,
     /** Vector Tightly Coupled Memory. HVX (Hexagon) local memory available on

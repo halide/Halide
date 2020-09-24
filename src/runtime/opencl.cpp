@@ -13,7 +13,7 @@ namespace OpenCL {
 
 // Define the function pointers for the OpenCL API. OpenCL 1.2
 // currently disabled so we can work on build bots without it.
-//#define HAVE_OPENCL_12
+#define HAVE_OPENCL_12
 #define CL_FN(ret, fn, args) WEAK ret(CL_API_CALL *fn) args;
 #include "cl_functions.h"
 
@@ -67,6 +67,7 @@ WEAK void load_libopencl(void *user_context) {
 }
 
 extern WEAK halide_device_interface_t opencl_device_interface;
+extern WEAK halide_device_interface_t opencl_image_device_interface;
 
 WEAK const char *get_opencl_error_name(cl_int err);
 WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_queue *q);
@@ -619,6 +620,8 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         return ctx.error_code;
     }
 
+    // std::cout << src;
+
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
@@ -687,8 +690,11 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         } else {
             debug(user_context) << (void *)program << "\n";
         }
-        (*state)->program = program;
 
+        // halide_print(user_context, "Source: \n");
+        // halide_print(user_context, src);
+
+        (*state)->program = program;
         debug(user_context) << "    clBuildProgram " << (void *)program
                             << " " << options.str() << "\n";
         err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL);
@@ -696,7 +702,7 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
 
             {
                 // Allocate an appropriately sized buffer for the build log.
-                Printer<ErrorPrinter, 8192> p(user_context);
+                Printer<ErrorPrinter, 16384> p(user_context);
 
                 p << "CL: clBuildProgram failed: "
                   << get_opencl_error_name(err)
@@ -707,7 +713,7 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
                                           CL_PROGRAM_BUILD_LOG,
                                           p.capacity() - p.size() - 1, p.dst,
                                           NULL) != CL_SUCCESS) {
-                    p << "clGetProgramBuildInfo failed";
+                    p << "clGetProgramBuildInfo failed (Printer buffer too small?)";
                 }
             }
 
@@ -1488,3 +1494,327 @@ WEAK halide_device_interface_t opencl_device_interface = {
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
+
+extern "C" {
+
+WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *buf) {
+    debug(user_context)
+        << "CL: halide_opencl_image_device_malloc (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
+
+    ClContext ctx(user_context);
+    if (ctx.error_code != CL_SUCCESS) {
+        return ctx.error_code;
+    }
+
+    size_t size = buf->size_in_bytes();
+    halide_assert(user_context, size != 0);
+    if (buf->device) {
+        halide_assert(user_context, validate_device_pointer(user_context, buf, size));
+        return 0;
+    }
+
+    for (int i = 0; i < buf->dimensions; i++) {
+        halide_assert(user_context, buf->dim[i].stride >= 0);
+    }
+
+    debug(user_context) << "    allocating " << *buf << "\n";
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+
+    device_handle *dev_handle = (device_handle *)malloc(sizeof(device_handle));
+    if (dev_handle == NULL) {
+        return CL_OUT_OF_HOST_MEMORY;
+    }
+
+    cl_image_format format;
+    cl_image_desc desc;
+
+    struct halide_type_t type = buf->type;
+    if (type.code == halide_type_int) {
+        if (type.bits == 8) {
+            format.image_channel_data_type = CL_SIGNED_INT8;
+        } else if (type.bits == 16) {
+            format.image_channel_data_type = CL_SIGNED_INT16;
+        } else if (type.bits == 32) {
+            format.image_channel_data_type = CL_SIGNED_INT32;
+        } else {
+            halide_assert(user_context, false && "unhandled int bit width for image");
+        }
+    } else if (type.code == halide_type_uint) {
+        if (type.bits == 8) {
+            format.image_channel_data_type = CL_UNSIGNED_INT8;
+        } else if (type.bits == 16) {
+            format.image_channel_data_type = CL_UNSIGNED_INT16;
+        } else if (type.bits == 32) {
+            format.image_channel_data_type = CL_UNSIGNED_INT32;
+        } else {
+            halide_assert(user_context, false && "unhandled uint bit width for image");
+        }
+    } else if (type.code == halide_type_float) {
+        if (type.bits == 16) {
+            format.image_channel_data_type = CL_HALF_FLOAT;
+        } else if (type.bits == 32) {
+            format.image_channel_data_type = CL_FLOAT;
+        } else {
+            halide_assert(user_context, false && "unhandled float bit width for image");
+        }
+    } else {
+        halide_assert(user_context, false && "unhandled data type for image");
+    }
+
+    int last_dim_size = buf->dim[buf->dimensions - 1].extent;
+    format.image_channel_order = CL_R;
+
+    // if (buf->host == NULL) {
+    //     size_t size = buf->size_in_bytes();
+    //     debug(user_context) << "manually allocating buf->host";
+    //     buf->host = (uint8_t *)halide_malloc(user_context, size);
+    //     if (buf->host == NULL) {
+    //         return -1;
+    // debug(user_context) << *buf;
+    //     }
+    // }
+
+    debug(user_context) << "      format=(" << format.image_channel_data_type << ", " << format.image_channel_order << ")\n";
+
+    if (buf->dimensions == 1) {
+        desc.image_type = CL_MEM_OBJECT_IMAGE1D;
+    } else if (buf->dimensions == 2) {
+        desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+    } else if (buf->dimensions == 3) {
+        desc.image_type = CL_MEM_OBJECT_IMAGE3D;
+    } else {
+        halide_assert(user_context, buf->dimensions >= 1 && buf->dimensions <= 3);
+    }
+    desc.image_width = buf->dim[0].extent;
+    desc.image_height = buf->dimensions >= 2 ? buf->dim[1].extent : 1;
+    desc.image_depth = buf->dimensions >= 3 ? buf->dim[1].extent : 1;
+    desc.image_array_size = 1;
+    desc.image_row_pitch = 0;  //buf->dim[1].stride * buf->type.bytes();
+    desc.image_slice_pitch = 0;
+    desc.num_mip_levels = 0;
+    desc.num_samples = 0;
+    desc.buffer = NULL;
+
+    debug(user_context) << "      desc=(\n";
+    debug(user_context) << "        " << (int)desc.image_type << ",\n";
+
+    debug(user_context) << "        " << (int)desc.image_width << ",\n";
+    debug(user_context) << "        " << (int)desc.image_height << ",\n";
+    debug(user_context) << "        " << (int)desc.image_depth << ",\n";
+
+    debug(user_context) << "        " << (int)desc.image_array_size << ",\n";
+    debug(user_context) << "        " << (int)desc.image_row_pitch << ",\n";
+    debug(user_context) << "        " << (int)desc.image_slice_pitch << ",\n";
+    debug(user_context) << "        " << (void *)desc.buffer << ")\n";
+
+    cl_int err;
+    debug(user_context) << "    clCreateImage -> " << (int)size << " ";
+    cl_mem dev_ptr = clCreateImage(ctx.context, CL_MEM_READ_WRITE, &format, &desc, NULL, &err);
+    if (err != CL_SUCCESS || dev_ptr == 0) {
+        debug(user_context) << get_opencl_error_name(err) << "\n";
+        error(user_context) << "CL: clCreateImage failed: "
+                            << get_opencl_error_name(err);
+        free(dev_handle);
+        return err;
+    } else {
+        debug(user_context) << (void *)dev_ptr << " device_handle: " << dev_handle << "\n";
+    }
+
+    dev_handle->mem = dev_ptr;
+    dev_handle->offset = 0;
+    buf->device = (uint64_t)dev_handle;
+    buf->device_interface = &opencl_image_device_interface;
+    buf->device_interface->impl->use_module();
+
+    debug(user_context)
+        << "    Allocated device buffer " << (void *)buf->device
+        << " for buffer " << buf << "\n";
+
+    halide_assert(user_context, validate_device_pointer(user_context, buf, size));
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+#endif
+
+    return CL_SUCCESS;
+}
+
+WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                                         const struct halide_device_interface_t *dst_device_interface,
+                                         struct halide_buffer_t *dst) {
+    // We only handle copies to opencl or to host
+    debug(user_context)
+        << "CL: halide_opencl_image_buffer_copy (user_context: " << user_context
+        << ", src: " << src << ", dst: " << dst << ")\n";
+
+    halide_assert(user_context, dst_device_interface == NULL ||
+                                    dst_device_interface == &opencl_image_device_interface);
+
+    if ((src->device_dirty() || src->host == NULL) &&
+        src->device_interface != &opencl_device_interface) {
+        halide_assert(user_context, dst_device_interface == &opencl_image_device_interface);
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    bool from_host = (src->device_interface != &opencl_image_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != NULL);
+    bool to_host = !dst_device_interface;
+
+    halide_assert(user_context, from_host || src->device);
+    halide_assert(user_context, to_host || dst->device);
+
+    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+
+    int err = 0;
+    {
+        ClContext ctx(user_context);
+        if (ctx.error_code != CL_SUCCESS) {
+            return ctx.error_code;
+        }
+
+#ifdef DEBUG_RUNTIME
+        uint64_t t_before = halide_current_time_ns(user_context);
+        if (!from_host) {
+            halide_assert(user_context, validate_device_pointer(user_context, src));
+        }
+        if (!to_host) {
+            halide_assert(user_context, validate_device_pointer(user_context, dst));
+        }
+#endif
+
+        debug(user_context) << "    from " << (from_host ? "host" : "device")
+                            << " to " << (to_host ? "host" : "device") << ", "
+                            << (void *)c.src << " + " << 0
+                            << " -> " << (void *)c.dst << " + " << 0
+                            << ", " << c.chunk_size << " bytes\n";
+
+        halide_assert(user_context, c.chunk_size == src->size_in_bytes());
+        halide_assert(user_context, c.chunk_size == dst->size_in_bytes());
+        if (!from_host && to_host) {
+            int dim = dst->dimensions;
+            size_t offset[] = {0, 0, 0};
+            size_t region[] = {
+                static_cast<size_t>(dst->dim[0].extent),
+                dim >= 2 ? static_cast<size_t>(dst->dim[1].extent) : 1,
+                dim >= 3 ? static_cast<size_t>(dst->dim[1].extent) : 1};
+            int pitch = dst->dimensions >= 2 ? dst->dim[1].stride * dst->type.bytes() : 0;
+            err = clEnqueueReadImage(ctx.cmd_queue, ((device_handle *)c.src)->mem,
+                                     CL_FALSE, offset, region,
+                                     0, 0,
+                                     dst->host, 0, NULL, NULL);
+        } else if (from_host && !to_host) {
+            int dim = src->dimensions;
+            size_t offset[] = {0, 0, 0};
+            size_t region[] = {
+                static_cast<size_t>(src->dim[0].extent),
+                dim >= 2 ? static_cast<size_t>(src->dim[1].extent) : 1,
+                dim >= 3 ? static_cast<size_t>(src->dim[1].extent) : 1};
+            int pitch = dim >= 2 ? src->dim[1].stride * src->type.bytes() : 0;
+            err = clEnqueueWriteImage(ctx.cmd_queue, ((device_handle *)c.dst)->mem,
+                                      CL_FALSE, offset, region, 0, 0, src->host,
+                                      0, NULL, NULL);
+        } else if (!from_host && !to_host) {
+            halide_assert(user_context, false && "image to image copies not implemented");
+            // err = clEnqueueCopyBuffer(ctx.cmd_queue, ((device_handle *)c.src)->mem, ((device_handle *)c.dst)->mem,
+            //                           src_idx + ((device_handle *)c.src)->offset, dst_idx + ((device_handle *)c.dst)->offset,
+            //                           c.chunk_size, 0, NULL, NULL);
+        }
+
+        if (err != CL_SUCCESS) {
+            debug(user_context) << get_opencl_error_name(err) << "\n";
+            error(user_context) << "CL: buffer transfer failed: "
+                                << get_opencl_error_name(err);
+            return err;
+        }
+
+        // The reads/writes above are all non-blocking, so empty the command
+        // queue before we proceed so that other host code won't write
+        // to the buffer while the above writes are still running.
+        clFinish(ctx.cmd_queue);
+
+#ifdef DEBUG_RUNTIME
+        uint64_t t_after = halide_current_time_ns(user_context);
+        debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+#endif
+    }
+
+    return err;
+}
+
+WEAK int halide_opencl_image_copy_to_device(void *user_context, halide_buffer_t *buf) {
+    return halide_opencl_image_buffer_copy(user_context, buf, &opencl_image_device_interface, buf);
+}
+
+WEAK int halide_opencl_image_copy_to_host(void *user_context, halide_buffer_t *buf) {
+    return halide_opencl_image_buffer_copy(user_context, buf, NULL, buf);
+}
+
+WEAK int halide_opencl_image_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
+    return halide_default_device_and_host_malloc(user_context, buf, &opencl_image_device_interface);
+}
+
+WEAK int halide_opencl_image_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
+    return halide_default_device_and_host_free(user_context, buf, &opencl_image_device_interface);
+}
+}
+
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace OpenCL {
+
+WEAK halide_device_interface_impl_t opencl_image_device_interface_impl = {
+    halide_use_jit_module,
+    halide_release_jit_module,
+    halide_opencl_image_device_malloc,
+    halide_opencl_device_free,
+    halide_opencl_device_sync,
+    halide_opencl_device_release,
+    halide_opencl_image_copy_to_host,
+    halide_opencl_image_copy_to_device,
+    halide_opencl_image_device_and_host_malloc,
+    halide_opencl_image_device_and_host_free,
+    halide_opencl_image_buffer_copy,
+    nullptr,  //halide_opencl_image_device_crop,
+    nullptr,  //halide_opencl_image_device_slice,
+    nullptr,  //halide_opencl_image_device_release_crop,
+    halide_opencl_wrap_cl_mem,
+    halide_opencl_detach_cl_mem,
+};
+
+WEAK halide_device_interface_t opencl_image_device_interface = {
+    halide_device_malloc,
+    halide_device_free,
+    halide_device_sync,
+    halide_device_release,
+    halide_copy_to_host,
+    halide_copy_to_device,
+    halide_device_and_host_malloc,
+    halide_device_and_host_free,
+    halide_buffer_copy,
+    halide_device_crop,
+    halide_device_slice,
+    halide_device_release_crop,
+    halide_device_wrap_native,
+    halide_device_detach_native,
+    NULL,
+    &opencl_image_device_interface_impl};
+
+}  // namespace OpenCL
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
+extern "C" {
+
+WEAK const struct halide_device_interface_t *halide_opencl_image_device_interface() {
+    return &opencl_image_device_interface;
+}
+}

@@ -24,6 +24,7 @@ struct ParameterContents {
     std::vector<BufferConstraint> buffer_constraints;
     Expr scalar_min, scalar_max, scalar_estimate;
     const bool is_buffer;
+    MemoryType memory_type = MemoryType::Auto;
 
     ParameterContents(Type t, bool b, int d, const std::string &n)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
@@ -347,6 +348,16 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
             (*args)[i] = Cast::make(Int(32), (*args)[i]);
         }
     }
+}
+
+void Parameter::store_in(MemoryType memory_type) {
+    check_is_buffer();
+    contents->memory_type = memory_type;
+}
+
+MemoryType Parameter::memory_type() const {
+    // check_is_buffer();
+    return contents->memory_type;
 }
 
 }  // namespace Internal

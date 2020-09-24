@@ -47,6 +47,7 @@ set(RUNTIME_CPP
     msan
     msan_stubs
     opencl
+    opencl_image
     opengl
     opengl_egl_context
     opengl_glx_context

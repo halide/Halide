@@ -36,6 +36,8 @@ struct DeviceArgument {
      */
     bool is_buffer;
 
+    bool is_texture;
+
     /** If is_buffer is true, this is the dimensionality of the buffer.
      * If is_buffer is false, this value is ignored (and should always be set to zero) */
     uint8_t dimensions;
@@ -66,6 +68,7 @@ struct DeviceArgument {
 
     DeviceArgument()
         : is_buffer(false),
+          is_texture(false),
           dimensions(0),
           size(0),
           packed_index(0),
@@ -75,11 +78,13 @@ struct DeviceArgument {
 
     DeviceArgument(const std::string &_name,
                    bool _is_buffer,
+                   bool _is_texture,
                    Type _type,
                    uint8_t _dimensions,
                    size_t _size = 0)
         : name(_name),
           is_buffer(_is_buffer),
+          is_texture(_is_texture),
           dimensions(_dimensions),
           type(_type),
           size(_size),

@@ -52,20 +52,25 @@ class FindBufferUsage : public IRVisitor {
     }
 
     void visit(const Call *op) override {
-        if (op->is_intrinsic(Call::image_load)) {
+        if (op->is_intrinsic(Call::image_load) ||
+            op->is_intrinsic(Call::image_load_texture)) {
             internal_assert(!op->args.empty());
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
+                touched_as_texture = touched_as_texture || op->is_intrinsic(Call::image_load_texture);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
                 if (i == 1) continue;
                 op->args[i].accept(this);
             }
-        } else if (op->is_intrinsic(Call::image_store)) {
+        } else if (op->is_intrinsic(Call::image_store) ||
+                   op->is_intrinsic(Call::image_store_texture)) {
             internal_assert(!op->args.empty());
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
                 devices_writing.insert(current_device_api);
+
+                touched_as_texture = touched_as_texture || op->is_intrinsic(Call::image_store_texture);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
                 if (i == 1) continue;
@@ -126,6 +131,8 @@ public:
     // bits and device allocation messed with.
     std::set<DeviceAPI> devices_touched_by_extern;
 
+    bool touched_as_texture = false;
+
     FindBufferUsage(const std::string &buf, DeviceAPI d)
         : buffer(buf), current_device_api(d) {
     }
@@ -144,6 +151,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     string buffer;
 
     bool is_external;
+
+    bool is_texture;
 
     enum FlagState {
         Unknown,
@@ -179,7 +188,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
     Stmt make_device_malloc(DeviceAPI target_device_api) {
-        Expr device_interface = make_device_interface_call(target_device_api);
+        Expr device_interface = make_device_interface_call(target_device_api, is_texture);
         Stmt device_malloc = call_extern_and_assert("halide_device_malloc",
                                                     {buffer_var(), device_interface});
         return device_malloc;
@@ -190,7 +199,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
     Stmt make_copy_to_device(DeviceAPI target_device_api) {
-        Expr device_interface = make_device_interface_call(target_device_api);
+        Expr device_interface = make_device_interface_call(target_device_api, is_texture);
         return call_extern_and_assert("halide_copy_to_device", {buffer_var(), device_interface});
     }
 
@@ -401,8 +410,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
 public:
-    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e)
-        : buffer(b), is_external(e) {
+    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e, bool t)
+        : buffer(b), is_external(e), is_texture(t) {
         if (is_external) {
             // The state of the buffer is totally unknown, which is
             // the default constructor for this->state
@@ -539,7 +548,6 @@ class InjectBufferCopies : public IRMutator {
                 body = Block::make(destructor, body);
 
                 // Then the device_and_host malloc
-                Expr device_interface = make_device_interface_call(device_api);
                 Stmt device_malloc = call_extern_and_assert("halide_device_and_host_malloc",
                                                             {buf, device_interface});
                 if (!is_one(condition)) {
@@ -561,11 +569,11 @@ class InjectBufferCopies : public IRMutator {
         Type type;
         vector<Expr> extents;
         Expr condition;
-        DeviceAPI device_api;
+        Expr device_interface;
 
     public:
-        InjectCombinedAllocation(string b, Type t, vector<Expr> e, Expr c, DeviceAPI d)
-            : buffer(std::move(b)), type(t), extents(std::move(e)), condition(std::move(c)), device_api(d) {
+        InjectCombinedAllocation(string b, Type t, vector<Expr> e, Expr c, Expr d)
+            : buffer(std::move(b)), type(t), extents(std::move(e)), condition(std::move(c)), device_interface(d) {
         }
     };
 
@@ -606,7 +614,7 @@ class InjectBufferCopies : public IRMutator {
 
         Stmt body = mutate(op->body);
 
-        InjectBufferCopiesForSingleBuffer injector(op->name, false);
+        InjectBufferCopiesForSingleBuffer injector(op->name, false, op->memory_type == MemoryType::GPUTexture);
         body = injector.mutate(body);
 
         string buffer_name = op->name + ".buffer";
@@ -634,8 +642,10 @@ class InjectBufferCopies : public IRMutator {
                 internal_assert(free_injecter.success);
             }
 
+            Expr device_interface = make_device_interface_call(touching_device, op->memory_type == MemoryType::GPUTexture);
+
             return InjectCombinedAllocation(op->name, op->type, op->extents,
-                                            op->condition, touching_device)
+                                            op->condition, device_interface)
                 .mutate(body);
         } else {
             // Only touched on host but passed to an extern stage, or
@@ -722,6 +732,10 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
         void include(const Parameter &p) {
             if (p.defined()) {
                 result.insert(p.name());
+
+                if (p.memory_type() == MemoryType::GPUTexture) {
+                    result_textures.insert(p.name());
+                }
             }
         }
 
@@ -749,6 +763,7 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
 
     public:
         set<string> result;
+        set<string> result_textures;
     };
 
 public:
@@ -760,7 +775,7 @@ public:
             s.accept(&finder);
             Stmt new_stmt = s;
             for (const string &buf : finder.result) {
-                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true).mutate(new_stmt);
+                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_textures.count(buf)).mutate(new_stmt);
             }
             return new_stmt;
         } else {

@@ -95,4 +95,8 @@ ImageParam &ImageParam::add_trace_tag(const std::string &trace_tag) {
     return *this;
 }
 
+void ImageParam::store_in(MemoryType type) {
+    param.store_in(type);
+}
+
 }  // namespace Halide
