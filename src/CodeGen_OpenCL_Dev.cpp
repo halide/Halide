@@ -175,6 +175,21 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf)
     }
 }
 
+namespace {
+std::string image_type_suffix(const Type &type) {
+    if (type.is_int()) {
+        return "i";
+    } else if (type.is_uint()) {
+        return "ui";
+    } else if (type.is_float()) {
+        return "f";
+    } else {
+        internal_error << "Invalid type for image: " << type << "\n";
+    }
+    return "";
+}
+}  // namespace
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::bool_to_mask)) {
         if (op->args[0].type().is_vector()) {
@@ -258,17 +273,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         internal_assert(arg_type.lanes() <= 16);
         internal_assert(arg_type.lanes() == op->type.lanes());
 
-        string type_suffix;
-        if (op->type.is_int()) {
-            type_suffix = "i";
-        } else if (op->type.is_uint()) {
-            type_suffix = "ui";
-        } else if (op->type.is_float()) {
-            type_suffix = "f";
-        } else {
-            internal_error << "Invalid type for read_image: " << op->type << "\n";
-        }
-
         std::array<string, 3> coord;
         for (int i = 0; i < dims; i++) {
             coord[i] = print_expr(op->args[i * 2 + 2]);
@@ -277,7 +281,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         // For vectorized reads, codegen as a sequence of read_image calls
         for (int i = 0; i < arg_type.lanes(); i++) {
             ostringstream rhs;
-            rhs << "read_image" << type_suffix << "(" << print_name(string_imm->value) << ", ";
+            rhs << "read_image" << image_type_suffix(op->type) << "(" << print_name(string_imm->value) << ", ";
             string idx = arg_type.is_vector() ? string(".s") + vector_elements[i] : "";
             switch (dims) {
             case 1:
@@ -327,17 +331,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         Type value_type = op->args.back().type();
         internal_assert(arg_type.lanes() == value_type.lanes());
 
-        string type_suffix;
-        if (op->type.is_int()) {
-            type_suffix = "i";
-        } else if (op->type.is_uint()) {
-            type_suffix = "ui";
-        } else if (op->type.is_float()) {
-            type_suffix = "f";
-        } else {
-            internal_error << "Invalid type for write_image: " << op->type << "\n";
-        }
-
         std::array<string, 3> coord;
         for (int i = 0; i < dims; i++) {
             coord[i] = print_expr(op->args[i + 2]);
@@ -346,7 +339,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         // For vectorized writes, codegen as a sequence of write_image calls
         for (int i = 0; i < arg_type.lanes(); i++) {
             ostringstream write_image;
-            write_image << "write_image" << type_suffix << "(" << print_name(string_imm->value) << ", ";
+            write_image << "write_image" << image_type_suffix(op->type)
+                        << "(" << print_name(string_imm->value) << ", ";
             string idx = arg_type.is_vector() ? string(".s") + vector_elements[i] : "";
             switch (dims) {
             case 1:

@@ -36,6 +36,10 @@ struct DeviceArgument {
      */
     bool is_buffer;
 
+    /** If is_buffer == true and is_texture == true, this argument should be
+     * passed and accessed through texture sampler operations instead of
+     * directly as a memory array
+     */
     bool is_texture;
 
     /** If is_buffer is true, this is the dimensionality of the buffer.

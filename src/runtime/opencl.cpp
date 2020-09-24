@@ -11,8 +11,7 @@ namespace Runtime {
 namespace Internal {
 namespace OpenCL {
 
-// Define the function pointers for the OpenCL API. OpenCL 1.2
-// currently disabled so we can work on build bots without it.
+// Define the function pointers for the OpenCL API.
 #define HAVE_OPENCL_12
 #define CL_FN(ret, fn, args) WEAK ret(CL_API_CALL *fn) args;
 #include "cl_functions.h"
@@ -1593,22 +1592,16 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
     desc.image_height = buf->dimensions >= 2 ? buf->dim[1].extent : 1;
     desc.image_depth = buf->dimensions >= 3 ? buf->dim[1].extent : 1;
     desc.image_array_size = 1;
-    desc.image_row_pitch = 0;  //buf->dim[1].stride * buf->type.bytes();
-    desc.image_slice_pitch = 0;
+    desc.image_row_pitch = buf->dimensions >= 2 ? buf->dim[1].stride * buf->type.bytes() : 0;
+    desc.image_slice_pitch = buf->dimensions >= 3 ? buf->dim[2].stride * buf->type.bytes() : 0;
     desc.num_mip_levels = 0;
     desc.num_samples = 0;
     desc.buffer = NULL;
 
     debug(user_context) << "      desc=(\n";
     debug(user_context) << "        " << (int)desc.image_type << ",\n";
-
-    debug(user_context) << "        " << (int)desc.image_width << ",\n";
-    debug(user_context) << "        " << (int)desc.image_height << ",\n";
-    debug(user_context) << "        " << (int)desc.image_depth << ",\n";
-
-    debug(user_context) << "        " << (int)desc.image_array_size << ",\n";
-    debug(user_context) << "        " << (int)desc.image_row_pitch << ",\n";
-    debug(user_context) << "        " << (int)desc.image_slice_pitch << ",\n";
+    debug(user_context) << "        " << (int)desc.image_width << ", " << (int)desc.image_height << ", " << (int)desc.image_depth << ",\n";
+    debug(user_context) << "        " << (int)desc.image_array_size << ", " << (int)desc.image_row_pitch << ", " << (int)desc.image_slice_pitch << ",\n";
     debug(user_context) << "        " << (void *)desc.buffer << ")\n";
 
     cl_int err;
@@ -1704,10 +1697,11 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
                 static_cast<size_t>(dst->dim[0].extent),
                 dim >= 2 ? static_cast<size_t>(dst->dim[1].extent) : 1,
                 dim >= 3 ? static_cast<size_t>(dst->dim[1].extent) : 1};
-            int pitch = dst->dimensions >= 2 ? dst->dim[1].stride * dst->type.bytes() : 0;
+            int row_pitch = dst->dimensions >= 2 ? dst->dim[1].stride * dst->type.bytes() : 0;
+            int slice_pitch = dst->dimensions >= 3 ? dst->dim[2].stride * dst->type.bytes() : 0;
             err = clEnqueueReadImage(ctx.cmd_queue, ((device_handle *)c.src)->mem,
                                      CL_FALSE, offset, region,
-                                     0, 0,
+                                     row_pitch, slice_pitch,
                                      dst->host, 0, NULL, NULL);
         } else if (from_host && !to_host) {
             int dim = src->dimensions;
@@ -1716,9 +1710,10 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
                 static_cast<size_t>(src->dim[0].extent),
                 dim >= 2 ? static_cast<size_t>(src->dim[1].extent) : 1,
                 dim >= 3 ? static_cast<size_t>(src->dim[1].extent) : 1};
-            int pitch = dim >= 2 ? src->dim[1].stride * src->type.bytes() : 0;
+            int row_pitch = dim >= 2 ? src->dim[1].stride * src->type.bytes() : 0;
+            int slice_pitch = dim >= 3 ? src->dim[2].stride * src->type.bytes() : 0;
             err = clEnqueueWriteImage(ctx.cmd_queue, ((device_handle *)c.dst)->mem,
-                                      CL_FALSE, offset, region, 0, 0, src->host,
+                                      CL_FALSE, offset, region, row_pitch, slice_pitch, src->host,
                                       0, NULL, NULL);
         } else if (!from_host && !to_host) {
             halide_assert(user_context, false && "image to image copies not implemented");
