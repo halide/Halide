@@ -32,8 +32,6 @@ class ImageParam : public OutputImageParam {
     /** Helper function to initialize the Func representation of this ImageParam. */
     Func create_func() const;
 
-    MemoryType memory_type = MemoryType::Auto;
-
 public:
     /** Construct a nullptr image parameter handle. */
     ImageParam() = default;
@@ -135,8 +133,6 @@ public:
 
     /** Add a trace tag to this ImageParam's Func. */
     ImageParam &add_trace_tag(const std::string &trace_tag);
-
-    void store_in(MemoryType type);
 };
 
 }  // namespace Halide
