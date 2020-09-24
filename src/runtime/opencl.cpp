@@ -1203,7 +1203,8 @@ WEAK int halide_opencl_detach_cl_mem(void *user_context, halide_buffer_t *buf) {
     if (buf->device == NULL) {
         return 0;
     }
-    halide_assert(user_context, buf->device_interface == &opencl_device_interface);
+    halide_assert(user_context, buf->device_interface == &opencl_device_interface ||
+                                buf->device_interface == &opencl_image_device_interface);
     free((device_handle *)buf->device);
     buf->device = 0;
     buf->device_interface->impl->release_module();
@@ -1215,7 +1216,8 @@ WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, halide_buffer_t *buf
     if (buf->device == NULL) {
         return 0;
     }
-    halide_assert(user_context, buf->device_interface == &opencl_device_interface);
+    halide_assert(user_context, buf->device_interface == &opencl_device_interface ||
+                                buf->device_interface == &opencl_image_device_interface);
     return (uintptr_t)((device_handle *)buf->device)->mem;
 }
 
@@ -1757,6 +1759,32 @@ WEAK int halide_opencl_image_device_and_host_malloc(void *user_context, struct h
 
 WEAK int halide_opencl_image_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_free(user_context, buf, &opencl_image_device_interface);
+}
+
+WEAK int halide_opencl_image_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t mem) {
+    halide_assert(user_context, buf->device == 0);
+    if (buf->device != 0) {
+        return -2;
+    }
+    device_handle *dev_handle = (device_handle *)malloc(sizeof(device_handle));
+    if (dev_handle == NULL) {
+        return halide_error_code_out_of_memory;
+    }
+    dev_handle->mem = (cl_mem)mem;
+    dev_handle->offset = 0;
+    buf->device = (uint64_t)dev_handle;
+    buf->device_interface = &opencl_image_device_interface;
+    buf->device_interface->impl->use_module();
+#ifdef DEBUG_RUNTIME
+    if (!validate_device_pointer(user_context, buf)) {
+        free((device_handle *)buf->device);
+        buf->device = 0;
+        buf->device_interface->impl->release_module();
+        buf->device_interface = NULL;
+        return -3;
+    }
+#endif
+    return 0;
 }
 }
 

@@ -90,6 +90,11 @@ extern const char *halide_opencl_get_build_options(void *user_context);
  * dirty bits are left unmodified. */
 extern int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr);
 
+/** Same as halide_opencl_wrap_cl_mem but wraps a cl_mem created with
+ * clCreateImage
+ */
+extern int halide_opencl_image_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr);
+
 /** Disconnect a halide_buffer_t from the memory it was previously
  * wrapped around. Should only be called for a halide_buffer_t that
  * halide_opencl_wrap_device_ptr was previously called on. Frees any
