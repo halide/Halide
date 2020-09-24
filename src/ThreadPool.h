@@ -15,7 +15,7 @@
 
 /** \file
  * Define a simple thread pool utility that is modeled on the api of
- * C++11 std::async(); since implementation details of std::async
+ * std::async(); since implementation details of std::async
  * can vary considerably, with no control over thread spawning, this class
  * allows us to use the same model but with precise control over thread usage.
  *

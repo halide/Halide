@@ -9,13 +9,13 @@ fi
 mkdir -p bin
 
 c++ jni/edge_detect_generator.cpp ../../tools/GenGen.cpp \
-    -g -fno-rtti -Wall -std=c++11 \
+    -g -fno-rtti -Wall -std=c++17 \
     -I ../../include -I ../../build/include \
     -L ../../bin -lHalide -ldl -lpthread -lz \
     -o bin/edge_detect_generator
 
 c++ jni/deinterleave_generator.cpp ../../tools/GenGen.cpp \
-    -g -fno-rtti -Wall -std=c++11 \
+    -g -fno-rtti -Wall -std=c++17 \
     -I ../../include -I ../../build/include \
     -L ../../bin -lHalide -ldl -lpthread -lz \
     -o bin/deinterleave_generator

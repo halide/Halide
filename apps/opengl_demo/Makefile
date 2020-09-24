@@ -43,7 +43,7 @@ endif
 #
 MAIN_LIBS      = -lpng -ldrawtext $(OPENGL_LIBS)
 GENERATOR_LIBS = -lHalide -lz -lcurses
-CXXFLAGS       = -std=c++11 -g -DDTX_FONT=\"$(DTX_FONT)\" $(HALIDE_INC_PATH)
+CXXFLAGS       = -std=c++17 -g -DDTX_FONT=\"$(DTX_FONT)\" $(HALIDE_INC_PATH)
 
 # Output directory.
 BIN ?= bin

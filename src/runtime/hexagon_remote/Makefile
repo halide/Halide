@@ -153,7 +153,7 @@ $(BIN)/%/sim_remote.o: sim_remote.cpp sim_protocol.h known_symbols.h $(BIN)/src/
 
 $(BIN)/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
-	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c sim_host.cpp -o $@
+	$(CXX-$*) -std=c++17 $(CCFLAGS-$*) -c sim_host.cpp -o $@
 
 $(BIN)/%/sim_qurt.o: sim_qurt.cpp
 	mkdir -p $(@D)

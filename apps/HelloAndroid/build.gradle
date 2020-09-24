@@ -1,7 +1,7 @@
 import org.apache.tools.ant.taskdefs.condition.Os
 
 // Avoid conflicts with Bazel on case-insensitive filesystems
-buildDir = 'gradle_build' 
+buildDir = 'gradle_build'
 
 repositories {
     jcenter()
@@ -51,7 +51,7 @@ sources {
 executables {
     hello_generator {
         binaries.all {
-            cppCompiler.args "-std=c++11", "-g", "-Wall", "-fno-rtti", "-I", "${projectDir}/../../include", "-I", "${projectDir}/../../build/include"
+            cppCompiler.args "-std=c++17", "-g", "-Wall", "-fno-rtti", "-I", "${projectDir}/../../include", "-I", "${projectDir}/../../build/include"
             // "/bin" assumes Makefile build for Halide; "/build/lib" assumes CMake build
             linker.args "-lHalide", "-ldl", "-lpthread", "-lz", "-L", "${projectDir}/../../bin", "-L", "${projectDir}/../../build/lib"
         }

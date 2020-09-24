@@ -11,7 +11,7 @@ LOCAL_STATIC_LIBRARIES += libOpengl
 LOCAL_LDLIBS           := -lm -llog -landroid -lEGL -lGLESv2 avg_filter_uint32t.o avg_filter_uint32t_arm.o avg_filter_float.o avg_filter_float_arm.o
 LOCAL_ARM_MODE         := arm
 
-LOCAL_CPPFLAGS += -std=c++11 -I../support -I../../include
+LOCAL_CPPFLAGS += -std=c++17 -I../support -I../../include
 
 LOCAL_C_INCLUDES += ./
 
@@ -27,7 +27,7 @@ LOCAL_STATIC_LIBRARIES += libOpengl
 LOCAL_LDLIBS           := -lm -llog -landroid -lEGL -lGLESv2 avg_filter_uint32t.o avg_filter_uint32t_arm.o avg_filter_float.o avg_filter_float_arm.o
 LOCAL_ARM_MODE         := arm
 
-LOCAL_CPPFLAGS += -std=c++11 -I../support -I../../include
+LOCAL_CPPFLAGS += -std=c++17 -I../support -I../../include
 
 LOCAL_C_INCLUDES += ./
 
@@ -44,7 +44,7 @@ LOCAL_STATIC_LIBRARIES += libOpengl
 LOCAL_LDLIBS           := -lm -llog -landroid -lEGL -lGLESv2 two_kernels_filter.o
 LOCAL_ARM_MODE         := arm
 
-LOCAL_CPPFLAGS += -std=c++11 -I../support -I../../include
+LOCAL_CPPFLAGS += -std=c++17 -I../support -I../../include
 
 LOCAL_C_INCLUDES += ./
 
@@ -60,7 +60,7 @@ LOCAL_STATIC_LIBRARIES += libOpengl
 LOCAL_LDLIBS           := -lm -llog -landroid -lEGL -lGLESv2 two_kernels_filter.o
 LOCAL_ARM_MODE         := arm
 
-LOCAL_CPPFLAGS += -std=c++11 -I../support -I../../include
+LOCAL_CPPFLAGS += -std=c++17 -I../support -I../../include
 
 LOCAL_C_INCLUDES += ./
 

@@ -14,7 +14,7 @@ def generate_pybind_wrapper(path, headers, has_cuda):
         s += "#define HL_PT_CUDA\n"
     s += "#include \"HalidePyTorchHelpers.h\"\n"
     for h in headers:
-        s += "#include \"{}\"\n".format(os.path.splitext(h)[0]+".pytorch.h")
+        s += "#include \"{}\"\n".format(os.path.splitext(h)[0] + ".pytorch.h")
     if has_cuda:
         s += "#undef HL_PT_CUDA\n"
 
@@ -22,7 +22,7 @@ def generate_pybind_wrapper(path, headers, has_cuda):
     for h in headers:
         name = os.path.splitext(h)[0]
         s += "  m.def(\"{}\", &{}_th_, \"PyTorch wrapper of the Halide pipeline {}\");\n".format(
-          name, name, name)
+            name, name, name)
     s += "}\n"
     with open(path, 'w') as fid:
         fid.write(s)
@@ -46,7 +46,7 @@ if __name__ == "__main__":
         has_cuda = True
 
     include_dirs = [build_dir, os.path.join(halide_dir, "include")]
-    compile_args = ["-std=c++11", "-g"]
+    compile_args = ["-std=c++17", "-g"]
     if platform.system() == "Darwin":  # on osx libstdc++ causes trouble
         compile_args += ["-stdlib=libc++"]
 
@@ -79,7 +79,8 @@ if __name__ == "__main__":
         extension = CUDAExtension(ext_name, sources,
                                   include_dirs=include_dirs,
                                   extra_objects=hl_libs,
-                                  libraries=["cuda"],  # Halide ops need the full cuda lib, not just the RT library
+                                  # Halide ops need the full cuda lib, not just the RT library
+                                  libraries=["cuda"],
                                   extra_compile_args=compile_args)
     else:
         print("Generating CPU wrapper")

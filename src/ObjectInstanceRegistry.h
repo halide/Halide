@@ -5,8 +5,7 @@
  *
  * Provides a single global registry of Generators, GeneratorParams,
  * and Params indexed by this pointer. This is used for finding the
- * parameters inside of a Generator. NOTE: this is threadsafe only
- * if you are compiling with C++11 enabled.
+ * parameters inside of a Generator.
  */
 
 #include <stddef.h>

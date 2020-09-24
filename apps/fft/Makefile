@@ -46,7 +46,7 @@ bench_64x64: $(BIN)/$(HL_TARGET)/bench_fft
 
 $(GENERATOR_BIN)/fft.generator: fft_generator.cpp fft.cpp fft.h $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS) 
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 # Generate four AOT compiled FFT variants. Forward versions have gain set to 1 / 256.0
 $(BIN)/%/fft_forward_r2c.a: $(GENERATOR_BIN)/fft.generator
@@ -67,7 +67,7 @@ $(BIN)/%/fft_inverse_c2c.a: $(GENERATOR_BIN)/fft.generator
 
 $(BIN)/%/fft_aot_test: fft_aot_test.cpp $(BIN)/%/fft_forward_r2c.a $(BIN)/%/fft_inverse_c2r.a $(BIN)/%/fft_forward_c2c.a $(BIN)/%/fft_inverse_c2c.a
 	@mkdir -p $(@D)
-	$(CXX) -I$(BIN)/$* -I$(HALIDE_DISTRIB_PATH)/include/ -std=c++11 $^ -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -I$(BIN)/$* -I$(HALIDE_DISTRIB_PATH)/include/ -std=c++17 $^ -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 clean:
 	rm -rf $(BIN)

@@ -109,7 +109,7 @@ function(add_wasm_executable TARGET)
     set(EMCC_FLAGS
         -O3
         -g
-        -std=c++11
+        -std=c++17
         -Wall
         -Wcast-qual
         -Werror

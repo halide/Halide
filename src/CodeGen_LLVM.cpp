@@ -32,13 +32,7 @@
 #include "Simplify.h"
 #include "Util.h"
 
-#if !(__cplusplus > 199711L || _MSC_VER >= 1800)
-
-// VS2013 isn't fully C++11 compatible, but it supports enough of what Halide
-// needs for now to be an acceptable minimum for Windows.
-#error "Halide requires C++11 or VS2013+; please upgrade your compiler."
-
-#endif
+static_assert(__cplusplus >= 201703L, "Halide requires C++17; please upgrade your compiler.");
 
 namespace Halide {
 

@@ -6,7 +6,7 @@
 
 // On linux or os x, you can compile and run it like so:
 
-// g++ lesson_16_rgb_generate.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++11 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_16_generate
+// g++ lesson_16_rgb_generate.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_16_generate
 // export LD_LIBRARY_PATH=<path/to/libHalide.so>   # For linux
 // export DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> # For OS X
 // ./lesson_16_generate -g brighten -o . -f brighten_planar      target=host layout=planar

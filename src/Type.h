@@ -18,9 +18,7 @@
  * time type checking for both Halide generated functions and calls
  * from Halide to external functions.
  *
- * These are intended to be constexpr producable, but we don't depend
- * on C++11 yet. In C++14, it is possible these will be replaced with
- * introspection/reflection facilities.
+ * These are intended to be constexpr producable.
  *
  * halide_handle_traits has to go outside the Halide namespace due to template
  * resolution rules. TODO(zalman): Do all types need to be in global namespace?
@@ -73,9 +71,7 @@ struct halide_cplusplus_type_name {
 /** A structure to represent the fully scoped name of a C++ composite
  * type for use in generating function signatures that use that type.
  *
- * This is intended to be a constexpr usable type, but we don't depend
- * on C++11 yet. In C++14, it is possible this will be replaced with
- * introspection/reflection facilities.
+ * This is intended to be a constexpr usable type.
  *
  * Although this is in the global namespace, it should be considered "Halide Internal"
  * and subject to change; code outside Halide should avoid referencing it.

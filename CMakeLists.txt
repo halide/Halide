@@ -42,10 +42,13 @@ endif ()
 # Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
-# Require standard C++14
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+# Require standard C++17
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_CXX_EXTENSIONS NO)
+
+# MSVC won't set __cplusplus correctly unless this flag is also set
+add_compile_options($<$<CXX_COMPILER_ID:MSVC>:-Zc:__cplusplus>)
 
 ##
 # Import dependencies

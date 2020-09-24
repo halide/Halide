@@ -514,7 +514,7 @@ boilerplate.
 cmake_minimum_required(VERSION 3.16)
 project(HalideExample)
 
-set(CMAKE_CXX_STANDARD 11)  # or newer
+set(CMAKE_CXX_STANDARD 17)  # or newer
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -530,7 +530,7 @@ immediately after setting the minimum version.
 
 The next three variables set the project-wide C++ standard. The first,
 [`CMAKE_CXX_STANDARD`][cmake_cxx_standard], simply sets the standard version.
-Halide requires at least C++11. The second,
+Halide requires at least c++17. The second,
 [`CMAKE_CXX_STANDARD_REQUIRED`][cmake_cxx_standard_required], tells CMake to
 fail if the compiler cannot provide the requested standard version. Lastly,
 [`CMAKE_CXX_EXTENSIONS`][cmake_cxx_extensions] tells CMake to disable

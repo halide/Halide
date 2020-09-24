@@ -3,7 +3,7 @@ set -e
 android update project -p . --target android-17
 mkdir -p bin
 c++ jni/hello_generator.cpp ../../tools/GenGen.cpp \
-    -g -fno-rtti -Wall -std=c++11 \
+    -g -fno-rtti -Wall -std=c++17 \
     -I ../../include -I ../../build/include \
     -L ../../bin -lHalide -ldl -lpthread -lz \
     -o bin/hello_generator
