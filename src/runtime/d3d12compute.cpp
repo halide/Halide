@@ -5,12 +5,12 @@
 #else  // BITS_64
 
 // Debugging utilities for back-end developers:
-#define HALIDE_D3D12_TRACE (0)
+#define HALIDE_D3D12_TRACE (1)
 #define HALIDE_D3D12_DEBUG_LAYER (0)
 #define HALIDE_D3D12_DEBUG_SHADERS (0)
 #define HALIDE_D3D12_PROFILING (0)
 #define HALIDE_D3D12_TRACE_TIME (0)
-#define HALIDE_D3D12_TRACE_TIME_THRESHOLD (100) /* in microseconds */
+#define HALIDE_D3D12_TRACE_TIME_THRESHOLD (25) /* in microseconds */
 #define HALIDE_D3D12_PIX (0)
 #define HALIDE_D3D12_RENDERDOC (0)
 
@@ -573,6 +573,7 @@ typedef halide_d3d12compute_command_queue d3d12_command_queue;
 
 struct d3d12_buffer {
     ID3D12Resource *resource;
+    UINT capacityInBytes;
     UINT sizeInBytes;
     UINT offset;    // FirstElement
     UINT elements;  // NumElements
@@ -1322,6 +1323,7 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12
     }
 
     buffer.resource = resource;
+    buffer.capacityInBytes = length;
     buffer.sizeInBytes = length;
     buffer.state = InitialResourceState;
     buffer.type = d3d12_buffer::Unknown;
@@ -2575,12 +2577,16 @@ static void d3d12_debug_dump(error &err) {
 
 using namespace Halide::Runtime::Internal::D3D12Compute;
 
+static const int MaxBuffersInCache = 32;
+WEAK d3d12_buffer *buffer_pool[MaxBuffersInCache] = {};
+WEAK halide_mutex buffer_pool_lock;
+
 extern "C" {
 
 WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *buf) {
     TRACELOG;
 
-    TRACEPRINT("(user_context: " << user_context << ", buf: " << buf << ")\n");
+    TRACEPRINT("user_context: " << user_context << " | halide_buffer_t: " << buf << " | d3d12_device: " << buf->device << "\n");
 
     if (buf->device) {
         // This buffer already has a device allocation
@@ -2595,13 +2601,42 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
         halide_assert(user_context, buf->dim[i].stride >= 0);
     }
 
+    // consult the allocation cache
+    d3d12_buffer *d3d12_buf = NULL;
+    size_t best_fit_size = ~0;
+    size_t best_fit_index = 0;
+    if (halide_can_reuse_device_allocations(user_context)) {
+        ScopedMutexLock lock(&buffer_pool_lock);
+        for (size_t i = 0; i < MaxBuffersInCache; ++i) {
+            if (buffer_pool[i] == NULL) {
+                continue;
+            }
+            d3d12_buffer *dbuffer = buffer_pool[i];
+            if (dbuffer->capacityInBytes < size) {
+                continue;
+            }
+            if (dbuffer->capacityInBytes > best_fit_size) {
+                continue;
+            }
+            best_fit_size = dbuffer->capacityInBytes;
+            best_fit_index = i;
+            d3d12_buf = dbuffer;
+        }
+        if (d3d12_buf != NULL) {
+            TRACEPRINT("serving request from allocation cache: " << size << " bytes from capacity of " << best_fit_size << "\n");
+            buffer_pool[best_fit_index] = NULL;
+        }
+    }
+
     D3D12ContextHolder d3d12_context(user_context, true);
     if (d3d12_context.error != 0) {
         return d3d12_context.error;
     }
 
-    d3d12_buffer *d3d12_buf = new_buffer(d3d12_context.device, size);
-    if (d3d12_buf == 0) {
+    if (d3d12_buf == NULL) {
+        d3d12_buf = new_buffer(d3d12_context.device, size);
+    } 
+    if (d3d12_buf == NULL) {
         d3d12_halt("D3D12: Failed to allocate buffer of size " << (int64_t)size);
         return halide_error_code_device_malloc_failed;
     }
@@ -2617,13 +2652,42 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *buf) {
     TRACELOG;
 
-    TRACEPRINT("buf " << buf << " device is " << buf->device << "\n");
+    TRACEPRINT("user_context: " << user_context << " | halide_buffer_t: " << buf << " | d3d12_device: " << buf->device << "\n");
 
     if (buf->device == 0) {
         return 0;
     }
 
-    halide_d3d12compute_detach_buffer(user_context, buf);
+    d3d12_buffer *dbuffer = peel_buffer(buf);
+    TRACEPRINT("d3d12_buffer: " << dbuffer << "\n");
+
+    wait_until_signaled(dbuffer->signal);
+
+    bool cached = false;
+    if (halide_can_reuse_device_allocations(user_context)) {
+        ScopedMutexLock lock(&buffer_pool_lock);
+        for (size_t i = 0; i < MaxBuffersInCache; ++i) {
+            if (buffer_pool[i] != NULL) {
+                continue;
+            }
+            TRACEPRINT("caching allocation for later use...\n");
+            cached = true;
+            buffer_pool[i] = dbuffer;
+            break;
+        }
+    }
+
+    unwrap_buffer(buf);
+
+    if (!cached) {
+        // it is safe to simply call release_d3d12_object() here:
+        // if 'buf' holds an user resource (from halide_d3d12compute_wrap_buffer),
+        // the reference count of the resource will just get decremented without
+        // actually freeing the underlying resource object;
+        // if 'buf' holds an internally managed resource, it will either be freed
+        // or have its reference count decreased (when 'buf' is a device_crop).
+        release_d3d12_object(dbuffer);
+    }
 
     return 0;
 }
@@ -3328,6 +3392,18 @@ WEAK int halide_d3d12compute_device_release_crop(void *user_context, struct hali
     return halide_d3d12compute_device_free(user_context, buf);
 }
 
+WEAK int halide_d3d12compute_detach_buffer(void *user_context, struct halide_buffer_t *buf) {
+    TRACELOG;
+
+    if (buf->device == 0) {
+        return 0;
+    }
+
+    unwrap_buffer(buf);
+
+    return 0;
+}
+
 WEAK int halide_d3d12compute_wrap_buffer(void *user_context, struct halide_buffer_t *halide_buf, uint64_t d3d12_resource) {
     TRACELOG;
 
@@ -3360,29 +3436,6 @@ WEAK int halide_d3d12compute_wrap_buffer(void *user_context, struct halide_buffe
     // safely call release_d3d12_object() later without actually releasing the
     // user-managed resource object:
     pResource->AddRef();
-
-    return 0;
-}
-
-WEAK int halide_d3d12compute_detach_buffer(void *user_context, struct halide_buffer_t *buf) {
-    TRACELOG;
-
-    if (buf->device == 0) {
-        return 0;
-    }
-
-    d3d12_buffer *dbuffer = peel_buffer(buf);
-    unwrap_buffer(buf);
-
-    wait_until_signaled(dbuffer->signal);
-
-    // it is safe to simply call release_d3d12_object() here:
-    // if 'buf' holds an user resource (from halide_d3d12compute_wrap_buffer),
-    // the reference count of the resource will just get decremented without
-    // actually freeing the underlying resource object;
-    // if 'buf' holds an internally managed resource, it will either be freed
-    // or have its reference count decreased (when 'buf' is a device_crop).
-    release_d3d12_object(dbuffer);
 
     return 0;
 }
