@@ -2542,7 +2542,6 @@ public:
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, dim)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, host_alignment)
     HALIDE_FORWARD_METHOD(OutputImageParam, set_host_alignment)
-    HALIDE_FORWARD_METHOD(OutputImageParam, store_in)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, dimensions)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, left)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, right)

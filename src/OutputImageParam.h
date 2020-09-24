@@ -117,10 +117,6 @@ public:
      * repeatedly, but slightly terser. The size of the estimates vector
      * must match the dimensionality of the ImageParam. */
     OutputImageParam &set_estimates(const Region &estimates);
-
-    /** Set the desired storage type for this parameter.  Only useful
-     * for MemoryType::GPUTexture at present */
-    OutputImageParam &store_in(MemoryType type);
 };
 
 }  // namespace Halide
