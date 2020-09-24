@@ -1384,9 +1384,9 @@ class EliminateInterleaves : public IRMutator {
             "halide.hexagon.deinterleave.vb",
             "halide.hexagon.deinterleave.vh",
             "halide.hexagon.deinterleave.vw",
-            "gather",
-            "scatter",
-            "scatter_acc",
+            Call::get_intrinsic_name(Call::hvx_gather),
+            Call::get_intrinsic_name(Call::hvx_scatter),
+            Call::get_intrinsic_name(Call::hvx_scatter_acc),
         };
         if (not_interleavable.count(op->name) != 0) return false;
 
@@ -2173,10 +2173,10 @@ class ScatterGatherGenerator : public IRMutator {
         }
         // Check for scatter-acc.
         Expr value = is_scatter_acc(op);
-        string intrinsic = "scatter";
+        Call::IntrinsicOp intrinsic = Call::hvx_scatter;
         if (!value.same_as(op->value)) {
             // It's a scatter-accumulate
-            intrinsic = "scatter_acc";
+            intrinsic = Call::hvx_scatter_acc;
         }
         Expr buffer = Variable::make(Handle(), op->name);
         Expr index = mutate(cast(ty.with_code(Type::Int), ty.bytes() * op->index));
@@ -2206,7 +2206,9 @@ class SyncronizationBarriers : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->name == "scatter" || op->name == "scatter_acc" || op->name == "gather") {
+        if (op->is_intrinsic(Call::hvx_scatter) ||
+            op->is_intrinsic(Call::hvx_scatter_acc) ||
+            op->is_intrinsic(Call::hvx_gather)) {
             string name = op->args[0].as<Variable>()->name;
             // Check if the scatter-gather encountered conflicts with any
             // previous operation. If yes, insert a scatter-release.
@@ -2270,8 +2272,8 @@ public:
         Stmt new_s = IRMutator::mutate(s);
         // Wrap the stmt with scatter-release if any hazard was detected.
         if (sync.find(&s) != sync.end()) {
-            Stmt scatter_sync = Evaluate::make(Call::make(Int(32), "scatter_release",
-                                                          {sync[&s]}, Call::Intrinsic));
+            Stmt scatter_sync =
+                Evaluate::make(Call::make(Int(32), Call::hvx_scatter_release, {sync[&s]}, Call::Intrinsic));
             return Block::make(scatter_sync, new_s);
         }
         return new_s;

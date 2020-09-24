@@ -509,11 +509,14 @@ struct Call : public ExprNode<Call> {
         div_round_to_zero,
         dynamic_shuffle,
         extract_mask_element,
-        gather,
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
         gpu_thread_barrier,
+        hvx_gather,
+        hvx_scatter,
+        hvx_scatter_acc,
+        hvx_scatter_release,
         if_then_else,
         if_then_else_mask,
         image_load,
@@ -535,9 +538,6 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
-        scatter,
-        scatter_acc,
-        scatter_release,
         select_mask,
         shift_left,
         shift_right,
@@ -744,6 +744,10 @@ struct Shuffle : public ExprNode<Shuffle> {
     /** Convenience constructor for making a shuffle representing a
      * concatenation of the vectors. */
     static Expr make_concat(const std::vector<Expr> &vectors);
+
+    /** Convenience constructor for making a shuffle representing a
+     * broadcast of a vector. */
+    static Expr make_broadcast(Expr vector, int lanes);
 
     /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */
