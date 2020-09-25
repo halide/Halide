@@ -1658,7 +1658,7 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
                                     dst_device_interface == &opencl_image_device_interface);
 
     if ((src->device_dirty() || src->host == NULL) &&
-        src->device_interface != &opencl_device_interface) {
+        src->device_interface != &opencl_image_device_interface) {
         halide_assert(user_context, dst_device_interface == &opencl_image_device_interface);
         // This is handled at the higher level.
         return halide_error_code_incompatible_device_interface;

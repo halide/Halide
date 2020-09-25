@@ -36,7 +36,10 @@ void define_enums(py::module &m) {
         .value("Heap", MemoryType::Heap)
         .value("Stack", MemoryType::Stack)
         .value("Register", MemoryType::Register)
-        .value("GPUShared", MemoryType::GPUShared);
+        .value("GPUShared", MemoryType::GPUShared)
+        .value("GPUTexture", MemoryType::GPUTexture)
+        .value("LockedCache", MemoryType::LockedCache)
+        .value("VTCM", MemoryType::VTCM);
 
     py::enum_<NameMangling>(m, "NameMangling")
         .value("Default", NameMangling::Default)

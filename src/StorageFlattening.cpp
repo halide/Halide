@@ -5,6 +5,7 @@
 #include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "Parameter.h"
 #include "Scope.h"
 
@@ -239,6 +240,13 @@ private:
             }
         }
 
+        if (output_buf.defined()) {
+            debug(2) << "have output buf " << output_buf.name() << " " << output_buf.memory_type() << "\n";
+            if (output_buf.memory_type() == MemoryType::GPUTexture) {
+                textures.insert(op->name);
+            }
+        }
+
         Expr value = mutate(op->values[0]);
         if (in_shader && !shader_scope_realizations.contains(op->name)) {
             user_assert(op->args.size() == 3)
@@ -280,7 +288,7 @@ private:
             debug(2) << " load call to " << op->name << " " << textures.count(op->name) << "\n";
             if (op->param.defined()) {
                 debug(2) << "     is param: "
-                         << " " << op->param.name() << " "
+                         << " " << op->param.name() << " " << op->param.memory_type()
                          << "\n";
 
                 if (op->param.memory_type() == MemoryType::GPUTexture) {

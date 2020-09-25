@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
             // 1D stores/loads
             Buffer<int> input(100);
             input.fill(10);
-            ImageParam param(Int(32), 1);
+            ImageParam param(Int(32), 1, "input");
             param.set(input);
             param.store_in(memory_type);  // check float stores
 
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
             g.gpu_tile(x, xi, 16);
 
             f.compute_root().store_in(memory_type).gpu_blocks(x);  // store f as integer
-            g.store_in(memory_type);
+            g.output_buffer().store_in(memory_type);
 
             Buffer<int> out = g.realize(100);
             for (int x = 0; x < 100; x++) {
@@ -45,6 +45,7 @@ int main(int argc, char **argv) {
                     return -1;
                 }
             }
+            return -0;
         }
         {
             // 2D stores/loads
