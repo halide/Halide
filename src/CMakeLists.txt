@@ -446,7 +446,7 @@ target_compile_definitions(Halide
                            )
 
 ##
-# Set up macro definitions for libHalide
+# Set up additional backend options for Halide
 ##
 
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
@@ -467,11 +467,6 @@ endif ()
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
-endif ()
-
-option(Halide_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
-if (Halide_USE_CODEMODEL_LARGE)
-    target_compile_definitions(Halide PRIVATE HALIDE_USE_CODEMODEL_LARGE)
 endif ()
 
 ##
