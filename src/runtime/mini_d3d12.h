@@ -6801,4 +6801,66 @@ typedef HRESULT(WINAPI *PFN_D3DCOMPILE)(
 #pragma clang diagnostic pop
 #endif
 
+
+
+// Mini Win32 for D3D12
+
+#if !defined(WINBASEAPI)
+#if !defined(_KERNEL32_)
+#define WINBASEAPI DECLSPEC_IMPORT
+#else
+#define WINBASEAPI
+#endif
+#endif
+
+#define _Ret_maybenull_
+#define _Post_ptr_invalid_
+
+#define STATUS_WAIT_0 ((DWORD)0x00000000L)
+#define WAIT_OBJECT_0 ((STATUS_WAIT_0) + 0)
+
+extern "C" {
+
+WINBASEAPI
+BOOL
+    WINAPI
+    CloseHandle(
+        _In_ _Post_ptr_invalid_ HANDLE hObject);
+
+WINBASEAPI
+_Ret_maybenull_
+    HANDLE
+        WINAPI
+        CreateEventA(
+            _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
+            _In_ BOOL bManualReset,
+            _In_ BOOL bInitialState,
+            _In_opt_ LPCSTR lpName);
+
+WINBASEAPI
+_Ret_maybenull_
+    HANDLE
+        WINAPI
+        CreateEventW(
+            _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
+            _In_ BOOL bManualReset,
+            _In_ BOOL bInitialState,
+            _In_opt_ LPCWSTR lpName);
+
+WINBASEAPI
+DWORD
+WINAPI
+WaitForSingleObject(
+    _In_ HANDLE hHandle,
+    _In_ DWORD dwMilliseconds);
+}
+
+#ifdef UNICODE
+#define CreateEvent CreateEventW
+#else
+#define CreateEvent CreateEventA
+#endif  // !UNICODE
+
+
+
 #endif /*__mini_d3d12_h__*/

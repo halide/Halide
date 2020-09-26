@@ -1,8 +1,14 @@
+// NOTE(marcos): this file should not be compiled stand-alone; instead, it must
+// be included from a platform wrapper, as listed below:
+// - windows_d3d12compute_x86.cpp
+
+#ifndef HALIDE_D3D12_PLATFORM
+#error Direct3D 12 Platform must be specified when compiling 'd3d12compute.cpp'.
+#endif
+
 #ifndef BITS_64
-// Don't emit a message: some environments will consider this as a "warning",
-// and we generally build with warnings-as-errors enabled.
-// #pragma message "The Halide Direct3D 12 back-end is not yet supported on 32bit targets..."
-#else  // BITS_64
+#error Direct3D 12 runtime module requires a 64-bit platform.
+#endif
 
 // Debugging utilities for back-end developers:
 #define HALIDE_D3D12_TRACE (0)
@@ -48,64 +54,6 @@
 #define COBJMACROS
 #endif
 #include "mini_d3d12.h"
-
-// Mini Win32
-
-#if !defined(WINBASEAPI)
-#if !defined(_KERNEL32_)
-#define WINBASEAPI DECLSPEC_IMPORT
-#else
-#define WINBASEAPI
-#endif
-#endif
-
-#define _Ret_maybenull_
-#define _Post_ptr_invalid_
-
-#define STATUS_WAIT_0 ((DWORD)0x00000000L)
-#define WAIT_OBJECT_0 ((STATUS_WAIT_0) + 0)
-
-extern "C" {
-
-WINBASEAPI
-BOOL
-    WINAPI
-    CloseHandle(
-        _In_ _Post_ptr_invalid_ HANDLE hObject);
-
-WINBASEAPI
-_Ret_maybenull_
-    HANDLE
-        WINAPI
-        CreateEventA(
-            _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
-            _In_ BOOL bManualReset,
-            _In_ BOOL bInitialState,
-            _In_opt_ LPCSTR lpName);
-
-WINBASEAPI
-_Ret_maybenull_
-    HANDLE
-        WINAPI
-        CreateEventW(
-            _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
-            _In_ BOOL bManualReset,
-            _In_ BOOL bInitialState,
-            _In_opt_ LPCWSTR lpName);
-
-WINBASEAPI
-DWORD
-WINAPI
-WaitForSingleObject(
-    _In_ HANDLE hHandle,
-    _In_ DWORD dwMilliseconds);
-}
-
-#ifdef UNICODE
-#define CreateEvent CreateEventW
-#else
-#define CreateEvent CreateEventA
-#endif  // !UNICODE
 
 // For all intents and purposes, we always want to use COMPUTE command lists
 // (and queues) ...
@@ -2066,15 +2014,17 @@ static bool block_until_signaled(uint64_t signal) {
     HRESULT result = queue_fence->SetEventOnCompletion(signal, hFenceEvent);
     if (FAILED(result)) {
         TRACEPRINT("ERROR: Unable to associate D3D12 Fence with Windows Event\n");
+        return false;
     }
 
     const DWORD timeout_ms = 15000;
     result = WaitForSingleObject(hFenceEvent, timeout_ms);
     if (result != WAIT_OBJECT_0) {
         D3DErrorCheck(result, hFenceEvent, NULL, "Unable to wait for Fence Event");
+        return false;
     }
 
-    return result == WAIT_OBJECT_0;
+    return true;
 }
 
 static void wait_until_signaled(uint64_t signal) {
@@ -2606,6 +2556,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
     size_t best_fit_size = ~0;
     size_t best_fit_index = 0;
     if (halide_can_reuse_device_allocations(user_context)) {
+        TRACE_SCOPE("allocation cache");
         ScopedMutexLock lock(&buffer_pool_lock);
         for (size_t i = 0; i < MaxBuffersInCache; ++i) {
             if (buffer_pool[i] == NULL) {
@@ -2625,7 +2576,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
         if (d3d12_buf != NULL) {
             TRACEPRINT("serving request from allocation cache: " << size << " bytes from capacity of " << best_fit_size << "\n");
             buffer_pool[best_fit_index] = NULL;
-            wait_until_signaled(d3d12_buf->signal);
+            //wait_until_signaled(d3d12_buf->signal);
         }
     }
 
@@ -2666,6 +2617,7 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *bu
 
     bool cached = false;
     if (halide_can_reuse_device_allocations(user_context)) {
+        TRACE_SCOPE("allocation cache");
         ScopedMutexLock lock(&buffer_pool_lock);
         for (size_t i = 0; i < MaxBuffersInCache; ++i) {
             if (buffer_pool[i] != NULL) {
@@ -2740,12 +2692,6 @@ static void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buff
     (*cmdList)->ResourceBarrier(1, &barrier);
 }
 
-static void halide_d3d12compute_device_sync_internal(d3d12_device *device, struct halide_buffer_t *buffer) {
-    TRACELOG;
-    d3d12_buffer *dbuffer = peel_buffer(buffer);
-    d3d12compute_device_sync_internal(device, dbuffer);
-}
-
 }  // namespace
 
 WEAK int halide_d3d12compute_device_sync(void *user_context, struct halide_buffer_t *buffer) {
@@ -2756,7 +2702,8 @@ WEAK int halide_d3d12compute_device_sync(void *user_context, struct halide_buffe
         return d3d12_context.error;
     }
 
-    halide_d3d12compute_device_sync_internal(d3d12_context.device, buffer);
+    d3d12_buffer *dbuffer = peel_buffer(buffer);
+    d3d12compute_device_sync_internal(d3d12_context.device, dbuffer);
 
     return 0;
 }
@@ -3036,7 +2983,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
                     return halide_error_code_out_of_memory;
                 }
             }
-            uint8_t *args_ptr = (uint8_t *)buffer_contents(&uniform_buffer);
+            uint8_t *uniform_bytes = (uint8_t *)buffer_contents(&uniform_buffer);
             size_t offset = 0;
             for (size_t i = 0; arg_sizes[i] != 0; i++) {
                 if (arg_is_buffer[i]) {
@@ -3051,7 +2998,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
                     uint32_t *i;
                 } arg;
                 arg.p = args[i];
-                size_t argsize = 4;
                 uint32_t val = 0;
                 switch (arg_sizes[i]) {
                 case 1:
@@ -3067,9 +3013,10 @@ WEAK int halide_d3d12compute_run(void *user_context,
                     halide_assert(user_context, false);
                     break;
                 }
-                memcpy(&args_ptr[offset], &val, argsize);
-                offset = (offset + argsize - 1) & ~(argsize - 1);
-                offset += argsize;
+                size_t val_size = 4;
+                memcpy(&uniform_bytes[offset], &val, val_size);
+                offset = (offset + val_size - 1) & ~(val_size - 1);
+                offset += val_size;
                 TRACEPRINT("args[" << i << "] is " << arg_sizes[i] << " bytes"
                                    << " : float(" << *arg.f << ")"
                                    << " or uint32(" << *arg.i << ")"
@@ -3098,6 +3045,19 @@ WEAK int halide_d3d12compute_run(void *user_context,
         }
     }
 
+    {
+        TRACE_SCOPE("pipeline barriers");
+        // TODO(marcos): avoid placing UAV barriers all the time after a dispatch...
+        // in fact, only buffers written to by the dispatch will need barriers, and
+        // only when later bound for read. For now, Halide does not provide enough
+        // context for chosing the right time to place transition barriers.
+        // TODO(marcos): also, it's best if we batch them into a single ResourceBarrier call
+        for (size_t i = 0; i < num_buffer_args; i++) {
+            d3d12_buffer *buffer = buffer_args[i];
+            compute_barrier(cmdList, buffer);
+        }
+    }
+
 #if HALIDE_D3D12_PROFILING
     d3d12_profiler *profiler = new_profiler(device, 8);
     begin_profiling(cmdList, profiler);
@@ -3114,19 +3074,9 @@ WEAK int halide_d3d12compute_run(void *user_context,
     end_profiling(cmdList, profiler);
 #endif
 
-    {
-        TRACE_SCOPE("pipeline barriers");
-        // TODO(marcos): avoid placing UAV barriers all the time after a dispatch...
-        // in fact, only buffers written to by the dispatch will need barriers, and
-        // only when later bound for read. For now, Halide does not provide enough
-        // context for chosing the right time to place transition barriers.
-        for (size_t i = 0; i < num_buffer_args; i++) {
-            d3d12_buffer *buffer = buffer_args[i];
-            compute_barrier(cmdList, buffer);
-        }
-    }
-
     enqueue_frame(frame);
+
+    //wait_until_completed(cmdList);
 
     // broadcast fence signal checkpoint to the buffers being used
     uint64_t checkpoint = frame->fence_signal;
@@ -3442,17 +3392,6 @@ WEAK int halide_d3d12compute_wrap_buffer(void *user_context, struct halide_buffe
     return 0;
 }
 
-WEAK uintptr_t halide_d3d12compute_get_buffer(void *user_context, struct halide_buffer_t *buf) {
-    TRACELOG;
-    if (buf->device == NULL) {
-        return 0;
-    }
-    d3d12_buffer *dbuffer = peel_buffer(buf);
-    ID3D12Resource *pResource = dbuffer->resource;
-    uintptr_t opaqued = reinterpret_cast<uintptr_t>(pResource);
-    return opaqued;
-}
-
 WEAK const struct halide_device_interface_t *halide_d3d12compute_device_interface() {
     TRACELOG;
     return &d3d12compute_device_interface;
@@ -3512,5 +3451,3 @@ WEAK halide_device_interface_t d3d12compute_device_interface = {
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
-
-#endif  // BITS_64
