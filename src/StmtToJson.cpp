@@ -59,6 +59,21 @@ std::string to_string(Halide::Range r, int base_indent) {
 }
 
 template<>
+std::string to_string(Halide::Internal::Call::CallType c, int base_indent) {
+    using CallType = Halide::Internal::Call::CallType;
+    std::map<CallType, std::string> ct_map =
+        {{CallType::Image, "Image"},
+          {CallType::Extern, "Extern"},
+          {CallType::ExternCPlusPlus, "ExternCPlusPlus"},
+          {CallType::PureExtern, "PureExtern"},
+          {CallType::Halide, "Halide"},
+          {CallType::Intrinsic, "Intrinsic"},
+          {CallType::PureIntrinsic, "PureIntrinsic"}
+        };
+    return ct_map[c];
+}
+
+template<>
 std::string to_string(Halide::Internal::PrefetchDirective p, int base_indent) {
     std::stringstream os;
     std::map<Halide::PrefetchBoundStrategy, std::string> strategy_str =
@@ -286,7 +301,19 @@ class StmtToJson : public IRVisitor {
     }
 
     void visit(const Call *e) override {
-        internal_error << "Todo: Call node\n";
+        open_obj("Call");
+        print_type(e->type);
+        stream << get_indent() << "name : " << quoted_str(e->name) << ",\n";
+        stream << get_indent() << "args : " << print_vector(e->args) << ",\n";
+        stream << get_indent() << "call_type : " << quoted_str(to_string(e->call_type)) << ",\n";
+        // We assume that a call to another func or a call to an image
+        // has already been lowered.
+        internal_assert(!e->func.defined()) << "Call to a func should not exist at backend\n";
+        internal_assert(!e->image.defined()) << "Call to an image should not exist at backend\n";
+        if (e->param.defined()) {
+            stream << get_indent() << "param : " << to_string(e->param) << "\n";
+        }
+        close_obj();
     }
 
     void visit(const Let *e) override {
