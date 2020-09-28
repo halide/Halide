@@ -849,6 +849,16 @@ void release_d3d12_object<d3d12_compute_pipeline_state>(d3d12_compute_pipeline_s
     Release_ID3D12Object(p);
 }
 
+template<>
+void release_d3d12_object<d3d12_frame>(d3d12_frame *frame) {
+    TRACELOG;
+    ID3D12Device *p = (*device);
+    release_object(frame->cmd_list);
+    release_object(frame->desc_binder);
+    release_object(&frame->args_buffer);
+    frame->fence_signal = 0;
+}
+
 extern WEAK halide_device_interface_t d3d12compute_device_interface;
 
 static d3d12_buffer *peel_buffer(struct halide_buffer_t *hbuffer) {
@@ -2736,6 +2746,16 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
 
     if (device) {
         d3d12compute_device_sync_internal(device, NULL);
+
+        for (int i = 0; i < MaxFrames; ++i) {
+            d3d12_frame *frame = &frame_pool[i];
+            release_object(frame);
+        }
+
+        for (int i = 0; i < MaxBuffersInCache; ++i) {
+            d3d12_buffer *buffer = buffer_pool[i];
+            release_object(buffer);
+        }
 
         // Unload the modules attached to this device. Note that the list
         // nodes themselves are not freed, only the program objects are
