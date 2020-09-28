@@ -60,7 +60,8 @@ class IRMutator;
  * or as an HTML file which can be opened in a browerser and manipulated via JS and CSS.*/
 enum StmtOutputFormat {
     Text,
-    HTML
+    HTML,
+    JSON
 };
 
 namespace {

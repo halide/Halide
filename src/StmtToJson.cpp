@@ -304,7 +304,9 @@ class StmtToJson : public IRVisitor {
         open_obj("Call");
         print_type(e->type);
         stream << get_indent() << "name : " << quoted_str(e->name) << ",\n";
-        stream << get_indent() << "args : " << print_vector(e->args) << ",\n";
+        stream << get_indent() << "args : ";
+        print_vector(e->args);
+        stream << ",\n";
         stream << get_indent() << "call_type : " << quoted_str(to_string(e->call_type)) << ",\n";
         // We assume that a call to another func or a call to an image
         // has already been lowered.

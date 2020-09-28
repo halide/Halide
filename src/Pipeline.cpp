@@ -321,7 +321,13 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
                                        StmtOutputFormat fmt,
                                        const Target &target) {
     Module m = compile_to_module(args, "", target);
-    m.compile(single_output(filename, m, fmt == HTML ? Output::stmt_html : Output::stmt));
+    auto output_format = Output::stmt;
+    if (fmt == HTML) {
+        output_format = Output::stmt_html;
+    } else if (fmt == JSON) {
+        output_format = Output::stmt_json;
+    }
+    m.compile(single_output(filename, m, output_format));
 }
 
 void Pipeline::compile_to_static_library(const string &filename_prefix,
