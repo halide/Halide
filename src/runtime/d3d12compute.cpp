@@ -3373,8 +3373,23 @@ WEAK int halide_d3d12compute_device_slice(void *user_context,
 
 WEAK int halide_d3d12compute_device_release_crop(void *user_context, struct halide_buffer_t *buf) {
     TRACELOG;
-    // for D3D12, this just so happens to be exactly like halide_d3d12compute_device_free():
-    return halide_d3d12compute_device_free(user_context, buf);
+
+    TRACEPRINT("user_context: " << user_context << " | halide_buffer_t: " << buf << "\n");
+
+    d3d12_buffer *dbuffer = peel_buffer(buf);
+    TRACEPRINT("d3d12_buffer: " << dbuffer << "\n");
+
+    unwrap_buffer(buf);
+
+    //wait_until_signaled(dbuffer->signal);
+
+    // it is safe to call release_d3d12_object() here because 'buf' is known to
+    // be a crop of a larger buffer, and release_d3d12_object() will decrement
+    // the reference count of the underlying ID3D12Resource that was incremented
+    // when the crop/slice was created.
+    release_d3d12_object(dbuffer);
+
+    return 0;
 }
 
 WEAK int halide_d3d12compute_detach_buffer(void *user_context, struct halide_buffer_t *buf) {
