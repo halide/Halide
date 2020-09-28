@@ -1480,8 +1480,9 @@ WEAK size_t suballocate(d3d12_device *device, d3d12_buffer *staging, size_t num_
     }
 
     halide_assert(user_context, (staging->sizeInBytes >= num_bytes));
-    // ensure there are no pending transfers on this buffer
+    // this reference counter will be decremented later by 'd3d12compute_device_sync_internal()'
     uint64_t use_count = __atomic_add_fetch(&staging->ref_count, 1, __ATOMIC_SEQ_CST);
+    // but for now we must ensure that there are no pending transfers on this buffer already
     halide_assert(user_context, (use_count == 1));
     size_t byte_offset = 0;  // always zero, for now
     return byte_offset;
@@ -2251,9 +2252,10 @@ static void d3d12compute_device_sync_internal(d3d12_device *device, d3d12_buffer
     }
 
     if (dev_buffer->xfer != NULL) {
-        // for now, we expect to have been the only one with pending transfer on the staging buffer:
         d3d12_buffer *staging_buffer = dev_buffer->xfer->staging;
+        // decrement the reference counter that was incremented by 'suballocate()'
         uint64_t use_count = __atomic_sub_fetch(&staging_buffer->ref_count, 1, __ATOMIC_SEQ_CST);
+        // for now, we expect to have been the only one with pending transfer on the staging buffer:
         halide_assert(user_context, (use_count == 0));
         dev_buffer->xfer = NULL;
     }
@@ -3258,7 +3260,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                     size_t dst_byte_offset = ddst->offsetInBytes;  // handle cropping
                     d3d12compute_buffer_copy(d3d12_context.device, staging, ddst,
                                              staging_byte_offset, dst_byte_offset, total_size);
-                    uint64_t use_count = __atomic_sub_fetch(&staging->ref_count, 0, __ATOMIC_SEQ_CST);
+                    uint64_t use_count = __atomic_load_n(&staging->ref_count, __ATOMIC_SEQ_CST);
                     halide_assert(user_context, (use_count == 0));
                 }
             } else {
@@ -3298,7 +3300,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                     c.src = reinterpret_cast<uint64_t>(staging_base) + staging_byte_offset;
                     c.dst = reinterpret_cast<uint64_t>(dst->host) + 0;
                     copy_memory(c, user_context);
-                    uint64_t use_count = __atomic_sub_fetch(&staging->ref_count, 0, __ATOMIC_SEQ_CST);
+                    uint64_t use_count = __atomic_load_n(&staging->ref_count, __ATOMIC_SEQ_CST);
                     halide_assert(user_context, (use_count == 0));
                 }
             }
