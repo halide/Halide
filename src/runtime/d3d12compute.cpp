@@ -2353,6 +2353,8 @@ static int d3d12compute_buffer_copy(d3d12_device *device,
     d3d12_compute_command_list *blitCmdList = frame->cmd_list;
     buffer_copy_command(blitCmdList, src, dst, src_byte_offset, dst_byte_offset, num_bytes);
     enqueue_frame(frame);
+    src->signal = frame->fence_signal;
+    dst->signal = frame->fence_signal;
 
     // TODO(marcos): we probably don't need to wait on device-device transfers...
     //wait_until_completed(frame);
