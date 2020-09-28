@@ -14,7 +14,7 @@ set(HALIDE_INSTALL_CMAKEDIR
 ##
 
 set(optional_dependencies "")
-foreach (target IN ITEMS wabt)
+foreach (target IN ITEMS wabt-obj)
     if (TARGET ${target})
         list(APPEND optional_dependencies ${target})
     endif ()

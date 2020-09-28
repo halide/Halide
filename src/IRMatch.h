@@ -1552,7 +1552,8 @@ struct BroadcastOp {
         if (l == 1) {
             return val;
         } else {
-            return Broadcast::make(std::move(val), l);
+            int val_lanes = val.type().lanes();
+            return Broadcast::make(std::move(val), l / val_lanes);
         }
     }
 
@@ -1608,7 +1609,7 @@ struct RampOp {
             return false;
         }
         const Ramp &op = (const Ramp &)e;
-        if ((lanes == op.type.lanes() || !known_lanes) &&
+        if ((lanes == op.lanes || !known_lanes) &&
             a.template match<bound>(*op.base.get(), state) &&
             b.template match<bound | bindings<A>::mask>(*op.stride.get(), state)) {
             return true;
@@ -1636,7 +1637,7 @@ struct RampOp {
             ea = a.make(state, type_hint);
             eb = b.make(state, ea.type());
         }
-        return Ramp::make(ea, eb, l);
+        return Ramp::make(ea, eb, l / ea.type().lanes());
     }
 
     constexpr static bool foldable = false;
@@ -2111,6 +2112,80 @@ HALIDE_ALWAYS_INLINE auto is_float(A a) noexcept -> IsFloat<decltype(pattern_arg
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
     s << "is_float(" << op.a << ")";
+    return s;
+}
+
+template<typename A>
+struct IsScalar {
+    struct pattern_tag {};
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = t.is_scalar();
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    };
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto is_scalar(A a) noexcept -> IsScalar<decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsScalar<A> &op) {
+    s << "is_scalar(" << op.a << ")";
+    return s;
+}
+
+template<typename A, typename B>
+struct IsSameType {
+    struct pattern_tag {};
+    A a;
+    B b;
+
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Expr ta = a.make(state, {});
+        Expr tb = b.make(state, {});
+        val.u.u64 = (ta.type() == tb.type());
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = ta.type().lanes();
+    };
+};
+
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto is_same_type(A a, B b) noexcept -> IsSameType<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
+}
+
+template<typename A, typename B>
+std::ostream &operator<<(std::ostream &s, const IsSameType<A, B> &op) {
+    s << "is_same_type(" << op.a << " " << op.b << ")";
     return s;
 }
 
