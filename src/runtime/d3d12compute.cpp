@@ -852,7 +852,6 @@ void release_d3d12_object<d3d12_compute_pipeline_state>(d3d12_compute_pipeline_s
 template<>
 void release_d3d12_object<d3d12_frame>(d3d12_frame *frame) {
     TRACELOG;
-    ID3D12Device *p = (*device);
     release_object(frame->cmd_list);
     release_object(frame->desc_binder);
     release_object(&frame->args_buffer);
@@ -2326,9 +2325,6 @@ static int d3d12compute_buffer_copy(d3d12_device *device,
     src->signal = frame->fence_signal;
     dst->signal = frame->fence_signal;
 
-    // TODO(marcos): we probably don't need to wait on device-device transfers...
-    //wait_until_completed(frame);
-
     return 0;
 }
 
@@ -2612,7 +2608,6 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
         if (d3d12_buf != NULL) {
             TRACEPRINT("serving request from allocation cache: " << size << " bytes from capacity of " << best_fit_size << "\n");
             buffer_pool[best_fit_index] = NULL;
-            //wait_until_signaled(d3d12_buf->signal);
         }
     }
 
@@ -2648,8 +2643,6 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *bu
 
     d3d12_buffer *dbuffer = peel_buffer(buf);
     TRACEPRINT("d3d12_buffer: " << dbuffer << "\n");
-
-    //wait_until_signaled(dbuffer->signal);
 
     bool cached = false;
     if (halide_can_reuse_device_allocations(user_context)) {
@@ -3123,8 +3116,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     enqueue_frame(frame);
 
-    //wait_until_completed(cmdList);
-
     // broadcast fence signal checkpoint to the buffers being used
     uint64_t checkpoint = frame->fence_signal;
     uniform_buffer.signal = checkpoint;
@@ -3396,8 +3387,6 @@ WEAK int halide_d3d12compute_device_release_crop(void *user_context, struct hali
     TRACEPRINT("d3d12_buffer: " << dbuffer << "\n");
 
     unwrap_buffer(buf);
-
-    //wait_until_signaled(dbuffer->signal);
 
     // it is safe to call release_d3d12_object() here because 'buf' is known to
     // be a crop of a larger buffer, and release_d3d12_object() will decrement
