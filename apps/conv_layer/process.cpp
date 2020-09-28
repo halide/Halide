@@ -3,6 +3,7 @@
 
 #include "conv_layer.h"
 #include "conv_layer_auto_schedule.h"
+#include "conv_layer_c.h"
 
 #include "HalideBuffer.h"
 #include "halide_benchmark.h"
@@ -11,7 +12,7 @@ using namespace Halide::Tools;
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    const int N = 5, CI = 128, CO = 128, W = 100, H = 80;
+    const int N = 1, CI = 128, CO = 128, W = 25, H = 20;
 
     Buffer<float> input(CI, W + 2, H + 2, N);
     Buffer<float> filter(CO, 3, 3, CI);
@@ -70,6 +71,23 @@ int main(int argc, char **argv) {
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
 
+    printf("Running generated C++ code...\n");
+    Buffer<float> output_c(CO, W, H, N);
+    conv_layer_c(input, filter, bias, output_c);
+
+    int mismatch_count = 0;
+    for (int c = 0; c < output_c.dim(3).extent(); c++) {
+        for (int z = 0; z < output_c.channels(); z++) {
+            for (int y = 0; y < output_c.height(); y++) {
+                for (int x = 0; x < output_c.width(); x++) {
+                    if (abs(output_c(x, y, z, c) - output_c(x, y, z, c)) > 0.0001) {
+                        mismatch_count++;
+                    }
+                }
+            }
+        }
+    }
+    printf("Mismtach count for generated C++ code: %d\n", mismatch_count);
     printf("Success!\n");
     return 0;
 }

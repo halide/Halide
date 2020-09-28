@@ -92,9 +92,9 @@ public:
             .vectorize(depth, vector_size_u8);
 
         // Parallelize across vertical strips.
-        Var yi("yi");
-        constexpr int kSplitFactor = 4;
-        output_.split(y, y, yi, kSplitFactor).parallel(y);
+        // Var yi("yi");
+        // constexpr int kSplitFactor = 4;
+        // output_.split(y, y, yi, kSplitFactor).parallel(y);
 
         shifted_input_bounded.compute_at(output_, Var::outermost());
     }

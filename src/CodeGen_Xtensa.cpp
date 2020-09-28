@@ -223,6 +223,7 @@ typedef xb_vecN_2x64w int64x16_t;
 typedef vboolN_2 uint1x16_t;
 typedef vboolN uint1x32_t;
 typedef vbool2N uint1x64_t;
+typedef xb_vecN_2xf32 float16;
 
 class int32x32_t {
   typedef int32x32_t Vec;
@@ -652,8 +653,18 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x16_t int32x16_t_aligned_load(cons
     return r;
 }
 
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED float16 float16_aligned_load(const void *base, int32_t offset) {
+    float16 r;
+    memcpy(&r, ((const float*)base + offset), sizeof(float) * 16);
+    return r;
+}
+
 HALIDE_ALWAYS_INLINE void aligned_store(const int32x16_t& a, void *base, int32_t offset) {
     *((int32x16_t *)((int32_t*)base + offset)) = a;
+}
+
+HALIDE_ALWAYS_INLINE void aligned_store(const float16& a, void *base, int32_t offset) {
+    *((float16 *)((float*)base + offset)) = a;
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint32x16_t uint32x16_t_load(const void *base, int32_t offset) {
@@ -1289,6 +1300,10 @@ bool CodeGen_Xtensa::is_native_vector_type(Type t) {
         return true;
     }
 
+    if (t.is_float() && (t.lanes() == 16) && (t.bits() == 32)) {
+        return true;
+    }
+
     return false;
 }
 
@@ -1429,6 +1444,8 @@ void CodeGen_Xtensa::visit(const Max *op) {
             rhs << "IVP_MAXN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else if (op->type.is_uint() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
             rhs << "IVP_MAXUN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        } else if (op->type.is_float() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
+            rhs << "IVP_MAXN_2XF32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else {
             rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         }
@@ -1449,6 +1466,8 @@ void CodeGen_Xtensa::visit(const Min *op) {
             rhs << "IVP_MINN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else if (op->type.is_uint() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
             rhs << "IVP_MINUN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        } else if (op->type.is_float() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
+            rhs << "IVP_MINN_2XF32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else {
             rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         }
