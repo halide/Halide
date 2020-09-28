@@ -2011,6 +2011,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
 static uint64_t queue_insert_checkpoint() {
     TRACELOG;
     uint64_t signal = __atomic_add_fetch(&queue_last_signal, 1, __ATOMIC_SEQ_CST);  // ++queue_last_signal
+    TRACEPRINT("latest queue checkpoint is now #" << signal << "...\n");
     (*queue)->Signal(queue_fence, signal);
     return signal;
 }
@@ -2040,7 +2041,7 @@ static bool block_until_signaled(uint64_t signal) {
         return false;
     }
 
-    const DWORD timeout_ms = 15000;
+    const DWORD timeout_ms = 15 * 1000;
     result = WaitForSingleObject(hFenceEvent, timeout_ms);
     if (result != WAIT_OBJECT_0) {
         D3DErrorCheck(result, hFenceEvent, NULL, "Unable to wait for Fence Event");
@@ -2196,12 +2197,14 @@ static void synchronize_host_and_device_buffer_contents(d3d12_copy_command_list 
     d3d12_buffer *staging = xfer->staging;
     switch (staging->type) {
     case d3d12_buffer::Upload:
+        TRACEPRINT("uploading buffer to device")
         src = staging;
         dst = buffer;
         src_byte_offset = xfer->offset;
         dst_byte_offset = buffer->offsetInBytes;
         break;
     case d3d12_buffer::ReadBack:
+        TRACEPRINT("reading-back buffer from device")
         unmap_buffer(staging);
         src = buffer;
         dst = staging;
@@ -2559,15 +2562,15 @@ extern "C" {
 WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *buf) {
     TRACELOG;
 
-    TRACEPRINT("user_context: " << user_context << " | halide_buffer_t: " << buf << " | d3d12_device: " << buf->device << "\n");
+    TRACEPRINT("user_context: " << user_context << " | halide_buffer_t: " << buf << "\n");
 
     if (buf->device) {
-        // This buffer already has a device allocation
+        TRACEPRINT("(this buffer already has a device allocation...)\n");
         return 0;
     }
 
     size_t size = buf->size_in_bytes();
-    halide_assert(user_context, size != 0);
+    halide_assert(user_context, size > 0);
 
     // Check all strides positive
     for (int i = 0; i < buf->dimensions; i++) {
@@ -2656,12 +2659,13 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *bu
     unwrap_buffer(buf);
 
     if (!cached) {
-        // it is safe to simply call release_d3d12_object() here:
-        // if 'buf' holds an user resource (from halide_d3d12compute_wrap_buffer),
-        // the reference count of the resource will just get decremented without
-        // actually freeing the underlying resource object;
-        // if 'buf' holds an internally managed resource, it will either be freed
-        // or have its reference count decreased (when 'buf' is a device_crop).
+        // it is safe to call release_d3d12_object() here:
+        // if 'buf' holds a user resource (from halide_d3d12compute_wrap_buffer),
+        // the reference counter of the underlying ID3D12Resource will just get
+        // decremented without actually freeing the underlying resource object
+        // since it was incremented during thewrapping process.
+        // If 'buf' holds a buffer created by halide_d3d12compute_device_malloc,
+        // it will be freed.
         wait_until_signaled(dbuffer->signal);
         release_d3d12_object(dbuffer);
     }
@@ -3355,6 +3359,7 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
     using namespace Halide::Runtime;
     int64_t offset = Internal::calc_device_crop_byte_offset(src, dst);
     // D3D12 buffer views are element-based, not byte-based
+    halide_assert(user_context, (offset % src->type.bytes()) == 0);
     offset /= src->type.bytes();
     return d3d12compute_device_crop_from_offset(user_context, src, offset, dst);
 }
@@ -3367,6 +3372,7 @@ WEAK int halide_d3d12compute_device_slice(void *user_context,
     using namespace Halide::Runtime;
     int64_t offset = Internal::calc_device_slice_byte_offset(src, slice_dim, slice_pos);
     // D3D12 buffer views are element-based, not byte-based
+    halide_assert(user_context, (offset % src->type.bytes()) == 0);
     offset /= src->type.bytes();
     return d3d12compute_device_crop_from_offset(user_context, src, offset, dst);
 }
@@ -3394,6 +3400,8 @@ WEAK int halide_d3d12compute_device_release_crop(void *user_context, struct hali
 
 WEAK int halide_d3d12compute_detach_buffer(void *user_context, struct halide_buffer_t *buf) {
     TRACELOG;
+
+    TRACEPRINT("user_context: " << user_context << " | halide_buffer_t: " << buf << "\n");
 
     if (buf->device == 0) {
         return 0;
