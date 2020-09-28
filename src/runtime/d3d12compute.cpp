@@ -193,7 +193,7 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
     TRACELOG;
     void *symbol = halide_get_library_symbol(lib, name);
     if (symbol) {
-        TRACEPRINT("Symbol '" << name << "' found at " << symbol << "\n");
+        TRACEPRINT("Symbol '" << name << "' found @ " << symbol << "\n");
     } else {
         d3d12_halt("Symbol not found: " << name);
     }
