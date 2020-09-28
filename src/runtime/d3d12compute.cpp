@@ -997,6 +997,54 @@ static void D3D12WaitForPix() {
 }
 #endif
 
+static ID3D12Device *D3D12CreateDeviceForAdapter(IDXGIAdapter1 *adapter) {
+    TRACELOG;
+
+    DXGI_ADAPTER_DESC1 desc = {};
+    if (FAILED(dxgiAdapter->GetDesc1(&desc))) {
+        d3d12_halt("Unable to retrieve information (DXGI_ADAPTER_DESC1) about the selectd adapter.");
+        return NULL;
+    }
+    char Description[128];
+    for (int i = 0; i < 128; ++i) {
+        Description[i] = desc.Description[i];
+    }
+    Description[127] = '\0';
+    TRACEPRINT("Device selected: " << Description << "\n");
+
+#if 0
+    // NOTE(marcos): ignoring IDXGIOutput setup since this back-end is compute only
+    IDXGIOutput *dxgiDisplayOutput = NULL;
+    result = dxgiAdapter->EnumOutputs(0, &dxgiDisplayOutput);
+    if (D3DErrorCheck(result, dxgiDisplayOutput, user_context, "Unable to enumerate DXGI outputs for adapter (IDXGIOutput)")) {
+        return NULL;
+    }
+#endif
+
+    ID3D12Device *device = NULL;
+    D3D_FEATURE_LEVEL MinimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
+    HRESULT result = D3D12CreateDevice(dxgiAdapter, MinimumFeatureLevel, IID_PPV_ARGS(&device));
+    if (D3DErrorCheck(result, device, user_context, "Unable to create the Direct3D 12 device")) {
+        return NULL;
+    }
+
+#if 0 & HALIDE_D3D12_PROFILING
+    // Notes on NVIDIA GPU Boost:
+    // https://developer.nvidia.com/setstablepowerstateexe-%20disabling%20-gpu-boost-windows-10-getting-more-deterministic-timestamp-queries
+    // MSDN: "Do not call SetStablePowerState in shipped applications.
+    //        This method only works while the machine is in developer mode.
+    //        If developer mode is not enabled, then device removal will occur.
+    //        (DXGI_ERROR_DEVICE_REMOVED : 0x887a0005)"
+    // https://msdn.microsoft.com/en-us/library/windows/desktop/dn903835(v=vs.85).aspx
+    result = device->SetStablePowerState(TRUE);
+    if (D3DErrorCheck(result, device, user_context, "Unable to activate stable power state")) {
+        return NULL;
+    }
+#endif
+
+    return device;
+} 
+
 static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
     TRACELOG;
 
@@ -1070,19 +1118,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
         return NULL;
     }
 
-    {
-        DXGI_ADAPTER_DESC1 desc = {};
-        if (FAILED(dxgiAdapter->GetDesc1(&desc))) {
-            d3d12_halt("Unable to retrieve information (DXGI_ADAPTER_DESC1) about the selectd adapter.");
-            return NULL;
-        }
-        char Description[128];
-        for (int i = 0; i < 128; ++i) {
-            Description[i] = desc.Description[i];
-        }
-        Description[127] = '\0';
-        TRACEPRINT("Device selected: " << Description << "\n");
-    }
+    ID3D12Device *device = D3D12CreateDeviceForAdapter(dxgiAdapter);
 
 #if 0
     // NOTE(marcos): ignoring IDXGIOutput setup since this back-end is compute only
