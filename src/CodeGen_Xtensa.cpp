@@ -4,6 +4,7 @@
 
 #include "CodeGen_Internal.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Lerp.h"
 #include "Simplify.h"
 #include "XtensaOptimize.h"
@@ -15,6 +16,48 @@ using std::ostream;
 using std::ostringstream;
 using std::string;
 using std::vector;
+
+struct TcmAllocation {
+  string name;
+  Type type;
+  int32_t size;
+};
+
+class FindTcmAllocations : public IRVisitor {
+  using IRVisitor::visit;
+
+  int current_loop_level = 0;
+
+  void visit(const Allocate *op) override {
+    if (op->memory_type != MemoryType::VTCM) {
+        IRVisitor::visit(op);
+        return ;
+    }
+
+
+    user_assert(current_loop_level == 0);
+
+    TcmAllocation tcm_alloc;
+    tcm_alloc.name = op->name;
+    tcm_alloc.type = op->type;
+
+    user_assert(!op->new_expr.defined()) << "can't handle new expression";
+    tcm_alloc.size = op->constant_allocation_size();
+    user_assert(tcm_alloc.size > 0) << "tcm alloc size should be > 0 " << op->extents.size() << " " << op->extents[0];
+
+    tcm_allocations.push_back(tcm_alloc);
+    IRVisitor::visit(op);
+  }
+
+  void visit(const For *op) override {
+    current_loop_level++;
+    IRVisitor::visit(op);
+    current_loop_level--;
+  }
+
+ public:
+  std::vector<TcmAllocation> tcm_allocations;
+};
 
 void CodeGen_Xtensa::compile(const Module &module) {
     CodeGen_C::compile(module);
@@ -55,6 +98,25 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f) {
             stream << "namespace " << ns << " {\n";
         }
         stream << "\n";
+    }
+
+    Stmt body = f.body;
+    body = match_xtensa_patterns(body);
+
+    FindTcmAllocations find_tcm_allocs;
+    body.accept(&find_tcm_allocs);
+
+    if (!is_header_or_extern_decl()) {
+        for (const auto& alloc: find_tcm_allocs.tcm_allocations) {
+            string op_name = print_name(alloc.name);
+            string op_type = print_type(alloc.type, AppendSpace);
+
+            Type size_id_type = Int(32);
+            string size_id = print_expr(make_const(size_id_type, alloc.size));
+
+            stream << op_type << "__attribute__((aligned(64))) " << op_name
+                   << "[" << size_id << "] __attribute__((section(\".dram0.data\")));\n";
+        }
     }
 
     // Emit the function prototype
@@ -100,10 +162,8 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f) {
                 stream << get_indent() << "halide_unused(_ucon);";
             }
 
-            // Emit the body
-            Stmt body = f.body;
-            body = match_xtensa_patterns(body);
             //debug(0) << body;
+            // Emit the body
             print(body);
             // stream << get_indent() << "printf(\"C code executed\\n\");";
 
@@ -134,7 +194,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f) {
 
 void CodeGen_Xtensa::add_vector_typedefs(const std::set<Type> &vector_types) {
     if (!vector_types.empty()) {
-        const char *native_typedef_decl = R"INLINE_CODE(
+      const char *native_typedef_decl = R"INLINE_CODE(
 
 
 #if defined(__XTENSA__)
@@ -159,6 +219,7 @@ typedef xb_vecNx16U uint16x32_t;
 typedef xb_vecN_2x32v int32x16_t;
 typedef xb_vecN_2x32Uv uint32x16_t;
 typedef xb_vecNx48 int48x32_t;
+typedef xb_vecN_2x64w int64x16_t;
 typedef vboolN_2 uint1x16_t;
 typedef vboolN uint1x32_t;
 typedef vbool2N uint1x64_t;
@@ -623,6 +684,10 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t int16x64_t_load(const void *
     return int16x64_t::load(base, offset);
 }
 
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x64_t uint16x64_t_load(const void *base, int32_t offset) {
+    return uint16x64_t::load(base, offset);
+}
+
 HALIDE_ALWAYS_INLINE void aligned_store(const int32x32_t& a, void *base, int32_t offset) {
    a.aligned_store(base, offset);
 }
@@ -648,6 +713,14 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_deinterleave_even_i16(const int16x
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_deinterleave_odd_i16(const int16x64_t& a) {
   return  IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_1);
+}
+
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_deinterleave_even_u16(const uint16x64_t& a) {
+  return  IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0);
+}
+
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_deinterleave_odd_u16(const uint16x64_t& a) {
+  return  IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_1);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_1_i16(const int16x64_t& a) {
@@ -688,6 +761,10 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_dynamic_shuffle(const int16x32_t& 
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_dynamic_shuffle(const int16x64_t& a, const int16x32_t& b, int min_range, int max_range) {
   return IVP_SELNX16(a.native_vector[1], a.native_vector[0], b);
+}
+
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_dynamic_shuffle(const uint16x64_t& a, const int16x32_t& b, int min_range, int max_range) {
+  return IVP_SELNX16U(a.native_vector[1], a.native_vector[0], b);
 }
 
 HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_shift_right(const uint16x32_t &a, const uint16x32_t &b) {
@@ -785,6 +862,10 @@ HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_i48(const int16x32_t& a,
   return a * b;
 }
 
+HALIDE_ALWAYS_INLINE int64x16_t halide_xtensa_widen_mul_i64(const int32x16_t& a, const int32x16_t& b) {
+  return a * b;
+}
+
 HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_widen_mul_i32(const int16x32_t& a, const int16x32_t& b) {
   xb_vecNx48 r = a * b;
   return int32x32_t(int32x32_t::from_native_vector,
@@ -871,6 +952,10 @@ HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_u48(const uint16x32_t& a
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_with_shift_i16(const int32x32_t& a, int shift) {
   xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
   return IVP_PACKVRNRNX48(wide, shift);
+}
+
+HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_narrow_high_i32(const int64x16_t& a) {
+  return IVP_PACKHN_2X64W(a);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_clz_i16(const int32x32_t& a) {
@@ -972,6 +1057,11 @@ inline int32x32_t convert_to_int32x32_t_from_uint16x32_t(const uint16x32_t& src)
 
 inline int32x32_t convert_to_int32x32_t_from_uint32x32_t(const uint32x32_t& src) {
     return int32x32_t(int32x32_t::from_native_vector,
+                      src.native_vector[0], src.native_vector[1]);
+}
+
+inline uint32x32_t convert_to_uint32x32_t_from_int32x32_t(const int32x32_t& src) {
+    return uint32x32_t(uint32x32_t::from_native_vector,
                       src.native_vector[0], src.native_vector[1]);
 }
 
@@ -1130,16 +1220,63 @@ inline uint32x16_t halide_xtensa_convert_i48_high_u32(const int48x32_t& src, int
 HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_concat_from_native(const uint1x16_t& a, const uint1x16_t& b) {
         return IVP_JOINBN_2(b, a);
 }
+/*
+#include <xtensa/idma.h>
 
+#define IMAGE_BUFFER_DEPTH 1
+
+IDMA_BUFFER_DEFINE(buffer, IMAGE_BUFFER_DEPTH, IDMA_1D_DESC);
+
+void idmaLogHandler(const char* str) { printf("libidma: %s", str); }
+
+void idmaErrCB(const idma_error_details_t* data) {
+  printf("ERROR CALLBACK: iDMA in Error\n");
+  idma_error_details_t* error = idma_error_details();
+  printf("COPY FAILED, Error 0x%x at desc:%p, PIF src/dst=%x/%x\n",
+         error->err_type, (void*)error->currDesc, error->srcAddr,
+         error->dstAddr);
+}
+
+void init_dma() {
+  printf("Initializing DMA\n");
+  idma_log_handler(idmaLogHandler);
+
+  idma_init(0, MAX_BLOCK_2, 16, TICK_CYCLES_2, 100000, idmaErrCB);
+
+  idma_init_loop(buffer, IDMA_1D_DESC, IMAGE_BUFFER_DEPTH, buffer, NULL);
+}
+
+HALIDE_ALWAYS_INLINE int32_t halide_xtensa_copy_1d(void* dst, int32_t dst_base, void* src, int32_t src_base, int extent, int item_size) {
+    // printf("Starting dma copy\n");
+    static bool is_initialized = false;
+    if (!is_initialized) {
+        init_dma();
+        is_initialized = true;
+        printf("Initialized DMA\n");
+    }
+    //memcpy((uint8_t* )dst + dst_base * item_size, (uint8_t* )src + src_base * item_size, extent * item_size);
+    xthal_dcache_region_writeback_inv((uint8_t* )src + src_base * item_size, extent * item_size);
+    idma_copy_desc((uint8_t* )dst + dst_base * item_size, (uint8_t* )src + src_base * item_size, extent * item_size, 0);
+    //idma_hw_wait_all();
+
+    return 0;
+}
+
+HALIDE_ALWAYS_INLINE int32_t halide_wait_for_copy(int32_t id) {
+    idma_hw_wait_all();
+    return 0;
+}
+*/
 )INLINE_CODE";
 
-        // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
-        // emitting this long text string was regularly garbled in a predictable pattern;
-        // flushing the stream before or after heals it. Since C++ codegen is rarely
-        // on a compilation critical path, we'll just band-aid it in this way.
-        stream << std::flush;
-        stream << native_typedef_decl;
-        stream << std::flush;
+      // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
+      // emitting this long text string was regularly garbled in a predictable
+      // pattern; flushing the stream before or after heals it. Since C++
+      // codegen is rarely on a compilation critical path, we'll just band-aid
+      // it in this way.
+      stream << std::flush;
+      stream << native_typedef_decl;
+      stream << std::flush;
     }
 }
 
@@ -1210,6 +1347,18 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         internal_assert(args.size() == 2);
         rhs << "int16x32_t(" << args[0] + ") * int16x32_t(" + args[1] + ")";
         return rhs.str();
+    }
+
+    if (op->name == "halide_xtensa_copy_1d") {
+      args[0] = print_name(op->args[0].as<StringImm>()->value);
+      args[1] = print_expr(op->args[1]);
+      args[2] = print_name(op->args[2].as<StringImm>()->value);
+
+      for (size_t i = 3; i < op->args.size(); i++) {
+          args[i] = print_expr(op->args[i]);
+      }
+      rhs << op->name << "(" << with_commas(args) << ")";
+      return rhs.str();
     }
 
     string op_name = op->name;
@@ -1809,9 +1958,8 @@ void CodeGen_Xtensa::visit(const Call *op) {
     }
 }
 
-static int loop_level = 0;
 void CodeGen_Xtensa::visit(const For *op) {
-    loop_level++;
+    current_loop_level++;
     string id_min = print_expr(op->min);
     string id_extent = print_expr(op->extent);
 
@@ -1851,7 +1999,7 @@ void CodeGen_Xtensa::visit(const For *op) {
     //   stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
     //   stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
     // }
-    loop_level--;
+    current_loop_level--;
 }
 
 void CodeGen_Xtensa::visit(const Shuffle *op) {
@@ -1904,6 +2052,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
 
     // For sizes less than 8k, do a stack allocation
     bool on_stack = false;
+    bool in_global_static = false;
     int32_t constant_size;
     string size_id;
     Type size_id_type;
@@ -1930,6 +2079,9 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
                     (op->memory_type == MemoryType::Auto &&
                      can_allocation_fit_on_stack(stack_bytes))) {
                     on_stack = true;
+                }
+                if (op->memory_type == MemoryType::VTCM) {
+                    in_global_static = true;
                 }
             }
         } else {
@@ -1969,7 +2121,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         // If the allocation is on the stack, the only condition we can respect is
         // unconditional false (otherwise a non-constant-sized array declaration
         // will be generated).
-        if (!on_stack || is_zero(op->condition)) {
+        if ((!on_stack && !in_global_static) || is_zero(op->condition)) {
             Expr conditional_size = Select::make(op->condition,
                                                  Variable::make(size_id_type, size_id),
                                                  make_const(size_id_type, 0));
@@ -1981,11 +2133,14 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
 
-        stream << get_indent() << op_type;
+        if (!in_global_static) {
+            stream << get_indent() << op_type;
+        }
 
         if (on_stack) {
             stream << "__attribute__((aligned(64))) " << op_name
                    << "[" << size_id << "];\n";
+        } else if (in_global_static) {
         } else {
             stream << "*"
                    << "__attribute__((aligned(64))) "
@@ -2000,7 +2155,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         }
     }
 
-    if (!on_stack) {
+    if (!on_stack && !in_global_static) {
         create_assertion(op_name, Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
         stream << get_indent();

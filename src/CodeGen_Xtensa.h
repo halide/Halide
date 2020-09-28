@@ -48,6 +48,10 @@ protected:
     void visit(const Shuffle *op) override;
     void visit(const Min *op) override;
     void visit(const Max *op) override;
+
+protected:
+    int current_loop_level = 0;
+    std::vector<std::string> global_static_allocations;
 };
 
 }  // namespace Internal
