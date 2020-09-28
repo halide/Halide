@@ -6801,8 +6801,6 @@ typedef HRESULT(WINAPI *PFN_D3DCOMPILE)(
 #pragma clang diagnostic pop
 #endif
 
-
-
 // Mini Win32 for D3D12
 
 #if !defined(WINBASEAPI)
@@ -6861,6 +6859,6 @@ WaitForSingleObject(
 #define CreateEvent CreateEventA
 #endif  // !UNICODE
 
-
+// end of Mini Win32 for D3D12
 
 #endif /*__mini_d3d12_h__*/

@@ -1043,7 +1043,7 @@ static ID3D12Device *D3D12CreateDeviceForAdapter(IDXGIAdapter1 *adapter) {
 #endif
 
     return device;
-} 
+}
 
 static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
     TRACELOG;
@@ -2623,7 +2623,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 
     if (d3d12_buf == NULL) {
         d3d12_buf = new_buffer(d3d12_context.device, size);
-    } 
+    }
     if (d3d12_buf == NULL) {
         d3d12_halt("D3D12: Failed to allocate buffer of size " << (int64_t)size);
         return halide_error_code_device_malloc_failed;
