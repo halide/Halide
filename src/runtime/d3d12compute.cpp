@@ -2557,15 +2557,17 @@ WEAK int halide_d3d12compute_release_context(void *user_context) {
 static void d3d12_debug_dump(error &err) {
     TRACELOG;
 
+    err << "\n>>>>> Halide D3D12 Debug Dump Report <<<<<\n";
+
     if (!device) {
-        err << "debug info not available: no device.\n";
+        err << ">>> Debug info not available: no device.\n";
         return;
     }
 
     halide_assert(user_context, (dxgiAdapter != NULL));
     DXGI_ADAPTER_DESC1 desc = {};
     if (FAILED(dxgiAdapter->GetDesc1(&desc))) {
-        err << "Unable to retrieve information about the adapter.\n";
+        err << ">>> Unable to retrieve information about the device adapter.\n";
         return;
     }
 
@@ -2573,11 +2575,9 @@ static void d3d12_debug_dump(error &err) {
     // is a panic mechanism that precedes an operational "halt":
     void *dump_buffer = d3d12_malloc(64 * 1024);
     if (!dump_buffer) {
-        err << "Unable to allocate memory for the debug dump.\n";
+        err << ">>> Unable to allocate memory for the debug dump.\n";
         return;
     }
-
-    err << "\n===== Debug Dump =====\n";
 
     // simple conversion from Windows 16bit wchar to char:
     char Description[128];
@@ -2586,7 +2586,9 @@ static void d3d12_debug_dump(error &err) {
     }
     Description[127] = '\0';
 
-    err << "D3D12 Adapter: " << Description << "\n";
+    err << ">>> D3D12 Device Adapter: " << Description << "\n";
+
+    err << ">>>>> End of Halide D3D12 Debug Dump Report <<<<<\n";
 }
 
 using namespace Halide::Runtime::Internal::D3D12Compute;
