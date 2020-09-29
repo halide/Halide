@@ -448,31 +448,16 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
 
     // elements in a threadgroup shared buffer are always 32bits:
     // must reinterpret (and maybe unpack) bits...
+    bool shared_promotion_required = false;
+    string promotion_str = "";
     if (groupshared_allocations.contains(op->name)) {
-        ostringstream rhs;
         internal_assert(allocations.contains(op->name));
-        // no ramps when accessing shared memory...
-        Expr ramp_base = is_ramp_one(op->index);
-        internal_assert(!ramp_base.defined());
-        internal_assert(op->type.lanes() == 1);
-
-        string id_index = print_expr(op->index);
-        internal_assert(op->type.bits() <= 32);
-        Type promoted = op->type.with_bits(32);
-        if (promoted == op->type) {
-            rhs << print_name(op->name)
-                << "[" << id_index << "]";
-        } else {
-            rhs << "as" << print_type(promoted)
-                << "("
-                << print_name(op->name)
-                << "[" << id_index << "]"
-                << ")";
+        Type promoted_type = op->type.with_bits(32).with_lanes(1);
+        if (promoted_type != op->type) {
+            shared_promotion_required = true;
+            // NOTE(marcos): might need to resort to StoragePackUnpack::unpack_load() here
+            promotion_str = "as" + print_type(promoted_type);
         }
-
-        // NOTE(marcos): might need to resort to StoragePackUnpack::unpack_load() here...
-        print_assignment(op->type, rhs.str());
-        return;
     }
 
     // If we're loading a contiguous ramp, "unroll" the ramp into loads:
@@ -485,11 +470,17 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
             << "(";
         const int lanes = op->type.lanes();
         for (int i = 0; i < lanes; ++i) {
+            if (shared_promotion_required) {
+                rhs << promotion_str << "(";
+            }
             rhs << print_name(op->name)
                 << "["
                 << print_expr(ramp_base)
                 << "+" << i
                 << "]";
+            if (shared_promotion_required) {
+                rhs << ")";
+            }
             if (i < lanes - 1)
                 rhs << ", ";
         }
@@ -509,14 +500,28 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     ostringstream rhs;
     if (type_cast_needed) {
         ostringstream element;
+        // Vector cases handled below
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            element << promotion_str << "(";
+        }
         element << print_name(op->name)
                 << "[" << id_index << "]";
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            element << ")";
+        }
         Type target_type = op->type;
         Type source_type = allocations.get(op->name).type;
         rhs << print_cast(target_type, source_type, element.str());
     } else {
+        // Vector cases handled below
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            rhs << promotion_str << "(";
+        }
         rhs << print_name(op->name);
         rhs << "[" << id_index << "]";
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            rhs << ")";
+        }
     }
 
     std::map<string, string>::iterator cached = cache.find(rhs.str());
@@ -541,10 +546,16 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
         for (int i = 0; i < op->type.lanes(); ++i) {
             stream << get_indent() << id << "[" << i << "] = "
                    << print_type(op->type.element_of())
-                   << "("
-                   << print_name(op->name)
-                   << "[" << id_index << "[" << i << "]]"
-                   << ");\n";
+                   << "(";
+            if (shared_promotion_required) {
+                stream << promotion_str << "(";
+            }
+            stream << print_name(op->name)
+                   << "[" << id_index << "[" << i << "]]";
+            if (shared_promotion_required) {
+                stream << ")";
+            }
+            stream << ");\n";
         }
     } else {
         print_assignment(op->type, rhs.str());
@@ -558,17 +569,16 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
 
     // elements in a threadgroup shared buffer are always 32bits:
     // must reinterpret (and maybe pack) bits...
+    bool shared_promotion_required = false;
+    string promotion_str = "";
     if (groupshared_allocations.contains(op->name)) {
-        internal_assert(value_type.bits() <= 32);
-        ostringstream rhs;
-        rhs << print_name(op->name)
-            << "[" << print_expr(op->index) << "]"
-            << " = "
-            << print_reinterpret(allocations.get(op->name).type, op->value)
-            << ";\n";
-        // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here...
-        stream << get_indent() << rhs.str();
-        return;
+        internal_assert(allocations.contains(op->name));
+        Type promoted_type = allocations.get(op->name).type;
+        if (promoted_type != op->value.type()) {
+            shared_promotion_required = true;
+            // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here
+            promotion_str = "as" + print_type(promoted_type);
+        }
     }
 
     // If we're writing a contiguous ramp, "unroll" the ramp into stores:
@@ -585,12 +595,18 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
                 << print_expr(ramp_base)
                 << " + " << i
                 << "]"
-                << " = "
-                << print_expr(op->value)
+                << " = ";
+            if (shared_promotion_required) {
+                rhs << promotion_str << "(";
+            }
+            rhs << print_expr(op->value)
                 << "["
                 << i
-                << "]"
-                << ";\n";
+                << "]";
+            if (shared_promotion_required) {
+                rhs << ")";
+            }
+            rhs << ";\n";
             stream << get_indent() << rhs.str();
         }
     } else if (op->index.type().is_vector()) {
@@ -603,17 +619,30 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
                 << "["
                 << print_expr(op->index) << "[" << i << "]"
                 << "]"
-                << " = "
-                << print_expr(op->value) << "[" << i << "];\n";
+                << " = ";
+            if (shared_promotion_required) {
+                rhs << promotion_str << "(";
+            }
+            rhs << print_expr(op->value) << "[" << i << "]";
+            if (shared_promotion_required) {
+                rhs << ")";
+            }
+            rhs << ";\n";
             stream << get_indent() << rhs.str();
         }
     } else {
         ostringstream rhs;
         rhs << print_name(op->name)
             << "[" << print_expr(op->index) << "]"
-            << " = "
-            << print_expr(op->value)
-            << ";\n";
+            << " = ";
+        if (shared_promotion_required) {
+            rhs << promotion_str << "(";
+        }
+        rhs << print_expr(op->value);
+        if (shared_promotion_required) {
+            rhs << ")";
+        }
+        rhs << ";\n";
         stream << get_indent() << rhs.str();
     }
 
