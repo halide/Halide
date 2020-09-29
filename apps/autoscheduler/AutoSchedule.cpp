@@ -170,6 +170,23 @@ bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
     return drop_it;
 }
 
+std::string conform_id_to_cpp(const std::string &name, const char prefix='v') {
+    auto invalid_contents = [] (const char& c) { 
+        return std::ispunct(c) || std::isspace(c);
+    };
+
+    auto invalid_prefix = [] (const char& c) { 
+        return !(std::isalpha(c));
+    };
+
+    std::string result = name;
+    assert(!name.empty());
+    std::replace_if(result.begin(), result.end(), invalid_contents, '_');
+    if(invalid_prefix(result.front())) { result = std::string(prefix) + result; }
+    return result;
+}
+
+
 struct State {
     mutable RefCount ref_count;
     IntrusivePtr<const LoopNest> root;
@@ -746,7 +763,7 @@ struct State {
         int i = (int)(dag.nodes.size() - 1);
         for (const auto &n : dag.nodes) {
             if (!n.is_input) {
-                src << "Func " << n.func.name() << " = pipeline.get_func(" << i << ");\n";
+                src << "Func " << conform_id_to_cpp(n.func.name(), 'f') << " = pipeline.get_func(" << i << ");\n";
             }
             i--;
         }
@@ -767,18 +784,18 @@ struct State {
         if (!vars.empty()) {
             for (const auto &p : vars) {
                 if (p.second.empty()) {
-                    src << "Var " << p.first << "(\"" << p.first << "\");\n";
+                    src << "Var " << conform_id_to_cpp(p.first, 'v') << "(\"" << p.first << "\");\n";
                 } else {
-                    src << "Var " << p.first << "(" << p.second << ");\n";
+                    src << "Var " << conform_id_to_cpp(p.first, 'v') << "(" << p.second << ");\n";
                 }
             }
         }
         if (!rvars.empty()) {
             for (const auto &p : rvars) {
                 if (p.second.empty()) {
-                    src << "RVar " << p.first << "(\"" << p.first << "\");\n";
+                    src << "RVar " << conform_id_to_cpp(p.first, 'r') << "(\"" << p.first << "\");\n";
                 } else {
-                    src << "RVar " << p.first << "(" << p.second << ");\n";
+                    src << "RVar " << conform_id_to_cpp(p.first, 'r') << "(" << p.second << ");\n";
                 }
             }
         }
@@ -815,7 +832,7 @@ struct State {
                             p.second->schedule_source << "{";
                         }
                         first = false;
-                        p.second->schedule_source << v.var.name();
+                        p.second->schedule_source << conform_id_to_cpp(v.var.name(), 'v');
                     }
                 }
                 p.second->schedule_source << "})";
@@ -829,18 +846,18 @@ struct State {
                 for (size_t i = 1; i < parallel_vars.size(); i++) {
                     // Outermost, and next outermost. Preserve the inner
                     // name to not invalidate any compute_ats.
-                    p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
-                                              << ", " << parallel_vars[i - 1].name()
-                                              << ", " << parallel_vars[i].name() << ")";
+                    p.second->schedule_source << "\n    .fuse(" << conform_id_to_cpp(parallel_vars[i].name(), 'v')
+                                              << ", " << conform_id_to_cpp(parallel_vars[i - 1].name(), 'v')
+                                              << ", " << conform_id_to_cpp(parallel_vars[i].name(), 'v') << ")";
                     stage.fuse(parallel_vars[i], parallel_vars[i - 1], parallel_vars[i]);
                 }
                 if (!parallel_vars.empty()) {
-                    p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
+                    p.second->schedule_source << "\n    .parallel(" << conform_id_to_cpp(parallel_vars.back().name(), 'v') << ")";
                     stage.parallel(parallel_vars.back());
                 }
             } else {
                 for (const auto &v : parallel_vars) {
-                    p.second->schedule_source << "\n    .parallel(" << v.name() << ")";
+                    p.second->schedule_source << "\n    .parallel(" << conform_id_to_cpp(v.name(), 'v') << ")";
                     stage.parallel(v);
                 }
             }
@@ -858,7 +875,7 @@ struct State {
                         p.second->schedule_source << ", ";
                     }
                     first = false;
-                    p.second->schedule_source << v.name();
+                    p.second->schedule_source << conform_id_to_cpp(v.name(), 'v');
                 }
                 p.second->schedule_source << ")";
                 Func(p.first->node->func).reorder_storage(storage_vars);
