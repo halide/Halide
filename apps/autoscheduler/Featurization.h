@@ -372,7 +372,6 @@ std::string conform_id_to_cpp(const std::string &name, const std::string &prefix
         return !(std::isalpha(c));
     };
 
-    assert(!name.empty());
     std::string result(name);
     std::replace_if(result.begin(), result.end(), invalid_contents, '_');
     if(invalid_prefix(result.front())) { result = std::string(prefix) + result; }
