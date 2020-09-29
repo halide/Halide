@@ -497,6 +497,17 @@ Expr lossless_cast(Type t, Expr e) {
         }
     }
 
+    if (const Shuffle *shuf = e.as<Shuffle>()) {
+        std::vector<Expr> vecs;
+        for (const auto &vec : shuf->vectors) {
+            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec));
+            if (!vecs.back().defined()) {
+                return Expr();
+            }
+        }
+        return Shuffle::make(vecs, shuf->indices);
+    }
+
     return Expr();
 }
 

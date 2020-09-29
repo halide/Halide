@@ -2683,7 +2683,18 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
 
         } else {
+            if (src.is_scalar() && dst.is_vector()) {
+                value = create_broadcast(value, 1);
+            }
+            if (src.is_vector() && dst.is_scalar()) {
+                llvm_dst = get_vector_type(llvm_dst, 1);
+            }
+            value->dump();
+            llvm_dst->dump();
             value = builder->CreateBitCast(value, llvm_dst);
+            if (src.is_vector() && dst.is_scalar()) {
+                value = builder->CreateExtractElement(value, (uint64_t)0);
+            }
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
@@ -4261,17 +4272,77 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
 }
 
 void CodeGen_LLVM::visit(const Shuffle *op) {
+    vector<Value *> vecs;
+    for (const Expr &e : op->vectors) {
+        vecs.push_back(codegen(e));
+    }
+
     if (op->is_interleave()) {
-        vector<Value *> vecs;
-        for (Expr i : op->vectors) {
-            vecs.push_back(codegen(i));
-        }
         value = interleave_vectors(vecs);
     } else {
-        vector<Value *> vecs;
-        for (Expr i : op->vectors) {
-            vecs.push_back(codegen(i));
+        // If the even-numbered indices equal the odd-numbered
+        // indices, only generate one and then do a self-interleave.
+        for (int f : {4, 3, 2}) {
+            bool self_interleave = op->indices.size() % f == 0;
+            for (size_t i = 0; i < op->indices.size(); i++) {
+                self_interleave &= (op->indices[i] == op->indices[i - (i % f)]);
+            }
+            if (self_interleave) {
+                vector<int> sub_indices;
+                for (size_t i = 0; i < op->indices.size(); i += f) {
+                    sub_indices.push_back(op->indices[i]);
+                }
+                Expr equiv = Shuffle::make(op->vectors, sub_indices);
+                value = codegen(equiv);
+                if (f == 2) {
+                    value = interleave_vectors({value, value});
+                } else if (f == 3) {
+                    value = interleave_vectors({value, value, value});
+                } else {
+                    value = interleave_vectors({value, value});
+                    value = interleave_vectors({value, value});
+                }
+                return;
+            }
         }
+
+        // If the indices form contiguous aligned runs, do the shuffle
+        // on entire sub-vectors by reinterpreting them as a wider
+        // type.
+        for (int f : {8, 4, 2}) {
+
+            if (op->type.lanes() % f != 0) {
+                continue;
+            }
+
+            if (op->type.bits() * f > 64) {
+                continue;
+            }
+            bool contiguous = true;
+            for (const Expr &vec : op->vectors) {
+                contiguous &= ((vec.type().lanes() % f) == 0);
+            }
+            for (size_t i = 0; i < op->indices.size(); i++) {
+                contiguous &= (op->indices[i] == op->indices[i - (i % f)] + ((int)i % f));
+            }
+            if (contiguous) {
+                vector<Expr> equiv_args;
+                for (const Expr &vec : op->vectors) {
+                    Type t = UInt(vec.type().bits() * f, vec.type().lanes() / f);
+                    equiv_args.push_back(reinterpret(t, vec));
+                }
+                vector<int> equiv_indices;
+                for (size_t i = 0; i < op->indices.size(); i += f) {
+                    equiv_indices.push_back(op->indices[i] / f);
+                }
+                Expr equiv = Shuffle::make(equiv_args, equiv_indices);
+                equiv = reinterpret(op->type, equiv);
+                codegen(equiv);
+                return;
+            }
+        }
+
+        // Do a concat and then a single shuffle
         value = concat_vectors(vecs);
         if (op->is_concat()) {
             // If this is just a concat, we're done.
@@ -4752,6 +4823,10 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
 Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
                                      const std::vector<int> &indices) {
     internal_assert(a->getType() == b->getType());
+    if (!a->getType()->isVectorTy()) {
+        a = create_broadcast(a, 1);
+        b = create_broadcast(b, 1);
+    }
     vector<Constant *> llvm_indices(indices.size());
     for (size_t i = 0; i < llvm_indices.size(); i++) {
         if (indices[i] >= 0) {
@@ -4763,7 +4838,6 @@ Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
             llvm_indices[i] = UndefValue::get(i32_t);
         }
     }
-
     return builder->CreateShuffleVector(a, b, ConstantVector::get(llvm_indices));
 }
 

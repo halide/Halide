@@ -49,14 +49,18 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
         // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(x + x, x * 2) ||
-             rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w), is_same_type(x, z)) ||
-             rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y), is_same_type(x, z)) ||
-             rewrite(broadcast(x) + broadcast(y), broadcast(x + y), is_same_type(x, y)) ||
-             rewrite((x + broadcast(y)) + broadcast(z), x + broadcast(y + z), is_same_type(y, z)) ||
-             rewrite((x - broadcast(y)) + broadcast(z), x + broadcast(z - y), is_same_type(y, z)) ||
+             rewrite(ramp(x, y, c0) + ramp(z, w, c0), ramp(x + z, y + w, c0)) ||
+             rewrite(ramp(x, y, c0) + broadcast(z, c0), ramp(x + z, y, c0)) ||
+             rewrite(broadcast(x, c0) + broadcast(y, c0), broadcast(x + y, c0)) ||
+             rewrite(broadcast(x, c0) + broadcast(y, c1), broadcast(x + broadcast(y, fold(c1/c0)), c0), c1 % c0 == 0) ||
+             rewrite(broadcast(y, c1) + broadcast(x, c0), broadcast(x + broadcast(y, fold(c1/c0)), c0), c1 % c0 == 0) ||
+
+             rewrite((x + broadcast(y, c0)) + broadcast(z, c0), x + broadcast(y + z, c0)) ||
+             rewrite((x - broadcast(y, c0)) + broadcast(z, c0), x + broadcast(z - y, c0)) ||
              rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
              rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
 
+             rewrite(ramp(broadcast(x, c0), y, c1) + broadcast(z, c2), ramp(broadcast(x + z, c0), y, c1), c2 == c0 * c1) ||
              rewrite(select(x, y, z) + (select(x, u, v) + w), select(x, y + u, z + v) + w) ||
              rewrite(select(x, y, z) + (w + select(x, u, v)), select(x, y + u, z + v) + w) ||
              rewrite(select(x, y, z) + (select(x, u, v) - w), select(x, y + u, z + v) - w) ||

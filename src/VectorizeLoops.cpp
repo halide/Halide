@@ -183,9 +183,6 @@ Interval bounds_of_lanes(const Expr &e) {
 };
 
 // A ramp with the lanes repeated (e.g. <0 0 2 2 4 4 6 6>)
-// TODO(vksnk): With nested vectorization, this will be representable
-// as a ramp(broadcast(a, repetitions), broadcast(b, repetitions,
-// lanes)
 struct InterleavedRamp {
     Expr base, stride;
     int lanes, repetitions;
@@ -193,17 +190,29 @@ struct InterleavedRamp {
 
 bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRamp *result) {
     if (const Ramp *r = e.as<Ramp>()) {
-        result->base = r->base;
-        result->stride = r->stride;
-        result->lanes = r->lanes;
-        result->repetitions = 1;
-        return true;
+        const Broadcast *b_base = r->base.as<Broadcast>();
+        const Broadcast *b_stride = r->stride.as<Broadcast>();
+        if (r->base.type().is_scalar()) {
+            result->base = r->base;
+            result->stride = r->stride;
+            result->lanes = r->lanes;
+            result->repetitions = 1;
+            return true;
+        } else if (b_base && b_stride && b_base->lanes == b_stride->lanes) {
+            result->base = b_base->value;
+            result->stride = b_stride->value;
+            result->lanes = r->lanes;
+            result->repetitions = b_base->lanes;
+            return true;
+        }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
-        result->base = b->value;
-        result->stride = 0;
-        result->lanes = b->lanes;
-        result->repetitions = 0;
-        return true;
+        if (b->value.type().is_scalar()) {
+            result->base = b->value;
+            result->stride = 0;
+            result->lanes = b->lanes;
+            result->repetitions = 0;
+            return true;
+        }
     } else if (const Add *add = e.as<Add>()) {
         InterleavedRamp ra;
         if (is_interleaved_ramp(add->a, scope, &ra) &&
@@ -710,7 +719,7 @@ class VectorSubs : public IRMutator {
         // Vectorize the let value and check to see if it was vectorized by
         // this mutator. The type of the expression might already be vector
         // width.
-        Expr mutated_value = mutate(op->value);
+        Expr mutated_value = simplify(mutate(op->value));
         bool was_vectorized = (!op->value.type().is_vector() &&
                                mutated_value.type().is_vector());
 
@@ -779,7 +788,7 @@ class VectorSubs : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        Expr mutated_value = mutate(op->value);
+        Expr mutated_value = simplify(mutate(op->value));
         string vectorized_name = op->name;
 
         // Check if the value was vectorized by this mutator.
@@ -1181,7 +1190,7 @@ class VectorSubs : public IRMutator {
 
                 output_lanes = store_index.type().lanes() / store_ir.repetitions;
 
-                store_index = Ramp::make(store_ir.base, store_ir.stride, output_lanes);
+                store_index = Ramp::make(store_ir.base, store_ir.stride, output_lanes / store_ir.base.type().lanes());
                 b = VectorReduce::make(reduce_op, b, output_lanes);
             }
 
