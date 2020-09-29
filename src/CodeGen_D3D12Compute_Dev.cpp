@@ -447,7 +447,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
     // elements in a threadgroup shared buffer are always 32bits:
-    // must reinterpret (and maybe unpack) bits...
+    // must reinterpret (and maybe unpack) bits.
     bool shared_promotion_required = false;
     string promotion_str = "";
     if (groupshared_allocations.contains(op->name)) {
@@ -568,7 +568,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
     Type value_type = op->value.type();
 
     // elements in a threadgroup shared buffer are always 32bits:
-    // must reinterpret (and maybe pack) bits...
+    // must reinterpret (and maybe pack) bits.
     bool shared_promotion_required = false;
     string promotion_str = "";
     if (groupshared_allocations.contains(op->name)) {
