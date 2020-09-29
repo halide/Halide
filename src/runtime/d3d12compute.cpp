@@ -15,6 +15,7 @@
 #define HALIDE_D3D12_DEBUG_LAYER (0)
 #define HALIDE_D3D12_DEBUG_SHADERS (0)
 #define HALIDE_D3D12_PROFILING (0)
+#define HALIDE_D3D12_TRACE_LEVEL (9)
 #define HALIDE_D3D12_TRACE_TIME (0)
 #define HALIDE_D3D12_TRACE_TIME_THRESHOLD (100) /* in microseconds */
 #define HALIDE_D3D12_PIX (0)
@@ -115,6 +116,12 @@ struct trace : public Printer<BasicPrinter, sizeof(trace_buf)> {
 };
 
 #define TRACEPRINT(msg) trace() << msg;
+#define TRACELEVEL(level, msg) if (level <= HALIDE_D3D12_TRACE_LEVEL) TRACEPRINT(msg);
+#define TRACEFATAL(msg) TRACELEVEL(-3, "FATAL ERROR: " << msg);
+#define TRACEERROR(msg) TRACELEVEL(-2, "ERROR: " << msg);
+#define TRACEWARN(msg) TRACELEVEL(-1, "WARNING: " << msg);
+#define TRACEINFO(msg) TRACELEVEL(0, msg);
+
 
 #ifdef HALIDE_D3D12_TRACE_TIME
 #define TRACETIME_CHECKPOINT() halide_current_time_ns(user_context)
@@ -164,6 +171,11 @@ typedef SinkPrinter trace;
 #define TRACE_SCOPE(name)
 #define TRACELOG
 #define TRACEPRINT(msg)
+#define TRACELEVEL(level, msg)
+#define TRACEFATAL(msg) error() << "FATAL ERROR: " << msg;
+#define TRACEERROR(msg) error() << "ERROR: " << msg;
+#define TRACEWARN(msg) debug() << "WARNING: " << msg;
+#define TRACEINFO(msg)
 #endif
 //
 // ^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ^
@@ -1921,8 +1933,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
 
     switch (input_buffer->type) {
     case d3d12_buffer::Constant: {
-        TRACEPRINT("CBV"
-                   "\n");
+        TRACELEVEL(1, "CBV\n");
 
         // NOTE(marcos): constant buffers are only used internally by the
         // runtime; users cannot create, control or access them, so it is
@@ -1954,8 +1965,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
         // just bind read-only buffers with UAV descriptors:
     case d3d12_buffer::ReadWrite:
     case d3d12_buffer::WriteOnly: {
-        TRACEPRINT("UAV"
-                   "\n");
+        TRACELEVEL(1, "UAV\n");
 
         DXGI_FORMAT Format = input_buffer->format;
         if (Format == DXGI_FORMAT_UNKNOWN) {
@@ -1973,11 +1983,14 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
         // enabled) the compiler might warn about unused variables...
         MAYBE_UNUSED(SizeInBytes);
 
-        TRACEPRINT("--- [" << index << "] : "
-                           << (void *)input_buffer << " | "
-                           << " | "
-                           << FirstElement << " : " << NumElements << " : " << SizeInBytes
-                           << "\n");
+        TRACELEVEL(3, "[" << index << "] : "
+                          << (void *)input_buffer
+                          << " | "
+                          << "offset " << FirstElement
+                          << " | "
+                          << NumElements
+                          << "elements (" << SizeInBytes << "bytes)"
+                          << "\n");
 
         // A View of a non-Structured Buffer cannot be created using a NULL Desc.
         // Default Desc parameters cannot be used, as a Format must be supplied.
@@ -2203,14 +2216,14 @@ static void synchronize_host_and_device_buffer_contents(d3d12_copy_command_list 
     d3d12_buffer *staging = xfer->staging;
     switch (staging->type) {
     case d3d12_buffer::Upload:
-        TRACEPRINT("uploading buffer to device")
+        TRACEPRINT("uploading buffer to device\n")
         src = staging;
         dst = buffer;
         src_byte_offset = xfer->offset;
         dst_byte_offset = buffer->offsetInBytes;
         break;
     case d3d12_buffer::ReadBack:
-        TRACEPRINT("reading-back buffer from device")
+        TRACEPRINT("reading-back buffer from device\n")
         unmap_buffer(staging);
         src = buffer;
         dst = staging;
@@ -2352,7 +2365,7 @@ static void *buffer_contents(d3d12_buffer *buffer) {
     case d3d12_buffer::ReadOnly:
     case d3d12_buffer::WriteOnly:
     case d3d12_buffer::ReadWrite: {
-        TRACEPRINT("WARNING: UNCHARTED TERRITORY! THIS CASE IS NOT EXPECTED TO HAPPEN FOR NOW!\n");
+        TRACEWARN("UNCHARTED TERRITORY! THIS CASE IS NOT EXPECTED TO HAPPEN FOR NOW!\n");
         halide_assert(user_context, false);
 
         D3D12ContextHolder d3d12_context(user_context, true);
@@ -2571,7 +2584,7 @@ static d3d12_buffer *d3d12_allocation_cache_get_buffer(void *user_context, size_
     TRACELOG;
 
     if (!halide_can_reuse_device_allocations(user_context) || !enable_allocation_cache) {
-        TRACEPRINT("(allocation cache is disabled...)");
+        TRACEPRINT("(allocation cache is disabled...)\n");
         return NULL;
     }
 
@@ -2607,7 +2620,7 @@ static bool d3d12_allocation_cache_put_buffer(void *user_context, d3d12_buffer *
     TRACELOG;
 
     if (!halide_can_reuse_device_allocations(user_context) || !enable_allocation_cache) {
-        TRACEPRINT("(allocation cache is disabled...)");
+        TRACEPRINT("(allocation cache is disabled...)\n");
         return false;
     }
 
@@ -2672,7 +2685,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *buf) {
     TRACELOG;
 
-    TRACEPRINT("user_context: " << user_context << " | halide_buffer_t: " << buf << " | d3d12_device: " << buf->device << "\n");
+    TRACEPRINT("user_context: " << user_context << " | halide_buffer_t: " << buf << "\n");
 
     if (buf->device == 0) {
         return 0;
@@ -3081,11 +3094,12 @@ WEAK int halide_d3d12compute_run(void *user_context,
                 memcpy(&uniform_bytes[offset], &val, val_size);
                 offset = (offset + val_size - 1) & ~(val_size - 1);
                 offset += val_size;
-                TRACEPRINT("args[" << i << "] is " << arg_sizes[i] << " bytes"
-                                   << " : float(" << *arg.f << ")"
-                                   << " or uint32(" << *arg.i << ")"
-                                   << " or int32(" << (int32_t &)*arg.i << ")"
-                                   << "\n");
+                TRACELEVEL(3,
+                    "args[" << i << "] is " << arg_sizes[i] << " bytes"
+                            << " : float(" << *arg.f << ")"
+                            << " or uint32(" << *arg.i << ")"
+                            << " or int32(" << (int32_t &)*arg.i << ")"
+                            << "\n");
             }
             halide_assert(user_context, offset == total_uniform_args_size);
         }
