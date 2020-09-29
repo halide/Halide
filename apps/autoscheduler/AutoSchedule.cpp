@@ -746,7 +746,7 @@ struct State {
         int i = (int)(dag.nodes.size() - 1);
         for (const auto &n : dag.nodes) {
             if (!n.is_input) {
-                src << "Func " << conform_id_to_cpp(n.func.name(), "f") << " = pipeline.get_func(" << i << ");\n";
+                src << "Func " << conform_id_to_cpp(n.func.name()) << " = pipeline.get_func(" << i << ");\n";
             }
             i--;
         }
@@ -776,9 +776,9 @@ struct State {
         if (!rvars.empty()) {
             for (const auto &p : rvars) {
                 if (p.second.empty()) {
-                    src << "RVar " << conform_id_to_cpp(p.first, "r") << "(\"" << p.first << "\");\n";
+                    src << "RVar " << conform_id_to_cpp(p.first) << "(\"" << p.first << "\");\n";
                 } else {
-                    src << "RVar " << conform_id_to_cpp(p.first, "r") << "(" << p.second << ");\n";
+                    src << "RVar " << conform_id_to_cpp(p.first) << "(" << p.second << ");\n";
                 }
             }
         }

@@ -363,13 +363,13 @@ struct ScheduleFeatures {
 };
 
 
-std::string conform_id_to_cpp(const std::string &name, const std::string &prefix="v") {
+std::string conform_id_to_cpp(const std::string &name, const std::string &prefix="_") {
     auto invalid_contents = [] (const char& c) { 
         return std::ispunct(c) || std::isspace(c);
     };
 
     auto invalid_prefix = [] (const char& c) { 
-        return !(std::isalpha(c));
+        return (c != '_') && !(std::isalpha(c));
     };
 
     std::string result(name);
