@@ -533,6 +533,42 @@ public:
     }
 };
 
+class float32 {
+  typedef float ElementType;
+  typedef float16 CppVectorType;
+  static const int Lanes = 32;
+public:
+
+    CppVectorType native_vector[2];
+
+    enum Empty { empty };
+    inline float32(Empty) {}
+
+    enum FromCppVector { from_native_vector };
+    inline float32(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
+        native_vector[0] = src1;
+        native_vector[1] = src2;
+    }
+
+   static float32 load(const void *base, int32_t offset) {
+        float32 r(empty);
+        memcpy(&r.native_vector[0], ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
+        return r;
+    }
+
+    void aligned_store(void *base, int32_t offset) const {
+        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
+    }
+
+    void store(void *base, int32_t offset) const {
+        memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
+    }
+
+   static float32 concat(const CppVectorType& a, const CppVectorType& b) {
+        return float32(from_native_vector, a, b);
+    }
+};
+
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x64_t int8x64_t_aligned_load(const void *base, int32_t offset) {
     return *((const int8x64_t *)((int8_t*)base + offset));
 }
@@ -761,7 +797,7 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_4_i16(const int16x64_t
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_i16(const int16x64_t& a, int start) {
-  return IVP_SELNX16 (a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
+  return IVP_SELNX16(a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
 }
 
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_slice_start_1_u8(const uint8x128_t& a) {
@@ -770,6 +806,10 @@ HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_slice_start_1_u8(const uint8x128_t
 
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_slice_start_2_u8(const uint8x128_t& a) {
   return IVP_SEL2NX8UI(a.native_vector[1], a.native_vector[0], IVP_SELI_8B_ROTATE_RIGHT_2);
+}
+
+HALIDE_ALWAYS_INLINE float16 halide_xtensa_slice_f32(const float32& a, int start) {
+  return IVP_SELN_2XF32(a.native_vector[1], a.native_vector[0], IVP_SEQN_2X32() + int32x16_t(start));
 }
 
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_dynamic_shuffle(const uint8x64_t& a, const int8x64_t& b, int min_range, int max_range) {
@@ -786,6 +826,10 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_dynamic_shuffle(const int16x64_t& 
 
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_dynamic_shuffle(const uint16x64_t& a, const int16x32_t& b, int min_range, int max_range) {
   return IVP_SELNX16U(a.native_vector[1], a.native_vector[0], b);
+}
+
+HALIDE_ALWAYS_INLINE float16 halide_xtensa_dynamic_shuffle(const float16& a, const int32x16_t& b, int min_range, int max_range) {
+  return IVP_SHFLN_2XF32(a, b);
 }
 
 HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_shift_right(const uint16x32_t &a, const uint16x32_t &b) {
@@ -1436,6 +1480,10 @@ void CodeGen_Xtensa::visit(const Div *op) {
         }
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_div(op->a, op->b));
+    } else if (op->type.is_float() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
+        ostringstream rhs;
+        rhs << "IVP_DIVN_2XF32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        print_assignment(op->type, rhs.str());
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }

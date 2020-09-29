@@ -551,6 +551,10 @@ private:
                                   {mutate(op->vectors[0]), op->slice_begin()},
                                   Call::PureExtern);
             }
+        } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_float() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
+            return Call::make(op->type, "halide_xtensa_slice_f32",
+                                {mutate(op->vectors[0]), op->slice_begin()},
+                                Call::PureExtern);
         } else if (op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
             if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 64)) {
                 bool is_deinterleave_even = true;
