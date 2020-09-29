@@ -653,6 +653,12 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x16_t int32x16_t_aligned_load(cons
     return r;
 }
 
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED float16 float16_load(const void *base, int32_t offset) {
+    float16 r;
+    memcpy(&r, ((const float*)base + offset), sizeof(float) * 16);
+    return r;
+}
+
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED float16 float16_aligned_load(const void *base, int32_t offset) {
     float16 r;
     memcpy(&r, ((const float*)base + offset), sizeof(float) * 16);
@@ -661,6 +667,10 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED float16 float16_aligned_load(const void
 
 HALIDE_ALWAYS_INLINE void aligned_store(const int32x16_t& a, void *base, int32_t offset) {
     *((int32x16_t *)((int32_t*)base + offset)) = a;
+}
+
+HALIDE_ALWAYS_INLINE void store(const float16& a, void *base, int32_t offset) {
+    memcpy(((float*)base + offset), &a, sizeof(float) * 16);
 }
 
 HALIDE_ALWAYS_INLINE void aligned_store(const float16& a, void *base, int32_t offset) {

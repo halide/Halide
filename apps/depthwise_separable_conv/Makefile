@@ -6,6 +6,10 @@ $(GENERATOR_BIN)/depthwise_separable_conv.generator: depthwise_separable_conv_ge
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
+$(BIN)/%/depthwise_separable_conv_c.halide_generated.cpp: $(GENERATOR_BIN)/depthwise_separable_conv.generator
+	@mkdir -p $(@D)
+	$^ -g depthwise_separable_conv -o $(@D) -f depthwise_separable_conv_c -e c_source,c_header target=$*-xtensa
+
 $(BIN)/%/depthwise_separable_conv.a: $(GENERATOR_BIN)/depthwise_separable_conv.generator
 	@mkdir -p $(@D)
 	$^ -g depthwise_separable_conv -e $(GENERATOR_OUTPUTS) -o $(@D) -f depthwise_separable_conv target=$* auto_schedule=false
@@ -14,9 +18,9 @@ $(BIN)/%/depthwise_separable_conv_auto_schedule.a: $(GENERATOR_BIN)/depthwise_se
 	@mkdir -p $(@D)
 	$^ -g depthwise_separable_conv -e $(GENERATOR_OUTPUTS) -o $(@D) -f depthwise_separable_conv_auto_schedule target=$*-no_runtime auto_schedule=true
 
-$(BIN)/%/process: process.cpp $(BIN)/%/depthwise_separable_conv.a $(BIN)/%/depthwise_separable_conv_auto_schedule.a
+$(BIN)/%/process: process.cpp $(BIN)/%/depthwise_separable_conv.a $(BIN)/%/depthwise_separable_conv_auto_schedule.a $(BIN)/%/depthwise_separable_conv_c.halide_generated.cpp
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -I${XTENSA_CSTUBS_ROOT} ${XTENSA_CSTUBS_ROOT}/libcstub.a
 
 test: $(BIN)/$(HL_TARGET)/process
 	@mkdir -p $(@D)
