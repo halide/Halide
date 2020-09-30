@@ -35,7 +35,9 @@ bool lookup_runtime_routine(const std::string &name,
 bool host_supports_target_device(const Target &t) {
     const DeviceAPI d = t.get_required_device_api();
     if (d == DeviceAPI::None) {
-        return false;
+        // If the target requires no DeviceAPI, then
+        // the host trivially supports the target device.
+        return true;
     }
 
     const struct halide_device_interface_t *i = get_device_interface_for_device_api(d, t);
