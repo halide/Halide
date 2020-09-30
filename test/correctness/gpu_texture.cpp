@@ -5,8 +5,6 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int argc, char **argv) {
-    // setenv("HL_JIT_TARGET", "host-opencl-debug", 1);
-
     Target t = get_jit_target_from_environment();
 
     if (!t.has_feature(halide_target_feature_opencl)) {

@@ -1563,19 +1563,7 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
     } else {
         halide_assert(user_context, false && "unhandled data type for image");
     }
-
-    int last_dim_size = buf->dim[buf->dimensions - 1].extent;
     format.image_channel_order = CL_R;
-
-    // if (buf->host == NULL) {
-    //     size_t size = buf->size_in_bytes();
-    //     debug(user_context) << "manually allocating buf->host";
-    //     buf->host = (uint8_t *)halide_malloc(user_context, size);
-    //     if (buf->host == NULL) {
-    //         return -1;
-    // debug(user_context) << *buf;
-    //     }
-    // }
 
     debug(user_context) << "      format=(" << format.image_channel_data_type << ", " << format.image_channel_order << ")\n";
 
@@ -1803,8 +1791,10 @@ WEAK int halide_opencl_image_wrap_cl_mem(void *user_context, struct halide_buffe
 WEAK int halide_opencl_image_device_crop(void *user_context,
                                          const struct halide_buffer_t *src,
                                          struct halide_buffer_t *dst) {
-    halide_assert(user_context, false && "crop not supported on opencl image objects");
-    return -1;
+    for (int dim = 0; dim < src->dimensions; dim++) {
+        halide_assert(user_context, src->dim[dim] == dst->dim[dim] && "crop not supported on opencl image objects");
+    }
+    return 0;
 }
 
 WEAK int halide_opencl_image_device_slice(void *user_context,
