@@ -1567,6 +1567,19 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
 
     debug(user_context) << "      format=(" << format.image_channel_data_type << ", " << format.image_channel_order << ")\n";
 
+    if (buf->dim[0].stride != 1) {
+        error(user_context) << "image buffer must be dense on inner dimension";
+        return halide_error_code_device_malloc_failed;
+    }
+    if (buf->dimensions >= 2 && buf->dim[1].stride != buf->dim[0].extent) {
+        error(user_context) << "image buffer must be dense on inner dimension";
+        return halide_error_code_device_malloc_failed;
+    }
+    if (buf->dimensions >= 3 && buf->dim[2].stride != buf->dim[0].extent * buf->dim[1].extent) {
+        error(user_context) << "image buffer must be dense on inner dimension";
+        return halide_error_code_device_malloc_failed;
+    }
+
     if (buf->dimensions == 1) {
         desc.image_type = CL_MEM_OBJECT_IMAGE1D;
     } else if (buf->dimensions == 2) {
@@ -1574,7 +1587,8 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
     } else if (buf->dimensions == 3) {
         desc.image_type = CL_MEM_OBJECT_IMAGE3D;
     } else {
-        halide_assert(user_context, buf->dimensions >= 1 && buf->dimensions <= 3);
+        error(user_context) << "image buffer must have 1-3 dimensions";
+        return halide_error_code_device_malloc_failed;
     }
     desc.image_width = buf->dim[0].extent;
     desc.image_height = buf->dimensions >= 2 ? buf->dim[1].extent : 1;
@@ -1583,9 +1597,7 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
     // desc.image_row_pitch = buf->dimensions >= 2 ? buf->dim[1].stride * buf->type.bytes() : 0;
     // desc.image_slice_pitch = buf->dimensions >= 3 ? buf->dim[2].stride * buf->type.bytes() : 0;
     desc.image_row_pitch = 0;
-    halide_assert(user_context, buf->dimensions < 2 || buf->dim[1].stride == buf->dim[0].extent);
     desc.image_slice_pitch = 0;
-    halide_assert(user_context, buf->dimensions < 3 || buf->dim[2].stride == buf->dim[0].extent * buf->dim[1].extent);
     desc.num_mip_levels = 0;
     desc.num_samples = 0;
     desc.buffer = NULL;
@@ -1685,8 +1697,10 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
                             << " -> " << (void *)c.dst << " + " << 0
                             << ", " << c.chunk_size << " bytes\n";
 
-        halide_assert(user_context, c.chunk_size == src->size_in_bytes());
-        halide_assert(user_context, c.chunk_size == dst->size_in_bytes());
+        if (src->size_in_bytes() != dst->size_in_bytes() || c.chunk_size != src->size_in_bytes()) {
+            error(user_context) << "image buffer copies must be for whole buffer";
+            return halide_error_code_device_buffer_copy_failed;
+        }
         if (!from_host && to_host) {
             int dim = dst->dimensions;
             size_t offset[] = {0, 0, 0};
@@ -1697,9 +1711,14 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
 
             // int row_pitch = dst->dimensions >= 2 ? dst->dim[1].stride * dst->type.bytes() : 0;
             // int slice_pitch = dst->dimensions >= 3 ? dst->dim[2].stride * dst->type.bytes() : 0;
-            halide_assert(user_context, dst->dimensions < 2 || dst->dim[1].stride == dst->dim[0].extent);
-            halide_assert(user_context, dst->dimensions < 3 || dst->dim[2].stride == dst->dim[0].extent * dst->dim[1].extent);
-
+            if (dst->dimensions >= 2 && dst->dim[1].stride != dst->dim[0].extent) {
+                error(user_context) << "image buffer copies must be dense on inner dimension";
+                return halide_error_code_device_buffer_copy_failed;
+            }
+            if (dst->dimensions >= 3 && dst->dim[2].stride != dst->dim[0].extent * dst->dim[1].extent) {
+                error(user_context) << "image buffer copies must be dense on inner dimension";
+                return halide_error_code_device_buffer_copy_failed;
+            }
             err = clEnqueueReadImage(ctx.cmd_queue, ((device_handle *)c.src)->mem,
                                      CL_FALSE, offset, region,
                                      /* row_pitch */ 0, /* slice_pitch */ 0,
@@ -1713,13 +1732,20 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
                 dim >= 3 ? static_cast<size_t>(src->dim[2].extent) : 1};
             // int row_pitch = dim >= 2 ? src->dim[1].stride * src->type.bytes() : 0;
             // int slice_pitch = dim >= 3 ? src->dim[2].stride * src->type.bytes() : 0;
-            halide_assert(user_context, src->dimensions < 2 || src->dim[1].stride == src->dim[0].extent);
-            halide_assert(user_context, src->dimensions < 3 || src->dim[2].stride == src->dim[0].extent * src->dim[1].extent);
+            if (src->dimensions >= 2 && src->dim[1].stride != src->dim[0].extent) {
+                error(user_context) << "image buffer copies must be dense on inner dimension";
+                return halide_error_code_device_buffer_copy_failed;
+            }
+            if (src->dimensions >= 3 && src->dim[2].stride != src->dim[0].extent * src->dim[1].extent) {
+                error(user_context) << "image buffer copies must be dense on inner dimension";
+                return halide_error_code_device_buffer_copy_failed;
+            }
             err = clEnqueueWriteImage(ctx.cmd_queue, ((device_handle *)c.dst)->mem,
                                       CL_FALSE, offset, region, /* row_pitch */ 0, /* slice_pitch */ 0, src->host,
                                       0, NULL, NULL);
         } else if (!from_host && !to_host) {
-            halide_assert(user_context, false && "image to image copies not implemented");
+            error(user_context) << "image to image copies not implemented";
+            return halide_error_code_device_buffer_copy_failed;
             // err = clEnqueueCopyBuffer(ctx.cmd_queue, ((device_handle *)c.src)->mem, ((device_handle *)c.dst)->mem,
             //                           src_idx + ((device_handle *)c.src)->offset, dst_idx + ((device_handle *)c.dst)->offset,
             //                           c.chunk_size, 0, NULL, NULL);
@@ -1771,6 +1797,19 @@ WEAK int halide_opencl_image_wrap_cl_mem(void *user_context, struct halide_buffe
     if (dev_handle == NULL) {
         return halide_error_code_out_of_memory;
     }
+
+    cl_int mem_type = 0;
+    cl_int result = clGetMemObjectInfo((cl_mem)mem, CL_MEM_TYPE, sizeof(mem_type), &mem_type, NULL);
+    if (result != CL_SUCCESS || (mem_type != CL_MEM_OBJECT_IMAGE1D &&
+                                 mem_type != CL_MEM_OBJECT_IMAGE2D &&
+                                 mem_type != CL_MEM_OBJECT_IMAGE3D)) {
+        error(user_context) << "CL: Bad device pointer passed to halide_opencl_image_wrap_cl_mem: " << (void *)mem
+                            << ": clGetMemObjectInfo returned "
+                            << get_opencl_error_name(result)
+                            << " with type " << mem_type;
+        return halide_error_code_device_wrap_native_failed;
+    }
+
     dev_handle->mem = (cl_mem)mem;
     dev_handle->offset = 0;
     buf->device = (uint64_t)dev_handle;
@@ -1792,7 +1831,10 @@ WEAK int halide_opencl_image_device_crop(void *user_context,
                                          const struct halide_buffer_t *src,
                                          struct halide_buffer_t *dst) {
     for (int dim = 0; dim < src->dimensions; dim++) {
-        halide_assert(user_context, src->dim[dim] == dst->dim[dim] && "crop not supported on opencl image objects");
+        if (src->dim[dim] != dst->dim[dim]) {
+            error(user_context) << "crop not supported on opencl image objects";
+            return halide_error_code_device_crop_unsupported;
+        }
     }
     return 0;
 }
@@ -1802,14 +1844,14 @@ WEAK int halide_opencl_image_device_slice(void *user_context,
                                           int slice_dim,
                                           int slice_pos,
                                           struct halide_buffer_t *dst) {
-    halide_assert(user_context, false && "slice not supported on opencl image objects");
-    return -1;
+    error(user_context) << "slice not supported on opencl image objects";
+    return halide_error_code_device_crop_unsupported;
 }
 
 WEAK int halide_opencl_image_device_release_crop(void *user_context,
                                                  struct halide_buffer_t *buf) {
-    halide_assert(user_context, false && "crop not supported on opencl image objects");
-    return -1;
+    error(user_context) << "crop not supported on opencl image objects";
+    return halide_error_code_device_crop_unsupported;
 }
 }
 
