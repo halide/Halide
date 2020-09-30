@@ -879,6 +879,9 @@ void release_d3d12_object<d3d12_frame>(d3d12_frame *frame) {
     release_object(frame->cmd_list);
     release_object(frame->desc_binder);
     release_object(&frame->args_buffer);
+    frame->cmd_list = NULL;
+    frame->desc_binder = NULL;
+    frame->args_buffer = {};
     frame->fence_signal = 0;
 }
 
