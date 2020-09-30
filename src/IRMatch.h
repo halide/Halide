@@ -1694,7 +1694,7 @@ struct VectorReduceOp {
             const VectorReduce &op = (const VectorReduce &)e;
             if (op.op == reduce_op &&
                 a.template match<bound>(*op.value.get(), state) &&
-                lanes.template match<bound | bindings<A>::mask>(op.type().lanes(), state)) {
+                lanes.template match<bound | bindings<A>::mask>(op.type.lanes(), state)) {
                 return true;
             }
         }

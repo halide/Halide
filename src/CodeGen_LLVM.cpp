@@ -2689,8 +2689,6 @@ void CodeGen_LLVM::visit(const Call *op) {
             if (src.is_vector() && dst.is_scalar()) {
                 llvm_dst = get_vector_type(llvm_dst, 1);
             }
-            value->dump();
-            llvm_dst->dump();
             value = builder->CreateBitCast(value, llvm_dst);
             if (src.is_vector() && dst.is_scalar()) {
                 value = builder->CreateExtractElement(value, (uint64_t)0);
