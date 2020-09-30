@@ -51,7 +51,7 @@ int aslog::aslog_level() {
     return cached_aslog_level;
 }
 
-std::string conform_name(const std::string &name, const std::string &prefix="_") {
+std::string conform_name(const std::string &name, const std::string &prefix) {
     auto invalid_contents = [] (const char& c) { 
         return std::ispunct(c) || std::isspace(c);
     };
