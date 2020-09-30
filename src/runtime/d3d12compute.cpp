@@ -1023,14 +1023,16 @@ static ID3D12Device *D3D12CreateDeviceForAdapter(IDXGIAdapter1 *adapter) {
     Description[127] = '\0';
     TRACEPRINT("Device selected: " << Description << "\n");
 
-#if 0
     // NOTE(marcos): ignoring IDXGIOutput setup since this back-end is compute only
+    // (still handy to have this block of code around for debugging purposes)
+    const bool setup_display_output = false;
+    if (setup_display_output) {
     IDXGIOutput *dxgiDisplayOutput = NULL;
     result = dxgiAdapter->EnumOutputs(0, &dxgiDisplayOutput);
     if (D3DErrorCheck(result, dxgiDisplayOutput, user_context, "Unable to enumerate DXGI outputs for adapter (IDXGIOutput)")) {
         return NULL;
     }
-#endif
+    }
 
     ID3D12Device *device = NULL;
     D3D_FEATURE_LEVEL MinimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
@@ -1039,7 +1041,7 @@ static ID3D12Device *D3D12CreateDeviceForAdapter(IDXGIAdapter1 *adapter) {
         return NULL;
     }
 
-#if 0 & HALIDE_D3D12_PROFILING
+#if HALIDE_D3D12_PROFILING
     // Notes on NVIDIA GPU Boost:
     // https://developer.nvidia.com/setstablepowerstateexe-%20disabling%20-gpu-boost-windows-10-getting-more-deterministic-timestamp-queries
     // MSDN: "Do not call SetStablePowerState in shipped applications.
@@ -1047,9 +1049,13 @@ static ID3D12Device *D3D12CreateDeviceForAdapter(IDXGIAdapter1 *adapter) {
     //        If developer mode is not enabled, then device removal will occur.
     //        (DXGI_ERROR_DEVICE_REMOVED : 0x887a0005)"
     // https://msdn.microsoft.com/en-us/library/windows/desktop/dn903835(v=vs.85).aspx
+    const bool enable_stable_power_state = false;
+    if (enable_stable_power_state)
+    {
     result = device->SetStablePowerState(TRUE);
     if (D3DErrorCheck(result, device, user_context, "Unable to activate stable power state")) {
         return NULL;
+    }
     }
 #endif
 
@@ -3128,7 +3134,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         // TODO(marcos): avoid placing UAV barriers all the time after a dispatch...
         // in fact, only buffers written to by the dispatch will need barriers, and
         // only when later bound for read. For now, Halide does not provide enough
-        // context for chosing the right time to place transition barriers.
+        // context for choosing the right time to place transition barriers.
         // TODO(marcos): also, it's best if we batch them into a single ResourceBarrier call
         for (size_t i = 0; i < num_buffer_args; i++) {
             d3d12_buffer *buffer = buffer_args[i];
