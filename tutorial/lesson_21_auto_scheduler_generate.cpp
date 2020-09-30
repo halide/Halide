@@ -94,7 +94,7 @@ public:
             // they are to the actual use-case values, the better the generated
             // schedule will be.
 
-            // To auto-schedule the the pipeline, we don't have to do anything else:
+            // To auto-schedule the pipeline, we don't have to do anything else:
             // every Generator implicitly has a GeneratorParam named "auto_schedule";
             // if this is set to true, Halide will call auto_schedule() on all of
             // our pipeline's outputs automatically.

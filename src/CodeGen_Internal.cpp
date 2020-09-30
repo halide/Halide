@@ -670,15 +670,14 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
+    bool use_large_code_model = false;
+    get_md_bool(module.getModuleFlag("halide_use_large_code_model"), use_large_code_model);
+
     auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 mcpu, mattrs,
                                                 options,
                                                 use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
-#ifdef HALIDE_USE_CODEMODEL_LARGE
-                                                llvm::CodeModel::Large,
-#else
-                                                llvm::CodeModel::Small,
-#endif
+                                                use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
                                                 llvm::CodeGenOpt::Aggressive);
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
