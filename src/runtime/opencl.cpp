@@ -1806,7 +1806,7 @@ WEAK int halide_opencl_image_wrap_cl_mem(void *user_context, struct halide_buffe
         error(user_context) << "CL: Bad device pointer passed to halide_opencl_image_wrap_cl_mem: " << (void *)mem
                             << ": clGetMemObjectInfo returned "
                             << get_opencl_error_name(result)
-                            << " with type " << mem_type;
+                            << " with type " << mem_type << "\n";
         return halide_error_code_device_wrap_native_failed;
     }
 
