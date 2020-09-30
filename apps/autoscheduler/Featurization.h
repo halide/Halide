@@ -4,8 +4,6 @@
 #include <cstring>
 #include <iostream>
 #include <stdint.h>
-#include <algorithm>
-#include <cctype>
 
 #include "ASLog.h"
 

@@ -1,5 +1,8 @@
 #include "ASLog.h"
 
+#include <algorithm>
+#include <cctype>
+
 namespace Halide {
 namespace Internal {
 
