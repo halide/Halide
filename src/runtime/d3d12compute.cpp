@@ -1040,7 +1040,7 @@ static ID3D12Device *D3D12CreateDeviceForAdapter(IDXGIAdapter1 *adapter) {
     const bool setup_display_output = false;
     if (setup_display_output) {
         IDXGIOutput *dxgiDisplayOutput = NULL;
-        result = dxgiAdapter->EnumOutputs(0, &dxgiDisplayOutput);
+        HRESULT result = dxgiAdapter->EnumOutputs(0, &dxgiDisplayOutput);
         if (D3DErrorCheck(result, dxgiDisplayOutput, user_context, "Unable to enumerate DXGI outputs for adapter (IDXGIOutput)")) {
             return NULL;
         }
