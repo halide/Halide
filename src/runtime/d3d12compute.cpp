@@ -187,8 +187,8 @@ typedef SinkPrinter trace;
 #define TRACEPRINT(msg)
 #define TRACELEVEL(level, msg)
 #define TRACEFATAL(msg) d3d12_panic(msg);
-#define TRACEERROR(msg) debug() << "ERROR: " << msg;
-#define TRACEWARN(msg) debug() << "WARNING: " << msg;
+#define TRACEERROR(msg) debug(user_context) << "ERROR: " << msg;
+#define TRACEWARN(msg) debug(user_context) << "WARNING: " << msg;
 #define TRACEINFO(msg)
 #endif
 //
@@ -1049,9 +1049,21 @@ static ID3D12Device *D3D12CreateDeviceForAdapter(IDXGIAdapter1 *adapter) {
         }
     }
 
+    // WARN(marcos): Direct3D 12 devices are singletons per adapter.
+    // https://docs.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-d3d12createdevice
+    // "If a Direct3D 12 device already exists in the current process for a given adapter,
+    // then a subsequent call to D3D12CreateDevice returns the existing device."
+    // This wouldn't be a problem in most circumstances, but if the non-debug module is
+    // first utilized, followed by an usage of the -debug module, D3D12CreateDevice will
+    // fail since ID3D12Debug->EnableDebugLayer() has now just been called after a device
+    // already exists for that adapter, often returning a rather cryptic 0x887a0007 error
+    // (DXGI_ERROR_DEVICE_RESET).
     ID3D12Device *device = NULL;
     D3D_FEATURE_LEVEL MinimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
     HRESULT result = D3D12CreateDevice(dxgiAdapter, MinimumFeatureLevel, IID_PPV_ARGS(&device));
+    if (result == 0x887a0007 /*DXGI_ERROR_DEVICE_RESET*/) {
+        TRACEERROR("It looks like a device for this adapter has been created before (non-debug vs. -debug)\n");
+    }
     if (D3DErrorCheck(result, device, user_context, "Unable to create the Direct3D 12 device")) {
         return NULL;
     }
