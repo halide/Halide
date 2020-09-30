@@ -11,13 +11,13 @@
 #endif
 
 // Debugging utilities for back-end developers:
-#define HALIDE_D3D12_TRACE (0)
+#define HALIDE_D3D12_TRACE (1)
 #define HALIDE_D3D12_DEBUG_LAYER (0)
 #define HALIDE_D3D12_DEBUG_SHADERS (0)
 #define HALIDE_D3D12_PROFILING (0)
 #define HALIDE_D3D12_TRACE_LEVEL (9)
-#define HALIDE_D3D12_TRACE_TIME (0)
-#define HALIDE_D3D12_TRACE_TIME_THRESHOLD (100) /* in microseconds */
+#define HALIDE_D3D12_TRACE_TIME (1)
+#define HALIDE_D3D12_TRACE_TIME_THRESHOLD (50) /* in microseconds */
 #define HALIDE_D3D12_PIX (0)
 #define HALIDE_D3D12_RENDERDOC (0)
 
@@ -94,14 +94,14 @@ private:
 
 static void d3d12_debug_dump(error &err);
 
-#define d3d12_panic(...)            \
-    do {                            \
-        error err(NULL);            \
-        err << __VA_ARGS__ << "\n"; \
+#define d3d12_panic(...)                               \
+    do {                                               \
+        error err(NULL);                               \
+        err << __VA_ARGS__ << "\n";                    \
         err << "vvvvv D3D12 Begin Debug Dump vvvvv\n"; \
-        d3d12_debug_dump(err);      \
+        d3d12_debug_dump(err);                         \
         err << "^^^^^ D3D12  End  Debug Dump ^^^^^\n"; \
-        err << "D3D12 HALT !!!\n";  \
+        err << "D3D12 HALT !!!\n";                     \
     } while (0)
 
 // v trace and logging utilities for debugging v
@@ -118,7 +118,7 @@ static int trace_indent = 0;
 
 struct trace : public Printer<BasicPrinter, sizeof(trace_buf)> {
     ScopedSpinLock lock;
-    explicit trace(void *user_context=NULL)
+    explicit trace(void *user_context = NULL)
         : Printer<BasicPrinter, sizeof(trace_buf)>(user_context, trace_buf),
           lock(&trace_lock) {
         for (int i = 0; i < trace_indent; i++) {
@@ -128,12 +128,14 @@ struct trace : public Printer<BasicPrinter, sizeof(trace_buf)> {
 };
 
 #define TRACEPRINT(msg) trace() << msg;
-#define TRACELEVEL(level, msg) if (level <= HALIDE_D3D12_TRACE_LEVEL) TRACEPRINT(msg);
-#define TRACEFATAL(msg) TRACELEVEL(-3, "FATAL ERROR: " << msg << "\n"); d3d12_panic(msg);
+#define TRACELEVEL(level, msg) \
+    if (level <= HALIDE_D3D12_TRACE_LEVEL) TRACEPRINT(msg);
+#define TRACEFATAL(msg)                             \
+    TRACELEVEL(-3, "FATAL ERROR: " << msg << "\n"); \
+    d3d12_panic(msg);
 #define TRACEERROR(msg) TRACELEVEL(-2, "ERROR: " << msg);
 #define TRACEWARN(msg) TRACELEVEL(-1, "WARNING: " << msg);
 #define TRACEINFO(msg) TRACELEVEL(0, msg);
-
 
 #ifdef HALIDE_D3D12_TRACE_TIME
 #define TRACETIME_CHECKPOINT() halide_current_time_ns(user_context)
@@ -2591,7 +2593,7 @@ static void d3d12_debug_dump(error &err) {
 using namespace Halide::Runtime::Internal::D3D12Compute;
 
 // NOTE(marcos): purposedly disabling cache on 'master' for now
-WEAK bool enable_allocation_cache = false;
+WEAK bool enable_allocation_cache = true;
 static const int MaxBuffersInCache = 32;
 WEAK d3d12_buffer *buffer_pool[MaxBuffersInCache] = {};
 WEAK halide_mutex buffer_pool_lock;
@@ -3111,11 +3113,11 @@ WEAK int halide_d3d12compute_run(void *user_context,
                 offset = (offset + val_size - 1) & ~(val_size - 1);
                 offset += val_size;
                 TRACELEVEL(3,
-                    "args[" << i << "] is " << arg_sizes[i] << " bytes"
-                            << " : float(" << *arg.f << ")"
-                            << " or uint32(" << *arg.i << ")"
-                            << " or int32(" << (int32_t &)*arg.i << ")"
-                            << "\n");
+                           "args[" << i << "] is " << arg_sizes[i] << " bytes"
+                                   << " : float(" << *arg.f << ")"
+                                   << " or uint32(" << *arg.i << ")"
+                                   << " or int32(" << (int32_t &)*arg.i << ")"
+                                   << "\n");
             }
             halide_assert(user_context, offset == total_uniform_args_size);
         }
