@@ -746,7 +746,7 @@ struct State {
         int i = (int)(dag.nodes.size() - 1);
         for (const auto &n : dag.nodes) {
             if (!n.is_input) {
-                src << "Func " << conform_id_to_cpp(n.func.name()) << " = pipeline.get_func(" << i << ");\n";
+                src << "Func " << conform_name(n.func.name()) << " = pipeline.get_func(" << i << ");\n";
             }
             i--;
         }
@@ -767,18 +767,18 @@ struct State {
         if (!vars.empty()) {
             for (const auto &p : vars) {
                 if (p.second.empty()) {
-                    src << "Var " << conform_id_to_cpp(p.first) << "(\"" << p.first << "\");\n";
+                    src << "Var " << conform_name(p.first) << "(\"" << p.first << "\");\n";
                 } else {
-                    src << "Var " << conform_id_to_cpp(p.first) << "(" << p.second << ");\n";
+                    src << "Var " << conform_name(p.first) << "(" << p.second << ");\n";
                 }
             }
         }
         if (!rvars.empty()) {
             for (const auto &p : rvars) {
                 if (p.second.empty()) {
-                    src << "RVar " << conform_id_to_cpp(p.first) << "(\"" << p.first << "\");\n";
+                    src << "RVar " << conform_name(p.first) << "(\"" << p.first << "\");\n";
                 } else {
-                    src << "RVar " << conform_id_to_cpp(p.first) << "(" << p.second << ");\n";
+                    src << "RVar " << conform_name(p.first) << "(" << p.second << ");\n";
                 }
             }
         }
@@ -815,7 +815,7 @@ struct State {
                             p.second->schedule_source << "{";
                         }
                         first = false;
-                        p.second->schedule_source << conform_id_to_cpp(v.var.name());
+                        p.second->schedule_source << conform_name(v.var.name());
                     }
                 }
                 p.second->schedule_source << "})";
@@ -829,18 +829,18 @@ struct State {
                 for (size_t i = 1; i < parallel_vars.size(); i++) {
                     // Outermost, and next outermost. Preserve the inner
                     // name to not invalidate any compute_ats.
-                    p.second->schedule_source << "\n    .fuse(" << conform_id_to_cpp(parallel_vars[i].name())
-                                              << ", " << conform_id_to_cpp(parallel_vars[i - 1].name())
-                                              << ", " << conform_id_to_cpp(parallel_vars[i].name()) << ")";
+                    p.second->schedule_source << "\n    .fuse(" << conform_name(parallel_vars[i].name())
+                                              << ", " << conform_name(parallel_vars[i - 1].name())
+                                              << ", " << conform_name(parallel_vars[i].name()) << ")";
                     stage.fuse(parallel_vars[i], parallel_vars[i - 1], parallel_vars[i]);
                 }
                 if (!parallel_vars.empty()) {
-                    p.second->schedule_source << "\n    .parallel(" << conform_id_to_cpp(parallel_vars.back().name()) << ")";
+                    p.second->schedule_source << "\n    .parallel(" << conform_name(parallel_vars.back().name()) << ")";
                     stage.parallel(parallel_vars.back());
                 }
             } else {
                 for (const auto &v : parallel_vars) {
-                    p.second->schedule_source << "\n    .parallel(" << conform_id_to_cpp(v.name()) << ")";
+                    p.second->schedule_source << "\n    .parallel(" << conform_name(v.name()) << ")";
                     stage.parallel(v);
                 }
             }
@@ -858,7 +858,7 @@ struct State {
                         p.second->schedule_source << ", ";
                     }
                     first = false;
-                    p.second->schedule_source << conform_id_to_cpp(v.name());
+                    p.second->schedule_source << conform_name(v.name());
                 }
                 p.second->schedule_source << ")";
                 Func(p.first->node->func).reorder_storage(storage_vars);
