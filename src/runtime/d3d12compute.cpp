@@ -881,7 +881,7 @@ void release_d3d12_object<d3d12_frame>(d3d12_frame *frame) {
     release_object(&frame->args_buffer);
     frame->cmd_list = NULL;
     frame->desc_binder = NULL;
-    frame->args_buffer = zero_struct<d3d12_buffer>();;
+    frame->args_buffer = zero_struct<d3d12_buffer>();
     frame->fence_signal = 0;
 }
 
