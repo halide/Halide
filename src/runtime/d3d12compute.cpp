@@ -3248,7 +3248,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
     halide_assert(user_context, (src->dimensions == dst->dimensions));
     const int dimensions = dst->dimensions;
     if (dimensions > MAX_COPY_DIMS) {
-        error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
+        error(user_context) << "Buffer has too many dimensions to copy to/from GPU.\n";
         return halide_error_code_device_buffer_copy_failed;
     }
 
