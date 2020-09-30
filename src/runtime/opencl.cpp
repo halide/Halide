@@ -1532,6 +1532,7 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
     cl_image_desc desc;
 
     struct halide_type_t type = buf->type;
+    format.image_channel_data_type = -1;
     if (type.code == halide_type_int) {
         if (type.bits == 8) {
             format.image_channel_data_type = CL_SIGNED_INT8;
@@ -1539,8 +1540,6 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
             format.image_channel_data_type = CL_SIGNED_INT16;
         } else if (type.bits == 32) {
             format.image_channel_data_type = CL_SIGNED_INT32;
-        } else {
-            halide_assert(user_context, false && "unhandled int bit width for image");
         }
     } else if (type.code == halide_type_uint) {
         if (type.bits == 8) {
@@ -1549,33 +1548,25 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
             format.image_channel_data_type = CL_UNSIGNED_INT16;
         } else if (type.bits == 32) {
             format.image_channel_data_type = CL_UNSIGNED_INT32;
-        } else {
-            halide_assert(user_context, false && "unhandled uint bit width for image");
         }
     } else if (type.code == halide_type_float) {
         if (type.bits == 16) {
             format.image_channel_data_type = CL_HALF_FLOAT;
         } else if (type.bits == 32) {
             format.image_channel_data_type = CL_FLOAT;
-        } else {
-            halide_assert(user_context, false && "unhandled float bit width for image");
         }
-    } else {
-        halide_assert(user_context, false && "unhandled data type for image");
+    }
+    if (format.image_channel_data_type == -1) {
+        error(user_context) << "Unhandled datatype for opencl texture object: " << type;
+        return halide_error_code_device_malloc_failed;
     }
     format.image_channel_order = CL_R;
 
     debug(user_context) << "      format=(" << format.image_channel_data_type << ", " << format.image_channel_order << ")\n";
 
-    if (buf->dim[0].stride != 1) {
-        error(user_context) << "image buffer must be dense on inner dimension";
-        return halide_error_code_device_malloc_failed;
-    }
-    if (buf->dimensions >= 2 && buf->dim[1].stride != buf->dim[0].extent) {
-        error(user_context) << "image buffer must be dense on inner dimension";
-        return halide_error_code_device_malloc_failed;
-    }
-    if (buf->dimensions >= 3 && buf->dim[2].stride != buf->dim[0].extent * buf->dim[1].extent) {
+    if (buf->dim[0].stride != 1 ||
+        (buf->dimensions >= 2 && buf->dim[1].stride != buf->dim[0].extent) ||
+        (buf->dimensions >= 3 && buf->dim[2].stride != buf->dim[0].extent * buf->dim[1].extent)) {
         error(user_context) << "image buffer must be dense on inner dimension";
         return halide_error_code_device_malloc_failed;
     }
