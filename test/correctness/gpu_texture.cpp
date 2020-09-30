@@ -12,8 +12,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // Check dynamic allocations per-block and per-thread into both
-    // shared and global
+    // Check dynamic allocations into Heap and Texture memory
     for (auto memory_type : {MemoryType::GPUTexture, MemoryType::Heap}) {
         {
             // 1D stores/loads
