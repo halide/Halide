@@ -58,6 +58,10 @@ private:
             return IRMutator::visit(op);
         }
 
+        if (required_alignment % op->type.bytes() != 0) {
+            return IRMutator::visit(op);
+        }
+
         Expr index = mutate(op->index);
         const Ramp *ramp = index.as<Ramp>();
         const int64_t *const_stride = ramp ? as_const_int(ramp->stride) : nullptr;
@@ -79,7 +83,6 @@ private:
         bool known_alignment = is_aligned || (!is_aligned && aligned_offset != 0);
         int lanes = ramp->lanes;
         int native_lanes = required_alignment / op->type.bytes();
-
         int stride = static_cast<int>(*const_stride);
         if (stride != 1) {
             internal_assert(stride >= 0);
