@@ -1439,9 +1439,9 @@ WEAK int halide_opengl_run(void *user_context,
             // Outbuf textures are handled explicitly below
             continue;
         } else if (kernel_arg->kind == Argument::Inbuf) {
-            halide_assert(user_context, is_buffer[i] && "OpenGL Inbuf argument is not a buffer.")
-                GLint loc =
-                    global_state.GetUniformLocation(kernel->program_id, kernel_arg->name);
+            halide_assert(user_context, is_buffer[i] && "OpenGL Inbuf argument is not a buffer.");
+            GLint loc =
+                global_state.GetUniformLocation(kernel->program_id, kernel_arg->name);
             if (global_state.CheckAndReportError(user_context, "halide_opengl_run GetUniformLocation(InBuf)")) {
                 return 1;
             }
@@ -1573,10 +1573,10 @@ WEAK int halide_opengl_run(void *user_context,
     for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
         if (kernel_arg->kind != Argument::Outbuf) continue;
 
-        halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
+        halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.");
 
-            // TODO: GL_MAX_COLOR_ATTACHMENTS
-            if (num_output_textures >= 1) {
+        // TODO: GL_MAX_COLOR_ATTACHMENTS
+        if (num_output_textures >= 1) {
             error(user_context)
                 << "OpenGL ES 2.0 only supports one single output texture";
             return 1;
