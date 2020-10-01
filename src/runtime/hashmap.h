@@ -279,8 +279,8 @@ inline int HashMap::lookup(void *user_context,
                 most_recently_used = entry;
             }
 
-            halide_assert(user_context, (cache_value_size == entry->value_size))
-                copy_value(cache_value, entry->value, entry->value_size);
+            halide_assert(user_context, (cache_value_size == entry->value_size));
+            copy_value(cache_value, entry->value, entry->value_size);
 
             entry->in_use_count += 1;
 
