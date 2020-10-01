@@ -1061,7 +1061,7 @@ static ID3D12Device *D3D12CreateDeviceForAdapter(IDXGIAdapter1 *adapter) {
     ID3D12Device *device = NULL;
     D3D_FEATURE_LEVEL MinimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
     HRESULT result = D3D12CreateDevice(dxgiAdapter, MinimumFeatureLevel, IID_PPV_ARGS(&device));
-    if (result == 0x887a0007 /*DXGI_ERROR_DEVICE_RESET*/) {
+    if (result == (HRESULT) 0x887a0007 /*DXGI_ERROR_DEVICE_RESET*/) {
         TRACEERROR("It looks like a device for this adapter has been created before (non-debug vs. -debug)\n");
     }
     if (D3DErrorCheck(result, device, user_context, "Unable to create the Direct3D 12 device")) {
