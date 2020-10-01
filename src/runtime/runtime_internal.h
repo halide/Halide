@@ -237,10 +237,12 @@ using namespace Halide::Runtime::Internal;
  * should-never-happen errors. */
 #define _halide_stringify(x) #x
 #define _halide_expand_and_stringify(x) _halide_stringify(x)
-#define halide_assert(user_context, cond)                                                                              \
-    if (!(cond)) {                                                                                                     \
-        halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
-        halide_abort();                                                                                                \
-    }
+#define halide_assert(user_context, cond)                                                                                  \
+    do {                                                                                                                   \
+        if (!(cond)) {                                                                                                     \
+            halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
+            halide_abort();                                                                                                \
+        }                                                                                                                  \
+    } while (0)
 
 #endif
