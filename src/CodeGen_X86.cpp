@@ -430,11 +430,15 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             a = lossless_cast(narrower, mul->a);
             b = lossless_cast(narrower, mul->b);
         } else {
-            a = lossless_cast(narrower, op->value);
-            b = make_const(narrower, 1);
+            //a = lossless_cast(narrower, op->value);
+            //b = make_const(narrower, 1);
         }
         if (a.defined() && b.defined()) {
-            if (target.has_feature(Target::AVX2) && op->type.lanes() > 4) {
+            if ((target.has_feature(Target::AVX512_Skylake) ||
+                 target.has_feature(Target::AVX512_Cannonlake)) &&
+                op->type.lanes() > 8) {
+                value = call_intrin(op->type, 16, "llvm.x86.avx512.pmaddw.d.512", {a, b});
+            } else if (target.has_feature(Target::AVX2) && op->type.lanes() > 4) {
                 value = call_intrin(op->type, 8, "llvm.x86.avx2.pmadd.wd", {a, b});
             } else {
                 value = call_intrin(op->type, 4, "llvm.x86.sse2.pmadd.wd", {a, b});
