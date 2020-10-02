@@ -53,24 +53,23 @@ class FindBufferUsage : public IRVisitor {
 
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::image_load) ||
-            op->is_intrinsic(Call::image_load_texture)) {
+            op->is_intrinsic(Call::image_load)) {
             internal_assert(!op->args.empty());
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
-                touched_as_texture = touched_as_texture || op->is_intrinsic(Call::image_load_texture);
+                touched_as_texture = touched_as_texture || op->is_intrinsic(Call::image_load);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
                 if (i == 1) continue;
                 op->args[i].accept(this);
             }
-        } else if (op->is_intrinsic(Call::image_store) ||
-                   op->is_intrinsic(Call::image_store_texture)) {
+        } else if (op->is_intrinsic(Call::image_store)) {
             internal_assert(!op->args.empty());
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
                 devices_writing.insert(current_device_api);
 
-                touched_as_texture = touched_as_texture || op->is_intrinsic(Call::image_store_texture);
+                touched_as_texture = touched_as_texture || op->is_intrinsic(Call::image_store);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
                 if (i == 1) continue;
@@ -152,7 +151,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
 
     bool is_external;
 
-    bool is_texture;
+    MemoryType memory_type;
 
     enum FlagState {
         Unknown,
@@ -188,7 +187,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
     Stmt make_device_malloc(DeviceAPI target_device_api) {
-        Expr device_interface = make_device_interface_call(target_device_api, is_texture);
+        Expr device_interface = make_device_interface_call(target_device_api, memory_type);
         Stmt device_malloc = call_extern_and_assert("halide_device_malloc",
                                                     {buffer_var(), device_interface});
         return device_malloc;
@@ -199,7 +198,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
     Stmt make_copy_to_device(DeviceAPI target_device_api) {
-        Expr device_interface = make_device_interface_call(target_device_api, is_texture);
+        Expr device_interface = make_device_interface_call(target_device_api, memory_type);
         return call_extern_and_assert("halide_copy_to_device", {buffer_var(), device_interface});
     }
 
@@ -410,8 +409,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
 public:
-    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e, bool t)
-        : buffer(b), is_external(e), is_texture(t) {
+    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e, MemoryType m)
+        : buffer(b), is_external(e), memory_type(m) {
         if (is_external) {
             // The state of the buffer is totally unknown, which is
             // the default constructor for this->state
@@ -615,7 +614,7 @@ class InjectBufferCopies : public IRMutator {
 
         Stmt body = mutate(op->body);
 
-        InjectBufferCopiesForSingleBuffer injector(op->name, false, op->memory_type == MemoryType::GPUTexture);
+        InjectBufferCopiesForSingleBuffer injector(op->name, false, op->memory_type);
         body = injector.mutate(body);
 
         string buffer_name = op->name + ".buffer";
@@ -643,7 +642,7 @@ class InjectBufferCopies : public IRMutator {
                 internal_assert(free_injecter.success);
             }
 
-            Expr device_interface = make_device_interface_call(touching_device, op->memory_type == MemoryType::GPUTexture);
+            Expr device_interface = make_device_interface_call(touching_device, op->memory_type);
 
             return InjectCombinedAllocation(op->name, op->type, op->extents,
                                             op->condition, device_interface)
@@ -733,10 +732,7 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
         void include(const Parameter &p) {
             if (p.defined()) {
                 result.insert(p.name());
-
-                if (p.memory_type() == MemoryType::GPUTexture) {
-                    result_textures.insert(p.name());
-                }
+                result_storage[p.name()] = p.memory_type();
             }
         }
 
@@ -764,7 +760,7 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
 
     public:
         set<string> result;
-        set<string> result_textures;
+        std::map<string, MemoryType> result_storage;
     };
 
 public:
@@ -776,7 +772,7 @@ public:
             s.accept(&finder);
             Stmt new_stmt = s;
             for (const string &buf : finder.result) {
-                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_textures.count(buf)).mutate(new_stmt);
+                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_storage.at(buf)).mutate(new_stmt);
             }
             return new_stmt;
         } else {

@@ -258,7 +258,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         } else {
             CodeGen_C::visit(op);
         }
-    } else if (op->is_intrinsic(Call::image_load_texture)) {
+    } else if (op->is_intrinsic(Call::image_load)) {
         // image_load(<image name>, <buffer>, <x>, <x-extent>, <y>,
         // <y-extent>, <z>, <z-extent>)
         int dims = (op->args.size() - 2) / 2;
@@ -316,7 +316,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
             // Widen to the correct type
             print_assignment(op->type, "convert_" + print_type(op->type) + "(" + id + ")");
         }
-    } else if (op->is_intrinsic(Call::image_store_texture)) {
+    } else if (op->is_intrinsic(Call::image_store)) {
         // image_store(<image name>, <buffer>, <x>, <y>, <z>, <value>)
         const StringImm *string_imm = op->args[0].as<StringImm>();
         if (!string_imm) {
@@ -882,7 +882,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     stream << "__kernel void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            if (args[i].is_texture) {
+            if (args[i].memory_type == MemoryType::GPUTexture) {
                 int dims = args[i].dimensions;
                 internal_assert(dims >= 1 && dims <= 3) << "dims = " << dims << "\n";
                 if (args[i].read && args[i].write) {

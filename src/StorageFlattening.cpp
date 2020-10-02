@@ -241,7 +241,6 @@ private:
         }
 
         if (output_buf.defined()) {
-            debug(2) << "have output buf " << output_buf.name() << " " << output_buf.memory_type() << "\n";
             if (output_buf.memory_type() == MemoryType::GPUTexture) {
                 textures.insert(op->name);
             }
@@ -261,7 +260,6 @@ private:
                                     args, Call::Intrinsic);
             return Evaluate::make(store);
         } else if (in_gpu && textures.count(op->name)) {
-            debug(2) << " lower texture store to " << op->name << "\n";
             Expr buffer_var =
                 Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer", output_buf);
             vector<Expr> args(2);
@@ -272,7 +270,7 @@ private:
                 args.push_back(op->args[i] - min);
             }
             args.push_back(value);
-            Expr store = Call::make(value.type(), Call::image_store_texture,
+            Expr store = Call::make(value.type(), Call::image_store,
                                     args, Call::Intrinsic);
             return Evaluate::make(store);
         } else {
@@ -319,7 +317,7 @@ private:
                 }
 
                 return Call::make(op->type,
-                                  textures.count(op->name) ? Call::image_load_texture : Call::image_load,
+                                  Call::image_load,
                                   args,
                                   Call::PureIntrinsic,
                                   FunctionPtr(),
