@@ -59,9 +59,18 @@ struct Pattern {
 
         NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2 | NarrowUnsignedOp3 | NarrowUnsignedOp4,
 
-        AccumulatorOutput48 = 1 << 20,
-        AccumulatorOutput64 = 1 << 21,
+        AccumulatorOutput24 = 1 << 20,
+        AccumulatorOutput48 = 1 << 21,
+        AccumulatorOutput64 = 1 << 22,
 
+        PassOnlyOp0 = 1 << 23,
+        PassOnlyOp1 = 1 << 24,
+        PassOnlyOp2 = 1 << 25,
+        PassOnlyOp3 = 1 << 26,
+
+        PassOps = PassOnlyOp0 | PassOnlyOp1 | PassOnlyOp2 | PassOnlyOp3,
+        BeginPassOnlyOp = 0,  // BeginPassOnlyOp and EndPassOnlyOp ensure that we check only
+        EndPassOnlyOp = 4,    // PassOps[0|1|2|3].
     };
 
     std::string intrin;  // Name of the intrinsic
@@ -90,6 +99,7 @@ Expr wild_u32x = Variable::make(Type(Type::UInt, 32, 0), "*");
 Expr wild_u64x = Variable::make(Type(Type::UInt, 64, 0), "*");
 Expr wild_i8x = Variable::make(Type(Type::Int, 8, 0), "*");
 Expr wild_i16x = Variable::make(Type(Type::Int, 16, 0), "*");
+Expr wild_i24x = Variable::make(Type(Type::Int, 24, 0), "*");
 Expr wild_i32x = Variable::make(Type(Type::Int, 32, 0), "*");
 Expr wild_i48x = Variable::make(Type(Type::Int, 48, 0), "*");
 Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
@@ -135,6 +145,17 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     //         matches[i] = native_deinterleave(matches[i]);
     //     }
     // }
+
+    if (flags & Pattern::PassOps) {
+        vector<Expr> new_matches;
+        for (size_t i = Pattern::BeginPassOnlyOp; i < Pattern::EndPassOnlyOp; i++) {
+            if (flags & (Pattern::PassOnlyOp0 << (i - Pattern::BeginPassOnlyOp))) {
+                new_matches.push_back(matches[i]);
+            }
+        }
+        matches.swap(new_matches);
+    }
+
     if (flags & Pattern::SwapOps01) {
         internal_assert(matches.size() >= 2);
         std::swap(matches[0], matches[1]);
@@ -217,9 +238,9 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IR
     return op;
 }
 
-class MatchXtensaPatterns : public IRMutator {
+class MatchXtensaPatterns : public IRGraphMutator {
 private:
-    using IRMutator::visit;
+    using IRGraphMutator::visit;
 
     static Expr halide_xtensa_widen_mul_i48(Expr v0, Expr v1) {
         Expr call = Call::make(wild_i48x.type(), "halide_xtensa_widen_mul_i48", {std::move(v0), std::move(v1)}, Call::PureExtern);
@@ -313,8 +334,21 @@ private:
         return call;
     }
 
+    static Expr halide_xtensa_concat_from_native_i32(Expr v0, Expr v1, Expr v2, Expr v3) {
+        Expr call = Call::make(wild_i32x.type(), "halide_xtensa_concat_from_native",
+                               {std::move(v0), std::move(v1), std::move(v2), std::move(v3)},
+                               Call::PureExtern);
+        return call;
+    }
+
     static Expr halide_xtensa_concat_from_native_u32(Expr v0, Expr v1) {
         Expr call = Call::make(wild_u32x.type(), "halide_xtensa_concat_from_native",
+                               {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_concat_from_native_i48(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i48x.type(), "halide_xtensa_concat_from_native",
                                {std::move(v0), std::move(v1)}, Call::PureExtern);
         return call;
     }
@@ -343,6 +377,8 @@ private:
                 // Widening addition
                 {"halide_xtensa_widen_add_u48", wild_u32x + wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_add_i48", wild_i32x + wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
+
+                {"halide_xtensa_widen_mul_add_i64", wild_i64x * wild_i64x + wild_i64x, Pattern::NarrowOps | Pattern::AccumulatorOutput64},
 
                 // Predicated addition
                 // {"halide_xtensa_pred_add_i16", wild_i16x + select(wild_u1x, wild_i16x, wild_i16x)}
@@ -491,6 +527,9 @@ private:
             {"halide_xtensa_narrow_high_i32", i32(wild_i64x >> 32)},
             {"halide_xtensa_narrow_high_i32", i32(wild_i64x / Expr(4294967296))},
 
+            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x >> bc(wild_i64))},
+            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x / bc(wild_i64)), Pattern::ExactLog2Op1},
+
             // Concat and cast.
             {"halide_xtensa_convert_concat_i16_to_i8", i8(halide_xtensa_concat_from_native_i16(wild_i16x, wild_i16x))},
             {"halide_xtensa_convert_concat_i16_to_u8", u8(halide_xtensa_concat_from_native_i16(wild_i16x, wild_i16x))},
@@ -636,9 +675,15 @@ private:
             {"halide_xtensa_convert_i8_high_u16", halide_xtensa_slice_to_native_u16(u16(wild_i8x), 1, wild_i32, wild_i32)},
             {"halide_xtensa_convert_i8_low_i16", halide_xtensa_slice_to_native_i16(i16(wild_i8x), 0, wild_i32, wild_i32)},
             {"halide_xtensa_convert_i8_high_i16", halide_xtensa_slice_to_native_i16(i16(wild_i8x), 1, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i32_u16", halide_xtensa_slice_to_native_u16(u16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x, wild_i32x, wild_i32x)), 0, 32, 64), Pattern::PassOnlyOp0 | Pattern::PassOnlyOp1},
+            {"halide_xtensa_convert_i32_u16", halide_xtensa_slice_to_native_u16(u16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x, wild_i32x, wild_i32x)), 1, 32, 64), Pattern::PassOnlyOp2 | Pattern::PassOnlyOp3},
 
             {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 0, 16, 32)},
             {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 1, 16, 32)},
+            {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 0, 16, 64), Pattern::PassOnlyOp0},
+            {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 1, 16, 64), Pattern::PassOnlyOp0},
+            {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 2, 16, 64), Pattern::PassOnlyOp1},
+            {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 3, 16, 64), Pattern::PassOnlyOp1},
             {"halide_xtensa_convert_i48_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 0, 16, 32)},
             {"halide_xtensa_convert_i48_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 1, 16, 32)},
             {"halide_xtensa_convert_i16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 0, wild_i32, wild_i32)},
@@ -1067,15 +1112,18 @@ public:
             {Type(Type::UInt, 16, 64), Type(Type::UInt, 16, 32)},
             {Type(Type::Int, 32, 32), Type(Type::Int, 32, 16)},
             {Type(Type::UInt, 32, 32), Type(Type::UInt, 32, 16)},
+            {Type(Type::Int, 32, 64), Type(Type::Int, 32, 16)},
+            {Type(Type::UInt, 32, 64), Type(Type::UInt, 32, 16)},
             {Type(Type::Int, 48, 64), Type(Type::Int, 48, 32)},
             {Type(Type::Int, 64, 32), Type(Type::Int, 64, 16)},
+            {Type(Type::Int, 64, 64), Type(Type::Int, 64, 16)},
         };
     }
 };
 
-class SimplifySliceConcat : public IRMutator {
+class SimplifySliceConcat : public IRGraphMutator {
 private:
-    using IRMutator::visit;
+    using IRGraphMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->name == "halide_xtensa_slice_to_native") {
@@ -1279,7 +1327,6 @@ Stmt match_xtensa_patterns(Stmt s) {
     s = SimplifySliceConcat().mutate(s);
     // Extra run to replace cast + concat, etc.
     s = MatchXtensaPatterns().mutate(s);
-
     s = simplify(common_subexpression_elimination(s));
 
     return s;
