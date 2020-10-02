@@ -55,9 +55,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite((x + broadcast(y, c0)) - broadcast(z, c0), x + broadcast(y - z, c0)) ||
 
              rewrite(ramp(broadcast(x, c0), y, c1) - broadcast(z, c2), ramp(broadcast(x - z, c0), y, c1), c2 == c0 * c1) ||
-             //             rewrite(broadcast(ramp(x, y, c0), c1) - broadcast(z, c2), broadcast(ramp(x - z, y, c0), c1), c2 == c0 * c1) ||
-             //             rewrite(broadcast(z, c2) - broadcast(ramp(x, y, c0), c1), broadcast(ramp(z - x, y, c0), c1), c2 == c0 * c1) ||
-
+             rewrite(ramp(ramp(x, y, c0), z, c1) - broadcast(w, c2), ramp(ramp(x - w, y, c0), z, c1), c2 == c0 * c1) ||
              rewrite(select(x, y, z) - select(x, w, u), select(x, y - w, z - u)) ||
              rewrite(select(x, y, z) - y, select(x, 0, z - y)) ||
              rewrite(select(x, y, z) - z, select(x, y - z, 0)) ||
