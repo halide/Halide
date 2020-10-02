@@ -5,8 +5,8 @@
  * Methods for managing device allocations when jitting
  */
 
-#include "Target.h"
 #include "Expr.h"
+#include "Target.h"
 
 namespace Halide {
 
