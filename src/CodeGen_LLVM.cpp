@@ -4302,8 +4302,25 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
                 }
                 return;
             }
-        }
 
+            // Check for an interleave of slices (i.e. an in-vector transpose)
+            bool interleave_of_slices = op->vectors.size() == 1 && op->indices.size() % f == 0;
+            int step = op->type.lanes() / f;
+            for (int i = 0; i < step; i++) {
+                for (int j = 0; j < f; j++) {
+                    interleave_of_slices &= (op->indices[i * f + j] == j * step + i);
+                }
+            }
+            if (interleave_of_slices) {
+                value = codegen(op->vectors[0]);
+                vector<Value *> slices;
+                for (int i = 0; i < f; i++) {
+                    slices.push_back(slice_vector(value, i * step, step));
+                }
+                value = interleave_vectors(slices);
+                //optimization_barrier(value);
+            }
+        }
         // If the indices form contiguous aligned runs, do the shuffle
         // on entire sub-vectors by reinterpreting them as a wider
         // type.
