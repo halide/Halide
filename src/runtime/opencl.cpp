@@ -1529,7 +1529,8 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
     cl_image_desc desc;
 
     struct halide_type_t type = buf->type;
-    format.image_channel_data_type = -1;
+    const cl_channel_type CL_INVALID = 0xffff;
+    format.image_channel_data_type = CL_INVALID;
     if (type.code == halide_type_int) {
         if (type.bits == 8) {
             format.image_channel_data_type = CL_SIGNED_INT8;
@@ -1553,7 +1554,7 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
             format.image_channel_data_type = CL_FLOAT;
         }
     }
-    if (format.image_channel_data_type == -1) {
+    if (format.image_channel_data_type == CL_INVALID) {
         error(user_context) << "Unhandled datatype for opencl texture object: " << type;
         return halide_error_code_device_malloc_failed;
     }
