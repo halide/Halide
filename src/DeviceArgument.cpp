@@ -15,17 +15,17 @@ std::vector<DeviceArgument> HostClosure::arguments() {
     std::vector<DeviceArgument> res;
     for (const auto &v : vars) {
         debug(2) << "var: " << v.first << "\n";
-        res.emplace_back(v.first, false, false, v.second, 0);
+        res.emplace_back(v.first, false, MemoryType::Auto, v.second, 0);
     }
     for (const auto &b : buffers) {
         debug(2) << "buffer: " << b.first << " " << b.second.size;
         if (b.second.read) debug(2) << " (read)";
         if (b.second.write) debug(2) << " (write)";
-        if (b.second.texture) debug(2) << " <texture>";
+        if (b.second.memory_type == MemoryType::GPUTexture) debug(2) << " <texture>";
         debug(2) << " dims=" << (int)b.second.dimensions;
         debug(2) << "\n";
 
-        DeviceArgument arg(b.first, true, b.second.texture, b.second.type, b.second.dimensions, b.second.size);
+        DeviceArgument arg(b.first, true, b.second.memory_type, b.second.type, b.second.dimensions, b.second.size);
         arg.read = b.second.read;
         arg.write = b.second.write;
         res.push_back(arg);
@@ -36,10 +36,8 @@ std::vector<DeviceArgument> HostClosure::arguments() {
 void HostClosure::visit(const Call *op) {
     if (op->is_intrinsic(Call::glsl_texture_load) ||
         op->is_intrinsic(Call::image_load) ||
-        op->is_intrinsic(Call::image_load_texture) ||
         op->is_intrinsic(Call::glsl_texture_store) ||
-        op->is_intrinsic(Call::image_store) ||
-        op->is_intrinsic(Call::image_store_texture)) {
+        op->is_intrinsic(Call::image_store)) {
 
         // The argument to the call is either a StringImm or a broadcasted
         // StringImm if this is part of a vectorized expression
@@ -55,17 +53,17 @@ void HostClosure::visit(const Call *op) {
         std::string bufname = string_imm->value;
         Buffer &ref = buffers[bufname];
         ref.type = op->type;
-        ref.texture = op->is_intrinsic(Call::image_load_texture) ||
-                      op->is_intrinsic(Call::image_store_texture);
+        ref.memory_type = op->is_intrinsic(Call::image_load) ||
+                                  op->is_intrinsic(Call::image_store) ?
+                              MemoryType::GPUTexture :
+                              MemoryType::Auto;
 
         if (op->is_intrinsic(Call::glsl_texture_load) ||
-            op->is_intrinsic(Call::image_load) ||
-            op->is_intrinsic(Call::image_load_texture)) {
+            op->is_intrinsic(Call::image_load)) {
             ref.read = true;
             ref.dimensions = (op->args.size() - 2) / 2;
         } else if (op->is_intrinsic(Call::glsl_texture_store) ||
-                   op->is_intrinsic(Call::image_store) ||
-                   op->is_intrinsic(Call::image_store_texture)) {
+                   op->is_intrinsic(Call::image_store)) {
             ref.write = true;
             ref.dimensions = op->args.size() - 3;
         }

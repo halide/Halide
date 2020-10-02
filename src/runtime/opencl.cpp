@@ -688,9 +688,6 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
             debug(user_context) << (void *)program << "\n";
         }
 
-        // halide_print(user_context, "Source: \n");
-        // halide_print(user_context, src);
-
         (*state)->program = program;
         debug(user_context) << "    clBuildProgram " << (void *)program
                             << " " << options.str() << "\n";
@@ -1585,8 +1582,6 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
     desc.image_height = buf->dimensions >= 2 ? buf->dim[1].extent : 1;
     desc.image_depth = buf->dimensions >= 3 ? buf->dim[1].extent : 1;
     desc.image_array_size = 1;
-    // desc.image_row_pitch = buf->dimensions >= 2 ? buf->dim[1].stride * buf->type.bytes() : 0;
-    // desc.image_slice_pitch = buf->dimensions >= 3 ? buf->dim[2].stride * buf->type.bytes() : 0;
     desc.image_row_pitch = 0;
     desc.image_slice_pitch = 0;
     desc.num_mip_levels = 0;
@@ -1700,8 +1695,6 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
                 dim >= 2 ? static_cast<size_t>(dst->dim[1].extent) : 1,
                 dim >= 3 ? static_cast<size_t>(dst->dim[2].extent) : 1};
 
-            // int row_pitch = dst->dimensions >= 2 ? dst->dim[1].stride * dst->type.bytes() : 0;
-            // int slice_pitch = dst->dimensions >= 3 ? dst->dim[2].stride * dst->type.bytes() : 0;
             if (dst->dimensions >= 2 && dst->dim[1].stride != dst->dim[0].extent) {
                 error(user_context) << "image buffer copies must be dense on inner dimension";
                 return halide_error_code_device_buffer_copy_failed;
@@ -1721,8 +1714,7 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
                 static_cast<size_t>(src->dim[0].extent),
                 dim >= 2 ? static_cast<size_t>(src->dim[1].extent) : 1,
                 dim >= 3 ? static_cast<size_t>(src->dim[2].extent) : 1};
-            // int row_pitch = dim >= 2 ? src->dim[1].stride * src->type.bytes() : 0;
-            // int slice_pitch = dim >= 3 ? src->dim[2].stride * src->type.bytes() : 0;
+
             if (src->dimensions >= 2 && src->dim[1].stride != src->dim[0].extent) {
                 error(user_context) << "image buffer copies must be dense on inner dimension";
                 return halide_error_code_device_buffer_copy_failed;
@@ -1737,9 +1729,6 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
         } else if (!from_host && !to_host) {
             error(user_context) << "image to image copies not implemented";
             return halide_error_code_device_buffer_copy_failed;
-            // err = clEnqueueCopyBuffer(ctx.cmd_queue, ((device_handle *)c.src)->mem, ((device_handle *)c.dst)->mem,
-            //                           src_idx + ((device_handle *)c.src)->offset, dst_idx + ((device_handle *)c.dst)->offset,
-            //                           c.chunk_size, 0, NULL, NULL);
         }
 
         if (err != CL_SUCCESS) {
