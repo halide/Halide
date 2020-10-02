@@ -417,33 +417,38 @@ void CodeGen_X86::visit(const Call *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_X86::visit(const VectorReduce *op) {
+void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     const int factor = op->value.type().lanes() / op->type.lanes();
 
-    // Match pmaddwd. X86 doesn't have many horizontal reduction ops,
-    // and the ones that exist are hit by llvm automatically using the
-    // base class lowering of VectorReduce (see
-    // test/correctness/simd_op_check.cpp).
-    if (const Mul *mul = op->value.as<Mul>()) {
-        Type narrower = Int(16, mul->type.lanes());
-        Expr a = lossless_cast(narrower, mul->a);
-        Expr b = lossless_cast(narrower, mul->b);
-        if (op->type.is_int() &&
-            op->type.bits() == 32 &&
-            a.defined() &&
-            b.defined() &&
-            factor == 2 &&
-            op->op == VectorReduce::Add) {
+    if (op->type.is_int() &&
+        op->type.bits() == 32 &&
+        factor == 2 &&
+        op->op == VectorReduce::Add) {
+        Type narrower = Int(16, op->value.type().lanes());
+        Expr a, b;
+        if (const Mul *mul = op->value.as<Mul>()) {
+            a = lossless_cast(narrower, mul->a);
+            b = lossless_cast(narrower, mul->b);
+        } else {
+            a = lossless_cast(narrower, op->value);
+            b = make_const(narrower, 1);
+        }
+        if (a.defined() && b.defined()) {
             if (target.has_feature(Target::AVX2) && op->type.lanes() > 4) {
                 value = call_intrin(op->type, 8, "llvm.x86.avx2.pmadd.wd", {a, b});
             } else {
                 value = call_intrin(op->type, 4, "llvm.x86.sse2.pmadd.wd", {a, b});
             }
+            if (init.defined()) {
+                Value *x = value;
+                Value *y = codegen(init);
+                value = builder->CreateAdd(x, y);
+            }
             return;
         }
     }
 
-    CodeGen_Posix::visit(op);
+    CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
 string CodeGen_X86::mcpu() const {
