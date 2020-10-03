@@ -55,6 +55,8 @@ int main(int argc, char **argv) {
                         .unroll(ri);
                 } else {
                     // ARM schedule. Relies on SDOT
+                    const int reduce = target.has_feature(Target::ARMDotProd) ? 4 : 2;
+
                     prod.in()
                         .tile(x, y, xi, yi, 8, 8)
                         .vectorize(xi)
@@ -67,12 +69,12 @@ int main(int argc, char **argv) {
                         .vectorize(x)
                         .unroll(y)
                         .update()
-                        .split(r, ro, ri, 8)
+                        .split(r, ro, ri, reduce)
                         .reorder(ri, x, y, ro)
                         .vectorize(x)
                         .unroll(y)
                         .atomic()
-                        .vectorize(ri, 4)
+                        .vectorize(ri, reduce)
                         .unroll(ri);
                 }
             } else {
@@ -156,6 +158,11 @@ int main(int argc, char **argv) {
                 .vectorize(x, 8, TailStrategy::RoundUp);
 
             if (use_nested_vectorization) {
+
+                const int reduce =
+                    target.arch == Target::X86             ? 8 :
+                    target.has_feature(Target::ARMDotProd) ? 4 :
+                                                             2;
                 prod.compute_at(result, x)
                     .vectorize(x)
                     .update()
@@ -163,15 +170,16 @@ int main(int argc, char **argv) {
                     .reorder(ri, x, ro)
                     .vectorize(x)
                     .atomic()
-                    .vectorize(ri, target.arch == Target::X86 ? 8 : 4)
+                    .vectorize(ri, reduce)
                     .unroll(ri);
             } else {
                 prod.compute_at(result, x)
                     .vectorize(x)
                     .update()
-                    .split(r, ro, ri, 4)
+                    .split(r, ro, ri, 8)
                     .reorder(ri, x, ro)
-                    .vectorize(x);
+                    .vectorize(x)
+                    .unroll(ri);
             }
 
             Buffer<uint8_t> f_buf(1024 * 1024);
