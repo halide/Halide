@@ -430,6 +430,10 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             a = lossless_cast(narrower, mul->a);
             b = lossless_cast(narrower, mul->b);
         } else {
+            // One could do a horizontal widening addition with
+            // pmaddwd against a vector of ones. Currently disabled
+            // because I haven't found case where it's clearly better.
+
             //a = lossless_cast(narrower, op->value);
             //b = make_const(narrower, 1);
         }
@@ -437,6 +441,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             if ((target.has_feature(Target::AVX512_Skylake) ||
                  target.has_feature(Target::AVX512_Cannonlake)) &&
                 op->type.lanes() > 8) {
+                // These generations have the AVX512_BW extension
                 value = call_intrin(op->type, 16, "llvm.x86.avx512.pmaddw.d.512", {a, b});
             } else if (target.has_feature(Target::AVX2) && op->type.lanes() > 4) {
                 value = call_intrin(op->type, 8, "llvm.x86.avx2.pmadd.wd", {a, b});
