@@ -56,7 +56,6 @@ set(RUNTIME_CPP
     osx_host_cpu_count
     osx_opengl_context
     osx_yield
-    posix_abort
     posix_allocator
     posix_clock
     posix_error_handler
@@ -84,7 +83,6 @@ set(RUNTIME_CPP
     trace_helper
     tracing
     wasm_cpu_features
-    windows_abort
     windows_clock
     windows_cuda
     windows_d3d12compute_x86
