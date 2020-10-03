@@ -159,10 +159,15 @@ int main(int argc, char **argv) {
 
             if (use_nested_vectorization) {
 
-                const int reduce =
-                    target.arch == Target::X86             ? 8 :
-                    target.has_feature(Target::ARMDotProd) ? 4 :
-                                                             2;
+                int reduce;
+                if (target.arch == Target::X86) {
+                    reduce = 8;
+                } else if (target.has_feature(Target::ARMDotProd)) {
+                    reduce = 4;
+                } else {
+                    reduce = 2;
+                }
+
                 prod.compute_at(result, x)
                     .vectorize(x)
                     .update()
