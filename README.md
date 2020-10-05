@@ -150,7 +150,7 @@ D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary
 For a 32-bit build, run:
 
 ```
-D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x86_amd64
+D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64_x86
 ```
 
 #### Managing dependencies with vcpkg
