@@ -4335,9 +4335,10 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             for (const Expr &vec : op->vectors) {
                 contiguous &= ((vec.type().lanes() % f) == 0);
             }
-            for (size_t i = 0; i < op->indices.size() / f; i++) {
+            for (size_t i = 0; i < op->indices.size(); i += f) {
+                contiguous &= (op->indices[i] % f) == 0;
                 for (int j = 0; j < f; j++) {
-                    contiguous &= (op->indices[i * f + j] == op->indices[i * f] + j);
+                    contiguous &= (op->indices[i + j] == op->indices[i] + j);
                 }
             }
             if (contiguous) {
