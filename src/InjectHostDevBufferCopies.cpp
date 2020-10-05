@@ -147,9 +147,9 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     using IRMutator::visit;
 
     // The buffer being managed
-    string buffer;
+    const string buffer;
 
-    bool is_external;
+    const bool is_external;
 
     MemoryType memory_type;
 
@@ -755,6 +755,16 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
 
         void visit(const Store *op) override {
             include(op->param);
+            IRVisitor::visit(op);
+        }
+
+        void visit(const Call *op) override {
+            // We shouldn't need to look for Buffers here,
+            // since we expect this to be run after StorageFlattening.
+            // Add an assertion check just in case a change to lowering ever
+            // subverts this ordering expectation.
+            internal_assert(op->call_type != Call::Halide &&
+                            op->call_type != Call::Image);
             IRVisitor::visit(op);
         }
 
