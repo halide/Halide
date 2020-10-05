@@ -541,7 +541,7 @@ private:
                     interval.max = cast(a.min.type(), abs(a.max));
                 } else {
                     interval.min = min(-a.max, a.min);
-                    interval.max = max(-a.max, a.min);
+                    interval.max = max(-a.min, a.max);
                 }
             } else {
                 interval = Interval::everything();
