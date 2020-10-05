@@ -199,23 +199,23 @@ int RDom::dimensions() const {
 }
 
 RVar RDom::operator[](int i) const {
-    if (i == 0) {
+    switch (i) {
+    case 0:
         return x;
-    }
-    if (i == 1) {
+    case 1:
         return y;
-    }
-    if (i == 2) {
+    case 2:
         return z;
-    }
-    if (i == 3) {
+    case 3:
         return w;
+    default:
+        if (i < dimensions()) {
+            return RVar(dom, i);
+        } else {
+            user_error << "Reduction domain index out of bounds: " << i << "\n";
+            return x;  // Keep the compiler happy
+        }
     }
-    if (i < dimensions()) {
-        return RVar(dom, i);
-    }
-    user_error << "Reduction domain index out of bounds: " << i << "\n";
-    return x;  // Keep the compiler happy
 }
 
 RDom::operator Expr() const {
