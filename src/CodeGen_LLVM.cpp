@@ -4777,7 +4777,9 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
 }
 
 Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
-    if (v.size() == 1) return v[0];
+    if (v.size() == 1) {
+        return v[0];
+    }
 
     internal_assert(!v.empty());
 
