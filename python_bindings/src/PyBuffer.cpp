@@ -364,7 +364,7 @@ void define_buffer(py::module &m) {
             .def("set_name", &Buffer<>::set_name)
             .def("name", &Buffer<>::name)
 
-            .def("same_as", (bool (Buffer<>::*)(const Buffer<> &other)) & Buffer<>::same_as, py::arg("other"))
+            .def("same_as", (bool (Buffer<>::*)(const Buffer<> &other) const) & Buffer<>::same_as, py::arg("other"))
             .def("defined", &Buffer<>::defined)
 
             .def("type", &Buffer<>::type)

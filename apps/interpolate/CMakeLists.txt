@@ -19,7 +19,7 @@ target_link_libraries(interpolate.generator PRIVATE Halide::Generator Halide::To
 add_halide_library(interpolate FROM interpolate.generator)
 add_halide_library(interpolate_auto_schedule FROM interpolate.generator
                    GENERATOR interpolate
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(interpolate_filter filter.cpp)

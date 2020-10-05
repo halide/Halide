@@ -15,7 +15,6 @@ set(HEADER_FILES
     AssociativeOpsTable.h
     Associativity.h
     AsyncProducers.h
-    AutoSchedule.h
     AutoScheduleUtils.h
     BoundaryConditions.h
     Bounds.h
@@ -69,6 +68,7 @@ set(HEADER_FILES
     ExternFuncArgument.h
     FastIntegerDivide.h
     FindCalls.h
+    FlattenNestedRamps.h
     Float16.h
     Func.h
     Function.h
@@ -180,7 +180,6 @@ set(SOURCE_FILES
     AssociativeOpsTable.cpp
     Associativity.cpp
     AsyncProducers.cpp
-    AutoSchedule.cpp
     AutoScheduleUtils.cpp
     BoundaryConditions.cpp
     Bounds.cpp
@@ -230,6 +229,7 @@ set(SOURCE_FILES
     Expr.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
+    FlattenNestedRamps.cpp
     Float16.cpp
     Func.cpp
     Function.cpp
@@ -375,7 +375,10 @@ add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
-target_compile_definitions(Halide PRIVATE $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:Halide_STATIC_DEFINE>)
+target_compile_definitions(Halide
+                           PRIVATE
+                           $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>
+                           $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:WITH_INTROSPECTION>)
 
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
@@ -384,8 +387,8 @@ set_target_properties(Halide PROPERTIES
 
 add_dependencies(Halide HalideIncludes)
 
-if (TARGET wabt)
-    target_link_libraries(Halide PRIVATE wabt)
+if (TARGET wabt-obj)
+    target_link_libraries(Halide PRIVATE wabt-obj)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 endif ()
 
@@ -395,30 +398,6 @@ endif ()
 
 set(Halide_INCLUDE_PATH "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 target_include_directories(Halide INTERFACE ${Halide_INCLUDE_PATH})
-
-##
-# Plugin interface for Halide on weak systems
-##
-
-add_library(Halide_Plugin INTERFACE)
-set_target_properties(Halide_Plugin PROPERTIES EXPORT_NAME Plugin)
-
-if (NOT BUILD_SHARED_LIBS)
-    if (MSVC)
-        message(STATUS "Notice: Halide plugins are not available when building statically with MSVC")
-    else ()
-        target_link_libraries(Halide_Plugin INTERFACE Halide::LanguageOptions)
-        target_link_options(Halide_Plugin INTERFACE
-                            $<$<CXX_COMPILER_ID:GNU>:-rdynamic>
-                            $<$<CXX_COMPILER_ID:Clang,AppleClang>:-undefined dynamic_lookup>)
-        target_include_directories(Halide_Plugin INTERFACE ${Halide_INCLUDE_PATH})
-        add_dependencies(Halide_Plugin Halide)
-    endif ()
-else ()
-    target_link_libraries(Halide_Plugin INTERFACE Halide::Halide)
-endif ()
-
-add_library(Halide::Plugin ALIAS Halide_Plugin)
 
 ##
 # Set compiler options for libHalide
@@ -467,7 +446,7 @@ target_compile_definitions(Halide
                            )
 
 ##
-# Set up macro definitions for libHalide
+# Set up additional backend options for Halide
 ##
 
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
@@ -490,7 +469,13 @@ if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
 endif ()
 
-option(Halide_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
-if (Halide_USE_CODEMODEL_LARGE)
-    target_compile_definitions(Halide PRIVATE HALIDE_USE_CODEMODEL_LARGE)
+##
+# Add autoschedulers to the build.
+##
+
+if (BUILD_SHARED_LIBS)
+    message(STATUS "Building autoschedulers enabled")
+    add_subdirectory(autoschedulers)
+else ()
+    message(STATUS "Building autoschedulers disabled (static Halide)")
 endif ()

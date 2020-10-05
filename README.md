@@ -16,6 +16,18 @@ to an object file, or JIT-compile it and run it in the same process. Halide also
 provides a Python binding that provides full support for writing Halide embedded
 in Python without C++.
 
+The latest version of Halide is **Halide 10.0.0**. If you are using macOS, you can
+install Halide using [Homebrew](https://brew.sh/) via:
+
+```
+$ brew install halide
+```
+
+We are very interested in bringing Halide 10 to other package managers including
+[vcpkg](https://github.com/microsoft/vcpkg/issues/13580) and
+[Ubuntu PPAs](https://github.com/halide/Halide/issues/5285). If you have some
+experience publishing packages we would be happy to work with you!
+
 For more detail about what Halide is, see http://halide-lang.org.
 
 For API documentation see http://halide-lang.org/docs
@@ -138,7 +150,7 @@ D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary
 For a 32-bit build, run:
 
 ```
-D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x86_amd64
+D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64_x86
 ```
 
 #### Managing dependencies with vcpkg

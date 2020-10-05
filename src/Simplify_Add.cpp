@@ -37,7 +37,6 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
         }
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
-        const int lanes = op->type.lanes();
 
         if (rewrite(c0 + c1, fold(c0 + c1)) ||
             rewrite(IRMatcher::Overflow() + x, a) ||
@@ -50,11 +49,11 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
         // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(x + x, x * 2) ||
-             rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w, lanes)) ||
-             rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y, lanes)) ||
-             rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
-             rewrite((x + broadcast(y)) + broadcast(z), x + broadcast(y + z, lanes)) ||
-             rewrite((x - broadcast(y)) + broadcast(z), x + broadcast(z - y, lanes)) ||
+             rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w), is_same_type(x, z)) ||
+             rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y), is_same_type(x, z)) ||
+             rewrite(broadcast(x) + broadcast(y), broadcast(x + y), is_same_type(x, y)) ||
+             rewrite((x + broadcast(y)) + broadcast(z), x + broadcast(y + z), is_same_type(y, z)) ||
+             rewrite((x - broadcast(y)) + broadcast(z), x + broadcast(z - y), is_same_type(y, z)) ||
              rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
              rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
 

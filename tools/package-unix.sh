@@ -24,6 +24,7 @@ cmake -G Ninja \
   -DWITH_DOCS=YES \
   -DWITH_UTILS=NO \
   -DWITH_PYTHON_BINDINGS=NO \
+  -DCMAKE_INSTALL_DATADIR="share/Halide" \
   -S "$halide_source" \
   -B "$halide_build_root/shared-Release"
 
@@ -40,6 +41,7 @@ cmake -G Ninja \
   -DWITH_DOCS=YES \
   -DWITH_UTILS=NO \
   -DWITH_PYTHON_BINDINGS=NO \
+  -DCMAKE_INSTALL_DATADIR="share/Halide" \
   -S "$halide_source" \
   -B "$halide_build_root/static-Release"
 
