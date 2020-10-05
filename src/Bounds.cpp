@@ -72,8 +72,12 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
 
     // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
     // for our purposes here, treat anything non-const as no-bound.
-    if (!is_const(interval.min)) interval.min = Interval::neg_inf();
-    if (!is_const(interval.max)) interval.max = Interval::pos_inf();
+    if (!is_const(interval.min)) {
+        interval.min = Interval::neg_inf();
+    }
+    if (!is_const(interval.max)) {
+        interval.max = Interval::pos_inf();
+    }
 
     return interval;
 }
@@ -306,11 +310,19 @@ private:
             // Start with the bounds of the narrow type.
             bounds_of_type(from);
             // If we have a better min or max for the arg use that.
-            if (a.has_lower_bound()) interval.min = a.min;
-            if (a.has_upper_bound()) interval.max = a.max;
+            if (a.has_lower_bound()) {
+                interval.min = a.min;
+            }
+            if (a.has_upper_bound()) {
+                interval.max = a.max;
+            }
             // Then cast those bounds to the wider type.
-            if (interval.has_lower_bound()) interval.min = Cast::make(to, interval.min);
-            if (interval.has_upper_bound()) interval.max = Cast::make(to, interval.max);
+            if (interval.has_lower_bound()) {
+                interval.min = Cast::make(to, interval.min);
+            }
+            if (interval.has_upper_bound()) {
+                interval.max = Cast::make(to, interval.max);
+            }
         } else {
             // This might overflow, so use the bounds of the destination type.
             bounds_of_type(to);
@@ -779,10 +791,18 @@ private:
     }
 
     Expr make_and(Expr a, Expr b) {
-        if (is_one(a)) return b;
-        if (is_one(b)) return a;
-        if (is_zero(a)) return a;
-        if (is_zero(b)) return b;
+        if (is_one(a)) {
+            return b;
+        }
+        if (is_one(b)) {
+            return a;
+        }
+        if (is_zero(a)) {
+            return a;
+        }
+        if (is_zero(b)) {
+            return b;
+        }
         return a && b;
     }
 
@@ -806,10 +826,18 @@ private:
     }
 
     Expr make_or(Expr a, Expr b) {
-        if (is_one(a)) return a;
-        if (is_one(b)) return b;
-        if (is_zero(a)) return b;
-        if (is_zero(b)) return a;
+        if (is_one(a)) {
+            return a;
+        }
+        if (is_one(b)) {
+            return b;
+        }
+        if (is_zero(a)) {
+            return b;
+        }
+        if (is_zero(b)) {
+            return a;
+        }
         return a || b;
     }
 
@@ -833,8 +861,12 @@ private:
     }
 
     Expr make_not(const Expr &e) {
-        if (is_one(e)) return make_zero(e.type());
-        if (is_zero(e)) return make_one(e.type());
+        if (is_one(e)) {
+            return make_zero(e.type());
+        }
+        if (is_zero(e)) {
+            return make_one(e.type());
+        }
         return !e;
     }
 
@@ -2334,7 +2366,9 @@ private:
                 auto vars = find_free_vars(op->condition);
                 for (auto v : vars) {
                     auto result = solve_expression(c, v->name);
-                    if (!result.fully_solved) continue;
+                    if (!result.fully_solved) {
+                        continue;
+                    }
                     Expr solved = result.result;
 
                     // Trim the scope down to represent the fact that the

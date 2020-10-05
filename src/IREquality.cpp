@@ -102,7 +102,9 @@ private:
 
 template<typename T>
 IRComparer::CmpResult IRComparer::compare_scalar(T a, T b) {
-    if (result != Equal) return result;
+    if (result != Equal) {
+        return result;
+    }
 
     if (a < b) {
         result = LessThan;
@@ -204,13 +206,17 @@ IRComparer::CmpResult IRComparer::compare_stmt(const Stmt &a, const Stmt &b) {
 }
 
 IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
-    if (result != Equal) return result;
+    if (result != Equal) {
+        return result;
+    }
 
     compare_scalar(a.code(), b.code());
     compare_scalar(a.bits(), b.bits());
     compare_scalar(a.lanes(), b.lanes());
 
-    if (result != Equal) return result;
+    if (result != Equal) {
+        return result;
+    }
 
     const halide_handle_cplusplus_type *ha = a.handle_type;
     const halide_handle_cplusplus_type *hb = b.handle_type;
@@ -248,13 +254,17 @@ IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
     compare_scalar(ha->enclosing_types.size(), hb->enclosing_types.size());
     compare_scalar(ha->cpp_type_modifiers.size(), hb->cpp_type_modifiers.size());
 
-    if (result != Equal) return result;
+    if (result != Equal) {
+        return result;
+    }
 
     for (size_t i = 0; i < ha->namespaces.size(); i++) {
         compare_names(ha->namespaces[i], hb->namespaces[i]);
     }
 
-    if (result != Equal) return result;
+    if (result != Equal) {
+        return result;
+    }
 
     for (size_t i = 0; i < ha->enclosing_types.size(); i++) {
         compare_scalar(ha->enclosing_types[i].cpp_type_type,
@@ -263,7 +273,9 @@ IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
                       hb->enclosing_types[i].name);
     }
 
-    if (result != Equal) return result;
+    if (result != Equal) {
+        return result;
+    }
 
     for (size_t i = 0; i < ha->cpp_type_modifiers.size(); i++) {
         compare_scalar(ha->cpp_type_modifiers[i],
@@ -274,7 +286,9 @@ IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
 }
 
 IRComparer::CmpResult IRComparer::compare_names(const string &a, const string &b) {
-    if (result != Equal) return result;
+    if (result != Equal) {
+        return result;
+    }
 
     int string_cmp = a.compare(b);
     if (string_cmp < 0) {
@@ -287,7 +301,9 @@ IRComparer::CmpResult IRComparer::compare_names(const string &a, const string &b
 }
 
 IRComparer::CmpResult IRComparer::compare_expr_vector(const vector<Expr> &a, const vector<Expr> &b) {
-    if (result != Equal) return result;
+    if (result != Equal) {
+        return result;
+    }
 
     compare_scalar(a.size(), b.size());
     for (size_t i = 0; (i < a.size()) && result == Equal; i++) {

@@ -1681,7 +1681,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                    << print_name(args[i].name);
         }
 
-        if (i < args.size() - 1) stream << ", ";
+        if (i < args.size() - 1) {
+            stream << ", ";
+        }
     }
 
     if (is_header_or_extern_decl()) {
@@ -2223,7 +2225,9 @@ void CodeGen_C::visit(const Call *op) {
             indent++;
             for (size_t i = 0; i < op->args.size(); i++) {
                 stream << get_indent() << values[i];
-                if (i < op->args.size() - 1) stream << ",";
+                if (i < op->args.size() - 1) {
+                    stream << ",";
+                }
                 stream << "\n";
             }
             indent--;
@@ -2804,7 +2808,9 @@ void CodeGen_C::visit(const IfThenElse *op) {
 }
 
 void CodeGen_C::visit(const Evaluate *op) {
-    if (is_const(op->value)) return;
+    if (is_const(op->value)) {
+        return;
+    }
     string id = print_expr(op->value);
     stream << get_indent() << "halide_unused(" << id << ");\n";
 }

@@ -153,7 +153,9 @@ string simt_intrinsic(const string &name) {
 }  // namespace
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op) {
-    if (is_const(op->value)) return;
+    if (is_const(op->value)) {
+        return;
+    }
     print_expr(op->value);
 }
 
@@ -251,8 +253,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
         << "(";
     for (int i = 0; i < op->lanes; ++i) {
         rhs << id_value;
-        if (i < op->lanes - 1)
+        if (i < op->lanes - 1) {
             rhs << ", ";
+        }
     }
     rhs << ")";
 
@@ -481,8 +484,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
             if (shared_promotion_required) {
                 rhs << ")";
             }
-            if (i < lanes - 1)
+            if (i < lanes - 1) {
                 rhs << ", ";
+            }
         }
         rhs << ")";
 
@@ -1053,10 +1057,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     struct FindThreadGroupSize : public IRVisitor {
         using IRVisitor::visit;
         void visit(const For *loop) override {
-            if (!is_gpu_var(loop->name))
+            if (!is_gpu_var(loop->name)) {
                 return loop->body.accept(this);
-            if (loop->for_type != ForType::GPUThread)
+            }
+            if (loop->for_type != ForType::GPUThread) {
                 return loop->body.accept(this);
+            }
             internal_assert(is_zero(loop->min));
             int index = thread_loop_workgroup_index(loop->name);
             user_assert(index >= 0) << "Invalid 'numthreads' index for loop variable '" << loop->name << "'.\n";

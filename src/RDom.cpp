@@ -199,10 +199,18 @@ int RDom::dimensions() const {
 }
 
 RVar RDom::operator[](int i) const {
-    if (i == 0) return x;
-    if (i == 1) return y;
-    if (i == 2) return z;
-    if (i == 3) return w;
+    if (i == 0) {
+        return x;
+    }
+    if (i == 1) {
+        return y;
+    }
+    if (i == 2) {
+        return z;
+    }
+    if (i == 3) {
+        return w;
+    }
     if (i < dimensions()) {
         return RVar(dom, i);
     }
