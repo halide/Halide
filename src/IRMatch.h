@@ -526,7 +526,7 @@ struct IntLiteral {
     constexpr static bool canonical = true;
 
     HALIDE_ALWAYS_INLINE
-    IntLiteral(int64_t v)
+    explicit IntLiteral(int64_t v)
         : v(v) {
     }
 
@@ -599,7 +599,7 @@ HALIDE_ALWAYS_INLINE T pattern_arg(T t) {
 }
 HALIDE_ALWAYS_INLINE
 IntLiteral pattern_arg(int64_t x) {
-    return {x};
+    return IntLiteral{x};
 }
 HALIDE_ALWAYS_INLINE
 const SpecificExpr pattern_arg(const Expr &e) {
