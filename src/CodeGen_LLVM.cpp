@@ -2684,9 +2684,16 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         } else {
             if (src.is_scalar() && dst.is_vector()) {
+                // If the source type is a scalar, we promote it to an
+                // equivalent vector of width one before doing the
+                // bitcast, because llvm's bitcast operator doesn't
+                // want to convert between scalars and vectors.
                 value = create_broadcast(value, 1);
             }
             if (src.is_vector() && dst.is_scalar()) {
+                // Similarly, if we're converting from a vector to a
+                // scalar, convert to a vector of width 1 first, and
+                // then extract the first lane.
                 llvm_dst = get_vector_type(llvm_dst, 1);
             }
             value = builder->CreateBitCast(value, llvm_dst);
@@ -4281,7 +4288,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
         // If the even-numbered indices equal the odd-numbered
         // indices, only generate one and then do a self-interleave.
         for (int f : {4, 3, 2}) {
-            bool self_interleave = op->indices.size() % f == 0;
+            bool self_interleave = (op->indices.size() % f) == 0;
             for (size_t i = 0; i < op->indices.size(); i++) {
                 self_interleave &= (op->indices[i] == op->indices[i - (i % f)]);
             }
@@ -4292,19 +4299,12 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
                 }
                 Expr equiv = Shuffle::make(op->vectors, sub_indices);
                 value = codegen(equiv);
-                if (f == 2) {
-                    value = interleave_vectors({value, value});
-                } else if (f == 3) {
-                    value = interleave_vectors({value, value, value});
-                } else {
-                    value = interleave_vectors({value, value});
-                    value = interleave_vectors({value, value});
-                }
+                value = interleave_vectors(std::vector<Value *>(f, value));
                 return;
             }
 
             // Check for an interleave of slices (i.e. an in-vector transpose)
-            bool interleave_of_slices = op->vectors.size() == 1 && op->indices.size() % f == 0;
+            bool interleave_of_slices = op->vectors.size() == 1 && (op->indices.size() % f) == 0;
             int step = op->type.lanes() / f;
             for (int i = 0; i < step; i++) {
                 for (int j = 0; j < f; j++) {
@@ -4318,14 +4318,12 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
                     slices.push_back(slice_vector(value, i * step, step));
                 }
                 value = interleave_vectors(slices);
-                //optimization_barrier(value);
             }
         }
         // If the indices form contiguous aligned runs, do the shuffle
         // on entire sub-vectors by reinterpreting them as a wider
         // type.
         for (int f : {8, 4, 2}) {
-
             if (op->type.lanes() % f != 0) {
                 continue;
             }
@@ -4337,8 +4335,10 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             for (const Expr &vec : op->vectors) {
                 contiguous &= ((vec.type().lanes() % f) == 0);
             }
-            for (size_t i = 0; i < op->indices.size(); i++) {
-                contiguous &= (op->indices[i] == op->indices[i - (i % f)] + ((int)i % f));
+            for (size_t i = 0; i < op->indices.size() / f; i++) {
+                for (int j = 0; j < f; j++) {
+                    contiguous &= (op->indices[i * f + j] == op->indices[i * f] + j);
+                }
             }
             if (contiguous) {
                 vector<Expr> equiv_args;

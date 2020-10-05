@@ -98,6 +98,9 @@ class FlattenRamps : public IRMutator {
                 // currently do the big-load-and-shuffle if we're
                 // going to use at least a quarter of the values
                 // loaded.
+                //
+                // TODO: It would be good to be able to control this
+                // in the schedule somehow.
                 const int max_unused_lane_factor = 4;
                 if (extent < max_unused_lane_factor * lanes) {
                     Expr dense_index = Ramp::make(min_lane, stride, extent);

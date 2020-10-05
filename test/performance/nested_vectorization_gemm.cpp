@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
                         .vectorize(ri, 2)
                         .unroll(ri);
                 } else {
-                    // ARM schedule. Relies on SDOT
+                    // ARM schedule. Exploits SDOT when available.
                     const int reduce = target.has_feature(Target::ARMDotProd) ? 4 : 2;
 
                     prod.in()
