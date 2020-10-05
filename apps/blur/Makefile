@@ -15,7 +15,7 @@ $(BIN)/%/halide_blur.a: $(GENERATOR_BIN)/halide_blur.generator
 
 $(BIN)/%/halide_blur_c.halide_generated.cpp: $(GENERATOR_BIN)/halide_blur.generator
 	@mkdir -p $(@D)
-	$^ -g halide_blur -o $(@D) -f halide_blur_c -e c_source,c_header target=$*
+	$^ -g halide_blur -o $(@D) -f halide_blur_c -e c_source,c_header target=$*-xtensa
 
 # g++ on OS X might actually be system clang without openmp
 CXX_VERSION=$(shell $(CXX) --version)
