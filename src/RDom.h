@@ -29,10 +29,12 @@ class OutputImageParam;
 class RVar {
     std::string _name;
     Internal::ReductionDomain _domain;
-    int _index;
+    int _index = -1;
 
     const Internal::ReductionVariable &_var() const {
-        return _domain.domain().at(_index);
+        const auto &d = _domain.domain();
+        internal_assert(_index >= 0 && _index < (int)d.size());
+        return d.at(_index);
     }
 
 public:

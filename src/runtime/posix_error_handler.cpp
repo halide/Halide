@@ -4,6 +4,8 @@
 
 extern "C" {
 
+extern void abort();
+
 WEAK void halide_default_error(void *user_context, const char *msg) {
     char buf[4096];
     char *dst = halide_string_to_string(buf, buf + 4094, "Error: ");
@@ -17,7 +19,7 @@ WEAK void halide_default_error(void *user_context, const char *msg) {
     }
     (void)halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
     halide_print(user_context, buf);
-    halide_abort();
+    abort();
 }
 }
 

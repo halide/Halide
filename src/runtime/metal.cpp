@@ -479,14 +479,14 @@ WEAK int halide_metal_device_malloc(void *user_context, halide_buffer_t *buf) {
 
     debug(user_context) << "    allocating " << *buf << "\n";
 
-#ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-#endif
-
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error != 0) {
         return metal_context.error;
     }
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
 
     device_handle *handle = (device_handle *)malloc(sizeof(device_handle));
     if (handle == NULL) {

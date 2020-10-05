@@ -294,7 +294,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t)
       emit_atomic_stores(false),
 
       destructor_block(nullptr),
-      strict_float(t.has_feature(Target::StrictFloat)) {
+      strict_float(t.has_feature(Target::StrictFloat)),
+      llvm_large_code_model(t.has_feature(Target::LLVMLargeCodeModel)) {
     initialize_llvm();
 }
 
@@ -601,6 +602,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
     module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
+    module->addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
 
     // Ensure some types we need are defined
@@ -1337,6 +1339,12 @@ void CodeGen_LLVM::optimize_module() {
             }
         }
     }
+
+#if LLVM_VERSION >= 120
+    if (tm) {
+        tm->registerPassBuilderCallbacks(pb, debug_pass_manager);
+    }
+#endif
 
     mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
     mpm.run(*module, mam);

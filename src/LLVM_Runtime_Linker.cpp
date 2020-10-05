@@ -114,7 +114,6 @@ DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
 DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(osx_yield)
-DECLARE_CPP_INITMOD(posix_abort)
 DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
@@ -144,7 +143,6 @@ DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
-DECLARE_CPP_INITMOD(windows_abort)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(windows_profiler)
@@ -765,7 +763,6 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     modules.push_back(get_initmod_metadata(c, bits_64, debug));
     modules.push_back(get_initmod_float16_t(c, bits_64, debug));
     modules.push_back(get_initmod_errors(c, bits_64, debug));
-    modules.push_back(get_initmod_posix_abort(c, bits_64, debug));
     modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
 
     // We don't want anything marked as weak for the wasm-jit runtime,
@@ -812,13 +809,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
     if (module_type != ModuleGPU) {
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
-            // Windows has a unique abort, but everyone else uses POSIX
-            if (t.os == Target::Windows) {
-                modules.push_back(get_initmod_windows_abort(c, bits_64, debug));
-            } else {
-                modules.push_back(get_initmod_posix_abort(c, bits_64, debug));
-            }
-
             // OS-dependent modules
             if (t.os == Target::Linux) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
