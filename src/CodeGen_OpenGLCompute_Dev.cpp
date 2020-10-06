@@ -357,7 +357,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Free *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Evaluate *op) {
-    if (is_const(op->value)) return;
+    if (is_const(op->value)) {
+        return;
+    }
     print_expr(op->value);
 }
 

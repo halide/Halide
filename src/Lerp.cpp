@@ -41,9 +41,9 @@ Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight) {
 
     if (result_type.is_bool()) {
         Expr half_weight;
-        if (weight.type().is_float())
+        if (weight.type().is_float()) {
             half_weight = 0.5f;
-        else {
+        } else {
             half_weight = weight.type().max() / 2;
         }
 

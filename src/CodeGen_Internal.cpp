@@ -696,9 +696,10 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
         if (GV->getName() != "llvm.embedded.module" &&
-            GV->getName() != "llvm.cmdline")
+            GV->getName() != "llvm.cmdline") {
             used_array.push_back(
                 ConstantExpr::getPointerBitCastOrAddrSpaceCast(GV, used_element_type));
+        }
     }
     if (used) {
         used->eraseFromParent();

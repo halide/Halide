@@ -693,7 +693,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         for (size_t i = 0; i < op->args.size(); i++) {
             const Expr &old_arg = op->args[i];
             Expr new_arg = mutate(old_arg, nullptr);
-            if (!new_arg.same_as(old_arg)) changed = true;
+            if (!new_arg.same_as(old_arg)) {
+                changed = true;
+            }
             new_args[i] = std::move(new_arg);
         }
 

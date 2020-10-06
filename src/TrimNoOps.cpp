@@ -67,14 +67,22 @@ class IsNoOp : public IRVisitor {
     using IRVisitor::visit;
 
     Expr make_and(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) return a;
-        if (is_zero(b) || is_one(a)) return b;
+        if (is_zero(a) || is_one(b)) {
+            return a;
+        }
+        if (is_zero(b) || is_one(a)) {
+            return b;
+        }
         return a && b;
     }
 
     Expr make_or(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) return b;
-        if (is_zero(b) || is_one(a)) return a;
+        if (is_zero(a) || is_one(b)) {
+            return b;
+        }
+        if (is_zero(b) || is_one(a)) {
+            return a;
+        }
         return a || b;
     }
 
