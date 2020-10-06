@@ -390,7 +390,7 @@ private:
             }
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const Sub *op) override {
@@ -405,7 +405,7 @@ private:
             }
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const Mul *op) override {
@@ -432,22 +432,23 @@ private:
             }
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const Div *op) override {
         if (op->type.is_vector()) {
+            Expr div = op;
             static const std::vector<Pattern> divs = {
-                // {"halide_xtensa_narrow_shift_qqq", i32(wild_i48x) / bc(wild_i32), Pattern::ExactLog2Op1}
+                {"halide_xtensa_div_i32_i16", wild_i32x / wild_i32x, Pattern::NarrowOp1}
             };
 
-            Expr new_expr = apply_patterns(op, divs, this);
+            Expr new_expr = apply_patterns(div, divs, this);
             if (!new_expr.same_as(op)) {
                 return new_expr;
             }
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const Max *op) override {
@@ -462,7 +463,7 @@ private:
             }
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const Min *op) override {
@@ -477,7 +478,7 @@ private:
             }
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const LT *op) override {
@@ -497,7 +498,7 @@ private:
             }
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const Cast *op) override {
@@ -554,7 +555,7 @@ private:
             }
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const Shuffle *op) override {
@@ -631,7 +632,7 @@ private:
             }
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const Call *op) override {
@@ -705,25 +706,25 @@ private:
             }
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     int loop_depth_ = 0;
 
     Stmt visit(const For *op) override {
         loop_depth_++;
-        Stmt body = IRMutator::visit(op);
+        Stmt body = IRGraphMutator::visit(op);
         loop_depth_--;
         return body;
     }
 
     Stmt visit(const LetStmt *op) override {
         if (loop_depth_ < 1) {
-            return IRMutator::visit(op);
+            return IRGraphMutator::visit(op);
         }
 
         if (op->value.type().is_handle()) {
-            return IRMutator::visit(op);
+            return IRGraphMutator::visit(op);
         }
 
         Stmt body = op->body;
@@ -1133,16 +1134,18 @@ private:
             int native_lanes = op->args[2].as<IntImm>()->value;
             int total_lanes = op->args[3].as<IntImm>()->value;
             if (maybe_concat && (maybe_concat->name == "halide_xtensa_concat_from_native")
-                // Are these checks necessary?
-                && (maybe_concat->type.lanes() == total_lanes) && (maybe_concat->args[slice_index].type().lanes() == native_lanes)) {
+                && (maybe_concat->type.lanes() == total_lanes) && ((int)maybe_concat->args.size() == total_lanes / native_lanes)) {
                 return maybe_concat->args[slice_index];
+            }
+            if (first_arg.type().is_bool() && first_arg.type().is_scalar()) {
+                return first_arg;
             }
             return Call::make(op->type, op->name,
                               {first_arg, op->args[1], op->args[2], op->args[3]},
                               Call::PureExtern);
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
 public:
