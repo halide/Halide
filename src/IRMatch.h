@@ -1898,7 +1898,8 @@ struct Fold {
         // and bits match the required type, if there is one (we can
         // tell from the bits field).
         if (type_hint.bits) {
-            if (ty.code == halide_type_int && type_hint.code == halide_type_float) {
+            if (((int)ty.code == (int)halide_type_int) &&
+                ((int)type_hint.code == (int)halide_type_float)) {
                 int64_t x = c.u.i64;
                 c.u.f64 = (double)x;
             }
