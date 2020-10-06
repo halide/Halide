@@ -540,8 +540,9 @@ private:
                     interval.min = -cast(a.min.type(), abs(a.min));
                     interval.max = cast(a.min.type(), abs(a.max));
                 } else {
+                    // div by 0 is 0 and the magnitude cannot increase by integer division
                     interval.min = min(-a.max, a.min);
-                    interval.max = max(-a.max, a.min);
+                    interval.max = max(-a.min, a.max);
                 }
             } else {
                 interval = Interval::everything();
