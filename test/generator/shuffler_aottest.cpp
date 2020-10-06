@@ -44,7 +44,8 @@ int main(int argc, char **argv) {
         config.max_time = config.min_time * 4;
         double best = benchmark([&]() {
             shuffler(input, output);
-        }, config);
+        },
+                                config);
 
         printf("Best time: %f\n", best);
     }
