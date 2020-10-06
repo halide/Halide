@@ -40,7 +40,9 @@ function(halide_define_aot_test NAME)
         add_wasm_halide_test("${TARGET}" GROUPS generator)
     else ()
         add_executable("${TARGET}" "${NAME}_aottest.cpp")
-        target_include_directories("${TARGET}" PRIVATE "${Halide_SOURCE_DIR}/test/common")
+        target_include_directories("${TARGET}" PRIVATE
+            "${Halide_SOURCE_DIR}/test/common"
+            "${Halide_SOURCE_DIR}/tools")
         if (NOT args_OMIT_DEFAULT_GENERATOR)
             target_link_libraries(${TARGET} PRIVATE ${NAME})
         endif ()
