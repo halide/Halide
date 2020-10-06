@@ -739,6 +739,7 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
         void include(const Buffer<> &b) {
             if (b.defined()) {
                 result.insert(b.name());
+                result_storage[b.name()] = MemoryType::Auto;
             }
         }
 
