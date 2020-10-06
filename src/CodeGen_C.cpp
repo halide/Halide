@@ -68,6 +68,7 @@ const string headers = R"INLINE_CODE(
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <type_traits>
 )INLINE_CODE";
 
 // We now add definitions of things in the runtime which are
@@ -1219,19 +1220,22 @@ public:
     template <typename OtherVec>
     static Vec convert_from(const OtherVec &src) {
         static_assert(Vec::Lanes == OtherVec::Lanes, "Lanes mismatch");
-#if 0 // __has_builtin(__builtin_convertvector)
-        // Disabled (for now) because __builtin_convertvector appears to have
+#if __has_builtin(__builtin_convertvector)
+        // Don't use __builtin_convertvector for float->int: it appears to have
         // different float->int rounding behavior in at least some situations;
         // for now we'll use the much-slower-but-correct explicit C++ code.
         // (https://github.com/halide/Halide/issues/2080)
-        return Vec(from_native_vector, __builtin_convertvector(src.native_vector, NativeVectorType));
-#else
+        constexpr bool is_float_to_int = std::is_floating_point<typename OtherVec::ElementType>::value &&
+                                         std::is_integral<typename Vec::ElementType>::value;
+        if (!is_float_to_int) {
+            return Vec(from_native_vector, __builtin_convertvector(src.native_vector, NativeVectorType));
+        }
+#endif
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.native_vector[i] = static_cast<typename Vec::ElementType>(src.native_vector[i]);
         }
         return r;
-#endif
     }
 
     // TODO: this should be improved by taking advantage of native operator support.
