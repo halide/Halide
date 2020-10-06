@@ -443,7 +443,6 @@ Expr long_div_round_to_zero(const Expr &num, const Expr &den,
     return simplify(common_subexpression_elimination(q));
 }
 
-
 Expr long_mod_round_to_zero(const Expr &a, const Expr &b,
                             const uint64_t *max_abs) {
     internal_assert(a.type() == b.type());

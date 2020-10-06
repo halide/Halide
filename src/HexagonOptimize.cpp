@@ -1088,7 +1088,7 @@ private:
             Expr a = op->args[0];
             Expr b = op->args[1];
             // Run bounds analysis to estimate the range of result.
-            Expr abs_result = op->type.is_int() ? abs(a/b) : a/b;
+            Expr abs_result = op->type.is_int() ? abs(a / b) : a / b;
             Expr extent_upper = find_constant_bound(abs_result, Direction::Upper, bounds);
             const uint64_t *upper_bound = as_const_uint(extent_upper);
             a = mutate(a);
