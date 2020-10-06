@@ -1194,6 +1194,13 @@ inline uint8x64_t convert_to_uint8x64_t_from_int16x64_t(const int16x64_t& src) {
   return IVP_PACKL2NX24(wide);
 }
 
+inline uint8x64_t convert_to_uint8x64_t_from_int32x64_t(const int32x64_t& src) {
+  printf("convert_to_uint8x64_t_from_int32x64_t\n");
+  xb_vec2Nx24 wide = IVP_CVT24UNX32L(src.native_vector[1], src.native_vector[0]);
+  IVP_CVT24UNX32H(wide, src.native_vector[3], src.native_vector[2]);
+  return IVP_PACKL2NX24(wide);
+}
+
 inline uint8x64_t convert_to_uint8x64_t_from_uint16x64_t(const uint16x64_t& src) {
   xb_vec2Nx24 wide = IVP_CVT24U2NX16(src.native_vector[1], src.native_vector[0]);
   return IVP_PACKL2NX24(wide);
@@ -1724,7 +1731,8 @@ void CodeGen_Xtensa::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
     string rhs;
     if (is_native_vector_type(op->type)) {
-        rhs = print_type(vector_type) + "(" + id_value + ")";
+        // TODO(vsknk): why it this extra cast to scalar is needed?
+        rhs = print_type(vector_type) + "((" + print_type(op->type.with_lanes(1)) + ")" + id_value + ")";
     } else if (op->lanes > 1) {
         rhs = print_type(vector_type) + "::broadcast(" + id_value + ")";
     } else {
