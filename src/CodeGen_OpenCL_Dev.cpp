@@ -898,7 +898,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                 stream << "image" << dims << "d_t ";
             } else {
                 stream << " " << get_memory_space(args[i].name) << " ";
-                if (!args[i].write) stream << "const ";
+                if (!args[i].write) {
+                    stream << "const ";
+                }
                 stream << print_type(args[i].type) << " *"
                        << "restrict ";
             }
@@ -922,7 +924,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                    << print_name(name);
         }
 
-        if (i < args.size() - 1) stream << ",\n";
+        if (i < args.size() - 1) {
+            stream << ",\n";
+        }
     }
 
     class FindShared : public IRVisitor {

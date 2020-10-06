@@ -59,7 +59,9 @@ class FindBufferUsage : public IRVisitor {
                 touched_as_texture = touched_as_texture || op->is_intrinsic(Call::image_load);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (i == 1) continue;
+                if (i == 1) {
+                    continue;
+                }
                 op->args[i].accept(this);
             }
         } else if (op->is_intrinsic(Call::image_store)) {
@@ -71,7 +73,9 @@ class FindBufferUsage : public IRVisitor {
                 touched_as_texture = touched_as_texture || op->is_intrinsic(Call::image_store);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (i == 1) continue;
+                if (i == 1) {
+                    continue;
+                }
                 op->args[i].accept(this);
             }
         } else if (op->is_intrinsic(Call::debug_to_file)) {
@@ -233,7 +237,9 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         for (DeviceAPI d : finder.devices_touched) {
             // TODO: looks dubious, but removing causes crashes in correctness_debug_to_file
             // with target=host-metal.
-            if (d == DeviceAPI::Host) continue;
+            if (d == DeviceAPI::Host) {
+                continue;
+            }
             internal_assert(touching_device == DeviceAPI::None)
                 << "Buffer " << buffer << " was touched on multiple devices within a single leaf Stmt!\n";
             touching_device = d;

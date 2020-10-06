@@ -579,7 +579,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
         if (args[i].is_buffer) {
             stream << ",\n";
             stream << " " << get_memory_space(args[i].name) << " ";
-            if (!args[i].write) stream << "const ";
+            if (!args[i].write) {
+                stream << "const ";
+            }
             stream << print_storage_type(args[i].type) << " *"
                    << print_name(args[i].name) << " [[ buffer(" << buffer_index++ << ") ]]";
             Allocation alloc;

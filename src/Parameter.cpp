@@ -161,7 +161,9 @@ Buffer<> Parameter::buffer() const {
 }
 
 const halide_buffer_t *Parameter::raw_buffer() const {
-    if (!is_buffer()) return nullptr;
+    if (!is_buffer()) {
+        return nullptr;
+    }
     return contents->buffer.raw_buffer();
 }
 

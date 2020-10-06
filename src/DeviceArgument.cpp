@@ -19,9 +19,15 @@ std::vector<DeviceArgument> HostClosure::arguments() {
     }
     for (const auto &b : buffers) {
         debug(2) << "buffer: " << b.first << " " << b.second.size;
-        if (b.second.read) debug(2) << " (read)";
-        if (b.second.write) debug(2) << " (write)";
-        if (b.second.memory_type == MemoryType::GPUTexture) debug(2) << " <texture>";
+        if (b.second.read) {
+            debug(2) << " (read)";
+        }
+        if (b.second.write) {
+            debug(2) << " (write)";
+        }
+        if (b.second.memory_type == MemoryType::GPUTexture) {
+            debug(2) << " <texture>";
+        }
         debug(2) << " dims=" << (int)b.second.dimensions;
         debug(2) << "\n";
 

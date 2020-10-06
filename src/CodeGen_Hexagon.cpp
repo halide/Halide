@@ -97,7 +97,9 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
 }
 bool is_dense_ramp(const Expr &x) {
     const Ramp *r = x.as<Ramp>();
-    if (!r) return false;
+    if (!r) {
+        return false;
+    }
 
     return is_one(r->stride);
 }
@@ -1570,7 +1572,9 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     if (min >= a_elements) {
         vector<int> shifted_indices(indices);
         for (int &i : shifted_indices) {
-            if (i != -1) i -= a_elements;
+            if (i != -1) {
+                i -= a_elements;
+            }
         }
         return shuffle_vectors(b, UndefValue::get(b->getType()), shifted_indices);
     }
@@ -2179,7 +2183,9 @@ string type_suffix(const Expr &a, const Expr &b, bool signed_variants = true) {
 }
 
 string type_suffix(const vector<Expr> &ops, bool signed_variants = true) {
-    if (ops.empty()) return "";
+    if (ops.empty()) {
+        return "";
+    }
     string suffix = type_suffix(ops.front(), signed_variants);
     for (size_t i = 1; i < ops.size(); i++) {
         suffix = suffix + type_suffix(ops[i], signed_variants);
@@ -2192,7 +2198,9 @@ string type_suffix(const vector<Expr> &ops, bool signed_variants = true) {
 Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
                                     vector<Expr> args, bool maybe) {
     llvm::Function *fn = module->getFunction(name);
-    if (maybe && !fn) return nullptr;
+    if (maybe && !fn) {
+        return nullptr;
+    }
     internal_assert(fn) << "Function '" << name << "' not found\n";
     if (get_vector_num_elements(fn->getReturnType()) * 2 <=
         result_type.lanes()) {
@@ -2211,7 +2219,9 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
 Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
                                     vector<Value *> args, bool maybe) {
     llvm::Function *fn = module->getFunction(name);
-    if (maybe && !fn) return nullptr;
+    if (maybe && !fn) {
+        return nullptr;
+    }
     internal_assert(fn) << "Function '" << name << "' not found\n";
     if (get_vector_num_elements(fn->getReturnType()) * 2 <=
         get_vector_num_elements(result_type)) {
@@ -2278,7 +2288,9 @@ void CodeGen_Hexagon::visit(const Mul *op) {
         value =
             call_intrin(op->type, "halide.hexagon.mul" + type_suffix(op->a, op->b),
                         {op->a, op->b}, true /*maybe*/);
-        if (value) return;
+        if (value) {
+            return;
+        }
 
         // Hexagon has mostly widening multiplies. Try to find a
         // widening multiply we can use.
@@ -2335,7 +2347,9 @@ void CodeGen_Hexagon::visit(const Call *op) {
         if (i != functions.end()) {
             string intrin = i->second.first + type_suffix(op->args, i->second.second);
             value = call_intrin(op->type, intrin, op->args, true /*maybe*/);
-            if (value) return;
+            if (value) {
+                return;
+            }
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right)) {
             internal_assert(op->args.size() == 2);
