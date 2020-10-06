@@ -439,7 +439,8 @@ private:
         if (op->type.is_vector()) {
             Expr div = op;
             static const std::vector<Pattern> divs = {
-                {"halide_xtensa_div_i32_i16", wild_i32x / wild_i32x, Pattern::NarrowOp1}
+                // TODO(vksnk): Before enabling it add a check for ExactLogOp
+                // {"halide_xtensa_div_i32_i16", wild_i32x / wild_i32x, Pattern::NarrowOp1}
             };
 
             Expr new_expr = apply_patterns(div, divs, this);
