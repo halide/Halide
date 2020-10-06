@@ -154,12 +154,16 @@ private:
     }
 
     void visit_expr(const Expr &e) {
-        if (!e.defined()) return;
+        if (!e.defined()) {
+            return;
+        }
         e.accept(this);
     }
 
     void visit_function(const Function &func) {
-        if (visited_functions.count(func.name())) return;
+        if (visited_functions.count(func.name())) {
+            return;
+        }
         visited_functions.insert(func.name());
 
         func.accept(this);
@@ -181,8 +185,10 @@ private:
     }
 
     void include_parameter(const Parameter &p) {
-        if (!p.defined()) return;
-        if (already_have(p)) return;
+        if (!p.defined() ||
+            already_have(p)) {
+            return;
+        }
 
         ArgumentEstimates argument_estimates = p.get_argument_estimates();
         if (!p.is_buffer()) {
@@ -220,8 +226,10 @@ private:
     }
 
     void include_buffer(const Buffer<> &b) {
-        if (!b.defined()) return;
-        if (already_have(b)) return;
+        if (!b.defined() ||
+            already_have(b)) {
+            return;
+        }
 
         InferredArgument a = {
             Argument(b.name(), Argument::InputBuffer, b.type(), b.dimensions(), ArgumentEstimates{}),

@@ -339,7 +339,9 @@ public:
             }
         }
 
-        if (!ok) fail(bad);
+        if (!ok) {
+            fail(bad);
+        }
 
         if (!stride.defined()) {
             // This allocation must only accessed via single-threaded stores.

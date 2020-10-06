@@ -185,7 +185,9 @@ private:
         Expr true_predicate = predicate;
 
         predicate = const_false();
-        if (false_case.defined()) false_case.accept(this);
+        if (false_case.defined()) {
+            false_case.accept(this);
+        }
         Expr false_predicate = predicate;
 
         bool old_varies = varies;

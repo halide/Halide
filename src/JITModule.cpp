@@ -304,7 +304,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     }
     ExecutionEngine *ee = engine_builder.create(tm);
 
-    if (!ee) std::cerr << error_string << "\n";
+    if (!ee) {
+        std::cerr << error_string << "\n";
+    }
     internal_assert(ee) << "Couldn't create execution engine\n";
 
     // Do any target-specific initialization
@@ -400,7 +402,9 @@ JITModule::Symbol JITModule::find_symbol_by_name(const std::string &name) const 
     }
     for (const JITModule &dep : jit_module->dependencies) {
         JITModule::Symbol s = dep.find_symbol_by_name(name);
-        if (s.address) return s;
+        if (s.address) {
+            return s;
+        }
     }
     return JITModule::Symbol();
 }

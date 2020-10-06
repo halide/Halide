@@ -529,7 +529,9 @@ private:
         stream << matched("(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
             print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
-            if (i < op->bounds.size() - 1) stream << ", ";
+            if (i < op->bounds.size() - 1) {
+                stream << ", ";
+            }
         }
         stream << matched(")");
         if (!is_one(op->condition)) {
@@ -554,7 +556,9 @@ private:
         stream << matched("(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
             print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
-            if (i < op->bounds.size() - 1) stream << ", ";
+            if (i < op->bounds.size() - 1) {
+                stream << ", ";
+            }
         }
         stream << matched(")");
         if (!is_one(op->condition)) {

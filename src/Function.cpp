@@ -216,14 +216,20 @@ struct CheckVars : public IRGraphVisitor {
 
     void visit(const Variable *var) override {
         // Is it a parameter?
-        if (var->param.defined()) return;
+        if (var->param.defined()) {
+            return;
+        }
 
         // Was it defined internally by a let expression?
-        if (defined_internally.contains(var->name)) return;
+        if (defined_internally.contains(var->name)) {
+            return;
+        }
 
         // Is it a pure argument?
         for (size_t i = 0; i < pure_args.size(); i++) {
-            if (var->name == pure_args[i]) return;
+            if (var->name == pure_args[i]) {
+                return;
+            }
         }
 
         // Is it in a reduction domain?

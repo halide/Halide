@@ -1525,7 +1525,9 @@ void solve_test() {
     // all the rounding rules. Check we didn't make a mistake with
     // brute force.
     for (int den = -3; den <= 3; den++) {
-        if (den == 0) continue;
+        if (den == 0) {
+            continue;
+        }
         for (int num = 5; num <= 10; num++) {
             Expr in[] = {x * den<num, x * den <= num, x * den == num, x * den != num, x * den >= num, x * den> num,
                          x / den<num, x / den <= num, x / den == num, x / den != num, x / den >= num, x / den> num};
