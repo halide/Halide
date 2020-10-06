@@ -455,35 +455,6 @@ void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
     #define __has_builtin(x) 0
 #endif
 
-// TODO: just use std::integer_sequence instead if we require >= C++14
-template<typename T, T... Ints>
-struct hl_int_sequence {
-    static constexpr size_t size() {
-        return sizeof...(Ints);
-    }
-};
-
-template<typename T>
-struct next_hl_int_sequence;
-
-template<typename T, T... Ints>
-struct next_hl_int_sequence<hl_int_sequence<T, Ints...>> {
-    using type = hl_int_sequence<T, Ints..., sizeof...(Ints)>;
-};
-
-template<typename T, T I, T N>
-struct make_hl_int_sequence_helper {
-    using type = typename next_hl_int_sequence<typename make_hl_int_sequence_helper<T, I + 1, N>::type>::type;
-};
-
-template<typename T, T N>
-struct make_hl_int_sequence_helper<T, N, N> {
-    using type = hl_int_sequence<T>;
-};
-
-template<typename T, T N>
-using make_hl_int_sequence = typename make_hl_int_sequence_helper<T, 0, N>::type;
-
 template <typename ElementType_, size_t Lanes_>
 class CppVector {
 public:
@@ -557,13 +528,17 @@ public:
 
     template<int N, int First, int Second, int... Rest>
     static void shuffle_impl(Vec &dst, const Vec &src) {
-        dst.elements[N] = src.elements[First < 0 ? 0 : First];
+        if (First >= 0) {
+            dst.elements[N] = src.elements[First];
+        }
         shuffle_impl<N + 1, Second, Rest...>(dst, src);
     }
 
     template<int N, int Last>
     static void shuffle_impl(Vec &dst, const Vec &src) {
-        dst.elements[N] = src.elements[Last < 0 ? 0 : Last];
+        if (Last >= 0) {
+            dst.elements[N] = src.elements[Last];
+        }
     }
 
     template<int... Indices>
@@ -1024,26 +999,36 @@ public:
     }
 
     template<int N, int First, int Second, int... Rest>
-    static void shuffle_impl(Vec &dst, const Vec &src) {
-        dst.native_vector[N] = src.native_vector[First < 0 ? 0 : First];
-        shuffle_impl<N + 1, Second, Rest...>(dst, src);
+    static void no_builtin_shuffle_impl(Vec &dst, const Vec &src) {
+        if (First >= 0) {
+            dst.native_vector[N] = src.native_vector[First];
+        }
+        no_builtin_shuffle_impl<N + 1, Second, Rest...>(dst, src);
     }
 
     template<int N, int Last>
-    static void shuffle_impl(Vec &dst, const Vec &src) {
-        dst.native_vector[N] = src.native_vector[Last < 0 ? 0 : Last];
+    static void no_builtin_shuffle_impl(Vec &dst, const Vec &src) {
+        if (Last >= 0) {
+            dst.native_vector[N] = src.native_vector[Last];
+        }
     }
 
     template<int... Indices>
     static Vec shuffle(const Vec &a) {
         static_assert(sizeof...(Indices) == Lanes, "shuffle() requires an exact match of lanes");
 #if __has_builtin(__builtin_shufflevector)
+        // Useful for debugging which Vector implementation is being selected
+        // #pragma message "__builtin_shufflevector"
         return Vec(from_native_vector, __builtin_shufflevector(a.native_vector, a.native_vector, Indices...));
 #elif __has_builtin(__builtin_shuffle)
+        // Useful for debugging which Vector implementation is being selected
+        // #pragma message "__builtin_shuffle"
         return Vec(from_native_vector, __builtin_shuffle(a.native_vector, {Indices...}));
 #else
+        // Useful for debugging which Vector implementation is being selected
+        // #pragma message "no_builtin_shuffle_impl"
         Vec r(empty);
-        shuffle_impl<0, Indices...>(r, a);
+        no_builtin_shuffle_impl<0, Indices...>(r, a);
         return r;
 #endif
     }
