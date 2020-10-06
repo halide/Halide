@@ -531,19 +531,17 @@ public:
         }
     }
 
-    template<int N, int First, int Second, int... Rest>
+    template<int N, int First, int... Rest>
     static void shuffle_impl(Vec &dst, const Vec &src) {
         if (First >= 0) {
             dst.elements[N] = src.elements[First];
         }
-        shuffle_impl<N + 1, Second, Rest...>(dst, src);
+        shuffle_impl<N + 1, Rest...>(dst, src);
     }
 
-    template<int N, int Last>
+    template<int N>
     static void shuffle_impl(Vec &dst, const Vec &src) {
-        if (Last >= 0) {
-            dst.elements[N] = src.elements[Last];
-        }
+        static_assert(N == Lanes, "impossible");
     }
 
     template<int... Indices>
@@ -1001,19 +999,17 @@ public:
         }
     }
 
-    template<int N, int First, int Second, int... Rest>
+    template<int N, int First, int... Rest>
     static void no_builtin_shuffle_impl(Vec &dst, const Vec &src) {
         if (First >= 0) {
             dst.native_vector[N] = src.native_vector[First];
         }
-        no_builtin_shuffle_impl<N + 1, Second, Rest...>(dst, src);
+        no_builtin_shuffle_impl<N + 1, Rest...>(dst, src);
     }
 
-    template<int N, int Last>
+    template<int N>
     static void no_builtin_shuffle_impl(Vec &dst, const Vec &src) {
-        if (Last >= 0) {
-            dst.native_vector[N] = src.native_vector[Last];
-        }
+        static_assert(N == Lanes, "impossible");
     }
 
     template<int... Indices>
