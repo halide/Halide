@@ -463,7 +463,9 @@ public:
 };
 
 Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monotonic> &scope) {
-    if (!e.defined()) return Monotonic::Unknown;
+    if (!e.defined()) {
+        return Monotonic::Unknown;
+    }
     MonotonicVisitor m(var, scope);
     e.accept(&m);
     return m.result;

@@ -296,7 +296,9 @@ $NAMESPACECLOSE$
     std::string clean_name = replace_all(name, "::", "_");
     std::string target_string;
     for (Target t : targets) {
-        if (!target_string.empty()) target_string += ",";
+        if (!target_string.empty()) {
+            target_string += ",";
+        }
         for (auto f : irrelevant_features) {
             t = t.without_feature(f);
         }
@@ -1027,7 +1029,9 @@ void compile_multitarget(const std::string &fn_name,
                     user_assert(cur_features.count() > 0) << "Multitarget subtargets must be distinct";
                     std::ostringstream condition;
                     for (int i = 0; i < Target::FeatureEnd; ++i) {
-                        if (!cur_features[i]) continue;
+                        if (!cur_features[i]) {
+                            continue;
+                        }
                         if (!condition.str().empty()) {
                             condition << " &&\n    ";
                         }

@@ -19,8 +19,12 @@ std::vector<DeviceArgument> HostClosure::arguments() {
     }
     for (const auto &b : buffers) {
         debug(2) << "buffer: " << b.first << " " << b.second.size;
-        if (b.second.read) debug(2) << " (read)";
-        if (b.second.write) debug(2) << " (write)";
+        if (b.second.read) {
+            debug(2) << " (read)";
+        }
+        if (b.second.write) {
+            debug(2) << " (write)";
+        }
         debug(2) << "\n";
 
         DeviceArgument arg(b.first, true, b.second.type, b.second.dimensions, b.second.size);

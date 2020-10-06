@@ -360,7 +360,9 @@ void CodeGen_X86::visit(const Cast *op) {
                 // Try to narrow the matches to the target type.
                 for (size_t i = 0; i < matches.size(); i++) {
                     matches[i] = lossless_cast(op->type, matches[i]);
-                    if (!matches[i].defined()) match = false;
+                    if (!matches[i].defined()) {
+                        match = false;
+                    }
                 }
             }
             if (match) {
@@ -461,15 +463,23 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
 }
 
 string CodeGen_X86::mcpu() const {
-    if (target.has_feature(Target::AVX512_Cannonlake)) return "cannonlake";
-    if (target.has_feature(Target::AVX512_Skylake)) return "skylake-avx512";
-    if (target.has_feature(Target::AVX512_KNL)) return "knl";
-    if (target.has_feature(Target::AVX2)) return "haswell";
-    if (target.has_feature(Target::AVX)) return "corei7-avx";
-    // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
-    if (target.has_feature(Target::SSE41)) return "penryn";
-    // Default should not include SSSE3, hence "k8" rather than "core2"
-    return "k8";
+    if (target.has_feature(Target::AVX512_Cannonlake)) {
+        return "cannonlake";
+    } else if (target.has_feature(Target::AVX512_Skylake)) {
+        return "skylake-avx512";
+    } else if (target.has_feature(Target::AVX512_KNL)) {
+        return "knl";
+    } else if (target.has_feature(Target::AVX2)) {
+        return "haswell";
+    } else if (target.has_feature(Target::AVX)) {
+        return "corei7-avx";
+    } else if (target.has_feature(Target::SSE41)) {
+        // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
+        return "penryn";
+    } else {
+        // Default should not include SSSE3, hence "k8" rather than "core2"
+        return "k8";
+    }
 }
 
 string CodeGen_X86::mattrs() const {

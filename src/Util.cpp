@@ -99,7 +99,9 @@ std::string get_env_variable(char const *env_var_name) {
     return lvl;
 #else
     char *lvl = getenv(env_var_name);
-    if (lvl) return std::string(lvl);
+    if (lvl) {
+        return std::string(lvl);
+    }
 #endif
 
     return "";
@@ -160,7 +162,9 @@ int unique_count(size_t h) {
 // construction.
 
 string unique_name(char prefix) {
-    if (prefix == '$') prefix = '_';
+    if (prefix == '$') {
+        prefix = '_';
+    }
     return prefix + std::to_string(unique_count((size_t)(prefix)));
 }
 
@@ -210,18 +214,26 @@ string unique_name(const std::string &prefix) {
 }
 
 bool starts_with(const string &str, const string &prefix) {
-    if (str.size() < prefix.size()) return false;
+    if (str.size() < prefix.size()) {
+        return false;
+    }
     for (size_t i = 0; i < prefix.size(); i++) {
-        if (str[i] != prefix[i]) return false;
+        if (str[i] != prefix[i]) {
+            return false;
+        }
     }
     return true;
 }
 
 bool ends_with(const string &str, const string &suffix) {
-    if (str.size() < suffix.size()) return false;
+    if (str.size() < suffix.size()) {
+        return false;
+    }
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off + i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) {
+            return false;
+        }
     }
     return true;
 }

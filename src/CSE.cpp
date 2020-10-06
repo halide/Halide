@@ -272,7 +272,9 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     Expr e = e_in;
 
     // Early-out for trivial cases.
-    if (is_const(e) || e.as<Variable>()) return e;
+    if (is_const(e) || e.as<Variable>()) {
+        return e;
+    }
 
     debug(4) << "\n\n\nInput to CSE " << e << "\n";
 

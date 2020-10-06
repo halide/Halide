@@ -469,7 +469,9 @@ public:
             // addresses of their children-of-children might follow a
             // dangling pointer.
             if (parent.type->type == TypeInfo::Pointer ||
-                parent.type->type == TypeInfo::Reference) continue;
+                parent.type->type == TypeInfo::Reference) {
+                continue;
+            }
 
             for (size_t j = 0; j < parent.type->members.size(); j++) {
                 const LocalVariable &member_spec = parent.type->members[j];
@@ -550,7 +552,9 @@ public:
         for (size_t i = 0; i < obj.members.size(); i++) {
             TypeInfo *t = obj.members[i].type;
 
-            if (!t) continue;
+            if (!t) {
+                continue;
+            }
 
             debug(5) << "Comparing to member " << obj.members[i].name
                      << " at address " << std::hex << obj.members[i].addr << std::dec
@@ -1016,7 +1020,9 @@ private:
         while (1) {
             EntryFormat fmt;
             fmt.code = e.getULEB128(&off);
-            if (!fmt.code) break;
+            if (!fmt.code) {
+                break;
+            }
             fmt.tag = e.getULEB128(&off);
             fmt.has_children = (e.getU8(&off) != 0);
             // Get the attributes
@@ -1028,7 +1034,9 @@ private:
             while (1) {
                 uint64_t name = e.getULEB128(&off);
                 uint64_t form = e.getULEB128(&off);
-                if (!name && !form) break;
+                if (!name && !form) {
+                    break;
+                }
                 //printf(" name = %lu, form = %lu\n", name, form);
 
                 FieldFormat f_fmt(name, form);
@@ -1249,8 +1257,8 @@ private:
                     {
                         val = 0;
                         payload = (const uint8_t *)(debug_info.data() + off);
-                        while (e.getU8(&off))
-                            ;
+                        while (e.getU8(&off)) {
+                        }
                         break;
                     }
                     case 9:  // block (uleb128 length followed by payload)
@@ -2245,8 +2253,10 @@ bool dump_stack_frame() {
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
-    if (!debug_sections) return "";
-    if (!debug_sections->working) return "";
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return "";
+    }
     std::string name = debug_sections->get_stack_variable_name(var, expected_type);
     if (name.empty()) {
         // Maybe it's a member of a heap object.
@@ -2261,21 +2271,27 @@ std::string get_variable_name(const void *var, const std::string &expected_type)
 }
 
 std::string get_source_location() {
-    if (!debug_sections) return "";
-    if (!debug_sections->working) return "";
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return "";
+    }
     return debug_sections->get_source_location();
 }
 
 void register_heap_object(const void *obj, size_t size, const void *helper) {
-    if (!debug_sections) return;
-    if (!debug_sections->working) return;
-    if (!helper) return;
+    if (!debug_sections ||
+        !debug_sections->working ||
+        !helper) {
+        return;
+    }
     debug_sections->register_heap_object(obj, size, helper);
 }
 
 void deregister_heap_object(const void *obj, size_t size) {
-    if (!debug_sections) return;
-    if (!debug_sections->working) return;
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return;
+    }
     debug_sections->deregister_heap_object(obj, size);
 }
 

@@ -93,8 +93,12 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
         // Code downstream can use min/max in calculated-but-unused arithmetic
         // that can lead to UB (and thus, flaky failures under ASAN/UBSAN)
         // if we leave them set to INT64_MAX/INT64_MIN; normalize to zero to avoid this.
-        if (!bounds->min_defined) bounds->min = 0;
-        if (!bounds->max_defined) bounds->max = 0;
+        if (!bounds->min_defined) {
+            bounds->min = 0;
+        }
+        if (!bounds->max_defined) {
+            bounds->max = 0;
+        }
         bounds->alignment = a_bounds.alignment / b_bounds.alignment;
         bounds->trim_bounds_using_alignment();
     }

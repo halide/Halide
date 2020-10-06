@@ -638,7 +638,9 @@ class VectorSubs : public IRMutator {
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
             Expr new_arg = mutate(old_arg);
-            if (!new_arg.same_as(old_arg)) changed = true;
+            if (!new_arg.same_as(old_arg)) {
+                changed = true;
+            }
             new_args[i] = new_arg;
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);
         }
@@ -1080,7 +1082,9 @@ class VectorSubs : public IRMutator {
 
             // f[x] = f[x] <op> y
             const Store *store = op->body.as<Store>();
-            if (!store) break;
+            if (!store) {
+                break;
+            }
 
             VectorReduce::Operator reduce_op = VectorReduce::Add;
             Expr a, b;
