@@ -1081,17 +1081,22 @@ private:
             // that they generate.
             internal_assert(op->args.size() == 3);
             return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
-        } else if (op->is_intrinsic(Call::div_round_to_zero) &&
+        } else if ((op->is_intrinsic(Call::div_round_to_zero) ||
+                    op->is_intrinsic(Call::mod_round_to_zero)) &&
                    !op->type.is_float() && op->type.is_vector()) {
             internal_assert(op->args.size() == 2);
             Expr a = op->args[0];
             Expr b = op->args[1];
             // Run bounds analysis to estimate the range of result.
-            Expr extent_upper = find_constant_bound(abs(a / b), Direction::Upper, bounds);
+            Expr abs_result = op->type.is_int() ? abs(a/b) : a/b;
+            Expr extent_upper = find_constant_bound(abs_result, Direction::Upper, bounds);
             const uint64_t *upper_bound = as_const_uint(extent_upper);
             a = mutate(a);
             b = mutate(b);
-            return long_div(a, b, upper_bound);
+            if (op->is_intrinsic(Call::div_round_to_zero)) {
+                return long_div_round_to_zero(a, b, upper_bound);
+            }
+            return long_mod_round_to_zero(a, b, upper_bound);
         } else {
             return IRMutator::visit(op);
         }
@@ -1116,6 +1121,13 @@ private:
     Expr visit(const Div *op) override {
         if (!op->type.is_float() && op->type.is_vector()) {
             return mutate(lower_int_uint_div(op->a, op->b));
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Mod *op) override {
+        if (!op->type.is_float() && op->type.is_vector()) {
+            return mutate(lower_int_uint_mod(op->a, op->b));
         }
         return IRMutator::visit(op);
     }

@@ -389,7 +389,8 @@ Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
     }
 }
 
-Expr unsigned_long_div(Expr num, const Expr &den, const uint64_t *upper_bound) {
+Expr unsigned_long_div_round_to_zero(Expr num, const Expr &den,
+                                     const uint64_t *upper_bound) {
     internal_assert(num.type() == den.type());
     internal_assert(num.type().is_uint());
     Type ty = num.type();
@@ -425,12 +426,14 @@ Expr unsigned_long_div(Expr num, const Expr &den, const uint64_t *upper_bound) {
     return common_subexpression_elimination(q);
 }
 
-Expr long_div(const Expr &num, const Expr &den, const uint64_t *max_abs) {
+Expr long_div_round_to_zero(const Expr &num, const Expr &den,
+                            const uint64_t *max_abs) {
     debug(1) << "Using long div: (num: " << num << "); (den: " << den << ")\n";
     internal_assert(num.type() == den.type());
-    Expr num_pos = abs(num);
-    Expr den_pos = abs(den);
-    Expr q = cast(num.type(), unsigned_long_div(num_pos, den_pos, max_abs));
+    Expr abs_num = (num.type().is_int()) ? abs(num) : num;
+    Expr abs_den = (den.type().is_int()) ? abs(den) : den;
+    Expr q = cast(num.type(), unsigned_long_div_round_to_zero(abs_num, abs_den,
+                                                              max_abs));
     // Correct the signs for quotient for signed integer division.
     if (num.type().is_int()) {
         Expr num_neg = num >> make_const(num.type(), (num.type().bits() - 1));
@@ -438,6 +441,15 @@ Expr long_div(const Expr &num, const Expr &den, const uint64_t *max_abs) {
         q = q * ((num_neg ^ den_neg) | 1);
     }
     return simplify(common_subexpression_elimination(q));
+}
+
+
+Expr long_mod_round_to_zero(const Expr &a, const Expr &b,
+                            const uint64_t *max_abs) {
+    internal_assert(a.type() == b.type());
+    // Using (a/b)*b + a%b = a
+    Expr result = (a - b * long_div_round_to_zero(a, b, max_abs));
+    return result;
 }
 
 Expr lower_euclidean_div(Expr a, Expr b) {
