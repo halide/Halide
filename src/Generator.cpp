@@ -56,11 +56,19 @@ bool is_alnum(char c) {
 // -- initial _ is forbidden (rather than merely "reserved")
 // -- two underscores in a row is also forbidden
 bool is_valid_name(const std::string &n) {
-    if (n.empty()) return false;
-    if (!is_alpha(n[0])) return false;
+    if (n.empty()) {
+        return false;
+    }
+    if (!is_alpha(n[0])) {
+        return false;
+    }
     for (size_t i = 1; i < n.size(); ++i) {
-        if (!is_alnum(n[i])) return false;
-        if (n[i] == '_' && n[i - 1] == '_') return false;
+        if (!is_alnum(n[i])) {
+            return false;
+        }
+        if (n[i] == '_' && n[i - 1] == '_') {
+            return false;
+        }
     }
     return true;
 }
@@ -233,8 +241,12 @@ private:
             // These are always propagated specially.
             if (p->name == "target" ||
                 p->name == "auto_schedule" ||
-                p->name == "machine_params") continue;
-            if (p->is_synthetic_param()) continue;
+                p->name == "machine_params") {
+                continue;
+            }
+            if (p->is_synthetic_param()) {
+                continue;
+            }
             out.push_back(p);
         }
         return out;
@@ -435,7 +447,9 @@ void StubEmitter::emit() {
 
     for (auto *p : generator_params) {
         std::string decl = p->get_type_decls();
-        if (decl.empty()) continue;
+        if (decl.empty()) {
+            continue;
+        }
         stream << decl << "\n";
     }
 
@@ -950,7 +964,9 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         std::string generator_args_string;
         std::string sep;
         for (const auto &it : generator_args) {
-            if (it.first == "target") continue;
+            if (it.first == "target") {
+                continue;
+            }
             std::string quote = it.second.string_value.find(" ") != std::string::npos ? "\\\"" : "";
             generator_args_string += sep + it.first + "=" + quote + it.second.string_value + quote;
             sep = " ";
@@ -1047,16 +1063,20 @@ GeneratorParamBase::~GeneratorParamBase() {
 
 void GeneratorParamBase::check_value_readable() const {
     // These are always readable.
-    if (name == "target") return;
-    if (name == "auto_schedule") return;
-    if (name == "machine_params") return;
+    if (name == "target" ||
+        name == "auto_schedule" ||
+        name == "machine_params") {
+        return;
+    }
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
         << "The GeneratorParam \"" << name << "\" cannot be read before build() or configure()/generate() is called.\n";
 }
 
 void GeneratorParamBase::check_value_writable() const {
     // Allow writing when no Generator is set, to avoid having to special-case ctor initing code
-    if (!generator) return;
+    if (!generator) {
+        return;
+    }
     user_assert(generator->phase < GeneratorBase::GenerateCalled) << "The GeneratorParam \"" << name << "\" cannot be written after build() or generate() is called.\n";
 }
 
@@ -1818,7 +1838,9 @@ void GIOBase::check_matching_types(const std::vector<Type> &t) const {
 
 void GIOBase::check_gio_access() const {
     // // Allow reading when no Generator is set, to avoid having to special-case ctor initing code
-    if (!generator) return;
+    if (!generator) {
+        return;
+    }
     user_assert(generator->phase > GeneratorBase::InputsSet)
         << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before build() or generate() is called.\n";
 }

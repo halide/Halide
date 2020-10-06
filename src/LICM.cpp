@@ -63,14 +63,24 @@ class LiftLoopInvariants : public IRMutator {
     }
 
     bool should_lift(const Expr &e) {
-        if (!can_lift(e)) return false;
-        if (e.as<Variable>()) return false;
-        if (e.as<Broadcast>()) return false;
-        if (is_const(e)) return false;
+        if (!can_lift(e)) {
+            return false;
+        }
+        if (e.as<Variable>()) {
+            return false;
+        }
+        if (e.as<Broadcast>()) {
+            return false;
+        }
+        if (is_const(e)) {
+            return false;
+        }
         // bool vectors are buggy enough in LLVM that lifting them is a bad idea.
         // (We just skip all vectors on the principle that we don't want them
         // on the stack anyway.)
-        if (e.type().is_vector()) return false;
+        if (e.type().is_vector()) {
+            return false;
+        }
         if (const Cast *cast = e.as<Cast>()) {
             if (cast->type.bytes() > cast->value.type().bytes()) {
                 // Don't lift widening casts.
@@ -291,7 +301,9 @@ class LICM : public IRMutator {
             do {
                 converged = true;
                 for (size_t i = 0; i < exprs.size(); i++) {
-                    if (!exprs[i].defined()) continue;
+                    if (!exprs[i].defined()) {
+                        continue;
+                    }
                     Expr e = call->args[i];
                     if (cost(e, vars.vars) <= 1) {
                         // Just subs it back in - computing it is as cheap

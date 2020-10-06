@@ -1142,9 +1142,13 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
             vector<Constant *> buffer_estimates_array_entries;
             for (const auto &be : argument_estimates.buffer_estimates) {
                 Expr min = be.min;
-                if (min.defined()) min = cast<int64_t>(min);
+                if (min.defined()) {
+                    min = cast<int64_t>(min);
+                }
                 Expr extent = be.extent;
-                if (extent.defined()) extent = cast<int64_t>(extent);
+                if (extent.defined()) {
+                    extent = cast<int64_t>(extent);
+                }
                 buffer_estimates_array_entries.push_back(embed_constant_expr(min, i64_t));
                 buffer_estimates_array_entries.push_back(embed_constant_expr(extent, i64_t));
             }
@@ -1349,8 +1353,9 @@ void CodeGen_LLVM::optimize_module() {
     mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
     mpm.run(*module, mam);
 
-    if (llvm::verifyModule(*module, &errs()))
+    if (llvm::verifyModule(*module, &errs())) {
         report_fatal_error("Transformation resulted in an invalid module\n");
+    }
 
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
@@ -2955,7 +2960,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             buf_size = ((buf_size + 15) / 16) * 16;
 
             // Clamp to at most 8k.
-            if (buf_size > 8 * 1024) buf_size = 8 * 1024;
+            buf_size = std::min(8 * 1024, buf_size);
 
             // Allocate a stack array to hold the message.
             llvm::Value *buf = create_alloca_at_entry(i8_t, buf_size);
@@ -3533,7 +3538,9 @@ void CodeGen_LLVM::create_assertion(Value *cond, const Expr &message, llvm::Valu
     internal_assert(!message.defined() || message.type() == Int(32))
         << "Assertion result is not an int: " << message;
 
-    if (target.has_feature(Target::NoAsserts)) return;
+    if (target.has_feature(Target::NoAsserts)) {
+        return;
+    }
 
     // If the condition is a vector, fold it down to a scalar
     VectorType *vt = dyn_cast<VectorType>(cond->getType());
@@ -3557,7 +3564,9 @@ void CodeGen_LLVM::create_assertion(Value *cond, const Expr &message, llvm::Valu
     builder->SetInsertPoint(assert_fails_bb);
 
     // Call the error handler
-    if (!error_code) error_code = codegen(message);
+    if (!error_code) {
+        error_code = codegen(message);
+    }
 
     return_with_error_code(error_code);
 
@@ -4699,7 +4708,9 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
 }
 
 Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
-    if (v.size() == 1) return v[0];
+    if (v.size() == 1) {
+        return v[0];
+    }
 
     internal_assert(!v.empty());
 
@@ -4790,8 +4801,9 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
     // order.
     vector<int> sizes_to_try;
     int l = 1;
-    while (l < lanes)
+    while (l < lanes) {
         l *= 2;
+    }
     for (int i = l; i > 1; i /= 2) {
         sizes_to_try.push_back(i);
     }

@@ -764,7 +764,9 @@ class IsUsedInStmt : public IRVisitor {
 
     void visit(const Call *op) override {
         IRVisitor::visit(op);
-        if (op->name == func) result = true;
+        if (op->name == func) {
+            result = true;
+        }
     }
 
     // A reference to the function's buffers counts as a use

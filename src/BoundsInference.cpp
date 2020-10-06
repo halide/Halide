@@ -808,7 +808,9 @@ public:
         // this is straight-forward.
         for (size_t i = 0; i < f.size(); i++) {
 
-            if (inlined[i]) continue;
+            if (inlined[i]) {
+                continue;
+            }
 
             Stage s;
             s.func = f[i];
@@ -981,7 +983,9 @@ public:
             }
             for (size_t i = 0; i < stages.size(); i++) {
                 Stage &s = stages[i];
-                if (!s.func.same_as(output)) continue;
+                if (!s.func.same_as(output)) {
+                    continue;
+                }
                 s.bounds[{s.name, s.stage}] = output_box;
             }
         }
