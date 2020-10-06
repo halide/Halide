@@ -307,7 +307,9 @@ std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &fil
     std::string error_string;
     std::error_code err;
     std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, err, llvm::sys::fs::F_None));
-    if (err) error_string = err.message();
+    if (err) {
+        error_string = err.message();
+    }
     internal_assert(error_string.empty())
         << "Error opening output " << filename << ": " << error_string << "\n";
 

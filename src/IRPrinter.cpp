@@ -856,7 +856,9 @@ void IRPrinter::visit(const Realize *op) {
         stream << ", ";
         print_no_parens(op->bounds[i].extent);
         stream << "]";
-        if (i < op->bounds.size() - 1) stream << ", ";
+        if (i < op->bounds.size() - 1) {
+            stream << ", ";
+        }
     }
     stream << ")";
     if (op->memory_type != MemoryType::Auto) {
@@ -892,7 +894,9 @@ void IRPrinter::visit(const Prefetch *op) {
         stream << ", ";
         print_no_parens(op->bounds[i].extent);
         stream << "]";
-        if (i < op->bounds.size() - 1) stream << ", ";
+        if (i < op->bounds.size() - 1) {
+            stream << ", ";
+        }
     }
     stream << ")\n";
     if (has_cond) {

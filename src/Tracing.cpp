@@ -166,7 +166,9 @@ private:
         internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) {
+            return stmt;
+        }
         Function f = iter->second;
         internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inlined());
 
@@ -224,7 +226,9 @@ private:
         internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) {
+            return stmt;
+        }
         Function f = iter->second;
         if (f.is_tracing_realizations() || trace_all_realizations) {
             add_trace_tags(op->name, f.get_trace_tags());
@@ -268,7 +272,9 @@ private:
         op = stmt.as<ProducerConsumer>();
         internal_assert(op);
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) {
+            return stmt;
+        }
         Function f = iter->second;
         if (f.is_tracing_realizations() || trace_all_realizations) {
             // Throw a tracing call around each pipeline event
