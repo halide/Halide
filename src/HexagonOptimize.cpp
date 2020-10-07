@@ -1093,10 +1093,11 @@ private:
             const uint64_t *upper_bound = as_const_uint(extent_upper);
             a = mutate(a);
             b = mutate(b);
+            std::pair<Expr, Expr> div_mod = long_div_mod_round_to_zero(a, b, upper_bound);
             if (op->is_intrinsic(Call::div_round_to_zero)) {
-                return long_div_round_to_zero(a, b, upper_bound);
+                return div_mod.first;
             }
-            return long_mod_round_to_zero(a, b, upper_bound);
+            return div_mod.second;
         } else {
             return IRMutator::visit(op);
         }
