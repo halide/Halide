@@ -285,10 +285,16 @@ public:
         CppVectorType one_to_n = IVP_SEQN_2X32();
         CppVectorType base_w = base;
         CppVectorType stride_w = stride;
-        CppVectorType lanes_2 = Lanes / 2;
+        CppVectorType lanes_2 = Lanes >> 1;
         return Vec(from_native_vector,
                     base_w + IVP_PACKLN_2X64W(one_to_n * stride_w),
                     base_w + IVP_PACKLN_2X64W((lanes_2 + one_to_n) * stride_w));
+    }
+
+    static Vec dense_ramp(const ElementType &base) {
+        const CppVectorType base_w = CppVectorType(base) + IVP_SEQN_2X32();
+        const CppVectorType lanes_2 = Lanes >> 1;
+        return Vec(from_native_vector, base_w, base_w + lanes_2);
     }
 
     friend Vec operator+(const Vec &a, const Vec &b) {
@@ -955,11 +961,10 @@ HALIDE_ALWAYS_INLINE uint32x16_t uint32x16_t_shift_left(const uint32x16_t &a, co
 HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_sat_add_i32(const int32x16_t& a,
                                                                       const int32x16_t& b) {
   // I am not 100% about it.
-  xb_vecN_2x32v zero = 0;
   xb_vecN_2x32v one = 1;
   xb_vecN_2x64w l0 = a * one;
   IVP_MULAN_2X32(l0, b, one);
-  return IVP_PACKVN_2X64W(l0, zero);
+  return IVP_PACKVRN_2X64W(l0, 0);
 }
 
 HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_sat_add_i32(const int32x32_t& a,
@@ -1722,10 +1727,18 @@ void CodeGen_Xtensa::visit(const Ramp *op) {
     Type vector_type = op->type.with_lanes(op->lanes);
     string id_base = print_expr(op->base);
     string id_stride = print_expr(op->stride);
-    if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
-        print_assignment(vector_type, "/* ramp */ int32x16_t(" + id_base + ") + IVP_PACKLN_2X64W(IVP_SEQN_2X32() * int32x16_t(" + id_stride + "))");
+    if (is_one(op->stride)) {
+        if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
+            print_assignment(vector_type, "/* ramp */ int32x16_t(" + id_base + ") + IVP_SEQN_2X32()");
+        } else {
+            print_assignment(vector_type, print_type(vector_type) + "::dense_ramp(" + id_base + ")");
+        }
     } else {
-        print_assignment(vector_type, print_type(vector_type) + "::ramp(" + id_base + ", " + id_stride + ")");
+        if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
+            print_assignment(vector_type, "/* ramp */ int32x16_t(" + id_base + ") + IVP_PACKLN_2X64W(IVP_SEQN_2X32() * int32x16_t(" + id_stride + "))");
+        } else {
+            print_assignment(vector_type, print_type(vector_type) + "::ramp(" + id_base + ", " + id_stride + ")");
+        }
     }
 }
 
