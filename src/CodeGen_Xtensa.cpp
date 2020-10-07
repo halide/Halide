@@ -675,8 +675,11 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_load(const void *
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t int16x32_t_load(const void *base, int32_t offset) {
     int16x32_t r;
+    // xb_vec2Nx8* ptr8 = (xb_vec2Nx8*)((const int16_t*)base + offset);
     xb_vecNx16* ptr = (xb_vecNx16*)((const int16_t*)base + offset);
     IVP_L2UNX16_XP(r, ptr, 0);
+    // valign align = IVP_LA_PP(ptr8);
+    // IVP_LANX16_IP(r, align, ptr);
     return r;
 }
 
@@ -1033,7 +1036,7 @@ HALIDE_ALWAYS_INLINE int64x16_t halide_xtensa_widen_mul_i64(const int32x16_t& a,
 }
 
 HALIDE_ALWAYS_INLINE int64x16_t halide_xtensa_widen_mul_add_i64(const int32x16_t& a, const int32x16_t& b, const int32x16_t& c) {
-  xb_vecN_2x64w r = c * 1;
+  xb_vecN_2x64w r = c * int32x16_t(1);
   IVP_MULAN_2X32(r, a, b);
   return r;
 }
@@ -1233,9 +1236,9 @@ inline int32x32_t convert_to_int32x32_t_from_int16x32_t(const int16x32_t& src) {
 }
 
 inline int32x32_t convert_to_int32x32_t_from_uint16x32_t(const uint16x32_t& src) {
-    xb_vec2Nx24 wide = IVP_CVT24U2NX16(0, src);
-    return int32x32_t(int32x32_t::from_native_vector,
-                      IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
+  return int32x32_t(int32x32_t::from_native_vector,
+                    IVP_MOVN_2X32_FROMNX16(IVP_SELNX16I(uint16x32_t(0), src, IVP_SELI_16B_INTERLEAVE_1_LO)),
+                    IVP_MOVN_2X32_FROMNX16(IVP_SELNX16I(uint16x32_t(0), src, IVP_SELI_16B_INTERLEAVE_1_HI)));
 }
 
 inline int32x32_t convert_to_int32x32_t_from_uint32x32_t(const uint32x32_t& src) {
@@ -1323,13 +1326,17 @@ HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_concat_from_native(const uint32x1
 }
 
 inline int32x16_t halide_xtensa_convert_i16_low_i32(const int16x32_t& src, int native_lanes, int total_lines) {
-    xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src);
-    return IVP_CVT32S2NX24LL(wide);
+    const int32x16_t m = int32x16_t(1U << (16 - 1));
+    int32x16_t x = IVP_MOVN_2X32_FROMNX16(IVP_SELNX16I(uint16x32_t(0), src, IVP_SELI_16B_INTERLEAVE_1_LO));
+    int32x16_t r = (x ^ m) - m;
+    return r;
 }
 
 inline int32x16_t halide_xtensa_convert_i16_high_i32(const int16x32_t& src, int native_lanes, int total_lines) {
-    xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src);
-    return IVP_CVT32S2NX24LH(wide);
+    const int32x16_t m = int32x16_t(1U << (16 - 1));
+    int32x16_t x = IVP_MOVN_2X32_FROMNX16(IVP_SELNX16I(uint16x32_t(0), src, IVP_SELI_16B_INTERLEAVE_1_HI));
+    int32x16_t r = (x ^ m) - m;
+    return r;
 }
 
 inline uint16x32_t halide_xtensa_convert_i32_u16(const int32x16_t& src0, const int32x16_t& src1) {
@@ -1386,23 +1393,19 @@ inline int16x32_t halide_xtensa_convert_u8_high_i16(const uint8x64_t& src, int n
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_concat_i32_to_i16(const int32x16_t& a, const int32x16_t& b) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(b, a);
-  return IVP_PACKLNX48(wide);
+  return IVP_SELNX16I(IVP_MOVNX16_FROMN_2X32(b), IVP_MOVNX16_FROMN_2X32(a), IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0);
 }
 
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_convert_concat_i32_to_u16(const int32x16_t& a, const int32x16_t& b) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(b, a);
-  return IVP_PACKLNX48(wide);
+  return IVP_SELNX16UI(IVP_MOVNX16_FROMN_2X32(b), IVP_MOVNX16_FROMN_2X32(a), IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_concat_u32_to_i16(const uint32x16_t& a, const uint32x16_t& b) {
-  xb_vecNx48 wide = IVP_CVT48UNX32(b, a);
-  return IVP_PACKLNX48(wide);
+  return IVP_SELNX16I(IVP_MOVNX16_FROMN_2X32U(b), IVP_MOVNX16_FROMN_2X32U(a), IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0);
 }
 
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_convert_concat_u32_to_u16(const uint32x16_t& a, const uint32x16_t& b) {
-  xb_vecNx48 wide = IVP_CVT48UNX32(b, a);
-  return IVP_PACKLNX48(wide);
+  return IVP_SELNX16I(IVP_MOVNX16_FROMN_2X32(b), IVP_MOVNX16_FROMN_2X32(a), IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0);
 }
 
 inline uint32x16_t halide_xtensa_convert_i48_low_u32(const int48x32_t& src, int native_lanes, int total_lines) {
