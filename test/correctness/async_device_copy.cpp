@@ -45,23 +45,23 @@ int main(int argc, char **argv) {
         if (i == 0) {
             // Synchronously GPU -> CPU
             avg.compute_root().update().reorder(x, y, r).vectorize(x, 8);
-            frames.store_root().compute_at(frames.in(), Var::outermost()).gpu_tile(x, y, xo, yo, x, y, 32, 32);
+            frames.store_root().compute_at(frames.in(), Var::outermost()).gpu_tile(x, y, xo, yo, x, y, 16, 16);
             frames.in().store_root().compute_at(avg, r).copy_to_host();
         } else if (i == 1) {
             // Asynchronously GPU -> CPU, via a double-buffer
             avg.compute_root().update().reorder(x, y, r).vectorize(x, 8);
-            frames.store_root().compute_at(frames.in(), Var::outermost()).gpu_tile(x, y, xo, yo, x, y, 32, 32);
+            frames.store_root().compute_at(frames.in(), Var::outermost()).gpu_tile(x, y, xo, yo, x, y, 16, 16);
             frames.in().store_root().compute_at(avg, r).copy_to_host().fold_storage(t, 2).async();
         } else if (i == 2) {
             // Synchronously CPU -> GPU
-            avg.compute_root().gpu_tile(x, y, xo, yo, x, y, 32, 32).update().reorder(x, y, r).gpu_tile(x, y, xo, yo, x, y, 32, 32);
+            avg.compute_root().gpu_tile(x, y, xo, yo, x, y, 16, 16).update().reorder(x, y, r).gpu_tile(x, y, xo, yo, x, y, 16, 16);
 
             frames.store_root().compute_at(avg, r).vectorize(x, 8).fold_storage(t, 2).parallel(y);
 
             frames.in().store_root().compute_at(avg, r).copy_to_device();
         } else if (i == 3) {
             // Asynchronously CPU -> GPU, via a double-buffer
-            avg.compute_root().gpu_tile(x, y, xo, yo, x, y, 32, 32).update().reorder(x, y, r).gpu_tile(x, y, xo, yo, x, y, 32, 32);
+            avg.compute_root().gpu_tile(x, y, xo, yo, x, y, 16, 16).update().reorder(x, y, r).gpu_tile(x, y, xo, yo, x, y, 16, 16);
 
             frames.store_root().compute_at(avg, r).vectorize(x, 8).fold_storage(t, 2).async().parallel(y);
 
