@@ -68,6 +68,7 @@ const string headers = R"INLINE_CODE(
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <type_traits>
 )INLINE_CODE";
 
 // We now add definitions of things in the runtime which are
@@ -441,840 +442,736 @@ void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
     #define __has_builtin(x) 0
 #endif
 
+namespace {
+
+// We can't use std::array because that has its own overload of operator<, etc,
+// which will interfere with ours.
+template <typename ElementType, size_t Lanes>
+struct CppVector {
+    ElementType elements[Lanes];
+
+    HALIDE_ALWAYS_INLINE
+    ElementType& operator[](size_t i) {
+        return elements[i];
+    }
+
+    HALIDE_ALWAYS_INLINE
+    const ElementType operator[](size_t i) const {
+        return elements[i];
+    }
+
+    HALIDE_ALWAYS_INLINE
+    ElementType *data() {
+        return elements;
+    }
+
+    HALIDE_ALWAYS_INLINE
+    const ElementType *data() const {
+        return elements;
+    }
+};
+
 template <typename ElementType_, size_t Lanes_>
-class CppVector {
+class CppVectorOps {
 public:
-    typedef ElementType_ ElementType;
-    static const size_t Lanes = Lanes_;
-    typedef CppVector<ElementType, Lanes> Vec;
-    typedef CppVector<uint8_t, Lanes> Mask;
+    using ElementType = ElementType_ ;
+    static constexpr size_t Lanes = Lanes_;
 
-    CppVector &operator=(const Vec &src) {
-        if (this != &src) {
-            for (size_t i = 0; i < Lanes; i++) {
-                elements[i] = src[i];
-            }
-        }
-        return *this;
-    }
+    using Vec = CppVector<ElementType, Lanes>;
+    using Mask = CppVector<uint8_t, Lanes>;
 
-    /* not-explicit */ CppVector(const Vec &src) {
+    CppVectorOps() = delete;
+
+    static Vec broadcast(const ElementType v) {
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            elements[i] = src[i];
-        }
-    }
-
-    CppVector() {
-        for (size_t i = 0; i < Lanes; i++) {
-            elements[i] = 0;
-        }
-    }
-
-    static Vec broadcast(const ElementType &v) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = v;
+            r[i] = v;
         }
         return r;
     }
 
-    static Vec ramp(const ElementType &base, const ElementType &stride) {
-        Vec r(empty);
+    static Vec ramp(const ElementType base, const ElementType stride) {
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = base + stride * i;
+            r[i] = base + stride * i;
         }
         return r;
     }
 
     static Vec load(const void *base, int32_t offset) {
-        Vec r(empty);
-        memcpy(&r.elements[0], ((const ElementType*)base + offset), sizeof(r.elements));
+        Vec r;
+        memcpy(r.data(), ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
         return r;
     }
 
     // gather
-    static Vec load(const void *base, const CppVector<int32_t, Lanes> &offset) {
-        Vec r(empty);
+    static Vec load_gather(const void *base, const CppVector<int32_t, Lanes> &offset) {
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ((const ElementType*)base)[offset[i]];
+            r[i] = ((const ElementType*)base)[offset[i]];
         }
         return r;
     }
 
-    void store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &this->elements[0], sizeof(this->elements));
+    static void store(const Vec &v, void *base, int32_t offset) {
+        memcpy(((ElementType*)base + offset), v.data(), sizeof(ElementType) * Lanes);
     }
 
     // scatter
-    void store(void *base, const CppVector<int32_t, Lanes> &offset) const {
+    void store_scatter(const Vec &v, void *base, const CppVector<int32_t, Lanes> &offset) {
         for (size_t i = 0; i < Lanes; i++) {
-            ((ElementType*)base)[offset[i]] = elements[i];
+            ((ElementType*)base)[offset[i]] = v[i];
         }
     }
 
-    static Vec shuffle(const Vec &a, const int32_t indices[Lanes]) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            if (indices[i] < 0) {
-                continue;
-            }
-            r.elements[i] = a[indices[i]];
-        }
+    template<int... Indices>
+    static Vec shuffle(const Vec &a) {
+        static_assert(sizeof...(Indices) == Lanes, "shuffle() requires an exact match of lanes");
+        Vec r = { a[Indices]... };
         return r;
     }
 
     template<size_t InputLanes>
     static Vec concat(size_t count, const CppVector<ElementType, InputLanes> vecs[]) {
-        Vec r(empty);
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = vecs[i / InputLanes][i % InputLanes];
+            r[i] = vecs[i / InputLanes][i % InputLanes];
         }
         return r;
     }
 
-    Vec replace(size_t i, const ElementType &b) const {
-        Vec r = *this;
-        r.elements[i] = b;
-        return r;
-    }
-
-    ElementType operator[](size_t i) const {
-        return elements[i];
-    }
-
-    Vec operator~() const {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ~elements[i];
-        }
-        return r;
-    }
-    Vec operator!() const {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = !r.elements[i];
-        }
-        return r;
-    }
-
-    friend Vec operator+(const Vec &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] + b[i];
-        }
-        return r;
-    }
-    friend Vec operator-(const Vec &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] - b[i];
-        }
-        return r;
-    }
-    friend Vec operator*(const Vec &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] * b[i];
-        }
-        return r;
-    }
-    friend Vec operator/(const Vec &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] / b[i];
-        }
-        return r;
-    }
-    friend Vec operator%(const Vec &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] % b[i];
-        }
-        return r;
-    }
-    template <typename OtherElementType>
-    friend Vec operator<<(const Vec &a, const CppVector<OtherElementType, Lanes> &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] << b[i];
-        }
-        return r;
-    }
-    template <typename OtherElementType>
-    friend Vec operator>>(const Vec &a, const CppVector<OtherElementType, Lanes> &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] >> b[i];
-        }
-        return r;
-    }
-    friend Vec operator&(const Vec &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] & b[i];
-        }
-        return r;
-    }
-    friend Vec operator|(const Vec &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] | b[i];
-        }
-        return r;
-    }
-
-    friend Vec operator&&(const Vec &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] && b[i];
-        }
-        return r;
-    }
-    friend Vec operator||(const Vec &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] || b[i];
-        }
-        return r;
-    }
-
-    friend Vec operator+(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] + b;
-        }
-        return r;
-    }
-    friend Vec operator-(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] - b;
-        }
-        return r;
-    }
-    friend Vec operator*(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] * b;
-        }
-        return r;
-    }
-    friend Vec operator/(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] / b;
-        }
-        return r;
-    }
-    friend Vec operator%(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] % b;
-        }
-        return r;
-    }
-    friend Vec operator>>(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] >> b;
-        }
-        return r;
-    }
-    friend Vec operator<<(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] << b;
-        }
-        return r;
-    }
-    friend Vec operator&(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] & b;
-        }
-        return r;
-    }
-    friend Vec operator|(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] | b;
-        }
-        return r;
-    }
-    friend Vec operator&&(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] && b;
-        }
-        return r;
-    }
-    friend Vec operator||(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] || b;
-        }
-        return r;
-    }
-
-    friend Vec operator+(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a + b[i];
-        }
-        return r;
-    }
-    friend Vec operator-(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a - b[i];
-        }
-        return r;
-    }
-    friend Vec operator*(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a * b[i];
-        }
-        return r;
-    }
-    friend Vec operator/(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a / b[i];
-        }
-        return r;
-    }
-    friend Vec operator%(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a % b[i];
-        }
-        return r;
-    }
-    friend Vec operator>>(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a >> b[i];
-        }
-        return r;
-    }
-    friend Vec operator<<(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a << b[i];
-        }
-        return r;
-    }
-    friend Vec operator&(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a & b[i];
-        }
-        return r;
-    }
-    friend Vec operator|(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a | b[i];
-        }
-        return r;
-    }
-    friend Vec operator&&(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a && b[i];
-        }
-        return r;
-    }
-    friend Vec operator||(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a || b[i];
-        }
-        return r;
-    }
-
-    friend Mask operator<(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] < b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    friend Mask operator<=(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] <= b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    friend Mask operator>(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] > b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    friend Mask operator>=(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] >= b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    friend Mask operator==(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] == b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    friend Mask operator!=(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = a[i] != b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    static Vec select(const Mask &cond, const Vec &true_value, const Vec &false_value) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = cond[i] ? true_value[i] : false_value[i];
-        }
+    static Vec replace(const Vec &v, size_t i, const ElementType b) {
+        Vec r = v;
+        r[i] = b;
         return r;
     }
 
     template <typename OtherVec>
     static Vec convert_from(const OtherVec &src) {
-        static_assert(Vec::Lanes == OtherVec::Lanes, "Lanes mismatch");
-        Vec r(empty);
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = static_cast<typename Vec::ElementType>(src[i]);
+            r[i] = static_cast<ElementType>(src[i]);
         }
         return r;
     }
 
     static Vec max(const Vec &a, const Vec &b) {
-        Vec r(empty);
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ::halide_cpp_max(a[i], b[i]);
+            r[i] = ::halide_cpp_max(a[i], b[i]);
         }
         return r;
     }
 
     static Vec min(const Vec &a, const Vec &b) {
-        Vec r(empty);
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ::halide_cpp_min(a[i], b[i]);
+            r[i] = ::halide_cpp_min(a[i], b[i]);
         }
         return r;
     }
 
-private:
-    template <typename, size_t> friend class CppVector;
-    ElementType elements[Lanes];
+    static Vec select(const Mask &cond, const Vec &true_value, const Vec &false_value) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = cond[i] ? true_value[i] : false_value[i];
+        }
+        return r;
+    }
 
-    // Leave vector uninitialized for cases where we overwrite every entry
-    enum Empty { empty };
-    CppVector(Empty) {}
+    static Mask logical_or(const Vec &a, const Vec &b) {
+        CppVector<uint8_t, Lanes> r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = a[i] || b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    static Mask logical_and(const Vec &a, const Vec &b) {
+        CppVector<uint8_t, Lanes> r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = a[i] && b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    static Mask lt(const Vec &a, const Vec &b) {
+        CppVector<uint8_t, Lanes> r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = a[i] < b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    static Mask le(const Vec &a, const Vec &b) {
+        CppVector<uint8_t, Lanes> r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = a[i] <= b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    static Mask gt(const Vec &a, const Vec &b) {
+        CppVector<uint8_t, Lanes> r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = a[i] > b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    static Mask ge(const Vec &a, const Vec &b) {
+        CppVector<uint8_t, Lanes> r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = a[i] >= b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    static Mask eq(const Vec &a, const Vec &b) {
+        CppVector<uint8_t, Lanes> r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = a[i] == b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    static Mask ne(const Vec &a, const Vec &b) {
+        CppVector<uint8_t, Lanes> r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = a[i] != b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
 };
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator~(const CppVector<ElementType, Lanes> &v) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = ~v[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator!(const CppVector<ElementType, Lanes> &v) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = !v[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator+(const CppVector<ElementType, Lanes> &a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] + b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator-(const CppVector<ElementType, Lanes> &a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] - b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator*(const CppVector<ElementType, Lanes> &a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] * b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator/(const CppVector<ElementType, Lanes> &a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] / b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator%(const CppVector<ElementType, Lanes> &a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] % b[i];
+    }
+    return r;
+}
+
+template <typename ElementType, size_t Lanes, typename OtherElementType>
+CppVector<ElementType, Lanes> operator<<(const CppVector<ElementType, Lanes> &a, const CppVector<OtherElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] << b[i];
+    }
+    return r;
+}
+
+template <typename ElementType, size_t Lanes, typename OtherElementType>
+CppVector<ElementType, Lanes> operator>>(const CppVector<ElementType, Lanes> &a, const CppVector<OtherElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] >> b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator&(const CppVector<ElementType, Lanes> &a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] & b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator|(const CppVector<ElementType, Lanes> &a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] | b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator+(const CppVector<ElementType, Lanes> &a, const ElementType b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] + b;
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator-(const CppVector<ElementType, Lanes> &a, const ElementType b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] - b;
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator*(const CppVector<ElementType, Lanes> &a, const ElementType b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] * b;
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator/(const CppVector<ElementType, Lanes> &a, const ElementType b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] / b;
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator%(const CppVector<ElementType, Lanes> &a, const ElementType b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] % b;
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator>>(const CppVector<ElementType, Lanes> &a, const ElementType b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] >> b;
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator<<(const CppVector<ElementType, Lanes> &a, const ElementType b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] << b;
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator&(const CppVector<ElementType, Lanes> &a, const ElementType b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] & b;
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator|(const CppVector<ElementType, Lanes> &a, const ElementType b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] | b;
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator+(const ElementType a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a + b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator-(const ElementType a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a - b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator*(const ElementType a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a * b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator/(const ElementType a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a / b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator%(const ElementType a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a % b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator>>(const ElementType a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a >> b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator<<(const ElementType a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a << b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator&(const ElementType a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a & b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator|(const ElementType a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a | b[i];
+    }
+    return r;
+}
+
+}  // namespace
+
 
 )INLINE_CODE";
 
         const char *native_vector_decl = R"INLINE_CODE(
+namespace {
+
 #if __has_attribute(ext_vector_type) || __has_attribute(vector_size)
-template <typename ElementType_, size_t Lanes_>
-class NativeVector {
-public:
-    typedef ElementType_ ElementType;
-    static const size_t Lanes = Lanes_;
-    typedef NativeVector<ElementType, Lanes> Vec;
-    typedef NativeVector<uint8_t, Lanes> Mask;
 
 #if __has_attribute(ext_vector_type)
-    typedef ElementType_ NativeVectorType __attribute__((ext_vector_type(Lanes), aligned(sizeof(ElementType))));
-#elif __has_attribute(vector_size) || __GNUC__
-    typedef ElementType_ NativeVectorType __attribute__((vector_size(Lanes * sizeof(ElementType)), aligned(sizeof(ElementType))));
+    // Clang
+    template<typename ElementType, size_t Lanes>
+    using NativeVector __attribute__((ext_vector_type(Lanes), aligned(sizeof(ElementType)))) = ElementType;
+#elif __has_attribute(vector_size) || defined(__GNUC__)
+    // GCC
+    template<typename ElementType, size_t Lanes>
+    using NativeVector __attribute__((vector_size(Lanes * sizeof(ElementType)), aligned(sizeof(ElementType)))) = ElementType;
+#else
+    #error
 #endif
 
-    NativeVector &operator=(const Vec &src) {
-        if (this != &src) {
-            native_vector = src.native_vector;
-        }
-        return *this;
-    }
+template<typename T>
+struct NativeVectorComparisonType {
+    using type = void;
+};
 
-    /* not-explicit */ NativeVector(const Vec &src) {
-        native_vector = src.native_vector;
-    }
+template<>
+struct NativeVectorComparisonType<int8_t> { using type = char; };
 
-    NativeVector() {
-        native_vector = (NativeVectorType){};
-    }
+template<>
+struct NativeVectorComparisonType<int16_t> { using type = int16_t; };
 
-    static Vec broadcast(const ElementType &v) {
-        Vec zero; // Zero-initialized native vector.
+template<>
+struct NativeVectorComparisonType<int32_t> { using type = int32_t; };
+
+template<>
+struct NativeVectorComparisonType<int64_t> { using type = int64_t; };
+
+template<>
+struct NativeVectorComparisonType<uint8_t> { using type = char; };
+
+template<>
+struct NativeVectorComparisonType<uint16_t> { using type = int16_t; };
+
+template<>
+struct NativeVectorComparisonType<uint32_t> { using type = int32_t; };
+
+template<>
+struct NativeVectorComparisonType<uint64_t> { using type = int64_t; };
+
+template<>
+struct NativeVectorComparisonType<float> { using type = int32_t; };
+
+template<>
+struct NativeVectorComparisonType<double> { using type = int64_t; };
+
+template <typename ElementType_, size_t Lanes_>
+class NativeVectorOps {
+public:
+    using ElementType = ElementType_ ;
+    static constexpr size_t Lanes = Lanes_;
+
+    using Vec = NativeVector<ElementType, Lanes>;
+    using Mask = NativeVector<uint8_t, Lanes>;
+
+    NativeVectorOps() = delete;
+
+    static Vec broadcast(const ElementType v) {
+        const Vec zero = {}; // Zero-initialized native vector.
         return zero + v;
     }
 
-    // TODO: this should be improved by taking advantage of native operator support.
-    static Vec ramp(const ElementType &base, const ElementType &stride) {
-        Vec r(empty);
+    static Vec ramp(const ElementType base, const ElementType stride) {
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = base + stride * i;
+            r[i] = base + stride * i;
         }
         return r;
     }
 
-    // TODO: could this be improved by taking advantage of native operator support?
     static Vec load(const void *base, int32_t offset) {
-        Vec r(empty);
+        Vec r;
         // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
-        // (e.g. uint8x48, which could be produced by concat()), the actual implementation
+        // (e.g. uint8x48), the actual implementation
         // might be larger (e.g. it might really be a uint8x64). Only copy the amount
         // that is in the logical type, to avoid possible overreads.
-        memcpy(&r.native_vector, ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
+        //
+        // TODO: can we assume proper alignment here and just do a straight assignment?
+        memcpy(&r, ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
         return r;
     }
 
-    // gather
-    // TODO: could this be improved by taking advantage of native operator support?
-    static Vec load(const void *base, const NativeVector<int32_t, Lanes> &offset) {
-        Vec r(empty);
+    static Vec load_gather(const void *base, const NativeVector<int32_t, Lanes> offset) {
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ((const ElementType*)base)[offset[i]];
+            r[i] = ((const ElementType*)base)[offset[i]];
         }
         return r;
     }
 
-    // TODO: could this be improved by taking advantage of native operator support?
-    void store(void *base, int32_t offset) const {
+    static void store(const Vec v, void *base, int32_t offset) {
         // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
-        // (e.g. uint8x48, which could be produced by concat()), the actual implementation
+        // (e.g. uint8x48), the actual implementation
         // might be larger (e.g. it might really be a uint8x64). Only copy the amount
         // that is in the logical type, to avoid possible overwrites.
-        memcpy(((ElementType*)base + offset), &native_vector, sizeof(ElementType) * Lanes);
+        //
+        // TODO: can we assume proper alignment here and just do a straight assignment?
+        memcpy(((ElementType*)base + offset), &v, sizeof(ElementType) * Lanes);
     }
 
     // scatter
-    // TODO: could this be improved by taking advantage of native operator support?
-    void store(void *base, const NativeVector<int32_t, Lanes> &offset) const {
+    void store_scatter(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset) {
         for (size_t i = 0; i < Lanes; i++) {
-            ((ElementType*)base)[offset[i]] = native_vector[i];
+            ((ElementType*)base)[offset[i]] = v[i];
         }
     }
 
-    // TODO: this should be improved by taking advantage of native operator support.
-    static Vec shuffle(const Vec &a, const int32_t indices[Lanes]) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            if (indices[i] < 0) {
-                continue;
-            }
-            r.native_vector[i] = a[indices[i]];
-        }
+    template<int... Indices>
+    static Vec shuffle(const Vec a) {
+        static_assert(sizeof...(Indices) == Lanes, "shuffle() requires an exact match of lanes");
+#if __has_builtin(__builtin_shufflevector)
+        // Clang
+        return __builtin_shufflevector(a, a, Indices...);
+#elif __has_builtin(__builtin_shuffle) || defined(__GNUC__)
+        // GCC
+        return __builtin_shuffle(a, NativeVector<int, sizeof...(Indices)>{Indices...});
+#else
+        Vec r = { a[Indices]... };
         return r;
+#endif
     }
 
-    // TODO: this should be improved by taking advantage of native operator support.
     template<size_t InputLanes>
     static Vec concat(size_t count, const NativeVector<ElementType, InputLanes> vecs[]) {
-        Vec r(empty);
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = vecs[i / InputLanes][i % InputLanes];
+            r[i] = vecs[i / InputLanes][i % InputLanes];
         }
         return r;
     }
 
-    // TODO: this should be improved by taking advantage of native operator support.
-    Vec replace(size_t i, const ElementType &b) const {
-        Vec r = *this;
-        r.native_vector[i] = b;
-        return r;
-    }
-
-    ElementType operator[](size_t i) const {
-        return native_vector[i];
-    }
-
-    Vec operator~() const {
-        return Vec(from_native_vector, ~native_vector);
-    }
-    Vec operator!() const {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = !(*this)[i];
-        }
-        return r;
-    }
-
-    friend Vec operator+(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector + b.native_vector);
-    }
-    friend Vec operator-(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector - b.native_vector);
-    }
-    friend Vec operator*(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector * b.native_vector);
-    }
-    friend Vec operator/(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector / b.native_vector);
-    }
-    friend Vec operator%(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector % b.native_vector);
-    }
-    friend Vec operator&(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector & b.native_vector);
-    }
-    friend Vec operator|(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector | b.native_vector);
-    }
-    friend Vec operator&&(const Vec &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a.native_vector[i] && b.native_vector[i];
-        }
-        return r;
-    }
-    friend Vec operator||(const Vec &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a.native_vector[i] || b.native_vector[i];
-        }
-        return r;
-    }
-
-    friend Vec operator+(const Vec &a, const ElementType &b) {
-        return Vec(from_native_vector, a.native_vector + b);
-    }
-    friend Vec operator-(const Vec &a, const ElementType &b) {
-        return Vec(from_native_vector, a.native_vector - b);
-    }
-    friend Vec operator*(const Vec &a, const ElementType &b) {
-        return Vec(from_native_vector, a.native_vector * b);
-    }
-    friend Vec operator/(const Vec &a, const ElementType &b) {
-        return Vec(from_native_vector, a.native_vector / b);
-    }
-    friend Vec operator%(const Vec &a, const ElementType &b) {
-        return Vec(from_native_vector, a.native_vector % b);
-    }
-    friend Vec operator<<(const Vec &a, const ElementType &b) {
-        return Vec(from_native_vector, a.native_vector << b);
-    }
-    friend Vec operator>>(const Vec &a, const ElementType &b) {
-        return Vec(from_native_vector, a.native_vector >> b);
-    }
-    friend Vec operator&(const Vec &a, const ElementType &b) {
-        return Vec(from_native_vector, a.native_vector & b);
-    }
-    friend Vec operator|(const Vec &a, const ElementType &b) {
-        return Vec(from_native_vector, a.native_vector | b);
-    }
-    friend Vec operator&&(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a.native_vector[i] && b;
-        }
-        return r;
-    }
-    friend Vec operator||(const Vec &a, const ElementType &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a.native_vector[i] || b;
-        }
-        return r;
-    }
-
-    friend Vec operator+(const ElementType &a, const Vec &b) {
-        return Vec(from_native_vector, a + b.native_vector);
-    }
-    friend Vec operator-(const ElementType &a, const Vec &b) {
-        return Vec(from_native_vector, a - b.native_vector);
-    }
-    friend Vec operator*(const ElementType &a, const Vec &b) {
-        return Vec(from_native_vector, a * b.native_vector);
-    }
-    friend Vec operator/(const ElementType &a, const Vec &b) {
-        return Vec(from_native_vector, a / b.native_vector);
-    }
-    friend Vec operator%(const ElementType &a, const Vec &b) {
-        return Vec(from_native_vector, a % b.native_vector);
-    }
-    friend Vec operator<<(const ElementType &a, const Vec &b) {
-        return Vec(from_native_vector, a << b.native_vector);
-    }
-    friend Vec operator>>(const ElementType &a, const Vec &b) {
-        return Vec(from_native_vector, a >> b.native_vector);
-    }
-    friend Vec operator&(const ElementType &a, const Vec &b) {
-        return Vec(from_native_vector, a & b.native_vector);
-    }
-    friend Vec operator|(const ElementType &a, const Vec &b) {
-        return Vec(from_native_vector, a | b.native_vector);
-    }
-    friend Vec operator&&(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a && b.native_vector[i];
-        }
-        return r;
-    }
-    friend Vec operator||(const ElementType &a, const Vec &b) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a || b.native_vector[i];
-        }
-        return r;
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    friend Mask operator<(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a[i] < b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    friend Mask operator<=(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a[i] <= b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    friend Mask operator>(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a[i] > b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    friend Mask operator>=(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a[i] >= b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    friend Mask operator==(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a[i] == b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    friend Mask operator!=(const Vec &a, const Vec &b) {
-        Mask r;
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = a[i] != b[i] ? 0xff : 0x00;
-        }
-        return r;
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    static Vec select(const Mask &cond, const Vec &true_value, const Vec &false_value) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = cond[i] ? true_value[i] : false_value[i];
-        }
-        return r;
+    static Vec replace(Vec v, size_t i, const ElementType b) {
+        v[i] = b;
+        return v;
     }
 
     template <typename OtherVec>
-    static Vec convert_from(const OtherVec &src) {
-        static_assert(Vec::Lanes == OtherVec::Lanes, "Lanes mismatch");
-#if 0 // __has_builtin(__builtin_convertvector)
-        // Disabled (for now) because __builtin_convertvector appears to have
+    static Vec convert_from(const OtherVec src) {
+#if __has_builtin(__builtin_convertvector) || defined(__GNUC__)
+        // Don't use __builtin_convertvector for float->int: it appears to have
         // different float->int rounding behavior in at least some situations;
         // for now we'll use the much-slower-but-correct explicit C++ code.
         // (https://github.com/halide/Halide/issues/2080)
-        return Vec(from_native_vector, __builtin_convertvector(src.native_vector, NativeVectorType));
-#else
-        Vec r(empty);
+        constexpr bool is_float_to_int = std::is_floating_point<OtherVec>::value &&
+                                         std::is_integral<Vec>::value;
+        if (!is_float_to_int) {
+            return __builtin_convertvector(src, Vec);
+        }
+#endif
+        // Fallthru for float->int, or degenerate compilers that support native vectors
+        // but not __builtin_convertvector (Intel?)
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = static_cast<typename Vec::ElementType>(src.native_vector[i]);
+            r[i] = static_cast<ElementType>(src[i]);
+        }
+        return r;
+    }
+
+    static Vec max(const Vec a, const Vec b) {
+#if defined(__GNUC__) && !defined(__clang__)
+        // TODO: GCC doesn't seem to recognize this pattern, and scalarizes instead
+        return a > b ? a : b;
+#else
+        // Clang doesn't do ternary operator for vectors, but recognizes this pattern
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = a[i] > b[i] ? a[i] : b[i];
         }
         return r;
 #endif
     }
 
-    // TODO: this should be improved by taking advantage of native operator support.
-    static Vec max(const Vec &a, const Vec &b) {
-        Vec r(empty);
+    static Vec min(const Vec a, const Vec b) {
+#if defined(__GNUC__) && !defined(__clang__)
+        // TODO: GCC doesn't seem to recognize this pattern, and scalarizes instead
+        return a < b ? a : b;
+#else
+        // Clang doesn't do ternary operator for vectors, but recognizes this pattern
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ::halide_cpp_max(a[i], b[i]);
+            r[i] = a[i] < b[i] ? a[i] : b[i];
         }
         return r;
+#endif
     }
 
-    // TODO: this should be improved by taking advantage of native operator support.
-    static Vec min(const Vec &a, const Vec &b) {
-        Vec r(empty);
+    static Vec select(const Mask cond, const Vec true_value, const Vec false_value) {
+#if defined(__GNUC__) && !defined(__clang__)
+        // This should do the correct lane-wise select.
+        using T = typename NativeVectorComparisonType<ElementType>::type;
+        auto b = NativeVectorOps<T, Lanes>::convert_from(cond);
+        return b ? true_value : false_value;
+#else
+        // Clang doesn't do ternary operator for vectors, but recognizes this pattern
+        Vec r;
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ::halide_cpp_min(a[i], b[i]);
+            r[i] = cond[i] ? true_value[i] : false_value[i];
         }
         return r;
+#endif
     }
 
-private:
-    template<typename, size_t> friend class NativeVector;
+    // The relational operators produce signed-int of same width as input; our codegen expects uint8.
+    static Mask logical_or(const Vec a, const Vec b) {
+        using T = typename NativeVectorComparisonType<ElementType>::type;
+        const NativeVector<T, Lanes> r = a || b;
+        return NativeVectorOps<uint8_t, Lanes>::convert_from(r);
+    }
 
-    template <typename ElementType, typename OtherElementType, size_t Lanes>
-    friend NativeVector<ElementType, Lanes> operator<<(
-                    const NativeVector<ElementType, Lanes> &a,
-                    const NativeVector<OtherElementType, Lanes> &b);
+    static Mask logical_and(const Vec a, const Vec b) {
+        using T = typename NativeVectorComparisonType<ElementType>::type;
+        const NativeVector<T, Lanes> r = a && b;
+        return NativeVectorOps<uint8_t, Lanes>::convert_from(r);
+    }
 
-    template <typename ElementType, typename OtherElementType, size_t Lanes>
-    friend NativeVector<ElementType, Lanes> operator>>(
-                    const NativeVector<ElementType, Lanes> &a,
-                    const NativeVector<OtherElementType, Lanes> &b);
+    static Mask lt(const Vec a, const Vec b) {
+        using T = typename NativeVectorComparisonType<ElementType>::type;
+        const NativeVector<T, Lanes> r = a < b;
+        return NativeVectorOps<uint8_t, Lanes>::convert_from(r);
+    }
 
-    NativeVectorType native_vector;
+    static Mask le(const Vec a, const Vec b) {
+        using T = typename NativeVectorComparisonType<ElementType>::type;
+        const NativeVector<T, Lanes> r = a <= b;
+        return NativeVectorOps<uint8_t, Lanes>::convert_from(r);
+    }
 
-    // Leave vector uninitialized for cases where we overwrite every entry
-    enum Empty { empty };
-    inline NativeVector(Empty) {}
+    static Mask gt(const Vec a, const Vec b) {
+        using T = typename NativeVectorComparisonType<ElementType>::type;
+        const NativeVector<T, Lanes> r = a > b;
+        return NativeVectorOps<uint8_t, Lanes>::convert_from(r);
+    }
 
-    // Syntactic sugar to avoid ctor overloading issues
-    enum FromNativeVector { from_native_vector };
-    inline NativeVector(FromNativeVector, const NativeVectorType &src) {
-        native_vector = src;
+    static Mask ge(const Vec a, const Vec b) {
+        using T = typename NativeVectorComparisonType<ElementType>::type;
+        const NativeVector<T, Lanes> r = a >= b;
+        return NativeVectorOps<uint8_t, Lanes>::convert_from(r);
+    }
+
+    static Mask eq(const Vec a, const Vec b) {
+        using T = typename NativeVectorComparisonType<ElementType>::type;
+        const NativeVector<T, Lanes> r = a == b;
+        return NativeVectorOps<uint8_t, Lanes>::convert_from(r);
+    }
+
+    static Mask ne(const Vec a, const Vec b) {
+        using T = typename NativeVectorComparisonType<ElementType>::type;
+        const NativeVector<T, Lanes> r = a != b;
+        return NativeVectorOps<uint8_t, Lanes>::convert_from(r);
     }
 };
 
-template <typename ElementType, typename OtherElementType, size_t Lanes>
-NativeVector<ElementType, Lanes> operator<<(const NativeVector<ElementType, Lanes> &a,
-                    const NativeVector<OtherElementType, Lanes> &b) {
-    return NativeVector<ElementType, Lanes>(
-                  NativeVector<ElementType, Lanes>::from_native_vector,
-                  a.native_vector << b.native_vector);
-}
 
-template <typename ElementType, typename OtherElementType, size_t Lanes>
-NativeVector<ElementType, Lanes> operator>>(const NativeVector<ElementType, Lanes> &a,
-                    const NativeVector<OtherElementType, Lanes> &b) {
-    return NativeVector<ElementType, Lanes>(
-                  NativeVector<ElementType, Lanes>::from_native_vector,
-                  a.native_vector >> b.native_vector);
-}
 #endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+
+}  // namespace
 
 )INLINE_CODE";
 
@@ -1313,11 +1210,13 @@ NativeVector<ElementType, Lanes> operator>>(const NativeVector<ElementType, Lane
             string name = type_to_c_type(t, false, false);
             string scalar_name = type_to_c_type(t.element_of(), false, false);
             stream << "#if halide_cpp_use_native_vector(" << scalar_name << ", " << t.lanes() << ")\n";
-            stream << "typedef NativeVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
+            stream << "using " << name << " = NativeVector<" << scalar_name << ", " << t.lanes() << ">;\n";
+            stream << "using " << name << "_ops = NativeVectorOps<" << scalar_name << ", " << t.lanes() << ">;\n";
             // Useful for debugging which Vector implementation is being selected
             // stream << "#pragma message \"using NativeVector for " << t << "\"\n";
             stream << "#else\n";
-            stream << "typedef CppVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
+            stream << "using " << name << " = CppVector<" << scalar_name << ", " << t.lanes() << ">;\n";
+            stream << "using " << name << "_ops = CppVectorOps<" << scalar_name << ", " << t.lanes() << ">;\n";
             // Useful for debugging which Vector implementation is being selected
             // stream << "#pragma message \"using CppVector for " << t << "\"\n";
             stream << "#endif\n";
@@ -1804,7 +1703,7 @@ string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
     if (t.is_vector() &&
         t.lanes() == e.type().lanes() &&
         t != e.type()) {
-        return print_assignment(t, type + "::convert_from<" + print_type(e.type()) + ">(" + value + ")");
+        return print_assignment(t, type + "_ops::convert_from<" + print_type(e.type()) + ">(" + value + ")");
     } else {
         return print_assignment(t, "(" + type + ")(" + value + ")");
     }
@@ -1905,7 +1804,7 @@ void CodeGen_C::visit(const Max *op) {
         print_expr(Call::make(op->type, "::halide_cpp_max", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
-        rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        rhs << print_type(op->type) << "_ops::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         print_assignment(op->type, rhs.str());
     }
 }
@@ -1917,41 +1816,52 @@ void CodeGen_C::visit(const Min *op) {
         print_expr(Call::make(op->type, "::halide_cpp_min", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
-        rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        rhs << print_type(op->type) << "_ops::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         print_assignment(op->type, rhs.str());
     }
 }
 
+void CodeGen_C::visit_relop(Type t, const Expr &a, const Expr &b, const char *scalar_op, const char *vector_op) {
+    if (t.is_scalar()) {
+        visit_binop(t, a, b, scalar_op);
+    } else {
+        internal_assert(a.type() == b.type());
+        string sa = print_expr(a);
+        string sb = print_expr(b);
+        print_assignment(t, print_type(a.type()) + "_ops::" + vector_op + "(" + sa + ", " + sb + ")");
+    }
+}
+
 void CodeGen_C::visit(const EQ *op) {
-    visit_binop(op->type, op->a, op->b, "==");
+    visit_relop(op->type, op->a, op->b, "==", "eq");
 }
 
 void CodeGen_C::visit(const NE *op) {
-    visit_binop(op->type, op->a, op->b, "!=");
+    visit_relop(op->type, op->a, op->b, "!=", "ne");
 }
 
 void CodeGen_C::visit(const LT *op) {
-    visit_binop(op->type, op->a, op->b, "<");
+    visit_relop(op->type, op->a, op->b, "<", "lt");
 }
 
 void CodeGen_C::visit(const LE *op) {
-    visit_binop(op->type, op->a, op->b, "<=");
+    visit_relop(op->type, op->a, op->b, "<=", "le");
 }
 
 void CodeGen_C::visit(const GT *op) {
-    visit_binop(op->type, op->a, op->b, ">");
+    visit_relop(op->type, op->a, op->b, ">", "gt");
 }
 
 void CodeGen_C::visit(const GE *op) {
-    visit_binop(op->type, op->a, op->b, ">=");
+    visit_relop(op->type, op->a, op->b, ">=", "ge");
 }
 
 void CodeGen_C::visit(const Or *op) {
-    visit_binop(op->type, op->a, op->b, "||");
+    visit_relop(op->type, op->a, op->b, "||", "logical_or");
 }
 
 void CodeGen_C::visit(const And *op) {
-    visit_binop(op->type, op->a, op->b, "&&");
+    visit_relop(op->type, op->a, op->b, "&&", "logical_and");
 }
 
 void CodeGen_C::visit(const Not *op) {
@@ -2378,12 +2288,12 @@ void CodeGen_C::visit(const Load *op) {
     if (dense_ramp_base.defined()) {
         internal_assert(t.is_vector());
         string id_ramp_base = print_expr(dense_ramp_base);
-        rhs << print_type(t) + "::load(" << name << ", " << id_ramp_base << ")";
+        rhs << print_type(t) + "_ops::load(" << name << ", " << id_ramp_base << ")";
     } else if (op->index.type().is_vector()) {
         // If index is a vector, gather vector elements.
         internal_assert(t.is_vector());
         string id_index = print_expr(op->index);
-        rhs << print_type(t) + "::load(" << name << ", " << id_index << ")";
+        rhs << print_type(t) + "_ops::load_gather(" << name << ", " << id_index << ")";
     } else {
         string id_index = print_expr(op->index);
         bool type_cast_needed = !(allocations.contains(op->name) &&
@@ -2430,12 +2340,12 @@ void CodeGen_C::visit(const Store *op) {
     if (dense_ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(dense_ramp_base);
-        stream << get_indent() << id_value + ".store(" << name << ", " << id_ramp_base << ");\n";
+        stream << get_indent() << print_type(t) + "_ops::store(" << id_value << ", " << name << ", " << id_ramp_base << ");\n";
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
         string id_index = print_expr(op->index);
-        stream << get_indent() << id_value + ".store(" << name << ", " << id_index << ");\n";
+        stream << get_indent() << print_type(t) + "_ops::store_scatter(" << id_value << ", " << name << ", " << id_index << ");\n";
     } else {
         bool type_cast_needed =
             t.is_handle() ||
@@ -2486,7 +2396,7 @@ void CodeGen_C::visit(const Select *op) {
             << " : " << false_val
             << ")";
     } else {
-        rhs << type << "::select(" << cond << ", " << true_val << ", " << false_val << ")";
+        rhs << type << "_ops::select(" << cond << ", " << true_val << ", " << false_val << ")";
     }
     print_assignment(op->type, rhs.str());
 }
@@ -2620,7 +2530,7 @@ void CodeGen_C::visit(const Ramp *op) {
     Type vector_type = op->type.with_lanes(op->lanes);
     string id_base = print_expr(op->base);
     string id_stride = print_expr(op->stride);
-    print_assignment(vector_type, print_type(vector_type) + "::ramp(" + id_base + ", " + id_stride + ")");
+    print_assignment(vector_type, print_type(vector_type) + "_ops::ramp(" + id_base + ", " + id_stride + ")");
 }
 
 void CodeGen_C::visit(const Broadcast *op) {
@@ -2628,7 +2538,7 @@ void CodeGen_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
     string rhs;
     if (op->lanes > 1) {
-        rhs = print_type(vector_type) + "::broadcast(" + id_value + ")";
+        rhs = print_type(vector_type) + "_ops::broadcast(" + id_value + ")";
     } else {
         rhs = id_value;
     }
@@ -2823,22 +2733,37 @@ void CodeGen_C::visit(const Shuffle *op) {
     for (Expr v : op->vectors) {
         vecs.push_back(print_expr(v));
     }
-    string src = vecs[0];
-    if (op->vectors.size() > 1) {
-        ostringstream rhs;
-        string storage_name = unique_name('_');
-        stream << get_indent() << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
-
-        rhs << print_type(op->type) << "::concat(" << op->vectors.size() << ", " << storage_name << ")";
-        src = print_assignment(op->type, rhs.str());
-    }
     ostringstream rhs;
     if (op->type.is_scalar()) {
-        rhs << src << "[" << op->indices[0] << "]";
+        // Deduce which vector we need. Apparently it's not required
+        // that all vectors have identical lanes, so a loop is required.
+        // Since idx of -1 means "don't care", we'll treat it as 0 to simplify.
+        int idx = std::max(0, op->indices[0]);
+        for (size_t vec_idx = 0; vec_idx < op->vectors.size(); vec_idx++) {
+            const int vec_lanes = op->vectors[vec_idx].type().lanes();
+            if (idx < vec_lanes) {
+                rhs << vecs[vec_idx] << "[" << idx << "]";
+                break;
+            }
+            idx -= vec_lanes;
+        }
+        internal_assert(!rhs.str().empty());
     } else {
-        string indices_name = unique_name('_');
-        stream << get_indent() << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
-        rhs << print_type(op->type) << "::shuffle(" << src << ", " << indices_name << ")";
+        string src = vecs[0];
+        if (op->vectors.size() > 1) {
+            // This code has always assumed/required that all the vectors
+            // have identical types, so let's verify
+            const Type t0 = op->vectors[0].type();
+            for (const auto &v : op->vectors) {
+                internal_assert(t0 == v.type());
+            }
+            ostringstream rhs;
+            string storage_name = unique_name('_');
+            stream << get_indent() << "const " << print_type(t0) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
+            rhs << print_type(op->type) << "_ops::concat<" << t0.lanes() << ">(" << op->vectors.size() << ", " << storage_name << ")";
+            src = print_assignment(op->type, rhs.str());
+        }
+        rhs << print_type(op->type) << "_ops::shuffle<" << with_commas(op->indices) << ">(" << src << ")";
     }
     print_assignment(op->type, rhs.str());
 }
