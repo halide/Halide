@@ -537,7 +537,7 @@ public:
     }
 
     // scatter
-    void store_scatter(const Vec &v, void *base, const CppVector<int32_t, Lanes> &offset) {
+    static void store_scatter(const Vec &v, void *base, const CppVector<int32_t, Lanes> &offset) {
         for (size_t i = 0; i < Lanes; i++) {
             ((ElementType*)base)[offset[i]] = v[i];
         }
@@ -1036,7 +1036,7 @@ public:
     }
 
     // scatter
-    void store_scatter(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset) {
+    static void store_scatter(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset) {
         for (size_t i = 0; i < Lanes; i++) {
             ((ElementType*)base)[offset[i]] = v[i];
         }
