@@ -1073,7 +1073,7 @@ public:
 
     template <typename OtherVec>
     static Vec convert_from(const OtherVec src) {
-#if __has_builtin(__builtin_convertvector) || defined(__GNUC__)
+#if __has_builtin(__builtin_convertvector)
         // Don't use __builtin_convertvector for float->int: it appears to have
         // different float->int rounding behavior in at least some situations;
         // for now we'll use the much-slower-but-correct explicit C++ code.
