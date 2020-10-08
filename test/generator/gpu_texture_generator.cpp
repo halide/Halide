@@ -14,8 +14,10 @@ public:
         // Create a simple pipeline that scales pixel values by 2.
         output(x, y) = input(x, y) * 2;
 
-        input.store_in(MemoryType::GPUTexture);
-        output.store_in(MemoryType::GPUTexture);
+        if(get_target().has_feature(Target::OpenCL)) {
+            input.store_in(MemoryType::GPUTexture);
+            output.store_in(MemoryType::GPUTexture);
+        }
 
         Target target = get_target();
         if (target.has_gpu_feature()) {
