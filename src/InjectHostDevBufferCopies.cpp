@@ -56,7 +56,6 @@ class FindBufferUsage : public IRVisitor {
             internal_assert(!op->args.empty());
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
-                touched_as_texture = touched_as_texture || op->is_intrinsic(Call::image_load);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
                 if (i == 1) {
@@ -69,8 +68,6 @@ class FindBufferUsage : public IRVisitor {
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
                 devices_writing.insert(current_device_api);
-
-                touched_as_texture = touched_as_texture || op->is_intrinsic(Call::image_store);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
                 if (i == 1) {
@@ -132,8 +129,6 @@ public:
     // Any buffer passed to an extern stage may have had its dirty
     // bits and device allocation messed with.
     std::set<DeviceAPI> devices_touched_by_extern;
-
-    bool touched_as_texture = false;
 
     FindBufferUsage(const std::string &buf, DeviceAPI d)
         : buffer(buf), current_device_api(d) {
