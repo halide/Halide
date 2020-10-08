@@ -174,9 +174,9 @@ public:
             g.compute_at(f, x)
                 .update()
                 .split(x, xo, xi, vector_width)
-                .fuse(g.rvars()[0], xi, rxi)
                 .atomic()
-                .vectorize(rxi);
+                .vectorize(g.rvars()[0])
+                .vectorize(xi);
         }
 
         // The output to the pipeline is the maximum absolute difference as a double.

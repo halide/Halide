@@ -1003,6 +1003,18 @@ const HvxIntrinsic intrinsic_wrappers[] = {
      "acc_add_2mpy.vw.vh.b",
      {i32v1, i16v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords},
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdmpyhsat),
+     i32v1,
+     "add_2mpy.vh.h",
+     {i16v1, i32}},
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdmpyhsusat),
+     i32v1,
+     "add_2mpy.vh.uh",
+     {i16v1, u32}},
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdmpyhvsat),
+     i32v1,
+     "add_2mpy.vh.vh",
+     {i16v1, i16v1}},
 
     // TODO: There are also saturating versions of vdmpy.
 
@@ -1189,6 +1201,10 @@ const HvxIntrinsic intrinsic_wrappers[] = {
      i16v1,
      "trunc_sath_shr.vw.uw",
      {i32v2, u32}},
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vror),
+     u8v1,
+     "vror",
+     {u8v1, i32}},
 
     // Bit counting
     {INTRINSIC_128B(vnormamth), u16v1, "cls.vh", {u16v1}},
@@ -2101,49 +2117,6 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
 
 namespace {
 
-string type_suffix(Type type, bool signed_variants = true) {
-    string prefix = type.is_vector() ? ".v" : ".";
-    if (type.is_int() || !signed_variants) {
-        switch (type.bits()) {
-        case 8:
-            return prefix + "b";
-        case 16:
-            return prefix + "h";
-        case 32:
-            return prefix + "w";
-        }
-    } else if (type.is_uint()) {
-        switch (type.bits()) {
-        case 8:
-            return prefix + "ub";
-        case 16:
-            return prefix + "uh";
-        case 32:
-            return prefix + "uw";
-        }
-    }
-    internal_error << "Unsupported HVX type: " << type << "\n";
-    return "";
-}
-
-string type_suffix(const Expr &a, bool signed_variants = true) {
-    return type_suffix(a.type(), signed_variants);
-}
-
-string type_suffix(const Expr &a, const Expr &b, bool signed_variants = true) {
-    return type_suffix(a, signed_variants) + type_suffix(b, signed_variants);
-}
-
-string type_suffix(const vector<Expr> &ops, bool signed_variants = true) {
-    if (ops.empty()) {
-        return "";
-    }
-    string suffix = type_suffix(ops.front(), signed_variants);
-    for (size_t i = 1; i < ops.size(); i++) {
-        suffix = suffix + type_suffix(ops[i], signed_variants);
-    }
-    return suffix;
-}
 
 }  // namespace
 
