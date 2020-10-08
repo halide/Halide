@@ -761,7 +761,7 @@ std::string halide_type_to_c_type(const Type &t) {
 
 int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] =
-        "gengen\n"
+        "gengen \n"
         "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-d 1|0]\n"
         "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME]\n"
         "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
