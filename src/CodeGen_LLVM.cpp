@@ -4379,21 +4379,33 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
 
         if (llvm_has_intrinsic) {
             std::stringstream name;
+#if LLVM_VERSION >= 120
+            name << "llvm.vector.reduce.";
+#else
             name << "llvm.experimental.vector.reduce.";
+#endif
             const int bits = op->type.bits();
             bool takes_initial_value = false;
             Expr initial_value = init;
             if (op->type.is_float()) {
                 switch (op->op) {
                 case VectorReduce::Add:
+#if LLVM_VERSION >= 120
+                    name << "fadd";
+#else
                     name << "v2.fadd.f" << bits;
+#endif
                     takes_initial_value = true;
                     if (!initial_value.defined()) {
                         initial_value = make_zero(op->type);
                     }
                     break;
                 case VectorReduce::Mul:
+#if LLVM_VERSION >= 120
+                    name << "fmul";
+#else
                     name << "v2.fmul.f" << bits;
+#endif
                     takes_initial_value = true;
                     if (!initial_value.defined()) {
                         initial_value = make_one(op->type);
