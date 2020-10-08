@@ -18,6 +18,7 @@
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
+#include "StmtToJson.h"
 
 using Halide::Internal::debug;
 
@@ -563,6 +564,10 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
     if (contains(output_files, Output::stmt_html)) {
         debug(1) << "Module.compile(): stmt_html " << output_files.at(Output::stmt_html) << "\n";
         Internal::print_to_html(output_files.at(Output::stmt_html), *this);
+    }
+    if (contains(output_files, Output::stmt_json)) {
+      debug(1) << "Module.compile(): stmt_json " << output_files.at(Output::stmt_json) << "\n";
+      Internal::print_to_json(output_files.at(Output::stmt_json), *this);
     }
 
     // If there are submodules, recursively lower submodules to

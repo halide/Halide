@@ -31,19 +31,6 @@ std::string to_string(T value, int base_indent = 0) {
 }
 
 template<>
-std::string to_string(Halide::Internal::Parameter p, int base_indent) {
-    std::ostringstream os;
-    os << "{\n";
-    os << get_indent(base_indent+1) << "type: " << to_string(p.type()) << "\n";
-    os << get_indent(base_indent+1) << "is_buffer: " << to_string(p.is_buffer()) << "\n";
-    os << get_indent(base_indent+1) << "dimensions: " << to_string(p.dimensions()) << "\n";
-    os << get_indent(base_indent+1) << "name: \"" << to_string(p.name()) << "\"\n";
-    os << get_indent(base_indent) << "}";
-
-    return os.str();
-}
-
-template<>
 std::string to_string(Halide::Internal::ModulusRemainder m, int base_indent) {
     std::ostringstream os;
     os << "{ modulus: " << m.modulus
@@ -73,25 +60,6 @@ std::string to_string(Halide::Internal::Call::CallType c, int base_indent) {
     return ct_map[c];
 }
 
-template<>
-std::string to_string(Halide::Internal::PrefetchDirective p, int base_indent) {
-    std::stringstream os;
-    std::map<Halide::PrefetchBoundStrategy, std::string> strategy_str =
-        {{Halide::PrefetchBoundStrategy::Clamp, "Clamp"},
-         {Halide::PrefetchBoundStrategy::GuardWithIf, "GuardWithIf"},
-         {Halide::PrefetchBoundStrategy::NonFaulting, "NonFaulting"}
-        };
-    os << "{\n";
-    os << get_indent(base_indent+1) << "name: " << p.name << ",\n";
-    os << get_indent(base_indent+1) << "var: " << p.var << ",\n";
-    //TODO: this needs to use the JSON visitor..
-    os << get_indent(base_indent+1) << "offset: " << p.offset << ",\n";
-    os << get_indent(base_indent+1) << "strategy: " << strategy_str[p.strategy] << ",\n";
-    os << get_indent(base_indent+1) << "param: " << to_string(p.param) << "\n";
-    os << get_indent(base_indent) << "}";
-
-    return os.str();
-}
 
 } // anonymous namespace
 
@@ -99,9 +67,17 @@ std::string to_string(Halide::Internal::PrefetchDirective p, int base_indent) {
 using std::string;
 using std::vector;
 
-class StmtToJson : public IRVisitor {
+struct StmtToJson : public IRVisitor {
     int indent;
-    std::stringstream stream;
+    std::ofstream stream;
+
+    StmtToJson(const std::string &filename) : 
+        indent(0) {
+        stream.open(filename.c_str());
+    }
+    ~StmtToJson() override {
+        stream.close();
+    }
 
     string get_indent() {
         return ::Halide::Internal::get_indent(indent);
@@ -122,7 +98,9 @@ class StmtToJson : public IRVisitor {
     }
 
     inline void open_obj(string node_type) {
-        stream << get_indent() << "{\n";
+        // Indent is already done, so no need to get_indent()
+        // for the first line
+        stream << "{\n";
         increase_indent();
         stream << get_indent() << "_node_type : " << quoted_str(node_type) << ",\n";
     }
@@ -136,11 +114,85 @@ class StmtToJson : public IRVisitor {
         stream << get_indent() << "type : " << quoted_str(to_string(t)) << ",\n";
     }
 
+    void print(const LoweredFunc &f) {
+        open_obj("LoweredFunc");
+        stream << get_indent() << "name : "
+               << quoted_str(f.name) << ",\n";
+        //TODO: linkage and name mangling
+        //TODO: arguments
+        stream << get_indent() << "body :";
+        f.body.accept(this);
+        close_obj();
+    }
+
+    void print(const Module &m) {
+        open_obj("Module");
+        stream << get_indent() << "functions : [\n";
+        stream << get_indent();
+        increase_indent();
+        for (auto &f: m.functions()) {
+            print(f);
+        }
+        decrease_indent();
+        stream << get_indent() << "]\n";
+        close_obj();
+
+    }
+    void print(const Parameter &p) {
+        open_obj("Parameter");
+        stream << get_indent() << "type: " << quoted_str(to_string(p.type())) << "\n";
+        stream << get_indent() << "is_buffer: " << to_string(p.is_buffer()) << "\n";
+        stream << get_indent() << "dimensions: " << to_string(p.dimensions()) << "\n";
+        stream << get_indent() << "name: " << quoted_str(to_string(p.name())) << "\n";
+        close_obj();
+
+    }
+
+    void print(const PrefetchDirective &p) {
+        std::map<Halide::PrefetchBoundStrategy, std::string> strategy_str =
+            {{Halide::PrefetchBoundStrategy::Clamp, "Clamp"},
+             {Halide::PrefetchBoundStrategy::GuardWithIf, "GuardWithIf"},
+             {Halide::PrefetchBoundStrategy::NonFaulting, "NonFaulting"}
+            };
+        open_obj("PrefetchDirective");
+        stream << get_indent() << "name: " << quoted_str(p.name) << ",\n";
+        stream << get_indent() << "var: " << quoted_str(p.var) << ",\n";
+        stream << get_indent() << "offset: ";
+        p.offset.accept(this);
+        stream << ",\n";
+        stream << get_indent() << "strategy: " << strategy_str[p.strategy] << ",\n";
+        stream << get_indent() << "param: ";
+        print(p.param);
+        stream << "\n";
+        close_obj();
+    }
+
+    void print(const ForType &ft) {
+        std::map<ForType, std::string> ft_str =
+            {{ForType::Serial, "Serial"},
+             {ForType::Parallel, "Parallel"},
+             {ForType::Vectorized, "Vectorized"},
+             {ForType::Unrolled, "Unrolled"},
+             {ForType::Extern, "Extern"},
+             {ForType::GPUBlock, "GPUBlock"},
+             {ForType::GPUThread, "GPUThread"},
+             {ForType::GPULane, "GPULane"}};
+        stream << quoted_str(ft_str[ft]);
+    }
+
     template<typename T>
-    void print_immediate(string node_type, Type t, T value) {
+    void print_immediate(string node_type, Type t, T v) {
         open_obj(node_type);
         print_type(t);
-        stream << get_indent() << "value : " << to_string(value) << "\n";
+        stream << get_indent() << "value : " << to_string(v->value) << "\n";
+        close_obj();
+    }
+
+    template<>
+    void print_immediate(string node_type, Type t, const StringImm* v) {
+        open_obj(node_type);
+        print_type(t);
+        stream << get_indent() << "value : " << quoted_str(v->value) << "\n";
         close_obj();
     }
 
@@ -163,12 +215,28 @@ class StmtToJson : public IRVisitor {
         open_obj("Cast");
         print_type(e->type);
         stream << get_indent() << "value : ";
-        e->accept(this); 
+        e->value.accept(this); 
         close_obj();
     }
 
     void visit(const Variable *e) override {
-        internal_assert(false);
+        open_obj("Variable");
+        stream << get_indent() << "name : "
+               << quoted_str(e->name) << ",\n";
+        if (e->param.defined()) {
+            stream << get_indent() << "param : ";
+            print(e->param);
+            stream << ",\n";
+        }
+        // TODO: buffer
+        internal_assert(!e->image.defined());
+        //stream << get_indent() << "image : "
+        //       << "TODO" << ",\n";
+        // TODO: reduction_domain
+        //stream << get_indent() << "reduction_domain : "
+        //       << "TODO" << "\n";
+        internal_assert(!e->reduction_domain.defined());
+        close_obj();
     }
 
     template<typename T>
@@ -245,7 +313,7 @@ class StmtToJson : public IRVisitor {
         open_obj("Not");
         print_type(e->type);
         stream << get_indent() << "value : ";
-        e->accept(this);
+        e->a.accept(this);
         close_obj();
     }
 
@@ -273,7 +341,8 @@ class StmtToJson : public IRVisitor {
         //stream << to_string(e->image) << ",\n";
 
         stream << get_indent() << "param : ";
-        stream << to_string(e->param) << ",\n";
+        print(e->param);
+        stream << ",\n";
 
         stream << get_indent() << "alignment : ";
         stream << to_string(e->alignment) << "\n";
@@ -306,14 +375,16 @@ class StmtToJson : public IRVisitor {
         stream << get_indent() << "name : " << quoted_str(e->name) << ",\n";
         stream << get_indent() << "args : ";
         print_vector(e->args);
-        stream << ",\n";
+        stream << get_indent() << ",\n";
         stream << get_indent() << "call_type : " << quoted_str(to_string(e->call_type)) << ",\n";
         // We assume that a call to another func or a call to an image
         // has already been lowered.
         internal_assert(!e->func.defined()) << "Call to a func should not exist at backend\n";
         internal_assert(!e->image.defined()) << "Call to an image should not exist at backend\n";
         if (e->param.defined()) {
-            stream << get_indent() << "param : " << to_string(e->param) << "\n";
+            stream << get_indent() << "param : ";
+            print(e->param);
+            stream << "\n";
         }
         close_obj();
     }
@@ -343,13 +414,20 @@ class StmtToJson : public IRVisitor {
         open_obj("AssertStmt");
         stream << get_indent() << "condition : ";
         s->condition.accept(this);
+        stream << get_indent() << ", ";
         stream << get_indent() << "message : ";
         s->message.accept(this);
         close_obj();
     }
 
-    void visit(const ProducerConsumer *) override {
-        internal_error << "Should not see ProducerConsumer in backend\n";
+    void visit(const ProducerConsumer *s) override {
+        open_obj("ProducerConsumer");
+        stream << get_indent() << "name : "
+               << quoted_str(s->name) << ",\n";
+        stream << get_indent() << "is_producer : " << s->is_producer << ",\n";
+        stream << get_indent() << "body : ";
+        s->body.accept(this);
+        close_obj();
     }
 
     void visit(const For *s) override {
@@ -360,8 +438,9 @@ class StmtToJson : public IRVisitor {
         s->min.accept(this);
         stream << get_indent() << "extent : ";
         s->extent.accept(this);
-        stream << get_indent() << "for_type : "
-               << quoted_str(to_string(s->for_type)) << ",\n";
+        stream << get_indent() << "for_type : ";
+        print(s->for_type);
+        stream << ",\n";
         stream << get_indent() << "device_api : "
                << quoted_str(to_string(s->device_api)) << ",\n";
         stream << get_indent() << "body : ";
@@ -379,8 +458,9 @@ class StmtToJson : public IRVisitor {
         s->value.accept(this);
         stream << get_indent() << "index : ";
         s->index.accept(this);
-        stream << get_indent() << "param : "
-               << to_string(s->param)<< ",\n";
+        stream << get_indent() << "param : ";
+        print(s->param);
+        stream << ",\n";
         stream << get_indent() << "alignment : "
                << quoted_str(to_string(s->alignment)) << ",\n";
         close_obj();
@@ -391,23 +471,24 @@ class StmtToJson : public IRVisitor {
 
     template<typename T>
     inline void print_vector(const vector<T> &v) {
-        stream << get_indent() << "[\n";
+        stream << "[\n";
         increase_indent();
         for (auto &e: v) {
             stream << to_string(e) << ",\n";
         }
         decrease_indent();
-        stream << get_indent() << "]\n";
+        stream << get_indent() << "]";
     }
 
 
     template<>
     inline void print_vector(const vector<Expr> &v) {
-        stream << get_indent() << "[\n";
+        stream << "[\n";
         increase_indent();
         for (auto &e: v) {
+            stream << get_indent();
             e->accept(this);
-            stream << ",\n";
+            stream << get_indent() << ",\n";
         }
         decrease_indent();
         stream << get_indent() << "]\n";
@@ -465,9 +546,9 @@ class StmtToJson : public IRVisitor {
         open_obj("IfThenElse");
         stream << get_indent() << "condition : ";
         s->condition.accept(this);
-        stream << get_indent() << "then_case";
-        s->condition.accept(this);
-        stream << get_indent() << "else_case";
+        stream << get_indent() << "then_case : ";
+        s->then_case.accept(this);
+        stream << get_indent() << "else_case : ";
         if (s->else_case.defined()) {
             s->else_case.accept(this);
         } else {
@@ -512,8 +593,9 @@ class StmtToJson : public IRVisitor {
         stream << get_indent() << "bounds : ";
         print_vector(s->bounds);
         stream << ",\n";
-        stream << get_indent() << "prefetch : "
-               << to_string(s->prefetch);
+        stream << get_indent() << "prefetch : ";
+        print(s->prefetch);
+        stream << ",\n";
         stream << get_indent() << "condition : ";
         s->condition.accept(this);
         stream << get_indent() << "body : ";
@@ -551,8 +633,14 @@ class StmtToJson : public IRVisitor {
         s->body.accept(this);
         close_obj();
     }
+
+
 };
 
+void print_to_json(const std::string &filename, const Module &m) {
+    StmtToJson stj(filename);
+    stj.print(m);
+}
 
 
 } // namespace Internal
