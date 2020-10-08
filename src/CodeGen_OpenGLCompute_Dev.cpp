@@ -255,7 +255,6 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(const Stmt &
     } else {
         stream << "#version 430\n";
     }
-    add_common_macros(stream);
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
     stream << "#define halide_unused(x) (void)(x)\n";
 
