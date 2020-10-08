@@ -405,8 +405,9 @@ std::pair<Expr, Expr> unsigned_long_div_mod_round_to_zero(Expr &num, const Expr 
         //     (1 << shift) <= upper_bound
         start = times;
         uint64_t max_val = *upper_bound;
-        while (max_val >>= 1)
+        while (max_val >>= 1) {
             --start;
+        }
         debug(1) << "Max value for long division: " << *upper_bound
                  << ". Evaluate only first " << 1 + times - start << " bits.\n";
     }
