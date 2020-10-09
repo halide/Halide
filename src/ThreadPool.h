@@ -1,7 +1,9 @@
 #ifndef HALIDE_THREAD_POOL_H
 #define HALIDE_THREAD_POOL_H
 
+#include <cassert>
 #include <condition_variable>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <queue>

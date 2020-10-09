@@ -2204,7 +2204,9 @@ HALIDE_NEVER_INLINE void fuzz_test_rule(Before &&before, After &&after, Predicat
     // Track which types this rule has been tested for before
     static std::set<uint32_t> tested;
 
-    if (!tested.insert(reinterpret_bits<uint32_t>(wildcard_type)).second) return;
+    if (!tested.insert(reinterpret_bits<uint32_t>(wildcard_type)).second) {
+        return;
+    }
 
     // Print it in a form where it can be piped into a python/z3 validator
     debug(0) << "validate('" << before << "', '" << after << "', '" << pred << "', " << Type(wildcard_type) << ", " << Type(output_type) << ")\n";
@@ -2258,13 +2260,17 @@ HALIDE_NEVER_INLINE void fuzz_test_rule(Before &&before, After &&after, Predicat
 
         halide_scalar_value_t val_pred, val_before, val_after;
         halide_type_t type = output_type;
-        if (!evaluate_predicate(pred, state)) continue;
+        if (!evaluate_predicate(pred, state)) {
+            continue;
+        }
         before.make_folded_const(val_before, type, state);
         uint16_t lanes = type.lanes;
         after.make_folded_const(val_after, type, state);
         lanes |= type.lanes;
 
-        if (lanes & MatcherState::special_values_mask) continue;
+        if (lanes & MatcherState::special_values_mask) {
+            continue;
+        }
 
         bool ok = true;
         switch (output_type.code) {

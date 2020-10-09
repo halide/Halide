@@ -2256,7 +2256,7 @@ RUN_CLANG_TIDY ?= $(shell dirname $(CLANG))/../share/clang/run-clang-tidy.py
 # Run clang-tidy on everything in src/. In future we may increase this
 # surface. Not doing it for now because things outside src are not
 # performance-critical.
-CLANG_TIDY_TARGETS= $(addprefix $(SRC_DIR)/,$(SOURCE_FILES))
+CLANG_TIDY_TARGETS= $(addprefix $(SRC_DIR)/,$(SOURCE_FILES)) $(addprefix $(SRC_DIR)/,$(HEADER_FILES))
 
 INVOKE_CLANG_TIDY ?= $(RUN_CLANG_TIDY) -p $(BUILD_DIR) $(CLANG_TIDY_TARGETS) -clang-tidy-binary $(CLANG)-tidy -clang-apply-replacements-binary $(CLANG)-apply-replacements -quiet
 
@@ -2266,7 +2266,7 @@ $(BUILD_DIR)/compile_commands.json:
 	BD=$$(realpath $(BUILD_DIR)); \
 	SD=$$(realpath $(SRC_DIR)); \
 	ID=$$(realpath $(INCLUDE_DIR)); \
-	for S in $(SOURCE_FILES); do \
+	for S in $(SOURCE_FILES) $(HEADER_FILES); do \
 	echo "{ \"directory\": \"$${BD}\"," >> $@; \
 	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -c $$SD/$$S -o /dev/null\"," >> $@; \
 	echo "  \"file\": \"$$SD/$$S\" }," >> $@; \
