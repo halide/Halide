@@ -2268,7 +2268,7 @@ $(BUILD_DIR)/compile_commands.json:
 	ID=$$(realpath $(INCLUDE_DIR)); \
 	for S in $(SOURCE_FILES) $(HEADER_FILES); do \
 	echo "{ \"directory\": \"$${BD}\"," >> $@; \
-	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -c $$SD/$$S -o /dev/null\"," >> $@; \
+	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -I$$ID -c $$SD/$$S -o /dev/null\"," >> $@; \
 	echo "  \"file\": \"$$SD/$$S\" }," >> $@; \
 	done
 	# Add a sentinel to make it valid json (no trailing comma)
