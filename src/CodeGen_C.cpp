@@ -2754,9 +2754,9 @@ void CodeGen_C::visit(const Shuffle *op) {
             // Combine them into one vector. Clang emits excellent code via this
             // union approach (typically without going thru memory) for both x64 and arm64.
             stream << get_indent() << "union { "
-                                   << print_type(t0) << " src[" << vecs.size() << "]; "
-                                   << print_type(op->type) << " dst; } "
-                                   << storage_name << " = {{ " << with_commas(vecs) << " }};\n";
+                   << print_type(t0) << " src[" << vecs.size() << "]; "
+                   << print_type(op->type) << " dst; } "
+                   << storage_name << " = {{ " << with_commas(vecs) << " }};\n";
             src = storage_name + ".dst";
         }
         rhs << print_type(op->type) << "_ops::shuffle<" << with_commas(op->indices) << ">(" << src << ")";
