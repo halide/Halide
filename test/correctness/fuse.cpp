@@ -64,17 +64,18 @@ int main(int argc, char **argv) {
             .fuse(x, y, xy)
             .vectorize(xy, 16);
 
-        // Compile the program to a stmt.
-        std::string result_file = Internal::get_test_tmp_dir() + "fuse.stmt";
-        Internal::ensure_no_file_exists(result_file);
-        f.compile_to_lowered_stmt(result_file, f.infer_arguments());
+        class CheckForMod : public Internal::IRMutator {
+            using IRMutator::visit;
 
-        // Verify that the compiled stmt does not contain a mod operator.
-        std::vector<char> stmt = Internal::read_entire_file(result_file);
-        if (std::find(stmt.begin(), stmt.end(), '%') != stmt.end()) {
-            printf("Fused schedule contained an unfused ramp: %s", stmt.data());
-            return -1;
-        }
+            Expr visit(const Internal::Mod *op) override {
+                std::cerr << "Found mod: " << Expr(op) << "\n";
+                exit(-1);
+                return op;
+            }
+        };
+
+        f.add_custom_lowering_pass(new CheckForMod);
+        f.compile_jit();
     }
     printf("Success!\n");
     return 0;
