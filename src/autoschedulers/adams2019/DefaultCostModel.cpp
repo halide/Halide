@@ -32,10 +32,14 @@ using Halide::Internal::ScheduleFeatures;
 using Halide::Runtime::Buffer;
 
 bool ends_with(const std::string &str, const std::string &suffix) {
-    if (str.size() < suffix.size()) return false;
+    if (str.size() < suffix.size()) {
+        return false;
+    }
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off + i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) {
+            return false;
+        }
     }
     return true;
 }
@@ -230,10 +234,12 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
             any_nans = true;
             aslog(0) << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
             aslog(0) << "Checking pipeline features for NaNs...\n";
-            pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+            pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) { abort(); 
+} });
             aslog(0) << "None found\n";
             aslog(0) << "Checking schedule features for NaNs...\n";
-            schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+            schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) { abort(); 
+} });
             aslog(0) << "None found\n";
             aslog(0) << "Checking network weights for NaNs...\n";
             weights.for_each_buffer([&](const Runtime::Buffer<float> &buf) {
@@ -243,7 +249,9 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
         }
         internal_assert(true_runtimes(i) > 0);
     }
-    if (any_nans) abort();
+    if (any_nans) {
+        abort();
+    }
 
     // Update weights locally
     auto update_weight = [](const Runtime::Buffer<float> &src, Runtime::Buffer<float> &dst) {
@@ -262,7 +270,9 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
 }
 
 void DefaultCostModel::evaluate_costs() {
-    if (cursor == 0 || !schedule_feat_queue.data()) return;
+    if (cursor == 0 || !schedule_feat_queue.data()) {
+        return;
+    }
 
     internal_assert(pipeline_feat_queue.data());
     internal_assert(schedule_feat_queue.data());

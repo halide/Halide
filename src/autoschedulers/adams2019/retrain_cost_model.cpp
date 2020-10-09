@@ -84,8 +84,9 @@ struct Flags {
     std::vector<float> parse_floats(const std::string &s) {
         const char *c = s.c_str();
         std::vector<float> v;
-        while (isspace(*c))
+        while (isspace(*c)) {
             ++c;
+        }
         while (*c) {
             string f;
             while (*c && !isspace(*c)) {
@@ -131,10 +132,14 @@ uint64_t hash_floats(uint64_t h, const float *begin, const float *end) {
 }
 
 bool ends_with(const string &str, const string &suffix) {
-    if (str.size() < suffix.size()) return false;
+    if (str.size() < suffix.size()) {
+        return false;
+    }
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off + i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) {
+            return false;
+        }
     }
     return true;
 }
@@ -433,7 +438,9 @@ int main(int argc, char **argv) {
                     auto &tp = tpp[model];
 
                     for (auto &p : train ? samples : validation_set) {
-                        if (kModels > 1 && rng() & 1) continue;  // If we are training multiple kModels, allow them to diverge.
+                        if (kModels > 1 && rng() & 1) {
+                            continue;  // If we are training multiple kModels, allow them to diverge.
+                        }
                         if (p.second.schedules.size() < 8) {
                             continue;
                         }
@@ -491,10 +498,14 @@ int main(int argc, char **argv) {
                             int good = 0, bad = 0;
                             for (auto &sched : p.second.schedules) {
                                 auto &ref = p.second.schedules[p.second.fastest_schedule_hash];
-                                if (sched.second.prediction[model] == 0) continue;
+                                if (sched.second.prediction[model] == 0) {
+                                    continue;
+                                }
                                 assert(sched.second.runtimes[0] >= ref.runtimes[0]);
                                 float runtime_ratio = sched.second.runtimes[0] / ref.runtimes[0];
-                                if (runtime_ratio <= 1.3f) continue;  // Within 30% of the runtime of the best
+                                if (runtime_ratio <= 1.3f) {
+                                    continue;  // Within 30% of the runtime of the best
+                                }
                                 if (sched.second.prediction[model] >= ref.prediction[model]) {
                                     good++;
                                 } else {
@@ -535,7 +546,9 @@ int main(int argc, char **argv) {
                 loss_sum[model] *= 0.9f;
                 loss_sum_counter[model] *= 0.9f;
             }
-            if (kModels > 1) std::cout << "\n";
+            if (kModels > 1) {
+                std::cout << "\n";
+            }
             std::cout << " Rate: ";
             int best_model = 0;
             float best_rate = 0;
@@ -555,7 +568,9 @@ int main(int argc, char **argv) {
                 v_correct_ordering_rate_count[model] *= 0.9f;
             }
 
-            if (kModels > 1) std::cout << "\n";
+            if (kModels > 1) {
+                std::cout << "\n";
+            }
             if (samples.count(worst_miss_pipeline_id)) {
                 std::cout << " Worst: " << worst_miss << " " << leaf(samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename) << "\n";
                 // samples[worst_miss_pipeline_id].schedules.erase(worst_miss_schedule_id);

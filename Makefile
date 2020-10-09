@@ -2256,7 +2256,9 @@ RUN_CLANG_TIDY ?= $(shell dirname $(CLANG))/../share/clang/run-clang-tidy.py
 # Run clang-tidy on everything in src/. In future we may increase this
 # surface. Not doing it for now because things outside src are not
 # performance-critical.
-CLANG_TIDY_TARGETS= $(addprefix $(SRC_DIR)/,$(SOURCE_FILES)) $(addprefix $(SRC_DIR)/,$(HEADER_FILES))
+CLANG_TIDY_TARGETS_SRC = $(SRC_DIR)/*.cpp $(SRC_DIR)/*.h
+CLANG_TIDY_TARGETS_AUTOSCHEDULERS = $(SRC_DIR)/autoschedulers/*/*.cpp $(SRC_DIR)/autoschedulers/*/*.h
+CLANG_TIDY_TARGETS = $(CLANG_TIDY_TARGETS_SRC) $(CLANG_TIDY_TARGETS_AUTOSCHEDULERS)
 
 INVOKE_CLANG_TIDY ?= $(RUN_CLANG_TIDY) -p $(BUILD_DIR) $(CLANG_TIDY_TARGETS) -clang-tidy-binary $(CLANG)-tidy -clang-apply-replacements-binary $(CLANG)-apply-replacements -quiet
 
@@ -2264,12 +2266,18 @@ $(BUILD_DIR)/compile_commands.json:
 	mkdir -p $(BUILD_DIR)
 	echo '[' >> $@
 	BD=$$(realpath $(BUILD_DIR)); \
-	SD=$$(realpath $(SRC_DIR)); \
-	ID=$$(realpath $(INCLUDE_DIR)); \
-	for S in $(SOURCE_FILES) $(HEADER_FILES); do \
+	for S in $(CLANG_TIDY_TARGETS_SRC); do \
 	echo "{ \"directory\": \"$${BD}\"," >> $@; \
-	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -c $$SD/$$S -o /dev/null\"," >> $@; \
-	echo "  \"file\": \"$$SD/$$S\" }," >> $@; \
+	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -c $$S -o /dev/null\"," >> $@; \
+	echo "  \"file\": \"$$S\" }," >> $@; \
+	done
+	BD=$$(realpath $(BUILD_DIR)); \
+	ID1=$$(realpath $(INCLUDE_DIR)); \
+	ID2=$$(realpath $(SRC_DIR)/autoschedulers/common); \
+	for S in $(CLANG_TIDY_TARGETS_AUTOSCHEDULERS); do \
+	echo "{ \"directory\": \"$${BD}\"," >> $@; \
+	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -I$$ID1 -I$$ID2 -c $$S -o /dev/null\"," >> $@; \
+	echo "  \"file\": \"$$S\" }," >> $@; \
 	done
 	# Add a sentinel to make it valid json (no trailing comma)
 	echo "{ \"directory\": \"$${BD}\"," >> $@; \

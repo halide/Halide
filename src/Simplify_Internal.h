@@ -208,8 +208,12 @@ public:
     // Put the args to a commutative op in a canonical order
     HALIDE_ALWAYS_INLINE
     bool should_commute(const Expr &a, const Expr &b) {
-        if (a.node_type() < b.node_type()) return true;
-        if (a.node_type() > b.node_type()) return false;
+        if (a.node_type() < b.node_type()) {
+            return true;
+        }
+        if (a.node_type() > b.node_type()) {
+            return false;
+        }
 
         if (a.node_type() == IRNodeType::Variable) {
             const Variable *va = a.as<Variable>();
