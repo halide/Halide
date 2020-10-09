@@ -356,7 +356,6 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
             << globals
             << halide_internal_runtime_header_HalideRuntime_h << "\n"
             << halide_internal_initmod_inlined_c << "\n";
-        add_common_macros(stream);
         stream << "\n";
     }
 
@@ -427,24 +426,6 @@ CodeGen_C::~CodeGen_C() {
         }
         stream << "#endif\n";
     }
-}
-
-void CodeGen_C::add_common_macros(std::ostream &dest) {
-    const char *macros = R"INLINE_CODE(
-// ll suffix in OpenCL is reserved for 128-bit integers.
-#if defined __OPENCL_VERSION__
-#define ADD_INT64_T_SUFFIX(x) x##l
-#define ADD_UINT64_T_SUFFIX(x) x##ul
-// HLSL doesn't have any suffixes.
-#elif defined HLSL_VERSION
-#define ADD_INT64_T_SUFFIX(x) x
-#define ADD_UINT64_T_SUFFIX(x) x
-#else
-#define ADD_INT64_T_SUFFIX(x) x##ll
-#define ADD_UINT64_T_SUFFIX(x) x##ull
-#endif
-)INLINE_CODE";
-    dest << macros;
 }
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
@@ -1981,12 +1962,22 @@ void CodeGen_C::visit(const IntImm *op) {
     if (op->type == Int(32)) {
         id = std::to_string(op->value);
     } else {
-        print_assignment(op->type, "(" + print_type(op->type) + ")(ADD_INT64_T_SUFFIX(" + std::to_string(op->value) + "))");
+        static const char *const suffixes[3] = {
+            "ll",  // PlainC
+            "l",   // OpenCL
+            "",    // HLSL
+        };
+        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
     }
 }
 
 void CodeGen_C::visit(const UIntImm *op) {
-    print_assignment(op->type, "(" + print_type(op->type) + ")(ADD_UINT64_T_SUFFIX(" + std::to_string(op->value) + "))");
+    static const char *const suffixes[3] = {
+        "ull",  // PlainC
+        "ul",   // OpenCL
+        "",     // HLSL
+    };
+    print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
 }
 
 void CodeGen_C::visit(const StringImm *op) {
@@ -2878,7 +2869,6 @@ void CodeGen_C::test() {
     {
         CodeGen_C cg(source, Target("host"), CodeGen_C::CImplementation);
         cg.compile(m);
-        cg.add_common_macros(macros);
     }
 
     string src = source.str();

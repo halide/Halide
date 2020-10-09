@@ -47,6 +47,7 @@ protected:
     public:
         CodeGen_OpenCL_C(std::ostream &s, Target t)
             : CodeGen_C(s, t) {
+            integer_suffix_style = IntegerSuffixStyle::OpenCL;
         }
         void add_kernel(Stmt stmt,
                         const std::string &name,
