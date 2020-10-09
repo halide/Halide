@@ -312,7 +312,7 @@ public:
 
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
-      extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false) {
+      extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false), using_vector_typedefs(false) {
 
     if (is_header()) {
         // If it's a header, emit an include guard.
@@ -1245,6 +1245,8 @@ public:
             stream << "#endif\n";
         }
     }
+
+    using_vector_typedefs = true;
 }
 
 void CodeGen_C::set_name_mangling_mode(NameMangling mode) {
@@ -1845,7 +1847,7 @@ void CodeGen_C::visit(const Min *op) {
 }
 
 void CodeGen_C::visit_relop(Type t, const Expr &a, const Expr &b, const char *scalar_op, const char *vector_op) {
-    if (t.is_scalar()) {
+    if (t.is_scalar() || !using_vector_typedefs) {
         visit_binop(t, a, b, scalar_op);
     } else {
         internal_assert(a.type() == b.type());
