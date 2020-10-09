@@ -523,7 +523,6 @@ public:
         return r;
     }
 
-    // gather
     static Vec load_gather(const void *base, const CppVector<int32_t, Lanes> &offset) {
         Vec r;
         for (size_t i = 0; i < Lanes; i++) {
@@ -536,7 +535,6 @@ public:
         memcpy(((ElementType*)base + offset), v.data(), sizeof(ElementType) * Lanes);
     }
 
-    // scatter
     static void store_scatter(const Vec &v, void *base, const CppVector<int32_t, Lanes> &offset) {
         for (size_t i = 0; i < Lanes; i++) {
             ((ElementType*)base)[offset[i]] = v[i];
@@ -996,7 +994,7 @@ public:
 
     static Vec broadcast(const ElementType v) {
         const Vec zero = {}; // Zero-initialized native vector.
-        return zero + v;
+        return v - zero;
     }
 
     static Vec ramp(const ElementType base, const ElementType stride) {
@@ -1009,13 +1007,14 @@ public:
 
     static Vec load(const void *base, int32_t offset) {
         Vec r;
-        // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
-        // (e.g. uint8x48), the actual implementation
-        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
-        // that is in the logical type, to avoid possible overreads.
-        //
-        // TODO: can we assume proper alignment here and just do a straight assignment?
-        memcpy(&r, ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
+        if (sizeof(ElementType) * Lanes == sizeof(Vec)) {
+            r = *((const Vec*)((const ElementType*)base + offset));
+        } else {
+            // If Vec is a non-power-of-two (e.g. uint8x48), the actual implementation
+            // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+            // that is in the logical type, to avoid possible overreads.
+            memcpy(&r, ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
+        }
         return r;
     }
 
@@ -1028,16 +1027,16 @@ public:
     }
 
     static void store(const Vec v, void *base, int32_t offset) {
-        // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
-        // (e.g. uint8x48), the actual implementation
-        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
-        // that is in the logical type, to avoid possible overwrites.
-        //
-        // TODO: can we assume proper alignment here and just do a straight assignment?
-        memcpy(((ElementType*)base + offset), &v, sizeof(ElementType) * Lanes);
+        if (sizeof(ElementType) * Lanes == sizeof(v)) {
+            *((Vec*)((ElementType*)base + offset)) = v;
+        } else {
+            // If Vec is a non-power-of-two (e.g. uint8x48), the actual implementation
+            // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+            // that is in the logical type, to avoid possible overreads.
+            memcpy(((ElementType*)base + offset), &v, sizeof(ElementType) * Lanes);
+        }
     }
 
-    // scatter
     static void store_scatter(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset) {
         for (size_t i = 0; i < Lanes; i++) {
             ((ElementType*)base)[offset[i]] = v[i];
