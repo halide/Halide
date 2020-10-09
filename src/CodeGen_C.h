@@ -50,10 +50,16 @@ public:
 
     static void test();
 
-    /**  Add common macros to be shared across all backends */
-    void add_common_macros(std::ostream &dest);
-
 protected:
+    enum class IntegerSuffixStyle {
+        PlainC = 0,
+        OpenCL = 1,
+        HLSL = 2
+    };
+
+    /** How to emit 64-bit integer constants */
+    IntegerSuffixStyle integer_suffix_style = IntegerSuffixStyle::PlainC;
+
     /** Emit a declaration. */
     // @{
     virtual void compile(const LoweredFunc &func);
