@@ -332,7 +332,7 @@ class SplitTuples : public IRMutator {
     Scope<int> realizations;
 
 public:
-    SplitTuples(const map<string, Function> &e)
+    explicit SplitTuples(const map<string, Function> &e)
         : env(e) {
     }
 };

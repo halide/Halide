@@ -27,7 +27,7 @@ public:
 
     string pipeline_name;
 
-    InjectProfiling(const string &pipeline_name)
+    explicit InjectProfiling(const string &pipeline_name)
         : pipeline_name(pipeline_name) {
         indices["overhead"] = 0;
         stack.push_back(0);

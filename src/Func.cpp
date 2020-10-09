@@ -2664,7 +2664,7 @@ class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
     int count;
 
-    CountImplicitVars(const vector<Expr> &e)
+    explicit CountImplicitVars(const vector<Expr> &e)
         : count(0) {
         for (size_t i = 0; i < e.size(); i++) {
             e[i].accept(this);

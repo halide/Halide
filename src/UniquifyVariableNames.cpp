@@ -115,7 +115,7 @@ class UniquifyVariableNames : public IRMutator {
     }
 
 public:
-    UniquifyVariableNames(const Scope<string> *free_vars) {
+    explicit UniquifyVariableNames(const Scope<string> *free_vars) {
         renaming.set_containing_scope(free_vars);
     }
 };

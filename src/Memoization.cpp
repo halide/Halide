@@ -448,7 +448,7 @@ Stmt inject_memoization(const Stmt &s, const std::map<std::string, Function> &en
 
 class RewriteMemoizedAllocations : public IRMutator {
 public:
-    RewriteMemoizedAllocations(const std::map<std::string, Function> &e)
+    explicit RewriteMemoizedAllocations(const std::map<std::string, Function> &e)
         : env(e) {
     }
 

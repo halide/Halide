@@ -44,7 +44,7 @@ class CountProducers : public IRVisitor {
 public:
     int count = 0;
 
-    CountProducers(const std::string &name)
+    explicit CountProducers(const std::string &name)
         : name(name) {
     }
 };
@@ -417,7 +417,7 @@ class HasExternConsumer : public IRVisitor {
     const std::string &func;
 
 public:
-    HasExternConsumer(const std::string &func)
+    explicit HasExternConsumer(const std::string &func)
         : func(func) {
     }
     bool result = false;
@@ -993,7 +993,7 @@ class StorageFolding : public IRMutator {
     }
 
 public:
-    StorageFolding(const map<string, Function> &env)
+    explicit StorageFolding(const map<string, Function> &env)
         : env(env) {
     }
 };

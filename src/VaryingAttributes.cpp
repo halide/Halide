@@ -425,7 +425,7 @@ Stmt find_linear_expressions(const Stmt &s) {
 // tagged intrinsics
 class FindVaryingAttributeTags : public IRVisitor {
 public:
-    FindVaryingAttributeTags(std::map<std::string, Expr> &varyings_)
+    explicit FindVaryingAttributeTags(std::map<std::string, Expr> &varyings_)
         : varyings(varyings_) {
     }
 
@@ -724,7 +724,7 @@ protected:
     }
 
 public:
-    CastVariablesToFloatAndOffset(const std::vector<std::string> &names_)
+    explicit CastVariablesToFloatAndOffset(const std::vector<std::string> &names_)
         : names(names_) {
     }
 

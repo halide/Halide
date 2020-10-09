@@ -76,7 +76,7 @@ public:
         int use_count = 0;
         // All consumer Exprs for which this is the last child Expr.
         map<ExprWithCompareCache, int> uses;
-        Entry(const Expr &e)
+        explicit Entry(const Expr &e)
             : expr(e) {
         }
     };
@@ -184,7 +184,7 @@ public:
 class Replacer : public IRGraphMutator {
 public:
     Replacer() = default;
-    Replacer(const map<Expr, Expr, ExprCompare> &r)
+    explicit Replacer(const map<Expr, Expr, ExprCompare> &r)
         : IRGraphMutator() {
         expr_replacements = r;
     }
@@ -261,7 +261,7 @@ public:
         return common_subexpression_elimination(e, lift_all);
     }
 
-    CSEEveryExprInStmt(bool l)
+    explicit CSEEveryExprInStmt(bool l)
         : lift_all(l) {
     }
 };

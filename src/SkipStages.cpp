@@ -323,7 +323,7 @@ private:
 
 class StageSkipper : public IRMutator {
 public:
-    StageSkipper(const string &f)
+    explicit StageSkipper(const string &f)
         : func(f), in_vector_loop(false) {
     }
 

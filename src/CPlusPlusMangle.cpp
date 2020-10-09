@@ -29,10 +29,10 @@ struct MangledNamePart {
     std::string with_substitutions;
 
     MangledNamePart() = default;
-    MangledNamePart(const std::string &mangled)
+    explicit MangledNamePart(const std::string &mangled)
         : full_name(mangled), with_substitutions(mangled) {
     }
-    MangledNamePart(const char *mangled)
+    explicit MangledNamePart(const char *mangled)
         : full_name(mangled), with_substitutions(mangled) {
     }
 };
@@ -203,7 +203,7 @@ MangledNamePart mangle_inner_name(const Type &type, const Target &target, Previo
 
     std::string quals = mangle_indirection_and_cvr_quals(type, target);
     if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
-        return quals + simple_type_to_mangle_char(type.handle_type->inner_name.name, target);
+        return MangledNamePart(quals + simple_type_to_mangle_char(type.handle_type->inner_name.name, target));
     } else {
         std::string code;
         if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Struct) {
@@ -239,45 +239,44 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
     if (type.is_int()) {
         switch (type.bits()) {
         case 8:
-            return "C";
+            return MangledNamePart("C");
         case 16:
-            return "F";
+            return MangledNamePart("F");
         case 32:
-            return "H";
+            return MangledNamePart("H");
         case 64:
-            return "_J";
+            return MangledNamePart("_J");
         }
         internal_error << "Unexpected integer size: " << type.bits() << ".\n";
-        return "";
+        return MangledNamePart("");
     } else if (type.is_uint()) {
         switch (type.bits()) {
         case 1:
-            return "_N";
+            return MangledNamePart("_N");
         case 8:
-            return "E";
+            return MangledNamePart("E");
         case 16:
-            return "G";
+            return MangledNamePart("G");
         case 32:
-            return "I";
+            return MangledNamePart("I");
         case 64:
-            return "_K";
+            return MangledNamePart("_K");
         }
-        internal_error << "Unexpected unsigned integer size: " << type.bits() << "\n";
-        return "";
+        return MangledNamePart("");
     } else if (type.is_float()) {
         if (type.bits() == 32) {
-            return "M";
+            return MangledNamePart("M");
         } else if (type.bits() == 64) {
-            return "N";
+            return MangledNamePart("N");
         }
         internal_error << "Unexpected floating-point type size: " << type.bits() << ".\n";
-        return "";
+        return MangledNamePart("");
     } else if (type.is_handle()) {
         return mangle_inner_name((type.handle_type != nullptr) ? type : non_null_void_star_type(),
                                  target, prev_decls);
     }
     internal_error << "Unexpected kind of type. Code: " << type.code() << "\n";
-    return "";
+    return MangledNamePart("");
 }
 
 std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
@@ -479,9 +478,9 @@ MangledNamePart mangle_qualified_name(const std::string &name, const std::vector
     if (is_directly_in_std) {
         // TODO: more cases here.
         if (name == "allocator") {
-            return "Sa";
+            return MangledNamePart("Sa");
         } else if (name == "string") {  // Not correct, but it does the right thing
-            return "Ss";
+            return MangledNamePart("Ss");
         }
         result.full_name += "St";
         result.with_substitutions += "St";
@@ -516,7 +515,7 @@ MangledNamePart mangle_qualified_name(const std::string &name, const std::vector
 
 std::string mangle_inner_name(const Type &type, const Target &target, PrevPrefixes &prevs) {
     if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
-        MangledNamePart result = simple_type_to_mangle_char(type.handle_type->inner_name.name, target);
+        MangledNamePart result(simple_type_to_mangle_char(type.handle_type->inner_name.name, target));
         return apply_indirection_and_cvr_quals(type, result, prevs).full_name;
     } else {
         MangledNamePart mangled = mangle_qualified_name(type.handle_type->inner_name.name, type.handle_type->namespaces,

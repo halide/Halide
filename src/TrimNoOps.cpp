@@ -51,7 +51,7 @@ class LoadsFromBuffer : public IRVisitor {
 
 public:
     bool result = false;
-    LoadsFromBuffer(const string &b)
+    explicit LoadsFromBuffer(const string &b)
         : buffer(b) {
     }
 };

@@ -296,7 +296,7 @@ Stmt sloppy_unpredicate_loads_and_stores(const Stmt &s) {
 
 class InjectHVXLocks : public IRMutator {
 public:
-    InjectHVXLocks(const Target &t)
+    explicit InjectHVXLocks(const Target &t)
         : target(t) {
         uses_hvx_var = Variable::make(Bool(), "uses_hvx");
     }

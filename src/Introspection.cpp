@@ -205,7 +205,7 @@ class DebugSections {
 public:
     bool working;
 
-    DebugSections(const std::string &binary)
+    explicit DebugSections(const std::string &binary)
         : calibrated(false), working(false) {
         std::string binary_path = binary;
 #ifdef __APPLE__

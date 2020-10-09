@@ -54,7 +54,7 @@ class WeakenFunctionPtrs : public IRMutator {
 
 public:
     int count = 0;
-    WeakenFunctionPtrs(FunctionContents *f)
+    explicit WeakenFunctionPtrs(FunctionContents *f)
         : func(f) {
     }
 };
@@ -186,7 +186,7 @@ struct CheckVars : public IRGraphVisitor {
     const std::string name;
     bool unbound_reduction_vars_ok = false;
 
-    CheckVars(const std::string &n)
+    explicit CheckVars(const std::string &n)
         : name(n) {
     }
 
@@ -274,7 +274,7 @@ class FreezeFunctions : public IRGraphVisitor {
     }
 
 public:
-    FreezeFunctions(const string &f)
+    explicit FreezeFunctions(const string &f)
         : func(f) {
     }
 };
@@ -1045,7 +1045,7 @@ class SubstituteCalls : public IRMutator {
     }
 
 public:
-    SubstituteCalls(const map<FunctionPtr, FunctionPtr> &substitutions)
+    explicit SubstituteCalls(const map<FunctionPtr, FunctionPtr> &substitutions)
         : substitutions(substitutions) {
     }
 };

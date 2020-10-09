@@ -120,7 +120,7 @@ class WithLanes : public IRMutator {
     }
 
 public:
-    WithLanes(int lanes)
+    explicit WithLanes(int lanes)
         : lanes(lanes) {
     }
 };
@@ -1093,7 +1093,7 @@ private:
     }
 
 public:
-    OptimizePatterns(Target t) {
+    explicit OptimizePatterns(Target t) {
         target = t;
     }
 };
@@ -1628,7 +1628,7 @@ class EliminateInterleaves : public IRMutator {
     using IRMutator::visit;
 
 public:
-    EliminateInterleaves(int native_vector_bytes)
+    explicit EliminateInterleaves(int native_vector_bytes)
         : native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes) {
     }
 };
@@ -1787,7 +1787,7 @@ class OptimizeShuffles : public IRMutator {
     }
 
 public:
-    OptimizeShuffles(int lut_alignment)
+    explicit OptimizeShuffles(int lut_alignment)
         : lut_alignment(lut_alignment) {
     }
 };

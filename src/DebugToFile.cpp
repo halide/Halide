@@ -88,7 +88,7 @@ class DebugToFile : public IRMutator {
     }
 
 public:
-    DebugToFile(const map<string, Function> &e)
+    explicit DebugToFile(const map<string, Function> &e)
         : env(e) {
     }
 };
@@ -108,7 +108,7 @@ class RemoveDummyRealizations : public IRMutator {
     }
 
 public:
-    RemoveDummyRealizations(const vector<Function> &o)
+    explicit RemoveDummyRealizations(const vector<Function> &o)
         : outputs(o) {
     }
 };
@@ -141,7 +141,7 @@ class AddDummyRealizations : public IRMutator {
     }
 
 public:
-    AddDummyRealizations(const vector<Function> &o)
+    explicit AddDummyRealizations(const vector<Function> &o)
         : outputs(o) {
     }
 };

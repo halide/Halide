@@ -29,7 +29,7 @@ class CountVarUses : public IRVisitor {
     using IRVisitor::visit;
 
 public:
-    CountVarUses(std::map<std::string, int> &var_uses)
+    explicit CountVarUses(std::map<std::string, int> &var_uses)
         : var_uses(var_uses) {
     }
 };
@@ -53,7 +53,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         string new_name;
         bool new_value_alignment_tracked = false, new_value_bounds_tracked = false;
         bool value_alignment_tracked = false, value_bounds_tracked = false;
-        Frame(const LetOrLetStmt *op)
+        explicit Frame(const LetOrLetStmt *op)
             : op(op) {
         }
     };

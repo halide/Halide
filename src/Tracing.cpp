@@ -321,7 +321,7 @@ class RemoveRealizeOverOutput : public IRMutator {
     }
 
 public:
-    RemoveRealizeOverOutput(const vector<Function> &o)
+    explicit RemoveRealizeOverOutput(const vector<Function> &o)
         : outputs(o) {
     }
 };

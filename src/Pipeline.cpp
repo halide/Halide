@@ -440,7 +440,7 @@ class FindExterns : public IRGraphVisitor {
     }
 
 public:
-    FindExterns(std::map<std::string, JITExtern> &externs)
+    explicit FindExterns(std::map<std::string, JITExtern> &externs)
         : externs(externs) {
     }
 
@@ -801,7 +801,7 @@ void Pipeline::add_requirement(const Expr &condition, std::vector<Expr> &error_a
         const Expr &condition;
 
     public:
-        Checker(const Expr &c)
+        explicit Checker(const Expr &c)
             : condition(c) {
             c.accept(this);
         }
@@ -865,7 +865,7 @@ struct JITFuncCallContext {
     JITUserContext jit_context;
     bool custom_error_handler;
 
-    JITFuncCallContext(const JITHandlers &handlers) {
+    explicit JITFuncCallContext(const JITHandlers &handlers) {
         void *user_context = nullptr;
         JITHandlers local_handlers = handlers;
         if (local_handlers.custom_error == nullptr) {
@@ -911,7 +911,7 @@ struct Pipeline::JITCallArgs {
     size_t size{0};
     const void **store;
 
-    JITCallArgs(size_t size)
+    explicit JITCallArgs(size_t size)
         : size(size) {
         if (size > kStoreSize) {
             store = new ConstVoidPtr[size];

@@ -52,7 +52,7 @@ public:
     }
 
     Expr fact;
-    SimplifyUsingFact(Expr f)
+    explicit SimplifyUsingFact(Expr f)
         : fact(std::move(f)) {
     }
 };

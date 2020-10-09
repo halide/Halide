@@ -1368,7 +1368,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
     struct NamespaceOrCall {
         const Call *call;  // nullptr if this is a subnamespace
         std::map<string, NamespaceOrCall> names;
-        NamespaceOrCall(const Call *call = nullptr)
+        explicit NamespaceOrCall(const Call *call = nullptr)
             : call(call) {
         }
     };

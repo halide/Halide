@@ -43,7 +43,7 @@ public:
     bool result;
     string var;
 
-    ExprDependsOnVar(string v)
+    explicit ExprDependsOnVar(string v)
         : result(false), var(std::move(v)) {
     }
 };
@@ -69,7 +69,7 @@ class ExpandExpr : public IRMutator {
     }
 
 public:
-    ExpandExpr(const Scope<Expr> &s)
+    explicit ExpandExpr(const Scope<Expr> &s)
         : scope(s) {
     }
 };
@@ -373,7 +373,7 @@ class SlidingWindowOnFunction : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunction(Function f)
+    explicit SlidingWindowOnFunction(Function f)
         : func(std::move(f)) {
     }
 };
@@ -418,7 +418,7 @@ class SlidingWindow : public IRMutator {
     }
 
 public:
-    SlidingWindow(const map<string, Function> &e)
+    explicit SlidingWindow(const map<string, Function> &e)
         : env(e) {
     }
 };

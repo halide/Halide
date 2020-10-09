@@ -21,7 +21,7 @@ namespace {
 // intended vector out of the aligned vector.
 class AlignLoads : public IRMutator {
 public:
-    AlignLoads(int alignment)
+    explicit AlignLoads(int alignment)
         : alignment_analyzer(alignment), required_alignment(alignment) {
     }
 

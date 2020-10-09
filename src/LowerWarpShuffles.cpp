@@ -747,7 +747,7 @@ class MoveIfStatementInwards : public IRMutator {
     Expr condition;
 
 public:
-    MoveIfStatementInwards(Expr c)
+    explicit MoveIfStatementInwards(Expr c)
         : condition(std::move(c)) {
     }
 };

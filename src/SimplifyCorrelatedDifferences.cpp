@@ -45,7 +45,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
                 : op(op),
                   binding(scope, op->name, is_monotonic(op->value, loop_var, scope)) {
             }
-            Frame(const LetStmtOrLet *op)
+            explicit Frame(const LetStmtOrLet *op)
                 : op(op) {
             }
         };

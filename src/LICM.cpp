@@ -44,7 +44,7 @@ class CanLift : public IRVisitor {
 public:
     bool result{true};
 
-    CanLift(const Scope<> &v)
+    explicit CanLift(const Scope<> &v)
         : varying(v) {
     }
 };
@@ -362,7 +362,7 @@ class GroupLoopInvariants : public IRMutator {
 
     public:
         int result = 0;
-        ExprDepth(const Scope<int> &var_depth)
+        explicit ExprDepth(const Scope<int> &var_depth)
             : depth(var_depth) {
         }
     };

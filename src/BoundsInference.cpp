@@ -75,7 +75,7 @@ bool depends_on_bounds_inference(const Expr &e) {
 class BoundsOfInnerVar : public IRVisitor {
 public:
     Interval result;
-    BoundsOfInnerVar(const string &v)
+    explicit BoundsOfInnerVar(const string &v)
         : var(v) {
     }
 

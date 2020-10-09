@@ -797,7 +797,7 @@ public:
         scope.pop(m.name());
     }
 
-    StmtToHtml(const string &filename)
+    explicit StmtToHtml(const string &filename)
         : id_count(0), context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";

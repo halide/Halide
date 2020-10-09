@@ -1375,7 +1375,7 @@ class AndConditionOverDomain : public IRMutator {
 public:
     bool relaxed = false;
 
-    AndConditionOverDomain(const Scope<Interval> &parent_scope) {
+    explicit AndConditionOverDomain(const Scope<Interval> &parent_scope) {
         scope.set_containing_scope(&parent_scope);
     }
 };

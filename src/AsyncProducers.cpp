@@ -298,7 +298,7 @@ class CountConsumeNodes : public IRVisitor {
     }
 
 public:
-    CountConsumeNodes(const string &f)
+    explicit CountConsumeNodes(const string &f)
         : func(f) {
     }
     int count = 0;
@@ -369,7 +369,7 @@ class ForkAsyncProducers : public IRMutator {
     }
 
 public:
-    ForkAsyncProducers(const map<string, Function> &e)
+    explicit ForkAsyncProducers(const map<string, Function> &e)
         : env(e) {
     }
 };
@@ -506,7 +506,7 @@ class TightenProducerConsumerNodes : public IRMutator {
     const map<string, Function> &env;
 
 public:
-    TightenProducerConsumerNodes(const map<string, Function> &e)
+    explicit TightenProducerConsumerNodes(const map<string, Function> &e)
         : env(e) {
     }
 };

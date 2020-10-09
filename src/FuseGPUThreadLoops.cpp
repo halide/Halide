@@ -219,7 +219,7 @@ class ReplaceForWithIf : public IRMutator {
     }
 
 public:
-    ReplaceForWithIf(const ExtractBlockSize &e)
+    explicit ReplaceForWithIf(const ExtractBlockSize &e)
         : block_size(e) {
     }
 };
@@ -250,7 +250,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
 
     struct AllocGroup {
         AllocGroup() = default;
-        AllocGroup(const SharedAllocation &alloc)
+        explicit AllocGroup(const SharedAllocation &alloc)
             : name(alloc.name),
               widest_type(alloc.type),
               max_size(alloc.size),
@@ -1016,7 +1016,7 @@ public:
         return result;
     }
 
-    ExtractSharedAndHeapAllocations(DeviceAPI d)
+    explicit ExtractSharedAndHeapAllocations(DeviceAPI d)
         : in_threads(false),
           barrier_stage(0),
           device_api(d),

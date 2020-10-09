@@ -69,7 +69,7 @@ class CountGPUBlocksThreads : public IRVisitor {
     }
 
 public:
-    CountGPUBlocksThreads(const string &p)
+    explicit CountGPUBlocksThreads(const string &p)
         : prefix(p) {
     }
     int nblocks = 0;

@@ -53,7 +53,7 @@ public:
     };
     bool any_strict_float{false};
 
-    StrictifyFloat(StrictnessMode mode)
+    explicit StrictifyFloat(StrictnessMode mode)
         : strictness((mode == Forced) ? StrictFloat : FastMath) {
         any_strict_float |= (mode == Forced);
     }

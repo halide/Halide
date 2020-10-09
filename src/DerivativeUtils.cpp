@@ -51,7 +51,7 @@ vector<int> gather_variables(const Expr &expr,
             }
         }
 
-        GatherVariables(const vector<string> &f)
+        explicit GatherVariables(const vector<string> &f)
             : filter(f) {
         }
 

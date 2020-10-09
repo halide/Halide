@@ -194,7 +194,7 @@ class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<std::pair<uint8_t *, size_t>> code_pages;
 
 public:
-    HalideJITMemoryManager(const std::vector<JITModule> &modules)
+    explicit HalideJITMemoryManager(const std::vector<JITModule> &modules)
         : modules(modules) {
     }
 

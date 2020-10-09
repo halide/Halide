@@ -1717,7 +1717,7 @@ public:
     const Scope<int> &vars_depth;
     string innermost_var;
 
-    FindInnermostVar(const Scope<int> &vars_depth)
+    explicit FindInnermostVar(const Scope<int> &vars_depth)
         : vars_depth(vars_depth) {
     }
 
@@ -1793,7 +1793,7 @@ public:
     string skipped_var;
     set<string> vars;
 
-    CollectVars(const string &v)
+    explicit CollectVars(const string &v)
         : skipped_var(v) {
     }
 
@@ -2037,7 +2037,7 @@ private:
             CollectVars collect;
             string max_name, min_name;
             Interval value_bounds;
-            Frame(const LetOrLetStmt *op)
+            explicit Frame(const LetOrLetStmt *op)
                 : op(op), collect(op->name) {
             }
         };
@@ -2320,7 +2320,7 @@ private:
         public:
             const Scope<Interval> &scope;
             vector<const Variable *> result;
-            FindFreeVars(const Scope<Interval> &s)
+            explicit FindFreeVars(const Scope<Interval> &s)
                 : scope(s) {
             }
         } finder(scope);
@@ -2616,7 +2616,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
             const string &fn;
             const string fn_buffer;
             Stmt no_op;
-            Filter(const string &fn)
+            explicit Filter(const string &fn)
                 : fn(fn), fn_buffer(fn + ".buffer"), no_op(Evaluate::make(0)) {
             }
         } filter(fn);
