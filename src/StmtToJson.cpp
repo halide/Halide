@@ -91,10 +91,14 @@ struct StmtToJson : public IRVisitor {
         indent--;
     }
 
-    inline string quoted_str(string str) {
+    inline string quoted_str(const string &str) {
         std::stringstream s;
         s << "\"" << str << "\"";
         return s.str();
+    }
+
+    inline void print_key(const string &str) {
+        stream << get_indent() << quoted_str(str) << " : ";
     }
 
     inline void open_obj(string node_type) {
@@ -102,7 +106,8 @@ struct StmtToJson : public IRVisitor {
         // for the first line
         stream << "{\n";
         increase_indent();
-        stream << get_indent() << "_node_type : " << quoted_str(node_type) << ",\n";
+        print_key("_node_type");
+        stream << quoted_str(node_type) << ",\n";
     }
 
     inline void close_obj() {
@@ -111,24 +116,28 @@ struct StmtToJson : public IRVisitor {
     }
 
     inline void print_type(Type t) {
-        stream << get_indent() << "type : " << quoted_str(to_string(t)) << ",\n";
+        print_key("type");
+        stream << quoted_str(to_string(t)) << ",\n";
     }
 
     void print(const LoweredFunc &f) {
         open_obj("LoweredFunc");
-        stream << get_indent() << "name : "
-               << quoted_str(f.name) << ",\n";
+        print_key("name");
+        stream << quoted_str(f.name) << ",\n";
         //TODO: linkage and name mangling
         //TODO: arguments
-        stream << get_indent() << "body :";
+        print_key("body");
         f.body.accept(this);
         close_obj();
     }
 
     void print(const Module &m) {
         open_obj("Module");
-        stream << get_indent() << "functions : [\n";
-        stream << get_indent();
+        //TODO: all other parts
+        print_key("target");
+        stream << quoted_str(to_string(m.target())) << ",\n";
+        print_key("functions");
+        stream << "[\n" << get_indent();
         increase_indent();
         for (auto &f: m.functions()) {
             print(f);
@@ -140,10 +149,14 @@ struct StmtToJson : public IRVisitor {
     }
     void print(const Parameter &p) {
         open_obj("Parameter");
-        stream << get_indent() << "type: " << quoted_str(to_string(p.type())) << "\n";
-        stream << get_indent() << "is_buffer: " << to_string(p.is_buffer()) << "\n";
-        stream << get_indent() << "dimensions: " << to_string(p.dimensions()) << "\n";
-        stream << get_indent() << "name: " << quoted_str(to_string(p.name())) << "\n";
+        print_key("type");
+        stream << quoted_str(to_string(p.type())) << "\n";
+        print_key("is_buffer");
+        stream << to_string(p.is_buffer()) << "\n";
+        print_key("dimensions");
+        stream << to_string(p.dimensions()) << "\n";
+        print_key("name");
+        stream << quoted_str(to_string(p.name())) << "\n";
         close_obj();
 
     }
@@ -155,13 +168,16 @@ struct StmtToJson : public IRVisitor {
              {Halide::PrefetchBoundStrategy::NonFaulting, "NonFaulting"}
             };
         open_obj("PrefetchDirective");
-        stream << get_indent() << "name: " << quoted_str(p.name) << ",\n";
-        stream << get_indent() << "var: " << quoted_str(p.var) << ",\n";
-        stream << get_indent() << "offset: ";
+        print_key("name");
+        stream << quoted_str(p.name) << ",\n";
+        print_key("var");
+        stream << quoted_str(p.var) << ",\n";
+        print_key("offset");
         p.offset.accept(this);
         stream << ",\n";
-        stream << get_indent() << "strategy: " << strategy_str[p.strategy] << ",\n";
-        stream << get_indent() << "param: ";
+        print_key("strategy");
+        stream << strategy_str[p.strategy] << ",\n";
+        print_key("param");
         print(p.param);
         stream << "\n";
         close_obj();
@@ -184,7 +200,8 @@ struct StmtToJson : public IRVisitor {
     void print_immediate(string node_type, Type t, T v) {
         open_obj(node_type);
         print_type(t);
-        stream << get_indent() << "value : " << to_string(v->value) << "\n";
+        print_key("value");
+        stream << to_string(v->value) << "\n";
         close_obj();
     }
 
@@ -192,7 +209,8 @@ struct StmtToJson : public IRVisitor {
     void print_immediate(string node_type, Type t, const StringImm* v) {
         open_obj(node_type);
         print_type(t);
-        stream << get_indent() << "value : " << quoted_str(v->value) << "\n";
+        print_key("value");
+        stream << quoted_str(v->value) << "\n";
         close_obj();
     }
 
@@ -214,17 +232,17 @@ struct StmtToJson : public IRVisitor {
     void visit(const Cast *e) override {
         open_obj("Cast");
         print_type(e->type);
-        stream << get_indent() << "value : ";
+        print_key("value");
         e->value.accept(this); 
         close_obj();
     }
 
     void visit(const Variable *e) override {
         open_obj("Variable");
-        stream << get_indent() << "name : "
-               << quoted_str(e->name) << ",\n";
+        print_key("name");
+        stream << quoted_str(e->name) << ",\n";
         if (e->param.defined()) {
-            stream << get_indent() << "param : ";
+            print_key("param");
             print(e->param);
             stream << ",\n";
         }
@@ -243,9 +261,9 @@ struct StmtToJson : public IRVisitor {
     inline void print_binop(string node_type, T e) {
         open_obj(node_type);
         print_type(e->type);
-        stream << get_indent() << "a : ";
+        print_key("a");
         e->a.accept(this);
-        stream << get_indent() << "b : ";
+        print_key("b");
         e->b.accept(this);
         close_obj();
     }
@@ -312,7 +330,7 @@ struct StmtToJson : public IRVisitor {
     void visit(const Not *e) override {
         open_obj("Not");
         print_type(e->type);
-        stream << get_indent() << "value : ";
+        print_key("value");
         e->a.accept(this);
         close_obj();
     }
@@ -320,11 +338,11 @@ struct StmtToJson : public IRVisitor {
     void visit(const Select *e) override {
         open_obj("Select");
         print_type(e->type);
-        stream << get_indent() << "condition : ";
+        print_key("condition");
         e->condition.accept(this);
-        stream << get_indent() << "true_value : ";
+        print_key("true_value");
         e->true_value.accept(this);
-        stream << get_indent() << "false_value : ";
+        print_key("false_value");
         e->false_value.accept(this);
         close_obj();
     }
@@ -332,19 +350,20 @@ struct StmtToJson : public IRVisitor {
     void visit(const Load *e) override {
         open_obj("Load");
         print_type(e->type);
-        stream << get_indent() << "name : " << quoted_str(e->name) << "\n";
-        stream << get_indent() << "index : ";
+        print_key("name");
+        stream << quoted_str(e->name) << "\n";
+        print_key("index");
         e->index.accept(this);
-        stream << get_indent() << "image : ";
+        print_key("image");
         // TODO: implement
         stream << "\"UNIMPLEMENTED\",\n";
         //stream << to_string(e->image) << ",\n";
 
-        stream << get_indent() << "param : ";
+        print_key("param");
         print(e->param);
         stream << ",\n";
 
-        stream << get_indent() << "alignment : ";
+        print_key("alignment");
         stream << to_string(e->alignment) << "\n";
         close_obj();
     }
@@ -352,37 +371,41 @@ struct StmtToJson : public IRVisitor {
     void visit(const Ramp *e) override {
         open_obj("Ramp");
         print_type(e->type);
-        stream << get_indent() << "base : ";
+        print_key("base");
         e->base.accept(this);
-        stream << get_indent() << "stride: ";
+        print_key("stride");
         e->stride.accept(this);
-        stream << get_indent() << "lanes : " << e->lanes << "\n";
+        print_key("lanes");
+        stream << e->lanes << "\n";
         close_obj();
     }
 
     void visit(const Broadcast *e) override {
         open_obj("Broadcast");
         print_type(e->type);
-        stream << get_indent() << "value : ";
+        print_key("value");
         e->value.accept(this);
-        stream << get_indent() << "lanes : " << e->lanes << "\n";
+        print_key("lanes");
+        stream << e->lanes << "\n";
         close_obj();
     }
 
     void visit(const Call *e) override {
         open_obj("Call");
         print_type(e->type);
-        stream << get_indent() << "name : " << quoted_str(e->name) << ",\n";
-        stream << get_indent() << "args : ";
+        print_key("name");
+        stream << quoted_str(e->name) << ",\n";
+        print_key("args");
         print_vector(e->args);
         stream << get_indent() << ",\n";
-        stream << get_indent() << "call_type : " << quoted_str(to_string(e->call_type)) << ",\n";
+        print_key("call_type");
+        stream << quoted_str(to_string(e->call_type)) << ",\n";
         // We assume that a call to another func or a call to an image
         // has already been lowered.
         internal_assert(!e->func.defined()) << "Call to a func should not exist at backend\n";
         internal_assert(!e->image.defined()) << "Call to an image should not exist at backend\n";
         if (e->param.defined()) {
-            stream << get_indent() << "param : ";
+            print_key("param");
             print(e->param);
             stream << "\n";
         }
@@ -392,77 +415,81 @@ struct StmtToJson : public IRVisitor {
     void visit(const Let *e) override {
         open_obj("Let");
         print_type(e->type);
-        stream << get_indent() << "name : " << quoted_str(e->name) << ",\n";
-        stream << get_indent() << "value : ";
+        print_key("name");
+        stream << quoted_str(e->name) << ",\n";
+        print_key("value");
         e->value.accept(this);
-        stream << get_indent() << "body : ";
+        print_key("body");
         e->body.accept(this);
         close_obj();
     }
 
     void visit(const LetStmt *s) override {
         open_obj("LetStmt");
-        stream << get_indent() << "name : " << quoted_str(s->name) << ",\n";
-        stream << get_indent() << "value : ";
+        print_key("name");
+        stream << quoted_str(s->name) << ",\n";
+        print_key("value");
         s->value.accept(this);
-        stream << get_indent() << "body : ";
+        print_key("body");
         s->body.accept(this);
         close_obj();
     }
 
     void visit(const AssertStmt *s) override {
         open_obj("AssertStmt");
-        stream << get_indent() << "condition : ";
+        print_key("condition");
         s->condition.accept(this);
         stream << get_indent() << ", ";
-        stream << get_indent() << "message : ";
+        print_key("message");
         s->message.accept(this);
         close_obj();
     }
 
     void visit(const ProducerConsumer *s) override {
         open_obj("ProducerConsumer");
-        stream << get_indent() << "name : "
-               << quoted_str(s->name) << ",\n";
-        stream << get_indent() << "is_producer : " << s->is_producer << ",\n";
-        stream << get_indent() << "body : ";
+        print_key("name");
+        stream << quoted_str(s->name) << ",\n";
+        print_key("is_producer");
+        stream << s->is_producer << ",\n";
+        print_key("body");
         s->body.accept(this);
         close_obj();
     }
 
     void visit(const For *s) override {
         open_obj("For");
-        stream << get_indent() << "name : "
-               << quoted_str(s->name) << "\n,";
-        stream << get_indent() << "min : ";
+        print_key("name");
+        stream << quoted_str(s->name) << "\n,";
+        print_key("min");
         s->min.accept(this);
         stream << get_indent() << "extent : ";
+        print_key("extent");
         s->extent.accept(this);
-        stream << get_indent() << "for_type : ";
+        print_key("for_type");
         print(s->for_type);
         stream << ",\n";
-        stream << get_indent() << "device_api : "
-               << quoted_str(to_string(s->device_api)) << ",\n";
-        stream << get_indent() << "body : ";
+        print_key("device_api");
+        stream << quoted_str(to_string(s->device_api)) << ",\n";
+        print_key("body");
         s->body.accept(this);
         close_obj();
     }
 
     void visit(const Store *s) override {
         open_obj("Store");
-        stream << get_indent() << "name : "
-               << quoted_str(s->name) << ",\n";
-        stream << get_indent() << "predicate : ";
+        print_key("name");
+        stream << quoted_str(s->name) << ",\n";
+        print_key("predicate");
         s->predicate.accept(this);
-        stream << get_indent() << "value : ";
+        print_key("value");
         s->value.accept(this);
-        stream << get_indent() << "index : ";
+        print_key("index");
         s->index.accept(this);
-        stream << get_indent() << "param : ";
+        print_key("param");
         print(s->param);
         stream << ",\n";
-        stream << get_indent() << "alignment : "
-               << quoted_str(to_string(s->alignment)) << ",\n";
+        print_key("alignment");
+        stream << quoted_str(to_string(s->alignment)) << ",\n";
         close_obj();
     }
     void visit(const Provide *) override {
@@ -496,32 +523,34 @@ struct StmtToJson : public IRVisitor {
 
     void visit(const Allocate *s) override {
         open_obj("Allocate");
-        stream << get_indent() << "name : " << quoted_str(s->name) << ",\n";
+        print_key("name");
+        stream << quoted_str(s->name) << ",\n";
         print_type(s->type);
-        stream << get_indent() << "memory_type : "
-               << quoted_str(to_string(s->memory_type))
+        print_key("memory_type");
+        stream  << quoted_str(to_string(s->memory_type))
                << ",\n";
-        stream << get_indent() << "extents : ";
+        print_key("extent");
         print_vector(s->extents);
-        stream << get_indent() << "condition : ";
+        print_key("condition");
         s->condition.accept(this);
-        stream << get_indent() << "new_expr : ";
+        print_key("new_expr");
         if (s->new_expr.defined()) {
             s->new_expr.accept(this);
         } else {
             stream << "{ }";
         }
-        stream << get_indent() << "free_function : "
-               << quoted_str(s->free_function)
+        print_key("free_function");
+        stream << quoted_str(s->free_function)
                << ",\n";
-        stream << get_indent() << "body : ";
+        print_key("body");
         s->body.accept(this);
         close_obj();
     }
 
     void visit(const Free *s) override {
         open_obj("Free");
-        stream << get_indent() << "name : " << quoted_str(s->name) << "\n";
+        print_key("name");
+        stream << quoted_str(s->name) << "\n";
         close_obj();
     }
 
@@ -531,9 +560,9 @@ struct StmtToJson : public IRVisitor {
 
     void visit(const Block *s) override {
         open_obj("Block");
-        stream << get_indent() << "first : ";
+        print_key("first");
         s->first.accept(this);
-        stream << get_indent() << "rest : ";
+        print_key("rest");
         if (s->rest.defined()) {
             s->rest.accept(this);
         } else {
@@ -544,11 +573,11 @@ struct StmtToJson : public IRVisitor {
 
     void visit(const IfThenElse *s) override {
         open_obj("IfThenElse");
-        stream << get_indent() << "condition : ";
+        print_key("condition");
         s->condition.accept(this);
-        stream << get_indent() << "then_case : ";
+        print_key("then_case");
         s->then_case.accept(this);
-        stream << get_indent() << "else_case : ";
+        print_key("else_case");
         if (s->else_case.defined()) {
             s->else_case.accept(this);
         } else {
@@ -558,16 +587,17 @@ struct StmtToJson : public IRVisitor {
 
     void visit(const Evaluate *s) override {
         open_obj("Evaluate");
-        stream << get_indent() << "value : ";
+        print_key("value");
         s->value.accept(this);
         close_obj();
     }
 
     void visit(const Shuffle *e) override {
         open_obj("Shuffle");
-        stream << get_indent() << "vectors: ";
+        print_key("vectors");
         print_vector(e->vectors);
-        stream << "indices : [";
+        print_key("indices");
+        stream << "[";
         for (size_t i = 0; i < e->vectors.size() - 1; i++) {
             stream << e->indices[i] << ", ";
         }
@@ -577,7 +607,7 @@ struct StmtToJson : public IRVisitor {
 
     void visit(const VectorReduce *e) override {
         open_obj("VectorReduce");
-        stream << get_indent() << "value : ";
+        print_key("value");
         e->value.accept(this);
         stream << "op : ";
         stream << quoted_str(to_string(e->op));
@@ -586,19 +616,19 @@ struct StmtToJson : public IRVisitor {
 
     void visit(const Prefetch *s) override {
         open_obj("Prefetch");
-        stream << get_indent() << "name : "
-               << quoted_str(s->name) << ",\n";
-        stream << get_indent() << "types : ";
+        print_key("name");
+        stream << quoted_str(s->name) << ",\n";
+        print_key("types");
         print_vector(s->types);
-        stream << get_indent() << "bounds : ";
+        print_key("bounds");
         print_vector(s->bounds);
         stream << ",\n";
-        stream << get_indent() << "prefetch : ";
+        print_key("prefetch");
         print(s->prefetch);
         stream << ",\n";
-        stream << get_indent() << "condition : ";
+        print_key("condition");
         s->condition.accept(this);
-        stream << get_indent() << "body : ";
+        print_key("body");
         s->body.accept(this);
         close_obj();
 
@@ -606,30 +636,31 @@ struct StmtToJson : public IRVisitor {
 
     void visit(const Fork *s) override {
         open_obj("Fork");
-        stream << get_indent() << "first : ";
+        print_key("first");
         s->first.accept(this);
-        stream << get_indent() << "rest : ";
+        print_key("rest");
         s->rest.accept(this);
         close_obj();
     }
 
     void visit(const Acquire *s) override {
         open_obj("Acquire");
-        stream << get_indent() << "sempahore : ";
+        print_key("semaphore");
         s->semaphore.accept(this);
-        stream << get_indent() << "count : ";
+        print_key("count");
         s->count.accept(this);
-        stream << get_indent() << "body : ";
+        print_key("body");
         s->body.accept(this);
         close_obj();
     }
+
     void visit(const Atomic *s) override {
         open_obj("Atomic");
-        stream << get_indent() << "producer_name : "
-               << quoted_str(s->producer_name) << ",\n";
-        stream << get_indent() << "mutex_name : "
-               << quoted_str(s->mutex_name) << ",\n";
-        stream << get_indent() << "body : ";
+        print_key("producer_name");
+        stream << quoted_str(s->producer_name) << ",\n";
+        print_key("mutex_name");
+        stream << quoted_str(s->mutex_name) << ",\n";
+        print_key("body");
         s->body.accept(this);
         close_obj();
     }

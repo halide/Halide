@@ -14,6 +14,7 @@ int main(int argc, char **argv) {
     f(x, y) = x * y + 2.4f;
 
     f.compile_to_lowered_stmt("foo.json", {}, StmtOutputFormat::JSON);
+    parse_from_json_file("foo.json");
 
 
 #if 0

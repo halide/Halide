@@ -95,6 +95,7 @@ set(HEADER_FILES
     IRPrinter.h
     IRVisitor.h
     JITModule.h
+    JsonParser.h
     Lambda.h
     Lerp.h
     LICM.h
@@ -253,6 +254,7 @@ set(SOURCE_FILES
     IROperator.cpp
     IRPrinter.cpp
     IRVisitor.cpp
+    JsonParser.cpp
     JITModule.cpp
     Lerp.cpp
     LICM.cpp
