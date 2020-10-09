@@ -39,8 +39,8 @@ int main(int argc, char **argv) {
 
         int err = evaluate_may_gpu<uint32_t>(error());
         if (err != 0) {
-          printf("Fusion caused a difference in the output\n");
-          return -1;
+            printf("Fusion caused a difference in the output\n");
+            return -1;
         }
     }
 
