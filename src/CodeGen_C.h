@@ -257,6 +257,9 @@ protected:
 
     /** Emit atomic store instructions? */
     bool emit_atomic_stores;
+
+    /** true if add_vector_typedefs() has been called. */
+    bool using_vector_typedefs;
 };
 
 }  // namespace Internal
