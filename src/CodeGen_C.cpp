@@ -551,9 +551,10 @@ public:
     template<size_t InputLanes>
     static Vec concat(size_t count, const CppVector<ElementType, InputLanes> vecs[]) {
         Vec r;
+        size_t j = 0;
         for (size_t c = 0; c < count; c++) {
             for (size_t i = 0; i < InputLanes; i++) {
-                r[i] = vecs[c][i];
+                r[j++] = vecs[c][i];
             }
         }
         return r;
@@ -1061,9 +1062,10 @@ public:
     template<size_t InputLanes>
     static Vec concat(size_t count, const NativeVector<ElementType, InputLanes> vecs[]) {
         Vec r;
+        size_t j = 0;
         for (size_t c = 0; c < count; c++) {
             for (size_t i = 0; i < InputLanes; i++) {
-                r[i] = vecs[c][i];
+                r[j++] = vecs[c][i];
             }
         }
         return r;
