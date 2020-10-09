@@ -529,18 +529,6 @@ public:
         return r;
     }
 
-    template<size_t InputLanes>
-    static Vec concat(size_t count, const CppVector<ElementType, InputLanes> vecs[]) {
-        Vec r;
-        size_t j = 0;
-        for (size_t c = 0; c < count; c++) {
-            for (size_t i = 0; i < InputLanes; i++) {
-                r[j++] = vecs[c][i];
-            }
-        }
-        return r;
-    }
-
     static Vec replace(const Vec &v, size_t i, const ElementType b) {
         Vec r = v;
         r[i] = b;
@@ -1038,18 +1026,6 @@ public:
         Vec r = { a[Indices]... };
         return r;
 #endif
-    }
-
-    template<size_t InputLanes>
-    static Vec concat(size_t count, const NativeVector<ElementType, InputLanes> vecs[]) {
-        Vec r;
-        size_t j = 0;
-        for (size_t c = 0; c < count; c++) {
-            for (size_t i = 0; i < InputLanes; i++) {
-                r[j++] = vecs[c][i];
-            }
-        }
-        return r;
     }
 
     static Vec replace(Vec v, size_t i, const ElementType b) {
@@ -2766,9 +2742,13 @@ void CodeGen_C::visit(const Shuffle *op) {
             }
             ostringstream rhs;
             string storage_name = unique_name('_');
-            stream << get_indent() << "const " << print_type(t0) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
-            rhs << print_type(op->type) << "_ops::concat<" << t0.lanes() << ">(" << op->vectors.size() << ", " << storage_name << ")";
-            src = print_assignment(op->type, rhs.str());
+            // Combine them into one vector. Clang emits excellent code via this
+            // union approach (typically without going thru memory) for both x64 and arm64.
+            stream << get_indent() << "union { "
+                                   << print_type(t0) << " src[" << vecs.size() << "]; "
+                                   << print_type(op->type) << " dst; } "
+                                   << storage_name << " = {{ " << with_commas(vecs) << " }};\n";
+            src = storage_name + ".dst";
         }
         rhs << print_type(op->type) << "_ops::shuffle<" << with_commas(op->indices) << ">(" << src << ")";
     }
