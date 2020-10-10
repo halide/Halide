@@ -17,6 +17,7 @@ tests(GROUPS performance
       matrix_multiplication.cpp
       memcpy.cpp
       memory_profiler.cpp
+      nested_vectorization_gemm.cpp
       packed_planar_fusion.cpp
       parallel_performance.cpp
       profiler.cpp
