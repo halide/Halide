@@ -30,13 +30,7 @@ std::string to_string(T value, int base_indent = 0) {
     return os.str();
 }
 
-template<>
-std::string to_string(Halide::Internal::ModulusRemainder m, int base_indent) {
-    std::ostringstream os;
-    os << "{ modulus: " << m.modulus
-        << ", remainder: " << m.remainder << "}";
-    return os.str();
-}
+
 
 template<>
 std::string to_string(Halide::Range r, int base_indent) {
@@ -159,6 +153,15 @@ struct StmtToJson : public IRVisitor {
         stream << quoted_str(to_string(p.name())) << "\n";
         close_obj();
 
+    }
+
+    void print(const ModulusRemainder &m) {
+        open_obj("ModulusRemainder");
+        print_key("modulus");
+        stream << m.modulus << ",\n";
+        print_key("remainder");
+        stream << m.remainder;
+        close_obj();
     }
 
     void print(const PrefetchDirective &p) {
@@ -364,7 +367,7 @@ struct StmtToJson : public IRVisitor {
         stream << ",\n";
 
         print_key("alignment");
-        stream << to_string(e->alignment) << "\n";
+        print(e->alignment);
         close_obj();
     }
 
@@ -462,7 +465,6 @@ struct StmtToJson : public IRVisitor {
         stream << quoted_str(s->name) << "\n,";
         print_key("min");
         s->min.accept(this);
-        stream << get_indent() << "extent : ";
         print_key("extent");
         s->extent.accept(this);
         print_key("for_type");
@@ -489,7 +491,7 @@ struct StmtToJson : public IRVisitor {
         print(s->param);
         stream << ",\n";
         print_key("alignment");
-        stream << quoted_str(to_string(s->alignment)) << ",\n";
+        print(s->alignment);
         close_obj();
     }
     void visit(const Provide *) override {
