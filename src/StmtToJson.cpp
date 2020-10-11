@@ -585,6 +585,7 @@ struct StmtToJson : public IRVisitor {
         } else {
             stream << "{ }\n";
         }
+        close_obj();
     }
 
     void visit(const Evaluate *s) override {
