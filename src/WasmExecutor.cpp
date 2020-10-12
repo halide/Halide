@@ -888,7 +888,9 @@ WABT_HOST_CALLBACK(free) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
     wasm32_ptr_t p = args[0].Get<int32_t>();
-    if (p) p -= kExtraMallocSlop;
+    if (p) {
+        p -= kExtraMallocSlop;
+    }
     wabt_free(wabt_context, p);
     return wabt::Result::Ok;
 }
@@ -1004,7 +1006,9 @@ WABT_HOST_CALLBACK(malloc) {
 
     size_t size = args[0].Get<int32_t>() + kExtraMallocSlop;
     wasm32_ptr_t p = wabt_malloc(wabt_context, size);
-    if (p) p += kExtraMallocSlop;
+    if (p) {
+        p += kExtraMallocSlop;
+    }
     results[0] = wabt::interp::Value::Make(p);
     return wabt::Result::Ok;
 }

@@ -2047,8 +2047,12 @@ protected:
         // Don't set min/max for bool
         if (!std::is_same<TBase, bool>::value) {
             for (Parameter &p : this->parameters_) {
-                if (min_.defined()) p.set_min_value(min_);
-                if (max_.defined()) p.set_max_value(max_);
+                if (min_.defined()) {
+                    p.set_min_value(min_);
+                }
+                if (max_.defined()) {
+                    p.set_max_value(max_);
+                }
             }
         }
     }
