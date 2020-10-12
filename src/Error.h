@@ -128,6 +128,7 @@ public:
  * when the assertion is true.
  */
 #define _halide_internal_assertion(condition, flags) \
+    // NOLINTNEXTLINE(bugprone-macro-parentheses) \
     (condition) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::ErrorReport(__FILE__, __LINE__, #condition, flags).ref()
 
 #define internal_error Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, 0)
