@@ -1155,8 +1155,11 @@ enum halide_error_code_t {
     /** The dimensions field of a halide_buffer_t does not match the dimensions of that ImageParam. */
     halide_error_code_bad_dimensions = -43,
 
-    /** An expression that would perform an integer division or modulo
-     * by zero was evaluated. */
+    /** A buffer with the device_dirty flag set was passed to a
+     * pipeline compiled with no device backends enabled, so it
+     * doesn't know how to copy the data back from device memory to
+     * host memory. Either call copy_to_host before calling the Halide
+     * pipeline, or enable the appropriate device backend. */
     halide_error_code_device_dirty_with_no_device_support = -44,
 
 };
