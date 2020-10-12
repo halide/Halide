@@ -1,4 +1,6 @@
 #include "FlattenNestedRamps.h"
+#include "Bounds.h"
+#include "CSE.h"
 #include "Deinterleave.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -48,26 +50,23 @@ class FlattenRamps : public IRMutator {
             is_one(op->predicate) &&
             (ramp == nullptr || ramp->lanes < lanes)) {
 
+            Expr min_lane = bounds_of_expr_in_scope(op->index, Scope<Interval>::empty_scope()).min;
+            if (!min_lane.defined()) {
+                return IRMutator::visit(op);
+            }
+
             // Extract each index as a scalar
             vector<Expr> indices(lanes);
             for (int i = 0; i < lanes; i++) {
                 indices[i] = extract_lane(op->index, i);
             }
 
-            // Simplify each and take the min index
-            Expr min_lane = indices[0];
-            for (Expr &idx : indices) {
-                idx = simplify(idx);
-                min_lane = min(idx, min_lane);
-            }
-            min_lane = simplify(min_lane);
-
             // Check if the other indices are just the min index plus a constant
             vector<int> const_indices;
             const_indices.reserve(lanes);
             int max_constant_offset = 0;
             for (Expr &idx : indices) {
-                idx = simplify(idx - min_lane);
+                idx = simplify(common_subexpression_elimination(idx - min_lane));
                 const int64_t *i = as_const_int(idx);
                 if (i) {
                     const_indices.push_back((int)(*i));
