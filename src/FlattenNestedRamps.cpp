@@ -1,6 +1,10 @@
 #include "FlattenNestedRamps.h"
+#include "Deinterleave.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Simplify.h"
+
+using std::vector;
 
 namespace Halide {
 namespace Internal {
@@ -33,8 +37,82 @@ class FlattenRamps : public IRMutator {
         return IRMutator::visit(op);
     }
 
-public:
-    FlattenRamps() {
+    Expr visit(const Load *op) override {
+        // Convert a load of a bounded span of indices into a shuffle
+        // of a dense or strided load if possible.
+        const int lanes = op->type.lanes();
+        // This is about converting *to* a dense ramp, so we don't
+        // want to do this if it's already a dense ramp.
+        const Ramp *ramp = op->index.as<Ramp>();
+        if (lanes > 1 &&
+            is_one(op->predicate) &&
+            (ramp == nullptr || ramp->lanes < lanes)) {
+
+            // Extract each index as a scalar
+            vector<Expr> indices(lanes);
+            for (int i = 0; i < lanes; i++) {
+                indices[i] = extract_lane(op->index, i);
+            }
+
+            // Simplify each and take the min index
+            Expr min_lane = indices[0];
+            for (Expr &idx : indices) {
+                idx = simplify(idx);
+                min_lane = min(idx, min_lane);
+            }
+            min_lane = simplify(min_lane);
+
+            // Check if the other indices are just the min index plus a constant
+            vector<int> const_indices;
+            const_indices.reserve(lanes);
+            int max_constant_offset = 0;
+            for (Expr &idx : indices) {
+                idx = simplify(idx - min_lane);
+                const int64_t *i = as_const_int(idx);
+                if (i) {
+                    const_indices.push_back((int)(*i));
+                    max_constant_offset = std::max((int)(*i), max_constant_offset);
+                } else {
+                    break;
+                }
+            }
+
+            // If they are, we'll have a full vector of const_indices
+            if ((int)const_indices.size() == lanes) {
+
+                // Compute the stride for the underlying strided load
+                int stride = 0;
+                for (int c : const_indices) {
+                    stride = (int)gcd(stride, c);
+                }
+                for (int &c : const_indices) {
+                    c /= stride;
+                }
+
+                // Compute the number of elements loaded
+                int extent = (int)((max_constant_offset / stride) + 1);
+
+                // If we're gathering from a very large range, it
+                // might be better to just do the gather rather than
+                // doing a big dense load and then shuffling. We
+                // currently do the big-load-and-shuffle if we're
+                // going to use at least a quarter of the values
+                // loaded.
+                //
+                // TODO: It would be good to be able to control this
+                // in the schedule somehow.
+                const int max_unused_lane_factor = 4;
+                if (extent < max_unused_lane_factor * lanes) {
+                    Expr dense_index = Ramp::make(min_lane, stride, extent);
+                    Expr dense_load =
+                        Load::make(op->type.with_lanes(extent), op->name, dense_index,
+                                   op->image, op->param,
+                                   const_true(extent), ModulusRemainder{});
+                    return Shuffle::make({dense_load}, const_indices);
+                }
+            }
+        }
+        return IRMutator::visit(op);
     }
 };
 
