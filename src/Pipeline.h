@@ -624,7 +624,9 @@ public:
         stream << " (*)(";
         bool comma = false;
         for (const auto &t : sig.arg_types_) {
-            if (comma) stream << ", ";
+            if (comma) {
+                stream << ", ";
+            }
             stream << t;
             comma = true;
         }

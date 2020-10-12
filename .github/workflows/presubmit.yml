@@ -36,7 +36,7 @@ jobs:
           [ -a build/compile_commands.json ]
       - name: Run clang-tidy
         run: |
-          clang-tidy-10 --quiet -extra-arg=-Wno-unknown-warning-option -p build src/*.cpp
+          clang-tidy-10 --quiet -header-filter=.* -extra-arg=-Wno-unknown-warning-option -p build src/*.cpp
   check_cmake_file_lists:
     name: Check CMake file lists
     runs-on: ubuntu-latest
