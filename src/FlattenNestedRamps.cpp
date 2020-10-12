@@ -50,9 +50,12 @@ class FlattenRamps : public IRMutator {
             is_one(op->predicate) &&
             (ramp == nullptr || ramp->lanes < lanes)) {
 
-            Expr min_lane = bounds_of_expr_in_scope(op->index, Scope<Interval>::empty_scope()).min;
-            if (!min_lane.defined()) {
+            Interval bounds_of_lanes = bounds_of_expr_in_scope(op->index, Scope<Interval>::empty_scope());
+            Expr min_lane;
+            if (!bounds_of_lanes.has_lower_bound()) {
                 return IRMutator::visit(op);
+            } else {
+                min_lane = bounds_of_lanes.min;
             }
 
             // Extract each index as a scalar
