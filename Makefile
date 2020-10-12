@@ -2251,7 +2251,7 @@ CLANG_FORMAT ?= ${CLANG}-format
 
 .PHONY: format
 format:
-	find "${ROOT_DIR}/apps" "${ROOT_DIR}/src" "${ROOT_DIR}/tools" "${ROOT_DIR}/test" "${ROOT_DIR}/util" "${ROOT_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG_FORMAT} -i -style=file
+	@CLANG_FORMAT=$(CLANG_FORMAT) ${ROOT_DIR}/run-clang-format.sh
 
 # run-clang-tidy.py is a script that comes with LLVM for running clang
 # tidy in parallel. Assume it's in the standard install path relative to clang.
