@@ -282,20 +282,21 @@ class FindSimplifications : public IRVisitor {
         bool likely_a = has_uncaptured_likely_tag(op->a);
         bool likely_b = has_uncaptured_likely_tag(op->b);
 
+        // If one side has an uncaptured likely, don't hunt for
+        // simplifications in the other side.
+        if (!likely_a) {
+            op->b.accept(this);
+        }
+        if (!likely_b) {
+            op->a.accept(this);
+        }
+
         // Prefer the side that has an uncaptured top-level likely
         // call. If neither does, prefer the side that contains any
         // likely call at all.
         if (!likely_a && !likely_b) {
             likely_a = has_likely_tag(op->a);
             likely_b = has_likely_tag(op->b);
-        }
-
-        // Don't hunt for simplifications in unlikely paths
-        if (!likely_a) {
-            op->b.accept(this);
-        }
-        if (!likely_b) {
-            op->a.accept(this);
         }
 
         if (likely_b && !likely_a) {
@@ -309,16 +310,16 @@ class FindSimplifications : public IRVisitor {
         bool likely_a = has_uncaptured_likely_tag(op->a);
         bool likely_b = has_uncaptured_likely_tag(op->b);
 
-        if (!likely_a && !likely_b) {
-            likely_a = has_likely_tag(op->a);
-            likely_b = has_likely_tag(op->b);
-        }
-
         if (!likely_a) {
             op->b.accept(this);
         }
         if (!likely_b) {
             op->a.accept(this);
+        }
+
+        if (!likely_a && !likely_b) {
+            likely_a = has_likely_tag(op->a);
+            likely_b = has_likely_tag(op->b);
         }
 
         if (likely_b && !likely_a) {
