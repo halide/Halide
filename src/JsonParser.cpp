@@ -697,6 +697,49 @@ struct HalideJSONParser {
         return Evaluate::make(parse_Expr(i->val_for("value")));
     }
 
+    ForType parse_ForType(const JSONNode &j) {
+        std::map<std::string, ForType> ft_str =
+            {{"Serial", ForType::Serial},
+             {"Parallel", ForType::Parallel},
+             {"Vectorized", ForType::Vectorized},
+             {"Unrolled", ForType::Unrolled},
+             {"Extern", ForType::Extern},
+             {"GPUBlock", ForType::GPUBlock},
+             {"GPUThread", ForType::GPUThread},
+             {"GPULane", ForType::GPULane}};
+        auto str = parse_string(j);
+        return ft_str[str];
+    }
+
+    DeviceAPI parse_DeviceAPI(const JSONNode &j) {
+        std::map<std::string, DeviceAPI> da_str =
+            {{"None", DeviceAPI::None},
+             {"Host", DeviceAPI::Host},
+             {"Default_GPU", DeviceAPI::Default_GPU},
+             {"CUDA", DeviceAPI::CUDA},
+             {"OpenCL", DeviceAPI::OpenCL},
+             {"GLSL", DeviceAPI::GLSL},
+             {"OpenGLCompute", DeviceAPI::OpenGLCompute},
+             {"Metal", DeviceAPI::Host},
+             {"Hexagon", DeviceAPI::Hexagon},
+             {"HexagonDma", DeviceAPI::HexagonDma},
+             {"D3D12Compute", DeviceAPI::D3D12Compute}};
+        auto str = parse_string(j);
+        return da_str[str];
+    }
+
+    Stmt parse_For(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        return For::make(parse_string(i->val_for("name")),
+                         parse_Expr(i->val_for("min")),
+                         parse_Expr(i->val_for("extent")),
+                         parse_ForType(i->val_for("for_type")),
+                         parse_DeviceAPI(i->val_for("device_api")),
+                         parse_Stmt(i->val_for("body")));
+
+    }
+
     Stmt parse_Stmt(const JSONNode &j) {
         auto *i = j.as<JSONObject>();
         internal_assert(i);
