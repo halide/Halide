@@ -1,6 +1,7 @@
 #include "HexagonOptimize.h"
 #include "Bounds.h"
 #include "CSE.h"
+#include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
 #include "ExprUsesVar.h"
 #include "HexagonAlignment.h"
@@ -449,6 +450,7 @@ class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
 
+    Scope<Interval> bounds;
     Target target;
 
     Expr visit(const Mul *op) override {
@@ -1087,9 +1089,56 @@ private:
             // that they generate.
             internal_assert(op->args.size() == 3);
             return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
+        } else if ((op->is_intrinsic(Call::div_round_to_zero) ||
+                    op->is_intrinsic(Call::mod_round_to_zero)) &&
+                   !op->type.is_float() && op->type.is_vector()) {
+            internal_assert(op->args.size() == 2);
+            Expr a = op->args[0];
+            Expr b = op->args[1];
+            // Run bounds analysis to estimate the range of result.
+            Expr abs_result = op->type.is_int() ? abs(a / b) : a / b;
+            Expr extent_upper = find_constant_bound(abs_result, Direction::Upper, bounds);
+            const uint64_t *upper_bound = as_const_uint(extent_upper);
+            a = mutate(a);
+            b = mutate(b);
+            std::pair<Expr, Expr> div_mod = long_div_mod_round_to_zero(a, b, upper_bound);
+            if (op->is_intrinsic(Call::div_round_to_zero)) {
+                return div_mod.first;
+            }
+            return div_mod.second;
         } else {
             return IRMutator::visit(op);
         }
+    }
+
+    template<typename NodeType, typename T>
+    NodeType visit_let(const T *op) {
+        bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        NodeType node = IRMutator::visit(op);
+        bounds.pop(op->name);
+        return node;
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let<Expr>(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let<Stmt>(op);
+    }
+
+    Expr visit(const Div *op) override {
+        if (!op->type.is_float() && op->type.is_vector()) {
+            return mutate(lower_int_uint_div(op->a, op->b));
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Mod *op) override {
+        if (!op->type.is_float() && op->type.is_vector()) {
+            return mutate(lower_int_uint_mod(op->a, op->b));
+        }
+        return IRMutator::visit(op);
     }
 
 public:
