@@ -49,6 +49,7 @@ protected:
     public:
         CodeGen_D3D12Compute_C(std::ostream &s, Target t)
             : CodeGen_C(s, t) {
+            integer_suffix_style = IntegerSuffixStyle::HLSL;
         }
         void add_kernel(Stmt stmt,
                         const std::string &name,
