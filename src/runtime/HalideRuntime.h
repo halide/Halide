@@ -143,9 +143,7 @@ extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry
 /** Define halide_do_par_for to replace the default thread pool
  * implementation. halide_shutdown_thread_pool can also be called to
  * release resources used by the default thread pool on platforms
- * where it makes sense. (E.g. On Mac OS, Grand Central Dispatch is
- * used so %Halide does not own the threads backing the pool and they
- * cannot be released.)  See Func::set_custom_do_task and
+ * where it makes sense. See Func::set_custom_do_task and
  * Func::set_custom_do_par_for. Should return zero if all the jobs
  * return zero, or an arbitrarily chosen return value from one of the
  * jobs otherwise.
