@@ -977,14 +977,13 @@ public:
 
     static Vec load(const void *base, int32_t offset) {
         Vec r;
-        if (sizeof(ElementType) * Lanes == sizeof(Vec)) {
-            r = *((const Vec*)((const ElementType*)base + offset));
-        } else {
-            // If Vec is a non-power-of-two (e.g. uint8x48), the actual implementation
-            // might be larger (e.g. it might really be a uint8x64). Only copy the amount
-            // that is in the logical type, to avoid possible overreads.
-            memcpy(&r, ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
-        }
+        // We only require Vec to be element-aligned, so we can't safely just read
+        // directly from memory (might segfault). Use memcpy for safety.
+        //
+        // If Vec is a non-power-of-two (e.g. uint8x48), the actual implementation
+        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+        // that is in the logical type, to avoid possible overreads.
+        memcpy(&r, ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
         return r;
     }
 
@@ -997,14 +996,13 @@ public:
     }
 
     static void store(const Vec v, void *base, int32_t offset) {
-        if (sizeof(ElementType) * Lanes == sizeof(v)) {
-            *((Vec*)((ElementType*)base + offset)) = v;
-        } else {
-            // If Vec is a non-power-of-two (e.g. uint8x48), the actual implementation
-            // might be larger (e.g. it might really be a uint8x64). Only copy the amount
-            // that is in the logical type, to avoid possible overreads.
-            memcpy(((ElementType*)base + offset), &v, sizeof(ElementType) * Lanes);
-        }
+        // We only require Vec to be element-aligned, so we can't safely just write
+        // directly from memory (might segfault). Use memcpy for safety.
+        //
+        // If Vec is a non-power-of-two (e.g. uint8x48), the actual implementation
+        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+        // that is in the logical type, to avoid possible overreads.
+        memcpy(((ElementType*)base + offset), &v, sizeof(ElementType) * Lanes);
     }
 
     static void store_scatter(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset) {
