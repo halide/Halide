@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "HalideRuntimeOpenCL.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -9,6 +10,15 @@ int main(int argc, char **argv) {
 
     if (!t.has_feature(halide_target_feature_opencl)) {
         printf("[SKIP] No OpenCL target enabled.\n");
+        return 0;
+    }
+
+    const auto *interface = get_device_interface_for_device_api(DeviceAPI::OpenCL);
+    assert(interface->compute_capability != nullptr);
+    int major, minor;
+    int err = interface->compute_capability(nullptr, &major, &minor);
+    if (major == 1 && minor < 2) {
+        printf("[SKIP] OpenCL %d.%d is less than required 1.2.\n", major, minor);
         return 0;
     }
 
