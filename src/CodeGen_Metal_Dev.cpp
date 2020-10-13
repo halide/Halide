@@ -700,8 +700,6 @@ void CodeGen_Metal_Dev::init_module() {
                << "#endif\n"
                << "}\n";  // close namespace
 
-    metal_c.add_common_macros(src_stream);
-
     src_stream << "#define halide_unused(x) (void)(x)\n";
 
     src_stream << "\n";
