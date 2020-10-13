@@ -20,6 +20,15 @@ using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
 #if defined(TEST_OPENCL)
+    const auto *interface = halide_opencl_device_interface();
+    assert(interface->compute_capability != nullptr);
+    int major, minor;
+    int err = interface->compute_capability(nullptr, &major, &minor);
+    if (major == 1 && minor < 2) {
+        printf("[SKIP] OpenCl %d.%d is less than required 1.2.\n", major, minor);
+        return 0;
+    }
+
     const int W = 32, H = 32;
     Buffer<int> input(W, H);
     for (int y = 0; y < input.height(); y++) {

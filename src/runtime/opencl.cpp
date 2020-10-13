@@ -48,9 +48,9 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
 }
 
 template<typename T>
-ALWAYS_INLINE T get_cl_symbol(void *user_context, const char *name) {
+ALWAYS_INLINE T get_cl_symbol(void *user_context, const char *name, bool req) {
     T s = (T)halide_opencl_get_symbol(user_context, name);
-    if (!s) {
+    if (!s && req) {
         error(user_context) << "OpenCL API not found: " << name << "\n";
     }
     return s;
@@ -61,7 +61,8 @@ WEAK void load_libopencl(void *user_context) {
     debug(user_context) << "    load_libopencl (user_context: " << user_context << ")\n";
     halide_assert(user_context, clCreateContext == NULL);
 
-#define CL_FN(ret, fn, args) fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn);
+#define CL_FN(ret, fn, args) fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, true);
+#define CL_12_FN(ret, fn, args) fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, false);
 #include "cl_functions.h"
 }
 
@@ -603,6 +604,55 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t *buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
+
+    return 0;
+}
+
+WEAK int halide_opencl_compute_capability(void *user_context, int *major, int *minor) {
+    if (!lib_opencl) {
+        // If OpenCL can't be found, we want to return 0, 0 and it's not
+        // considered an error. So we should be very careful about
+        // looking for OpenCL without tripping any errors in the rest
+        // of this runtime.
+        void *sym = halide_opencl_get_symbol(user_context, "clCreateContext");
+        if (!sym) {
+            *major = *minor = 0;
+            return 0;
+        }
+    }
+
+    {
+        ClContext ctx(user_context);
+        if (ctx.error_code != 0) {
+            return ctx.error_code;
+        }
+
+        cl_int err;
+
+        cl_device_id devices[1];
+        err = clGetContextInfo(ctx.context, CL_CONTEXT_DEVICES, sizeof(devices), devices, NULL);
+        if (err != CL_SUCCESS) {
+            error(user_context) << "CL: clGetContextInfo failed: "
+                                << get_opencl_error_name(err);
+            return err;
+        }
+
+        char device_version[256] = "";
+        err = clGetDeviceInfo(devices[0], CL_DEVICE_VERSION, sizeof(device_version), device_version, NULL);
+        if (err != CL_SUCCESS) {
+            error(user_context) << "CL: clGetDeviceInfo failed: "
+                                << get_opencl_error_name(err);
+            return err;
+        }
+
+        // This should always be of the format "OpenCL X.Y" per the spec
+        if (strlen(device_version) < 10) {
+            return -1;
+        }
+
+        *major = device_version[7] - '0';
+        *minor = device_version[9] - '0';
+    }
 
     return 0;
 }
@@ -1483,7 +1533,7 @@ WEAK halide_device_interface_t opencl_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
-    NULL,
+    halide_opencl_compute_capability,
     &opencl_device_interface_impl};
 
 }  // namespace OpenCL
@@ -1875,7 +1925,7 @@ WEAK halide_device_interface_t opencl_image_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
-    NULL,
+    halide_opencl_compute_capability,
     &opencl_image_device_interface_impl};
 
 }  // namespace OpenCL
