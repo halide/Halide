@@ -1121,14 +1121,14 @@ private:
 
     Expr visit(const Div *op) override {
         if (!op->type.is_float() && op->type.is_vector()) {
-            return mutate(lower_int_uint_div(op->a, op->b));
+            return mutate(simplify(lower_int_uint_div(op->a, op->b)));
         }
         return IRMutator::visit(op);
     }
 
     Expr visit(const Mod *op) override {
         if (!op->type.is_float() && op->type.is_vector()) {
-            return mutate(lower_int_uint_mod(op->a, op->b));
+            return mutate(simplify(lower_int_uint_mod(op->a, op->b)));
         }
         return IRMutator::visit(op);
     }
