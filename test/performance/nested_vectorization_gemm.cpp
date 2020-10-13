@@ -286,7 +286,7 @@ int main(int argc, char **argv) {
         }
 
         double speed_up = times[0] / times[1];
-        printf("8-bit blur with reduction dimension outermost vector dim\n"
+        printf("16-bit blur with reduction dimension outermost vector dim\n"
                "Time with nested vectorization: %0.2f ms \n"
                "Time without: %0.2f ms \n"
                "Speed-up: %0.2fx\n",
