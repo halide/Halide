@@ -240,17 +240,20 @@ int main(int argc, char **argv) {
 
             RVar ro, ri, rio, rii;
 
-            f.in().compute_at(prod, ro).vectorize(_0).bound_extent(_0, 16);
-            g.in().compute_at(prod, ro).vectorize(_0);
-
             result
-                .vectorize(x, 8, TailStrategy::RoundUp);
+                .vectorize(x, 16, TailStrategy::RoundUp);
 
             if (use_nested_vectorization) {
+                f.in().compute_at(prod, ro).vectorize(_0).bound_extent(_0, 32);
+
+                // It's faster to compute this at rio and unroll rio,
+                // but that's not what we're testing.
+                g.in().compute_at(prod, ro).vectorize(_0);
+
                 prod.compute_at(result, x)
                     .vectorize(x)
                     .update()
-                    .split(r, ro, ri, 8)
+                    .split(r, ro, ri, 4)
                     .split(ri, rio, rii, 2)
                     .reorder(rii, x, rio, ro)
                     .vectorize(x)
@@ -261,7 +264,7 @@ int main(int argc, char **argv) {
                 prod.compute_at(result, x)
                     .vectorize(x)
                     .update()
-                    .split(r, ro, ri, 8)
+                    .split(r, ro, ri, 4)
                     .reorder(ri, x, ro)
                     .vectorize(x)
                     .unroll(ri);

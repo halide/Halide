@@ -1208,6 +1208,24 @@ class VectorSubs : public IRMutator {
                 break;
             }
 
+            auto binop = [=](const Expr &a, const Expr &b) {
+                switch (reduce_op) {
+                case VectorReduce::Add:
+                    return a + b;
+                case VectorReduce::Mul:
+                    return a * b;
+                case VectorReduce::Min:
+                    return min(a, b);
+                case VectorReduce::Max:
+                    return max(a, b);
+                case VectorReduce::And:
+                    return a && b;
+                case VectorReduce::Or:
+                    return a || b;
+                }
+                return Expr();
+            };
+
             int output_lanes = 1;
             if (store_index.type().is_scalar()) {
                 // The index doesn't depend on the value being
@@ -1226,31 +1244,25 @@ class VectorSubs : public IRMutator {
                 // Handle outer repetitions by unrolling the reduction
                 // over slices.
                 if (store_ir.outer_repetitions > 1) {
-                    Expr v = Shuffle::make_slice(b, 0, 1, output_lanes);
-                    for (int i = 1; i < store_ir.outer_repetitions; i++) {
-                        Expr slice = simplify(Shuffle::make_slice(b, i * output_lanes, 1, output_lanes));
-                        switch (reduce_op) {
-                        case VectorReduce::Add:
-                            v += slice;
-                            break;
-                        case VectorReduce::Mul:
-                            v *= slice;
-                            break;
-                        case VectorReduce::Min:
-                            v = min(v, slice);
-                            break;
-                        case VectorReduce::Max:
-                            v = max(v, slice);
-                            break;
-                        case VectorReduce::And:
-                            v = v && slice;
-                            break;
-                        case VectorReduce::Or:
-                            v = v || slice;
-                            break;
-                        }
+                    // First remove all powers of two with a binary reduction tree.
+                    int reps = store_ir.outer_repetitions;
+                    while (reps % 2 == 0) {
+                        int l = b.type().lanes() / 2;
+                        Expr b0 = Shuffle::make_slice(b, 0, 1, l);
+                        Expr b1 = Shuffle::make_slice(b, l, 1, l);
+                        b = binop(b0, b1);
+                        reps /= 2;
                     }
-                    b = v;
+
+                    // Then reduce linearly over slices for the rest.
+                    if (reps > 1) {
+                        Expr v = Shuffle::make_slice(b, 0, 1, output_lanes);
+                        for (int i = 1; i < reps; i++) {
+                            Expr slice = simplify(Shuffle::make_slice(b, i * output_lanes, 1, output_lanes));
+                            v = binop(v, slice);
+                        }
+                        b = v;
+                    }
                 }
             }
 
@@ -1259,26 +1271,9 @@ class VectorSubs : public IRMutator {
                                        load_a->param, const_true(output_lanes),
                                        ModulusRemainder{});
 
-            switch (reduce_op) {
-            case VectorReduce::Add:
-                b = new_load + b;
-                break;
-            case VectorReduce::Mul:
-                b = new_load * b;
-                break;
-            case VectorReduce::Min:
-                b = min(new_load, b);
-                break;
-            case VectorReduce::Max:
-                b = max(new_load, b);
-                break;
-            case VectorReduce::And:
-                b = cast(new_load.type(), cast(b.type(), new_load) && b);
-                break;
-            case VectorReduce::Or:
-                b = cast(new_load.type(), cast(b.type(), new_load) || b);
-                break;
-            }
+            Expr lhs = cast(b.type(), new_load);
+            b = binop(lhs, b);
+            b = cast(new_load.type(), b);
 
             Stmt s = Store::make(store->name, b, store_index, store->param,
                                  const_true(b.type().lanes()), store->alignment);
