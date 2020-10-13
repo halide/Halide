@@ -240,6 +240,7 @@ tests(GROUPS correctness
       partial_realization.cpp
       partition_loops.cpp
       partition_loops_bug.cpp
+      partition_max_filter.cpp
       pipeline_set_jit_externs_func.cpp
       plain_c_includes.c
       popc_clz_ctz_bounds.cpp
