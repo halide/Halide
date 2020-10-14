@@ -494,49 +494,13 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
 namespace {
 
-class IdPair {
-    Intrinsic::ID i64 = Intrinsic::not_intrinsic;
-    Intrinsic::ID i128 = Intrinsic::not_intrinsic;
-
-public:
-    constexpr IdPair()
-        : i64(Intrinsic::not_intrinsic), i128(Intrinsic::not_intrinsic) {
-    }
-    constexpr IdPair(Intrinsic::ID i64, Intrinsic::ID i128)
-        : i64(i64), i128(i128) {
-    }
-
-    Intrinsic::ID get(bool is_128B) const {
-        return is_128B ? i128 : i64;
-    }
-};
-
-// LLVM Hexagon HVX intrinsics are broken up into 64B and 128B versions, for
-// example, llvm::Intrinsic::hexagon_V6_vaddh and
-// llvm::Intrinsic::hexagon_V6_vaddh_128B. This macro selects the 64B or 128B
-// mode depending on the value of is_128B.
-// TODO: is there a numerical correlation (e.g. the 128B version can be
-// mathematically derived from the 64B version)? That would allow us to dodge
-// this macro stuff.
-#ifdef WITH_HEXAGON
-#define MAKE_ID_PAIR(i64)   \
-    IdPair {                \
-        (i64), (i64##_128B) \
-    }
-#else
-#define MAKE_ID_PAIR(i64)                                  \
-    IdPair {                                               \
-        Intrinsic::not_intrinsic, Intrinsic::not_intrinsic \
-    }
-#endif
-
 struct HvxIntrinsic {
     enum {
         BroadcastScalarsToWords = 1 << 0,  // Some intrinsics need scalar arguments
                                            // broadcasted up to 32 bits.
         v65OrLater = 1 << 1,
     };
-    IdPair ids;
+    Intrinsic::ID id;
     halide_type_t ret_type;
     const char *name;
     halide_type_t arg_types[4];
@@ -578,97 +542,97 @@ halide_type_t u32v2 = u32v1.with_lanes(u32v1.lanes * 2);
 
 static const HvxIntrinsic intrinsic_wrappers[] = {
     // Zero/sign extension:
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vzb), u16v2, "zxt.vub", {u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vzh), u32v2, "zxt.vuh", {u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsb), i16v2, "sxt.vb", {i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsh), i32v2, "sxt.vh", {i16v1}},
+    {Intrinsic::hexagon_V6_vzb, u16v2, "zxt.vub", {u8v1}},
+    {Intrinsic::hexagon_V6_vzh, u32v2, "zxt.vuh", {u16v1}},
+    {Intrinsic::hexagon_V6_vsb, i16v2, "sxt.vb", {i8v1}},
+    {Intrinsic::hexagon_V6_vsh, i32v2, "sxt.vh", {i16v1}},
 
     // Similar to zxt/sxt, but without deinterleaving the result.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vunpackub),
+    {Intrinsic::hexagon_V6_vunpackub,
      u16v2,
      "unpack.vub",
      {u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vunpackuh),
+    {Intrinsic::hexagon_V6_vunpackuh,
      u32v2,
      "unpack.vuh",
      {u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vunpackb), i16v2, "unpack.vb", {i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vunpackh), i32v2, "unpack.vh", {i16v1}},
+    {Intrinsic::hexagon_V6_vunpackb, i16v2, "unpack.vb", {i8v1}},
+    {Intrinsic::hexagon_V6_vunpackh, i32v2, "unpack.vh", {i16v1}},
 
     // Truncation:
     // (Yes, there really are two fs in the b versions, and 1 f in
     // the h versions.)
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffeb), i8v1, "trunc.vh", {i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshufeh), i16v1, "trunc.vw", {i32v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffob), i8v1, "trunclo.vh", {i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshufoh), i16v1, "trunclo.vw", {i32v2}},
+    {Intrinsic::hexagon_V6_vshuffeb, i8v1, "trunc.vh", {i16v2}},
+    {Intrinsic::hexagon_V6_vshufeh, i16v1, "trunc.vw", {i32v2}},
+    {Intrinsic::hexagon_V6_vshuffob, i8v1, "trunclo.vh", {i16v2}},
+    {Intrinsic::hexagon_V6_vshufoh, i16v1, "trunclo.vw", {i32v2}},
 
     // Downcast with saturation:
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsathub),
+    {Intrinsic::hexagon_V6_vsathub,
      u8v1,
      "trunc_satub.vh",
      {i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsatwh),
+    {Intrinsic::hexagon_V6_vsatwh,
      i16v1,
      "trunc_sath.vw",
      {i32v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsatuwuh),
+    {Intrinsic::hexagon_V6_vsatuwuh,
      u16v1,
      "trunc_satuh.vuw",
      {u32v2}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vroundhub),
+    {Intrinsic::hexagon_V6_vroundhub,
      u8v1,
      "trunc_satub_rnd.vh",
      {i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vroundhb),
+    {Intrinsic::hexagon_V6_vroundhb,
      i8v1,
      "trunc_satb_rnd.vh",
      {i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vroundwuh),
+    {Intrinsic::hexagon_V6_vroundwuh,
      u16v1,
      "trunc_satuh_rnd.vw",
      {i32v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vroundwh),
+    {Intrinsic::hexagon_V6_vroundwh,
      i16v1,
      "trunc_sath_rnd.vw",
      {i32v2}},
 
     // vpack does not interleave its input.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackhub_sat),
+    {Intrinsic::hexagon_V6_vpackhub_sat,
      u8v1,
      "pack_satub.vh",
      {i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackwuh_sat),
+    {Intrinsic::hexagon_V6_vpackwuh_sat,
      u16v1,
      "pack_satuh.vw",
      {i32v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackhb_sat),
+    {Intrinsic::hexagon_V6_vpackhb_sat,
      i8v1,
      "pack_satb.vh",
      {i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackwh_sat),
+    {Intrinsic::hexagon_V6_vpackwh_sat,
      i16v1,
      "pack_sath.vw",
      {i32v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackeb), i8v1, "pack.vh", {i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackeh), i16v1, "pack.vw", {i32v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackob), i8v1, "packhi.vh", {i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackoh), i16v1, "packhi.vw", {i32v2}},
+    {Intrinsic::hexagon_V6_vpackeb, i8v1, "pack.vh", {i16v2}},
+    {Intrinsic::hexagon_V6_vpackeh, i16v1, "pack.vw", {i32v2}},
+    {Intrinsic::hexagon_V6_vpackob, i8v1, "packhi.vh", {i16v2}},
+    {Intrinsic::hexagon_V6_vpackoh, i16v1, "packhi.vw", {i32v2}},
 
     // Widening adds. There are other instructions that add two vub and two vuh
     // but do not widen.
     // To differentiate those from the widening ones, we encode the return type
     // in the name here.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddubh),
+    {Intrinsic::hexagon_V6_vaddubh,
      u16v2,
      "add_vuh.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddhw),
+    {Intrinsic::hexagon_V6_vaddhw,
      i32v2,
      "add_vw.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vadduhw),
+    {Intrinsic::hexagon_V6_vadduhw,
      u32v2,
      "add_vuw.vuh.vuh",
      {u16v1, u16v1}},
@@ -677,369 +641,369 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     // two vuh but do not widen.
     // To differentiate those from the widening ones, we encode the return type
     // in the name here.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsububh),
+    {Intrinsic::hexagon_V6_vsububh,
      u16v2,
      "sub_vuh.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsububh),
+    {Intrinsic::hexagon_V6_vsububh,
      i16v2,
      "sub_vh.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubhw),
+    {Intrinsic::hexagon_V6_vsubhw,
      i32v2,
      "sub_vw.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubuhw),
+    {Intrinsic::hexagon_V6_vsubuhw,
      u32v2,
      "sub_vuw.vuh.vuh",
      {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubuhw),
+    {Intrinsic::hexagon_V6_vsubuhw,
      i32v2,
      "sub_vw.vuh.vuh",
      {u16v1, u16v1}},
 
     // Adds/subtract of unsigned values with saturation.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddubsat),
+    {Intrinsic::hexagon_V6_vaddubsat,
      u8v1,
      "satub_add.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vadduhsat),
+    {Intrinsic::hexagon_V6_vadduhsat,
      u16v1,
      "satuh_add.vuh.vuh",
      {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vadduwsat),
+    {Intrinsic::hexagon_V6_vadduwsat,
      u32v1,
      "satuw_add.vuw.vuw",
      {u32v1, u32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddhsat),
+    {Intrinsic::hexagon_V6_vaddhsat,
      i16v1,
      "sath_add.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddwsat),
+    {Intrinsic::hexagon_V6_vaddwsat,
      i32v1,
      "satw_add.vw.vw",
      {i32v1, i32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddubsat_dv),
+    {Intrinsic::hexagon_V6_vaddubsat_dv,
      u8v2,
      "satub_add.vub.vub.dv",
      {u8v2, u8v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vadduhsat_dv),
+    {Intrinsic::hexagon_V6_vadduhsat_dv,
      u16v2,
      "satuh_add.vuh.vuh.dv",
      {u16v2, u16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vadduwsat_dv),
+    {Intrinsic::hexagon_V6_vadduwsat_dv,
      u32v2,
      "satuw_add.vuw.vuw.dv",
      {u32v2, u32v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddhsat_dv),
+    {Intrinsic::hexagon_V6_vaddhsat_dv,
      i16v2,
      "sath_add.vh.vh.dv",
      {i16v2, i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddwsat_dv),
+    {Intrinsic::hexagon_V6_vaddwsat_dv,
      i32v2,
      "satw_add.vw.vw.dv",
      {i32v2, i32v2}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsububsat),
+    {Intrinsic::hexagon_V6_vsububsat,
      u8v1,
      "satub_sub.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubuhsat),
+    {Intrinsic::hexagon_V6_vsubuhsat,
      u16v1,
      "satuh_sub.vuh.vuh",
      {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubhsat),
+    {Intrinsic::hexagon_V6_vsubhsat,
      i16v1,
      "sath_sub.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubwsat),
+    {Intrinsic::hexagon_V6_vsubwsat,
      i32v1,
      "satw_sub.vw.vw",
      {i32v1, i32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsububsat_dv),
+    {Intrinsic::hexagon_V6_vsububsat_dv,
      u8v2,
      "satub_sub.vub.vub.dv",
      {u8v2, u8v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubuhsat_dv),
+    {Intrinsic::hexagon_V6_vsubuhsat_dv,
      u16v2,
      "satuh_sub.vuh.vuh.dv",
      {u16v2, u16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubhsat_dv),
+    {Intrinsic::hexagon_V6_vsubhsat_dv,
      i16v2,
      "sath_sub.vh.vh.dv",
      {i16v2, i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubwsat_dv),
+    {Intrinsic::hexagon_V6_vsubwsat_dv,
      i32v2,
      "satw_sub.vw.vw.dv",
      {i32v2, i32v2}},
 
     // Absolute value:
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vabsh), u16v1, "abs.vh", {i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vabsw), u32v1, "abs.vw", {i32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vabsb),
+    {Intrinsic::hexagon_V6_vabsh, u16v1, "abs.vh", {i16v1}},
+    {Intrinsic::hexagon_V6_vabsw, u32v1, "abs.vw", {i32v1}},
+    {Intrinsic::hexagon_V6_vabsb,
      u8v1,
      "abs.vb",
      {i8v1},
      HvxIntrinsic::v65OrLater},
 
     // Absolute difference:
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vabsdiffub),
+    {Intrinsic::hexagon_V6_vabsdiffub,
      u8v1,
      "absd.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vabsdiffuh),
+    {Intrinsic::hexagon_V6_vabsdiffuh,
      u16v1,
      "absd.vuh.vuh",
      {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vabsdiffh),
+    {Intrinsic::hexagon_V6_vabsdiffh,
      u16v1,
      "absd.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vabsdiffw),
+    {Intrinsic::hexagon_V6_vabsdiffw,
      u32v1,
      "absd.vw.vw",
      {i32v1, i32v1}},
 
     // Averaging:
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vavgub),
+    {Intrinsic::hexagon_V6_vavgub,
      u8v1,
      "avg.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vavguh),
+    {Intrinsic::hexagon_V6_vavguh,
      u16v1,
      "avg.vuh.vuh",
      {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vavgh),
+    {Intrinsic::hexagon_V6_vavgh,
      i16v1,
      "avg.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vavgw),
+    {Intrinsic::hexagon_V6_vavgw,
      i32v1,
      "avg.vw.vw",
      {i32v1, i32v1}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vavgubrnd),
+    {Intrinsic::hexagon_V6_vavgubrnd,
      u8v1,
      "avg_rnd.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vavguhrnd),
+    {Intrinsic::hexagon_V6_vavguhrnd,
      u16v1,
      "avg_rnd.vuh.vuh",
      {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vavghrnd),
+    {Intrinsic::hexagon_V6_vavghrnd,
      i16v1,
      "avg_rnd.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vavgwrnd),
+    {Intrinsic::hexagon_V6_vavgwrnd,
      i32v1,
      "avg_rnd.vw.vw",
      {i32v1, i32v1}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnavgub),
+    {Intrinsic::hexagon_V6_vnavgub,
      i8v1,
      "navg.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnavgh),
+    {Intrinsic::hexagon_V6_vnavgh,
      i16v1,
      "navg.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnavgw),
+    {Intrinsic::hexagon_V6_vnavgw,
      i32v1,
      "navg.vw.vw",
      {i32v1, i32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vavgb),
+    {Intrinsic::hexagon_V6_vavgb,
      i8v1,
      "avg.vb.vb",
      {i8v1, i8v1},
      HvxIntrinsic::v65OrLater},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vavguw),
+    {Intrinsic::hexagon_V6_vavguw,
      u32v1,
      "avg.vuw.vuw",
      {u32v1, u32v1},
      HvxIntrinsic::v65OrLater},
 
     // Non-widening multiplication:
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyih),
+    {Intrinsic::hexagon_V6_vmpyih,
      i16v1,
      "mul.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyihb),
+    {Intrinsic::hexagon_V6_vmpyihb,
      i16v1,
      "mul.vh.b",
      {i16v1, i8},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyiwh),
+    {Intrinsic::hexagon_V6_vmpyiwh,
      i32v1,
      "mul.vw.h",
      {i32v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyiwb),
+    {Intrinsic::hexagon_V6_vmpyiwb,
      i32v1,
      "mul.vw.b",
      {i32v1, i8},
      HvxIntrinsic::BroadcastScalarsToWords},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyih_acc),
+    {Intrinsic::hexagon_V6_vmpyih_acc,
      i16v1,
      "add_mul.vh.vh.vh",
      {i16v1, i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyihb_acc),
+    {Intrinsic::hexagon_V6_vmpyihb_acc,
      i16v1,
      "add_mul.vh.vh.b",
      {i16v1, i16v1, i8},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyiwh_acc),
+    {Intrinsic::hexagon_V6_vmpyiwh_acc,
      i32v1,
      "add_mul.vw.vw.h",
      {i32v1, i32v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyiwb_acc),
+    {Intrinsic::hexagon_V6_vmpyiwb_acc,
      i32v1,
      "add_mul.vw.vw.b",
      {i32v1, i32v1, i8},
      HvxIntrinsic::BroadcastScalarsToWords},
 
     // Widening vector multiplication:
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyubv),
+    {Intrinsic::hexagon_V6_vmpyubv,
      u16v2,
      "mpy.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyuhv),
+    {Intrinsic::hexagon_V6_vmpyuhv,
      u32v2,
      "mpy.vuh.vuh",
      {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpybv),
+    {Intrinsic::hexagon_V6_vmpybv,
      i16v2,
      "mpy.vb.vb",
      {i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyhv),
+    {Intrinsic::hexagon_V6_vmpyhv,
      i32v2,
      "mpy.vh.vh",
      {i16v1, i16v1}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyubv_acc),
+    {Intrinsic::hexagon_V6_vmpyubv_acc,
      u16v2,
      "add_mpy.vuh.vub.vub",
      {u16v2, u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyuhv_acc),
+    {Intrinsic::hexagon_V6_vmpyuhv_acc,
      u32v2,
      "add_mpy.vuw.vuh.vuh",
      {u32v2, u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpybv_acc),
+    {Intrinsic::hexagon_V6_vmpybv_acc,
      i16v2,
      "add_mpy.vh.vb.vb",
      {i16v2, i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyhv_acc),
+    {Intrinsic::hexagon_V6_vmpyhv_acc,
      i32v2,
      "add_mpy.vw.vh.vh",
      {i32v2, i16v1, i16v1}},
 
     // Inconsistencies: both are vector instructions despite the
     // missing 'v', and the signedness is indeed swapped.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpybusv),
+    {Intrinsic::hexagon_V6_vmpybusv,
      i16v2,
      "mpy.vub.vb",
      {u8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyhus),
+    {Intrinsic::hexagon_V6_vmpyhus,
      i32v2,
      "mpy.vh.vuh",
      {i16v1, u16v1}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpybusv_acc),
+    {Intrinsic::hexagon_V6_vmpybusv_acc,
      i16v2,
      "add_mpy.vh.vub.vb",
      {i16v2, u8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyhus_acc),
+    {Intrinsic::hexagon_V6_vmpyhus_acc,
      i32v2,
      "add_mpy.vw.vh.vuh",
      {i32v2, i16v1, u16v1}},
 
     // Widening scalar multiplication:
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyub),
+    {Intrinsic::hexagon_V6_vmpyub,
      u16v2,
      "mpy.vub.ub",
      {u8v1, u8},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyuh),
+    {Intrinsic::hexagon_V6_vmpyuh,
      u32v2,
      "mpy.vuh.uh",
      {u16v1, u16},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyh),
+    {Intrinsic::hexagon_V6_vmpyh,
      i32v2,
      "mpy.vh.h",
      {i16v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpybus),
+    {Intrinsic::hexagon_V6_vmpybus,
      i16v2,
      "mpy.vub.b",
      {u8v1, i8},
      HvxIntrinsic::BroadcastScalarsToWords},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyub_acc),
+    {Intrinsic::hexagon_V6_vmpyub_acc,
      u16v2,
      "add_mpy.vuh.vub.ub",
      {u16v2, u8v1, u8},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyuh_acc),
+    {Intrinsic::hexagon_V6_vmpyuh_acc,
      u32v2,
      "add_mpy.vuw.vuh.uh",
      {u32v2, u16v1, u16},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpybus_acc),
+    {Intrinsic::hexagon_V6_vmpybus_acc,
      i16v2,
      "add_mpy.vh.vub.b",
      {i16v2, u8v1, i8},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyhsat_acc),
+    {Intrinsic::hexagon_V6_vmpyhsat_acc,
      i32v2,
      "satw_add_mpy.vw.vh.h",
      {i32v2, i16v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords},
 
     // Widening vector multiplication, with horizontal reduction.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vrmpyubv),
+    {Intrinsic::hexagon_V6_vrmpyubv,
      u32v1,
      "add_4mpy.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vrmpybv),
+    {Intrinsic::hexagon_V6_vrmpybv,
      i32v1,
      "add_4mpy.vb.vb",
      {i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vrmpybusv),
+    {Intrinsic::hexagon_V6_vrmpybusv,
      i32v1,
      "add_4mpy.vub.vb",
      {i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vrmpyubv_acc),
+    {Intrinsic::hexagon_V6_vrmpyubv_acc,
      u32v1,
      "acc_add_4mpy.vuw.vub.vub",
      {u32v1, u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vrmpybv_acc),
+    {Intrinsic::hexagon_V6_vrmpybv_acc,
      i32v1,
      "acc_add_4mpy.vw.vb.vb",
      {i32v1, i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vrmpybusv_acc),
+    {Intrinsic::hexagon_V6_vrmpybusv_acc,
      i32v1,
      "acc_add_4mpy.vw.vub.vb",
      {i32v1, i8v1, i8v1}},
 
     // Widening scalar multiplication, with horizontal reduction.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdmpybus),
+    {Intrinsic::hexagon_V6_vdmpybus,
      i16v1,
      "add_2mpy.vub.b",
      {u8v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdmpyhb),
+    {Intrinsic::hexagon_V6_vdmpyhb,
      i32v1,
      "add_2mpy.vh.b",
      {i16v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdmpybus_acc),
+    {Intrinsic::hexagon_V6_vdmpybus_acc,
      i16v1,
      "acc_add_2mpy.vh.vub.b",
      {i16v1, u8v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdmpyhb_acc),
+    {Intrinsic::hexagon_V6_vdmpyhb_acc,
      i32v1,
      "acc_add_2mpy.vw.vh.b",
      {i32v1, i16v1, i16},
@@ -1049,191 +1013,191 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
 
     // TODO: These don't generate correctly because the vectors
     // aren't interleaved correctly.
-    //{ MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdmpybus_dv), i16v2,
+    //{ Intrinsic::hexagon_V6_vdmpybus_dv, i16v2,
     //"add_2mpy.vub.b.dv", {u8v2, i32} },
-    //{ MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdmpyhb_dv), i32v2,
+    //{ Intrinsic::hexagon_V6_vdmpyhb_dv, i32v2,
     //"add_2mpy.vh.b.dv", {i16v2, i32} },
-    //{ MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdmpybus_dv_acc), i16v2,
+    //{ Intrinsic::hexagon_V6_vdmpybus_dv_acc, i16v2,
     //"acc_add_2mpy.vh.vub.b.dv", {i16v2, u8v2, i32} },
-    //{ MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdmpyhb_dv_acc), i32v2,
+    //{ Intrinsic::hexagon_V6_vdmpyhb_dv_acc, i32v2,
     //"acc_add_2mpy.vw.vh.b.dv", {i32v2, i16v2, i32} },
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vrmpybus),
+    {Intrinsic::hexagon_V6_vrmpybus,
      i32v1,
      "add_4mpy.vub.b",
      {u8v1, i32}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vrmpyub),
+    {Intrinsic::hexagon_V6_vrmpyub,
      u32v1,
      "add_4mpy.vub.ub",
      {u8v1, u32}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vrmpybus_acc),
+    {Intrinsic::hexagon_V6_vrmpybus_acc,
      i32v1,
      "acc_add_4mpy.vw.vub.b",
      {i32v1, u8v1, i32}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vrmpyub_acc),
+    {Intrinsic::hexagon_V6_vrmpyub_acc,
      u32v1,
      "acc_add_4mpy.vuw.vub.ub",
      {u32v1, u8v1, u32}},
 
     // Multiply keep high half, with multiplication by 2.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyhvsrs),
+    {Intrinsic::hexagon_V6_vmpyhvsrs,
      i16v1,
      "trunc_satw_mpy2_rnd.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyhss),
+    {Intrinsic::hexagon_V6_vmpyhss,
      i16v1,
      "trunc_satw_mpy2.vh.h",
      {i16v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmpyhsrs),
+    {Intrinsic::hexagon_V6_vmpyhsrs,
      i16v1,
      "trunc_satw_mpy2_rnd.vh.h",
      {i16v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords},
 
     // Min/max:
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmaxub),
+    {Intrinsic::hexagon_V6_vmaxub,
      u8v1,
      "max.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmaxuh),
+    {Intrinsic::hexagon_V6_vmaxuh,
      u16v1,
      "max.vuh.vuh",
      {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmaxh),
+    {Intrinsic::hexagon_V6_vmaxh,
      i16v1,
      "max.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmaxw),
+    {Intrinsic::hexagon_V6_vmaxw,
      i32v1,
      "max.vw.vw",
      {i32v1, i32v1}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vminub),
+    {Intrinsic::hexagon_V6_vminub,
      u8v1,
      "min.vub.vub",
      {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vminuh),
+    {Intrinsic::hexagon_V6_vminuh,
      u16v1,
      "min.vuh.vuh",
      {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vminh),
+    {Intrinsic::hexagon_V6_vminh,
      i16v1,
      "min.vh.vh",
      {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vminw),
+    {Intrinsic::hexagon_V6_vminw,
      i32v1,
      "min.vw.vw",
      {i32v1, i32v1}},
 
     // Shifts
     // We map arithmetic and logical shifts to just "shr", depending on type.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlsrhv),
+    {Intrinsic::hexagon_V6_vlsrhv,
      u16v1,
      "shr.vuh.vh",
      {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlsrwv),
+    {Intrinsic::hexagon_V6_vlsrwv,
      u32v1,
      "shr.vuw.vw",
      {u32v1, u32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vasrhv),
+    {Intrinsic::hexagon_V6_vasrhv,
      i16v1,
      "shr.vh.vh",
      {i16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vasrwv),
+    {Intrinsic::hexagon_V6_vasrwv,
      i32v1,
      "shr.vw.vw",
      {i32v1, u32v1}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaslhv),
+    {Intrinsic::hexagon_V6_vaslhv,
      u16v1,
      "shl.vuh.vh",
      {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaslwv),
+    {Intrinsic::hexagon_V6_vaslwv,
      u32v1,
      "shl.vuw.vw",
      {u32v1, u32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaslhv),
+    {Intrinsic::hexagon_V6_vaslhv,
      i16v1,
      "shl.vh.vh",
      {i16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaslwv),
+    {Intrinsic::hexagon_V6_vaslwv,
      i32v1,
      "shl.vw.vw",
      {i32v1, u32v1}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlsrh),
+    {Intrinsic::hexagon_V6_vlsrh,
      u16v1,
      "shr.vuh.h",
      {u16v1, u16}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlsrw),
+    {Intrinsic::hexagon_V6_vlsrw,
      u32v1,
      "shr.vuw.w",
      {u32v1, u32}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vasrh),
+    {Intrinsic::hexagon_V6_vasrh,
      i16v1,
      "shr.vh.h",
      {i16v1, u16}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vasrw),
+    {Intrinsic::hexagon_V6_vasrw,
      i32v1,
      "shr.vw.w",
      {i32v1, u32}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaslh),
+    {Intrinsic::hexagon_V6_vaslh,
      u16v1,
      "shl.vuh.h",
      {u16v1, u16}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaslw),
+    {Intrinsic::hexagon_V6_vaslw,
      u32v1,
      "shl.vuw.w",
      {u32v1, u32}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaslh),
+    {Intrinsic::hexagon_V6_vaslh,
      i16v1,
      "shl.vh.h",
      {i16v1, u16}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaslw),
+    {Intrinsic::hexagon_V6_vaslw,
      i32v1,
      "shl.vw.w",
      {i32v1, u32}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vasrh_acc),
+    {Intrinsic::hexagon_V6_vasrh_acc,
      i16v1,
      "add_shr.vh.vh.uh",
      {i16v1, i16v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords | HvxIntrinsic::v65OrLater},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaslh_acc),
+    {Intrinsic::hexagon_V6_vaslh_acc,
      i16v1,
      "add_shl.vh.vh.uh",
      {i16v1, i16v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords | HvxIntrinsic::v65OrLater},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vasrw_acc),
+    {Intrinsic::hexagon_V6_vasrw_acc,
      i32v1,
      "add_shr.vw.vw.uw",
      {i32v1, i32v1, i32}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaslw_acc),
+    {Intrinsic::hexagon_V6_vaslw_acc,
      i32v1,
      "add_shl.vw.vw.uw",
      {i32v1, i32v1, i32}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vasrwh),
+    {Intrinsic::hexagon_V6_vasrwh,
      i16v1,
      "trunc_shr.vw.uw",
      {i32v2, u32}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vasrhubsat),
+    {Intrinsic::hexagon_V6_vasrhubsat,
      u8v1,
      "trunc_satub_shr.vh.uh",
      {i16v2, u16}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vasrwuhsat),
+    {Intrinsic::hexagon_V6_vasrwuhsat,
      u16v1,
      "trunc_satuh_shr.vw.uw",
      {i32v2, u32}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vasrwhsat),
+    {Intrinsic::hexagon_V6_vasrwhsat,
      i16v1,
      "trunc_sath_shr.vw.uw",
      {i32v2, u32}},
 
     // Bit counting
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnormamth), u16v1, "cls.vh", {u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnormamtw), u32v1, "cls.vw", {u32v1}},
+    {Intrinsic::hexagon_V6_vnormamth, u16v1, "cls.vh", {u16v1}},
+    {Intrinsic::hexagon_V6_vnormamtw, u32v1, "cls.vw", {u32v1}},
 };
 
 // TODO: Many variants of the above functions are missing. They
@@ -1257,10 +1221,9 @@ void CodeGen_Hexagon::init_module() {
         return t.with_lanes(lanes_actual);
     };
 
-    const bool is_128B = target.has_feature(Halide::Target::HVX_128);
     vector<Type> arg_types;
     for (const HvxIntrinsic &i : intrinsic_wrappers) {
-        Intrinsic::ID id = i.ids.get(is_128B);
+        Intrinsic::ID id = i.id;
         internal_assert(id != Intrinsic::not_intrinsic);
         // Get the real intrinsic.
         llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), id);
@@ -1417,7 +1380,6 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty, int id,
 }
 
 Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
-    const bool is_128B = target.has_feature(Halide::Target::HVX_128);
     llvm::Type *v_ty = v[0]->getType();
     llvm::Type *element_ty = get_vector_element_type(v_ty);
     int element_bits = element_ty->getScalarSizeInBits();
@@ -1434,8 +1396,8 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
             llvm::Type *native_ty = get_vector_type(element_ty, native_elements);
             // This is an interleave of two half native vectors, use
             // vshuff.
-            IdPair vshuff = element_bits == 8 ? MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffb) : MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffh);
-            return call_intrin_cast(native_ty, vshuff.get(is_128B),
+            Intrinsic::ID vshuff = element_bits == 8 ? Intrinsic::hexagon_V6_vshuffb : Intrinsic::hexagon_V6_vshuffh;
+            return call_intrin_cast(native_ty, vshuff,
                                     {concat_vectors({a, b})});
         } else {
             // Break them into native vectors, use vshuffvdd, and
@@ -1448,7 +1410,7 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
                 Value *b_i = slice_vector(b, i, native_elements);
                 Value *ret_i = call_intrin_cast(
                     native2_ty,
-                    MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffvdd).get(is_128B),
+                    Intrinsic::hexagon_V6_vshuffvdd,
                     {b_i, a_i, bytes});
                 if ((i + native_elements) * 2 > result_elements) {
                     // This is the last vector, and it has some extra
@@ -1548,7 +1510,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     llvm::Type *b_ty = b->getType();
     internal_assert(a_ty == b_ty);
 
-    const bool is_128B = target.has_feature(Halide::Target::HVX_128);
     int a_elements = static_cast<int>(get_vector_num_elements(a_ty));
 
     llvm::Type *element_ty = get_vector_element_type(a->getType());
@@ -1586,7 +1547,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
         CallInst *a_call = dyn_cast<CallInst>(a_cast ? a_cast->getOperand(0) : a);
         llvm::Function *vcombine = Intrinsic::getDeclaration(
             module.get(),
-            MAKE_ID_PAIR(Intrinsic::hexagon_V6_vcombine).get(is_128B));
+            Intrinsic::hexagon_V6_vcombine);
         if (a_call && a_call->getCalledFunction() == vcombine) {
             // Rewrite shuffle(vcombine(a, b), x) to shuffle(a, b)
             return shuffle_vectors(
@@ -1621,15 +1582,13 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             // native vectors. Use vcombine.
             internal_assert(start == 0);
             return call_intrin_cast(
-                native2_ty, MAKE_ID_PAIR(Intrinsic::hexagon_V6_vcombine).get(is_128B),
+                native2_ty, Intrinsic::hexagon_V6_vcombine,
                 {b, a});
         }
         if (result_ty == native_ty && a_ty == native2_ty && max < a_elements) {
             // Extract a and b from a double vector.
-            b = call_intrin_cast(
-                native_ty, MAKE_ID_PAIR(Intrinsic::hexagon_V6_hi).get(is_128B), {a});
-            a = call_intrin_cast(
-                native_ty, MAKE_ID_PAIR(Intrinsic::hexagon_V6_lo).get(is_128B), {a});
+            b = call_intrin_cast(native_ty, Intrinsic::hexagon_V6_hi, {a});
+            a = call_intrin_cast(native_ty, Intrinsic::hexagon_V6_lo, {a});
             a_ty = a->getType();
             b_ty = b->getType();
             a_elements = get_vector_num_elements(a_ty);
@@ -1646,14 +1605,14 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             int bytes_off = start * (element_bits / 8);
             int reverse_bytes = (native_vector_bits() / 8) - bytes_off;
             Intrinsic::ID intrin_id =
-                MAKE_ID_PAIR(Intrinsic::hexagon_V6_valignb).get(is_128B);
+                Intrinsic::hexagon_V6_valignb;
             // v(l)align is a bit more efficient if the offset fits in
             // 3 bits, so if the offset is with in 3 bits from the
             // high end, use vlalign instead.
             if (bytes_off <= 7) {
-                intrin_id = MAKE_ID_PAIR(Intrinsic::hexagon_V6_valignbi).get(is_128B);
+                intrin_id = Intrinsic::hexagon_V6_valignbi;
             } else if (reverse_bytes <= 7) {
-                intrin_id = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlalignbi).get(is_128B);
+                intrin_id = Intrinsic::hexagon_V6_vlalignbi;
                 bytes_off = reverse_bytes;
             }
             return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
@@ -1671,13 +1630,13 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             Value *ab_i1 = slice_vector(ab, i * 2 + native_elements, native_elements);
             Value *ret_i;
             if (element_bits == 8) {
-                IdPair intrin = start == 0 ? MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackeb) : MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackob);
+                Intrinsic::ID intrin = start == 0 ? Intrinsic::hexagon_V6_vpackeb : Intrinsic::hexagon_V6_vpackob;
                 ret_i =
-                    call_intrin_cast(native_ty, intrin.get(is_128B), {ab_i1, ab_i0});
+                    call_intrin_cast(native_ty, intrin, {ab_i1, ab_i0});
             } else if (element_bits == 16) {
-                IdPair intrin = start == 0 ? MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackeh) : MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackoh);
+                Intrinsic::ID intrin = start == 0 ? Intrinsic::hexagon_V6_vpackeh : Intrinsic::hexagon_V6_vpackoh;
                 ret_i =
-                    call_intrin_cast(native_ty, intrin.get(is_128B), {ab_i1, ab_i0});
+                    call_intrin_cast(native_ty, intrin, {ab_i1, ab_i0});
             } else if (element_bits % 8 == 0) {
                 // Need to use vdealw, followed by lo/hi.
                 // TODO: Is there a better instruction? This generates a
@@ -1685,10 +1644,10 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 int element_bytes = element_bits / 8;
                 Value *packed = call_intrin_cast(
                     native2_ty,
-                    MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdealvdd).get(is_128B),
+                    Intrinsic::hexagon_V6_vdealvdd,
                     {ab_i1, ab_i0, ConstantInt::get(i32_t, -element_bytes)});
-                IdPair intrin = start == 0 ? MAKE_ID_PAIR(Intrinsic::hexagon_V6_lo) : MAKE_ID_PAIR(Intrinsic::hexagon_V6_hi);
-                ret_i = call_intrin_cast(native_ty, intrin.get(is_128B), {packed});
+                Intrinsic::ID intrin = start == 0 ? Intrinsic::hexagon_V6_lo : Intrinsic::hexagon_V6_hi;
+                ret_i = call_intrin_cast(native_ty, intrin, {packed});
             } else {
                 return CodeGen_Posix::shuffle_vectors(a, b, indices);
             }
@@ -1710,7 +1669,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
 
 Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
                                 int max_index) {
-    bool is_128B = target.has_feature(Halide::Target::HVX_128);
     llvm::Type *lut_ty = lut->getType();
     llvm::Type *idx_ty = idx->getType();
 
@@ -1720,17 +1678,17 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
     internal_assert(min_index >= 0);
     internal_assert(max_index < 256);
 
-    IdPair vlut, vlut_acc, vshuff;
+    Intrinsic::ID vlut, vlut_acc, vshuff;
     if (lut_ty->getScalarSizeInBits() == 8) {
         // We can use vlut32.
-        vlut = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlutvvb);
-        vlut_acc = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlutvvb_oracc);
-        vshuff = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffb);
+        vlut = Intrinsic::hexagon_V6_vlutvvb;
+        vlut_acc = Intrinsic::hexagon_V6_vlutvvb_oracc;
+        vshuff = Intrinsic::hexagon_V6_vshuffb;
     } else {
         // We can use vlut16.
-        vlut = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlutvwh);
-        vlut_acc = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlutvwh_oracc);
-        vshuff = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffh);
+        vlut = Intrinsic::hexagon_V6_vlutvwh;
+        vlut_acc = Intrinsic::hexagon_V6_vlutvwh_oracc;
+        vshuff = Intrinsic::hexagon_V6_vshuffh;
     }
 
     // There are two dimensions in which we need to slice up the
@@ -1754,7 +1712,7 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
     vector<Value *> lut_slices;
     for (int i = 0; i <= max_index; i += native_lut_elements) {
         Value *lut_slice = slice_vector(lut, i, native_lut_elements);
-        lut_slice = call_intrin_cast(lut_slice->getType(), vshuff.get(is_128B),
+        lut_slice = call_intrin_cast(lut_slice->getType(), vshuff,
                                      {lut_slice});
         lut_slices.push_back(lut_slice);
     }
@@ -1769,7 +1727,7 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
     // Each LUT has 1 pair of even/odd mask values for HVX 64, 2 for
     // HVX 128.  We may not need all of the passes, if the LUT has
     // fewer than half of the elements in an HVX 128 vector.
-    int lut_passes = is_128B ? 2 : 1;
+    constexpr int lut_passes = 2;
 
     vector<Value *> result;
     for (int i = 0; i < idx_elements; i += native_idx_elements) {
@@ -1784,7 +1742,7 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
             // conditions) this should get lifted out of any loops.
             idx_i = call_intrin_cast(
                 idx_i->getType(),
-                MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffb).get(is_128B), {idx_i});
+                Intrinsic::hexagon_V6_vshuffb, {idx_i});
         }
 
         Value *result_i = nullptr;
@@ -1797,17 +1755,17 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
                 };
                 if (result_i == nullptr) {
                     // The first native LUT, use vlut.
-                    result_i = call_intrin_cast(native_result_ty, vlut.get(is_128B),
+                    result_i = call_intrin_cast(native_result_ty, vlut,
                                                 {idx_i, lut_slices[j], mask[0]});
                     result_i =
-                        call_intrin_cast(native_result_ty, vlut_acc.get(is_128B),
+                        call_intrin_cast(native_result_ty, vlut_acc,
                                          {result_i, idx_i, lut_slices[j], mask[1]});
                 } else if (max_index >= pass_index * native_lut_elements / lut_passes) {
                     // Not the first native LUT, accumulate the LUT
                     // with the previous result.
                     for (int m = 0; m < 2; m++) {
                         result_i =
-                            call_intrin_cast(native_result_ty, vlut_acc.get(is_128B),
+                            call_intrin_cast(native_result_ty, vlut_acc,
                                              {result_i, idx_i, lut_slices[j], mask[m]});
                     }
                 }
@@ -1905,7 +1863,6 @@ bool generate_vdelta(const std::vector<int> &indices, bool reverse,
 }
 
 Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
-    bool is_128B = target.has_feature(Halide::Target::HVX_128);
     llvm::Type *lut_ty = lut->getType();
     int lut_elements = get_vector_num_elements(lut_ty);
     llvm::Type *element_ty = get_vector_element_type(lut_ty);
@@ -2004,8 +1961,8 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
                 control_elements[i] = ConstantInt::get(i8_t, switches[i]);
             }
             Value *control = ConstantVector::get(control_elements);
-            IdPair vdelta = reverse ? MAKE_ID_PAIR(Intrinsic::hexagon_V6_vrdelta) : MAKE_ID_PAIR(Intrinsic::hexagon_V6_vdelta);
-            return call_intrin_cast(lut_ty, vdelta.get(is_128B), {lut, control});
+            Intrinsic::ID vdelta = reverse ? Intrinsic::hexagon_V6_vrdelta : Intrinsic::hexagon_V6_vdelta;
+            return call_intrin_cast(lut_ty, vdelta, {lut, control});
         }
     }
 
