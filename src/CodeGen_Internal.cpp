@@ -273,6 +273,7 @@ bool can_allocation_fit_on_stack(int64_t size) {
 
 Expr lower_int_uint_div(const Expr &a, const Expr &b) {
     // Detect if it's a small int division
+    internal_assert(a.type() == b.type());
     const int64_t *const_int_divisor = as_const_int(b);
     const uint64_t *const_uint_divisor = as_const_uint(b);
 
@@ -398,6 +399,65 @@ Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
         // and |b|.
         return lower_euclidean_mod(a, b);
     }
+}
+
+std::pair<Expr, Expr> unsigned_long_div_mod_round_to_zero(Expr &num, const Expr &den,
+                                                          const uint64_t *upper_bound) {
+    internal_assert(num.type() == den.type());
+    internal_assert(num.type().is_uint());
+    Type ty = num.type();
+    Expr q = make_zero(ty);
+    Expr leading_zeros = cast(ty, count_leading_zeros(den));
+    // Each iteration of the loop below checks for a bit in the result.
+    const int times = ty.bits();
+    int start = 1;
+    if (upper_bound) {
+        // Set start to times - (index of most significant bit in max_val)
+        // as for each iteration:
+        //     (1 << shift) <= upper_bound
+        start = times;
+        uint64_t max_val = *upper_bound;
+        while (max_val >>= 1) {
+            --start;
+        }
+        debug(1) << "Max value for long division: " << *upper_bound
+                 << ". Evaluate only first " << 1 + times - start << " bits.\n";
+    }
+    Expr r = num;
+    for (int i = start; i <= times; i++) {
+        // Check if the bit at 'shift' index should be set in the result.
+        int shift = times - i;
+        Expr shift_expr = make_const(ty, shift);
+        Expr new_r = r - (den << shift_expr);
+        // Don't drop any set bits from den after shift. The bit is set if
+        // den << shift is no more than remainder.
+        Expr bit_set = ((shift_expr <= leading_zeros) && r >= (den << shift_expr));
+        // Update the  and the quotient.
+        r = select(bit_set, new_r, r);
+        q = select(bit_set, make_const(ty, uint64_t(1) << shift) | q, q);
+    }
+    return {q, r};
+}
+
+std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &num, const Expr &den,
+                                                 const uint64_t *max_abs) {
+    debug(1) << "Using long div: (num: " << num << "); (den: " << den << ")\n";
+    internal_assert(num.type() == den.type());
+    Expr abs_num = (num.type().is_int()) ? abs(num) : num;
+    Expr abs_den = (den.type().is_int()) ? abs(den) : den;
+    std::pair<Expr, Expr> qr = unsigned_long_div_mod_round_to_zero(abs_num, abs_den, max_abs);
+    Expr q = qr.first;
+    Expr r = qr.second;
+    // Correct the signs for quotient and remainder for signed integer division.
+    if (num.type().is_int()) {
+        Expr num_neg = num >> make_const(num.type(), (num.type().bits() - 1));
+        Expr den_neg = den >> make_const(num.type(), (num.type().bits() - 1));
+        q = cast(num.type(), q) * ((num_neg ^ den_neg) | 1);
+        r = cast(num.type(), r) * (num_neg | 1);
+    }
+    q = simplify(common_subexpression_elimination(q));
+    r = simplify(common_subexpression_elimination(r));
+    return {q, r};
 }
 
 Expr lower_euclidean_div(Expr a, Expr b) {

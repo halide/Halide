@@ -423,7 +423,7 @@ Funcs.
  --no-verbose: Disable additional informational messages to stderr.
      This is the default.
 
-))USAGE";
+)USAGE";
 }
 
 // Calculate the maximum 2d rendered size for a given Box and stride, assuming
