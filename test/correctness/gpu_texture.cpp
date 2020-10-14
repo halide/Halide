@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     assert(interface->compute_capability != nullptr);
     int major, minor;
     int err = interface->compute_capability(nullptr, &major, &minor);
-    if (major == 1 && minor < 2) {
+    if (err != 0 || (major == 1 && minor < 2)) {
         printf("[SKIP] OpenCL %d.%d is less than required 1.2.\n", major, minor);
         return 0;
     }
