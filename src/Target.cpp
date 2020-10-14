@@ -174,8 +174,7 @@ Target calculate_host_target() {
 }
 
 bool is_using_hexagon(const Target &t) {
-    return (t.has_feature(Target::HVX_64) ||
-            t.has_feature(Target::HVX_128) ||
+    return (t.has_feature(Target::HVX_128) ||
             t.has_feature(Target::HVX_v62) ||
             t.has_feature(Target::HVX_v65) ||
             t.has_feature(Target::HVX_v66) ||
@@ -805,7 +804,7 @@ bool Target::supports_device_api(DeviceAPI api) const {
     case DeviceAPI::Default_GPU:
         return has_gpu_feature();
     case DeviceAPI::Hexagon:
-        return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
+        return has_feature(Target::HVX_128);
     case DeviceAPI::HexagonDma:
         return has_feature(Target::HexagonDma);
     default:
@@ -874,10 +873,8 @@ int Target::natural_vector_size(const Halide::Type &t) const {
             // HVX is either 64 or 128 *byte* vector size.
             if (has_feature(Halide::Target::HVX_128)) {
                 return 128 / data_size;
-            } else if (has_feature(Halide::Target::HVX_64)) {
-                return 64 / data_size;
             } else {
-                user_error << "Target uses hexagon arch without hvx_128 or hvx_64 set.\n";
+                user_error << "Target uses hexagon arch without hvx_128 set.\n";
                 return 0;
             }
         } else {
@@ -939,7 +936,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
     const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
 
-    const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, HexagonDma, HVX_shared_object}};
+    const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_128, HexagonDma, HVX_shared_object}};
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;
@@ -966,7 +963,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, HexagonDma, and HVX_shared_object\n"
+        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_128, HexagonDma, and HVX_shared_object\n"
                            << "  this:  " << *this << "\n"
                            << "  other: " << other << "\n";
         return false;
@@ -1054,8 +1051,8 @@ void target_test() {
         {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
         {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
         {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
-        {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt", ""}},
-        {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt-hvx_64", "hexagon-32-qurt-hvx_64"}},
+        {{"hexagon-32-qurt-hvx_v62-hvx_128", "hexagon-32-qurt", ""}},
+        {{"hexagon-32-qurt-hvx_v62-hvx_128", "hexagon-32-qurt-hvx_128", "hexagon-32-qurt-hvx_128"}},
     };
 
     for (const auto &test : gcd_tests) {
