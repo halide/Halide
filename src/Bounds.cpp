@@ -634,9 +634,12 @@ private:
             }
         } else {
             // b is bounded
-            if (b.max.type().is_uint() || (b.max.type().is_int() && is_positive_const(b.min))) {
-                // If the RHS is a positive integer, the result is in [0, max_b-1]
-                interval.max = Max::make(interval.min, b.max - make_one(t));
+            if (b.max.type().is_int_or_uint() && is_positive_const(b.min)) {
+                // If the RHS is >= 1, the result is in [0, max_b-1]
+                interval.max = b.max - make_one(t);
+            } else if (b.max.type().is_uint()) {
+                // if b.max = 0 then result is [0, 0], else [0, b.max - 1]
+                interval.max = select(is_zero(b.max), make_zero(t), b.max - make_one(t));
             } else if (b.max.type().is_int()) {
                 // x % [4,10] -> [0,9]
                 // x % [-8,-3] -> [0,7]
