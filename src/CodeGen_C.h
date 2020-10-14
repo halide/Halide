@@ -232,6 +232,7 @@ protected:
     void visit(const Atomic *) override;
 
     void visit_binop(Type t, const Expr &a, const Expr &b, const char *op);
+    void visit_relop(Type t, const Expr &a, const Expr &b, const char *scalar_op, const char *vector_op);
 
     template<typename T>
     static std::string with_sep(const std::vector<T> &v, const std::string &sep) {
@@ -256,6 +257,9 @@ protected:
 
     /** Emit atomic store instructions? */
     bool emit_atomic_stores;
+
+    /** true if add_vector_typedefs() has been called. */
+    bool using_vector_typedefs;
 };
 
 }  // namespace Internal
