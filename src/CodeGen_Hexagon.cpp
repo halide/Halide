@@ -46,17 +46,15 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
     } else {
         isa_version = 62;
     }
-    user_assert(!target.features_all_of(
-        {Halide::Target::HVX_128, Halide::Target::HVX_64}))
-        << "Cannot set both HVX_64 and HVX_128 at the same time.\n";
+    user_assert(target.has_feature(Target::HVX_128))
+        << "Creating a Codegen target for Hexagon without the hvx_128 target feature.\n";
 }
 
 namespace {
 
 Stmt call_halide_qurt_hvx_lock(const Target &target) {
-    Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
     Expr hvx_lock =
-        Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
+        Call::make(Int(32), "halide_qurt_hvx_lock", {128}, Call::Extern);
     string hvx_lock_result_name = unique_name("hvx_lock_result");
     Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
     Stmt check_hvx_lock = LetStmt::make(
@@ -78,10 +76,6 @@ Stmt call_halide_qurt_hvx_unlock() {
 // Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
 // as a destructor if successful.
 Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
-    user_assert(target.features_any_of(
-        {Halide::Target::HVX_128, Halide::Target::HVX_64}))
-        << "Must specify either HVX_64 or HVX_128 (but not both).\n";
-
     // Modify the stmt to add a call to halide_qurt_hvx_lock, and
     // register a destructor to call halide_qurt_hvx_unlock.
     Stmt check_hvx_lock = call_halide_qurt_hvx_lock(target);
@@ -2206,11 +2200,7 @@ string CodeGen_Hexagon::mcpu() const {
 
 string CodeGen_Hexagon::mattrs() const {
     std::stringstream attrs;
-    if (target.has_feature(Halide::Target::HVX_128)) {
-        attrs << "+hvx-length128b";
-    } else {
-        attrs << "+hvx-length64b";
-    }
+    attrs << "+hvx-length128b";
     attrs << ",+long-calls";
     return attrs.str();
 }
@@ -2220,11 +2210,7 @@ bool CodeGen_Hexagon::use_soft_float_abi() const {
 }
 
 int CodeGen_Hexagon::native_vector_bits() const {
-    if (target.has_feature(Halide::Target::HVX_128)) {
-        return 128 * 8;
-    } else {
-        return 64 * 8;
-    }
+    return 128 * 8;
 }
 
 namespace {

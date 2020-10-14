@@ -676,7 +676,6 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::OpenCL, false);
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
-        one_gpu.set_feature(Target::HVX_64, false);
         one_gpu.set_feature(Target::HVX_128, false);
         one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
@@ -736,11 +735,11 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
-            one_gpu.set_feature(Target::HVX_64);
+            one_gpu.set_feature(Target::HVX_128);
             module_name = "debug_hexagon";
             break;
         case Hexagon:
-            one_gpu.set_feature(Target::HVX_64);
+            one_gpu.set_feature(Target::HVX_128);
             module_name += "hexagon";
             break;
         case D3D12ComputeDebug:
@@ -898,7 +897,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (target.has_feature(Target::HVX_128)) {
         auto kind = target.has_feature(Target::Debug) ? HexagonDebug : Hexagon;
         JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
