@@ -13,7 +13,7 @@
 // simd_op_check into two tests, simd_op_check.cpp and simd_op_check_hvx.cpp
 // so that the latter is free to do its own thing - for simd_op_check_hvx.cpp
 // to run any tests, all that is needed is that HL_TARGET have a HVX related
-// target feature, i.e. one of HVX_64, HVX_128, HVX_v62, HVX_v65 and HVX_v66.
+// target feature, i.e. one of HVX_128, HVX_v62, HVX_v65 and HVX_v66.
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -47,12 +47,7 @@ public:
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
         Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
 
-        int hvx_width = 0;
-        if (target.has_feature(Target::HVX_64)) {
-            hvx_width = 64;
-        } else if (target.has_feature(Target::HVX_128)) {
-            hvx_width = 128;
-        }
+        constexpr int hvx_width = 128;
 
         int isa_version;
         if (target.has_feature(Halide::Target::HVX_v66)) {
@@ -663,8 +658,7 @@ int main(int argc, char **argv) {
     printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
 
     Target t(Target::NoOS, Target::Hexagon, 32);
-    for (const auto &f : {Target::HVX_64,
-                          Target::HVX_128,
+    for (const auto &f : {Target::HVX_128,
                           Target::HVX_v62,
                           Target::HVX_v65,
                           Target::HVX_v66}) {
