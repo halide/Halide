@@ -221,8 +221,8 @@ int main(int argc, char **argv) {
 
     // 16-bit blur into 32-bit accumulator, with reduction over
     // adjacent vector lanes at the same time as reduction over slices
-    // of the vector
-    {
+    // of the vector. This is only a win on platforms with a pmaddwd-like instruction.
+    if (target.arch == Target::X86) {
 
         double times[2];
 
