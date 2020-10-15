@@ -19,6 +19,7 @@ enum class Padding {
     Valid,
 };
 
+// This is an abstract helper op for elementwise operations.
 class ElementwiseOp : public Op {
 public:
     explicit ElementwiseOp(std::vector<Tensor *> inputs, Tensor *output)
@@ -27,6 +28,34 @@ public:
 
     Bounds InferBounds(const CropShape &crop) const;
     std::vector<CropShape> Split(const CropShape &crop) const;
+};
+
+class AveragePoolOp : public Op {
+    std::vector<int> stride_;
+    std::vector<int> filter_size_;
+    Padding padding_;
+    ActivationFunction activation_;
+
+public:
+    AveragePoolOp(Tensor *input, Tensor *output, std::vector<int> stride,
+                  std::vector<int> filter_size, Padding padding,
+                  ActivationFunction activation)
+        : Op({input}, {output}),
+          stride_(std::move(stride)),
+          filter_size_(std::move(filter_size)),
+          padding_(padding),
+          activation_(activation) {
+
+    }
+
+    Bounds InferBounds(const CropShape &crop) const;
+    std::vector<CropShape> Split(const CropShape &crop) const;
+
+    void Execute(const CropShape &crop);
+
+    void Dump(std::ostream &os) const {
+        os << "  AveragePool " << Output()->Name() << std::endl;
+    }
 };
 
 class Conv2DOp : public Op {
@@ -46,17 +75,11 @@ public:
           activation_(activation) {
     }
 
-    const Tensor *Input() const {
-        return Op::Input(0);
-    }
     const Tensor *Filter() const {
         return Op::Input(1);
     }
     const Tensor *Bias() const {
         return Op::Input(2);
-    }
-    Tensor *Input() {
-        return Op::Input(0);
     }
     Tensor *Filter() {
         return Op::Input(1);
@@ -153,6 +176,24 @@ public:
 
     void Dump(std::ostream &os) const {
         os << "  Add " << Output()->Name() << std::endl;
+    }
+};
+
+class ReshapeOp : public Op {
+    std::vector<int> new_shape_;
+
+public:
+    ReshapeOp(Tensor *input, Tensor *output, std::vector<int> new_shape)
+        : Op({input}, {output}), new_shape_(std::move(new_shape)) {
+    }
+
+    Bounds InferBounds(const CropShape &crop) const;
+    std::vector<CropShape> Split(const CropShape &crop) const;
+
+    void Execute(const CropShape &crop);
+
+    void Dump(std::ostream &os) const {
+        os << "  Reshape " << Output()->Name() << std::endl;
     }
 };
 

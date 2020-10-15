@@ -262,7 +262,9 @@ resort:
 
   std::cout << "After: " << std::endl;
   for (auto i : schedule_) {
-    std::cout << i.crop[2].first << " " << i.crop[2].second << " ";
+    if (i.crop.size() >= 3) {
+      std::cout << i.crop[2].first << " " << i.crop[2].second << " ";
+    }
     i.op->Dump(std::cout);
   }
 }

@@ -103,12 +103,9 @@ public:
             filter_bounded(co * vector_reduction + ci, x, y, c);
 
         // Set up the reduction loop and inputs.
-        Expr reduce_c_extent =
-            ((filter_.dim(0).extent() + vector_reduction - 1) / vector_reduction) *
-            vector_reduction;
         filter_.dim(1).set_min(0);
         filter_.dim(2).set_min(0);
-        RDom r(0, reduce_c_extent, 0, filter_.dim(1).extent(), 0,
+        RDom r(0, filter_.dim(0).extent(), 0, filter_.dim(1).extent(), 0,
                filter_.dim(2).extent());
         RVar rc = r[0];
         RVar rx = r[1];

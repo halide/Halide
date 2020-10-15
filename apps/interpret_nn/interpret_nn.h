@@ -233,6 +233,9 @@ public:
     const Tensor *Output(int idx) const {
         return outputs_[idx];
     }
+    const Tensor *Input() const {
+        return Input(0);
+    }
     const Tensor *Output() const {
         return Output(0);
     }
@@ -241,6 +244,9 @@ public:
     }
     Tensor *Output(int idx) {
         return outputs_[idx];
+    }
+    Tensor *Input() {
+        return Input(0);
     }
     Tensor *Output() {
         return Output(0);

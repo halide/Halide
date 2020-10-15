@@ -135,6 +135,35 @@ public:
             std::move(data), std::move(quantization));
     }
 
+    std::unique_ptr<Op> ParseAdd(const tflite::Operator *op) {
+        const auto options = op->builtin_options_as_AddOptions();
+        Tensor *input1 = result_.tensors[op->inputs()->Get(0)].get();
+        Tensor *input2 = result_.tensors[op->inputs()->Get(1)].get();
+        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        return make_unique<AddOp>(
+            input1, input2, output,
+            ParseActivationFunction(options->fused_activation_function()));
+    }
+
+    std::unique_ptr<Op> ParseAveragePool2D(const tflite::Operator *op) {
+        const auto options = op->builtin_options_as_Pool2DOptions();
+        Padding padding = ParsePadding(options->padding());
+        std::vector<int> stride = {
+            options->stride_w(),
+            options->stride_h(),
+        };
+        std::vector<int> filter_size = {
+            options->filter_width(),
+            options->filter_height(),
+        };
+        ActivationFunction activation =
+            ParseActivationFunction(options->fused_activation_function());
+        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
+        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        return make_unique<AveragePoolOp>(
+            input, output, stride, filter_size, padding, activation);
+    }
+
     std::unique_ptr<Op> ParseConv2D(const tflite::Operator *op) {
         const tflite::Conv2DOptions *options =
             op->builtin_options_as_Conv2DOptions();
@@ -188,14 +217,14 @@ public:
         return make_unique<PadOp>(input, padding, output);
     }
 
-    std::unique_ptr<Op> ParseAdd(const tflite::Operator *op) {
-        const auto options = op->builtin_options_as_AddOptions();
-        Tensor *input1 = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *input2 = result_.tensors[op->inputs()->Get(1)].get();
+    std::unique_ptr<Op> ParseReshape(const tflite::Operator *op) {
+        const tflite::ReshapeOptions *options =
+            op->builtin_options_as_ReshapeOptions();
+        std::vector<int> new_shape(options->new_shape()->cbegin(),
+                                   options->new_shape()->cend());
+        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return make_unique<AddOp>(
-            input1, input2, output,
-            ParseActivationFunction(options->fused_activation_function()));
+        return make_unique<ReshapeOp>(input, output, new_shape);
     }
 
     std::unique_ptr<Op> ParseOp(const tflite::Operator *op) {
@@ -208,14 +237,18 @@ public:
         auto builtin_code = GetBuiltinCode(opcode);
         halide_app_assert(builtin_code != tflite::BuiltinOperator_CUSTOM);
         switch (builtin_code) {
+        case tflite::BuiltinOperator_ADD:
+            return ParseAdd(op);
+        case tflite::BuiltinOperator_AVERAGE_POOL_2D:
+            return ParseAveragePool2D(op);
         case tflite::BuiltinOperator_CONV_2D:
             return ParseConv2D(op);
         case tflite::BuiltinOperator_DEPTHWISE_CONV_2D:
             return ParseDepthwiseConv2D(op);
         case tflite::BuiltinOperator_PAD:
             return ParsePad(op);
-        case tflite::BuiltinOperator_ADD:
-            return ParseAdd(op);
+        case tflite::BuiltinOperator_RESHAPE:
+            return ParseReshape(op);
         default:
             halide_app_error << "Unsupported op "
                              << tflite::EnumNameBuiltinOperator(builtin_code);

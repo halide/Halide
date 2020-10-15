@@ -27,6 +27,10 @@ $(BIN)/%/Add4DUint8Uint8.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	$< -g Add -f interpret_nn::Add4DUint8Uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
 
+$(BIN)/%/AveragePoolUint8.a: $(GENERATOR_BIN)/average_pool.generator
+	@mkdir -p $(@D)
+	$< -g AveragePool -f interpret_nn::AveragePoolUint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+
 $(BIN)/%/ConvolutionUint8.a: $(GENERATOR_BIN)/convolution.generator
 	@mkdir -p $(@D)
 	$< -g Convolution -f interpret_nn::ConvolutionUint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
@@ -39,7 +43,7 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$* target=$*
 
-OPS_HALIDE = $(BIN)/%/Add4DUint8Uint8.a $(BIN)/%/ConvolutionUint8.a $(BIN)/%/DepthwiseConvolutionUint8.a $(BIN)/%/runtime.a
+OPS_HALIDE = $(BIN)/%/Add4DUint8Uint8.a $(BIN)/%/AveragePoolUint8.a $(BIN)/%/ConvolutionUint8.a $(BIN)/%/DepthwiseConvolutionUint8.a $(BIN)/%/runtime.a
 
 $(BIN)/%/interpret_nn.o: interpret_nn.cpp
 	@mkdir -p $(@D)
