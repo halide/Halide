@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     if (t.has_gpu_feature() && !t.has_feature(Target::OpenGLCompute)) {
         Var xi, yi;
         f.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (t.has_feature(Target::HVX_128)) {
+    } else if (t.features_any_of({Target::HVX, Target::HVX_128})) {
         f.hexagon(y);
     } else {
         printf("[SKIP] No GPU target enabled.\n");

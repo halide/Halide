@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
             if (!target.has_feature(Target::OpenGLCompute)) {
                 f.vectorize(xi, 4);
             }
-        } else if (target.has_feature(Target::HVX_128)) {
+        } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 8);
@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
             if (!target.has_feature(Target::OpenGLCompute)) {
                 f.vectorize(xi, 4);
             }
-        } else if (target.has_feature(Target::HVX_128)) {
+        } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 8);
@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
             if (!target.has_feature(Target::OpenGLCompute)) {
                 f.vectorize(xi, 4);
             }
-        } else if (target.has_feature(Target::HVX_128)) {
+        } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 128);
@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
             if (!target.has_feature(Target::OpenGLCompute)) {
                 f.vectorize(xi, 4);
             }
-        } else if (target.has_feature(Target::HVX_128)) {
+        } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 8);
@@ -196,7 +196,7 @@ int main(int argc, char **argv) {
                 if (!target.has_feature(Target::OpenGLCompute)) {
                     gpu.vectorize(xi, 4);
                 }
-            } else if (target.has_feature(Target::HVX_128)) {
+            } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
                 gpu.hexagon().vectorize(x, 128);
             } else {
                 // Just test vectorization

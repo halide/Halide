@@ -897,7 +897,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-    if (target.has_feature(Target::HVX_128)) {
+    if (target.features_any_of({Target::HVX, Target::HVX_128})) {
         auto kind = target.has_feature(Target::Debug) ? HexagonDebug : Hexagon;
         JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {

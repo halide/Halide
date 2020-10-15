@@ -33,7 +33,7 @@ static void test(int vector_width) {
         s.vectorize(x, vector_width).compute_root();
         f.vectorize(x, vector_width);
     }
-    if (target.has_feature(Target::HVX_128)) {
+    if (target.features_any_of({Target::HVX, Target::HVX_128})) {
         f.hexagon();
     }
     f.set_error_handler(&halide_error);

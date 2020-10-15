@@ -80,9 +80,9 @@ public:
             default:
                 break;
             }
-        } else if (get_target().has_feature(Target::HVX_128)) {
+        } else if (get_target().features_any_of({Target::HVX, Target::HVX_128})) {
             // Hexagon schedule.
-            const int vector_size = get_target().has_feature(Target::HVX_128) ? 128 : 64;
+            const int vector_size = get_target().features_any_of({Target::HVX, Target::HVX_128}) ? 128 : 64;
 
             blur_y.compute_root()
                 .hexagon()

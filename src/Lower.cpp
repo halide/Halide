@@ -207,7 +207,7 @@ Module lower(const vector<Function> &output_funcs,
          t.has_feature(Target::OpenGLCompute) ||
          t.has_feature(Target::OpenGL) ||
          t.has_feature(Target::HexagonDma) ||
-         (t.arch != Target::Hexagon && (t.has_feature(Target::HVX_128))));
+         (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX, Target::HVX_128}))));
 
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
@@ -448,7 +448,7 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 
-    if (t.arch != Target::Hexagon && t.has_feature(Target::HVX_128)) {
+    if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX, Target::HVX_128})) {
         debug(1) << "Splitting off Hexagon offload...\n";
         s = inject_hexagon_rpc(s, t, result_module);
         debug(2) << "Lowering after splitting off Hexagon offload:\n"

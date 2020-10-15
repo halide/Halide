@@ -72,14 +72,14 @@ public:
         // The schedule.
 
         const bool use_hexagon =
-            get_target().has_feature(Target::HVX_128);
+            get_target().features_any_of({Target::HVX, Target::HVX_128});
 
         if (use_hexagon) {
             output_.hexagon();
         }
 
         int vector_size_u8 = get_target().natural_vector_size<uint8_t>();
-        if (get_target().has_feature(Target::HVX_128)) {
+        if (get_target().features_any_of({Target::HVX, Target::HVX_128})) {
             vector_size_u8 = 128;
         }
 

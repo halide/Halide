@@ -967,7 +967,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
 
             if (t.arch == Target::Hexagon ||
-                t.has_feature(Target::HVX_128)) {
+                t.features_any_of({Target::HVX, Target::HVX_128})) {
                 modules.push_back(get_initmod_alignment_128(c, bits_64, debug));
             } else if (t.arch == Target::X86) {
                 // AVX-512 requires 64-byte alignment. Could only increase alignment
@@ -1156,7 +1156,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             user_assert(t.os == Target::Windows) << "D3D12Compute target only available on Windows targets.\n";
             modules.push_back(get_initmod_windows_d3d12compute_x86(c, bits_64, debug));
         }
-        if (t.arch != Target::Hexagon && t.has_feature(Target::HVX_128)) {
+        if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX, Target::HVX_128})) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_host(c, bits_64, debug));
         }

@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
 
         // Summation is done as a sequential loop within each gpu thread
         blur2.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (target.has_feature(Target::HVX_128)) {
+    } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
         int hvx_vector_width = 64;
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");

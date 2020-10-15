@@ -124,7 +124,7 @@ public:
                     u8_sat(u16_sat(scaled_plus_offset(depth, x, y, batch)))));
 
         const bool use_hexagon =
-            get_target().has_feature(Target::HVX_128);
+            get_target().features_any_of({Target::HVX, Target::HVX_128});
 
         // Specifying .hexagon() on a Func will generate an RPC to run this stage
         // on Hexagon. If Hexagon is the host (that is, the architecture is
@@ -136,7 +136,7 @@ public:
 
         // Schedule for CPU and HVX.
         int vector_size_u8 = get_target().natural_vector_size<uint8_t>();
-        if (get_target().has_feature(Target::HVX_128)) {
+        if (get_target().features_any_of({Target::HVX, Target::HVX_128})) {
             vector_size_u8 = 128;
         }
         // We only perform vectorization when the depth >= vector size.

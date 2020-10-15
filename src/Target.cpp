@@ -174,7 +174,7 @@ Target calculate_host_target() {
 }
 
 bool is_using_hexagon(const Target &t) {
-    return (t.has_feature(Target::HVX_128) ||
+    return (t.features_any_of({Target::HVX, Target::HVX_128}) ||
             t.has_feature(Target::HVX_v62) ||
             t.has_feature(Target::HVX_v65) ||
             t.has_feature(Target::HVX_v66) ||
@@ -804,7 +804,7 @@ bool Target::supports_device_api(DeviceAPI api) const {
     case DeviceAPI::Default_GPU:
         return has_gpu_feature();
     case DeviceAPI::Hexagon:
-        return has_feature(Target::HVX_128);
+        return features_any_of({Target::HVX, Target::HVX_128});
     case DeviceAPI::HexagonDma:
         return has_feature(Target::HexagonDma);
     default:
@@ -819,7 +819,7 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::D3D12Compute)) {
         return DeviceAPI::D3D12Compute;
     }
-    if (has_feature(Target::HVX_128)) {
+    if (features_any_of({Target::HVX, Target::HVX_128})) {
         return DeviceAPI::Hexagon;
     }
     if (has_feature(Target::HexagonDma)) {

@@ -26,7 +26,7 @@ bool test_interleave() {
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
         interleaved.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (target.has_feature(Target::HVX_128)) {
+    } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
         const int vector_width = 128 / sizeof(T);
         interleaved.hexagon().vectorize(x, vector_width).unroll(c);
     } else {

@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         f.gpu_tile(x, y, xi, yi, 8, 8);
-    } else if (target.has_feature(Target::HVX_128)) {
+    } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
         f.hexagon().vectorize(x, 32);
     }
 
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
 
         if (target.has_gpu_feature()) {
             g.gpu_tile(x, y, xi, yi, 8, 8);
-        } else if (target.has_feature(Target::HVX_128)) {
+        } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
             g.hexagon().vectorize(x, 32);
         }
 
