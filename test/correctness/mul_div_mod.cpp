@@ -558,7 +558,7 @@ int main(int argc, char **argv) {
     } else if (target.has_feature(Target::OpenGLCompute)) {
         // Vector load/store unimplemented
     } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
-        mul_vector_widths.push_back(128);
+        vector_widths.push_back(128);
     } else {
         for (int i = 2; i <= 16; i *= 2) {
             vector_widths.push_back(i);
