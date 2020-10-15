@@ -1,22 +1,3 @@
-// This generator implements convolution and schedules for CPU and HVX.
-//
-// The pipeline implements the following operations:
-// (1) an input offset is added to the 8-bit input
-// (2) a filter offset is added to the 8-bit filter
-// (3) perform convolution
-// (4) convolution result is right-shifted and multiplied by a multiplier
-// (5) an output offset is added to the quantized convolution result
-// (6) the output is saturated and narrowed to 8-bit
-
-// The output dimension is a function of input dimension, filter dimension,
-// padding and stride.
-// Input dimension: {input_depth, input_width, input_height, input_batches}
-// Filter dimension: {filter_depth(=input_depth), filter_width, filter_height,
-// filter_batches}
-// Output dimension: {filter_batches, ceil((input_width + 2 * pad_width -
-// filter_width) / stride) + 1, ceil((input_height + 2 * pad_height -
-// filter_height) / stride) + 1, input_batches}
-
 #include "Halide.h"
 #include "common_halide.h"
 

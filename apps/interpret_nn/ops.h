@@ -19,15 +19,6 @@ enum class Padding {
     Valid,
 };
 
-inline std::string NNTypeToString(Padding p) {
-    switch (p) {
-    case Padding::Same:
-        return "Same";
-    case Padding::Valid:
-        return "Valid";
-    }
-}
-
 class ElementwiseOp : public Op {
 public:
     explicit ElementwiseOp(std::vector<Tensor *> inputs, Tensor *output)

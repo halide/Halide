@@ -6,64 +6,64 @@
 
 namespace interpret_nn {
 
-size_t SizeOfNNType(NNType t) {
+size_t SizeOfTensorType(TensorType t) {
     switch (t) {
-    case NNType::Float32:
+    case TensorType::Float32:
         return 4;
-    case NNType::Float16:
+    case TensorType::Float16:
         return 2;
-    case NNType::Int32:
+    case TensorType::Int32:
         return 4;
-    case NNType::UInt8:
+    case TensorType::UInt8:
         return 1;
-    case NNType::Int64:
+    case TensorType::Int64:
         return 8;
-    case NNType::Int16:
+    case TensorType::Int16:
         return 2;
-    case NNType::Complex64:
+    case TensorType::Complex64:
         return 16;
-    case NNType::Int8:
+    case TensorType::Int8:
         return 1;
-    case NNType::Float64:
+    case TensorType::Float64:
         return 8;
-    case NNType::Complex128:
+    case TensorType::Complex128:
         return 32;
-    // case NNType::String:  fallthru
-    // case NNType::Bool:    fallthru
+    // case TensorType::String:  fallthru
+    // case TensorType::Bool:    fallthru
     default:
         halide_app_error << "Unknown size of type";
         return 0;
     }
 }
 
-const char *NNTypeToString(NNType t) {
+const char *TensorTypeToString(TensorType t) {
     switch (t) {
-    case NNType::Float32:
+    case TensorType::Float32:
         return "float32";
-    case NNType::Float16:
+    case TensorType::Float16:
         return "float16";
-    case NNType::Int32:
+    case TensorType::Int32:
         return "int32";
-    case NNType::UInt8:
+    case TensorType::UInt8:
         return "uint8";
-    case NNType::Int64:
+    case TensorType::Int64:
         return "int64";
-    case NNType::Int16:
+    case TensorType::Int16:
         return "int16";
-    case NNType::Complex64:
+    case TensorType::Complex64:
         return "complex64";
-    case NNType::Int8:
+    case TensorType::Int8:
         return "int8";
-    case NNType::Float64:
+    case TensorType::Float64:
         return "float64";
-    case NNType::Complex128:
+    case TensorType::Complex128:
         return "complex128";
-    case NNType::String:
+    case TensorType::String:
         return "string";
-    case NNType::Bool:
+    case TensorType::Bool:
         return "bool";
     default:
-        halide_app_error << "Unhandled interpret_nn::NNType";
+        halide_app_error << "Unhandled interpret_nn::TensorType";
         return "";
     }
 }
@@ -71,7 +71,7 @@ const char *NNTypeToString(NNType t) {
 void Model::Dump(std::ostream& os) {
   os << "Tensors: " << std::endl;
   for (const auto& i : tensors) {
-    os << "  " << NNTypeToString(i->Type()) << " x " << i->Shape()
+    os << "  " << TensorTypeToString(i->Type()) << " x " << i->Shape()
        << (i->is_allocated() ? " allocated " : " ") << i->Name() << std::endl;
   }
 
@@ -88,13 +88,15 @@ void Tensor::allocate() {
     i.stride = shape_size;
     shape_size *= i.extent;
   }
-  shape_size *= SizeOfNNType(Type());
+  shape_size *= SizeOfTensorType(Type());
   if (data_.empty()) {
     data_.resize(shape_size);
   } else {
     halide_app_assert(data_.size() == shape_size);
   }
 }
+
+namespace {
 
 const std::pair<int, int> FindEdge(const Op* from, const Op* to) {
   for (int i = 0; i < from->OutputCount(); i++) {
@@ -145,6 +147,8 @@ bool IsIntersectionEmpty(const CropShape& a, const CropShape& b) {
   }
   return result;
 }
+
+}  // namespace
 
 bool ModelInterpreter::CanReorder(const ModelInterpreter::ScheduledOp& a,
                                   const ModelInterpreter::ScheduledOp& b) {
@@ -203,6 +207,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
     i.op->Dump(std::cout);
   }
 
+#if 0
   for (std::list<ScheduledOp>::iterator i = schedule.begin();
        i != schedule.end();) {
     // Split the op the way the op wants it done.
@@ -222,6 +227,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
     std::list<ScheduledOp>::iterator insert_at = i++;
     schedule.insert(insert_at, split_ops.begin(), split_ops.end());
   }
+#endif
 
   schedule_.reserve(schedule.size());
   while (!schedule.empty()) {

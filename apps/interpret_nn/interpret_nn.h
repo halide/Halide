@@ -28,9 +28,9 @@ inline std::ostream &operator<<(std::ostream &s,
 template<typename T>
 using HalideBuffer = Halide::Runtime::Buffer<T>;
 
-// TODO: renamed to "NNType" to avoid some warnings between this and the Type()
+// TODO: renamed to "TensorType" to avoid some warnings between this and the Type()
 // method and to avoid confusion with Halide::Type. Yuck. Need a better name.
-enum class NNType {
+enum class TensorType {
     Bool,
     Complex128,
     Complex64,
@@ -45,53 +45,53 @@ enum class NNType {
     UInt8,
 };
 
-size_t SizeOfNNType(NNType t);
+size_t SizeOfTensorType(TensorType t);
 
-const char *NNTypeToString(NNType t);
+const char *TensorTypeToString(TensorType t);
 
 template<typename T>
-bool IsType(NNType t) {
+bool IsType(TensorType t) {
     return IsType<typename std::remove_const<T>::type>(t);
 }
 
 template<>
-inline bool IsType<float>(NNType t) {
-    return t == NNType::Float32;
+inline bool IsType<float>(TensorType t) {
+    return t == TensorType::Float32;
 }
 template<>
-inline bool IsType<int32_t>(NNType t) {
-    return t == NNType::Int32;
+inline bool IsType<int32_t>(TensorType t) {
+    return t == TensorType::Int32;
 }
 template<>
-inline bool IsType<uint8_t>(NNType t) {
-    return t == NNType::UInt8;
+inline bool IsType<uint8_t>(TensorType t) {
+    return t == TensorType::UInt8;
 }
 template<>
-inline bool IsType<int64_t>(NNType t) {
-    return t == NNType::Int64;
+inline bool IsType<int64_t>(TensorType t) {
+    return t == TensorType::Int64;
 }
 template<>
-inline bool IsType<std::string>(NNType t) {
-    return t == NNType::String;
+inline bool IsType<std::string>(TensorType t) {
+    return t == TensorType::String;
 }
 template<>
-inline bool IsType<bool>(NNType t) {
-    return t == NNType::Bool;
+inline bool IsType<bool>(TensorType t) {
+    return t == TensorType::Bool;
 }
 template<>
-inline bool IsType<int16_t>(NNType t) {
-    return t == NNType::Int16;
+inline bool IsType<int16_t>(TensorType t) {
+    return t == TensorType::Int16;
 }
 template<>
-inline bool IsType<int8_t>(NNType t) {
-    return t == NNType::Int8;
+inline bool IsType<int8_t>(TensorType t) {
+    return t == TensorType::Int8;
 }
 template<>
-inline bool IsType<double>(NNType t) {
-    return t == NNType::Float64;
+inline bool IsType<double>(TensorType t) {
+    return t == TensorType::Float64;
 }
 // TODO
-//template<> inline bool IsType<float16>(NNType t) { return t == NNType::Float16; }
+//template<> inline bool IsType<float16>(TensorType t) { return t == TensorType::Float16; }
 
 struct QuantizationInfo {
     std::vector<float> scale;
@@ -112,13 +112,13 @@ inline CropShape WithoutStrides(const std::vector<halide_dimension_t> &shape) {
 
 class Tensor {
     std::string name_;
-    NNType type_;
+    TensorType type_;
     std::vector<halide_dimension_t> shape_;
     std::vector<uint8_t> data_;
     QuantizationInfo quantization_;
 
 public:
-    explicit Tensor(std::string name, NNType type,
+    explicit Tensor(std::string name, TensorType type,
                     std::vector<halide_dimension_t> shape,
                     std::vector<uint8_t> data, QuantizationInfo quantization)
         : name_(std::move(name)),
@@ -128,7 +128,7 @@ public:
           quantization_(std::move(quantization)) {
     }
 
-    interpret_nn::NNType Type() const {
+    interpret_nn::TensorType Type() const {
         return type_;
     }
     const std::string &Name() const {
@@ -194,6 +194,7 @@ protected:
 public:
     virtual ~Op() = default;
 
+    // Get the shape of the complete output of this op.
     virtual CropShape GetFullCrop() {
         if (OutputCount() == 1) {
             return WithoutStrides(Output(0)->Shape());
@@ -203,14 +204,17 @@ public:
         }
     }
 
+    // Get the bounds required of all inputs and outputs given a crop.
     struct Bounds {
         std::vector<CropShape> inputs;
         std::vector<CropShape> outputs;
     };
     virtual Bounds InferBounds(const CropShape &crop) const = 0;
 
+    // Execute the op on a given crop.
     virtual void Execute(const CropShape &crop) = 0;
 
+    // Given a crop, split the crop into smaller crops appropriate for this op.
     virtual std::vector<CropShape> Split(const CropShape &crop) const {
         return {crop};
     }
@@ -261,13 +265,19 @@ struct ScheduleOptions {
 class ModelInterpreter {
     Model *model_;
 
+    // The schedule is a list of ops with crops to run the ops on.
     struct ScheduledOp {
         Op *op;
         CropShape crop;
     };
     std::vector<ScheduledOp> schedule_;
 
+    // Can ops a and b be reordered with respect to each other?
     static bool CanReorder(const ScheduledOp &a, const ScheduledOp &b);
+
+    // Compute the cost of the memory accesses between a producer from and
+    // a consumer to. The cost is related to the size of the memory accessed,
+    // and the distance between the regions of memory accessed.
     static float Distance(const ScheduledOp &from, const ScheduledOp &to);
 
     void ScheduleNaive();
