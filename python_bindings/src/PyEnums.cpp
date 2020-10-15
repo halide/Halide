@@ -113,7 +113,7 @@ void define_enums(py::module &m) {
         .value("Metal", Target::Feature::Metal)
         .value("CPlusPlusMangling", Target::Feature::CPlusPlusMangling)
         .value("LargeBuffers", Target::Feature::LargeBuffers)
-        .value("HVX_64", Target::Feature::HVX_64)
+        .value("HVX", Target::Feature::HVX)
         .value("HVX_128", Target::Feature::HVX_128)
         .value("HVX_v62", Target::Feature::HVX_v62)
         .value("HVX_v65", Target::Feature::HVX_v65)
