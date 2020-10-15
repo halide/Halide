@@ -111,6 +111,7 @@ set(RUNTIME_LL
     x86
     x86_avx
     x86_avx2
+    x86_avx512    
     x86_sse41
     )
 

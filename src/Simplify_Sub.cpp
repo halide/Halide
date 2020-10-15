@@ -45,12 +45,17 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
         if (EVAL_IN_LAMBDA
             ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0), !overflows(-c0))) ||
              rewrite(x - x, 0) || // We want to remutate this just to get better bounds
-             rewrite(ramp(x, y) - ramp(z, w), ramp(x - z, y - w), is_same_type(x, z)) ||
-             rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y), is_same_type(x, z)) ||
-             rewrite(broadcast(x) - ramp(z, w), ramp(x - z, -w), is_same_type(x, z)) ||
-             rewrite(broadcast(x) - broadcast(y), broadcast(x - y), is_same_type(x, y)) ||
-             rewrite((x - broadcast(y)) - broadcast(z), x - broadcast(y + z), is_same_type(y, z)) ||
-             rewrite((x + broadcast(y)) - broadcast(z), x + broadcast(y - z), is_same_type(y, z)) ||
+             rewrite(ramp(x, y, c0) - ramp(z, w, c0), ramp(x - z, y - w, c0)) ||
+             rewrite(ramp(x, y, c0) - broadcast(z, c0), ramp(x - z, y, c0)) ||
+             rewrite(broadcast(x, c0) - ramp(z, w, c0), ramp(x - z, -w, c0)) ||
+             rewrite(broadcast(x, c0) - broadcast(y, c0), broadcast(x - y, c0)) ||
+             rewrite(broadcast(x, c0) - broadcast(y, c1), broadcast(x - broadcast(y, fold(c1/c0)), c0), c1 % c0 == 0) ||
+             rewrite(broadcast(y, c1) - broadcast(x, c0), broadcast(broadcast(y, fold(c1/c0)) - x, c0), c1 % c0 == 0) ||
+             rewrite((x - broadcast(y, c0)) - broadcast(z, c0), x - broadcast(y + z, c0)) ||
+             rewrite((x + broadcast(y, c0)) - broadcast(z, c0), x + broadcast(y - z, c0)) ||
+
+             rewrite(ramp(broadcast(x, c0), y, c1) - broadcast(z, c2), ramp(broadcast(x - z, c0), y, c1), c2 == c0 * c1) ||
+             rewrite(ramp(ramp(x, y, c0), z, c1) - broadcast(w, c2), ramp(ramp(x - w, y, c0), z, c1), c2 == c0 * c1) ||
              rewrite(select(x, y, z) - select(x, w, u), select(x, y - w, z - u)) ||
              rewrite(select(x, y, z) - y, select(x, 0, z - y)) ||
              rewrite(select(x, y, z) - z, select(x, y - z, 0)) ||

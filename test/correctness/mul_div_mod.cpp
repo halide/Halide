@@ -548,12 +548,12 @@ int main(int argc, char **argv) {
         scheduling = Hexagon;
     }
 
-    // Test multiplication
-    std::vector<int> mul_vector_widths = {1};
+    // Test multiplication and division
+    std::vector<int> vector_widths = {1};
     if (target.has_feature(Target::Metal) ||
         target.has_feature(Target::D3D12Compute)) {
         for (int i = 2; i <= 4; i *= 2) {
-            mul_vector_widths.push_back(i);
+            vector_widths.push_back(i);
         }
     } else if (target.has_feature(Target::OpenGLCompute)) {
         // Vector load/store unimplemented
@@ -561,22 +561,14 @@ int main(int argc, char **argv) {
         mul_vector_widths.push_back(128);
     } else {
         for (int i = 2; i <= 16; i *= 2) {
-            mul_vector_widths.push_back(i);
+            vector_widths.push_back(i);
         }
-    }
-
-    // Test division.
-    std::vector<int> div_vector_widths = mul_vector_widths;
-    if (scheduling == Hexagon) {
-        // Vectorized division is not supported on Hexagon.
-        div_vector_widths.clear();
-        div_vector_widths.push_back(1);
     }
 
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
 
-    for (int vector_width : mul_vector_widths) {
+    for (int vector_width : vector_widths) {
         std::cout << "Testing mul vector_width: " << vector_width << "\n";
         if (can_parallelize) {
             auto f = pool.async(test_mul, vector_width, scheduling, target);
@@ -586,7 +578,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    for (int vector_width : div_vector_widths) {
+    for (int vector_width : vector_widths) {
         std::cout << "Testing div_mod vector_width: " << vector_width << "\n";
         if (can_parallelize) {
             auto f = pool.async(test_div_mod, vector_width, scheduling, target);
