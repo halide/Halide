@@ -27,7 +27,7 @@ std::pair<int, int> Intersect(std::pair<int, int> a, std::pair<int, int> b) {
 
 CropShape Intersect(CropShape a, const CropShape &b) {
     halide_app_assert(a.size() == b.size());
-    for (int i = 0; i < a.size(); i++) {
+    for (int i = 0; i < (int) a.size(); i++) {
         a[i] = Intersect(a[i], b[i]);
     }
     return a;

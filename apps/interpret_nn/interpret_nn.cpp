@@ -120,7 +120,7 @@ float ShapeDistance(const CropShape& a, const CropShape& b) {
   halide_app_assert(a.size() == b.size());
   float size_cost = std::log(TotalExtent(a) + TotalExtent(b));
   float max_distance = 0.0f;
-  for (int d = 0; d < a.size(); d++) {
+  for (int d = 0; d < (int) a.size(); d++) {
     // TODO: This could be more precise, and also maybe should consider strides.
     int a_center = a[d].first + a[d].second / 2;
     int b_center = b[d].first + b[d].second / 2;
@@ -140,7 +140,7 @@ bool IsIntersectionEmpty(std::pair<int, int> a, std::pair<int, int> b) {
 
 bool IsIntersectionEmpty(const CropShape& a, const CropShape& b) {
   bool result = true;
-  for (int i = 0; i < a.size(); i++) {
+  for (int i = 0; i < (int) a.size(); i++) {
     result = result && IsIntersectionEmpty(a[i], b[i]);
   }
   return result;
@@ -211,7 +211,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
     // Make a vector of scheduled ops.
     std::vector<ScheduledOp> split_ops;
     split_ops.reserve(splits.size() - 1);
-    for (int j = 0; j + 1 < splits.size(); j++) {
+    for (int j = 0; j + 1 < (int) splits.size(); j++) {
       split_ops.push_back({i->op, splits[j]});
     }
 

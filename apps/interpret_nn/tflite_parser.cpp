@@ -112,7 +112,7 @@ public:
         }
 
         std::vector<halide_dimension_t> shape(t->shape()->size());
-        for (int i = 0; i < shape.size(); i++) {
+        for (int i = 0; i < (int) shape.size(); i++) {
             shape[i].min = 0;
             shape[i].extent = t->shape()->Get(shape.size() - 1 - i);
             shape[i].stride = 0;

@@ -48,5 +48,6 @@ int main(int argc, char **argv) {
         interpret_nn::RunBenchmark(argv[i]);
     }
 
+    std::cout << "Done!\n";
     return 0;
 }
