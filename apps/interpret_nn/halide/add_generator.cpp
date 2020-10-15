@@ -1,8 +1,3 @@
-// 'Add4DUint8Uint8' operation generator with quantization on inputs and output.
-// Inputs are expected as 4-dimensional arrays with possibly different sizes.
-// Each input is replicated as needed along a dimension, so that both inputs
-// have the same size before addition.
-
 #include "Halide.h"
 #include "common_halide.h"
 
@@ -16,8 +11,6 @@ using Halide::ConciseCasts::u8_sat;
 
 class Add : public Generator<Add> {
 public:
-    // Parameter ordering here is the same as in tfmini's interface for 'Add'.
-
     // Left shift for both inputs.
     Input<int32_t> left_shift_{"left_shift"};
 
@@ -39,7 +32,6 @@ public:
     Input<int32_t> output_offset_{"output_offset"};
     Input<int32_t> output_multiplier_{"output_multiplier"};
     Input<int32_t> output_shift_{"output_shift"};
-
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 

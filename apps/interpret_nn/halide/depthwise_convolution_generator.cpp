@@ -1,18 +1,3 @@
-// This generator implements depthwise convolution and schedules for HVX.
-//
-// The pipeline implements the following operations:
-// (1) an input offset is added to the 8-bit input
-// (2) a filter offset is added to the 8-bit filter
-// (3) the offset input is resampled with a c multiplier and stride
-// (4) separable convolution between offset, resampled input and offset filter
-// (5) convolution result is right-shifted and multiplied by a multiplier
-// (6) an output offset is added to the quantized convolution result
-// (7) the output is transformed by an activation function
-// (8) the output is saturated and narrowed to 8-bit
-
-// The Halide schedule for DepthwiseConv assumes the input c to be a
-// multiple of vector_size.
-
 #include "Halide.h"
 #include "common_halide.h"
 

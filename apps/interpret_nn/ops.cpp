@@ -9,13 +9,7 @@
 
 namespace interpret_nn {
 
-std::string DescribeTensor(const Tensor *t, const char *name) {
-    std::stringstream ss;
-    ss << "Tensor " << name << ":" << std::endl;
-    ss << "  " << t->Name() << std::endl;
-    ss << "  " << t->Shape() << std::endl;
-    return ss.str();
-}
+namespace {
 
 std::pair<int, int> Intersect(std::pair<int, int> a, std::pair<int, int> b) {
     int max_a = a.first + a.second - 1;
@@ -32,6 +26,8 @@ CropShape Intersect(CropShape a, const CropShape &b) {
     }
     return a;
 }
+
+}  // namespace
 
 Op::Bounds ElementwiseOp::InferBounds(const CropShape &crop) const {
     Bounds result;
@@ -105,9 +101,9 @@ void Conv2DOp::Execute(const CropShape &crop) {
     const Tensor *bias = Bias();
     Tensor *output = Output();
 
-    if (input->Type() == NNType::UInt8 &&
-        filter->Type() == NNType::UInt8 &&
-        output->Type() == NNType::UInt8) {
+    if (input->Type() == TensorType::UInt8 &&
+        filter->Type() == TensorType::UInt8 &&
+        output->Type() == TensorType::UInt8) {
         auto input_buf = input->Data<uint8_t>();
         auto filter_buf = filter->Data<uint8_t>();
         auto bias_buf = bias->Data<int32_t>();
@@ -165,18 +161,9 @@ void DepthwiseConv2DOp::Execute(const CropShape &crop) {
     const Tensor *bias = Bias();
     Tensor *output = Output();
 
-#if 0
-  std::cout << "DepthwiseConv:" << std::endl;
-  std::cout << DescribeTensor(input, "input");
-  std::cout << DescribeTensor(filter, "filter");
-  std::cout << DescribeTensor(bias, "bias");
-  std::cout << DescribeTensor(output, "output");
-  std::cout << "  Padding: " << NNTypeToString(padding_);
-#endif
-
-    if (input->Type() == NNType::UInt8 &&
-        filter->Type() == NNType::UInt8 &&
-        output->Type() == NNType::UInt8) {
+    if (input->Type() == TensorType::UInt8 &&
+        filter->Type() == TensorType::UInt8 &&
+        output->Type() == TensorType::UInt8) {
         auto input_buf = input->Data<uint8_t>();
         auto filter_buf = filter->Data<uint8_t>().sliced(3, 0);
         auto bias_buf = bias->Data<int32_t>();
@@ -229,7 +216,7 @@ void PadOp::Execute(const CropShape &crop) {
     auto padding = Input(1)->Data<const int32_t>();
     Tensor *output = Output();
 
-    if (SizeOfNNType(output->Type()) == 1) {
+    if (SizeOfTensorType(output->Type()) == 1) {
         auto input_buf = input->Data<uint8_t>();
         auto output_buf = output->Data<uint8_t>(crop);
 
@@ -256,9 +243,9 @@ void AddOp::Execute(const CropShape &crop) {
     const Tensor *input2 = Input(1);
     Tensor *output = Output();
 
-    if (input1->Type() == NNType::UInt8 &&
-        input2->Type() == NNType::UInt8 &&
-        output->Type() == NNType::UInt8) {
+    if (input1->Type() == TensorType::UInt8 &&
+        input2->Type() == TensorType::UInt8 &&
+        output->Type() == TensorType::UInt8) {
         auto input1_buf = input1->Data<uint8_t>();
         auto input2_buf = input2->Data<uint8_t>();
         auto output_buf = output->Data<uint8_t>(crop);

@@ -13,6 +13,7 @@ struct Model;
 
 namespace interpret_nn {
 
+// Translate from a tflite::Model to our own model representation.
 Model ParseTfLiteModel(const tflite::Model *model);
 
 }  // namespace interpret_nn

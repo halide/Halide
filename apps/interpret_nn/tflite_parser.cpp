@@ -63,32 +63,32 @@ public:
         }
     }
 
-    static NNType ParseType(tflite::TensorType t) {
+    static TensorType ParseType(tflite::TensorType t) {
         switch (t) {
         case tflite::TensorType_FLOAT32:
-            return NNType::Float32;
+            return TensorType::Float32;
         case tflite::TensorType_FLOAT16:
-            return NNType::Float16;
+            return TensorType::Float16;
         case tflite::TensorType_INT32:
-            return NNType::Int32;
+            return TensorType::Int32;
         case tflite::TensorType_UINT8:
-            return NNType::UInt8;
+            return TensorType::UInt8;
         case tflite::TensorType_INT64:
-            return NNType::Int64;
+            return TensorType::Int64;
         case tflite::TensorType_STRING:
-            return NNType::String;
+            return TensorType::String;
         case tflite::TensorType_BOOL:
-            return NNType::Bool;
+            return TensorType::Bool;
         case tflite::TensorType_INT16:
-            return NNType::Int16;
+            return TensorType::Int16;
         case tflite::TensorType_COMPLEX64:
-            return NNType::Complex64;
+            return TensorType::Complex64;
         case tflite::TensorType_INT8:
-            return NNType::Int8;
+            return TensorType::Int8;
         case tflite::TensorType_FLOAT64:
-            return NNType::Float64;
+            return TensorType::Float64;
         case tflite::TensorType_COMPLEX128:
-            return NNType::Complex128;
+            return TensorType::Complex128;
         }
     }
 
