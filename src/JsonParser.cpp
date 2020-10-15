@@ -86,8 +86,11 @@ struct JSONObject : public JSONBaseNode<JSONObject> {
     }
     const JSONNode val_for(const std::string &key) const {
         auto val = members.find(key);
-        internal_assert(val != members.end());
+        internal_assert(val != members.end()) << "Key not found: " << key << "\n";
         return val->second;
+    }
+    bool key_exists(const std::string &key) const {
+        return (members.find(key) != members.end());
     }
 };
 
@@ -430,15 +433,26 @@ struct HalideJSONParser {
         return false;
     }
 
+    inline int get_bits(const std::string &s) {
+        int num;
+        std::stringstream v(s);
+        v >> num;
+        return num;
+    }
+
     Type parse_type(const JSONNode &j) {
         auto *i = j.as<JSONString>();
         internal_assert(i);
         internal_assert(i->str.find("x") == std::string::npos);
         // TODO: more robust parsing
         if (starts_with(i->str, "uint")) {
-            return UInt(64);
+            int bits = get_bits(i->str.substr(4, 2));
+            std::cout << "str: " << i->str << " " << i->str.substr(4, 2)<< " bits: " << bits << "\n";
+            return UInt(bits);
         } else if (starts_with(i->str, "int")) {
-            return Int(64);
+            int bits = get_bits(i->str.substr(3, 2));
+            std::cout << "str" << i->str << " bits: " << bits << "\n";
+            return Int(bits);
         } else if (starts_with(i->str, "float")) {
                 return Float(64);
         } else {
@@ -463,6 +477,11 @@ struct HalideJSONParser {
     }
     Expr parse_FloatImm(const JSONNode &j) {
         return parse_immediate<FloatImm>(j);
+    }
+    Expr parse_StringImm(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        return StringImm::make(parse_string(i->val_for("value")));
     }
 
     Expr parse_Cast(const JSONNode &j) {
@@ -650,6 +669,26 @@ struct HalideJSONParser {
         return exprs;
     }
 
+    std::vector<int> parse_array_int(const JSONNode &j) {
+        std::vector<int> ints;
+        auto *i = j.as<JSONArray>();
+        internal_assert(i);
+        for (auto &e : i->elements) {
+            ints.push_back(parse_number(e));
+        }
+        return ints;
+    }
+
+    std::vector<Type> parse_array_type(const JSONNode &j) {
+        std::vector<Type> types;
+        auto *i = j.as<JSONArray>();
+        internal_assert(i);
+        for (auto &e : i->elements) {
+            types.push_back(parse_type(e));
+        }
+        return types;
+    }
+
     Stmt parse_Allocate(const JSONNode &j) {
         auto *i = j.as<JSONObject>();
         internal_assert(i);
@@ -740,6 +779,166 @@ struct HalideJSONParser {
 
     }
 
+    Stmt parse_Acquire(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        return Acquire::make(parse_Expr(i->val_for("semaphore")),
+                             parse_Expr(i->val_for("count")),
+                             parse_Stmt(i->val_for("body")));
+    }
+
+    Expr parse_Shuffle(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        return Shuffle::make(parse_array_Expr(i->val_for("vectors")),
+                             parse_array_int(i->val_for("indices")));
+    }
+
+    // A Range is a struct that is NOT an Expr, but contains
+    // Exprs.
+    Range parse_Range(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        return Range(parse_Expr(i->val_for("min")),
+                     parse_Expr(i->val_for("extent")));
+    }
+
+    // A region is a vector of Ranges
+    Region parse_Region(const JSONNode &j) {
+        std::vector<Range> region;
+        auto *i = j.as<JSONArray>();
+        internal_assert(i);
+        for (auto &e : i->elements) {
+            region.push_back(parse_Range(e));
+        }
+        return region;
+    }
+
+    PrefetchDirective parse_PrefetchDirective(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        std::map<std::string, Halide::PrefetchBoundStrategy> strategy_str =
+            {{"Clamp", Halide::PrefetchBoundStrategy::Clamp},
+             {"GuardWithIf", Halide::PrefetchBoundStrategy::GuardWithIf},
+             {"NonFaulting", Halide::PrefetchBoundStrategy::NonFaulting}};
+        PrefetchDirective pd;
+        pd.name = parse_string(i->val_for("name"));
+        pd.var = parse_string(i->val_for("var"));
+        pd.offset = parse_Expr(i->val_for("offset"));
+        pd.strategy = strategy_str[parse_string(i->val_for("strategy"))];
+        pd.param = parse_Parameter(i->val_for("param"));
+
+        return pd;
+    }
+
+    Stmt parse_Prefetch(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        return Prefetch::make(parse_string(i->val_for("name")),
+                              parse_array_type(i->val_for("types")),
+                              parse_Region(i->val_for("bounds")),
+                              parse_PrefetchDirective(i->val_for("prefetch")),
+                              parse_Expr(i->val_for("condition")),
+                              parse_Stmt(i->val_for("body")));
+    }
+
+    Stmt parse_Atomic(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        return Atomic::make(parse_string(i->val_for("producer_name")),
+                            parse_string(i->val_for("mutex_name")),
+                            parse_Stmt(i->val_for("body")));
+    }
+
+    Expr parse_VectorReduce(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        // This uses an internal enum to decide which operator
+        VectorReduce::Operator ops[] = {VectorReduce::Operator::Add,
+                                        VectorReduce::Operator::Mul,
+                                        VectorReduce::Operator::Min,
+                                        VectorReduce::Operator::Max,
+                                        VectorReduce::Operator::And,
+                                        VectorReduce::Operator::Or};
+        return VectorReduce::make(ops[parse_number(i->val_for("op"))],
+                                  parse_Expr(i->val_for("value")),
+                                  parse_number(i->val_for("lanes")));
+    }
+
+    Stmt parse_Realize(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        return Realize::make(parse_string(i->val_for("name")),
+                             parse_array_type(i->val_for("types")),
+                             parse_MemoryType(i->val_for("memory_type")),
+                             parse_Region(i->val_for("bounds")),
+                             parse_Expr(i->val_for("condition")),
+                             parse_Stmt(i->val_for("body")));
+    }
+
+    Expr parse_Load(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        return Load::make(parse_type(i->val_for("type")),
+                          parse_string(i->val_for("name")),
+                          parse_Expr(i->val_for("index")),
+                          //parse_Buffer(i->val_for("image")),
+                          Buffer<>(),
+                          parse_Parameter(i->val_for("param")),
+                          parse_Expr(i->val_for("predicate")),
+                          parse_ModulusRemainder(i->val_for("alignment")));
+    }
+
+    Call::CallType parse_CallType(const JSONNode &j) {
+        std::map<std::string, Call::CallType> ct_map =
+            {{"Image", Call::CallType::Image},
+             {"Extern", Call::CallType::Extern},
+             {"ExternCPlusPlus", Call::CallType::ExternCPlusPlus},
+             {"PureExtern", Call::CallType::PureExtern},
+             {"Halide", Call::CallType::Halide},
+             {"Intrinsic", Call::CallType::Intrinsic},
+             {"PureIntrinsic", Call::CallType::PureIntrinsic}};
+        auto str = parse_string(j);
+        return ct_map[str];
+
+    }
+
+    Expr parse_Call(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        Parameter p;
+        if (i->key_exists("param")) {
+            p = parse_Parameter(i->val_for("param"));
+        }
+        // Currently, intrinsics will get mapped to their names in the
+        // constructor anyway, so this should be safe
+        return Call::make(parse_type(i->val_for("type")),
+                          parse_string(i->val_for("name")),
+                          parse_array_Expr(i->val_for("args")),
+                          parse_CallType(i->val_for("call_type")),
+                          //parse_FunctionPtr(i->val_for("func")),
+                          FunctionPtr(),
+                          //parse_number(i->val_for("index")),
+                          0,
+                          //parse_Buffer(i->val_for("image")),
+                          Buffer<>(),
+                          p);
+    }
+
+    Expr parse_Variable(const JSONNode &j) {
+        // TODO: image, reduction_domain
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        auto param = Parameter();
+        if (i->key_exists("param")) {
+            param = parse_Parameter(i->val_for("param"));
+        }
+        return Variable::make(parse_type(i->val_for("type")),
+                              parse_string(i->val_for("name")),
+                              param);
+    }
+
+
     Stmt parse_Stmt(const JSONNode &j) {
         auto *i = j.as<JSONObject>();
         internal_assert(i);
@@ -748,8 +947,36 @@ struct HalideJSONParser {
             return parse_LetStmt(j);
         } else if (starts_with(tp, "AssertStmt")) {
             return parse_AssertStmt(j);
+        } else if (starts_with(tp, "ProducerConsumer")) {
+            return parse_ProducerConsumer(j);
+        } else if (starts_with(tp, "For")) {
+            return parse_For(j);
+        } else if (starts_with(tp, "Acquire")) {
+            return parse_Acquire(j);
         } else if (starts_with(tp, "Store")) {
             return parse_Store(j);
+        } else if (starts_with(tp, "Provide")) {
+            return parse_Provide(j);
+        } else if (starts_with(tp, "Allocate")) {
+            return parse_Allocate(j);
+        } else if (starts_with(tp, "Free")) {
+            return parse_Free(j);
+        } else if (starts_with(tp, "Realize")) {
+            return parse_Realize(j);
+        } else if (starts_with(tp, "Block")) {
+            return parse_Block(j);
+        } else if (starts_with(tp, "Fork")) {
+            return parse_Fork(j);
+        } else if (starts_with(tp, "IfThenElse")) {
+            return parse_IfThenElse(j);
+        } else if (starts_with(tp, "Evaluate")) {
+            return parse_Evaluate(j);
+        } else if (starts_with(tp, "Prefetch")) {
+            return parse_Prefetch(j);
+        } else if (starts_with(tp, "Atomic")) {
+            return parse_Atomic(j);
+        } else if (starts_with(tp, "Stmt")) {
+            return Stmt();
         }
         internal_assert(false);
         return Stmt();
@@ -766,6 +993,8 @@ struct HalideJSONParser {
             return parse_UIntImm(j);
         } else if (starts_with(tp, "FloatImm")) {
             return parse_FloatImm(j);
+        } else if (starts_with(tp, "StringImm")) {
+            return parse_StringImm(j);
         } else if (starts_with(tp, "Add")) {
             return parse_Add(j);
         } else if (starts_with(tp, "Sub")) {
@@ -804,13 +1033,108 @@ struct HalideJSONParser {
             return parse_Broadcast(j);
         } else if (starts_with(tp, "Ramp")) {
             return parse_Ramp(j);
-        } else if (starts_with(tp, "Select")) {
-            return parse_Select(j);
-        }
+        } else if (starts_with(tp, "Load")) {
+            return parse_Load(j);
+        } else if (starts_with(tp, "Ramp")) {
+            return parse_Ramp(j);
+        } else if (starts_with(tp, "Call")) {
+            return parse_Call(j);
+        } else if (starts_with(tp, "Let")) {
+            return parse_Let(j);
+        } else if (starts_with(tp, "Shuffle")) {
+            return parse_Shuffle(j);
+        } else if (starts_with(tp, "VectorReduce")) {
+            return parse_VectorReduce(j);
+        } else if (starts_with(tp, "Variable")) {
+            return parse_Variable(j);
+        } else if (starts_with(tp, "Expr")) {
+            return Expr();
+        } 
         internal_assert(false) << "No dispatch for " << tp << "\n";
         return Expr();
     }
 
+    Argument::Kind parse_ArgumentKind(const JSONNode &j) {
+        std::map<std::string, Argument::Kind> kind_str =
+            {{"InputScalar", Argument::Kind::InputScalar},
+             {"InputBuffer", Argument::Kind::InputBuffer},
+             {"OutputBuffer", Argument::Kind::OutputBuffer}};
+        auto str = parse_string(j);
+        return kind_str[str];
+    }
+
+    ArgumentEstimates parse_ArgumentEstimates(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        ArgumentEstimates estimates;
+        estimates.scalar_def = parse_Expr(i->val_for("scalar_def"));
+        estimates.scalar_min = parse_Expr(i->val_for("scalar_min"));
+        estimates.scalar_max = parse_Expr(i->val_for("scalar_max"));
+        estimates.scalar_estimate = parse_Expr(i->val_for("scalar_estimate"));
+        estimates.buffer_estimates = parse_Region(i->val_for("buffer_estimates"));
+        return estimates;
+    }
+
+    std::vector<LoweredArgument> parse_array_LoweredArgument(const JSONNode &j) {
+        auto *i = j.as<JSONArray>();
+        internal_assert(i);
+        std::vector<LoweredArgument> ret;
+        for (auto &e: i->elements) {
+            auto *arg_obj = e.as<JSONObject>();
+            internal_assert(arg_obj);
+            LoweredArgument argument(parse_string(arg_obj->val_for("name")),
+                                     parse_ArgumentKind(arg_obj->val_for("kind")),
+                                     parse_type(arg_obj->val_for("type")),
+                                     parse_number(arg_obj->val_for("dimensions")),
+                                     parse_ArgumentEstimates(arg_obj->val_for("argument_estimates")));
+            argument.alignment = parse_ModulusRemainder(arg_obj->val_for("alignment"));
+            ret.push_back(argument);
+        }
+        return ret;
+    }
+
+    LinkageType parse_LinkageType(const JSONNode &j) {
+        std::map<std::string, LinkageType> linkage_str =
+            {{"External", LinkageType::External},
+             {"ExternalPlusMetadata", LinkageType::ExternalPlusMetadata},
+             {"Internal", LinkageType::Internal}};
+        auto str = parse_string(j);
+        return linkage_str[str];
+    }
+
+    NameMangling parse_NameMangling(const JSONNode &j) {
+        auto *i = j.as<JSONString>();
+        internal_assert(i);
+        return NameMangling::Default;
+    }
+
+    LoweredFunc parse_LoweredFunc(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        return LoweredFunc(parse_string(i->val_for("name")),
+                           parse_array_LoweredArgument(i->val_for("args")),
+                           parse_Stmt(i->val_for("body")),
+                           parse_LinkageType(i->val_for("linkage")),
+                           parse_NameMangling(i->val_for("name_mangling")));
+    }
+
+    Module parse_Module(const JSONNode &j) {
+        auto *i = j.as<JSONObject>();
+        internal_assert(i);
+        auto name = parse_string(i->val_for("name"));
+        Target target(parse_string(i->val_for("target")));
+
+        Module m(name, target);
+
+        // Iterate through the funcs and add them
+        auto *funcs = i->val_for("functions").as<JSONArray>();
+        internal_assert(funcs);
+        for (auto &e : funcs->elements) {
+            m.append(parse_LoweredFunc(e));
+        }
+
+        return m;
+    }
 };
 
 
@@ -830,13 +1154,15 @@ struct HalideJSONParser {
         Module m("parsed", Target());
         //Internal::JSONParser p("\n{ \"a\" : \"b\" , \"c\" : \"d\"}");
         //Internal::JSONParser p("\n[ \"a\" , \"b\" ]");
-        //Internal::JSONParser p(read_entire_file(fname));
+        Internal::JSONParser p(read_entire_file(fname));
         //Internal::JSONParser p("[10, -2203, 5.08, 9.9.9]");
-        Internal::JSONParser p("{ \"_node_type\" : \"IntImm\", \"type\" : \"int64_t\", \"value\" : 1873 }");
+        //Internal::JSONParser p("{ \"_node_type\" : \"IntImm\", \"type\" : \"int64_t\", \"value\" : 1873 }");
+
         auto jsn = p.parse();
         std::cout << "==============\n";
         Internal::HalideJSONParser hp;
-        std::cout << hp.parse_IntImm(jsn);
+        //std::cout << hp.parse_IntImm(jsn);
+        hp.parse_Module(jsn);
 
 
         return m;

@@ -30,6 +30,11 @@ std::string to_string(T value, int base_indent = 0) {
     return os.str();
 }
 
+template<>
+std::string to_string(bool value, int base_indent) {
+    return value ? "true" : "false";
+}
+
 
 
 template<>
@@ -115,21 +120,34 @@ struct StmtToJson : public IRVisitor {
     }
 
     void print(const LoweredFunc &f) {
+        std::map<LinkageType, std::string> linkage_map =
+            {{LinkageType::External, "External"},
+             {LinkageType::ExternalPlusMetadata, "ExternalPlusMetadata"},
+             {LinkageType::Internal, "Internal"}};
         open_obj("LoweredFunc");
         print_key("name");
         stream << quoted_str(f.name) << ",\n";
-        //TODO: linkage and name mangling
-        //TODO: arguments
+        print_key("name_mangling");
+        stream << quoted_str(to_string(f.name_mangling)) << ",\n";
+        print_key("linkage");
+        stream << quoted_str(linkage_map[f.linkage]) << ",\n";
+        print_key("args");
+        print_vector(f.args);
         print_key("body");
-        f.body.accept(this);
+        print(f.body);
         close_obj();
     }
 
     void print(const Module &m) {
         open_obj("Module");
         //TODO: all other parts
+        print_key("name");
+        stream << quoted_str(m.name()) << ",\n";
         print_key("target");
-        stream << quoted_str(to_string(m.target())) << ",\n";
+        // for some reason, this outputs "target(<actual target>)"
+        auto target_str = to_string(m.target());
+        target_str = target_str.substr(7, target_str.size()-8);
+        stream << quoted_str(target_str) << ",\n";
         print_key("functions");
         stream << "[\n" << get_indent();
         increase_indent();
@@ -236,12 +254,14 @@ struct StmtToJson : public IRVisitor {
         open_obj("Cast");
         print_type(e->type);
         print_key("value");
-        e->value.accept(this); 
+        //e->value.accept(this); 
+        print(e->value);
         close_obj();
     }
 
     void visit(const Variable *e) override {
         open_obj("Variable");
+        print_type(e->type);
         print_key("name");
         stream << quoted_str(e->name) << ",\n";
         if (e->param.defined()) {
@@ -333,7 +353,7 @@ struct StmtToJson : public IRVisitor {
     void visit(const Not *e) override {
         open_obj("Not");
         print_type(e->type);
-        print_key("value");
+        print_key("a");
         e->a.accept(this);
         close_obj();
     }
@@ -453,7 +473,7 @@ struct StmtToJson : public IRVisitor {
         print_key("name");
         stream << quoted_str(s->name) << ",\n";
         print_key("is_producer");
-        stream << s->is_producer << ",\n";
+        stream << to_string(s->is_producer) << ",\n";
         print_key("body");
         s->body.accept(this);
         close_obj();
@@ -498,6 +518,66 @@ struct StmtToJson : public IRVisitor {
         internal_error << "Should not see Provide in backend\n";
     }
 
+    void print(const Region &r) {
+        // A region is a vector of Ranges
+        stream << "[\n";
+        increase_indent();
+        for (auto &g : r) {
+            stream << get_indent();
+            open_obj("Range");
+            print_key("min");
+            print(g.min);
+            stream << ",\n";
+            print_key("extent");
+            print(g.extent);
+            stream << ",\n";
+            close_obj();
+            stream << ",\n";
+        }
+        decrease_indent();
+        stream << "]";
+    }
+
+    void print(const ArgumentEstimates &e) {
+        open_obj("ArgumentEstimates");
+        print_key("scalar_def");
+        print(e.scalar_def);
+        stream << ",\n";
+        print_key("scalar_min");
+        print(e.scalar_min);
+        stream << ",\n";
+        print_key("scalar_max");
+        print(e.scalar_max);
+        stream << ",\n";
+        print_key("scalar_estimate");
+        print(e.scalar_estimate);
+        stream << ",\n";
+        print_key("buffer_estimates");
+        print(e.buffer_estimates);
+        close_obj();
+    }
+
+    void print(const LoweredArgument &a) {
+        std::map<Argument::Kind, std::string> kind_str =
+            {{Argument::Kind::InputScalar, "InputScalar"},
+             {Argument::Kind::InputBuffer, "InputBuffer"},
+             {Argument::Kind::OutputBuffer, "OutputBuffer"}};
+        open_obj("LoweredArgument");
+        print_key("name");
+        stream << quoted_str(a.name) << ",\n";
+        print_key("kind");
+        stream << quoted_str(kind_str[a.kind]) << ",\n";
+        print_key("dimensions");
+        stream << (uint64_t)a.dimensions << ",\n";
+        print_type(a.type);
+        print_key("argument_estimates");
+        print(a.argument_estimates);
+        stream << ",\n";
+        print_key("alignment");
+        print(a.alignment);
+        close_obj();
+    }
+
     template<typename T>
     inline void print_vector(const vector<T> &v) {
         stream << "[\n";
@@ -517,6 +597,19 @@ struct StmtToJson : public IRVisitor {
         for (auto &e: v) {
             stream << get_indent();
             e->accept(this);
+            stream << get_indent() << ",\n";
+        }
+        decrease_indent();
+        stream << get_indent() << "]\n";
+    }
+
+    template<>
+    inline void print_vector(const vector<LoweredArgument> &v) {
+        stream << "[\n";
+        increase_indent();
+        for (auto &e: v) {
+            stream << get_indent();
+            print(e);
             stream << get_indent() << ",\n";
         }
         decrease_indent();
@@ -583,7 +676,8 @@ struct StmtToJson : public IRVisitor {
         if (s->else_case.defined()) {
             s->else_case.accept(this);
         } else {
-            stream << "{ }\n";
+            open_obj("Stmt");
+            close_obj();
         }
         close_obj();
     }
@@ -666,6 +760,25 @@ struct StmtToJson : public IRVisitor {
         print_key("body");
         s->body.accept(this);
         close_obj();
+    }
+
+    void print(const Expr e) {
+        if (e.defined()) {
+            e.accept(this);
+        } else {
+            // equivalent to Expr()
+            open_obj("Expr");
+            close_obj();
+        }
+    }
+    void print(const Stmt e) {
+        if (e.defined()) {
+            e.accept(this);
+        } else {
+            // equivalent to Stmt()
+            open_obj("Stmt");
+            close_obj();
+        }
     }
 
 
