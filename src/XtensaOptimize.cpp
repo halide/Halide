@@ -725,7 +725,7 @@ private:
         return IRGraphMutator::visit(op);
     }
 
-    Expr visit(const VectorReduce* op) {
+    Expr visit(const VectorReduce* op) override {
         // Full reduction.
         if (op->type.is_scalar()) {
             static const std::vector<Pattern> reduces = {

@@ -2463,7 +2463,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         } else {
             stream << "*"
                    << "__attribute__((aligned(64))) "
-                   << " __restrict "
+                //    << " __restrict "
                    << op_name
                    << " = ("
                    << op_type
