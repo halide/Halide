@@ -138,15 +138,24 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
 
                false)) ||
              (no_overflow_int(op->type) &&
-              (rewrite((x/c0)*c0 + x%c0, x, c0 != 0) ||
-               rewrite((z + x/c0)*c0 + x%c0, z*c0 + x, c0 != 0) ||
-               rewrite((x/c0 + z)*c0 + x%c0, x + z*c0, c0 != 0) ||
-               rewrite(x%c0 + ((x/c0)*c0 + z), x + z, c0 != 0) ||
-               rewrite(x%c0 + ((x/c0)*c0 - z), x - z, c0 != 0) ||
-               rewrite(x%c0 + (z + (x/c0)*c0), x + z, c0 != 0) ||
-               rewrite((x/c0)*c0 + (x%c0 + z), x + z, c0 != 0) ||
-               rewrite((x/c0)*c0 + (x%c0 - z), x - z, c0 != 0) ||
-               rewrite((x/c0)*c0 + (z + x%c0), x + z, c0 != 0) ||
+              (rewrite((x*(y/x)) + (y % x), select(x == 0, 0, y)) ||
+               rewrite(((x/y)*y) + (x % y), select(y == 0, 0, x)) ||
+               rewrite(w*(z + x/w) + x%w, select(w == 0, 0, z*w + x)) ||
+               rewrite((z + x/w)*w + x%w, select(w == 0, 0, z*w + x)) ||
+               rewrite(w*(x/w + z) + x%w, select(w == 0, 0, x + z*w)) ||
+               rewrite((x/w + z)*w + x%w, select(w == 0, 0, x + z*w)) ||
+               rewrite(x%w + (w*(x/w) + z), select(w == 0, 0, x) + z) ||
+               rewrite(x%w + ((x/w)*w + z), select(w == 0, 0, x) + z) ||
+               rewrite(x%w + (w*(x/w) - z), select(w == 0, 0, x) - z) ||
+               rewrite(x%w + ((x/w)*w - z), select(w == 0, 0, x) - z) ||
+               rewrite(x%w + (z + w*(x/w)), select(w == 0, 0, x) + z) ||
+               rewrite(x%w + (z + (x/w)*w), select(w == 0, 0, x) + z) ||
+               rewrite(w*(x/w) + (x%w + z), select(w == 0, 0, x) + z) ||
+               rewrite((x/w)*w + (x%w + z), select(w == 0, 0, x) + z) ||
+               rewrite(w*(x/w) + (x%w - z), select(w == 0, 0, x) - z) ||
+               rewrite((x/w)*w + (x%w - z), select(w == 0, 0, x) - z) ||
+               rewrite(w*(x/w) + (z + x%w), select(w == 0, 0, x) + z) ||
+               rewrite((x/w)*w + (z + x%w), select(w == 0, 0, x) + z) ||
                rewrite(x/2 + x%2, (x + 1) / 2) ||
 
                rewrite(x + ((c0 - x)/c1)*c1, c0 - ((c0 - x) % c1), c1 > 0) ||
