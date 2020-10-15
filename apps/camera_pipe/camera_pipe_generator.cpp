@@ -500,12 +500,11 @@ void CameraPipe::generate() {
         Expr out_width = processed.width();
         Expr out_height = processed.height();
 
-        // In HVX 128, we need 2 threads to saturate HVX with work,
-        //and in HVX 64 we need 4 threads, and on other devices,
-        // we might need many threads.
+        // In HVX 128, we need 4 threads to saturate HVX with work,
+        // on other devices, we might need many threads.
         Expr strip_size;
         if (get_target().features_any_of({Target::HVX, Target::HVX_128})) {
-            strip_size = processed.dim(1).extent() / 2;
+            strip_size = processed.dim(1).extent() / 4;
         } else {
             strip_size = 32;
         }
