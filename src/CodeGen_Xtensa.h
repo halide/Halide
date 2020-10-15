@@ -43,6 +43,8 @@ protected:
     void visit(const Broadcast *op) override;
     void visit(const Call *op) override;
     void visit(const Load *op) override;
+    void visit(const EQ *op) override;
+    void visit(const LT *op) override;
     void visit(const Store *op) override;
     void visit(const Select *op) override;
     void visit(const Shuffle *op) override;

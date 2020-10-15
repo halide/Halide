@@ -162,7 +162,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f) {
                 stream << get_indent() << "halide_unused(_ucon);";
             }
 
-            //debug(0) << body;
+            // debug(0) << body;
             // Emit the body
             print(body);
             // stream << get_indent() << "printf(\"C code executed\\n\");";
@@ -212,19 +212,19 @@ inline int GetCycleCount() {
 
 #define HALIDE_MAYBE_UNUSED __attribute__ ((unused))
 
-//typedef int16_t int16x32_t __attribute__((ext_vector_type(32)));
-//typedef uint16_t uint16x32_t __attribute__((ext_vector_type(32)));
-//typedef int32_t int32x16_t __attribute__((ext_vector_type(16)));
-//typedef uint32_t uint32x16_t __attribute__((ext_vector_type(16)));
+typedef int16_t int16x32_t __attribute__((ext_vector_type(32)));
+typedef uint16_t uint16x32_t __attribute__((ext_vector_type(32)));
+typedef int32_t int32x16_t __attribute__((ext_vector_type(16)));
+typedef uint32_t uint32x16_t __attribute__((ext_vector_type(16)));
 
 typedef xb_vec2Nx8 int8x64_t;
 typedef xb_vec2Nx8U uint8x64_t;
-typedef xb_vecNx16 int16x32_t;
-typedef xb_vecNx16U uint16x32_t;
+//typedef xb_vecNx16 int16x32_t;
+//typedef xb_vecNx16U uint16x32_t;
 typedef xb_int24 int24_t;
 typedef xb_vec2Nx24 int24x64_t;
-typedef xb_vecN_2x32v int32x16_t;
-typedef xb_vecN_2x32Uv uint32x16_t;
+//typedef xb_vecN_2x32v int32x16_t;
+//typedef xb_vecN_2x32Uv uint32x16_t;
 typedef xb_vecNx48 int48x32_t;
 typedef xb_vecN_2x64w int64x16_t;
 typedef vboolN_2 uint1x16_t;
@@ -365,8 +365,8 @@ public:
                     IVP_MINN_2X32(a.native_vector[1], b.native_vector[1]));
     }
 
-    static Vec count_leading_zeros(const Vec &a) {
-        return Vec(from_native_vector, IVP_NSAUN_2X32(a.native_vector[0]), IVP_NSAUN_2X32(a.native_vector[1]));
+    static int32x32_t concat(const int32x16_t& a, const int32x16_t& b) {
+        return int32x32_t(from_native_vector, a, b);
     }
 };
 
@@ -567,6 +567,20 @@ public:
                     IVP_ADDN_2X32(base_w, IVP_PACKLN_2X64W(IVP_MULN_2X32(lanes_3 + one_to_n, stride_w))),
                     IVP_ADDN_2X32(base_w, IVP_PACKLN_2X64W(IVP_MULN_2X32(lanes_4 + one_to_n, stride_w))));
     }
+
+    static int32x64_t dense_ramp(const ElementType &base) {
+        CppVectorType base_w = IVP_ADDN_2X32(CppVectorType(base), IVP_SEQN_2X32());
+        CppVectorType lanes_2 = Lanes >> 2;
+        CppVectorType lanes_3 = Lanes >> 1;
+        CppVectorType lanes_4 = IVP_ADDN_2X32(lanes_2, lanes_3);
+
+        return int32x64_t(from_native_vector,
+                            base_w,
+                            IVP_ADDN_2X32(base_w, lanes_2),
+                            IVP_ADDN_2X32(base_w, lanes_3),
+                            IVP_ADDN_2X32(base_w, lanes_4));
+    }
+
 };
 
 class uint8x128_t {
@@ -1192,8 +1206,13 @@ inline uint8x64_t convert_to_uint8x64_t_from_int16x64_t(const int16x64_t& src) {
   return IVP_PACKL2NX24(wide);
 }
 
+inline int8x64_t convert_to_int8x64_t_from_int32x64_t(const int32x64_t& src) {
+  xb_vec2Nx24 wide = IVP_CVT24UNX32L(src.native_vector[1], src.native_vector[0]);
+  IVP_CVT24UNX32H(wide, src.native_vector[3], src.native_vector[2]);
+  return IVP_PACKL2NX24(wide);
+}
+
 inline uint8x64_t convert_to_uint8x64_t_from_int32x64_t(const int32x64_t& src) {
-  printf("convert_to_uint8x64_t_from_int32x64_t\n");
   xb_vec2Nx24 wide = IVP_CVT24UNX32L(src.native_vector[1], src.native_vector[0]);
   IVP_CVT24UNX32H(wide, src.native_vector[3], src.native_vector[2]);
   return IVP_PACKL2NX24(wide);
@@ -1214,6 +1233,13 @@ inline int16x32_t convert_to_int16x32_t_from_uint32x32_t(const uint32x32_t& src)
   return IVP_PACKLNX48(wide);
 }
 
+inline int16x64_t convert_to_int16x64_t_from_int32x64_t(const int32x64_t& src) {
+  xb_vecNx48 wide0 = IVP_CVT48SNX32(src.native_vector[1], src.native_vector[0]);
+  xb_vecNx48 wide1 = IVP_CVT48SNX32(src.native_vector[3], src.native_vector[2]);
+
+  return int16x64_t(int16x64_t::from_native_vector, IVP_PACKLNX48(wide0), IVP_PACKLNX48(wide1));
+}
+
 inline uint16x32_t convert_to_uint16x32_t_from_int32x32_t(const int32x32_t& src) {
   xb_vecNx48 wide = IVP_CVT48SNX32(src.native_vector[1], src.native_vector[0]);
   return xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKLNX48(wide));
@@ -1222,6 +1248,12 @@ inline uint16x32_t convert_to_uint16x32_t_from_int32x32_t(const int32x32_t& src)
 inline uint16x32_t convert_to_uint16x32_t_from_uint32x32_t(const uint32x32_t& src) {
   xb_vecNx48 wide = IVP_CVT48UNX32(src.native_vector[1], src.native_vector[0]);
   return xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKLNX48(wide));
+}
+
+inline int32x16_t convert_to_int32x16_t_from_uint1x16_t(const uint1x16_t& src) {
+  xb_vecN_2x32v r = 0;
+  IVP_INJBIN_2X32(r, src, 0);
+  return r;
 }
 
 inline int32x32_t convert_to_int32x32_t_from_int16x32_t(const int16x32_t& src) {
@@ -1416,6 +1448,7 @@ inline uint32x16_t halide_xtensa_convert_i48_high_u32(const int48x32_t& src, int
 HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_concat_from_native(const uint1x16_t& a, const uint1x16_t& b) {
         return IVP_JOINBN_2(b, a);
 }
+
 /*
 #include <xtensa/idma.h>
 
@@ -1611,6 +1644,10 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         op_name = "IVP_CVT32UNX48L";
     } else if (op->name == "halide_xtensa_convert_i48_high_u32") {
         op_name = "IVP_CVT32UNX48H";
+    } else if (op->name == "halide_xtensa_full_reduce_i16") {
+        op_name = "IVP_RADDNX16";
+    } else if (op->name == "halide_xtensa_convert_to_int32x16_t_from_uint1x16_t") {
+        op_name = "convert_to_int32x16_t_from_uint1x16_t";
     }
 
     rhs << op_name << "(" << with_commas(args) << ")";
@@ -1775,6 +1812,23 @@ void CodeGen_Xtensa::visit(const LT *op) {
         print_assignment(op->type, "IVP_LTUN_2X32U(" + sa + ", " + sb + ")");
     } else {
         visit_binop(op->type, op->a, op->b, "<");
+    }
+}
+
+void CodeGen_Xtensa::visit(const EQ *op) {
+    string sa = print_expr(op->a);
+    string sb = print_expr(op->b);
+
+    if (op->a.type().is_int() && (op->a.type().bits() == 16) && (op->a.type().lanes() == 32)) {
+        print_assignment(op->type, "IVP_EQNX16(" + sa + ", " + sb + ")");
+    } else if (op->a.type().is_uint() && (op->a.type().bits() == 16) && (op->a.type().lanes() == 32)) {
+        print_assignment(op->type, "IVP_EQNX16U(" + sa + ", " + sb + ")");
+    } else if (op->a.type().is_int() && (op->a.type().bits() == 32) && (op->a.type().lanes() == 16)) {
+        print_assignment(op->type, "IVP_EQN_2X32(" + sa + ", " + sb + ")");
+    } else if (op->a.type().is_uint() && (op->a.type().bits() == 32) && (op->a.type().lanes() == 16)) {
+        print_assignment(op->type, "IVP_EQN_2X32U(" + sa + ", " + sb + ")");
+    } else {
+        visit_binop(op->type, op->a, op->b, "==");
     }
 }
 
@@ -2409,7 +2463,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         } else {
             stream << "*"
                    << "__attribute__((aligned(64))) "
-                   //    << " __restrict "
+                   << " __restrict "
                    << op_name
                    << " = ("
                    << op_type
@@ -2440,6 +2494,5 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
 
     close_scope("alloc " + print_name(op->name));
 }
-
 }  // namespace Internal
 }  // namespace Halide

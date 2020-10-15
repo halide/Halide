@@ -109,6 +109,10 @@ Expr bc(Expr x) {
     return Broadcast::make(std::move(x), 0);
 }
 
+Expr vector_reduce(VectorReduce::Operator op, Expr x) {
+  return VectorReduce::make(op, x, 0);
+}
+
 // Check if the matches satisfy the given pattern flags, and mutate the matches
 // as specified by the flags.
 bool process_match_flags(vector<Expr> &matches, int flags) {
@@ -347,6 +351,12 @@ private:
         return call;
     }
 
+    static Expr halide_xtensa_concat_from_native_u1(Expr v0, Expr v1, Expr v2, Expr v3) {
+        Expr call = Call::make(wild_u1x.type(), "halide_xtensa_concat_from_native",
+                               {std::move(v0), std::move(v1), std::move(v2), std::move(v3)}, Call::PureExtern);
+        return call;
+    }
+
     static Expr halide_xtensa_concat_from_native_i48(Expr v0, Expr v1) {
         Expr call = Call::make(wild_i48x.type(), "halide_xtensa_concat_from_native",
                                {std::move(v0), std::move(v1)}, Call::PureExtern);
@@ -484,8 +494,8 @@ private:
 
     Expr visit(const LT *op) override {
         static const vector<Pattern> lts = {
-            {"halide_xtensa_i48x_gt_zero", 0 < i32(wild_i48x)},
-            {"halide_xtensa_i48x_gt_zero", 0 < u32(wild_i48x)},
+            // {"halide_xtensa_i48x_gt_zero", 0 < i32(wild_i48x)},
+            // {"halide_xtensa_i48x_gt_zero", 0 < u32(wild_i48x)},
         };
 
         if (op->type.is_vector()) {
@@ -691,6 +701,11 @@ private:
             {"halide_xtensa_convert_i16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 0, wild_i32, wild_i32)},
             {"halide_xtensa_convert_i16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 1, wild_i32, wild_i32)},
 
+            {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 0, 16, 64), Pattern::PassOnlyOp0},
+            {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 1, 16, 64), Pattern::PassOnlyOp1},
+            {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 2, 16, 64), Pattern::PassOnlyOp2},
+            {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 3, 16, 64), Pattern::PassOnlyOp3},
+
             // {"halide_xtensa_avg121_round_i16", halide_xtensa_avg_round_i16(halide_xtensa_avg_round_i16(wild_i16x, wild_i16x), wild_i16x)},
             // Predicated saturated add/sub.
             // {"halide_xtensa_pred_sat_add_i16", halide_xtensa_sat_add_i16(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))},
@@ -703,6 +718,22 @@ private:
 
             Expr new_expr = apply_patterns(call, calls, this);
             if (!new_expr.same_as(call)) {
+                return new_expr;
+            }
+        }
+
+        return IRGraphMutator::visit(op);
+    }
+
+    Expr visit(const VectorReduce* op) {
+        // Full reduction.
+        if (op->type.is_scalar()) {
+            static const std::vector<Pattern> reduces = {
+                {"halide_xtensa_full_reduce_i16", vector_reduce(VectorReduce::Add, wild_i32x), Pattern::NarrowOps},
+            };
+
+            Expr new_expr = apply_patterns(op, reduces, this);
+            if (!new_expr.same_as(op)) {
                 return new_expr;
             }
         }
@@ -728,6 +759,9 @@ private:
             return IRGraphMutator::visit(op);
         }
 
+        if (op->value.type().is_scalar()) {
+            return IRGraphMutator::visit(op);
+        }
         Stmt body = op->body;
         body = substitute(op->name, op->value, body);
         return mutate(body);
@@ -1130,17 +1164,27 @@ private:
     Expr visit(const Call *op) override {
         if (op->name == "halide_xtensa_slice_to_native") {
             Expr first_arg = mutate(op->args[0]);
-            const Call *maybe_concat = first_arg.as<Call>();
+            const Call *maybe_concat_call = first_arg.as<Call>();
             int slice_index = op->args[1].as<IntImm>()->value;
             int native_lanes = op->args[2].as<IntImm>()->value;
             int total_lanes = op->args[3].as<IntImm>()->value;
-            if (maybe_concat && (maybe_concat->name == "halide_xtensa_concat_from_native")
-                && (maybe_concat->type.lanes() == total_lanes) && ((int)maybe_concat->args.size() == total_lanes / native_lanes)) {
-                return maybe_concat->args[slice_index];
+            if (maybe_concat_call && (maybe_concat_call->name == "halide_xtensa_concat_from_native")
+                && (maybe_concat_call->type.lanes() == total_lanes) && ((int)maybe_concat_call->args.size() == total_lanes / native_lanes)) {
+                return maybe_concat_call->args[slice_index];
             }
+            const Shuffle* maybe_concat_shuffle = first_arg.as<Shuffle>();
+            if (maybe_concat_shuffle
+                  && maybe_concat_shuffle->is_concat()
+                  && ((int)maybe_concat_shuffle->vectors.size() == total_lanes / native_lanes)
+                  && ((int)maybe_concat_shuffle->vectors[slice_index].type().lanes() == native_lanes)
+               ) {
+                return maybe_concat_shuffle->vectors[slice_index];
+            }
+
             if (first_arg.type().is_bool() && first_arg.type().is_scalar()) {
                 return first_arg;
             }
+
             return Call::make(op->type, op->name,
                               {first_arg, op->args[1], op->args[2], op->args[3]},
                               Call::PureExtern);
@@ -1331,7 +1375,8 @@ Stmt match_xtensa_patterns(Stmt s) {
     s = SimplifySliceConcat().mutate(s);
     // Extra run to replace cast + concat, etc.
     s = MatchXtensaPatterns().mutate(s);
-    s = simplify(common_subexpression_elimination(s));
+    // s = simplify(common_subexpression_elimination(s));
+    s = common_subexpression_elimination(s);
 
     return s;
 }
