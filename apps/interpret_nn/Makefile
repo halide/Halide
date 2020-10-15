@@ -45,7 +45,7 @@ $(BIN)/%/interpret_nn.o: interpret_nn.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -c $< -o $@
 
-$(BIN)/%/ops.o: ops.cpp
+$(BIN)/%/ops.o: ops.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -c $< -o $@
 
