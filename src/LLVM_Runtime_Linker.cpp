@@ -236,11 +236,9 @@ DECLARE_NO_INITMOD(powerpc_cpu_features)
 #endif  // WITH_POWERPC
 
 #ifdef WITH_HEXAGON
-DECLARE_LL_INITMOD(hvx_64)
 DECLARE_LL_INITMOD(hvx_128)
 DECLARE_CPP_INITMOD(hexagon_cpu_features)
 #else
-DECLARE_NO_INITMOD(hvx_64)
 DECLARE_NO_INITMOD(hvx_128)
 DECLARE_NO_INITMOD(hexagon_cpu_features)
 #endif  // WITH_HEXAGON

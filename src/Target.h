@@ -93,7 +93,7 @@ struct Target {
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,
         HexagonDma = halide_target_feature_hexagon_dma,
-        HVX_64 = halide_target_feature_hvx_64,
+        HVX = halide_target_feature_hvx_128,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
         HVX_v65 = halide_target_feature_hvx_v65,

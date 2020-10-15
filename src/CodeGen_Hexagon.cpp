@@ -54,7 +54,7 @@ namespace {
 
 Stmt call_halide_qurt_hvx_lock(const Target &target) {
     Expr hvx_lock =
-        Call::make(Int(32), "halide_qurt_hvx_lock", {128}, Call::Extern);
+        Call::make(Int(32), "halide_qurt_hvx_lock", {}, Call::Extern);
     string hvx_lock_result_name = unique_name("hvx_lock_result");
     Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
     Stmt check_hvx_lock = LetStmt::make(

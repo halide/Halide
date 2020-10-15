@@ -324,7 +324,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"metal", Target::Metal},
     {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
     {"large_buffers", Target::LargeBuffers},
-    {"hvx_64", Target::HVX_64},
+    {"hvx", Target::HVX_128},
     {"hvx_128", Target::HVX_128},
     {"hvx_v62", Target::HVX_v62},
     {"hvx_v65", Target::HVX_v65},
@@ -870,8 +870,7 @@ int Target::natural_vector_size(const Halide::Type &t) const {
 
     if (arch == Target::Hexagon) {
         if (is_integer) {
-            // HVX is either 64 or 128 *byte* vector size.
-            if (has_feature(Halide::Target::HVX_128)) {
+            if (features_any_of({Halide::Target::HVX, Halide::Target::HVX_128})) {
                 return 128 / data_size;
             } else {
                 user_error << "Target uses hexagon arch without hvx_128 set.\n";

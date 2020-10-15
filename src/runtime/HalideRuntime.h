@@ -1285,7 +1285,6 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_large_buffers,  ///< Enable 64-bit buffer indexing to support buffers > 2GB. Ignored if bits != 64.
 
-    halide_target_feature_hvx_64,                 ///< Enable HVX 64 byte mode.
     halide_target_feature_hvx_128,                ///< Enable HVX 128 byte mode.
     halide_target_feature_hvx_v62,                ///< Enable Hexagon v62 architecture.
     halide_target_feature_fuzz_float_stores,      ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
