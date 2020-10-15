@@ -166,9 +166,6 @@ public:
         } else {
             int vec = get_target().natural_vector_size(UInt(16));
             bool use_hexagon = get_target().features_any_of({Target::HVX, Target::HVX_128});
-            if (get_target().features_any_of({Target::HVX, Target::HVX_128})) {
-                vec = 64;
-            }
 
             for (Func f : intermediates) {
                 f.compute_at(intermed_compute_at)
