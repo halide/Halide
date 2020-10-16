@@ -133,10 +133,10 @@ GENERATOR_DEPS_STATIC ?= $(LIB_HALIDE_STATIC) $(HALIDE_DISTRIB_PATH)/include/Hal
 LIBHALIDE_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lHalide $(LDFLAGS)
 LIBHALIDE_LDFLAGS_STATIC ?= $(LIB_HALIDE_STATIC) $(LDFLAGS)
 
-# Autoschedulers. Mullapudi2016 is currently the default, because it's fast. 
+# Autoschedulers. Mullapudi2016 is currently the default, because it's fast.
 AUTOSCHEDULER ?= mullapudi2016
 ifneq ($(AUTOSCHEDULER),)
-LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT) 
+LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 LIBHALIDE_LDFLAGS +=  -Wl,-force_load $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
 else
@@ -191,37 +191,40 @@ HL_VIDEOPLAYER ?= mplayer
 
 # ------- RunGen/Benchmark support
 
-# Really, .SECONDARY is what we want instead of .PRECIOUS (here and elsewhere),
-# but .SECONDARY doesn't accept wildcards
-.PRECIOUS: $(BIN)/%.registration.cpp
-$(BIN)/%.registration.cpp: $(BIN)/%.a
-	@echo $@ produced implicitly by $^
+RUNARGS ?=
 
 .PRECIOUS: $(BIN)/%/RunGenMain.o
 $(BIN)/%/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
 	@mkdir -p $(@D)
 	$(CXX) -c $< $(CXXFLAGS) -fno-exceptions $(IMAGE_IO_CXX_FLAGS) -I$(BIN)/$* -o $@
 
-.PRECIOUS: $(BIN)/%.rungen
-$(BIN)/%.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%.a $(BIN)/%.registration.cpp
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+# Can't have multiple wildcards in Make, so we'll use a macro
+# to stamp out all the rules we need
+define DEFINE_RUNGEN
 
-RUNARGS ?=
+.PRECIOUS: $$(BIN)/%/$(1).registration.cpp
+$$(BIN)/%/$(1).registration.cpp: $$(BIN)/%/$(1).a
+	@echo $$@ produced implicitly by $$^
+
+.PRECIOUS: $$(BIN)/%/$(1).rungen
+$$(BIN)/%/$(1).rungen: $$(BIN)/%/RunGenMain.o $$(BIN)/%/$(1).a $$(BIN)/%/$(1).registration.cpp $(2)
+	$$(CXX) $$(CXXFLAGS) $$^ -o $$@ $$(IMAGE_IO_FLAGS) $$(LDFLAGS)
 
 # Pseudo target that allows us to build-and-run in one step, e.g.
 #
 #     make bin/host/foo.run RUNARGS='input=a output=baz'
 #
-.PHONY: $(BIN)/%.run
-$(BIN)/%.run: $(BIN)/%.rungen
-	@$(CURDIR)/$< $(RUNARGS)
+.PHONY: $$(BIN)/%/$(1).run
+$$(BIN)/%/$(1).run: $$(BIN)/%/$(1).rungen
+	@$$(CURDIR)/$$< $$(RUNARGS)
 
 # Also allow 'foo.run' as a shortcut to mean host
-.PHONY: %.run
-%.run: $(BIN)/host/%.rungen
-	@$(CURDIR)/$< $(RUNARGS)
+.PHONY: $(1).run
+$(1).run: $$(BIN)/host/$(1).rungen
+	@$$(CURDIR)/$$< $$(RUNARGS)
 
-.PHONY: %.benchmark
-%.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
-	@$^ --benchmarks=all --estimate_all --parsable_output
+.PHONY: $(1).bench
+$(1).bench: $$(BIN)/$$(HL_TARGET)/$(1).rungen
+	@$$^ --benchmarks=all --estimate_all --parsable_output
 
+endef

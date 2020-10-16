@@ -92,3 +92,11 @@ $(BIN)/%/convolution_test: halide/convolution_test.cpp $(BIN)/%/common_reference
 
 test_convolution: $(BIN)/$(HL_TARGET)/convolution_test
 	$<
+
+# Experimental glue code to define RunGen rules for all of these (from Makefile.inc)
+# Not sure if useful or not, gonna leave in and see.
+$(eval $(call DEFINE_RUNGEN,AddUint8Uint8,$(BIN)/%/runtime.a))
+$(eval $(call DEFINE_RUNGEN,AveragePoolUint8,$(BIN)/%/runtime.a))
+$(eval $(call DEFINE_RUNGEN,ConvolutionUint8,$(BIN)/%/runtime.a))
+$(eval $(call DEFINE_RUNGEN,DepthwiseConvolutionUint8,$(BIN)/%/runtime.a))
+$(eval $(call DEFINE_RUNGEN,MaxPoolUint8,$(BIN)/%/runtime.a))
