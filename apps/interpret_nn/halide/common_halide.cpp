@@ -39,8 +39,8 @@ Halide::Expr RoundingDivideByPOT(const Halide::Expr &x,
     // TODO: Maybe this should be an offset added to x prior to shifting.
     Halide::Expr mask = ((cast(x.type(), 1) << uexponent) - 1);
     Halide::Expr remainder = x & mask;
-    Halide::Expr threshold = (mask >> 1) + (x < 0);
-    return (x >> uexponent) + (remainder > threshold);
+    Halide::Expr threshold = (mask >> 1) + select(x < 0, 1, 0);
+    return (x >> uexponent) + select(remainder > threshold, 1, 0);
 }
 
 // The tflite function of the same name performs a left shift.
