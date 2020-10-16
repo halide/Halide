@@ -853,7 +853,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
     case DeviceAPI::Metal:
         return Target::Metal;
     case DeviceAPI::Hexagon:
-        return Target::HVX_128;
+        return Target::HVX;
     case DeviceAPI::D3D12Compute:
         return Target::D3D12Compute;
     default:
@@ -870,10 +870,10 @@ int Target::natural_vector_size(const Halide::Type &t) const {
 
     if (arch == Target::Hexagon) {
         if (is_integer) {
-            if (features_any_of({Halide::Target::HVX, Halide::Target::HVX_128})) {
+            if (has_feature(Halide::Target::HVX)) {
                 return 128 / data_size;
             } else {
-                user_error << "Target uses hexagon arch without hvx_128 set.\n";
+                user_error << "Target uses hexagon arch without target feature hvx set.\n";
                 return 0;
             }
         } else {
@@ -935,7 +935,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
     const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
 
-    const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_128, HexagonDma, HVX_shared_object}};
+    const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, HVX_shared_object}};
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;
@@ -962,7 +962,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_128, HexagonDma, and HVX_shared_object\n"
+        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, and HVX_shared_object\n"
                            << "  this:  " << *this << "\n"
                            << "  other: " << other << "\n";
         return false;
@@ -1050,8 +1050,8 @@ void target_test() {
         {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
         {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
         {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
-        {{"hexagon-32-qurt-hvx_v62-hvx_128", "hexagon-32-qurt", ""}},
-        {{"hexagon-32-qurt-hvx_v62-hvx_128", "hexagon-32-qurt-hvx_128", "hexagon-32-qurt-hvx_128"}},
+        {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},
+        {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt-hvx", "hexagon-32-qurt-hvx"}},
     };
 
     for (const auto &test : gcd_tests) {

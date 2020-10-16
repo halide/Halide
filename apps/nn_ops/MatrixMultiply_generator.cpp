@@ -62,7 +62,7 @@ public:
         int vector_size_u8 = natural_vector_size<uint8_t>();
         int vector_size_u32 = natural_vector_size<uint32_t>();
         bool use_hexagon = false;
-        if (get_target().has_feature(Halide::Target::HVX_128)) {
+        if (get_target().has_feature(Halide::Target::HVX)) {
             vector_size_u8 = 128;
             vector_size_u32 = 32;
             use_hexagon = true;

@@ -676,7 +676,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::OpenCL, false);
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
-        one_gpu.set_feature(Target::HVX_128, false);
+        one_gpu.set_feature(Target::HVX, false);
         one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
@@ -735,11 +735,11 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
-            one_gpu.set_feature(Target::HVX_128);
+            one_gpu.set_feature(Target::HVX);
             module_name = "debug_hexagon";
             break;
         case Hexagon:
-            one_gpu.set_feature(Target::HVX_128);
+            one_gpu.set_feature(Target::HVX);
             module_name += "hexagon";
             break;
         case D3D12ComputeDebug:

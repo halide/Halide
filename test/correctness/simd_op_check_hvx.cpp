@@ -4,8 +4,8 @@
 // simd_op_check is not an 'offload' test. In other words, it runs SIMD tests
 // for the architecture that is the host architecture in HL_TARGET.
 // However, the buildbots are configured to test for HVX as an offload device
-// i.e HL_TARGET and HL_JIT_TARGET, for instance, are host-hvx_128. This works
-// fine for all the tests except simd_op_check because with HL_TARGET=host-hvx_128
+// i.e HL_TARGET and HL_JIT_TARGET, for instance, are host-hvx. This works
+// fine for all the tests except simd_op_check because with HL_TARGET=host-hvx
 // we end up running host tests and not HVX tests.
 //
 // One way of fixing this is to change the buildbot recipe. However, this would
@@ -13,7 +13,7 @@
 // simd_op_check into two tests, simd_op_check.cpp and simd_op_check_hvx.cpp
 // so that the latter is free to do its own thing - for simd_op_check_hvx.cpp
 // to run any tests, all that is needed is that HL_TARGET have a HVX related
-// target feature, i.e. one of HVX_128, HVX_v62, HVX_v65 and HVX_v66.
+// target feature, i.e. one of HVX, HVX_v62, HVX_v65 and HVX_v66.
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -658,7 +658,7 @@ int main(int argc, char **argv) {
     printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
 
     Target t(Target::NoOS, Target::Hexagon, 32);
-    for (const auto &f : {Target::HVX_128,
+    for (const auto &f : {Target::HVX,
                           Target::HVX_v62,
                           Target::HVX_v65,
                           Target::HVX_v66}) {
