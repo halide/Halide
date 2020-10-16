@@ -122,7 +122,7 @@ Op::Bounds AveragePoolOp::InferBounds(const CropShape &crop) const {
 
 std::vector<CropShape> AveragePoolOp::Split(const CropShape &crop) const {
     const int kSplit = 2;
-    return SplitCrop(crop, 2, kSplit, true);
+    return SplitCrop(crop, 2, kSplit);
 }
 
 void AveragePoolOp::Execute(const CropShape &crop) {
