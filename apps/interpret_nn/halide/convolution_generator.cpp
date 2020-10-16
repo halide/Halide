@@ -149,7 +149,7 @@ public:
 
         // Saturate and narrow the output.
         Expr output =
-            MultiplyByQuantizedMultiplierSmallerThanOne(i32(convolved(c, x, y, b)),
+            MultiplyByQuantizedMultiplierSmallerThanOne(convolved(c, x, y, b),
                                                         output_multiplier_, output_shift_) +
             output_offset_;
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);

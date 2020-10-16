@@ -31,13 +31,15 @@ struct TestParams {
 
 const static TestParams test_params[] = {
     // TODO: add more tests
-    {3, 64, 64, 2, 3, 5, 5, 32, 128, 128, 1, 1},
+    //{3, 64, 64, 2, 3, 5, 5, 32, 128, 128, 1, 1},
+    {32, 64, 64, 2, 32, 5, 5, 32, 128, 128, 1, 1},
 };
 
 struct ConvolutionArgs {
     Halide::Runtime::Buffer<uint8_t> input_tensor;
     Halide::Runtime::Buffer<uint8_t> filter_tensor;
     Halide::Runtime::Buffer<int32_t> bias_tensor;
+    // TODO: Just use TestParams here?
     int input_offset;
     int filter_offset;
     int stride_x;

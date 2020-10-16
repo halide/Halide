@@ -4,7 +4,7 @@
 namespace interpret_nn {
 
 using Halide::Generator;
-using Halide::ConciseCasts::i16;
+using Halide::ConciseCasts::u16;
 using Halide::ConciseCasts::u8_sat;
 
 class AveragePool : public Generator<AveragePool> {
@@ -18,8 +18,8 @@ public:
     // [x * stride, y * stride] is a valid spatial location in the input buffer.
     // Generally, this means setting the output buffer's [width, height] to be
     // the input buffer's [width, height] / stride.
-    Input<int> stride_x_{"stride_x", 1, 1, 4};
-    Input<int> stride_y_{"stride_y", 1, 1, 4};
+    Input<int> stride_x_{"stride_x", 1, 1, 16};
+    Input<int> stride_y_{"stride_y", 1, 1, 16};
     Input<int> filter_width_{"filter_width", 1, 1, 16};
     Input<int> filter_height_{"filter_height", 1, 1, 16};
 
@@ -30,22 +30,21 @@ public:
 
     void generate() {
         // The algorithm.
-
         Var c("c"), x("x"), y("y"), b("b");
 
         Func input_bounded = ConstantExteriorTensor(input_, 0);
 
         Func sum("sum");
         RDom filter_dom(0, filter_width_, 0, filter_height_);
-        sum(c, x, y, b) += i16(
+        sum(c, x, y, b) += u16(
             input_bounded(c, x * stride_x_ + filter_dom.x,
                           y * stride_y_ + filter_dom.y, b));
 
         Func average("average");
         Expr x_start = max(x * stride_x_, input_.dim(1).min());
-        Expr x_end = min(x * stride_x_ + filter_width_, input_.dim(1).max());
+        Expr x_end = min(x * stride_x_ + filter_width_, input_.dim(1).max() + 1);
         Expr y_start = max(y * stride_y_, input_.dim(2).min());
-        Expr y_end = min(y * stride_y_ + filter_height_, input_.dim(2).max());
+        Expr y_end = min(y * stride_y_ + filter_height_, input_.dim(2).max() + 1);
         Expr filter_count = (x_end - x_start) * (y_end - y_start);
         average(c, x, y, b) = (sum(c, x, y, b) + filter_count / 2) / filter_count;
 
