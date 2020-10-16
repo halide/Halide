@@ -55,9 +55,6 @@ struct ConvolutionArgs {
         // These parameters lead to reasonable values for testing in
         // most cases (expected value of the input matrices is ~0,
         // expected value of the product is ~0).
-
-        // Hexagon's device_malloc implementation will also set the host
-        // pointer if it is null, giving a zero copy buffer.
         input_tensor = Halide::Runtime::Buffer<uint8_t>(p.input_depth, p.input_width, p.input_height, p.input_batches);
         filter_tensor = Halide::Runtime::Buffer<uint8_t>(p.filter_depth, p.filter_width, p.filter_height, p.filter_batches);
         bias_tensor = Halide::Runtime::Buffer<int32_t>(p.filter_batches);
@@ -91,7 +88,7 @@ struct ConvolutionArgs {
         stride_y = p.stride;
         dilation_x = p.dilation;
         dilation_y = p.dilation;
-        output_multiplier = 1;
+        output_multiplier = 1 << 20;
         output_shift = 0;
         output_offset = 0;
         output_min = 0;
@@ -115,10 +112,6 @@ void RunBenchmark(ConvolutionArgs &a) {
 }
 
 void ValidateOutput(ConvolutionArgs &a, const TestParams &p) {
-    // Copy the output back to the host. If the buffer is zero-copy (as
-    // it should be on a real device), this will be a no-op.
-    a.output_tensor.copy_to_host();
-
     // Validate that the algorithm did what we expect.
     a.output_tensor.for_each_element([&](int c, int x, int y, int b) {
         int32_t output = a.bias_tensor(c);
@@ -126,15 +119,15 @@ void ValidateOutput(ConvolutionArgs &a, const TestParams &p) {
         for (int filter_y = 0; filter_y < p.filter_height; filter_y++) {
             for (int filter_x = 0; filter_x < p.filter_width; filter_x++) {
                 for (int index_c = 0; index_c < p.input_depth; index_c++) {
-                    int32_t input_value = static_cast<int32_t>(0);
+                    int32_t input_value = 0;
                     int x_offset = x * p.stride + filter_x * p.dilation;
                     int y_offset = y * p.stride + filter_y * p.dilation;
                     if ((x_offset >= 0) && (x_offset < p.input_width) && (y_offset >= 0) && (y_offset < p.input_height)) {
-                        input_value = static_cast<int32_t>(
-                            (int16_t)a.input_tensor(index_c, x_offset, y_offset, b) - p.input_offset);
+                        input_value =
+                            (int16_t)a.input_tensor(index_c, x_offset, y_offset, b) - (int16_t)p.input_offset;
                     }
-                    int32_t filter_value = static_cast<int32_t>(
-                        (int16_t)a.filter_tensor(index_c, filter_x, filter_y, c) - p.filter_offset);
+                    int32_t filter_value =
+                        (int16_t)a.filter_tensor(index_c, filter_x, filter_y, c) - (int16_t)p.filter_offset;
 
                     output += input_value * filter_value;
                 }
@@ -145,8 +138,6 @@ void ValidateOutput(ConvolutionArgs &a, const TestParams &p) {
         output += a.output_offset;
         output = std::max(output, (int32_t)a.output_min);
         output = std::min(output, (int32_t)a.output_max);
-// TODO: remove this printf
-printf("Output at %d %d %d %d: %d vs %d\n", c, x, y, b, output, a.output_tensor(c, x, y, b));
         if (output != a.output_tensor(c, x, y, b)) {
             fprintf(stderr, "Mismatch at %d %d: %d != %d\n", x, y, output, a.output_tensor(c, x, y, b));
             abort();

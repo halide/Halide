@@ -135,8 +135,8 @@ public:
         // depend only on c.
         Func offset_c("offset_c");
         offset_c(c) = bias_(c);
-        offset_c(c) += i32(filter_rdxyc) * i32(input_offset_) -
-                       i32(filter_offset_) * i32(input_offset_);
+        offset_c(c) += i32(filter_offset_) * i32(input_offset_) -
+                       i32(filter_rdxyc) * i32(input_offset_);
 
         // Next, the terms that depend only on x, y, b.
         Func offset_xyb("offset_xyb");
