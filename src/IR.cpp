@@ -823,11 +823,14 @@ bool Shuffle::is_interleave() const {
 
 int Shuffle::is_broadcast() const {
     if (vectors.size() != 1) {
-        // Broadcast of concat is different.
+        // This might be a broadcast of concat, but we don't consider that
+        // a broadcast.
         return 0;
     }
     int lanes = vectors.front().type().lanes();
     if (indices.size() % lanes != 0) {
+        // This might be a broadcast and then a slice, but we don't consider
+        // that a broadcast.
         return 0;
     }
     for (int i = 0; i < (int)indices.size(); i++) {
