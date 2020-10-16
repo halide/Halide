@@ -30,6 +30,29 @@ public:
     std::vector<CropShape> Split(const CropShape &crop) const;
 };
 
+// This is an abstract helper op for pooling operations.
+class PoolOp : public Op {
+protected:
+    std::vector<int> stride_;
+    std::vector<int> filter_size_;
+    Padding padding_;
+    ActivationFunction activation_;
+
+public:
+    PoolOp(Tensor *input, Tensor *output, std::vector<int> stride,
+           std::vector<int> filter_size, Padding padding,
+           ActivationFunction activation)
+        : Op({input}, {output}),
+          stride_(std::move(stride)),
+          filter_size_(std::move(filter_size)),
+          padding_(padding),
+          activation_(activation) {
+    }
+
+    Bounds InferBounds(const CropShape &crop) const;
+    std::vector<CropShape> Split(const CropShape &crop) const;
+};
+
 class AddOp : public ElementwiseOp {
     ActivationFunction activation_;
 
@@ -46,26 +69,13 @@ public:
     }
 };
 
-class AveragePoolOp : public Op {
-    std::vector<int> stride_;
-    std::vector<int> filter_size_;
-    Padding padding_;
-    ActivationFunction activation_;
-
+class AveragePoolOp : public PoolOp {
 public:
     AveragePoolOp(Tensor *input, Tensor *output, std::vector<int> stride,
                   std::vector<int> filter_size, Padding padding,
                   ActivationFunction activation)
-        : Op({input}, {output}),
-          stride_(std::move(stride)),
-          filter_size_(std::move(filter_size)),
-          padding_(padding),
-          activation_(activation) {
-
-    }
-
-    Bounds InferBounds(const CropShape &crop) const;
-    std::vector<CropShape> Split(const CropShape &crop) const;
+        : PoolOp(input, output, std::move(stride),
+          std::move(filter_size), padding, activation) {}
 
     void Execute(const CropShape &crop);
 
@@ -160,6 +170,21 @@ public:
 
     void Dump(std::ostream &os) const {
         os << "  DepthwiseConv2D " << Output()->Name() << std::endl;
+    }
+};
+
+class MaxPoolOp : public PoolOp {
+public:
+    MaxPoolOp(Tensor *input, Tensor *output, std::vector<int> stride,
+              std::vector<int> filter_size, Padding padding,
+              ActivationFunction activation)
+        : PoolOp(input, output, std::move(stride),
+          std::move(filter_size), padding, activation) {}
+
+    void Execute(const CropShape &crop);
+
+    void Dump(std::ostream &os) const {
+        os << "  MaxPool " << Output()->Name() << std::endl;
     }
 };
 

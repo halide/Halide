@@ -7,6 +7,7 @@
 #include "AveragePoolUint8.h"
 #include "ConvolutionUint8.h"
 #include "DepthwiseConvolutionUint8.h"
+#include "MaxPoolUint8.h"
 
 namespace interpret_nn {
 
@@ -69,6 +70,31 @@ std::vector<CropShape> ElementwiseOp::Split(const CropShape &crop) const {
     return SplitCrop(crop, 2, kSplit);
 }
 
+Op::Bounds PoolOp::InferBounds(const CropShape &crop) const {
+    CropShape input_crop = crop;
+
+    input_crop[0] = crop[0];
+    for (int dim = 1; dim <= 2; dim++) {
+        input_crop[dim].first *= stride_[dim - 1];
+        input_crop[dim].second *= stride_[dim - 1];
+    }
+
+    input_crop[1].second += filter_size_[1];
+    input_crop[2].second += filter_size_[2];
+    input_crop = Intersect(input_crop, WithoutStrides(Input()->Shape()));
+
+    Bounds result;
+    result.inputs.emplace_back(input_crop);
+    result.outputs = {crop};
+    return result;
+}
+
+std::vector<CropShape> PoolOp::Split(const CropShape &crop) const {
+    const int kSplit = 2;
+    return SplitCrop(crop, 2, kSplit);
+}
+
+
 void AddOp::Execute(const CropShape &crop) {
     const Tensor *input1 = Input(0);
     const Tensor *input2 = Input(1);
@@ -99,30 +125,6 @@ void AddOp::Execute(const CropShape &crop) {
                                              output_offset, output_multiplier, output_shift,
                                              output_min, output_max, output_buf));
     }
-}
-
-Op::Bounds AveragePoolOp::InferBounds(const CropShape &crop) const {
-    CropShape input_crop = crop;
-
-    input_crop[0] = crop[0];
-    for (int dim = 1; dim <= 2; dim++) {
-        input_crop[dim].first *= stride_[dim - 1];
-        input_crop[dim].second *= stride_[dim - 1];
-    }
-
-    input_crop[1].second += filter_size_[1];
-    input_crop[2].second += filter_size_[2];
-    input_crop = Intersect(input_crop, WithoutStrides(Input()->Shape()));
-
-    Bounds result;
-    result.inputs.emplace_back(input_crop);
-    result.outputs = {crop};
-    return result;
-}
-
-std::vector<CropShape> AveragePoolOp::Split(const CropShape &crop) const {
-    const int kSplit = 2;
-    return SplitCrop(crop, 2, kSplit);
 }
 
 void AveragePoolOp::Execute(const CropShape &crop) {
@@ -262,6 +264,25 @@ void DepthwiseConv2DOp::Execute(const CropShape &crop) {
                      input_offset, filter_offset, stride_[0], stride_[1],
                      dilation_[0], dilation_[1], output_multiplier, output_shift,
                      output_offset, output_min, output_max, output_buf));
+    }
+}
+
+void MaxPoolOp::Execute(const CropShape &crop) {
+    const Tensor *input = Input();
+    Tensor *output = Output();
+
+    if (input->Type() == TensorType::UInt8 &&
+        output->Type() == TensorType::UInt8) {
+        auto input_buf = input->Data<uint8_t>();
+        auto output_buf = output->Data<uint8_t>(crop);
+
+        int output_min = 0;
+        int output_max = 0;
+
+        halide_app_assert(
+            0 == MaxPoolUint8(input_buf, stride_[0], stride_[1],
+                              filter_size_[0], filter_size_[1],
+                              output_min, output_max, output_buf));
     }
 }
 
