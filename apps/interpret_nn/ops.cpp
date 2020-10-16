@@ -28,19 +28,6 @@ CropShape Intersect(CropShape a, const CropShape &b) {
     return a;
 }
 
-}  // namespace
-
-Op::Bounds ElementwiseOp::InferBounds(const CropShape &crop) const {
-    Bounds result;
-    for (int i = 0; i < InputCount(); i++) {
-        result.inputs.emplace_back(crop);
-    }
-    for (int i = 0; i < OutputCount(); i++) {
-        result.outputs.emplace_back(crop);
-    }
-    return result;
-}
-
 std::vector<CropShape> SplitCrop(const CropShape &crop, int dim, int factor,
                                  bool shift_inwards = false) {
     std::vector<CropShape> splits;
@@ -64,9 +51,54 @@ std::vector<CropShape> SplitCrop(const CropShape &crop, int dim, int factor,
     return splits;
 }
 
+}  // namespace
+
+Op::Bounds ElementwiseOp::InferBounds(const CropShape &crop) const {
+    Bounds result;
+    for (int i = 0; i < InputCount(); i++) {
+        result.inputs.emplace_back(crop);
+    }
+    for (int i = 0; i < OutputCount(); i++) {
+        result.outputs.emplace_back(crop);
+    }
+    return result;
+}
+
 std::vector<CropShape> ElementwiseOp::Split(const CropShape &crop) const {
     const int kSplit = 2;
     return SplitCrop(crop, 2, kSplit);
+}
+
+void AddOp::Execute(const CropShape &crop) {
+    const Tensor *input1 = Input(0);
+    const Tensor *input2 = Input(1);
+    Tensor *output = Output();
+
+    if (input1->Type() == TensorType::UInt8 &&
+        input2->Type() == TensorType::UInt8 &&
+        output->Type() == TensorType::UInt8) {
+        auto input1_buf = input1->Data<uint8_t>();
+        auto input2_buf = input2->Data<uint8_t>();
+        auto output_buf = output->Data<uint8_t>(crop);
+
+        int left_shift = 0;
+        int input1_offset = 0;
+        int input1_multiplier = 0;
+        int input1_shift = 0;
+        int input2_offset = 0;
+        int input2_multiplier = 0;
+        int input2_shift = 0;
+        int output_offset = 0;
+        int output_multiplier = 0;
+        int output_shift = 0;
+        int output_min = 0;
+        int output_max = 0;
+        halide_app_assert(0 == AddUint8Uint8(left_shift, input1_buf, input2_buf,
+                                             input1_offset, input1_multiplier, input1_shift,
+                                             input2_offset, input2_multiplier, input2_shift,
+                                             output_offset, output_multiplier, output_shift,
+                                             output_min, output_max, output_buf));
+    }
 }
 
 Op::Bounds AveragePoolOp::InferBounds(const CropShape &crop) const {
@@ -279,38 +311,6 @@ void PadOp::Execute(const CropShape &crop) {
                 output_y.copy_from(input_y);
             }
         }
-    }
-}
-
-void AddOp::Execute(const CropShape &crop) {
-    const Tensor *input1 = Input(0);
-    const Tensor *input2 = Input(1);
-    Tensor *output = Output();
-
-    if (input1->Type() == TensorType::UInt8 &&
-        input2->Type() == TensorType::UInt8 &&
-        output->Type() == TensorType::UInt8) {
-        auto input1_buf = input1->Data<uint8_t>();
-        auto input2_buf = input2->Data<uint8_t>();
-        auto output_buf = output->Data<uint8_t>(crop);
-
-        int left_shift = 0;
-        int input1_offset = 0;
-        int input1_multiplier = 0;
-        int input1_shift = 0;
-        int input2_offset = 0;
-        int input2_multiplier = 0;
-        int input2_shift = 0;
-        int output_offset = 0;
-        int output_multiplier = 0;
-        int output_shift = 0;
-        int output_min = 0;
-        int output_max = 0;
-        halide_app_assert(0 == AddUint8Uint8(left_shift, input1_buf, input2_buf,
-                                             input1_offset, input1_multiplier, input1_shift,
-                                             input2_offset, input2_multiplier, input2_shift,
-                                             output_offset, output_multiplier, output_shift,
-                                             output_min, output_max, output_buf));
     }
 }
 

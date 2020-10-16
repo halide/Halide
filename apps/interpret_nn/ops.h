@@ -30,6 +30,22 @@ public:
     std::vector<CropShape> Split(const CropShape &crop) const;
 };
 
+class AddOp : public ElementwiseOp {
+    ActivationFunction activation_;
+
+public:
+    explicit AddOp(Tensor *input1, Tensor *input2, Tensor *output,
+                   ActivationFunction activation)
+        : ElementwiseOp({input1, input2}, output), activation_(activation) {
+    }
+
+    void Execute(const CropShape &crop);
+
+    void Dump(std::ostream &os) const {
+        os << "  Add " << Output()->Name() << std::endl;
+    }
+};
+
 class AveragePoolOp : public Op {
     std::vector<int> stride_;
     std::vector<int> filter_size_;
@@ -160,22 +176,6 @@ public:
 
     void Dump(std::ostream &os) const {
         os << "  Pad " << Output()->Name() << std::endl;
-    }
-};
-
-class AddOp : public ElementwiseOp {
-    ActivationFunction activation_;
-
-public:
-    explicit AddOp(Tensor *input1, Tensor *input2, Tensor *output,
-                   ActivationFunction activation)
-        : ElementwiseOp({input1, input2}, output), activation_(activation) {
-    }
-
-    void Execute(const CropShape &crop);
-
-    void Dump(std::ostream &os) const {
-        os << "  Add " << Output()->Name() << std::endl;
     }
 };
 
