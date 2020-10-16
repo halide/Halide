@@ -68,6 +68,8 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
 
         // clang-format off
         if (rewrite(broadcast(x, c0) < broadcast(y, c0), broadcast(x < y, c0)) ||
+            rewrite(broadcast(x, c0) < broadcast(y, c1), broadcast(x < broadcast(y, fold(c1/c0)), c0), c1 % c0 == 0) ||
+            rewrite(broadcast(y, c1) < broadcast(x, c0), broadcast(broadcast(y, fold(c1/c0)) < x, c0), c1 % c0 == 0) ||
             (no_overflow(ty) && EVAL_IN_LAMBDA
              (rewrite(ramp(x, y, c0) < ramp(z, y, c0), broadcast(x < z, c0)) ||
               // Move constants to the RHS
