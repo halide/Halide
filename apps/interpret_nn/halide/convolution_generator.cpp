@@ -141,6 +141,7 @@ public:
                        i32(filter_rdxyc) * i32(input_offset_);
 
         // The sum of the input is used to compute the filter_offset * input term.
+        // TODO: This is separable, but a bit messy to optimize this way.
         Func sum_input("sum_input");
         sum_input(x, y, b) += i32(input_rdxyc);
 
