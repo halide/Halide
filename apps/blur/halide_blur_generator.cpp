@@ -80,7 +80,7 @@ public:
             default:
                 break;
             }
-        } else if (get_target().features_any_of({Target::HVX, Target::HVX_128})) {
+        } else if (get_target().has_feature(Target::HVX)) {
             // Hexagon schedule.
             const int vector_size = 128;
 

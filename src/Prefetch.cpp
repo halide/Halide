@@ -364,7 +364,7 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
 
     // Hexagon's prefetch takes in a range of address and can be maximum of
     // two dimension. Other architectures generate one prefetch per cache line.
-    if (t.features_any_of({Target::HVX, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         max_dim = 2;
     } else if (t.arch == Target::ARM) {
         // ARM's cache line size can be 32 or 64 bytes and it can switch the

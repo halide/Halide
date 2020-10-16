@@ -405,7 +405,7 @@ CodeGen_C::~CodeGen_C() {
             if (target.has_feature(Target::CUDA)) {
                 stream << halide_internal_runtime_header_HalideRuntimeCuda_h << "\n";
             }
-            if (target.features_any_of({Target::HVX, Target::HVX_128})) {
+            if (target.has_feature(Target::HVX)) {
                 stream << halide_internal_runtime_header_HalideRuntimeHexagonHost_h << "\n";
             }
             if (target.has_feature(Target::Metal)) {

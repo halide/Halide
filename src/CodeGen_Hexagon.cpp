@@ -46,7 +46,7 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
     } else {
         isa_version = 62;
     }
-    user_assert(target.features_any_of({Target::HVX, Target::HVX_128}))
+    user_assert(target.has_feature(Target::HVX))
         << "Creating a Codegen target for Hexagon without the hvx_128 or the hvx target feature.\n";
 }
 

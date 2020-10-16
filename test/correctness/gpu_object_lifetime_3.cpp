@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
             if (i % 3 != 0) {
                 if (target.has_gpu_feature()) {
                     f[i].gpu_tile(x, xi, 32);
-                } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
+                } else if (target.has_feature(Target::HVX)) {
                     f[i].hexagon();
                 }
             }

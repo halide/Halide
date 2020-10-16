@@ -39,8 +39,8 @@ bool test() {
     output_vtcm(x, y) = lut_vtcm(xCoord, yCoord);
     output(x, y) = output_vtcm(x, y);
 
-    if (target.features_any_of({Target::HVX, Target::HVX_128})) {
-        const int vector_size = target.features_any_of({Target::HVX, Target::HVX_128}) ? 128 : 64;
+    if (target.has_feature(Target::HVX)) {
+        const int vector_size = target.has_feature(Target::HVX) ? 128 : 64;
         Var yi;
 
         output

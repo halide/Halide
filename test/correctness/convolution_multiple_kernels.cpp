@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
         blur.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (target.features_any_of({Target::HVX, Target::HVX_128})) {
+    } else if (target.has_feature(Target::HVX)) {
         blur.hexagon().vectorize(x, 64);
     }
 
