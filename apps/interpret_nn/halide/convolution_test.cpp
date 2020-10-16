@@ -31,8 +31,7 @@ struct TestParams {
 
 const static TestParams test_params[] = {
     // TODO: add more tests
-    //{3, 64, 64, 2, 3, 5, 5, 32, 128, 128, 1, 1},
-    {32, 64, 64, 2, 32, 5, 5, 32, 128, 128, 1, 1},
+    {3, 64, 64, 2, 3, 5, 5, 32, 128, 128, 1, 1},
 };
 
 struct ConvolutionArgs {

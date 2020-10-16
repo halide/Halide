@@ -14,10 +14,7 @@ public:
 
     // The stride specifies how the input [x, y] are sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
-    // spatially at [x * stride, y * stride]. The caller should ensure that
-    // [x * stride, y * stride] is a valid spatial location in the input buffer.
-    // Generally, this means setting the output buffer's [width, height] to be
-    // the input buffer's [width, height] / stride.
+    // spatially at [x * stride, y * stride].
     Input<int> stride_x_{"stride_x", 1, 1, 16};
     Input<int> stride_y_{"stride_y", 1, 1, 16};
     Input<int> filter_width_{"filter_width", 1, 1, 16};
@@ -46,10 +43,9 @@ public:
         Expr y_start = max(y * stride_y_, input_.dim(2).min());
         Expr y_end = min(y * stride_y_ + filter_height_, input_.dim(2).max() + 1);
         Expr filter_count = (x_end - x_start) * (y_end - y_start);
-        average(c, x, y, b) = (sum(c, x, y, b) + filter_count / 2) / filter_count;
+        average(c, x, y, b) = u8_sat((sum(c, x, y, b) + filter_count / 2) / filter_count);
 
-        output_(c, x, y, b) =
-            clamp(u8_sat(average(c, x, y, b)), output_min_, output_max_);
+        output_(c, x, y, b) = clamp(average(c, x, y, b), output_min_, output_max_);
 
         // Schedule.
         InterpretAsTensor(input_);
