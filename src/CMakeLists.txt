@@ -68,6 +68,7 @@ set(HEADER_FILES
     ExternFuncArgument.h
     FastIntegerDivide.h
     FindCalls.h
+    FlattenNestedRamps.h
     Float16.h
     Func.h
     Function.h
@@ -228,6 +229,7 @@ set(SOURCE_FILES
     Expr.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
+    FlattenNestedRamps.cpp
     Float16.cpp
     Func.cpp
     Function.cpp
@@ -385,8 +387,8 @@ set_target_properties(Halide PROPERTIES
 
 add_dependencies(Halide HalideIncludes)
 
-if (TARGET wabt)
-    target_link_libraries(Halide PRIVATE wabt)
+if (TARGET wabt-obj)
+    target_link_libraries(Halide PRIVATE wabt-obj)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 endif ()
 
@@ -444,7 +446,7 @@ target_compile_definitions(Halide
                            )
 
 ##
-# Set up macro definitions for libHalide
+# Set up additional backend options for Halide
 ##
 
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
@@ -465,11 +467,6 @@ endif ()
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
-endif ()
-
-option(Halide_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
-if (Halide_USE_CODEMODEL_LARGE)
-    target_compile_definitions(Halide PRIVATE HALIDE_USE_CODEMODEL_LARGE)
 endif ()
 
 ##

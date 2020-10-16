@@ -118,10 +118,18 @@ Target calculate_host_target() {
         << ", " << info[3]
         << std::dec << "\n";
 
-    if (have_sse41) initial_features.push_back(Target::SSE41);
-    if (have_avx) initial_features.push_back(Target::AVX);
-    if (have_f16c) initial_features.push_back(Target::F16C);
-    if (have_fma) initial_features.push_back(Target::FMA);
+    if (have_sse41) {
+        initial_features.push_back(Target::SSE41);
+    }
+    if (have_avx) {
+        initial_features.push_back(Target::AVX);
+    }
+    if (have_f16c) {
+        initial_features.push_back(Target::F16C);
+    }
+    if (have_fma) {
+        initial_features.push_back(Target::FMA);
+    }
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         // So far, so good.  AVX2/512?
@@ -349,6 +357,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
+    {"llvm_large_code_model", Target::LLVMLargeCodeModel},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -649,7 +658,9 @@ bool Target::has_unknowns() const {
 }
 
 void Target::set_feature(Feature f, bool value) {
-    if (f == FeatureEnd) return;
+    if (f == FeatureEnd) {
+        return;
+    }
     user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
     features.set(f, value);
 }
@@ -661,7 +672,9 @@ void Target::set_features(const std::vector<Feature> &features_to_set, bool valu
 }
 
 bool Target::has_feature(Feature f) const {
-    if (f == FeatureEnd) return true;
+    if (f == FeatureEnd) {
+        return true;
+    }
     user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
     return features[f];
 }
@@ -801,14 +814,30 @@ bool Target::supports_device_api(DeviceAPI api) const {
 }
 
 DeviceAPI Target::get_required_device_api() const {
-    if (has_feature(Target::CUDA)) return DeviceAPI::CUDA;
-    if (has_feature(Target::D3D12Compute)) return DeviceAPI::D3D12Compute;
-    if (has_feature(Target::HVX_128)) return DeviceAPI::Hexagon;
-    if (has_feature(Target::HexagonDma)) return DeviceAPI::HexagonDma;
-    if (has_feature(Target::Metal)) return DeviceAPI::Metal;
-    if (has_feature(Target::OpenCL)) return DeviceAPI::OpenCL;
-    if (has_feature(Target::OpenGL)) return DeviceAPI::GLSL;
-    if (has_feature(Target::OpenGLCompute)) return DeviceAPI::OpenGLCompute;
+    if (has_feature(Target::CUDA)) {
+        return DeviceAPI::CUDA;
+    }
+    if (has_feature(Target::D3D12Compute)) {
+        return DeviceAPI::D3D12Compute;
+    }
+    if (has_feature(Target::HVX_128)) {
+        return DeviceAPI::Hexagon;
+    }
+    if (has_feature(Target::HexagonDma)) {
+        return DeviceAPI::HexagonDma;
+    }
+    if (has_feature(Target::Metal)) {
+        return DeviceAPI::Metal;
+    }
+    if (has_feature(Target::OpenCL)) {
+        return DeviceAPI::OpenCL;
+    }
+    if (has_feature(Target::OpenGL)) {
+        return DeviceAPI::GLSL;
+    }
+    if (has_feature(Target::OpenGLCompute)) {
+        return DeviceAPI::OpenGLCompute;
+    }
     return DeviceAPI::None;
 }
 
@@ -957,14 +986,30 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // large, so min selects the true lower bound when one target doesn't specify a capability,
     // and the other doesn't use CUDA at all.
     int cuda_capability = std::min((unsigned)cuda_a, (unsigned)cuda_b);
-    if (cuda_capability < 30) output.features.reset(CUDACapability30);
-    if (cuda_capability < 32) output.features.reset(CUDACapability32);
-    if (cuda_capability < 35) output.features.reset(CUDACapability35);
-    if (cuda_capability < 50) output.features.reset(CUDACapability50);
-    if (cuda_capability < 61) output.features.reset(CUDACapability61);
-    if (cuda_capability < 70) output.features.reset(CUDACapability70);
-    if (cuda_capability < 75) output.features.reset(CUDACapability75);
-    if (cuda_capability < 80) output.features.reset(CUDACapability80);
+    if (cuda_capability < 30) {
+        output.features.reset(CUDACapability30);
+    }
+    if (cuda_capability < 32) {
+        output.features.reset(CUDACapability32);
+    }
+    if (cuda_capability < 35) {
+        output.features.reset(CUDACapability35);
+    }
+    if (cuda_capability < 50) {
+        output.features.reset(CUDACapability50);
+    }
+    if (cuda_capability < 61) {
+        output.features.reset(CUDACapability61);
+    }
+    if (cuda_capability < 70) {
+        output.features.reset(CUDACapability70);
+    }
+    if (cuda_capability < 75) {
+        output.features.reset(CUDACapability75);
+    }
+    if (cuda_capability < 80) {
+        output.features.reset(CUDACapability80);
+    }
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
@@ -972,9 +1017,15 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
     // Same trick as above for CUDA
     int hvx_version = std::min((unsigned)hvx_a, (unsigned)hvx_b);
-    if (hvx_version < 62) output.features.reset(HVX_v62);
-    if (hvx_version < 65) output.features.reset(HVX_v65);
-    if (hvx_version < 66) output.features.reset(HVX_v66);
+    if (hvx_version < 62) {
+        output.features.reset(HVX_v62);
+    }
+    if (hvx_version < 65) {
+        output.features.reset(HVX_v65);
+    }
+    if (hvx_version < 66) {
+        output.features.reset(HVX_v66);
+    }
 
     result = output;
     return true;

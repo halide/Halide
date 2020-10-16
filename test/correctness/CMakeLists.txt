@@ -240,6 +240,7 @@ tests(GROUPS correctness
       partial_realization.cpp
       partition_loops.cpp
       partition_loops_bug.cpp
+      partition_max_filter.cpp
       pipeline_set_jit_externs_func.cpp
       plain_c_includes.c
       popc_clz_ctz_bounds.cpp
@@ -332,6 +333,7 @@ tests(GROUPS correctness
       vector_tile.cpp
       vectorize_guard_with_if.cpp
       vectorize_mixed_widths.cpp
+      vectorize_nested.cpp
       vectorize_varying_allocation_size.cpp
       vectorized_gpu_allocation.cpp
       vectorized_initialization.cpp

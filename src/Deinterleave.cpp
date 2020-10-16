@@ -2,6 +2,7 @@
 
 #include "CSE.h"
 #include "Debug.h"
+#include "FlattenNestedRamps.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -208,8 +209,24 @@ private:
 
     Expr visit(const Broadcast *op) override {
         if (new_lanes == 1) {
-            return op->value;
+            if (op->value.type().lanes() == 1) {
+                return op->value;
+            } else {
+                int old_starting_lane = starting_lane;
+                int old_lane_stride = lane_stride;
+                starting_lane = starting_lane % op->value.type().lanes();
+                lane_stride = op->value.type().lanes();
+                Expr e = mutate(op->value);
+                starting_lane = old_starting_lane;
+                lane_stride = old_lane_stride;
+                return e;
+            }
         }
+        if (op->value.type().lanes() > 1) {
+            // There is probably a more efficient way to this.
+            return mutate(flatten_nested_ramps(op));
+        }
+
         return Broadcast::make(op->value, new_lanes);
     }
 
@@ -228,7 +245,21 @@ private:
     }
 
     Expr visit(const Ramp *op) override {
-        Expr expr = op->base + starting_lane * op->stride;
+        int base_lanes = op->base.type().lanes();
+        if (base_lanes > 1) {
+            if (new_lanes == 1) {
+                int index = starting_lane / base_lanes;
+                Expr expr = op->base + cast(op->base.type(), index) * op->stride;
+                ScopedValue<int> old_starting_lane(starting_lane, starting_lane % base_lanes);
+                ScopedValue<int> old_lane_stride(lane_stride, base_lanes);
+                expr = mutate(expr);
+                return expr;
+            } else {
+                // There is probably a more efficient way to this.
+                return mutate(flatten_nested_ramps(op));
+            }
+        }
+        Expr expr = op->base + cast(op->base.type(), starting_lane) * op->stride;
         internal_assert(expr.type() == op->base.type());
         if (new_lanes > 1) {
             expr = Ramp::make(expr, op->stride * lane_stride, new_lanes);
@@ -590,17 +621,23 @@ class Interleaver : public IRMutator {
         }
 
         // There was no inner store.
-        if (!store) return Stmt();
+        if (!store) {
+            return Stmt();
+        }
 
         const Ramp *r0 = store->index.as<Ramp>();
 
         // It's not a store of a ramp index.
-        if (!r0) return Stmt();
+        if (!r0) {
+            return Stmt();
+        }
 
         const int64_t *stride_ptr = as_const_int(r0->stride);
 
         // The stride isn't a constant or is <= 0
-        if (!stride_ptr || *stride_ptr < 1) return Stmt();
+        if (!stride_ptr || *stride_ptr < 1) {
+            return Stmt();
+        }
 
         const int64_t stride = *stride_ptr;
         const int lanes = r0->lanes;
@@ -618,7 +655,9 @@ class Interleaver : public IRMutator {
         internal_assert(stores.size() <= (size_t)expected_stores);
 
         // Not enough stores collected.
-        if (stores.size() != (size_t)expected_stores) return Stmt();
+        if (stores.size() != (size_t)expected_stores) {
+            return Stmt();
+        }
 
         Type t = store->value.type();
         Expr base;
@@ -636,13 +675,17 @@ class Interleaver : public IRMutator {
             internal_assert(ri);
 
             // Mismatched store vector laness.
-            if (ri->lanes != lanes) return Stmt();
+            if (ri->lanes != lanes) {
+                return Stmt();
+            }
 
             Expr diff = simplify(ri->base - r0->base);
             const int64_t *offs = as_const_int(diff);
 
             // Difference between bases is not constant.
-            if (!offs) return Stmt();
+            if (!offs) {
+                return Stmt();
+            }
 
             offsets[i] = *offs;
             if (*offs < min_offset) {
@@ -651,27 +694,39 @@ class Interleaver : public IRMutator {
 
             if (stride == 1) {
                 // Difference between bases is not a multiple of the lanes.
-                if (*offs % lanes != 0) return Stmt();
+                if (*offs % lanes != 0) {
+                    return Stmt();
+                }
 
                 // This case only triggers if we have an immediate load of the correct stride on the RHS.
                 // TODO: Could we consider mutating the RHS so that we can handle more complex Expr's than just loads?
                 const Load *load = stores[i].as<Store>()->value.as<Load>();
-                if (!load) return Stmt();
+                if (!load) {
+                    return Stmt();
+                }
                 // TODO(psuriana): Predicated load is not currently handled.
-                if (!is_one(load->predicate)) return Stmt();
+                if (!is_one(load->predicate)) {
+                    return Stmt();
+                }
 
                 const Ramp *ramp = load->index.as<Ramp>();
-                if (!ramp) return Stmt();
+                if (!ramp) {
+                    return Stmt();
+                }
 
                 // Load stride or lanes is not equal to the store lanes.
-                if (!is_const(ramp->stride, lanes) || ramp->lanes != lanes) return Stmt();
+                if (!is_const(ramp->stride, lanes) || ramp->lanes != lanes) {
+                    return Stmt();
+                }
 
                 if (i == 0) {
                     load_name = load->name;
                     load_image = load->image;
                     load_param = load->param;
                 } else {
-                    if (load->name != load_name) return Stmt();
+                    if (load->name != load_name) {
+                        return Stmt();
+                    }
                 }
             }
         }
@@ -688,10 +743,14 @@ class Interleaver : public IRMutator {
             }
 
             // The offset is not between zero and the stride.
-            if (j < 0 || (size_t)j >= stores.size()) return Stmt();
+            if (j < 0 || (size_t)j >= stores.size()) {
+                return Stmt();
+            }
 
             // We already have a store for this offset.
-            if (args[j].defined()) return Stmt();
+            if (args[j].defined()) {
+                return Stmt();
+            }
 
             if (stride == 1) {
                 // Convert multiple dense vector stores of strided vector loads

@@ -107,6 +107,7 @@ ssize_t write(int fd, const void *buf, size_t bytes);
 int remove(const char *pathname);
 int ioctl(int fd, unsigned long request, ...);
 char *strncpy(char *dst, const char *src, size_t n);
+void abort();
 
 // Below are prototypes for various functions called by generated code
 // and parts of the runtime but not exposed to users:
@@ -187,7 +188,6 @@ WEAK void halide_use_jit_module();
 WEAK void halide_release_jit_module();
 
 WEAK_INLINE int halide_malloc_alignment();
-WEAK_INLINE void halide_abort();
 
 void halide_thread_yield();
 
@@ -237,10 +237,12 @@ using namespace Halide::Runtime::Internal;
  * should-never-happen errors. */
 #define _halide_stringify(x) #x
 #define _halide_expand_and_stringify(x) _halide_stringify(x)
-#define halide_assert(user_context, cond)                                                                              \
-    if (!(cond)) {                                                                                                     \
-        halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
-        halide_abort();                                                                                                \
-    }
+#define halide_assert(user_context, cond)                                                                                  \
+    do {                                                                                                                   \
+        if (!(cond)) {                                                                                                     \
+            halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
+            abort();                                                                                                       \
+        }                                                                                                                  \
+    } while (0)
 
 #endif

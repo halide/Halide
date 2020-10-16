@@ -974,17 +974,20 @@ void IRFilter::visit(const Allocate *op) {
     stmt = Stmt();
     for (size_t i = 0; i < op->extents.size(); i++) {
         Stmt new_extent = mutate(op->extents[i]);
-        if (new_extent.defined())
+        if (new_extent.defined()) {
             stmt = make_block(new_extent, stmt);
+        }
     }
 
     Stmt body = mutate(op->body);
-    if (body.defined())
+    if (body.defined()) {
         stmt = make_block(body, stmt);
+    }
 
     Stmt condition = mutate(op->condition);
-    if (condition.defined())
+    if (condition.defined()) {
         stmt = make_block(condition, stmt);
+    }
 }
 
 void IRFilter::visit(const Free *op) {
@@ -1000,19 +1003,23 @@ void IRFilter::visit(const Realize *op) {
         Stmt new_min = mutate(old_min);
         Stmt new_extent = mutate(old_extent);
 
-        if (new_min.defined())
+        if (new_min.defined()) {
             stmt = make_block(new_min, stmt);
-        if (new_extent.defined())
+        }
+        if (new_extent.defined()) {
             stmt = make_block(new_extent, stmt);
+        }
     }
 
     Stmt body = mutate(op->body);
-    if (body.defined())
+    if (body.defined()) {
         stmt = make_block(body, stmt);
+    }
 
     Stmt condition = mutate(op->condition);
-    if (condition.defined())
+    if (condition.defined()) {
         stmt = make_block(condition, stmt);
+    }
 }
 
 void IRFilter::visit(const Block *op) {

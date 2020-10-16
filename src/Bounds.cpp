@@ -72,8 +72,12 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
 
     // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
     // for our purposes here, treat anything non-const as no-bound.
-    if (!is_const(interval.min)) interval.min = Interval::neg_inf();
-    if (!is_const(interval.max)) interval.max = Interval::pos_inf();
+    if (!is_const(interval.min)) {
+        interval.min = Interval::neg_inf();
+    }
+    if (!is_const(interval.max)) {
+        interval.max = Interval::pos_inf();
+    }
 
     return interval;
 }
@@ -306,11 +310,19 @@ private:
             // Start with the bounds of the narrow type.
             bounds_of_type(from);
             // If we have a better min or max for the arg use that.
-            if (a.has_lower_bound()) interval.min = a.min;
-            if (a.has_upper_bound()) interval.max = a.max;
+            if (a.has_lower_bound()) {
+                interval.min = a.min;
+            }
+            if (a.has_upper_bound()) {
+                interval.max = a.max;
+            }
             // Then cast those bounds to the wider type.
-            if (interval.has_lower_bound()) interval.min = Cast::make(to, interval.min);
-            if (interval.has_upper_bound()) interval.max = Cast::make(to, interval.max);
+            if (interval.has_lower_bound()) {
+                interval.min = Cast::make(to, interval.min);
+            }
+            if (interval.has_upper_bound()) {
+                interval.max = Cast::make(to, interval.max);
+            }
         } else {
             // This might overflow, so use the bounds of the destination type.
             bounds_of_type(to);
@@ -540,8 +552,9 @@ private:
                     interval.min = -cast(a.min.type(), abs(a.min));
                     interval.max = cast(a.min.type(), abs(a.max));
                 } else {
+                    // div by 0 is 0 and the magnitude cannot increase by integer division
                     interval.min = min(-a.max, a.min);
-                    interval.max = max(-a.max, a.min);
+                    interval.max = max(-a.min, a.max);
                 }
             } else {
                 interval = Interval::everything();
@@ -633,9 +646,12 @@ private:
             }
         } else {
             // b is bounded
-            if (b.max.type().is_uint() || (b.max.type().is_int() && is_positive_const(b.min))) {
-                // If the RHS is a positive integer, the result is in [0, max_b-1]
-                interval.max = Max::make(interval.min, b.max - make_one(t));
+            if (b.max.type().is_int_or_uint() && is_positive_const(b.min)) {
+                // If the RHS is >= 1, the result is in [0, max_b-1]
+                interval.max = b.max - make_one(t);
+            } else if (b.max.type().is_uint()) {
+                // if b.max = 0 then result is [0, 0], else [0, b.max - 1]
+                interval.max = select(is_zero(b.max), make_zero(t), b.max - make_one(t));
             } else if (b.max.type().is_int()) {
                 // x % [4,10] -> [0,9]
                 // x % [-8,-3] -> [0,7]
@@ -779,10 +795,18 @@ private:
     }
 
     Expr make_and(Expr a, Expr b) {
-        if (is_one(a)) return b;
-        if (is_one(b)) return a;
-        if (is_zero(a)) return a;
-        if (is_zero(b)) return b;
+        if (is_one(a)) {
+            return b;
+        }
+        if (is_one(b)) {
+            return a;
+        }
+        if (is_zero(a)) {
+            return a;
+        }
+        if (is_zero(b)) {
+            return b;
+        }
         return a && b;
     }
 
@@ -806,10 +830,18 @@ private:
     }
 
     Expr make_or(Expr a, Expr b) {
-        if (is_one(a)) return a;
-        if (is_one(b)) return b;
-        if (is_zero(a)) return b;
-        if (is_zero(b)) return a;
+        if (is_one(a)) {
+            return a;
+        }
+        if (is_one(b)) {
+            return b;
+        }
+        if (is_zero(a)) {
+            return b;
+        }
+        if (is_zero(b)) {
+            return a;
+        }
         return a || b;
     }
 
@@ -833,8 +865,12 @@ private:
     }
 
     Expr make_not(const Expr &e) {
-        if (is_one(e)) return make_zero(e.type());
-        if (is_zero(e)) return make_one(e.type());
+        if (is_one(e)) {
+            return make_zero(e.type());
+        }
+        if (is_zero(e)) {
+            return make_one(e.type());
+        }
         return !e;
     }
 
@@ -957,7 +993,7 @@ private:
         TRACK_BOUNDS_INTERVAL;
         // Treat the ramp lane as a free variable
         string var_name = unique_name('t');
-        Expr var = Variable::make(op->base.type(), var_name);
+        Expr var = Variable::make(op->base.type().element_of(), var_name);
         Expr lane = op->base + var * op->stride;
         ScopedBinding<Interval> p(scope, var_name, Interval(make_const(var.type(), 0), make_const(var.type(), op->lanes - 1)));
         lane.accept(this);
@@ -2334,7 +2370,9 @@ private:
                 auto vars = find_free_vars(op->condition);
                 for (auto v : vars) {
                     auto result = solve_expression(c, v->name);
-                    if (!result.fully_solved) continue;
+                    if (!result.fully_solved) {
+                        continue;
+                    }
                     Expr solved = result.result;
 
                     // Trim the scope down to represent the fact that the

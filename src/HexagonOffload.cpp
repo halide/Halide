@@ -883,8 +883,12 @@ class InjectHexagonRpc : public IRMutator {
             // buffer is read, bit 1 set indicates the buffer is
             // written. If neither are set, the argument is a scalar.
             int flags = 0;
-            if (i.second.read) flags |= 0x1;
-            if (i.second.write) flags |= 0x2;
+            if (i.second.read) {
+                flags |= 0x1;
+            }
+            if (i.second.write) {
+                flags |= 0x2;
+            }
             arg_flags.emplace_back(flags);
         }
         for (const auto &i : c.vars) {

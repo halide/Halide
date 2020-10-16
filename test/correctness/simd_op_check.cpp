@@ -1544,8 +1544,13 @@ public:
 
                 // Create vector with identical lanes
                 check("i8x16.splat", 16 * w, u8_1 * u8(42));
-                check("i16x8.splat", 8 * w, u16_1 * u16(42));
-                check("i32x4.splat", 4 * w, u32_1 * u32(42));
+                if (Halide::Internal::get_llvm_version() >= 120) {
+                    check("i64x2.splat", 8 * w, u16_1 * u16(42));
+                    check("i64x2.splat", 4 * w, u32_1 * u32(42));
+                } else {
+                    check("i16x8.splat", 8 * w, u16_1 * u16(42));
+                    check("i32x4.splat", 4 * w, u32_1 * u32(42));
+                }
                 check("i64x2.splat", 2 * w, u64_1 * u64(42));
                 check("f32x4.splat", 8 * w, f32_1 * f32(42));
                 check("f64x2.splat", 4 * w, f64_1 * f64(42));

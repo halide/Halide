@@ -983,7 +983,9 @@ public:
     }
 
     Stmt compute_shared_memory_sizes_on_host(Stmt result) {
-        if (!host_side_preamble.defined()) return result;
+        if (!host_side_preamble.defined()) {
+            return result;
+        }
 
         // Make all the let stmts that define the size vars
         for (auto &alloc : allocations) {

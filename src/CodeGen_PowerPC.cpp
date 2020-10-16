@@ -118,7 +118,9 @@ void CodeGen_PowerPC::visit(const Cast *op) {
                 // Try to narrow the matches to the target type.
                 for (size_t i = 0; i < matches.size(); i++) {
                     matches[i] = lossless_cast(op->type, matches[i]);
-                    if (!matches[i].defined()) match = false;
+                    if (!matches[i].defined()) {
+                        match = false;
+                    }
                 }
             }
             if (match) {
@@ -187,12 +189,13 @@ string CodeGen_PowerPC::mcpu() const {
     if (target.bits == 32) {
         return "ppc32";
     } else {
-        if (target.has_feature(Target::POWER_ARCH_2_07))
+        if (target.has_feature(Target::POWER_ARCH_2_07)) {
             return "pwr8";
-        else if (target.has_feature(Target::VSX))
+        } else if (target.has_feature(Target::VSX)) {
             return "pwr7";
-        else
+        } else {
             return "ppc64";
+        }
     }
 }
 

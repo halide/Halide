@@ -1,6 +1,7 @@
 #include "HexagonOptimize.h"
 #include "Bounds.h"
 #include "CSE.h"
+#include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
 #include "ExprUsesVar.h"
 #include "HexagonAlignment.h"
@@ -63,7 +64,9 @@ Expr native_deinterleave(const Expr &x) {
 
 bool is_native_interleave_op(const Expr &x, const char *name) {
     const Call *c = x.as<Call>();
-    if (!c || c->args.size() != 1) return false;
+    if (!c || c->args.size() != 1) {
+        return false;
+    }
     return starts_with(c->name, name);
 }
 
@@ -220,7 +223,9 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
         } else if (flags & (Pattern::NarrowUnsignedOp0 << i)) {
             matches[i] = lossless_cast(target_t.with_code(Type::UInt), matches[i]);
         }
-        if (!matches[i].defined()) return false;
+        if (!matches[i].defined()) {
+            return false;
+        }
     }
 
     for (size_t i = Pattern::BeginExactLog2Op; i < Pattern::EndExactLog2Op; i++) {
@@ -333,12 +338,16 @@ Expr lossless_negate(const Expr &x) {
 template<typename T>
 Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, const Target &target, IRMutator *mutator) {
     Expr ret = apply_patterns(op, patterns, target, mutator);
-    if (!ret.same_as(op)) return ret;
+    if (!ret.same_as(op)) {
+        return ret;
+    }
 
     // Try commuting the op
     Expr commuted = T::make(op->b, op->a);
     ret = apply_patterns(commuted, patterns, target, mutator);
-    if (!ret.same_as(commuted)) return ret;
+    if (!ret.same_as(commuted)) {
+        return ret;
+    }
 
     return op;
 }
@@ -441,6 +450,7 @@ class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
 
+    Scope<Interval> bounds;
     Target target;
 
     Expr visit(const Mul *op) override {
@@ -1079,9 +1089,56 @@ private:
             // that they generate.
             internal_assert(op->args.size() == 3);
             return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
+        } else if ((op->is_intrinsic(Call::div_round_to_zero) ||
+                    op->is_intrinsic(Call::mod_round_to_zero)) &&
+                   !op->type.is_float() && op->type.is_vector()) {
+            internal_assert(op->args.size() == 2);
+            Expr a = op->args[0];
+            Expr b = op->args[1];
+            // Run bounds analysis to estimate the range of result.
+            Expr abs_result = op->type.is_int() ? abs(a / b) : a / b;
+            Expr extent_upper = find_constant_bound(abs_result, Direction::Upper, bounds);
+            const uint64_t *upper_bound = as_const_uint(extent_upper);
+            a = mutate(a);
+            b = mutate(b);
+            std::pair<Expr, Expr> div_mod = long_div_mod_round_to_zero(a, b, upper_bound);
+            if (op->is_intrinsic(Call::div_round_to_zero)) {
+                return div_mod.first;
+            }
+            return div_mod.second;
         } else {
             return IRMutator::visit(op);
         }
+    }
+
+    template<typename NodeType, typename T>
+    NodeType visit_let(const T *op) {
+        bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        NodeType node = IRMutator::visit(op);
+        bounds.pop(op->name);
+        return node;
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let<Expr>(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let<Stmt>(op);
+    }
+
+    Expr visit(const Div *op) override {
+        if (!op->type.is_float() && op->type.is_vector()) {
+            return mutate(simplify(lower_int_uint_div(op->a, op->b)));
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Mod *op) override {
+        if (!op->type.is_float() && op->type.is_vector()) {
+            return mutate(simplify(lower_int_uint_mod(op->a, op->b)));
+        }
+        return IRMutator::visit(op);
     }
 
 public:
@@ -1372,7 +1429,9 @@ class EliminateInterleaves : public IRMutator {
             Call::get_intrinsic_name(Call::shift_right),
             Call::get_intrinsic_name(Call::abs),
             Call::get_intrinsic_name(Call::absd)};
-        if (interleavable.count(op->name) != 0) return true;
+        if (interleavable.count(op->name) != 0) {
+            return true;
+        }
 
         // ...these calls cannot. Furthermore, these calls have the
         // same return type as the arguments, which means our test
@@ -1388,14 +1447,18 @@ class EliminateInterleaves : public IRMutator {
             Call::get_intrinsic_name(Call::hvx_scatter),
             Call::get_intrinsic_name(Call::hvx_scatter_acc),
         };
-        if (not_interleavable.count(op->name) != 0) return false;
+        if (not_interleavable.count(op->name) != 0) {
+            return false;
+        }
 
         if (starts_with(op->name, "halide.hexagon.")) {
             // We assume that any hexagon intrinsic is interleavable
             // as long as all of the vector operands have the same
             // number of lanes and lane width as the return type.
             for (Expr i : op->args) {
-                if (i.type().is_scalar()) continue;
+                if (i.type().is_scalar()) {
+                    continue;
+                }
                 if (i.type().bits() != op->type.bits() || i.type().lanes() != op->type.lanes()) {
                     return false;
                 }
@@ -1964,10 +2027,12 @@ private:
                         Expr b = mpys[i].second;
                         int lanes = op->type.lanes();
 
-                        if (a.type().is_scalar())
+                        if (a.type().is_scalar()) {
                             a = Broadcast::make(a, lanes);
-                        if (b.type().is_scalar())
+                        }
+                        if (b.type().is_scalar()) {
                             b = Broadcast::make(b, lanes);
+                        }
 
                         Expr mpy_a = lossless_cast(op->type, a);
                         Expr mpy_b = lossless_cast(op->type, b);

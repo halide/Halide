@@ -23,7 +23,53 @@ For API documentation see http://halide-lang.org/docs
 To see some example code, look in the tutorials directory.
 
 If you've acquired a full source distribution and want to build Halide, see the
-notes below.
+[notes below](#building-halide-with-cmake).
+
+# Getting Halide
+
+## Binary tarballs
+
+The latest version of Halide is **Halide 10.0.0**. We provide binary releases
+for many popular platforms and architectures, including 32/64-bit x86 Windows,
+64-bit macOS, and 32/64-bit x86/ARM Ubuntu Linux. See the releases tab on the
+right (or click [here](https://github.com/halide/Halide/releases/tag/v10.0.0)).
+
+## Vcpkg
+
+If you use [vcpkg](https://github.com/microsoft/vcpkg) to manage dependencies,
+you can install Halide via:
+
+```
+$ vcpkg install halide:x64-windows # or x64-linux/x64-osx
+```
+
+Note two caveats: first, at time of writing,
+[MSVC mis-compiles LLVM](https://github.com/halide/Halide/issues/5039) on
+x86-windows, so Halide cannot be used in vcpkg on that platform at this time;
+second, vcpkg installs only the minimum Halide backends required to compile code
+for the active platform. If you want to include all the backends, you should
+install `halide[target-all]:x64-windows` instead. Note that since this will
+build LLVM, it will take a _lot_ of disk space (up to 100GB).
+
+## Homebrew
+
+Alternatively, if you use macOS, you can install Halide via
+[Homebrew](https://brew.sh/) like so:
+
+```
+$ brew install halide
+```
+
+## Other package managers
+
+We are interested in bringing Halide 10 to other popular package managers
+and Linux distribution repositories including, but not limited to, Conan,
+Debian, [Ubuntu (or PPA)](https://github.com/halide/Halide/issues/5285),
+CentOS/Fedora, and Arch. If you have experience publishing packages we
+would be happy to work with you!
+
+If you are a maintainer of any other package distribution platform, we would
+be excited to work with you, too.
 
 # Building Halide with Make
 
@@ -138,7 +184,7 @@ D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary
 For a 32-bit build, run:
 
 ```
-D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x86_amd64
+D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64_x86
 ```
 
 #### Managing dependencies with vcpkg

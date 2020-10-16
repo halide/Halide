@@ -1,3 +1,4 @@
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -10,6 +11,7 @@
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::set;
 using std::string;
 using std::vector;
@@ -32,24 +34,117 @@ public:
     }
 
 private:
-    vector<Function> outputs;
+    const vector<Function> outputs;
     set<string> visited_functions;
+
+    struct ParamOrBuffer {
+        Parameter param;
+        Buffer<> buffer;
+    };
+    map<string, ParamOrBuffer> args_by_name;
 
     using IRGraphVisitor::visit;
 
-    bool already_have(const string &name) {
-        // Ignore dependencies on the output buffers
+    bool is_output_name(const string &name) const {
         for (const Function &output : outputs) {
             if (name == output.name() || starts_with(name, output.name() + ".")) {
                 return true;
             }
         }
-        for (const InferredArgument &arg : args) {
-            if (arg.arg.name == name) {
-                return true;
-            }
-        }
         return false;
+    }
+
+    static bool dupe_names_error(const string &name) {
+        user_error << "All Params and embedded Buffers must have unique names, but the name '"
+                   << name << "' was seen multiple times.\n";
+        return false;  // not reached
+    }
+
+    bool already_have(const Parameter &p) {
+        const string &name = p.name();
+
+        // Ignore dependencies on the output buffers
+        if (is_output_name(name)) {
+            return true;
+        }
+
+        auto it = args_by_name.find(name);
+        if (it == args_by_name.end()) {
+            // If the Parameter is already bound to a Buffer, include it here.
+            if (p.is_buffer() && p.buffer().defined()) {
+                args_by_name[name] = {p, p.buffer()};
+            } else {
+                args_by_name[name] = {p, Buffer<>()};
+            }
+            return false;
+        }
+
+        ParamOrBuffer &pob = it->second;
+        if (pob.param.defined()) {
+            // If the name is already in the args, verify that it's the same
+            // Parameter that we've already seen.
+            if (p.same_as(pob.param)) {
+                return true;
+            } else {
+                // Multiple different Parameters with the same name -> illegal
+                return dupe_names_error(name);
+            }
+        } else if (pob.buffer.defined()) {
+            // If the name is in the args, but only as a Buffer,
+            // maybe it's the Buffer that the Parameter is bound to?
+            if (p.is_buffer() && p.buffer().defined() && p.buffer().same_as(pob.buffer)) {
+                // Update this entry to have both the Parameter and Buffer.
+                pob.param = p;
+                return true;
+            } else {
+                // A Parameter and Buffer with the same name (but aren't connected) -> illegal
+                return dupe_names_error(name);
+            }
+        } else {
+            internal_error << "There should be no empty ParamOrBuffers in the map.";
+            return false;  // not reached
+        }
+    }
+
+    bool already_have(const Buffer<> &b) {
+        const string &name = b.name();
+
+        // Ignore dependencies on the output buffers
+        if (is_output_name(name)) {
+            return true;
+        }
+
+        auto it = args_by_name.find(name);
+        if (it == args_by_name.end()) {
+            args_by_name[name] = {Parameter(), b};
+            return false;
+        }
+
+        ParamOrBuffer &pob = it->second;
+        if (pob.buffer.defined()) {
+            // If the name is already in the args, verify that it's the same
+            // Buffer that we've already seen.
+            if (b.same_as(pob.buffer)) {
+                return true;
+            } else {
+                // Multiple different Buffers with the same name -> illegal
+                return dupe_names_error(name);
+            }
+        } else if (pob.param.defined()) {
+            // If the name is in the args, but only as a Parameter,
+            // maybe it's the Parameter that this Buffer is bound to?
+            if (pob.param.is_buffer() && pob.param.buffer().same_as(b)) {
+                // Update this entry to have both the Parameter and Buffer.
+                pob.buffer = b;
+                return true;
+            } else {
+                // A Parameter and Buffer with the same name (but aren't connected) -> illegal
+                return dupe_names_error(name);
+            }
+        } else {
+            internal_error << "There should be no empty ParamOrBuffers in the map.";
+            return false;  // not reached
+        }
     }
 
     void visit_exprs(const vector<Expr> &v) {
@@ -59,12 +154,16 @@ private:
     }
 
     void visit_expr(const Expr &e) {
-        if (!e.defined()) return;
+        if (!e.defined()) {
+            return;
+        }
         e.accept(this);
     }
 
     void visit_function(const Function &func) {
-        if (visited_functions.count(func.name())) return;
+        if (visited_functions.count(func.name())) {
+            return;
+        }
         visited_functions.insert(func.name());
 
         func.accept(this);
@@ -86,8 +185,10 @@ private:
     }
 
     void include_parameter(const Parameter &p) {
-        if (!p.defined()) return;
-        if (already_have(p.name())) return;
+        if (!p.defined() ||
+            already_have(p)) {
+            return;
+        }
 
         ArgumentEstimates argument_estimates = p.get_argument_estimates();
         if (!p.is_buffer()) {
@@ -125,8 +226,10 @@ private:
     }
 
     void include_buffer(const Buffer<> &b) {
-        if (!b.defined()) return;
-        if (already_have(b.name())) return;
+        if (!b.defined() ||
+            already_have(b)) {
+            return;
+        }
 
         InferredArgument a = {
             Argument(b.name(), Argument::InputBuffer, b.type(), b.dimensions(), ArgumentEstimates{}),

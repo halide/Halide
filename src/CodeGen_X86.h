@@ -47,7 +47,7 @@ protected:
     void visit(const EQ *) override;
     void visit(const NE *) override;
     void visit(const Select *) override;
-    void visit(const VectorReduce *) override;
+    void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
     void visit(const Mul *) override;
     // @}
 };

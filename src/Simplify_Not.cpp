@@ -17,7 +17,7 @@ Expr Simplify::visit(const Not *op, ExprInfo *bounds) {
         return rewrite.result;
     }
 
-    if (rewrite(!broadcast(x), broadcast(!x, op->type.lanes())) ||
+    if (rewrite(!broadcast(x, c0), broadcast(!x, c0)) ||
         rewrite(!intrin(Call::likely, x), intrin(Call::likely, !x)) ||
         rewrite(!intrin(Call::likely_if_innermost, x), intrin(Call::likely_if_innermost, !x))) {
         return mutate(rewrite.result, bounds);
