@@ -38,7 +38,7 @@ int GetRecommendedAccumulators(const Target &target) {
         return 20;
     } else {
         // 16 reigsters total.
-        return 12;
+        return 16;
     }
 }
 
@@ -103,9 +103,11 @@ public:
             filter_bounded(co * vector_reduction + ci, x, y, c);
 
         // Set up the reduction loop and inputs.
+        Expr reduction_extent_0 =
+            ((filter_.dim(0).extent() + vector_reduction - 1) / vector_reduction) * vector_reduction;
         filter_.dim(1).set_min(0);
         filter_.dim(2).set_min(0);
-        RDom r(0, filter_.dim(0).extent(), 0, filter_.dim(1).extent(), 0,
+        RDom r(0, reduction_extent_0, 0, filter_.dim(1).extent(), 0,
                filter_.dim(2).extent());
         RVar rc = r[0];
         RVar rx = r[1];
@@ -138,13 +140,13 @@ public:
         offset_c(c) += i32(filter_offset_) * i32(input_offset_) -
                        i32(filter_rdxyc) * i32(input_offset_);
 
-        // Next, the terms that depend only on x, y, b.
-        Func offset_xyb("offset_xyb");
-        offset_xyb(x, y, b) += i32(filter_offset_) * i32(input_rdxyc);
+        // The sum of the input is used to compute the filter_offset * input term.
+        Func sum_input("sum_input");
+        sum_input(x, y, b) += i32(input_rdxyc);
 
         // Finally, the terms that depend on all of c, x, y, b.
         Func convolved("convolved");
-        convolved(c, x, y, b) = offset_c(c) - offset_xyb(x, y, b);
+        convolved(c, x, y, b) = offset_c(c) - i32(filter_offset_) * sum_input(x, y, b);
         convolved(c, x, y, b) += i32(filter_rdxyc) * i32(input_rdxyc);
 
         // Saturate and narrow the output.
@@ -204,6 +206,9 @@ public:
             .vectorize(c)
             .unroll(x);
 
+        // Specialize this to avoid computing sum_input when it isn't needed.
+        convolved.specialize(filter_offset_ == 0);
+
         RVar rco, rci;
         convolved.update()
             .split(rc, rco, rci, vector_reduction)
@@ -219,9 +224,21 @@ public:
         offset_c.compute_root();
         offset_c.update().specialize(input_offset_ == 0);
 
-        // Compute the batch offsets outside the loops over channels.
-        offset_xyb.compute_at(output_, xo);
-        offset_xyb.update().specialize(filter_offset_ == 0);
+        // Compute the sum of the input outside the loops over channels.
+        sum_input.compute_at(output_, xo)
+            .vectorize(x);
+        sum_input.update()
+            .reorder(x, rc, rx, ry, y, b)
+            .atomic()
+            .vectorize(rc, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf)
+            .unroll(x);
+
+        // TODO: We only need this (and the boundary condition on c) when
+        // filter.dim(0).extent() % 4 != 0 :(
+        input_bounded.compute_at(output_, y)
+            .store_in(MemoryType::Stack)
+            .reorder(x, y, b, c)
+            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
 
         // Pretranspose the filter, so we don't need to do it in the inner loop.
         // TODO: This gets recomputed often when the op is split up into small
@@ -231,8 +248,7 @@ public:
             .reorder(ci, c, x, y, co)
             .bound(ci, 0, vector_reduction)
             .align_storage(ci, vector_reduction)
-            .align_storage(c, vector_size * tile_c_max)
-            .unroll(ci);
+            .vectorize(ci);
     }
 };
 

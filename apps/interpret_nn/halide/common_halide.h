@@ -31,23 +31,38 @@ inline Halide::Expr CanFuseCX(Halide::OutputImageParam p) {
          p.dim(1).stride() == p.dim(0).extent();
 }
 
+// A boundary condition, without likelies that cause loop partitioning.
 inline Halide::Func ConstantExteriorTensor(
-    Halide::Func t, Halide::Expr exterior, Halide::Expr min_x,
-    Halide::Expr extent_x, Halide::Expr min_y, Halide::Expr extent_y) {
-    Halide::Var d("d"), x("x"), y("y"), b("b");
+    Halide::Func t, Halide::Expr exterior,
+    Halide::Expr min_c, Halide::Expr extent_c,
+    Halide::Expr min_x, Halide::Expr extent_x,
+    Halide::Expr min_y, Halide::Expr extent_y,
+    Halide::Expr min_b, Halide::Expr extent_b) {
+    Halide::Var c("c"), x("x"), y("y"), b("b");
+    // We usually don't care about what comes after the boundary in the c
+    // or b dimensions, so just skip those for the select.
     Halide::Expr in_bounds =
-        min_x <= x && x < min_x + extent_x && min_y <= y && y < min_y + extent_y;
-    Halide::Func constant_exterior("constant_exterior");
-    constant_exterior(d, x, y, b) = t(d, clamp(x, min_x, min_x + extent_x - 1),
-                                      clamp(y, min_y, min_y + extent_y - 1), b);
+        min_x <= x && x < min_x + extent_x &&
+        min_y <= y && y < min_y + extent_y;
+    Halide::Expr bounded("bounded");
+    bounded = t(clamp(c, min_c, min_c + extent_c - 1),
+                clamp(x, min_x, min_x + extent_x - 1),
+                clamp(y, min_y, min_y + extent_y - 1),
+                clamp(b, min_b, min_b + extent_b - 1));
 
-    return constant_exterior;
+    Halide::Func tensor_bounded("tensor_bounded");
+    tensor_bounded(c, x, y, b) = select(in_bounds, bounded, exterior);
+
+    return tensor_bounded;
 }
 
 inline Halide::Func ConstantExteriorTensor(Halide::ImageParam p,
                                            Halide::Expr exterior) {
-    return ConstantExteriorTensor(p, exterior, p.dim(1).min(), p.dim(1).extent(),
-                                  p.dim(2).min(), p.dim(2).extent());
+    return ConstantExteriorTensor(p, exterior,
+                                  p.dim(0).min(), p.dim(0).extent(),
+                                  p.dim(1).min(), p.dim(1).extent(),
+                                  p.dim(2).min(), p.dim(2).extent(),
+                                  p.dim(3).min(), p.dim(3).extent());
 }
 
 // This function implements the same computation as the ARMv7 NEON VQRDMULH
