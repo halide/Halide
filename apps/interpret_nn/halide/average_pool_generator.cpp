@@ -4,6 +4,7 @@
 namespace interpret_nn {
 
 using Halide::Generator;
+using Halide::BoundaryConditions::constant_exterior;
 using Halide::ConciseCasts::u16;
 using Halide::ConciseCasts::u8_sat;
 
@@ -29,7 +30,8 @@ public:
         // The algorithm.
         Var c("c"), x("x"), y("y"), b("b");
 
-        Func input_bounded = ConstantExteriorTensor(input_, 0);
+        Func input_bounded("input_bounded");
+        input_bounded(c, x, y, b) = constant_exterior(input_, 0)(c, x, y, b);
 
         Func sum("sum");
         RDom filter_dom(0, filter_width_, 0, filter_height_);
@@ -51,8 +53,12 @@ public:
         InterpretAsTensor(input_);
         InterpretAsTensor(output_);
 
-        // TODO: Schedule.
-        output_.compute_root();
+        // TODO: Optimize more.
+        Expr output_channels = output_.dim(0).extent();
+        const int vector_size = natural_vector_size<uint8_t>();
+        output_.compute_root()
+            .specialize(output_channels >= vector_size)
+            .vectorize(c, vector_size, TailStrategy::ShiftInwards);
     }
 };
 
