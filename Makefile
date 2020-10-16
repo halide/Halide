@@ -2240,11 +2240,17 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
+# Let's default to the Ubuntu install location.
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
+
 .PHONY: format
 format:
 	@${ROOT_DIR}/run-clang-format.sh
 
 # Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
+# Let's default to the Ubuntu install location.
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
+
 .PHONY: clang-tidy
 clang-tidy:
 	@${ROOT_DIR}/run-clang-tidy.sh
