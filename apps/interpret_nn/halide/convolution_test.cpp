@@ -58,29 +58,16 @@ struct ConvolutionArgs {
 
         // Hexagon's device_malloc implementation will also set the host
         // pointer if it is null, giving a zero copy buffer.
-        input_tensor = Halide::Runtime::Buffer<uint8_t>(nullptr, p.input_depth, p.input_width, p.input_height, p.input_batches);
-        filter_tensor = Halide::Runtime::Buffer<uint8_t>(nullptr, p.filter_depth, p.filter_width, p.filter_height, p.filter_batches);
-        bias_tensor = Halide::Runtime::Buffer<int32_t>(nullptr, p.filter_batches);
+        input_tensor = Halide::Runtime::Buffer<uint8_t>(p.input_depth, p.input_width, p.input_height, p.input_batches);
+        filter_tensor = Halide::Runtime::Buffer<uint8_t>(p.filter_depth, p.filter_width, p.filter_height, p.filter_batches);
+        bias_tensor = Halide::Runtime::Buffer<int32_t>(p.filter_batches);
 
         const int output_depth = p.filter_batches;
         const int output_width = ceil((p.input_width - p.filter_width) / p.stride) + 1;
         const int output_height = ceil((p.input_height - p.filter_height) / p.stride) + 1;
         const int output_batches = p.input_batches;
-        printf("output size: %d %d\n", output_width, output_height);
 
-        output_tensor = Halide::Runtime::Buffer<uint8_t>(nullptr, output_depth, output_width, output_height, output_batches);
-
-#ifdef HALIDE_RUNTIME_HEXAGON
-        input_tensor.device_malloc(halide_hexagon_device_interface());
-        filter_tensor.device_malloc(halide_hexagon_device_interface());
-        bias_tensor.device_malloc(halide_hexagon_device_interface());
-        output_tensor.device_malloc(halide_hexagon_device_interface());
-#else
-        input_tensor.allocate();
-        filter_tensor.allocate();
-        bias_tensor.allocate();
-        output_tensor.allocate();
-#endif
+        output_tensor = Halide::Runtime::Buffer<uint8_t>(output_depth, output_width, output_height, output_batches);
 
         input_tensor.for_each_value([](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
@@ -113,13 +100,6 @@ struct ConvolutionArgs {
 };
 
 void RunBenchmark(ConvolutionArgs &a) {
-#ifdef HALIDE_RUNTIME_HEXAGON
-    // To avoid the cost of powering HVX on in each call of the
-    // pipeline, power it on once now. Also, set Hexagon performance to turbo.
-    halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_turbo);
-    halide_hexagon_power_hvx_on(nullptr);
-#endif
-
     double time = Halide::Tools::benchmark([&]() {
         int result = interpret_nn::ConvolutionUint8(a.input_tensor, a.filter_tensor, a.bias_tensor,
                                                     a.input_offset, a.filter_offset, a.stride_x,
@@ -132,13 +112,6 @@ void RunBenchmark(ConvolutionArgs &a) {
     });
 
     printf("Done, time: %g s\n", time);
-
-#ifdef HALIDE_RUNTIME_HEXAGON
-    // We're done with HVX, power it off, and reset the performance mode
-    // to default to save power.
-    halide_hexagon_power_hvx_off(nullptr);
-    halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_default);
-#endif
 }
 
 void ValidateOutput(ConvolutionArgs &a, const TestParams &p) {
@@ -158,10 +131,10 @@ void ValidateOutput(ConvolutionArgs &a, const TestParams &p) {
                     int y_offset = y * p.stride + filter_y * p.dilation;
                     if ((x_offset >= 0) && (x_offset < p.input_width) && (y_offset >= 0) && (y_offset < p.input_height)) {
                         input_value = static_cast<int32_t>(
-                            (int16_t)a.input_tensor(index_c, x_offset, y_offset, b) + p.input_offset);
+                            (int16_t)a.input_tensor(index_c, x_offset, y_offset, b) - p.input_offset);
                     }
                     int32_t filter_value = static_cast<int32_t>(
-                        (int16_t)a.filter_tensor(index_c, filter_x, filter_y, c) + p.filter_offset);
+                        (int16_t)a.filter_tensor(index_c, filter_x, filter_y, c) - p.filter_offset);
 
                     output += input_value * filter_value;
                 }
@@ -173,7 +146,7 @@ void ValidateOutput(ConvolutionArgs &a, const TestParams &p) {
         output = std::max(output, (int32_t)a.output_min);
         output = std::min(output, (int32_t)a.output_max);
 // TODO: remove this printf
-printf("Output at %d %d: %d vs %d\n", x, y, output, a.output_tensor(c, x, y, b));
+printf("Output at %d %d %d %d: %d vs %d\n", c, x, y, b, output, a.output_tensor(c, x, y, b));
         if (output != a.output_tensor(c, x, y, b)) {
             fprintf(stderr, "Mismatch at %d %d: %d != %d\n", x, y, output, a.output_tensor(c, x, y, b));
             abort();
