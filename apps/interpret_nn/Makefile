@@ -24,10 +24,10 @@ $(GENERATOR_BIN)/%.generator: halide/%_generator.cpp $(GENERATOR_BIN)/common_hal
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter %.cpp %.o,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-.PRECIOUS: $(BIN)/%/Add4DUint8Uint8.a
-$(BIN)/%/Add4DUint8Uint8.a: $(GENERATOR_BIN)/add.generator
+.PRECIOUS: $(BIN)/%/AddUint8Uint8.a
+$(BIN)/%/AddUint8Uint8.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
-	$< -g Add -f interpret_nn::Add4DUint8Uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g Add -f interpret_nn::AddUint8Uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
 
 .PRECIOUS: $(BIN)/%/AveragePoolUint8.a
 $(BIN)/%/AveragePoolUint8.a: $(GENERATOR_BIN)/average_pool.generator
@@ -50,7 +50,7 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/add.generator
 	$< -r runtime -o $(BIN)/$* target=$*
 
 OPS_HALIDE = \
-	$(BIN)/%/Add4DUint8Uint8.a \
+	$(BIN)/%/AddUint8Uint8.a \
 	$(BIN)/%/AveragePoolUint8.a \
 	$(BIN)/%/ConvolutionUint8.a \
 	$(BIN)/%/DepthwiseConvolutionUint8.a \

@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#include "Add4DUint8Uint8.h"
+#include "AddUint8Uint8.h"
 #include "AveragePoolUint8.h"
 #include "ConvolutionUint8.h"
 #include "DepthwiseConvolutionUint8.h"
@@ -306,11 +306,11 @@ void AddOp::Execute(const CropShape &crop) {
         int output_shift = 0;
         int output_min = 0;
         int output_max = 0;
-        halide_app_assert(0 == Add4DUint8Uint8(left_shift, input1_buf, input2_buf,
-                                               input1_offset, input1_multiplier, input1_shift,
-                                               input2_offset, input2_multiplier, input2_shift,
-                                               output_offset, output_multiplier, output_shift,
-                                               output_min, output_max, output_buf));
+        halide_app_assert(0 == AddUint8Uint8(left_shift, input1_buf, input2_buf,
+                                             input1_offset, input1_multiplier, input1_shift,
+                                             input2_offset, input2_multiplier, input2_shift,
+                                             output_offset, output_multiplier, output_shift,
+                                             output_min, output_max, output_buf));
     }
 }
 
