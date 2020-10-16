@@ -2248,7 +2248,7 @@ CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
 
 .PHONY: format
 format:
-	@${ROOT_DIR}/run-clang-format.sh
+	CLANG_FORMAT_LLVM_INSTALL_DIR=$(CLANG_FORMAT_LLVM_INSTALL_DIR) @${ROOT_DIR}/run-clang-format.sh
 
 # Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
 # Let's default to the Ubuntu install location.
@@ -2256,11 +2256,11 @@ CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
 
 .PHONY: clang-tidy
 clang-tidy:
-	@${ROOT_DIR}/run-clang-tidy.sh
+	CLANG_TIDY_LLVM_INSTALL_DIR=$(CLANG_TIDY_LLVM_INSTALL_DIR) @${ROOT_DIR}/run-clang-tidy.sh
 
 .PHONY: clang-tidy-fix
 clang-tidy-fix: $(BUILD_DIR)/compile_commands.json
-	@${ROOT_DIR}/run-clang-tidy.sh -fix
+	CLANG_TIDY_LLVM_INSTALL_DIR=$(CLANG_TIDY_LLVM_INSTALL_DIR) @${ROOT_DIR}/run-clang-tidy.sh -fix
 
 # Build the documentation. Be sure to keep this synchronized with doc/CMakeLists.txt
 # if you choose to edit it.
