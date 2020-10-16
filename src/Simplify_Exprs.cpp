@@ -53,6 +53,36 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
 
 Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     Expr value = mutate(op->value, bounds);
+    if (const Shuffle* shuffle = value.as<Shuffle>()) {
+        int broadcast_factor = shuffle->is_broadcast();
+        if (broadcast_factor > 1) {
+            // How many lanes does the smaller vector reduce have?
+            int reduced_result_lanes = std::max(1, op->type.lanes() / broadcast_factor);
+
+            Expr reduced = VectorReduce::make(op->op, shuffle->vectors[0], reduced_result_lanes);
+            if (reduced_result_lanes < op->type.lanes()) {
+                reduced = Shuffle::make_broadcast(reduced, op->type.lanes() / reduced_result_lanes);
+            }
+            if (reduced.type().lanes() != op->type.lanes()) {
+                // This can happen for oddly sized reductions, e.g. a broadcast of 3 to 6
+                // lanes, then a vector reduction to 3 lanes. But checking this above is
+                // tricky...
+            } else {
+                if (op->op == VectorReduce::Add) {
+                    // This could be simplified to reduced * redundancy, should it?
+                    // It might not be faster to do this if the whole redundant reduction
+                    // maps to a single instruction.
+                } else if (op->op == VectorReduce::Mul) {
+                    // This could be simplified to pow(reduced, redundancy), should it?
+                    // It might not be faster to do this if the whole redundant reduction
+                    // maps to a single instruction.
+                } else {
+                    return mutate(reduced, bounds);
+                }
+            }
+        }
+    }
+
     if (bounds && op->type.is_int()) {
         int factor = op->value.type().lanes() / op->type.lanes();
         switch (op->op) {
