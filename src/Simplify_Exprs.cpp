@@ -53,7 +53,7 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
 
 Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     Expr value = mutate(op->value, bounds);
-    if (const Shuffle* shuffle = value.as<Shuffle>()) {
+    if (const Shuffle *shuffle = value.as<Shuffle>()) {
         int broadcast_factor = shuffle->is_broadcast();
         if (broadcast_factor > 1) {
             // How many lanes does the smaller vector reduce have?
