@@ -77,7 +77,9 @@ public:
         convolved(c, x, y, b) = bias_(c);
         filter_.dim(1).set_min(0);
         filter_.dim(2).set_min(0);
-        RDom r(0, filter_.dim(1).extent(), 0, filter_.dim(2).extent());
+        Expr filter_width = filter_.dim(1).extent();
+        Expr filter_height = filter_.dim(2).extent();
+        RDom r(0, filter_width, 0, filter_height);
         Expr filter_drxy = filter_biased(c, r.x, r.y);
         Expr input_drxyb = input_biased(c, x * stride_x_ + r.x * dilation_x_,
                                         y * stride_y_ + r.y * dilation_y_, b);
@@ -102,8 +104,7 @@ public:
             input_.dim(0).set_extent(1);
         }
 
-        const int vector_size_u8 = natural_vector_size<uint8_t>();
-        const int vector_size_i16 = natural_vector_size<int16_t>();
+        const int vector_size = natural_vector_size<uint8_t>();
 
         // Tile the output, so we can try to re-use loads spatially when performing
         // convolution. This also helps because we can schedule the input and not
@@ -117,8 +118,8 @@ public:
             .reorder(x, y, c, xo, yo, b)
             .unroll(x)
             .unroll(y)
-            .specialize(output_channels >= vector_size_u8)
-            .split(c, co, c, vector_size_u8, TailStrategy::ShiftInwards)
+            .specialize(output_channels >= vector_size)
+            .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
             .reorder(x, y, c, xo, co, yo, b)
             .vectorize(c);
 
@@ -127,18 +128,18 @@ public:
 
         convolved.compute_at(output_, xo)
             .store_in(MemoryType::Stack)
+            .bound_extent(c, vector_size)
             .reorder(x, y, c, b)
             .unroll(x)
             .unroll(y)
-            .vectorize(c, vector_size_i16, TailStrategy::GuardWithIf)
-            .unroll(c, 2, TailStrategy::GuardWithIf);
+            .vectorize(c);
         convolved.update()
             .reorder(x, y, c, r.x, r.y, b)
             .unroll(x)
             .unroll(y)
-            .vectorize(c, vector_size_i16, TailStrategy::GuardWithIf)
-            .unroll(c, 2, TailStrategy::GuardWithIf);
-        convolved.update().specialize(filter_.dim(1).extent() == 3).unroll(r.x);
+            .vectorize(c);
+        convolved.update().specialize(filter_width == 3 && filter_height == 3)
+            .unroll(r.x);
 
         // TODO: This gets recomputed often when the op is split up into small
         // pieces.
@@ -150,7 +151,7 @@ public:
             resampled_input
                 .compute_at(output_, co)
                 .store_in(MemoryType::Stack)
-                .vectorize(c, vector_size_u8, TailStrategy::GuardWithIf);
+                .vectorize(c, vector_size, TailStrategy::GuardWithIf);
 
             for (int dm : {1, 3}) {
                 resampled_input.specialize(depth_multiplier_ == dm);
