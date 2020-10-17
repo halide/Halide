@@ -18,7 +18,7 @@ int32_t SaturatingRoundingDoublingHighMultiplyReference(int32_t a, int32_t b) {
 
 int32_t RoundingDivideByPOTReference(int32_t x, int32_t shift) {
     // Shift must satisfy 0 <= shift <= 31
-    int32_t round = 1 << (shift - 1);
+    int32_t round = (1 << shift) / 2;
     return ((int64_t)x + round) >> shift;
 }
 
