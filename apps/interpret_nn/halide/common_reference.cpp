@@ -18,10 +18,8 @@ int32_t SaturatingRoundingDoublingHighMultiplyReference(int32_t a, int32_t b) {
 
 int32_t RoundingDivideByPOTReference(int32_t x, int32_t shift) {
     // Shift must satisfy 0 <= shift <= 31
-    int32_t mask = ((1ll << shift) - 1);
-    int32_t remainder = x & mask;
-    int32_t threshold = (mask >> 1) + (x < 0 ? 1 : 0);
-    return (x >> shift) + (remainder > threshold ? 1 : 0);
+    int32_t round = 1 << (shift - 1);
+    return ((int64_t)x + round) >> shift;
 }
 
 int32_t MultiplyByQuantizedMultiplierSmallerThanOneReference(int32_t x, int32_t q, int32_t shift) {

@@ -70,12 +70,6 @@ inline Halide::Func ConstantExteriorTensor(Halide::ImageParam p,
 Halide::Expr SaturatingRoundingDoublingHighMultiply(const Halide::Expr &a,
                                                     const Halide::Expr &b);
 
-// This function implements the same computation as the gemmlowp function of
-// the same name. The exponent should be positive. Only the following types are
-// verified to work: int32_t
-Halide::Expr SaturatingRoundingMultiplyByPOT(const Halide::Expr &x,
-                                             const Halide::Expr &exponent);
-
 // Correctly-rounded-to-nearest division by a power-of-two. Also known as
 // rounding arithmetic right shift.
 Halide::Expr RoundingDivideByPOT(const Halide::Expr &x,
@@ -87,24 +81,6 @@ Halide::Expr RoundingDivideByPOT(const Halide::Expr &x,
 Halide::Expr MultiplyByQuantizedMultiplierSmallerThanOne(
     const Halide::Expr &x, const Halide::Expr &quantized_multiplier,
     const Halide::Expr &shift);
-
-// Performs the same operation as the tfmini function of the same name.
-Halide::Expr MultiplyByQuantizedMultiplierGreaterThanOne(
-    const Halide::Expr &input, const Halide::Expr &quantized_multiplier,
-    const Halide::Expr &left_shift);
-
-// Returns the multiplier and shift for a quantized inverse square root.
-// Implements the same computation as tfmini's reference implementation. Only
-// the following types are verified to work: int32_t
-std::pair<Halide::Expr, Halide::Expr> InvSqrtQuantizedMultiplierExp(
-    const Halide::Expr &start_input);
-
-// This function implements the same computation as the gemmlowp function of the
-// similar name. Only input values in the range [-(1 << 29), -1] are supported
-// for int32 inputs. Only input values in the range [-(1 << 13), -1] are
-// supported for int16 inputs.
-Halide::Expr ExponentialOnNegativeOneQuarterAndZeroExclusive(
-    const Halide::Expr &a);
 
 }  // namespace interpret_nn
 
