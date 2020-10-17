@@ -361,8 +361,7 @@ class FindSimplifications : public IRVisitor {
         // statement is marked as likely, treat it as likely true and
         // partition accordingly.
         IRVisitor::visit(op);
-        const Call *call = op->condition.as<Call>();
-        if (call && call->is_intrinsic(Call::likely)) {
+        if (has_likely_tag(op->condition)) {
             new_simplification(op->condition, op->condition, const_true(), const_false());
         }
     }
