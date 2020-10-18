@@ -112,14 +112,11 @@ public:
         // Align the filter depth, which requires padding the input.
         filter_depth =
             ((filter_depth + vector_reduction - 1) / vector_reduction) * vector_reduction;
-        RDom r(0, filter_depth, 0, filter_width, 0, filter_height);
-        RVar rc = r[0];
-        RVar rx = r[1];
-        RVar ry = r[2];
+        RDom r(0, filter_width, 0, filter_height, 0, filter_depth);
         Expr filter_rdxyc =
-            filter_tiled(rc % vector_reduction, rc / vector_reduction, rx, ry, c);
-        Expr input_rdxyc = input_bounded(rc, x * stride_x_ + rx * dilation_x_,
-                                         y * stride_y_ + ry * dilation_y_, b);
+            filter_tiled(r.z % vector_reduction, r.z / vector_reduction, r.x, r.y, c);
+        Expr input_rdxyc = input_bounded(r.z, x * stride_x_ + r.x * dilation_x_,
+                                         y * stride_y_ + r.y * dilation_y_, b);
 
         // We want to compute the reduction:
         // convolved(c, x, y, b) = bias_(c)
@@ -216,8 +213,8 @@ public:
 
         RVar rco, rci;
         convolved.update()
-            .split(rc, rco, rci, vector_reduction)
-            .reorder(rci, x, c, rco, rx, ry, y, b)
+            .split(r.z, rco, rci, vector_reduction)
+            .reorder(rci, x, c, rco, r.x, r.y, y, b)
             .vectorize(c)
             .atomic()
             .vectorize(rci)
@@ -233,9 +230,9 @@ public:
         sum_input.compute_at(output_, xo)
             .vectorize(x);
         sum_input.update()
-            .reorder(x, rc, rx, ry, y, b)
+            .reorder(x, r.z, r.x, r.y, y, b)
             .atomic()
-            .vectorize(rc, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf)
+            .vectorize(r.z, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf)
             .unroll(x);
 
         // TODO: We only need this (and the boundary condition on c) when
