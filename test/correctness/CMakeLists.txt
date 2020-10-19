@@ -147,6 +147,7 @@ tests(GROUPS correctness
       gpu_specialize.cpp
       gpu_store_in_register_with_no_lanes_loop.cpp
       gpu_sum_scan.cpp
+      gpu_texture.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
       gpu_vectorized_shared_memory.cpp
