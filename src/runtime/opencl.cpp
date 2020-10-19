@@ -365,7 +365,9 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
             const cl_uint max_platform_name = 256;
             char platform_name[max_platform_name];
             err = clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, max_platform_name, platform_name, NULL);
-            if (err != CL_SUCCESS) continue;
+            if (err != CL_SUCCESS) {
+                continue;
+            }
             debug(user_context) << "CL: platform " << i << " " << platform_name << "\n";
 
             // A platform matches the request if it is a substring of the platform name.

@@ -68,20 +68,25 @@ EGLAPI void *eglGetProcAddress(const char *procname);
 extern int strcmp(const char *, const char *);
 
 WEAK int halide_opengl_create_context(void *user_context) {
-    if (eglGetCurrentContext() != EGL_NO_CONTEXT)
+    if (eglGetCurrentContext() != EGL_NO_CONTEXT) {
         return 0;
+    }
 
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (display == EGL_NO_DISPLAY || !eglInitialize(display, 0, 0)) {
         PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT =
             reinterpret_cast<PFNEGLQUERYDEVICESEXTPROC>(
                 eglGetProcAddress("eglQueryDevicesEXT"));
-        if (eglQueryDevicesEXT == NULL) return 1;
+        if (eglQueryDevicesEXT == NULL) {
+            return 1;
+        }
 
         PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT =
             reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
                 eglGetProcAddress("eglGetPlatformDisplayEXT"));
-        if (eglGetPlatformDisplayEXT == NULL) return 1;
+        if (eglGetPlatformDisplayEXT == NULL) {
+            return 1;
+        }
 
         const int kMaxDevices = 32;
         EGLDeviceEXT egl_devices[kMaxDevices];

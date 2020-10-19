@@ -43,8 +43,9 @@ namespace Internal {
 //   http://www.opengl.org/resources/features/OGLextensions/
 WEAK bool glx_extension_supported(const char *extlist, const char *extension) {
     // Extension names should not have spaces.
-    if (strchr(extension, ' ') != NULL || *extension == '\0')
+    if (strchr(extension, ' ') != NULL || *extension == '\0') {
         return false;
+    }
 
     const char *start = extlist;
     while (const char *pos = strstr(start, extension)) {
