@@ -278,16 +278,24 @@ void define_func(py::module &m) {
                                  "Call infer_input_bounds() with an explicit list of ints instead.",
                                  1);
                     std::vector<int32_t> sizes;
-                    if (x_size) sizes.push_back(x_size);
-                    if (y_size) sizes.push_back(y_size);
-                    if (z_size) sizes.push_back(z_size);
-                    if (w_size) sizes.push_back(w_size);
+                    if (x_size) {
+                        sizes.push_back(x_size);
+                    }
+                    if (y_size) {
+                        sizes.push_back(y_size);
+                    }
+                    if (z_size) {
+                        sizes.push_back(z_size);
+                    }
+                    if (w_size) {
+                        sizes.push_back(w_size);
+                    }
                     f.infer_input_bounds(sizes, target);
                 },
                 py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("target") = get_jit_target_from_environment())
 
             .def(
-                "infer_input_bounds", [](Func &f, py::object dst, const Target &target) -> void {
+                "infer_input_bounds", [](Func &f, const py::object &dst, const Target &target) -> void {
                     // dst could be Buffer<>, vector<Buffer>, or vector<int>
                     try {
                         Buffer<> b = dst.cast<Buffer<>>();

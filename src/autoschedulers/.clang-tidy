@@ -1,6 +1,14 @@
-# Note: if you make changes here, you may need to make changes in .clang-tidy
-# files elsewhere in the tree; clang-tidy-10 doesn't allow selective
-# inheritance of parent .clang-tidy files.
+# In clang-tidy-11 (or maybe clang-tidy-12) you can use
+#
+#  InheritParentConfig: true
+#
+# to just inherit from parent .clang-tidy files. Alas,
+# that isn't available in clang-tidy-10, so we must make copies
+# where specialization is needed.
+
+#
+# The desired change here is just to remove two performance checks.
+#
 
 ---
 Checks: >
@@ -14,8 +22,8 @@ Checks: >
     performance-move-const-arg,
     performance-noexcept-move-constructor,
     performance-trivially-destructible,
-    performance-unnecessary-copy-initialization,
-    performance-unnecessary-value-param,
+    -performance-unnecessary-copy-initialization,
+    -performance-unnecessary-value-param,
     readability-braces-around-statements
 
 WarningsAsErrors: '*'

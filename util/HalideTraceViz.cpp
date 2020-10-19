@@ -999,7 +999,9 @@ public:
                     int px = pos.x + (((inconsolata_char_width * c + fx) * h_scale_numerator) >> 8);
                     int py = pos.y - inconsolata_char_height + fy + 1;
                     if (px < 0 || px >= frame_size.x ||
-                        py < 0 || py >= frame_size.y) continue;
+                        py < 0 || py >= frame_size.y) {
+                        continue;
+                    }
                     dst[py * frame_size.x + px] = (font_ptr[fy * inconsolata_char_width + fx] << 24) | color;
                 }
             }
@@ -1069,7 +1071,9 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
     std::unique_ptr<Surface> surface;
 
     const std::function<void()> finalize_state = [&]() -> void {
-        if (is_state_finalized) return;
+        if (is_state_finalized) {
+            return;
+        }
 
         is_state_finalized = true;
 
@@ -1094,7 +1098,9 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         if (state.globals.auto_layout_grid.x < 0 || state.globals.auto_layout_grid.y < 0) {
             int cells_needed = 0;
             for (const auto &p : state.funcs) {
-                if (p.second.type_and_dim_valid) cells_needed++;
+                if (p.second.type_and_dim_valid) {
+                    cells_needed++;
+                }
             }
             Point cell_size = best_cell_size(cells_needed, state.globals.frame_size.x, state.globals.frame_size.y);
             state.globals.auto_layout_grid.x = state.globals.frame_size.x / cell_size.x;
@@ -1153,7 +1159,9 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                     int frames_since_first_draw = (halide_clock - first_draw_clock) / state.globals.timestep;
                     if (frames_since_first_draw < label.fade_in_frames) {
                         uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
-                        if (color > 255) color = 255;
+                        if (color > 255) {
+                            color = 255;
+                        }
                         color *= 0x10101;
                         surface->draw_text(label.text, label.pos, color, label.h_scale);
                         ++it;
@@ -1266,7 +1274,9 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
 
         // Draw the event
         FuncInfo &fi = state.funcs[qualified_name];
-        if (!fi.config_valid) continue;
+        if (!fi.config_valid) {
+            continue;
+        }
 
         if (fi.stats.first_draw_time < 0) {
             fi.stats.first_draw_time = halide_clock;

@@ -104,7 +104,9 @@ struct PipelineFeatures {
         for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
             const char *type_names[] = {"Bool", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
             // Skip printing for types not used
-            if (!types_in_use[i]) continue;
+            if (!types_in_use[i]) {
+                continue;
+            }
 
             os << "    Featurization for type " << type_names[i] << "\n"
                << "     Op histogram:\n"

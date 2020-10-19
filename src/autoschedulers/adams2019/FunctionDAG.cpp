@@ -496,7 +496,9 @@ FunctionDAG::Edge::BoundInfo::BoundInfo(const Expr &e, const Node::Stage &consum
 
 void FunctionDAG::Edge::add_load_jacobian(LoadJacobian j1) {
     for (auto &j2 : load_jacobians) {
-        if (j2.merge(j1)) return;
+        if (j2.merge(j1)) {
+            return;
+        }
     }
     load_jacobians.emplace_back(std::move(j1));
 }
@@ -699,7 +701,9 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             for (size_t i = 0; i < sched.dims().size(); i++) {
                 const auto &d = sched.dims()[i];
                 // Skip synthetic loops like "__outermost"
-                if (!stage_scope_with_symbolic_rvar_bounds.contains(d.var)) continue;
+                if (!stage_scope_with_symbolic_rvar_bounds.contains(d.var)) {
+                    continue;
+                }
 
                 Node::Loop l;
                 l.var = d.var;
@@ -807,7 +811,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 int leaves = 0;
                 Type narrowest_type;
                 map<string, int> calls;
-                CheckTypes(Function f)
+                CheckTypes(const Function &f)
                     : func(f) {
                 }
             };

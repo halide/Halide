@@ -6,6 +6,8 @@ ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 [[ "$1" != "" && "$1" != "-fix" ]] && echo "The only supported argument is -fix" && exit
 
+FIX=$1
+
 # We are currently standardized on using LLVM/Clang10 for this script.
 # Note that this is totally independent of the version of LLVM that you
 # are using to build Halide itself. If you don't have LLVM10 installed,
@@ -31,20 +33,34 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
 
 [ -a ${CLANG_TIDY_BUILD_DIR}/compile_commands.json ]
 
+# We must populate the includes directory to check things outside of src/
+cd ${CLANG_TIDY_BUILD_DIR} && make HalideIncludes
+
 RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/share/clang/run-clang-tidy.py
 
-CLANG_TIDY_TARGETS="${ROOT_DIR}/src/*.cpp ${ROOT_DIR}/src/*.h"
+# We deliberately skip apps/ and test/ for now, as the compile commands won't include
+# generated headers files from Generators.
+#
+# Skip DefaultCostModel.cpp as it relies on cost_model.h.
+# Skip GenGen.cpp and RunGenMain.cpp as they bring clang-tidy to its knees,
+# for reasons that aren't entirely clear yet.
+CLANG_TIDY_TARGETS=$(find \
+     "${ROOT_DIR}/src" \
+     "${ROOT_DIR}/python_bindings" \
+     "${ROOT_DIR}/tools" \
+     "${ROOT_DIR}/util" \
+     \( -name *.cpp -o -name *.h -o -name *.c \) -and -not -wholename "*/.*" \
+     ! -name DefaultCostModel.cpp \
+     ! -name GenGen.cpp \
+     ! -name RunGenMain.cpp)
 
-if [ $(uname -s) = "Darwin" ]; then
-    LOCAL_CORES=`sysctl -n hw.ncpu`
-else
-    LOCAL_CORES=`nproc`
-fi
+# clang-tidy doesn't have a sane way to exclude third-party headers (e.g. pybind11),
+# so we will instead build an include filter
+CLANG_TIDY_HEADER_FILTER=".*/src/.*|.*/python_bindings/.*|.*/tools/.*|.*/util/.*"
 
 ${RUN_CLANG_TIDY} \
-    $1 \
-    -header-filter=.* \
-    -j ${LOCAL_CORES} \
+    ${FIX} \
+    -header-filter="${CLANG_TIDY_HEADER_FILTER}" \
     -quiet \
     -p ${CLANG_TIDY_BUILD_DIR} \
     -clang-tidy-binary ${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy \
@@ -52,5 +68,10 @@ ${RUN_CLANG_TIDY} \
     ${CLANG_TIDY_TARGETS} \
     2>&1 | grep -v "warnings generated" | sed "s|.*/||"
 
+RESULT=${PIPESTATUS[0]}
+
+echo run-clang-tidy finished with status ${RESULT}
+
 rm -rf ${CLANG_TIDY_BUILD_DIR}
 
+exit $RESULT
