@@ -645,6 +645,14 @@ void check_vectors() {
         Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder());
         check(stmt, Evaluate::make(0));
     }
+
+    Expr float_vector = Variable::make(Float(32, 8), "float_vector");
+    check(VectorReduce::make(VectorReduce::Add, Shuffle::make({float_vector}, {4, 5, 6, 7, 0, 1, 2, 3}), 4),
+          Shuffle::make({VectorReduce::make(VectorReduce::Add, float_vector, 4)}, {2, 3, 0, 1}));
+    check(VectorReduce::make(VectorReduce::Add, Shuffle::make({float_vector}, {4, 5, 6, 7, 0, 1, 2, 3}), 2),
+          Shuffle::make({VectorReduce::make(VectorReduce::Add, float_vector, 2)}, {1, 0}));
+    check(VectorReduce::make(VectorReduce::Add, Shuffle::make({float_vector}, {0, 0, 2, 2, 4, 4, 6, 6}), 4),
+          VectorReduce::make(VectorReduce::Add, Shuffle::make({float_vector}, {0, 0, 2, 2, 4, 4, 6, 6}), 4));
 }
 
 void check_bounds() {

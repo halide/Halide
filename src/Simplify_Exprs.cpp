@@ -53,8 +53,41 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
 
 Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     Expr value = mutate(op->value, bounds);
+
+    const int lanes = op->type.lanes();
+    const int arg_lanes = op->value.type().lanes();
+    const int factor = arg_lanes / lanes;
+
+    if (const Shuffle* s = op->value.as<Shuffle>()) {
+        // Find the potential indices of the shuffle if performed after the reduction.
+        std::vector<int> shuffle_after_reduction(lanes);
+        for (int i = 0; i < lanes; i++) {
+            shuffle_after_reduction[i] = s->indices[i * factor] / factor;
+        }
+
+        // All indices within each reduction need to map to the same shuffle after the reduction.
+        bool all_ok = true;
+        for (int i = 0; i < (int)s->indices.size(); i++) {
+            all_ok = all_ok && shuffle_after_reduction[i / factor] == s->indices[i] / factor;
+        }
+
+        // We also need the shuffle to be a permutation of a ramp within each reduction.
+        for (int i = 0; all_ok && i < (int)shuffle_after_reduction.size(); i++) {
+            std::vector<int> ramp(factor);
+            std::iota(ramp.begin(), ramp.end(), shuffle_after_reduction[i] * factor);
+            auto indices_begin = s->indices.begin() + i * factor;
+            auto indices_end = indices_begin + factor;
+            all_ok = all_ok && std::is_permutation(indices_begin, indices_end, ramp.begin(), ramp.end());
+        }
+
+        if (all_ok) {
+            Expr reduced = Shuffle::make_concat(s->vectors);
+            Expr reduce = VectorReduce::make(op->op, reduced, lanes);
+            return mutate(Shuffle::make({reduce}, shuffle_after_reduction), bounds);
+        }
+    }
+
     if (bounds && op->type.is_int()) {
-        int factor = op->value.type().lanes() / op->type.lanes();
         switch (op->op) {
         case VectorReduce::Add:
             // Alignment of result is the alignment of the arg. Bounds
@@ -106,8 +139,6 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     // - horizontal reduce of an shuffle_vectors may be simplifiable to the
     //   underlying op on different shuffle_vectors calls
 
-    const int lanes = op->type.lanes();
-    const int arg_lanes = op->value.type().lanes();
     switch (op->op) {
     case VectorReduce::Add: {
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
