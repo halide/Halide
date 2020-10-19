@@ -458,7 +458,8 @@ private:
 
         if ((fixed_size_thread_allocation &&
              op->memory_type != MemoryType::Heap &&
-             op->memory_type != MemoryType::GPUShared) ||
+             op->memory_type != MemoryType::GPUShared &&
+             op->memory_type != MemoryType::GPUTexture) ||
             op->memory_type == MemoryType::Register ||
             op->memory_type == MemoryType::Stack) {
             // These allocations go in register or local memory
@@ -467,6 +468,7 @@ private:
 
         user_assert(op->memory_type == MemoryType::Auto ||
                     op->memory_type == MemoryType::GPUShared ||
+                    op->memory_type == MemoryType::GPUTexture ||
                     op->memory_type == MemoryType::Heap)
             << "Allocation " << op->name << " must live in shared or heap memory, "
             << "but is scheduled to live in " << op->memory_type << " memory.\n";
@@ -1265,6 +1267,7 @@ class InjectThreadBarriers : public IRMutator {
             break;
         case MemoryType::Auto:
         case MemoryType::Heap:
+        case MemoryType::GPUTexture:
             debug(4) << "   memory type is heap or auto\n";
             device_stores.insert(op->name);
             break;
@@ -1288,6 +1291,7 @@ class InjectThreadBarriers : public IRMutator {
             break;
         case MemoryType::Auto:
         case MemoryType::Heap:
+        case MemoryType::GPUTexture:
             debug(4) << "   memory type is heap or auto\n";
             device_loads.insert(op->name);
             break;
