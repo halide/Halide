@@ -173,7 +173,7 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, c
 
 void pystub_init(pybind11::module &m, FactoryFunc factory) {
     m.def(
-        "generate", [factory](const Halide::Target &target, py::args args, py::kwargs kwargs) -> py::object {
+        "generate", [factory](const Halide::Target &target, const py::args &args, const py::kwargs &kwargs) -> py::object {
             return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
         },
         py::arg("target"));

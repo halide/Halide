@@ -1588,8 +1588,9 @@ bool save_mat(ImageType &im, const std::string &filename) {
     }
 
     uint32_t name_size = (int)name.size();
-    while (name.size() & 0x7)
+    while (name.size() & 0x7) {
         name += '\0';
+    }
 
     char header[128] = "MATLAB 5.0 MAT-file, produced by Halide";
     int len = strlen(header);
@@ -1763,7 +1764,9 @@ struct ElemWriter {
     }
 
     void operator()(const ElemType &elem) {
-        if (!ok) return;
+        if (!ok) {
+            return;
+        }
 
         *next++ = elem;
         if (next == &buf[BUFFER_SIZE]) {
@@ -1772,7 +1775,9 @@ struct ElemWriter {
     }
 
     void flush() {
-        if (!ok) return;
+        if (!ok) {
+            return;
+        }
 
         if (next > buf) {
             if (!f->write_bytes(buf, (next - buf) * sizeof(ElemType))) {

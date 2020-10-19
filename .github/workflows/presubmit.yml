@@ -28,15 +28,14 @@ jobs:
       - name: Install clang-tidy
         run: |
           sudo apt-get update
-          sudo apt-get install llvm-10 clang-10 libclang-10-dev clang-tidy-10
-          sudo apt-get remove llvm-8 clang-8 libclang-8-dev clang-tidy-8
-      - name: Build Compilation DB
-        run: |
-          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DLLVM_DIR=/usr/lib/llvm-10/lib/cmake/llvm -S . -B build
-          [ -a build/compile_commands.json ]
+          sudo apt-get install llvm-10 clang-10 libclang-10-dev clang-tidy-10 ninja-build
+          sudo apt-get remove llvm-8 clang-8 libclang-8-dev clang-tidy-8 llvm-9 clang-9 libclang-9-dev clang-tidy-9
       - name: Run clang-tidy
         run: |
-          clang-tidy-10 --quiet -header-filter=.* -extra-arg=-Wno-unknown-warning-option -p build src/*.cpp
+          export CC=clang-10
+          export CXX=clang++-10
+          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-10
+          ./run-clang-tidy.sh
   check_cmake_file_lists:
     name: Check CMake file lists
     runs-on: ubuntu-latest

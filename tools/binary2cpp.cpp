@@ -45,7 +45,9 @@ int main(int argc, const char **argv) {
     int line_break = 0;
     while (1) {
         int c = getchar();
-        if (c == EOF) break;
+        if (c == EOF) {
+            break;
+        }
         printf("0x%02x, ", c);
         // Not necessary, but makes a bit easier to read
         if (++line_break > 12) {

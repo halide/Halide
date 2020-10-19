@@ -112,7 +112,9 @@ struct LogEmitter {
 
     ~LogEmitter() {
         std::string s = msg.str();
-        if (s.back() != '\n') s += '\n';
+        if (s.back() != '\n') {
+            s += '\n';
+        }
         f(s);
     }
 
@@ -734,13 +736,17 @@ struct ArgData {
 
         std::vector<std::string> v = split_string(raw_string, ":");
         if (v[0] == "zero") {
-            if (v.size() != 2) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 2) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             auto shape = parse_optional_extents(v[1]);
             Buffer<> b = allocate_buffer(metadata->type, shape);
             memset(b.data(), 0, b.size_in_bytes());
             return b;
         } else if (v[0] == "constant") {
-            if (v.size() != 3) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 3) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             halide_scalar_value_t value;
             if (!parse_scalar(metadata->type, v[1], &value)) {
                 fail() << "Invalid value for constant value";
@@ -750,7 +756,9 @@ struct ArgData {
             dynamic_type_dispatch<FillWithScalar>(metadata->type, b, value);
             return b;
         } else if (v[0] == "identity") {
-            if (v.size() != 2) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 2) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             auto shape = parse_optional_extents(v[1]);
             // Make a binary buffer with diagonal elements set to true. Diagonal
             // elements are those whose first two dimensions are equal.
@@ -761,7 +769,9 @@ struct ArgData {
             // Convert the binary buffer to the required type, so true becomes 1.
             return Halide::Tools::ImageTypeConversion::convert_image(b, metadata->type);
         } else if (v[0] == "random") {
-            if (v.size() != 3) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 3) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             int seed;
             if (!parse_scalar(v[1], &seed)) {
                 fail() << "Invalid value for seed";
@@ -1014,7 +1024,9 @@ public:
                 if (!values.empty()) {
                     bool set = false;
                     for (auto &v : values) {
-                        if (!v.first) continue;
+                        if (!v.first) {
+                            continue;
+                        }
                         info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata (" << v.second << ") as: "
                                << scalar_to_string(arg.metadata->type, *v.first);
                         arg.scalar_value = *v.first;

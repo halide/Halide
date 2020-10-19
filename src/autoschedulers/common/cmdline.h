@@ -76,8 +76,9 @@ public:
     static Target cast(const Source &arg) {
         Target ret;
         std::stringstream ss;
-        if (!(ss << arg && ss >> ret && ss.eof()))
+        if (!(ss << arg && ss >> ret && ss.eof())) {
             throw_bad_cast();
+        }
 
         return ret;
     }
@@ -107,8 +108,9 @@ public:
     static Target cast(const std::string &arg) {
         Target ret;
         std::istringstream ss(arg);
-        if (!(ss >> ret && ss.eof()))
+        if (!(ss >> ret && ss.eof())) {
             throw_bad_cast();
+        }
         return ret;
     }
 };
@@ -190,7 +192,7 @@ public:
     cmdline_error(const std::string &msg)
         : msg(msg) {
     }
-    ~cmdline_error() throw() {
+    ~cmdline_error() throw() override {
     }
     const char *what() const throw() override {
         return msg.c_str();
@@ -223,7 +225,9 @@ struct range_reader {
     }
     T operator()(const std::string &s) const {
         T ret = default_reader<T>()(s);
-        if (!(ret >= low && ret <= high)) throw_cmdline_error("range_error");
+        if (!(ret >= low && ret <= high)) {
+            throw_cmdline_error("range_error");
+        }
         return ret;
     }
 
@@ -240,8 +244,9 @@ template<class T>
 struct oneof_reader {
     T operator()(const std::string &s) {
         T ret = default_reader<T>()(s);
-        if (std::find(alt.begin(), alt.end(), ret) == alt.end())
+        if (std::find(alt.begin(), alt.end(), ret) == alt.end()) {
             throw_cmdline_error("");
+        }
         return ret;
     }
     void add(const T &v) {
@@ -375,14 +380,17 @@ public:
     }
     ~parser() {
         for (std::map<std::string, option_base *>::iterator p = options.begin();
-             p != options.end(); p++)
+             p != options.end(); p++) {
             delete p->second;
+        }
     }
 
     void add(const std::string &name,
              char short_name = 0,
              const std::string &desc = "") {
-        if (options.count(name)) throw_cmdline_error("multiple definition: " + name);
+        if (options.count(name)) {
+            throw_cmdline_error("multiple definition: " + name);
+        }
         options[name] = new option_without_value(name, short_name, desc);
         ordered.push_back(options[name]);
     }
@@ -403,7 +411,9 @@ public:
              bool need = true,
              const T def = T(),
              F reader = F()) {
-        if (options.count(name)) throw_cmdline_error("multiple definition: " + name);
+        if (options.count(name)) {
+            throw_cmdline_error("multiple definition: " + name);
+        }
         options[name] = new option_with_value_with_reader<T, F>(name, short_name, need, def, desc, reader);
         ordered.push_back(options[name]);
     }
@@ -417,19 +427,25 @@ public:
     }
 
     bool exist(const std::string &name) const {
-        if (options.count(name) == 0) throw_cmdline_error("there is no flag: --" + name);
+        if (options.count(name) == 0) {
+            throw_cmdline_error("there is no flag: --" + name);
+        }
         return options.find(name)->second->has_set();
     }
 
     template<class T>
     const T &get(const std::string &name) const {
-        if (options.count(name) == 0) throw_cmdline_error("there is no flag: --" + name);
+        if (options.count(name) == 0) {
+            throw_cmdline_error("there is no flag: --" + name);
+        }
 #ifndef HALIDE_ENABLE_RTTI
         const option_with_value<T> *p = reinterpret_cast<const option_with_value<T> *>(options.find(name)->second);
         return p->get();
 #else
         const option_with_value<T> *p = dynamic_cast<const option_with_value<T> *>(options.find(name)->second);
-        if (p == NULL) throw_cmdline_error("type mismatch flag '" + name + "'");
+        if (p == NULL) {
+            throw_cmdline_error("type mismatch flag '" + name + "'");
+        }
         return p->get();
 #endif
     }
@@ -458,7 +474,7 @@ public:
             if (arg[i] == '\\') {
                 i++;
                 if (i >= arg.length()) {
-                    errors.push_back("unexpected occurrence of '\\' at end of string");
+                    errors.emplace_back("unexpected occurrence of '\\' at end of string");
                     return false;
                 }
             }
@@ -467,15 +483,17 @@ public:
         }
 
         if (in_quote) {
-            errors.push_back("quote is not closed");
+            errors.emplace_back("quote is not closed");
             return false;
         }
 
-        if (buf.length() > 0)
+        if (buf.length() > 0) {
             args.push_back(buf);
+        }
 
-        for (size_t i = 0; i < args.size(); i++)
+        for (size_t i = 0; i < args.size(); i++) {
             std::cout << "\"" << args[i] << "\"" << std::endl;
+        }
 
         return parse(args);
     }
@@ -484,8 +502,9 @@ public:
         int argc = static_cast<int>(args.size());
         std::vector<const char *> argv(argc);
 
-        for (int i = 0; i < argc; i++)
+        for (int i = 0; i < argc; i++) {
             argv[i] = args[i].c_str();
+        }
 
         return parse(argc, &argv[0]);
     }
@@ -495,24 +514,28 @@ public:
         others.clear();
 
         if (argc < 1) {
-            errors.push_back("argument number must be longer than 0");
+            errors.emplace_back("argument number must be longer than 0");
             return false;
         }
-        if (prog_name == "")
+        if (prog_name == "") {
             prog_name = argv[0];
+        }
 
         std::map<char, std::string> lookup;
         for (std::map<std::string, option_base *>::iterator p = options.begin();
              p != options.end(); p++) {
-            if (p->first.length() == 0) continue;
+            if (p->first.length() == 0) {
+                continue;
+            }
             char initial = p->second->short_name();
             if (initial) {
                 if (lookup.count(initial) > 0) {
                     lookup[initial] = "";
                     errors.push_back(std::string("short option '") + initial + "' is ambiguous");
                     return false;
-                } else
+                } else {
                     lookup[initial] = p->first;
+                }
             }
         }
 
@@ -542,7 +565,9 @@ public:
                     }
                 }
             } else if (strncmp(argv[i], "-", 1) == 0) {
-                if (!argv[i][1]) continue;
+                if (!argv[i][1]) {
+                    continue;
+                }
                 char last = argv[i][1];
                 for (int j = 2; argv[i][j]; j++) {
                     last = argv[i][j];
@@ -573,33 +598,38 @@ public:
                     set_option(lookup[last]);
                 }
             } else {
-                others.push_back(argv[i]);
+                others.emplace_back(argv[i]);
             }
         }
 
         for (std::map<std::string, option_base *>::iterator p = options.begin();
-             p != options.end(); p++)
-            if (!p->second->valid())
+             p != options.end(); p++) {
+            if (!p->second->valid()) {
                 errors.push_back("need option: --" + std::string(p->first));
+            }
+        }
 
         return errors.size() == 0;
     }
 
     void parse_check(const std::string &arg) {
-        if (!options.count("help"))
+        if (!options.count("help")) {
             add("help", '?', "print this message");
+        }
         check(0, parse(arg));
     }
 
     void parse_check(const std::vector<std::string> &args) {
-        if (!options.count("help"))
+        if (!options.count("help")) {
             add("help", '?', "print this message");
+        }
         check(args.size(), parse(args));
     }
 
     void parse_check(int argc, char *argv[]) {
-        if (!options.count("help"))
+        if (!options.count("help")) {
             add("help", '?', "print this message");
+        }
         check(argc, parse(argc, argv));
     }
 
@@ -609,8 +639,9 @@ public:
 
     std::string error_full() const {
         std::ostringstream oss;
-        for (size_t i = 0; i < errors.size(); i++)
+        for (size_t i = 0; i < errors.size(); i++) {
             oss << errors[i] << std::endl;
+        }
         return oss.str();
     }
 
@@ -618,8 +649,9 @@ public:
         std::ostringstream oss;
         oss << "usage: " << prog_name << " ";
         for (size_t i = 0; i < ordered.size(); i++) {
-            if (ordered[i]->must())
+            if (ordered[i]->must()) {
                 oss << ordered[i]->short_description() << " ";
+            }
         }
 
         oss << "[options] ... " << ftr << std::endl;
@@ -637,8 +669,9 @@ public:
             }
 
             oss << "--" << ordered[i]->name();
-            for (size_t j = ordered[i]->name().length(); j < max_width + 4; j++)
+            for (size_t j = ordered[i]->name().length(); j < max_width + 4; j++) {
                 oss << ' ';
+            }
             oss << ordered[i]->description() << std::endl;
         }
         return oss.str();
@@ -705,7 +738,7 @@ private:
                              const std::string &desc)
             : nam(name), snam(short_name), desc(desc), has(false) {
         }
-        ~option_without_value() {
+        ~option_without_value() override {
         }
 
         bool has_value() const override {
@@ -767,7 +800,7 @@ private:
             : nam(name), snam(short_name), need(need), has(false), def(def), actual(def) {
             this->desc = full_description(desc);
         }
-        ~option_with_value() {
+        ~option_with_value() override {
         }
 
         const T &get() const {
@@ -804,7 +837,9 @@ private:
         }
 
         bool valid() const override {
-            if (need && !has) return false;
+            if (need && !has) {
+                return false;
+            }
             return true;
         }
 
