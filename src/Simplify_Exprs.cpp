@@ -136,8 +136,6 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     // come up in practice:
     // - a horizontal min/max/add of a ramp is a different ramp
     // - horizontal add of a broadcast is a broadcast + multiply
-    // - horizontal reduce of an shuffle_vectors may be simplifiable to the
-    //   underlying op on different shuffle_vectors calls
 
     switch (op->op) {
     case VectorReduce::Add: {
