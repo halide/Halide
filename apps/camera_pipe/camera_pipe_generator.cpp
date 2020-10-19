@@ -501,14 +501,13 @@ void CameraPipe::generate() {
         Expr out_height = processed.height();
 
         // Depending on the HVX generation, we need 2 or 4 threads
-        // to saturate HVX with work.
+        // to saturate HVX with work. For simplicity, we'll just
+        // stick to 4 threads. On balance, the overhead should
+        // not be much for the 2 extra threads that we create
+        // on cores that have only two HVX contexts.
         Expr strip_size;
         if (get_target().has_feature(Target::HVX)) {
-            if (get_target().features_any_of({Target::HVX_v65, Target::HVX_v66})) {
                 strip_size = processed.dim(1).extent() / 4;
-            } else {
-                strip_size = processed.dim(1).extent() / 2;
-            }
         } else {
             strip_size = 32;
         }
