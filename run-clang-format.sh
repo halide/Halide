@@ -15,10 +15,13 @@ ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 [ -z "$CLANG_FORMAT_LLVM_INSTALL_DIR" ] && echo "CLANG_FORMAT_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script." && exit
 echo CLANG_FORMAT_LLVM_INSTALL_DIR = ${CLANG_FORMAT_LLVM_INSTALL_DIR}
 
+# Note that we specifically exclude files starting with . in order
+# to avoid finding emacs backup files
 find "${ROOT_DIR}/apps" \
      "${ROOT_DIR}/src" \
      "${ROOT_DIR}/tools" \
      "${ROOT_DIR}/test" \
      "${ROOT_DIR}/util" \
      "${ROOT_DIR}/python_bindings" \
-     -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG_FORMAT_LLVM_INSTALL_DIR}/bin/clang-format -i -style=file
+     \( -name *.cpp -o -name *.h -o -name *.c \) -and -not -wholename "*/.*" | \
+     xargs ${CLANG_FORMAT_LLVM_INSTALL_DIR}/bin/clang-format -i -style=file
