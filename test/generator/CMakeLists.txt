@@ -265,6 +265,10 @@ halide_define_aot_test(gpu_object_lifetime FEATURES debug)
 # gpu_only_generator.cpp
 halide_define_aot_test(gpu_only)
 
+# gpu_texture_aottest.cpp
+# gpu_texture_generator.cpp
+halide_define_aot_test(gpu_texture)
+
 # image_from_array_aottest.cpp
 # image_from_array_generator.cpp
 halide_define_aot_test(image_from_array)
