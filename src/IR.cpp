@@ -821,16 +821,6 @@ bool Shuffle::is_interleave() const {
     return true;
 }
 
-int Shuffle::is_broadcast() const {
-    int lanes = vectors.front().type().lanes();
-    for (int i = 0; i < (int)indices.size(); i++) {
-        if (indices[i] != i % lanes) {
-            return 0;
-        }
-    }
-    return indices.size() / lanes;
-}
-
 Stmt Atomic::make(const std::string &producer_name,
                   const std::string &mutex_name,
                   Stmt body) {

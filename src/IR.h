@@ -778,11 +778,6 @@ struct Shuffle : public ExprNode<Shuffle> {
     }
     ///@}
 
-    /** Check if this shuffle is a broadcast of the vector arguments.
-     * returns 0 if the shuffle is not a broadcast, otherwise returns
-     * the broadcast factor. */
-    int is_broadcast() const;
-
     /** Check if this shuffle is extracting a scalar from the vector
      * arguments. */
     bool is_extract_element() const;

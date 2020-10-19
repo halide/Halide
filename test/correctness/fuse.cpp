@@ -44,16 +44,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    class CheckForMod : public Internal::IRMutator {
-        using IRMutator::visit;
-
-        Expr visit(const Internal::Mod *op) override {
-            std::cerr << "Found mod: " << Expr(op) << "\n";
-            exit(-1);
-            return op;
-        }
-    };
-
     {
         ImageParam p(Int(32), 2);
         Func f;
@@ -74,57 +64,15 @@ int main(int argc, char **argv) {
             .fuse(x, y, xy)
             .vectorize(xy, 16);
 
-        f.add_custom_lowering_pass(new CheckForMod);
-        f.compile_jit();
-    }
+        class CheckForMod : public Internal::IRMutator {
+            using IRMutator::visit;
 
-    // Test two cases where the fuse arithmetic should vanish due to nested vectorization
-
-    // The first case should turn into a sum of slices of a vector
-    {
-        ImageParam p(Int(32), 2);
-        RDom r(0, 2);
-        Func f;
-
-        f(x) += p(x, r);
-
-        f.output_buffer().dim(0).set_bounds(0, 8);
-        p.dim(0).set_bounds(0, 8);
-        p.dim(1).set_stride(8);
-
-        // Fuse and vectorize x and y.
-        RVar rx;
-        f.compute_root()
-            .update()
-            .reorder(x, r)  // x is inside r, so this is a sum of slices
-            .fuse(x, r, rx)
-            .atomic()
-            .vectorize(rx);
-
-        f.add_custom_lowering_pass(new CheckForMod);
-        f.compile_jit();
-    }
-
-    // The second case should turn into a vector reduce instruction, with no modulo in the indexing
-    {
-        ImageParam p(Int(32), 2);
-        RDom r(0, 2);
-        Func f;
-
-        f(x) += p(x, r);
-
-        f.output_buffer().dim(0).set_bounds(0, 8);
-        p.dim(0).set_bounds(0, 8);
-        p.dim(1).set_stride(8);
-
-        // Fuse and vectorize x and y.
-        RVar rx;
-        f.compute_root()
-            .update()
-            .reorder(r, x)
-            .fuse(r, x, rx)  // r is inside x, so this is a vector reduce
-            .atomic()
-            .vectorize(rx);
+            Expr visit(const Internal::Mod *op) override {
+                std::cerr << "Found mod: " << Expr(op) << "\n";
+                exit(-1);
+                return op;
+            }
+        };
 
         f.add_custom_lowering_pass(new CheckForMod);
         f.compile_jit();
