@@ -39,7 +39,9 @@ WEAK void *halide_opengl_get_proc_address(void *user_context, const char *name) 
     if (!dylib) {
         dylib = halide_load_library(
             "/System/Library/Frameworks/OpenGL.framework/Versions/Current/OpenGL");
-        if (!dylib) return NULL;
+        if (!dylib) {
+            return NULL;
+        }
     }
     return halide_get_library_symbol(dylib, name);
 }
