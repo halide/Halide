@@ -2216,12 +2216,10 @@ static void buffer_copy_command(d3d12_copy_command_list *cmdList,
 
     if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter) {
         (*cmdList)->ResourceBarrier(1, &src_barrier);
-
-}
+    }
     if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter) {
         (*cmdList)->ResourceBarrier(1, &dst_barrier);
-
-}
+    }
 
     UINT64 SrcOffset = src_byte_offset;
     UINT64 DstOffset = dst_byte_offset;
@@ -2234,12 +2232,10 @@ static void buffer_copy_command(d3d12_copy_command_list *cmdList,
 
     if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter) {
         (*cmdList)->ResourceBarrier(1, &src_barrier);
-
-}
+    }
     if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter) {
         (*cmdList)->ResourceBarrier(1, &dst_barrier);
-
-}
+    }
 }
 
 static void synchronize_host_and_device_buffer_contents(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
