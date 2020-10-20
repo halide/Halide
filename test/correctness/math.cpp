@@ -134,7 +134,7 @@ struct TestArgs {
         test_##name(x) = name(in(x));                                                        \
         if (target.has_gpu_feature()) {                                                      \
             test_##name.gpu_tile(x, xi, 8);                                                  \
-        } else if (target.has_feature(Target::HVX)) {              \
+        } else if (target.has_feature(Target::HVX)) {                                        \
             test_##name.hexagon();                                                           \
         }                                                                                    \
         Buffer<type_ret> result = test_##name.realize(in.extent(0), target);                 \
@@ -161,7 +161,7 @@ struct TestArgs {
         test_##name(x) = name(in(0, x), in(1, x));                                                  \
         if (target.has_gpu_feature()) {                                                             \
             test_##name.gpu_tile(x, xi, 8);                                                         \
-        } else if (target.has_feature(Target::HVX)) {                     \
+        } else if (target.has_feature(Target::HVX)) {                                               \
             test_##name.hexagon();                                                                  \
         }                                                                                           \
         Buffer<type_ret> result = test_##name.realize(in.height(), target);                         \
