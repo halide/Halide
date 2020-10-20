@@ -40,10 +40,9 @@ class IsBlockUniform : public IRVisitor {
     }
 
 public:
-    bool result;
+    bool result = true;
 
-    IsBlockUniform()
-        : result(true) {
+    IsBlockUniform() {
     }
 };
 }  // namespace

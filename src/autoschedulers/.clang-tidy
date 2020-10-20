@@ -25,6 +25,7 @@ Checks: >
     -misc-unconventional-assign-operator,
     -misc-unused-parameters,
     modernize-deprecated-headers,
+    modernize-use-default-member-init,
     modernize-use-emplace,
     modernize-use-override,
     performance-*,
@@ -37,4 +38,7 @@ Checks: >
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
 FormatStyle: 'file'
+CheckOptions:
+    - key:   modernize-use-default-member-init.UseAssignment
+      value: 1
 ...

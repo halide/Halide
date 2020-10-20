@@ -50,9 +50,8 @@ class DependsOnBoundsInference : public IRVisitor {
     }
 
 public:
-    bool result;
-    DependsOnBoundsInference()
-        : result(false) {
+    bool result = false;
+    DependsOnBoundsInference() {
     }
 };
 

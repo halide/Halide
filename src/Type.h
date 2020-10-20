@@ -288,7 +288,7 @@ public:
 
     // Default ctor initializes everything to predictable-but-unlikely values
     Type()
-        : type(Handle, 0, 0), handle_type(nullptr) {
+        : type(Handle, 0, 0) {
     }
 
     /** Construct a runtime representation of a Halide type from:
@@ -357,7 +357,7 @@ public:
     }
 
     /** Type to be printed when declaring handles of this type. */
-    const halide_handle_cplusplus_type *handle_type;
+    const halide_handle_cplusplus_type *handle_type = nullptr;
 
     /** Is this type boolean (represented as UInt(1))? */
     HALIDE_ALWAYS_INLINE

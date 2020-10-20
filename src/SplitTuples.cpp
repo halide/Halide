@@ -47,10 +47,9 @@ class UsesExternImage : public IRVisitor {
     }
 
 public:
-    UsesExternImage()
-        : result(false) {
+    UsesExternImage() {
     }
-    bool result;
+    bool result = false;
 };
 
 inline bool uses_extern_image(const Stmt &s) {
