@@ -180,11 +180,15 @@ void add_binary_operators(PythonClass &class_instance) {
         .def("__pow__", pow_wrap, py::is_operator())
         .def("__rpow__", pow_wrap, py::is_operator());
 
+    const auto logical_not_wrap = [](const self_t &self) -> decltype(!self) {
+        return !self;
+    };
+
     // Define unary operators
     class_instance
         .def(-py::self)  // neg
         .def(~py::self)  // invert
-        ;
+        .def("logical_not", logical_not_wrap);
 }
 
 }  // namespace PythonBindings
