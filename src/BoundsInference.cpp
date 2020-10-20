@@ -956,7 +956,7 @@ public:
         }
 
         // The region required of the each output is expanded to include the size of the output buffer.
-        for (Function output : outputs) {
+        for (const Function &output : outputs) {
             Box output_box;
             string buffer_name = output.name();
             if (output.outputs() > 1) {

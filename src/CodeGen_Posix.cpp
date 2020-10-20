@@ -251,7 +251,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
             debug(4) << "Creating call to halide_malloc for allocation " << name
                      << " of size " << type.bytes();
-            for (Expr e : extents) {
+            for (const Expr &e : extents) {
                 debug(4) << " x " << e;
             }
             debug(4) << "\n";

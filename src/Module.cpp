@@ -139,7 +139,7 @@ std::string add_suffix(const std::string &path, const std::string &suffix) {
 void validate_outputs(const std::map<Output, std::string> &in) {
     // We don't care about the extensions, so any Target will do
     auto known = get_output_info(Target());
-    for (auto it : in) {
+    for (const auto &it : in) {
         internal_assert(!it.second.empty()) << "Empty value for output: " << known.at(it.first).name;
     }
 }
@@ -767,8 +767,7 @@ void compile_multitarget(const std::string &fn_name,
     user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
 
     const auto suffix_for_entry = [&](int i) -> std::string {
-        const std::string suffix = "-" + (suffixes.empty() ? targets[i].to_string() : suffixes[i]);
-        return suffix;
+        return "-" + (suffixes.empty() ? targets[i].to_string() : suffixes[i]);
     };
 
     const auto add_suffixes = [&](const std::map<Output, std::string> &in, const std::string &suffix) -> std::map<Output, std::string> {

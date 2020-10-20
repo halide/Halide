@@ -327,7 +327,7 @@ std::vector<Expr> parameter_constraints(const Parameter &p);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE std::string enum_to_string(const std::map<std::string, T> &enum_map, const T &t) {
-    for (auto key_value : enum_map) {
+    for (const auto &key_value : enum_map) {
         if (t == key_value.second) {
             return key_value.first;
         }
@@ -767,7 +767,7 @@ public:
         if (std::is_same<T, float>::value) {
             // If the constant has no decimal point ("1")
             // we must append one before appending "f"
-            if (oss.str().find(".") == std::string::npos) {
+            if (oss.str().find('.') == std::string::npos) {
                 oss << ".";
             }
             oss << "f";

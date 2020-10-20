@@ -320,7 +320,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     vector<string> temp;
     set<string> result_set;
     set<string> visited;
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         if (visited.find(f.name()) == visited.end()) {
             realization_order_dfs(f.name(), graph, visited, result_set, temp);
         }
@@ -378,7 +378,7 @@ vector<string> topological_order(const vector<Function> &outputs,
     vector<string> order;
     set<string> result_set;
     set<string> visited;
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         if (visited.find(f.name()) == visited.end()) {
             realization_order_dfs(f.name(), graph, visited, result_set, order);
         }

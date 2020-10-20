@@ -54,7 +54,7 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     FindCalls calls;
     f.accept(&calls);
     if (f.has_extern_definition()) {
-        for (ExternFuncArgument arg : f.extern_arguments()) {
+        for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
                 Function g(arg.func);
                 calls.calls[g.name()] = g;
@@ -63,7 +63,7 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     }
 
     if (include_wrappers) {
-        for (auto it : f.schedule().wrappers()) {
+        for (const auto &it : f.schedule().wrappers()) {
             Function g(it.second);
             calls.calls[g.name()] = g;
         }

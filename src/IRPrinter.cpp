@@ -925,7 +925,7 @@ void IRPrinter::visit(const Fork *op) {
     stmts.push_back(rest);
 
     stream << get_indent() << "fork ";
-    for (Stmt s : stmts) {
+    for (const Stmt &s : stmts) {
         stream << "{\n";
         indent++;
         print(s);
