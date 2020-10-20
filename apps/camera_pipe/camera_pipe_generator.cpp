@@ -507,7 +507,7 @@ void CameraPipe::generate() {
         // on cores that have only two HVX contexts.
         Expr strip_size;
         if (get_target().has_feature(Target::HVX)) {
-                strip_size = processed.dim(1).extent() / 4;
+            strip_size = processed.dim(1).extent() / 4;
         } else {
             strip_size = 32;
         }
