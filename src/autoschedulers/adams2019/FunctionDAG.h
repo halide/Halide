@@ -567,6 +567,7 @@ struct FunctionDAG {
     void dump() const;
     std::ostream &dump(std::ostream &os) const;
 
+    // This class uses a lot of internal pointers, so we'll make it noncopyable/nonmovable.
     FunctionDAG(const FunctionDAG &) = delete;
     FunctionDAG &operator=(const FunctionDAG &) = delete;
     FunctionDAG(FunctionDAG &&) = delete;
