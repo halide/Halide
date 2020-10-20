@@ -411,8 +411,7 @@ public:
     // scalar slots are used by boilerplate code to pass pixel coordinates.
     const unsigned int max_expressions = 62;
 
-    FindLinearExpressions() {
-    }
+    FindLinearExpressions() = default;
 };
 
 Stmt find_linear_expressions(const Stmt &s) {

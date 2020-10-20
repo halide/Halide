@@ -51,8 +51,7 @@ class DependsOnBoundsInference : public IRVisitor {
 
 public:
     bool result = false;
-    DependsOnBoundsInference() {
-    }
+    DependsOnBoundsInference() = default;
 };
 
 bool depends_on_bounds_inference(const Expr &e) {

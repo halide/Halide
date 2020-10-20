@@ -802,8 +802,7 @@ struct BufferSize {
     string name;
     size_t size = 0;
 
-    BufferSize() {
-    }
+    BufferSize() = default;
     BufferSize(string name, size_t size)
         : name(std::move(name)), size(size) {
     }

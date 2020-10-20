@@ -68,8 +68,7 @@ private:
     void set(const ImageParam &p, const Buffer<> &buf, Buffer<> *buf_out_param);
 
 public:
-    ParamMap() {
-    }
+    ParamMap() = default;
 
     ParamMap(const std::initializer_list<ParamMapping> &init);
 

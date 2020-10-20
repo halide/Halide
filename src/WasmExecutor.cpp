@@ -1331,7 +1331,7 @@ struct WasmModuleContents {
 
     int run(const void **args);
 
-    ~WasmModuleContents();
+    ~WasmModuleContents() = default;
 };
 
 WasmModuleContents::WasmModuleContents(
@@ -1537,12 +1537,6 @@ int WasmModuleContents::run(const void **args) {
 
     internal_error << "WasmExecutor is not configured correctly";
     return -1;
-}
-
-WasmModuleContents::~WasmModuleContents() {
-#if WITH_WABT
-    // nothing
-#endif
 }
 
 template<>

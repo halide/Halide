@@ -931,9 +931,11 @@ private:
     using ConstVoidPtr = const void *;
     ConstVoidPtr fixed_store[kStoreSize];
 
-    JITCallArgs(const JITCallArgs &) = delete;
-    JITCallArgs(JITCallArgs &&) = delete;
-    void operator=(const JITCallArgs &) = delete;
+public:
+    JITCallArgs(const JITCallArgs &other) = delete;
+    JITCallArgs &operator=(const JITCallArgs &other) = delete;
+    JITCallArgs(JITCallArgs &&other) = delete;
+    JITCallArgs &operator=(JITCallArgs &&other) = delete;
 };
 
 // Make a vector of void *'s to pass to the jit call using the

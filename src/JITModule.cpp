@@ -54,35 +54,8 @@ bool have_symbol(const char *s) {
 
 typedef struct CUctx_st *CUcontext;
 
-struct SharedCudaContext {
-    CUctx_st *ptr = 0;
-    volatile int lock = 0;
-
-    // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext() {
-    }
-
-    // Note that we never free the context, because static destructor
-    // order is unpredictable, and we can't free the context before
-    // all JITModules are freed. Users may be stashing Funcs or Images
-    // in globals, and these keep JITModules around.
-} cuda_ctx;
-
 typedef struct cl_context_st *cl_context;
 typedef struct cl_command_queue_st *cl_command_queue;
-
-// A single global OpenCL context and command queue to share between
-// jitted functions.
-struct SharedOpenCLContext {
-    cl_context context = nullptr;
-    cl_command_queue command_queue = nullptr;
-    volatile int lock = 0;
-
-    SharedOpenCLContext() {
-    }
-
-    // We never free the context, for the same reason as above.
-} cl_ctx;
 
 void load_opengl() {
 #if defined(__linux__)
@@ -136,8 +109,7 @@ public:
     mutable RefCount ref_count;
 
     // Just construct a module with symbols to import into other modules.
-    JITModuleContents() {
-    }
+    JITModuleContents() = default;
 
     ~JITModuleContents() {
         if (execution_engine != nullptr) {

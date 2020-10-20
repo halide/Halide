@@ -1984,8 +1984,7 @@ private:
 
     public:
         int count = 0;
-        CountVars() {
-        }
+        CountVars() = default;
     };
 
     // We get better simplification if we directly substitute mins

@@ -49,8 +49,7 @@ struct ExternFuncArgument {
         // Scalar params come in via the Expr constructor.
         internal_assert(p.is_buffer());
     }
-    ExternFuncArgument() {
-    }
+    ExternFuncArgument() = default;
 
     bool is_func() const {
         return arg_type == FuncArg;

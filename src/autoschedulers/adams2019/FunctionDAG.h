@@ -571,12 +571,15 @@ private:
     // Compute the featurization for the entire DAG
     void featurize();
 
-    // This class uses a lot of internal pointers, so we'll hide the copy constructor.
-    FunctionDAG(const FunctionDAG &other) = delete;
-    void operator=(const FunctionDAG &other) = delete;
-
     template<typename OS>
     void dump_internal(OS &os) const;
+
+public:
+    // This class uses a lot of internal pointers, so we'll make it uncopyable/unmovable.
+    FunctionDAG(const FunctionDAG &other) = delete;
+    FunctionDAG &operator=(const FunctionDAG &other) = delete;
+    FunctionDAG(FunctionDAG &&other) = delete;
+    FunctionDAG &operator=(FunctionDAG &&other) = delete;
 };
 
 }  // namespace Autoscheduler
