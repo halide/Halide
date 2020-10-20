@@ -51,14 +51,11 @@ public:
 private:
     struct ParamArg {
         Internal::Parameter mapped_param;
-        Buffer<> *buf_out_param;
+        Buffer<> *buf_out_param = nullptr;
 
-        ParamArg()
-            : buf_out_param(nullptr) {
-        }
+        ParamArg() = default;
         ParamArg(const ParamMapping &pm)
-            : mapped_param(pm.parameter->type(), false, 0, pm.parameter->name()),
-              buf_out_param(nullptr) {
+            : mapped_param(pm.parameter->type(), false, 0, pm.parameter->name()) {
             mapped_param.set_scalar(pm.parameter->type(), pm.value);
         }
         ParamArg(Buffer<> *buf_ptr)

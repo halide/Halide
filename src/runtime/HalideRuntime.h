@@ -1370,15 +1370,13 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
 extern int halide_default_can_use_target_features(int count, const uint64_t *features);
 
 typedef struct halide_dimension_t {
-    int32_t min, extent, stride;
+#ifdef __cplusplus
+    int32_t min = 0, extent = 0, stride = 0;
 
     // Per-dimension flags. None are defined yet (This is reserved for future use).
-    uint32_t flags;
+    uint32_t flags = 0;
 
-#ifdef __cplusplus
-    HALIDE_ALWAYS_INLINE halide_dimension_t()
-        : min(0), extent(0), stride(0), flags(0) {
-    }
+    HALIDE_ALWAYS_INLINE halide_dimension_t() = default;
     HALIDE_ALWAYS_INLINE halide_dimension_t(int32_t m, int32_t e, int32_t s, uint32_t f = 0)
         : min(m), extent(e), stride(s), flags(f) {
     }
@@ -1393,6 +1391,11 @@ typedef struct halide_dimension_t {
     HALIDE_ALWAYS_INLINE bool operator!=(const halide_dimension_t &other) const {
         return !(*this == other);
     }
+#else
+    int32_t min, extent, stride;
+
+    // Per-dimension flags. None are defined yet (This is reserved for future use).
+    uint32_t flags;
 #endif
 } halide_dimension_t;
 

@@ -301,14 +301,13 @@ class ExprCost : public IRVisitor {
     }
 
 public:
-    int64_t arith;
-    int64_t memory;
+    int64_t arith = 0;
+    int64_t memory = 0;
     // Detailed breakdown of bytes loaded by the allocation or function
     // they are loaded from.
     map<string, int64_t> detailed_byte_loads;
 
-    ExprCost()
-        : arith(0), memory(0) {
+    ExprCost() {
     }
 };
 
