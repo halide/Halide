@@ -94,10 +94,9 @@ if (m.contains(ExprWithCompareCache(query, &cache))) {...}
  */
 struct ExprWithCompareCache {
     Expr expr;
-    mutable IRCompareCache *cache;
+    mutable IRCompareCache *cache{nullptr};
 
-    ExprWithCompareCache()
-        : cache(nullptr) {
+    ExprWithCompareCache() {
     }
     ExprWithCompareCache(const Expr &e, IRCompareCache *c)
         : expr(e), cache(c) {

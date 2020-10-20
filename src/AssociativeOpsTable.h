@@ -35,13 +35,12 @@ struct AssociativePattern {
     /** Contain the identities for each dimension of the associative op. */
     std::vector<Expr> identities;
     /** Indicate if the associative op is also commutative. */
-    bool is_commutative;
+    bool is_commutative{false};
 
-    AssociativePattern()
-        : is_commutative(false) {
+    AssociativePattern() {
     }
     AssociativePattern(size_t size)
-        : ops(size), identities(size), is_commutative(false) {
+        : ops(size), identities(size) {
     }
     AssociativePattern(const std::vector<Expr> &ops, const std::vector<Expr> &ids, bool is_commutative)
         : ops(ops), identities(ids), is_commutative(is_commutative) {

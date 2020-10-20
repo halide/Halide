@@ -1364,10 +1364,10 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
 extern int halide_default_can_use_target_features(int count, const uint64_t *features);
 
 typedef struct halide_dimension_t {
-    int32_t min, extent, stride;
+    int32_t min, extent, stride;  // NOLINT(modernize-use-default-member-init)
 
     // Per-dimension flags. None are defined yet (This is reserved for future use).
-    uint32_t flags;
+    uint32_t flags;  // NOLINT(modernize-use-default-member-init)
 
 #ifdef __cplusplus
     HALIDE_ALWAYS_INLINE halide_dimension_t()

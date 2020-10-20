@@ -17,6 +17,7 @@ Checks: >
     bugprone-parent-virtual-call,
     -bugprone-sizeof-expression,
     bugprone-string-constructor,
+    modernize-use-default-member-init,
     modernize-use-emplace,
     modernize-use-override,
     performance-move-const-arg,
