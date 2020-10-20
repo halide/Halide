@@ -10,13 +10,13 @@ char *dlerror();
 #define RTLD_LAZY 0x1
 
 WEAK void *halide_default_get_symbol(const char *name) {
-    return dlsym(NULL, name);
+    return dlsym(nullptr, name);
 }
 
 WEAK void *halide_default_load_library(const char *name) {
     void *lib = dlopen(name, RTLD_LAZY);
     if (!lib) {
-        debug(NULL) << "dlerror: " << dlerror() << "\n";
+        debug(nullptr) << "dlerror: " << dlerror() << "\n";
     }
     return lib;
 }

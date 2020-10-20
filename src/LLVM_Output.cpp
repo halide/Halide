@@ -447,7 +447,7 @@ std::string get_current_directory() {
     // Note that passing null for the first arg isn't strictly POSIX, but is
     // supported everywhere we currently build.
     char *p = getcwd(nullptr, 0);
-    internal_assert(p != NULL) << "getcwd() failed";
+    internal_assert(p != nullptr) << "getcwd() failed";
     dir = p;
     free(p);
     return dir;

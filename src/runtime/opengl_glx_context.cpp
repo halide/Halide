@@ -43,7 +43,7 @@ namespace Internal {
 //   http://www.opengl.org/resources/features/OGLextensions/
 WEAK bool glx_extension_supported(const char *extlist, const char *extension) {
     // Extension names should not have spaces.
-    if (strchr(extension, ' ') != NULL || *extension == '\0') {
+    if (strchr(extension, ' ') != nullptr || *extension == '\0') {
         return false;
     }
 
@@ -80,14 +80,14 @@ WEAK int halide_opengl_create_context(void *user_context) {
         return 0;
     }
 
-    void *dpy = XOpenDisplay(NULL);
+    void *dpy = XOpenDisplay(nullptr);
     if (!dpy) {
         halide_error(user_context, "Could not open X11 display.\n");
         return -1;
     }
 
     // GLX supported?
-    if (!glXQueryExtension(dpy, NULL, NULL)) {
+    if (!glXQueryExtension(dpy, nullptr, nullptr)) {
         halide_error(user_context, "GLX not supported by X server.\n");
         return -1;
     }
@@ -110,11 +110,11 @@ WEAK int halide_opengl_create_context(void *user_context) {
     void *fbconfig = fbconfigs[0];
 
     const char *glxexts = glXQueryExtensionsString(dpy, screen);
-    void *share_list = NULL;
+    void *share_list = nullptr;
     int direct = 1;
-    void *context = NULL;
+    void *context = nullptr;
 
-    glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
+    glXCreateContextAttribsARBProc glXCreateContextAttribsARB = nullptr;
     glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc)
         glXGetProcAddressARB("glXCreateContextAttribsARB");
 

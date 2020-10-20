@@ -919,7 +919,7 @@ WABT_HOST_CALLBACK(halide_print) {
     uint8_t *p = get_wasm_memory_base(wabt_context);
     const char *str = (const char *)p + str_address;
 
-    if (jit_user_context && jit_user_context->handlers.custom_print != NULL) {
+    if (jit_user_context && jit_user_context->handlers.custom_print != nullptr) {
         (*jit_user_context->handlers.custom_print)(jit_user_context, str);
     } else {
         std::cout << str;
@@ -964,7 +964,7 @@ WABT_HOST_CALLBACK(halide_trace_helper) {
     event.dimensions = dimensions;
 
     int32_t result = 0;
-    if (jit_user_context && jit_user_context->handlers.custom_trace != NULL) {
+    if (jit_user_context && jit_user_context->handlers.custom_trace != nullptr) {
         result = (*jit_user_context->handlers.custom_trace)(jit_user_context, &event);
     } else {
         debug(0) << "Dropping trace event due to lack of trace handler.\n";
@@ -985,7 +985,7 @@ WABT_HOST_CALLBACK(halide_error) {
     uint8_t *p = get_wasm_memory_base(wabt_context);
     const char *str = (const char *)p + str_address;
 
-    if (jit_user_context && jit_user_context->handlers.custom_error != NULL) {
+    if (jit_user_context && jit_user_context->handlers.custom_error != nullptr) {
         (*jit_user_context->handlers.custom_error)(jit_user_context, str);
     } else {
         halide_runtime_error << str;

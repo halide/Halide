@@ -1520,7 +1520,7 @@ typedef struct halide_buffer_t {
     /** Attempt to call device_sync for the buffer. If the buffer
      * has no device_interface (or no device_sync), this is a quiet no-op.
      * Calling this explicitly should rarely be necessary, except for profiling. */
-    HALIDE_ALWAYS_INLINE int device_sync(void *ctx = NULL) {
+    HALIDE_ALWAYS_INLINE int device_sync(void *ctx = nullptr) {
         if (device_interface && device_interface->device_sync) {
             return device_interface->device_sync(ctx, this);
         }
@@ -1532,7 +1532,7 @@ typedef struct halide_buffer_t {
      * this both adds clarity to code and will facilitate moving to
      * another representation for bounds query arguments. */
     HALIDE_ALWAYS_INLINE bool is_bounds_query() const {
-        return host == NULL && device == 0;
+        return host == nullptr && device == 0;
     }
 
 #endif
