@@ -17,6 +17,7 @@ Checks: >
     bugprone-parent-virtual-call,
     -bugprone-sizeof-expression,
     bugprone-string-constructor,
+    modernize-deprecated-headers,
     modernize-use-emplace,
     modernize-use-override,
     performance-move-const-arg,

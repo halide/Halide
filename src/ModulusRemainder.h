@@ -5,7 +5,7 @@
  * Routines for statically determining what expressions are divisible by.
  */
 
-#include <stdint.h>
+#include <cstdint>
 
 namespace Halide {
 

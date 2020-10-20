@@ -4,7 +4,7 @@
 #include <assert.h>
 #define NDEBUG
 #else
-#include <assert.h>
+#include <cassert>
 #endif
 
 #ifndef HALIDE_UTIL_H

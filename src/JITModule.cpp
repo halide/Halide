@@ -1,6 +1,6 @@
+#include <cstdint>
 #include <mutex>
 #include <set>
-#include <stdint.h>
 #include <string>
 
 #ifdef _WIN32

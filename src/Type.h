@@ -5,7 +5,7 @@
 #include "Float16.h"
 #include "Util.h"
 #include "runtime/HalideRuntime.h"
-#include <stdint.h>
+#include <cstdint>
 
 /** \file
  * Defines halide types

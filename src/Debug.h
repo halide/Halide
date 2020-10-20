@@ -5,8 +5,8 @@
  * Defines functions for debug logging during code generation.
  */
 
+#include <cstdlib>
 #include <iostream>
-#include <stdlib.h>
 #include <string>
 
 namespace Halide {
