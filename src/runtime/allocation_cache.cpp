@@ -9,7 +9,7 @@ namespace Internal {
 WEAK bool halide_reuse_device_allocations_flag = true;
 
 WEAK halide_mutex allocation_pools_lock;
-WEAK halide_device_allocation_pool *device_allocation_pools = NULL;
+WEAK halide_device_allocation_pool *device_allocation_pools = nullptr;
 
 }  // namespace Internal
 }  // namespace Runtime
@@ -23,7 +23,7 @@ WEAK int halide_reuse_device_allocations(void *user_context, bool flag) {
     int err = 0;
     if (!flag) {
         ScopedMutexLock lock(&allocation_pools_lock);
-        for (halide_device_allocation_pool *p = device_allocation_pools; p != NULL; p = p->next) {
+        for (halide_device_allocation_pool *p = device_allocation_pools; p != nullptr; p = p->next) {
             int ret = p->release_unused(user_context);
             if (ret) {
                 err = ret;

@@ -131,7 +131,7 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
             c.src_stride_bytes[j] = c.src_stride_bytes[j - 1];
         }
         c.extent[insert] = dst->dim[i].extent;
-        // debug(NULL) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
+        // debug(nullptr) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
         c.dst_stride_bytes[insert] = dst_stride_bytes;
         c.src_stride_bytes[insert] = src_stride_bytes;
     };

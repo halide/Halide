@@ -86,7 +86,7 @@ std::string get_env_variable(char const *env_var_name) {
 #ifdef _MSC_VER
     // call getenv_s without a buffer to determine the correct string length:
     size_t length = 0;
-    if ((getenv_s(&length, NULL, 0, env_var_name) != 0) || (length == 0)) {
+    if ((getenv_s(&length, nullptr, 0, env_var_name) != 0) || (length == 0)) {
         return "";
     }
     // call it again to retrieve the value of the environment variable;

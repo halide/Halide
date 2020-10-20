@@ -21,6 +21,6 @@ WEAK_INLINE __attribute__((used)) void pseudostack_free(void *user_context, void
     if (slot->ptr) {
         halide_free(user_context, slot->ptr);
     }
-    slot->ptr = NULL;
+    slot->ptr = nullptr;
 }
 }

@@ -246,16 +246,10 @@ public:
     }
 };
 
-#if __cplusplus >= 201103L
 // Low order two bits are used for locking state,
 static constexpr uint8_t lock_bit = 0x01;
 static constexpr uint8_t queue_lock_bit = 0x02;
 static constexpr uint8_t parked_bit = 0x02;
-#else
-#define lock_bit 0x01
-#define queue_lock_bit 0x02
-#define parked_bit 0x02
-#endif
 
 struct word_lock_queue_data {
     thread_parker parker;  // TODO: member or pointer?
@@ -276,10 +270,9 @@ struct word_lock_queue_data {
     // The only cost is the O(n) processing, but this only needs to be done
     // once for each node, and therefore isn't too expensive.
 
-    word_lock_queue_data *next = NULL;
-    word_lock_queue_data *prev = NULL;
-
-    word_lock_queue_data *tail = NULL;
+    word_lock_queue_data *next = nullptr;
+    word_lock_queue_data *prev = nullptr;
+    word_lock_queue_data *tail = nullptr;
 
     ALWAYS_INLINE word_lock_queue_data() = default;
 
@@ -352,14 +345,14 @@ WEAK void word_lock::lock_full() {
         // TODO set up prelinkage parking state
 
         word_lock_queue_data *head = (word_lock_queue_data *)(expected & ~(uintptr_t)(queue_lock_bit | lock_bit));
-        if (head == NULL) {
+        if (head == nullptr) {
             node.tail = &node;
-            // constructor set node.prev = NULL;
+            // constructor set node.prev = nullptr;
         } else {
-            // Mark the tail as NULL. The unlock routine will walk the list and wakeup
+            // Mark the tail as nullptr. The unlock routine will walk the list and wakeup
             // the thread at the end.
-            // constructor set node.tail = NULL;
-            // constructor set node.prev = NULL;
+            // constructor set node.tail = nullptr;
+            // constructor set node.prev = nullptr;
             node.next = head;
         }
 
@@ -397,9 +390,9 @@ WEAK void word_lock::unlock_full() {
         word_lock_queue_data *current = head;
         word_lock_queue_data *tail = current->tail;
         int times_through = 0;
-        while (tail == NULL) {
+        while (tail == nullptr) {
             word_lock_queue_data *next = current->next;
-            halide_assert(NULL, next != NULL);
+            halide_assert(nullptr, next != nullptr);
             next->prev = current;
             current = next;
             tail = current->tail;
@@ -419,7 +412,7 @@ WEAK void word_lock::unlock_full() {
         }
 
         word_lock_queue_data *new_tail = tail->prev;
-        if (new_tail == NULL) {
+        if (new_tail == nullptr) {
             bool continue_outer = false;
             while (!continue_outer) {
                 uintptr_t desired = expected & lock_bit;
@@ -456,9 +449,7 @@ struct queue_data {
     thread_parker parker;  // TODO: member or pointer?
 
     uintptr_t sleep_address = 0;
-
-    queue_data *next = NULL;
-
+    queue_data *next = nullptr;
     uintptr_t unpark_info = 0;
 
     ALWAYS_INLINE queue_data() = default;
@@ -488,7 +479,7 @@ WEAK char table_storage[sizeof(hash_table)];
 #define table (*(hash_table *)table_storage)
 
 ALWAYS_INLINE void check_hash(uintptr_t hash) {
-    halide_assert(NULL, hash < sizeof(table.buckets) / sizeof(table.buckets[0]));
+    halide_assert(nullptr, hash < sizeof(table.buckets) / sizeof(table.buckets[0]));
 }
 
 #if 0
@@ -496,8 +487,8 @@ WEAK void dump_hash() {
     int i = 0;
     for (auto &bucket : table.buckets) {
         queue_data *head = bucket.head;
-        while (head != NULL) {
-            print(NULL) << "Bucket index " << i << " addr " << (void *)head->sleep_address << "\n";
+        while (head != nullptr) {
+            print(nullptr) << "Bucket index " << i << " addr " << (void *)head->sleep_address << "\n";
             head = head->next;
         }
         i++;
@@ -622,10 +613,10 @@ WEAK uintptr_t park(uintptr_t addr, parking_control &control) {
         return action.invalid_unpark_info;
     }
 
-    queue_data.next = NULL;
+    queue_data.next = nullptr;
     queue_data.sleep_address = addr;
     queue_data.parker.prepare_park();
-    if (bucket.head != NULL) {
+    if (bucket.head != nullptr) {
         bucket.tail->next = &queue_data;
     } else {
         bucket.head = &queue_data;
@@ -646,9 +637,9 @@ WEAK uintptr_t unpark_one(uintptr_t addr, parking_control &control) {
     hash_bucket &bucket = lock_bucket(addr);
 
     queue_data **data_location = &bucket.head;
-    queue_data *prev = NULL;
+    queue_data *prev = nullptr;
     queue_data *data = *data_location;
-    while (data != NULL) {
+    while (data != nullptr) {
         uintptr_t cur_addr;
         atomic_load_relaxed(&data->sleep_address, &cur_addr);
         if (cur_addr == addr) {
@@ -661,7 +652,7 @@ WEAK uintptr_t unpark_one(uintptr_t addr, parking_control &control) {
                 bucket.tail = prev;
             } else {
                 queue_data *data2 = next;
-                while (data2 != NULL && !more_waiters) {
+                while (data2 != nullptr && !more_waiters) {
                     uintptr_t cur_addr2;
                     atomic_load_relaxed(&data2->sleep_address, &cur_addr2);
                     more_waiters = (cur_addr2 == addr);
@@ -697,14 +688,14 @@ WEAK uintptr_t unpark_all(uintptr_t addr, uintptr_t unpark_info) {
     hash_bucket &bucket = lock_bucket(addr);
 
     queue_data **data_location = &bucket.head;
-    queue_data *prev = NULL;
+    queue_data *prev = nullptr;
     queue_data *data = *data_location;
     size_t waiters = 0;
     queue_data *temp_list_storage[16];
     queue_data **temp_list = &temp_list_storage[0];
     size_t max_waiters = sizeof(temp_list_storage) / sizeof(temp_list_storage[0]);
 
-    while (data != NULL) {
+    while (data != nullptr) {
         uintptr_t cur_addr;
         atomic_load_relaxed(&data->sleep_address, &cur_addr);
 
@@ -769,13 +760,13 @@ WEAK int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, parking_control 
     }
 
     queue_data **data_location = &buckets.from.head;
-    queue_data *prev = NULL;
+    queue_data *prev = nullptr;
     queue_data *data = *data_location;
-    queue_data *requeue = NULL;
-    queue_data *requeue_tail = NULL;
-    queue_data *wakeup = NULL;
+    queue_data *requeue = nullptr;
+    queue_data *requeue_tail = nullptr;
+    queue_data *wakeup = nullptr;
 
-    while (data != NULL) {
+    while (data != nullptr) {
         uintptr_t cur_addr;
         atomic_load_relaxed(&data->sleep_address, &cur_addr);
 
@@ -787,10 +778,10 @@ WEAK int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, parking_control 
                 buckets.from.tail = prev;
             }
 
-            if (action.unpark_one && wakeup == NULL) {
+            if (action.unpark_one && wakeup == nullptr) {
                 wakeup = data;
             } else {
-                if (requeue == NULL) {
+                if (requeue == nullptr) {
                     requeue = data;
                 } else {
                     requeue_tail->next = data;
@@ -808,9 +799,9 @@ WEAK int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, parking_control 
         }
     }
 
-    if (requeue != NULL) {
-        requeue_tail->next = NULL;
-        if (buckets.to.head == NULL) {
+    if (requeue != nullptr) {
+        requeue_tail->next = nullptr;
+        if (buckets.to.head == nullptr) {
             buckets.to.head = requeue;
         } else {
             buckets.to.tail->next = requeue;
@@ -818,9 +809,9 @@ WEAK int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, parking_control 
         buckets.to.tail = requeue_tail;
     }
 
-    control.requeue_callback(&control, action, wakeup != NULL, requeue != NULL);
+    control.requeue_callback(&control, action, wakeup != nullptr, requeue != nullptr);
 
-    if (wakeup != NULL) {
+    if (wakeup != nullptr) {
         wakeup->unpark_info = unpark_info;
         wakeup->parker.unpark_start();
         unlock_bucket_pair(buckets);
@@ -830,7 +821,7 @@ WEAK int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, parking_control 
         unlock_bucket_pair(buckets);
     }
 
-    return wakeup != NULL && action.unpark_one;
+    return wakeup != nullptr && action.unpark_one;
 }
 
 WEAK bool mutex_parking_control_validate(void *control, validate_action &action);
@@ -1120,7 +1111,7 @@ public:
             // TODO: this is debug only.
             uintptr_t val;
             atomic_load_relaxed((uintptr_t *)mutex, &val);
-            halide_assert(NULL, val & 0x1);
+            halide_assert(nullptr, val & 0x1);
 
             if_tsan_post_lock(mutex);
         }
@@ -1176,17 +1167,17 @@ WEAK halide_mutex_array *halide_mutex_array_create(int sz) {
     // TODO: If sz is huge, we should probably hash it down to something smaller
     // in the accessors below. Check for deadlocks before doing so.
     halide_mutex_array *array = (halide_mutex_array *)halide_malloc(
-        NULL, sizeof(halide_mutex_array));
-    if (array == NULL) {
+        nullptr, sizeof(halide_mutex_array));
+    if (array == nullptr) {
         // Will result in a failed assertion and a call to halide_error.
-        return NULL;
+        return nullptr;
     }
     array->array = (halide_mutex *)halide_malloc(
-        NULL, sz * sizeof(halide_mutex));
-    if (array->array == NULL) {
-        halide_free(NULL, array);
+        nullptr, sz * sizeof(halide_mutex));
+    if (array->array == nullptr) {
+        halide_free(nullptr, array);
         // Will result in a failed assertion and a call to halide_error.
-        return NULL;
+        return nullptr;
     }
     memset(array->array, 0, sz * sizeof(halide_mutex));
     return array;

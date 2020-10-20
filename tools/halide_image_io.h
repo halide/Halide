@@ -766,7 +766,7 @@ bool load_png(const std::string &filename, ImageType *im) {
     }
 
     /* initialize stuff */
-    png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (!check(png_ptr != nullptr, "png_create_read_struct failed")) {
         return false;
     }
@@ -812,7 +812,7 @@ bool load_png(const std::string &filename, ImageType *im) {
         copy_to_image(row.data(), y, im);
     }
 
-    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 
     return true;
 }
@@ -856,7 +856,7 @@ bool save_png(ImageType &im, const std::string &filename) {
     }
 
     // initialize stuff
-    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (!check(png_ptr != nullptr, "[write_png_file] png_create_write_struct failed")) {
         return false;
     }
@@ -892,7 +892,7 @@ bool save_png(ImageType &im, const std::string &filename) {
         copy_from_image(im, y, row.data());
         png_write_row(png_ptr, row.data());
     }
-    png_write_end(png_ptr, NULL);
+    png_write_end(png_ptr, nullptr);
     png_destroy_write_struct(&png_ptr, &info_ptr);
 
     return true;

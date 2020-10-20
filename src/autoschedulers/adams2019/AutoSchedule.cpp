@@ -1256,7 +1256,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     // Get the seed for random dropout
     string seed_str = get_env_variable("HL_SEED");
     // Or use the time, if not set.
-    int seed = (int)time(NULL);
+    int seed = (int)time(nullptr);
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
