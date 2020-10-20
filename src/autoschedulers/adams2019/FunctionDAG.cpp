@@ -352,7 +352,7 @@ BoundContents::Layout::~Layout() {
     for (auto *b : pool) {
         b->~BoundContents();
     }
-    for (auto b : blocks) {
+    for (auto *b : blocks) {
         free(b);
     }
 }

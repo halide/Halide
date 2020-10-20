@@ -1983,7 +1983,6 @@ WEAK void halide_opengl_context_lost(void *user_context) {
     }
 
     global_state.init();
-    return;
 }
 
 WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, uint64_t texture_id) {

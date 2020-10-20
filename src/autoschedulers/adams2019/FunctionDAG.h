@@ -306,7 +306,7 @@ struct BoundContents {
     }
 
     BoundContents *make_copy() const {
-        auto b = layout->make();
+        auto *b = layout->make();
         size_t bytes = sizeof(data()[0]) * layout->total_size;
         memcpy(b->data(), data(), bytes);
         return b;

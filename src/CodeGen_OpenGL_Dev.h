@@ -43,7 +43,6 @@ private:
 
     std::string print_gpu_name(const std::string &name) override;
 
-private:
     std::ostringstream src_stream;
     std::string cur_kernel_name;
     Target target;

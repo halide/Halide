@@ -336,7 +336,7 @@ public:
     Module compile_to_module(const std::vector<Argument> &args,
                              const std::string &fn_name,
                              const Target &target = get_target_from_environment(),
-                             const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
+                             LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're

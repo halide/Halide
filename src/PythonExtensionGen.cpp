@@ -27,7 +27,7 @@ static string sanitize_name(const string &name) {
     return oss.str();
 }
 
-static const string remove_namespaces(const string &name) {
+static string remove_namespaces(const string &name) {
     size_t i = name.find_last_of(':');
     if (i == string::npos) {
         return name;
@@ -254,7 +254,7 @@ int _convert_py_buffer_to_halide(
 
 )INLINE_CODE";
 
-    for (auto &f : module.functions()) {
+    for (const auto &f : module.functions()) {
         if (f.linkage == LinkageType::ExternalPlusMetadata) {
             compile(f);
         }
@@ -262,7 +262,7 @@ int _convert_py_buffer_to_halide(
 
     dest << "\n";
     dest << "static PyMethodDef _methods[] = {\n";
-    for (auto &f : module.functions()) {
+    for (const auto &f : module.functions()) {
         if (f.linkage == LinkageType::ExternalPlusMetadata) {
             const string basename = remove_namespaces(f.name);
             dest << "    {\"" << basename << "\", (PyCFunction)_f_" << basename

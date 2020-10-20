@@ -286,18 +286,18 @@ private:
                 // constants, they might fit regardless of types.
                 a.min = simplify(a.min);
                 a.max = simplify(a.max);
-                auto *umin = as_const_uint(a.min);
-                auto *umax = as_const_uint(a.max);
+                const auto *umin = as_const_uint(a.min);
+                const auto *umax = as_const_uint(a.max);
                 if (umin && umax && to.can_represent(*umin) && to.can_represent(*umax)) {
                     could_overflow = false;
                 } else {
-                    auto *imin = as_const_int(a.min);
-                    auto *imax = as_const_int(a.max);
+                    const auto *imin = as_const_int(a.min);
+                    const auto *imax = as_const_int(a.max);
                     if (imin && imax && to.can_represent(*imin) && to.can_represent(*imax)) {
                         could_overflow = false;
                     } else {
-                        auto *fmin = as_const_float(a.min);
-                        auto *fmax = as_const_float(a.max);
+                        const auto *fmin = as_const_float(a.min);
+                        const auto *fmax = as_const_float(a.max);
                         if (fmin && fmax && to.can_represent(*fmin) && to.can_represent(*fmax)) {
                             could_overflow = false;
                         }
@@ -2367,7 +2367,7 @@ private:
                 };
                 vector<RestrictedVar> to_pop;
                 auto vars = find_free_vars(op->condition);
-                for (auto v : vars) {
+                for (const auto *v : vars) {
                     auto result = solve_expression(c, v->name);
                     if (!result.fully_solved) {
                         continue;

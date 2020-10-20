@@ -70,7 +70,7 @@ enum : uint32_t {
     STN_UNDEF = 0
 };
 
-static const char elf_magic[] = {0x7f, 'E', 'L', 'F'};
+const char elf_magic[] = {0x7f, 'E', 'L', 'F'};
 
 template<int bits>
 struct Types;

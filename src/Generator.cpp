@@ -237,7 +237,7 @@ private:
 
     std::vector<Internal::GeneratorParamBase *> select_generator_params(const std::vector<Internal::GeneratorParamBase *> &in) {
         std::vector<Internal::GeneratorParamBase *> out;
-        for (auto p : in) {
+        for (auto *p : in) {
             // These are always propagated specially.
             if (p->name == "target" ||
                 p->name == "auto_schedule" ||
@@ -267,7 +267,7 @@ void StubEmitter::emit_generator_params_struct() {
     stream << get_indent() << "struct " << name << " final {\n";
     indent_level++;
     if (!v.empty()) {
-        for (auto p : v) {
+        for (auto *p : v) {
             stream << get_indent() << p->get_c_type() << " " << p->name << "{ " << p->get_default_value() << " };\n";
         }
         stream << "\n";
@@ -280,7 +280,7 @@ void StubEmitter::emit_generator_params_struct() {
         stream << get_indent() << name << "(\n";
         indent_level++;
         std::string comma = "";
-        for (auto p : v) {
+        for (auto *p : v) {
             stream << get_indent() << comma << p->get_c_type() << " " << p->name << "\n";
             comma = ", ";
         }
@@ -288,7 +288,7 @@ void StubEmitter::emit_generator_params_struct() {
         stream << get_indent() << ") : \n";
         indent_level++;
         comma = "";
-        for (auto p : v) {
+        for (auto *p : v) {
             stream << get_indent() << comma << p->name << "(" << p->name << ")\n";
             comma = ", ";
         }
@@ -303,7 +303,7 @@ void StubEmitter::emit_generator_params_struct() {
     stream << get_indent() << "return {\n";
     indent_level++;
     std::string comma = "";
-    for (auto p : v) {
+    for (auto *p : v) {
         stream << get_indent() << comma << "{\"" << p->name << "\", ";
         if (p->is_looplevel_param()) {
             stream << p->name << "}\n";
@@ -328,7 +328,7 @@ void StubEmitter::emit_inputs_struct() {
         std::string name;
     };
     std::vector<InInfo> in_info;
-    for (auto input : inputs) {
+    for (auto *input : inputs) {
         std::string c_type = input->get_c_type();
         if (input->is_array()) {
             c_type = "std::vector<" + c_type + ">";
@@ -392,7 +392,7 @@ void StubEmitter::emit() {
     };
     bool all_outputs_are_func = true;
     std::vector<OutputInfo> out_info;
-    for (auto output : outputs) {
+    for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
         std::string getter;
         const bool is_func = (c_type == "Func");
@@ -475,7 +475,7 @@ void StubEmitter::emit() {
         stream << "\n";
         if (all_outputs_are_func) {
             std::string name = out_info.at(0).name;
-            auto output = outputs[0];
+            auto *output = outputs[0];
             if (output->is_array()) {
                 stream << get_indent() << "operator std::vector<Halide::Func>() const {\n";
                 indent_level++;
@@ -1174,8 +1174,8 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
 
     std::vector<void *> vi = ObjectInstanceRegistry::instances_in_range(
         generator, size, ObjectInstanceRegistry::GeneratorInput);
-    for (auto v : vi) {
-        auto input = static_cast<Internal::GeneratorInputBase *>(v);
+    for (auto *v : vi) {
+        auto *input = static_cast<Internal::GeneratorInputBase *>(v);
         internal_assert(input != nullptr);
         user_assert(is_valid_name(input->name())) << "Invalid Input name: (" << input->name() << ")\n";
         user_assert(!names.count(input->name())) << "Duplicate Input name: " << input->name();
@@ -1188,8 +1188,8 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
 
     std::vector<void *> vo = ObjectInstanceRegistry::instances_in_range(
         generator, size, ObjectInstanceRegistry::GeneratorOutput);
-    for (auto v : vo) {
-        auto output = static_cast<Internal::GeneratorOutputBase *>(v);
+    for (auto *v : vo) {
+        auto *output = static_cast<Internal::GeneratorOutputBase *>(v);
         internal_assert(output != nullptr);
         user_assert(is_valid_name(output->name())) << "Invalid Output name: (" << output->name() << ")\n";
         user_assert(!names.count(output->name())) << "Duplicate Output name: " << output->name();
@@ -1202,8 +1202,8 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
 
     std::vector<void *> vg = ObjectInstanceRegistry::instances_in_range(
         generator, size, ObjectInstanceRegistry::GeneratorParam);
-    for (auto v : vg) {
-        auto param = static_cast<GeneratorParamBase *>(v);
+    for (auto *v : vg) {
+        auto *param = static_cast<GeneratorParamBase *>(v);
         internal_assert(param != nullptr);
         user_assert(is_valid_name(param->name)) << "Invalid GeneratorParam name: " << param->name;
         user_assert(!names.count(param->name)) << "Duplicate GeneratorParam name: " << param->name;
@@ -1266,7 +1266,7 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
         generator_params_by_name[g->name] = g;
     }
 
-    for (auto &key_value : params) {
+    for (const auto &key_value : params) {
         auto gp = generator_params_by_name.find(key_value.first);
         user_assert(gp != generator_params_by_name.end())
             << "Generator " << generator_registered_name << " has no GeneratorParam named: " << key_value.first << "\n";
@@ -1312,7 +1312,7 @@ void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> 
 
 void GeneratorBase::track_parameter_values(bool include_outputs) {
     GeneratorParamInfo &pi = param_info();
-    for (auto input : pi.inputs()) {
+    for (auto *input : pi.inputs()) {
         if (input->kind() == IOKind::Buffer) {
             internal_assert(!input->parameters_.empty());
             for (auto &p : input->parameters_) {
@@ -1322,10 +1322,10 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
         }
     }
     if (include_outputs) {
-        for (auto output : pi.outputs()) {
+        for (auto *output : pi.outputs()) {
             if (output->kind() == IOKind::Buffer) {
                 internal_assert(!output->funcs().empty());
-                for (auto &f : output->funcs()) {
+                for (const auto &f : output->funcs()) {
                     user_assert(f.defined()) << "Output " << output->name() << " is not fully defined.";
                     auto output_buffers = f.output_buffers();
                     for (auto &o : output_buffers) {

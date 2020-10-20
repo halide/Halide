@@ -171,7 +171,7 @@ namespace {
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
-    llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
+    llvm::Function *fn = ee.FindFunctionNamed(name);
     internal_assert(fn->getName() == name);
     void *f = (void *)ee.getFunctionAddress(name);
     if (!f) {

@@ -20,7 +20,21 @@ Checks: >
     performance-*,
     -performance-inefficient-string-concatenation,
     -performance-inefficient-vector-operation,
-    readability-braces-around-statements
+    readability-avoid-const-params-in-decls,
+    readability-braces-around-statements,
+    readability-const-return-type,
+    readability-container-size-empty,
+    readability-misplaced-array-index,
+    readability-qualified-auto,
+    readability-redundant-access-specifiers,
+    readability-redundant-control-flow,
+    readability-redundant-function-ptr-dereference,
+    readability-redundant-preprocessor,
+    readability-redundant-smartptr-get,
+    readability-redundant-string-cstr,
+    readability-simplify-subscript-expr,
+    readability-static-accessed-through-instance,
+    readability-static-definition-in-anonymous-namespace,
 
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
