@@ -41,8 +41,7 @@ protected:
 
 public:
     /** Construct a null image parameter handle. */
-    OutputImageParam() {
-    }
+    OutputImageParam() = default;
 
     /** Get the name of this Param */
     const std::string &name() const;

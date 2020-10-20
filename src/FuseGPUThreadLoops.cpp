@@ -1502,8 +1502,7 @@ class ZeroGPULoopMins : public IRMutator {
     }
 
 public:
-    ZeroGPULoopMins() {
-    }
+    ZeroGPULoopMins() = default;
 };
 
 class ValidateGPULoopNesting : public IRVisitor {

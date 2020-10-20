@@ -126,6 +126,7 @@ struct MatcherState {
     }
 
     HALIDE_ALWAYS_INLINE
+    // NOLINTNEXTLINE(modernize-use-equals-default): Can't use `= default`; clang-tidy complains about noexcept mismatch
     MatcherState() noexcept {
     }
 };

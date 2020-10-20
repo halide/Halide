@@ -27,6 +27,8 @@ Checks: >
     modernize-deprecated-headers,
     modernize-use-default-member-init,
     modernize-use-emplace,
+    modernize-use-equals-default,
+    modernize-use-equals-delete,
     modernize-use-override,
     performance-*,
     -performance-inefficient-string-concatenation,

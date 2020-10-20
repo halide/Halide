@@ -286,8 +286,7 @@ public:
         this->set_host_dirty();
     }
 
-    ~PyBuffer() override {
-    }
+    ~PyBuffer() override = default;
 };
 
 }  // namespace

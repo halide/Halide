@@ -307,8 +307,7 @@ public:
     // they are loaded from.
     map<string, int64_t> detailed_byte_loads;
 
-    ExprCost() {
-    }
+    ExprCost() = default;
 };
 
 // Return the number of bytes required to store a single value of the
