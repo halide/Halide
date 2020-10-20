@@ -74,6 +74,7 @@ $(BIN)/%/tflite_parser.o: tflite_parser.cpp $(BIN)/%/tflite_schema_generated.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -c $< -o $@
 
+# TODO: this rule is always "dirty", so everything that depends on it will get rebuilt too often
 $(BIN)/%/tflite_schema_generated.h:
 	@echo Fetching tflite_schema_generated.h...
 	@wget --quiet -O $@ https://github.com/tensorflow/tensorflow/raw/master/tensorflow/lite/schema/schema_generated.h
