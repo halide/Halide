@@ -31,7 +31,9 @@ bool Packet::read_from_filedesc(FILE *fdesc) {
 
 bool Packet::read(void *d, size_t size, FILE *fdesc) {
     uint8_t *dst = (uint8_t *)d;
-    if (!size) return true;
+    if (!size) {
+        return true;
+    }
     size_t s = fread(dst, 1, size, fdesc);
     if (s != size) {
         if (ferror(fdesc) || !feof(fdesc)) {

@@ -279,39 +279,6 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
     if (emit_atomic_stores) {
         user_assert(is_one(op->predicate)) << "Atomic update does not support predicated store.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
-#if LLVM_VERSION < 90
-        user_assert(op->value.type().is_scalar())
-            << "CUDA atomic update does not support vectorization with LLVM version < 9.\n";
-        // Generate nvvm intrinsics for the atomics if this is a float atomicAdd.
-        // Otherwise defer to the llvm codegen. For llvm version >= 90, atomicrmw support floats so we
-        // can also refer to llvm.
-        // Half atomics are supported by compute capability 7.x or higher.
-        if (op->value.type().is_float() &&
-            (op->value.type().bits() == 32 ||
-             (op->value.type().bits() == 64 &&
-              (target.get_cuda_capability_lower_bound() >= 61)))) {
-            Expr val_expr = op->value;
-            Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
-            Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
-            // For atomicAdd, we check if op->value - store[index] is independent of store.
-            bool is_atomic_add = !expr_uses_var(delta, op->name);
-            if (is_atomic_add) {
-                Value *ptr = codegen_buffer_pointer(op->name, op->value.type(), op->index);
-                Value *val = codegen(delta);
-                llvm::Function *intrin = nullptr;
-                if (op->value.type().bits() == 32) {
-                    intrin = module->getFunction("llvm.nvvm.atomic.load.add.f32.p0f32");
-                    internal_assert(intrin) << "Could not find atomic intrinsics llvm.nvvm.atomic.load.add.f32.p0f32\n";
-                } else {
-                    internal_assert(op->value.type().bits() == 64);
-                    intrin = module->getFunction("llvm.nvvm.atomic.load.add.f64.p0f64");
-                    internal_assert(intrin) << "Could not find atomic intrinsics llvm.nvvm.atomic.load.add.f64.p0f64\n";
-                }
-                value = builder->CreateCall(intrin, {ptr, val});
-                return;
-            }
-        }
-#endif
     }
 
     // Do aligned 4-wide 32-bit stores as a single i128 store.
@@ -655,11 +622,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     // Ask the target to add backend passes as necessary.
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
-#if LLVM_VERSION >= 100
                                                     ::llvm::CGFT_AssemblyFile,
-#else
-                                                    TargetMachine::CGFT_AssemblyFile,
-#endif
                                                     true);
     if (fail) {
         internal_error << "Failed to set up passes to emit PTX source\n";

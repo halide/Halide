@@ -53,8 +53,15 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
 
 Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     Expr value = mutate(op->value, bounds);
+
+    const int lanes = op->type.lanes();
+    const int arg_lanes = op->value.type().lanes();
+    const int factor = arg_lanes / lanes;
+    if (factor == 1) {
+        return value;
+    }
+
     if (bounds && op->type.is_int()) {
-        int factor = op->value.type().lanes() / op->type.lanes();
         switch (op->op) {
         case VectorReduce::Add:
             // Alignment of result is the alignment of the arg. Bounds
@@ -106,8 +113,6 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     // - horizontal reduce of an shuffle_vectors may be simplifiable to the
     //   underlying op on different shuffle_vectors calls
 
-    const int lanes = op->type.lanes();
-    const int arg_lanes = op->value.type().lanes();
     switch (op->op) {
     case VectorReduce::Add: {
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
@@ -124,6 +129,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
             rewrite(h_min(max(x, broadcast(y, arg_lanes)), lanes), max(h_min(x, lanes), broadcast(y, lanes))) ||
             rewrite(h_min(max(broadcast(x, arg_lanes), y), lanes), max(h_min(y, lanes), broadcast(x, lanes))) ||
             rewrite(h_min(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
+            rewrite(h_min(broadcast(x, c0), lanes), h_min(x, lanes), factor % c0 == 0) ||
             rewrite(h_min(ramp(x, y, arg_lanes), lanes), x + min(y * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, bounds);
@@ -137,6 +143,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
             rewrite(h_max(max(x, broadcast(y, arg_lanes)), lanes), max(h_max(x, lanes), broadcast(y, lanes))) ||
             rewrite(h_max(max(broadcast(x, arg_lanes), y), lanes), max(h_max(y, lanes), broadcast(x, lanes))) ||
             rewrite(h_max(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
+            rewrite(h_max(broadcast(x, c0), lanes), h_max(x, lanes), factor % c0 == 0) ||
             rewrite(h_max(ramp(x, y, arg_lanes), lanes), x + max(y * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, bounds);
@@ -150,6 +157,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
             rewrite(h_and(x && broadcast(y, arg_lanes), lanes), h_and(x, lanes) && broadcast(y, lanes)) ||
             rewrite(h_and(broadcast(x, arg_lanes) && y, lanes), h_and(y, lanes) && broadcast(x, lanes)) ||
             rewrite(h_and(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
+            rewrite(h_and(broadcast(x, c0), lanes), h_and(x, lanes), factor % c0 == 0) ||
             rewrite(h_and(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), lanes),
                     x + max(y * (arg_lanes - 1), 0) < z) ||
             rewrite(h_and(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), lanes),
@@ -170,6 +178,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
             rewrite(h_or(x && broadcast(y, arg_lanes), lanes), h_or(x, lanes) && broadcast(y, lanes)) ||
             rewrite(h_or(broadcast(x, arg_lanes) && y, lanes), h_or(y, lanes) && broadcast(x, lanes)) ||
             rewrite(h_or(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
+            rewrite(h_or(broadcast(x, c0), lanes), h_or(x, lanes), factor % c0 == 0) ||
             // type of arg_lanes is somewhat indeterminate
             rewrite(h_or(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), lanes),
                     x + min(y * (arg_lanes - 1), 0) < z) ||

@@ -1,5 +1,7 @@
 #include "PyPipeline.h"
 
+#include <utility>
+
 #include "PyTuple.h"
 
 namespace Halide {
@@ -107,7 +109,7 @@ void define_pipeline(py::module &m) {
 
             .def(
                 "realize", [](Pipeline &p, std::vector<int32_t> sizes, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(sizes, target));
+                    return realization_to_object(p.realize(std::move(sizes), target));
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 
@@ -146,16 +148,24 @@ void define_pipeline(py::module &m) {
                                  "Call infer_input_bounds() with an explicit list of ints instead.",
                                  1);
                     std::vector<int32_t> sizes;
-                    if (x_size) sizes.push_back(x_size);
-                    if (y_size) sizes.push_back(y_size);
-                    if (z_size) sizes.push_back(z_size);
-                    if (w_size) sizes.push_back(w_size);
+                    if (x_size) {
+                        sizes.push_back(x_size);
+                    }
+                    if (y_size) {
+                        sizes.push_back(y_size);
+                    }
+                    if (z_size) {
+                        sizes.push_back(z_size);
+                    }
+                    if (w_size) {
+                        sizes.push_back(w_size);
+                    }
                     p.infer_input_bounds(sizes, target);
                 },
                 py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("target") = get_jit_target_from_environment())
 
             .def(
-                "infer_input_bounds", [](Pipeline &p, py::object dst, const Target &target) -> void {
+                "infer_input_bounds", [](Pipeline &p, const py::object &dst, const Target &target) -> void {
                     // dst could be Buffer<>, vector<Buffer>, or vector<int>
                     try {
                         Buffer<> b = dst.cast<Buffer<>>();

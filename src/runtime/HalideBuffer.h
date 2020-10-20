@@ -69,7 +69,9 @@ namespace Internal {
 template<typename Container>
 bool any_zero(const Container &c) {
     for (int i : c) {
-        if (i == 0) return true;
+        if (i == 0) {
+            return true;
+        }
     }
     return false;
 }

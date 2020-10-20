@@ -8,7 +8,9 @@
 std::set<std::string> done;
 
 void dump_header(const std::string &header) {
-    if (done.find(header) != done.end()) return;
+    if (done.find(header) != done.end()) {
+        return;
+    }
     done.insert(header);
 
     if (header.find("runtime_internal") != std::string::npos) {
@@ -32,12 +34,15 @@ void dump_header(const std::string &header) {
         if (strncmp(line, include_str, include_str_len) == 0) {
             char *sub_header = line + include_str_len;
             for (int i = 0; i < line_len - include_str_len; i++) {
-                if (sub_header[i] == '"') sub_header[i] = 0;
+                if (sub_header[i] == '"') {
+                    sub_header[i] = 0;
+                }
             }
             size_t slash_pos = header.rfind('/');
             std::string path;
-            if (slash_pos != std::string::npos)
+            if (slash_pos != std::string::npos) {
                 path = header.substr(0, slash_pos + 1);
+            }
             dump_header(path + sub_header);
         } else {
             fputs(line, stdout);
