@@ -53,8 +53,7 @@ private:
         Internal::Parameter mapped_param;
         Buffer<> *buf_out_param{nullptr};
 
-        ParamArg() {
-        }
+        ParamArg() = default;
         ParamArg(const ParamMapping &pm)
             : mapped_param(pm.parameter->type(), false, 0, pm.parameter->name()) {
             mapped_param.set_scalar(pm.parameter->type(), pm.value);
@@ -69,8 +68,7 @@ private:
     void set(const ImageParam &p, const Buffer<> &buf, Buffer<> *buf_out_param);
 
 public:
-    ParamMap() {
-    }
+    ParamMap() = default;
 
     ParamMap(const std::initializer_list<ParamMapping> &init);
 

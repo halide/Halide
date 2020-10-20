@@ -59,8 +59,7 @@ struct SharedCudaContext {
     volatile int lock{0};
 
     // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext() {
-    }
+    SharedCudaContext() = default;
 
     // Note that we never free the context, because static destructor
     // order is unpredictable, and we can't free the context before
@@ -78,8 +77,7 @@ struct SharedOpenCLContext {
     cl_command_queue command_queue{nullptr};
     volatile int lock{0};
 
-    SharedOpenCLContext() {
-    }
+    SharedOpenCLContext() = default;
 
     // We never free the context, for the same reason as above.
 } cl_ctx;
@@ -136,8 +134,7 @@ public:
     mutable RefCount ref_count;
 
     // Just construct a module with symbols to import into other modules.
-    JITModuleContents() {
-    }
+    JITModuleContents() = default;
 
     ~JITModuleContents() {
         if (execution_engine != nullptr) {

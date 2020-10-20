@@ -46,8 +46,7 @@ struct FuncInfo {
     halide_type_t type;
     Buffer<> values;
 
-    FuncInfo() {
-    }
+    FuncInfo() = default;
     FuncInfo(Packet *p) {
         int real_dims = p->dimensions / p->type.lanes;
         if (real_dims > 16) {

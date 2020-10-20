@@ -15,7 +15,7 @@ namespace Internal {
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 struct CodeGen_GPU_Dev {
-    virtual ~CodeGen_GPU_Dev();
+    virtual ~CodeGen_GPU_Dev() = default;
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single

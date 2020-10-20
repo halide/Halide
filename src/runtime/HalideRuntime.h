@@ -544,8 +544,7 @@ struct halide_trace_event_t {
 #ifdef __cplusplus
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_event_t() {
-    }
+    HALIDE_ALWAYS_INLINE halide_trace_event_t() = default;
 #endif
 };
 
@@ -614,8 +613,7 @@ struct halide_trace_packet_t {
 #ifdef __cplusplus
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_packet_t() {
-    }
+    HALIDE_ALWAYS_INLINE halide_trace_packet_t() = default;
 
     /** Get the coordinates array, assuming this packet is laid out in
      * memory as it was written. The coordinates array comes

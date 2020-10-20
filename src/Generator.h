@@ -465,19 +465,18 @@ protected:
     void fail_wrong_type(const char *type);
 
 private:
-    // No copy
-    GeneratorParamBase(const GeneratorParamBase &) = delete;
-    void operator=(const GeneratorParamBase &) = delete;
-    // No move
-    GeneratorParamBase(GeneratorParamBase &&) = delete;
-    void operator=(GeneratorParamBase &&) = delete;
-
     // Generator which owns this GeneratorParam. Note that this will be null
     // initially; the GeneratorBase itself will set this field when it initially
     // builds its info about params. However, since it (generally) isn't
     // appropriate for GeneratorParam<> to be declared outside of a Generator,
     // all reasonable non-testing code should expect this to be non-null.
     GeneratorBase *generator{nullptr};
+
+public:
+    GeneratorParamBase(const GeneratorParamBase &) = delete;
+    GeneratorParamBase &operator=(const GeneratorParamBase &) = delete;
+    GeneratorParamBase(GeneratorParamBase &&) = delete;
+    GeneratorParamBase &operator=(GeneratorParamBase &&) = delete;
 };
 
 // This is strictly some syntactic sugar to suppress certain compiler warnings.
@@ -1446,7 +1445,7 @@ public:
     const std::vector<Func> &funcs() const;
     const std::vector<Expr> &exprs() const;
 
-    virtual ~GIOBase();
+    virtual ~GIOBase() = default;
 
 protected:
     GIOBase(size_t array_size,
@@ -1498,12 +1497,11 @@ private:
     template<typename T>
     friend class GeneratorParam_Synthetic;
 
-    // No copy
+public:
     GIOBase(const GIOBase &) = delete;
-    void operator=(const GIOBase &) = delete;
-    // No move
+    GIOBase &operator=(const GIOBase &) = delete;
     GIOBase(GIOBase &&) = delete;
-    void operator=(GIOBase &&) = delete;
+    GIOBase &operator=(GIOBase &&) = delete;
 };
 
 template<>
@@ -2866,7 +2864,7 @@ public:
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
                               const MachineParams &machine_params = MachineParams::generic());
-    virtual ~GeneratorContext();
+    virtual ~GeneratorContext() = default;
 
     inline Target get_target() const {
         return target;
@@ -2909,6 +2907,11 @@ public:
         return t;
     }
 
+    GeneratorContext(const GeneratorContext &) = delete;
+    GeneratorContext &operator=(const GeneratorContext &) = delete;
+    GeneratorContext(GeneratorContext &&) = delete;
+    GeneratorContext &operator=(GeneratorContext &&) = delete;
+
 protected:
     GeneratorParam<Target> target;
     GeneratorParam<bool> auto_schedule;
@@ -2925,13 +2928,6 @@ protected:
     inline std::shared_ptr<Internal::ValueTracker> get_value_tracker() const {
         return value_tracker;
     }
-
-    // No copy
-    GeneratorContext(const GeneratorContext &) = delete;
-    void operator=(const GeneratorContext &) = delete;
-    // No move
-    GeneratorContext(GeneratorContext &&) = delete;
-    void operator=(GeneratorContext &&) = delete;
 };
 
 class NamesInterface {
@@ -3456,12 +3452,11 @@ private:
         return {build_input(Indices, std::get<Indices>(t))...};
     }
 
-    // No copy
+public:
     GeneratorBase(const GeneratorBase &) = delete;
-    void operator=(const GeneratorBase &) = delete;
-    // No move
+    GeneratorBase &operator=(const GeneratorBase &) = delete;
     GeneratorBase(GeneratorBase &&that) = delete;
-    void operator=(GeneratorBase &&that) = delete;
+    GeneratorBase &operator=(GeneratorBase &&that) = delete;
 };
 
 class GeneratorRegistry {
@@ -3483,8 +3478,12 @@ private:
     static GeneratorRegistry &get_registry();
 
     GeneratorRegistry() = default;
+
+public:
     GeneratorRegistry(const GeneratorRegistry &) = delete;
-    void operator=(const GeneratorRegistry &) = delete;
+    GeneratorRegistry &operator=(const GeneratorRegistry &) = delete;
+    GeneratorRegistry(GeneratorRegistry &&that) = delete;
+    GeneratorRegistry &operator=(GeneratorRegistry &&that) = delete;
 };
 
 }  // namespace Internal
@@ -3683,12 +3682,11 @@ private:
     friend void ::Halide::Internal::generator_test();
     friend class ::Halide::GeneratorContext;
 
-    // No copy
+public:
     Generator(const Generator &) = delete;
-    void operator=(const Generator &) = delete;
-    // No move
+    Generator &operator=(const Generator &) = delete;
     Generator(Generator &&that) = delete;
-    void operator=(Generator &&that) = delete;
+    Generator &operator=(Generator &&that) = delete;
 };
 
 namespace Internal {

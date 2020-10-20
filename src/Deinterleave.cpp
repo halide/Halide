@@ -804,8 +804,7 @@ class Interleaver : public IRMutator {
     }
 
 public:
-    Interleaver() {
-    }
+    Interleaver() = default;
 };
 
 }  // namespace

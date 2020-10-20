@@ -70,8 +70,7 @@ public:
         lock = 0;
     }
 
-    SharedExclusiveSpinLock() {
-    }
+    SharedExclusiveSpinLock() = default;
 };
 
 const static int buffer_size = 1024 * 1024;
@@ -143,8 +142,7 @@ public:
         lock.init();
     }
 
-    TraceBuffer() {
-    }
+    TraceBuffer() = default;
 };
 
 WEAK TraceBuffer *halide_trace_buffer = NULL;

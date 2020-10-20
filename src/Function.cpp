@@ -284,9 +284,6 @@ namespace {
 static std::atomic<int> rand_counter{0};
 }
 
-Function::Function() {
-}
-
 Function::Function(const FunctionPtr &ptr)
     : contents(ptr) {
     contents.strengthen();

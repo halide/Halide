@@ -232,8 +232,7 @@ class spin_control {
 
 public:
     // Everyone says this should be 40. Have not measured it.
-    ALWAYS_INLINE spin_control() {
-    }
+    ALWAYS_INLINE spin_control() = default;
 
     ALWAYS_INLINE bool should_spin() {
         if (spin_count > 0) {
@@ -282,12 +281,10 @@ struct word_lock_queue_data {
 
     word_lock_queue_data *tail{NULL};
 
-    ALWAYS_INLINE word_lock_queue_data() {
-    }
+    ALWAYS_INLINE word_lock_queue_data() = default;
 
     // Inlined, empty dtor needed to avoid confusing MachO builds
-    ALWAYS_INLINE ~word_lock_queue_data() {
-    }
+    ALWAYS_INLINE ~word_lock_queue_data() = default;
 };
 
 class word_lock {
@@ -297,8 +294,7 @@ class word_lock {
     void unlock_full();
 
 public:
-    ALWAYS_INLINE word_lock() {
-    }
+    ALWAYS_INLINE word_lock() = default;
     ALWAYS_INLINE void lock() {
         if_tsan_pre_lock(this);
 
@@ -465,11 +461,9 @@ struct queue_data {
 
     uintptr_t unpark_info{0};
 
-    ALWAYS_INLINE queue_data() {
-    }
+    ALWAYS_INLINE queue_data() = default;
     // Inlined, empty dtor needed to avoid confusing MachO builds
-    ALWAYS_INLINE ~queue_data() {
-    }
+    ALWAYS_INLINE ~queue_data() = default;
 };
 
 // Must be a power of two.
@@ -592,8 +586,7 @@ struct validate_action {
     bool unpark_one{false};
     uintptr_t invalid_unpark_info{0};
 
-    ALWAYS_INLINE validate_action() {
-    }
+    ALWAYS_INLINE validate_action() = default;
 };
 
 WEAK bool parking_control_validate(void *control, validate_action &action) {
@@ -1087,8 +1080,7 @@ class fast_cond {
     uintptr_t state{0};
 
 public:
-    ALWAYS_INLINE fast_cond() {
-    }
+    ALWAYS_INLINE fast_cond() = default;
 
     ALWAYS_INLINE void signal() {
         if_tsan_pre_signal(this);

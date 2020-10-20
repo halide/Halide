@@ -19,6 +19,8 @@ Checks: >
     bugprone-string-constructor,
     modernize-use-default-member-init,
     modernize-use-emplace,
+    modernize-use-equals-default,
+    modernize-use-equals-delete,
     modernize-use-override,
     performance-move-const-arg,
     performance-noexcept-move-constructor,

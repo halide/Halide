@@ -37,8 +37,7 @@ struct AssociativePattern {
     /** Indicate if the associative op is also commutative. */
     bool is_commutative{false};
 
-    AssociativePattern() {
-    }
+    AssociativePattern() = default;
     AssociativePattern(size_t size)
         : ops(size), identities(size) {
     }

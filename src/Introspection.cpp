@@ -59,8 +59,7 @@ class DebugSections {
 
     struct FieldFormat {
         uint64_t name{0}, form{0};
-        FieldFormat() {
-        }
+        FieldFormat() = default;
         FieldFormat(uint64_t n, uint64_t f)
             : name(n), form(f) {
         }
@@ -69,8 +68,7 @@ class DebugSections {
     struct EntryFormat {
         uint64_t code{0}, tag{0};
         bool has_children{false};
-        EntryFormat() {
-        }
+        EntryFormat() = default;
         vector<FieldFormat> fields;
     };
     vector<EntryFormat> entry_formats;
@@ -180,8 +178,7 @@ class DebugSections {
                Reference,
                Array } type{Primitive};
 
-        TypeInfo() {
-        }
+        TypeInfo() = default;
     };
     vector<TypeInfo> types;
 

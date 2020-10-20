@@ -47,8 +47,7 @@ class UsesExternImage : public IRVisitor {
     }
 
 public:
-    UsesExternImage() {
-    }
+    UsesExternImage() = default;
     bool result{false};
 };
 

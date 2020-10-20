@@ -22,10 +22,6 @@ GeneratorContext::GeneratorContext(const Target &t, bool auto_schedule,
       value_tracker(std::make_shared<Internal::ValueTracker>()) {
 }
 
-GeneratorContext::~GeneratorContext() {
-    // nothing
-}
-
 void GeneratorContext::init_from_context(const Halide::GeneratorContext &context) {
     target.set(context.get_target());
     auto_schedule.set(context.get_auto_schedule());
@@ -1698,10 +1694,6 @@ GIOBase::GIOBase(size_t array_size,
                  const std::vector<Type> &types,
                  int dims)
     : array_size_(array_size), name_(name), kind_(kind), types_(types), dims_(dims) {
-}
-
-GIOBase::~GIOBase() {
-    // nothing
 }
 
 bool GIOBase::array_size_defined() const {

@@ -29,8 +29,7 @@ class Scope;
  * remainder == 0). */
 
 struct ModulusRemainder {
-    ModulusRemainder() {
-    }
+    ModulusRemainder() = default;
     ModulusRemainder(int64_t m, int64_t r)
         : modulus(m), remainder(r) {
     }

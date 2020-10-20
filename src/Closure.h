@@ -61,8 +61,7 @@ public:
         /** The size of the buffer if known, otherwise zero. */
         size_t size{0};
 
-        Buffer() {
-        }
+        Buffer() = default;
     };
 
 protected:

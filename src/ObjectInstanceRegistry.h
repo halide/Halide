@@ -65,6 +65,11 @@ public:
      */
     static std::vector<void *> instances_in_range(void *start, size_t size, Kind kind);
 
+    ObjectInstanceRegistry(const ObjectInstanceRegistry &) = delete;
+    ObjectInstanceRegistry &operator=(const ObjectInstanceRegistry &) = delete;
+    ObjectInstanceRegistry(ObjectInstanceRegistry &&) = delete;
+    ObjectInstanceRegistry &operator=(ObjectInstanceRegistry &&) = delete;
+
 private:
     static ObjectInstanceRegistry &get_registry();
 
@@ -74,8 +79,7 @@ private:
         Kind kind{Invalid};
         bool registered_for_introspection{false};
 
-        InstanceInfo() {
-        }
+        InstanceInfo() = default;
         InstanceInfo(size_t size, Kind kind, void *subject_ptr, bool registered_for_introspection)
             : subject_ptr(subject_ptr), size(size), kind(kind), registered_for_introspection(registered_for_introspection) {
         }
@@ -85,7 +89,6 @@ private:
     std::map<uintptr_t, InstanceInfo> instances;
 
     ObjectInstanceRegistry() = default;
-    ObjectInstanceRegistry(ObjectInstanceRegistry &rhs) = delete;
 };
 
 }  // namespace Internal

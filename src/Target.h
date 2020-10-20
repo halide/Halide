@@ -127,8 +127,7 @@ struct Target {
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         FeatureEnd = halide_target_feature_end
     };
-    Target() {
-    }
+    Target() = default;
     Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
         for (const auto &f : initial_features) {

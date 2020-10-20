@@ -567,13 +567,14 @@ struct FunctionDAG {
     void dump() const;
     std::ostream &dump(std::ostream &os) const;
 
+    FunctionDAG(const FunctionDAG &) = delete;
+    FunctionDAG &operator=(const FunctionDAG &) = delete;
+    FunctionDAG(FunctionDAG &&) = delete;
+    FunctionDAG &operator=(FunctionDAG &&) = delete;
+
 private:
     // Compute the featurization for the entire DAG
     void featurize();
-
-    // This class uses a lot of internal pointers, so we'll hide the copy constructor.
-    FunctionDAG(const FunctionDAG &other) = delete;
-    void operator=(const FunctionDAG &other) = delete;
 
     template<typename OS>
     void dump_internal(OS &os) const;
