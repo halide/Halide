@@ -237,53 +237,51 @@ public:
                 check("pabsd", 2 * w, abs(i32_1));
             }
 
-            if (Halide::Internal::get_llvm_version() >= 90) {
-                // Horizontal ops. Our support for them uses intrinsics
-                // from LLVM 9+.
+            // Horizontal ops. Our support for them uses intrinsics
+            // from LLVM 9+.
 
-                // Paradoxically, haddps is a bad way to do horizontal
-                // adds down to a single scalar on most x86. A better
-                // sequence (according to Peter Cordes on stackoverflow)
-                // is movshdup, addps, movhlps, addss. haddps is still
-                // good if you're only partially reducing and your result
-                // is at least one native vector, if only to save code
-                // size, but LLVM really really tries to avoid it and
-                // replace it with shuffles whenever it can, so we won't
-                // test for it.
-                //
-                // See:
-                // https://stackoverflow.com/questions/6996764/fastest-way-to-do-horizontal-float-vector-sum-on-x86
+            // Paradoxically, haddps is a bad way to do horizontal
+            // adds down to a single scalar on most x86. A better
+            // sequence (according to Peter Cordes on stackoverflow)
+            // is movshdup, addps, movhlps, addss. haddps is still
+            // good if you're only partially reducing and your result
+            // is at least one native vector, if only to save code
+            // size, but LLVM really really tries to avoid it and
+            // replace it with shuffles whenever it can, so we won't
+            // test for it.
+            //
+            // See:
+            // https://stackoverflow.com/questions/6996764/fastest-way-to-do-horizontal-float-vector-sum-on-x86
 
-                // For reducing down to a scalar we expect to see addps
-                // and movshdup. We'll sniff for the movshdup.
-                check("movshdup", 1, sum(in_f32(RDom(0, 2) + 2 * x)));
-                check("movshdup", 1, sum(in_f32(RDom(0, 4) + 4 * x)));
-                check("movshdup", 1, sum(in_f32(RDom(0, 16) + 16 * x)));
+            // For reducing down to a scalar we expect to see addps
+            // and movshdup. We'll sniff for the movshdup.
+            check("movshdup", 1, sum(in_f32(RDom(0, 2) + 2 * x)));
+            check("movshdup", 1, sum(in_f32(RDom(0, 4) + 4 * x)));
+            check("movshdup", 1, sum(in_f32(RDom(0, 16) + 16 * x)));
 
-                // The integer horizontal add operations are pretty
-                // terrible on all x86 variants, and LLVM does its best to
-                // avoid generating those too, so we won't test that here
-                // either.
+            // The integer horizontal add operations are pretty
+            // terrible on all x86 variants, and LLVM does its best to
+            // avoid generating those too, so we won't test that here
+            // either.
 
-                // Min reductions should use phminposuw when
-                // possible. This only exists for u16. X86 is weird.
-                check("phminposuw", 1, minimum(in_u16(RDom(0, 8) + 8 * x)));
+            // Min reductions should use phminposuw when
+            // possible. This only exists for u16. X86 is weird.
+            check("phminposuw", 1, minimum(in_u16(RDom(0, 8) + 8 * x)));
 
-                // Max reductions can use the same instruction by first
-                // flipping the bits.
-                check("phminposuw", 1, maximum(in_u16(RDom(0, 8) + 8 * x)));
+            // Max reductions can use the same instruction by first
+            // flipping the bits.
+            check("phminposuw", 1, maximum(in_u16(RDom(0, 8) + 8 * x)));
 
-                // Reductions over signed ints can flip the sign bit
-                // before and after (equivalent to adding 128).
-                check("phminposuw", 1, minimum(in_i16(RDom(0, 8) + 8 * x)));
-                check("phminposuw", 1, maximum(in_i16(RDom(0, 8) + 8 * x)));
+            // Reductions over signed ints can flip the sign bit
+            // before and after (equivalent to adding 128).
+            check("phminposuw", 1, minimum(in_i16(RDom(0, 8) + 8 * x)));
+            check("phminposuw", 1, maximum(in_i16(RDom(0, 8) + 8 * x)));
 
-                // Reductions over 8-bit ints can widen first
-                check("phminposuw", 1, minimum(in_u8(RDom(0, 16) + 16 * x)));
-                check("phminposuw", 1, maximum(in_u8(RDom(0, 16) + 16 * x)));
-                check("phminposuw", 1, minimum(in_i8(RDom(0, 16) + 16 * x)));
-                check("phminposuw", 1, maximum(in_i8(RDom(0, 16) + 16 * x)));
-            }
+            // Reductions over 8-bit ints can widen first
+            check("phminposuw", 1, minimum(in_u8(RDom(0, 16) + 16 * x)));
+            check("phminposuw", 1, maximum(in_u8(RDom(0, 16) + 16 * x)));
+            check("phminposuw", 1, minimum(in_i8(RDom(0, 16) + 16 * x)));
+            check("phminposuw", 1, maximum(in_i8(RDom(0, 16) + 16 * x)));
         }
 
         // SSE 4.1
@@ -940,8 +938,7 @@ public:
             // VORR     X       -       Bitwise OR
             // check("vorr", bool1 | bool2);
 
-            if (Halide::Internal::get_llvm_version() >= 100) {
-
+            {
                 for (int f : {2, 4}) {
                     RDom r(0, f);
 

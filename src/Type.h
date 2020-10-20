@@ -430,8 +430,12 @@ public:
 
     /** Compare ordering of two types so they can be used in certain containers and algorithms */
     bool operator<(const Type &other) const {
-        if (type < other.type) return true;
-        if (code() == Handle) return handle_type < other.handle_type;
+        if (type < other.type) {
+            return true;
+        }
+        if (code() == Handle) {
+            return handle_type < other.handle_type;
+        }
         return false;
     }
 

@@ -9,6 +9,10 @@
 #define CL_FN(ret, fn, args)
 #endif
 
+#ifndef CL_12_FN
+#define CL_12_FN(ret, fn, args) CL_FN(ret, fn, args)
+#endif
+
 /* Platform API */
 CL_FN(cl_int,
       clGetPlatformIDs, (cl_uint          /* num_entries */,
@@ -37,20 +41,18 @@ CL_FN(cl_int,
                         void *          /* param_value */,
                         size_t *        /* param_value_size_ret */));
 
-#ifdef HAVE_OPENCL_12
-CL_FN(cl_int,
+CL_12_FN(cl_int,
       clCreateSubDevices, (cl_device_id                         /* in_device */,
                            const cl_device_partition_property * /* properties */,
                            cl_uint                              /* num_devices */,
                            cl_device_id *                       /* out_devices */,
                            cl_uint *                            /* num_devices_ret */));
 
-CL_FN(cl_int,
+CL_12_FN(cl_int,
       clRetainDevice, (cl_device_id /* device */));
 
-CL_FN(cl_int,
+CL_12_FN(cl_int,
       clReleaseDevice, (cl_device_id /* device */));
-#endif
 
 /* Context APIs  */
 CL_FN(cl_context,
@@ -116,15 +118,13 @@ CL_FN(cl_mem,
                           const void *             /* buffer_create_info */,
                           cl_int *                 /* errcode_ret */));
 
-#ifdef HAVE_OPENCL_12
-CL_FN(cl_mem,
+CL_12_FN(cl_mem,
       clCreateImage, (cl_context              /* context */,
                       cl_mem_flags            /* flags */,
                       const cl_image_format * /* image_format */,
                       const cl_image_desc *   /* image_desc */,
                       void *                  /* host_ptr */,
                       cl_int *                /* errcode_ret */));
-#endif
 
 CL_FN(cl_int,
       clRetainMemObject, (cl_mem /* memobj */));
@@ -352,5 +352,6 @@ CL_FN(cl_int,
                                cl_event *       /* event */));
 
 #undef CL_FN
+#undef CL_12_FN
 
 // clang-format on

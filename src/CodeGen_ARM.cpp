@@ -114,7 +114,6 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         casts.push_back(p);
 
         // Saturating add
-#if LLVM_VERSION >= 100
         if (t.is_int()) {
             p.intrin32 = "llvm.sadd.sat" + t_str;
             p.intrin64 = "llvm.sadd.sat" + t_str;
@@ -122,15 +121,6 @@ CodeGen_ARM::CodeGen_ARM(Target target)
             p.intrin32 = "llvm.uadd.sat" + t_str;
             p.intrin64 = "llvm.uadd.sat" + t_str;
         }
-#else
-        if (t.is_int()) {
-            p.intrin32 = "llvm.arm.neon.vqadds" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.sqadd" + t_str;
-        } else {
-            p.intrin32 = "llvm.arm.neon.vqaddu" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.uqadd" + t_str;
-        }
-#endif
         p.pattern = cast(t, clamp(w_vector + w_vector, tmin, tmax));
         casts.push_back(p);
 
@@ -142,7 +132,6 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 
         // Saturating subtract
         // N.B. Saturating subtracts always widen to a signed type
-#if LLVM_VERSION >= 100
         if (t.is_int()) {
             p.intrin32 = "llvm.ssub.sat" + t_str;
             p.intrin64 = "llvm.ssub.sat" + t_str;
@@ -150,15 +139,6 @@ CodeGen_ARM::CodeGen_ARM(Target target)
             p.intrin32 = "llvm.usub.sat" + t_str;
             p.intrin64 = "llvm.usub.sat" + t_str;
         }
-#else
-        if (t.is_int()) {
-            p.intrin32 = "llvm.arm.neon.vqsubs" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.sqsub" + t_str;
-        } else {
-            p.intrin32 = "llvm.arm.neon.vqsubu" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.uqsub" + t_str;
-        }
-#endif
         p.pattern = cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax));
         casts.push_back(p);
 
@@ -947,10 +927,8 @@ void CodeGen_ARM::visit(const Load *op) {
             LoadInst *loadI = cast<LoadInst>(builder->CreateLoad(bitcastI));
 #if LLVM_VERSION >= 110
             loadI->setAlignment(Align(alignment));
-#elif LLVM_VERSION >= 100
-            loadI->setAlignment(MaybeAlign(alignment));
 #else
-            loadI->setAlignment(alignment);
+            loadI->setAlignment(MaybeAlign(alignment));
 #endif
             add_tbaa_metadata(loadI, op->name, slice_ramp);
             Value *shuffleInstr = builder->CreateShuffleVector(loadI, undef, constantsV);
@@ -1025,7 +1003,6 @@ void CodeGen_ARM::visit(const Call *op) {
 }
 
 void CodeGen_ARM::visit(const LT *op) {
-#if LLVM_VERSION >= 100
     if (op->a.type().is_float() && op->type.is_vector()) {
         // Fast-math flags confuse LLVM's aarch64 backend, so
         // temporarily clear them for this instruction.
@@ -1035,13 +1012,11 @@ void CodeGen_ARM::visit(const LT *op) {
         CodeGen_Posix::visit(op);
         return;
     }
-#endif
 
     CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const LE *op) {
-#if LLVM_VERSION >= 100
     if (op->a.type().is_float() && op->type.is_vector()) {
         // Fast-math flags confuse LLVM's aarch64 backend, so
         // temporarily clear them for this instruction.
@@ -1051,7 +1026,6 @@ void CodeGen_ARM::visit(const LE *op) {
         CodeGen_Posix::visit(op);
         return;
     }
-#endif
 
     CodeGen_Posix::visit(op);
 }
@@ -1060,10 +1034,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     if (neon_intrinsics_disabled() ||
         op->op == VectorReduce::Or ||
         op->op == VectorReduce::And ||
-        op->op == VectorReduce::Mul ||
-        // LLVM 9 has bugs in the arm backend for vector reduce
-        // ops. See https://github.com/halide/Halide/issues/5081
-        !(LLVM_VERSION >= 100)) {
+        op->op == VectorReduce::Mul) {
         CodeGen_Posix::codegen_vector_reduce(op, init);
         return;
     }

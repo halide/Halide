@@ -645,6 +645,17 @@ void check_vectors() {
         Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder());
         check(stmt, Evaluate::make(0));
     }
+
+    Expr bool_vector = Variable::make(Bool(4), "bool_vector");
+    Expr int_vector = Variable::make(Int(32, 4), "int_vector");
+    check(VectorReduce::make(VectorReduce::And, Broadcast::make(bool_vector, 4), 1),
+          VectorReduce::make(VectorReduce::And, bool_vector, 1));
+    check(VectorReduce::make(VectorReduce::Or, Broadcast::make(bool_vector, 4), 2),
+          VectorReduce::make(VectorReduce::Or, bool_vector, 2));
+    check(VectorReduce::make(VectorReduce::Min, Broadcast::make(int_vector, 4), 4),
+          int_vector);
+    check(VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8),
+          VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8));
 }
 
 void check_bounds() {

@@ -32,10 +32,14 @@ using Halide::Internal::ScheduleFeatures;
 using Halide::Runtime::Buffer;
 
 bool ends_with(const std::string &str, const std::string &suffix) {
-    if (str.size() < suffix.size()) return false;
+    if (str.size() < suffix.size()) {
+        return false;
+    }
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off + i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) {
+            return false;
+        }
     }
     return true;
 }
@@ -243,7 +247,9 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
         }
         internal_assert(true_runtimes(i) > 0);
     }
-    if (any_nans) abort();
+    if (any_nans) {
+        abort();
+    }
 
     // Update weights locally
     auto update_weight = [](const Runtime::Buffer<float> &src, Runtime::Buffer<float> &dst) {
@@ -262,7 +268,9 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
 }
 
 void DefaultCostModel::evaluate_costs() {
-    if (cursor == 0 || !schedule_feat_queue.data()) return;
+    if (cursor == 0 || !schedule_feat_queue.data()) {
+        return;
+    }
 
     internal_assert(pipeline_feat_queue.data());
     internal_assert(schedule_feat_queue.data());

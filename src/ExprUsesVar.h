@@ -20,12 +20,16 @@ class ExprUsesVars : public IRGraphVisitor {
     Scope<Expr> scope;
 
     void include(const Expr &e) override {
-        if (result) return;
+        if (result) {
+            return;
+        }
         IRGraphVisitor::include(e);
     }
 
     void include(const Stmt &s) override {
-        if (result) return;
+        if (result) {
+            return;
+        }
         IRGraphVisitor::include(s);
     }
 

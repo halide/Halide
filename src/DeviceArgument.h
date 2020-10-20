@@ -36,6 +36,12 @@ struct DeviceArgument {
      */
     bool is_buffer;
 
+    /** If is_buffer == true and memory_type == GPUTexture, this argument should be
+     * passed and accessed through texture sampler operations instead of
+     * directly as a memory array
+     */
+    MemoryType memory_type;
+
     /** If is_buffer is true, this is the dimensionality of the buffer.
      * If is_buffer is false, this value is ignored (and should always be set to zero) */
     uint8_t dimensions;
@@ -66,6 +72,7 @@ struct DeviceArgument {
 
     DeviceArgument()
         : is_buffer(false),
+          memory_type(MemoryType::Auto),
           dimensions(0),
           size(0),
           packed_index(0),
@@ -75,11 +82,13 @@ struct DeviceArgument {
 
     DeviceArgument(const std::string &_name,
                    bool _is_buffer,
+                   MemoryType _mem,
                    Type _type,
                    uint8_t _dimensions,
                    size_t _size = 0)
         : name(_name),
           is_buffer(_is_buffer),
+          memory_type(_mem),
           dimensions(_dimensions),
           type(_type),
           size(_size),

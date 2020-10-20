@@ -111,7 +111,7 @@ set(RUNTIME_LL
     x86
     x86_avx
     x86_avx2
-    x86_avx512    
+    x86_avx512
     x86_sse41
     )
 
@@ -216,14 +216,23 @@ foreach (i IN LISTS RUNTIME_CPP)
                 set(dep_args "")
             endif ()
 
-            add_custom_command(OUTPUT "${LL}"
-                               COMMAND clang ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
-                               DEPENDS "${SOURCE}"
-                               # Note: IMPLICIT_DEPENDS only works for Makefile generators, ${dep_args} handles Ninja.
-                               IMPLICIT_DEPENDS CXX "${SOURCE}"
-                               WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-                               ${dep_args}
-                               VERBATIM)
+            if (CMAKE_EXPORT_COMPILE_COMMANDS)
+                # Create a 'fake' entry just so that clang-tidy will see a C++ compilation command
+                # that it can use for tidy-checking. (This branch should never be taken by 'normal'
+                # compilations.)
+                add_library(${basename} STATIC "${SOURCE}")
+                target_compile_options(${basename} PRIVATE ${RUNTIME_CXX_FLAGS} ${fpic} -m${j} -target ${TARGET})
+                target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
+            else()
+                add_custom_command(OUTPUT "${LL}"
+                                   COMMAND clang ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
+                                   DEPENDS "${SOURCE}"
+                                   # Note: IMPLICIT_DEPENDS only works for Makefile generators, ${dep_args} handles Ninja.
+                                   IMPLICIT_DEPENDS CXX "${SOURCE}"
+                                   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+                                   ${dep_args}
+                                   VERBATIM)
+            endif()
 
             add_custom_command(OUTPUT "${BC}"
                                COMMAND llvm-as "${LL}" -o "${BC}"

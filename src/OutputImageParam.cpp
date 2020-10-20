@@ -102,4 +102,9 @@ OutputImageParam &OutputImageParam::set_estimates(const Region &estimates) {
     return *this;
 }
 
+OutputImageParam &OutputImageParam::store_in(MemoryType type) {
+    param.store_in(type);
+    return *this;
+}
+
 }  // namespace Halide

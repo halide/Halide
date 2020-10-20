@@ -375,8 +375,9 @@ namespace {
 template<typename Source, typename Dest>
 ALWAYS_INLINE void converting_copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
     // Skip size-1 dimensions
-    while (d >= 0 && copy.extent[d] == 1)
+    while (d >= 0 && copy.extent[d] == 1) {
         d--;
+    }
 
     if (d == -1) {
         const Source *from = (Source *)(copy.src + src_off);

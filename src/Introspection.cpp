@@ -49,11 +49,7 @@ inline T load_misaligned(const T *p) {
     return result;
 }
 
-#if LLVM_VERSION >= 100
 typedef uint64_t llvm_offset_t;
-#else
-typedef uint32_t llvm_offset_t;
-#endif
 
 }  // namespace
 
@@ -963,14 +959,9 @@ private:
 
         for (llvm::object::section_iterator iter = obj->section_begin();
              iter != obj->section_end(); ++iter) {
-#if LLVM_VERSION >= 100
             auto expected_name = iter->getName();
             internal_assert(expected_name);
             llvm::StringRef name = expected_name.get();
-#else
-            llvm::StringRef name;
-            iter->getName(name);
-#endif
             debug(2) << "Section: " << name.str() << "\n";
             // ignore errors, just leave strings empty
             auto e = iter->getContents();

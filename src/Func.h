@@ -46,10 +46,11 @@ struct VarOrRVar {
     }
 
     const std::string &name() const {
-        if (is_rvar)
+        if (is_rvar) {
             return rvar.name();
-        else
+        } else {
             return var.name();
+        }
     }
 
     Var var;

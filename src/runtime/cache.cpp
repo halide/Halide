@@ -60,7 +60,9 @@ WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) 
 
 WEAK bool buffer_has_shape(const halide_buffer_t *buf, const halide_dimension_t *shape) {
     for (int i = 0; i < buf->dimensions; i++) {
-        if (buf->dim[i] != shape[i]) return false;
+        if (buf->dim[i] != shape[i]) {
+            return false;
+        }
     }
     return true;
 }

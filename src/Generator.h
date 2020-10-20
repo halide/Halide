@@ -1785,6 +1785,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(ImageParam, dim)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, host_alignment)
     HALIDE_FORWARD_METHOD(ImageParam, set_host_alignment)
+    HALIDE_FORWARD_METHOD(ImageParam, store_in)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, dimensions)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, left)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, right)
@@ -2046,8 +2047,12 @@ protected:
         // Don't set min/max for bool
         if (!std::is_same<TBase, bool>::value) {
             for (Parameter &p : this->parameters_) {
-                if (min_.defined()) p.set_min_value(min_);
-                if (max_.defined()) p.set_max_value(max_);
+                if (min_.defined()) {
+                    p.set_min_value(min_);
+                }
+                if (max_.defined()) {
+                    p.set_max_value(max_);
+                }
             }
         }
     }
@@ -2541,6 +2546,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, dim)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, host_alignment)
     HALIDE_FORWARD_METHOD(OutputImageParam, set_host_alignment)
+    HALIDE_FORWARD_METHOD(OutputImageParam, store_in)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, dimensions)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, left)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, right)

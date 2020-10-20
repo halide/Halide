@@ -1101,6 +1101,9 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_multitarget,$(GENERATOR_
 # (each tagged with the *known* blocking issue(s))
 
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_texture,$(GENERATOR_AOTCPP_TESTS))
+
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_acquire_release,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
@@ -2059,7 +2062,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 90 100 110 120))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 100 110 120))
 LLVM_OK=yes
 endif
 
@@ -2239,51 +2242,25 @@ $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(INCLUDE_DIR)/Ha
 $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
-# Run clang-format on most of the source. The tutorials directory is
-# explicitly skipped, as those files are manually formatted to
-# maximize readability. NB: clang-format is *not* stable across versions;
-# we are currently standardized on the formatting from clang-format-10.
-# If CLANG_FORMAT points to a different version, you may get incorrectly-formatted code.
-CLANG_FORMAT ?= ${CLANG}-format
+# Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
+# Let's default to the Ubuntu install location.
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
 
 .PHONY: format
 format:
-	find "${ROOT_DIR}/apps" "${ROOT_DIR}/src" "${ROOT_DIR}/tools" "${ROOT_DIR}/test" "${ROOT_DIR}/util" "${ROOT_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG_FORMAT} -i -style=file
+	@CLANG_FORMAT_LLVM_INSTALL_DIR=$(CLANG_FORMAT_LLVM_INSTALL_DIR) ${ROOT_DIR}/run-clang-format.sh
 
-# run-clang-tidy.py is a script that comes with LLVM for running clang
-# tidy in parallel. Assume it's in the standard install path relative to clang.
-RUN_CLANG_TIDY ?= $(shell dirname $(CLANG))/../share/clang/run-clang-tidy.py
-
-# Run clang-tidy on everything in src/. In future we may increase this
-# surface. Not doing it for now because things outside src are not
-# performance-critical.
-CLANG_TIDY_TARGETS= $(addprefix $(SRC_DIR)/,$(SOURCE_FILES))
-
-INVOKE_CLANG_TIDY ?= $(RUN_CLANG_TIDY) -p $(BUILD_DIR) $(CLANG_TIDY_TARGETS) -clang-tidy-binary $(CLANG)-tidy -clang-apply-replacements-binary $(CLANG)-apply-replacements -quiet
-
-$(BUILD_DIR)/compile_commands.json:
-	mkdir -p $(BUILD_DIR)
-	echo '[' >> $@
-	BD=$$(realpath $(BUILD_DIR)); \
-	SD=$$(realpath $(SRC_DIR)); \
-	ID=$$(realpath $(INCLUDE_DIR)); \
-	for S in $(SOURCE_FILES); do \
-	echo "{ \"directory\": \"$${BD}\"," >> $@; \
-	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -c $$SD/$$S -o /dev/null\"," >> $@; \
-	echo "  \"file\": \"$$SD/$$S\" }," >> $@; \
-	done
-	# Add a sentinel to make it valid json (no trailing comma)
-	echo "{ \"directory\": \"$${BD}\"," >> $@; \
-	echo "  \"command\": \"$(CXX) -c /dev/null -o /dev/null\"," >> $@; \
-	echo "  \"file\": \"$$S\" }]" >> $@; \
+# Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
+# Let's default to the Ubuntu install location.
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
 
 .PHONY: clang-tidy
-clang-tidy: $(BUILD_DIR)/compile_commands.json
-	@$(INVOKE_CLANG_TIDY) 2>&1 | grep -v "warnings generated" | grep -v '^$(CLANG)-tidy '
+clang-tidy:
+	@CLANG_TIDY_LLVM_INSTALL_DIR=$(CLANG_TIDY_LLVM_INSTALL_DIR) ${ROOT_DIR}/run-clang-tidy.sh
 
 .PHONY: clang-tidy-fix
-clang-tidy-fix: $(BUILD_DIR)/compile_commands.json
-	@$(INVOKE_CLANG_TIDY) -fix 2>&1 | grep -v "warnings generated" | grep -v '^$(CLANG)-tidy '
+clang-tidy-fix:
+	@CLANG_TIDY_LLVM_INSTALL_DIR=$(CLANG_TIDY_LLVM_INSTALL_DIR) ${ROOT_DIR}/run-clang-tidy.sh -fix
 
 # Build the documentation. Be sure to keep this synchronized with doc/CMakeLists.txt
 # if you choose to edit it.
