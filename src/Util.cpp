@@ -14,7 +14,7 @@
 #ifdef _MSC_VER
 #include <io.h>
 #else
-#include <stdlib.h>
+#include <cstdlib>
 #include <unistd.h>
 #endif
 #include <sys/stat.h>

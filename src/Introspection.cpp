@@ -7,9 +7,9 @@
 #include "LLVM_Headers.h"
 #include "Util.h"
 
+#include <cstdio>
 #include <iostream>
 #include <sstream>
-#include <stdio.h>
 #include <string>
 
 // defines backtrace, which gets the call stack as instruction pointers

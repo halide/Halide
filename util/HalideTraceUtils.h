@@ -2,8 +2,8 @@
 #define HALIDE_TRACE_UTILS_H
 
 #include "HalideRuntime.h"
+#include <cstdio>
 #include <cstring>
-#include <stdio.h>
 
 namespace Halide {
 namespace Internal {

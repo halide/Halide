@@ -6,8 +6,8 @@
 #define FUNCTION_DAG_H
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
-#include <stdint.h>
 #include <string>
 #include <utility>
 

@@ -9,8 +9,8 @@
  * if you are compiling with C++11 enabled.
  */
 
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 
 #include <map>
 #include <mutex>

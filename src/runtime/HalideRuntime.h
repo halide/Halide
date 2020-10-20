@@ -2,10 +2,16 @@
 #define HALIDE_HALIDERUNTIME_H
 
 #ifndef COMPILING_HALIDE_RUNTIME
+#ifdef __cplusplus
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#else
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#endif
 #else
 #include "runtime_internal.h"
 #endif

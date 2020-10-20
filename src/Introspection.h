@@ -1,8 +1,8 @@
 #ifndef HALIDE_INTROSPECTION_H
 #define HALIDE_INTROSPECTION_H
 
+#include <cstdint>
 #include <iostream>
-#include <stdint.h>
 #include <string>
 
 /** \file

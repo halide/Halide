@@ -2,7 +2,7 @@
 #include "Introspection.h"
 #include "Util.h"  // for get_env_variable
 
-#include <signal.h>
+#include <csignal>
 
 #ifdef _MSC_VER
 #include <io.h>

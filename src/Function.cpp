@@ -1,7 +1,7 @@
 #include <atomic>
+#include <cstdlib>
 #include <memory>
 #include <set>
-#include <stdlib.h>
 #include <utility>
 
 #include "CSE.h"
