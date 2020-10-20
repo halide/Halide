@@ -1,7 +1,7 @@
 #include <atomic>
+#include <cstdlib>
 #include <memory>
 #include <set>
-#include <stdlib.h>
 #include <utility>
 
 #include "CSE.h"
@@ -105,7 +105,7 @@ struct FunctionContents {
         }
 
         if (!extern_function_name.empty()) {
-            for (ExternFuncArgument i : extern_arguments) {
+            for (const ExternFuncArgument &i : extern_arguments) {
                 if (i.is_func()) {
                     user_assert(i.func.get() != this)
                         << "Extern Func has itself as an argument";
@@ -119,7 +119,7 @@ struct FunctionContents {
             }
         }
 
-        for (Parameter i : output_buffers) {
+        for (const Parameter &i : output_buffers) {
             for (size_t j = 0; j < args.size(); j++) {
                 if (i.min_constraint(j).defined()) {
                     i.min_constraint(j).accept(visitor);

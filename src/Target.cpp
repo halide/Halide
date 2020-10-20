@@ -538,8 +538,7 @@ void bad_target_string(const std::string &target) {
 
 }  // namespace
 
-Target::Target(const std::string &target)
-    : os(OSUnknown), arch(ArchUnknown), bits(0) {
+Target::Target(const std::string &target) {
     Target host = get_host_target();
 
     if (target.empty()) {

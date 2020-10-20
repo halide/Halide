@@ -87,14 +87,13 @@ namespace Synchronization {
 struct thread_parker {
     CriticalSection critical_section;
     ConditionVariable condvar;
-    bool should_park;
+    bool should_park = false;
 
 #if __cplusplus >= 201103L
     thread_parker(const thread_parker &) = delete;
 #endif
 
-    ALWAYS_INLINE thread_parker()
-        : should_park(false) {
+    ALWAYS_INLINE thread_parker() {
         InitializeCriticalSection(&critical_section);
         InitializeConditionVariable(&condvar);
         should_park = false;

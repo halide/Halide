@@ -28,7 +28,7 @@ static string sanitize_name(const string &name) {
 }
 
 static const string remove_namespaces(const string &name) {
-    size_t i = name.find_last_of(":");
+    size_t i = name.find_last_of(':');
     if (i == string::npos) {
         return name;
     } else {

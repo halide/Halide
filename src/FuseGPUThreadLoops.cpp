@@ -1479,7 +1479,7 @@ class FuseGPUThreadLoops : public IRMutator {
 };
 
 class ZeroGPULoopMins : public IRMutator {
-    bool in_non_glsl_gpu;
+    bool in_non_glsl_gpu = false;
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
@@ -1502,8 +1502,7 @@ class ZeroGPULoopMins : public IRMutator {
     }
 
 public:
-    ZeroGPULoopMins()
-        : in_non_glsl_gpu(false) {
+    ZeroGPULoopMins() {
     }
 };
 

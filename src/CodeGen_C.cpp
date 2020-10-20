@@ -2710,7 +2710,7 @@ void CodeGen_C::visit(const Shuffle *op) {
     }
 
     std::vector<string> vecs;
-    for (Expr v : op->vectors) {
+    for (const Expr &v : op->vectors) {
         vecs.push_back(print_expr(v));
     }
     ostringstream rhs;

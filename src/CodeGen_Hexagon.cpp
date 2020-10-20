@@ -2608,7 +2608,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
 
         debug(4) << "Creating call to halide_locked_cache_malloc for allocation "
                  << alloc->name << " of size " << alloc->type.bytes();
-        for (Expr e : alloc->extents) {
+        for (const Expr &e : alloc->extents) {
             debug(4) << " x " << e;
         }
         debug(4) << "\n";

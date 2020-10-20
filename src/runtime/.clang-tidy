@@ -7,7 +7,9 @@
 # where specialization is needed.
 
 #
-# The desired change here is just to remove bugprone-sizeof-expression.
+# The desired change here is just to remove:
+#       bugprone-sizeof-expression
+#       misc-definitions-in-headers
 #
 
 ---
@@ -17,16 +19,24 @@ Checks: >
     bugprone-parent-virtual-call,
     -bugprone-sizeof-expression,
     bugprone-string-constructor,
+    misc-*,
+    -misc-definitions-in-headers,
+    -misc-non-private-member-variables-in-classes,
+    -misc-unused-parameters,
+    -misc-unconventional-assign-operator,
+    modernize-deprecated-headers,
+    modernize-use-default-member-init,
     modernize-use-emplace,
     modernize-use-override,
-    performance-move-const-arg,
-    performance-noexcept-move-constructor,
-    performance-trivially-destructible,
-    performance-unnecessary-copy-initialization,
-    performance-unnecessary-value-param,
+    performance-*,
+    -performance-inefficient-string-concatenation,
+    -performance-inefficient-vector-operation,
     readability-braces-around-statements
 
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
 FormatStyle: 'file'
+CheckOptions:
+    - key:   modernize-use-default-member-init.UseAssignment
+      value: 1
 ...

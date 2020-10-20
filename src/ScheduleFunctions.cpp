@@ -372,7 +372,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     Stmt body = Provide::make(func.name(), values, site);
     if (def.schedule().atomic()) {  // Add atomic node.
         bool any_unordered_parallel = false;
-        for (auto d : def.schedule().dims()) {
+        for (const auto &d : def.schedule().dims()) {
             any_unordered_parallel |= is_unordered_parallel(d.for_type);
         }
         if (any_unordered_parallel) {

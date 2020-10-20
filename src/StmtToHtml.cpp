@@ -3,11 +3,11 @@
 #include "IRVisitor.h"
 #include "Scope.h"
 
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <sstream>
-#include <stdio.h>
 
 namespace Halide {
 namespace Internal {

@@ -880,7 +880,7 @@ struct State {
                 }
                 p.second->schedule_source << "\n    .reorder_storage(";
                 bool first = true;
-                for (auto v : storage_vars) {
+                for (const auto &v : storage_vars) {
                     if (!first) {
                         p.second->schedule_source << ", ";
                     }
@@ -1353,7 +1353,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 struct Adams2019 {
     void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
-        for (Func f : p.outputs()) {
+        for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
         Autoscheduler::generate_schedule(outputs, target, params, results);

@@ -17,7 +17,7 @@ namespace Internal {
 // that's a bad name. We use the __sync primitives used elsewhere in
 // the runtime for atomic work. They are well supported by clang.
 class SharedExclusiveSpinLock {
-    volatile uint32_t lock;
+    volatile uint32_t lock = 0;
 
     // Covers a single bit indicating one owner has exclusive
     // access. The waiting bit can be set while the exclusive bit is
@@ -70,8 +70,7 @@ public:
         lock = 0;
     }
 
-    SharedExclusiveSpinLock()
-        : lock(0) {
+    SharedExclusiveSpinLock() {
     }
 };
 
@@ -79,7 +78,7 @@ const static int buffer_size = 1024 * 1024;
 
 class TraceBuffer {
     SharedExclusiveSpinLock lock;
-    uint32_t cursor, overage;
+    uint32_t cursor = 0, overage = 0;
     uint8_t buf[buffer_size];
 
     // Attempt to atomically acquire space in the buffer to write a
@@ -144,8 +143,7 @@ public:
         lock.init();
     }
 
-    TraceBuffer()
-        : cursor(0), overage(0) {
+    TraceBuffer() {
     }
 };
 

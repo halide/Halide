@@ -1432,7 +1432,7 @@ private:
     void visit(const Shuffle *op) override {
         TRACK_BOUNDS_INTERVAL;
         Interval result = Interval::nothing();
-        for (Expr i : op->vectors) {
+        for (const Expr &i : op->vectors) {
             i.accept(this);
             result.include(interval);
         }
@@ -1928,7 +1928,7 @@ private:
 
             if (op->call_type == Call::Halide ||
                 op->call_type == Call::Image) {
-                for (Expr e : op->args) {
+                for (const Expr &e : op->args) {
                     e.accept(this);
                 }
                 if (op->name == func || func.empty()) {
@@ -1983,9 +1983,8 @@ private:
         }
 
     public:
-        int count;
-        CountVars()
-            : count(0) {
+        int count = 0;
+        CountVars() {
         }
     };
 

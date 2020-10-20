@@ -113,10 +113,10 @@ struct PipelineContents {
 
     std::vector<Stmt> requirements;
 
-    bool trace_pipeline;
+    bool trace_pipeline = false;
 
     PipelineContents()
-        : module("", Target()), trace_pipeline(false) {
+        : module("", Target()) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void *>(), 0, ArgumentEstimates{});
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context");
     }
@@ -164,7 +164,7 @@ Pipeline::Pipeline(const Func &output)
 
 Pipeline::Pipeline(const vector<Func> &outputs)
     : contents(new PipelineContents) {
-    for (Func f : outputs) {
+    for (const Func &f : outputs) {
         f.function().freeze();
         contents->outputs.push_back(f.function());
     }
@@ -242,7 +242,7 @@ void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_n
 Func Pipeline::get_func(size_t index) {
     // Compute an environment
     std::map<string, Function> env;
-    for (Function f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         std::map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
@@ -426,7 +426,7 @@ class FindExterns : public IRGraphVisitor {
                 if (function_takes_user_context(op->name)) {
                     arg_types.push_back(type_of<void *>());
                 }
-                for (Expr e : op->args) {
+                for (const Expr &e : op->args) {
                     arg_types.push_back(e.type().element_of());
                 }
                 bool is_void_return = op->type.bits() == 0 || op->name == "halide_print";
@@ -457,7 +457,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const LinkageType linkage_type) {
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";
 
-    for (Function f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         user_assert(f.has_pure_definition() || f.has_extern_definition())
             << "Can't compile Pipeline with undefined output Func: " << f.name() << ".\n";
     }
@@ -476,7 +476,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // explicitly).
     const bool requires_user_context = target.has_feature(Target::UserContext);
     bool has_user_context = false;
-    for (Argument arg : lowering_args) {
+    for (const Argument &arg : lowering_args) {
         if (arg.name == contents->user_context_arg.arg.name) {
             has_user_context = true;
         }
@@ -511,7 +511,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         debug(2) << "Reusing old module\n";
     } else {
         vector<IRMutator *> custom_passes;
-        for (CustomLoweringPass p : contents->custom_lowering_passes) {
+        for (const CustomLoweringPass &p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
 
