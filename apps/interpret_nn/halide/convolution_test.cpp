@@ -157,6 +157,9 @@ int main(int argc, char **argv) {
 
         printf("Validating %dx%dx%dx%d\n", p.input_depth, p.input_width, p.input_height, p.input_batches);
         ValidateOutput(a, p);
+
+        halide_profiler_report(nullptr);
+        halide_profiler_reset();
     }
 
     printf("Success!\n");
