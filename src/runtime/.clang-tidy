@@ -27,11 +27,9 @@ Checks: >
     modernize-deprecated-headers,
     modernize-use-emplace,
     modernize-use-override,
-    performance-move-const-arg,
-    performance-noexcept-move-constructor,
-    performance-trivially-destructible,
-    performance-unnecessary-copy-initialization,
-    performance-unnecessary-value-param,
+    performance-*,
+    -performance-inefficient-string-concatenation,
+    -performance-inefficient-vector-operation,
     readability-braces-around-statements
 
 WarningsAsErrors: '*'

@@ -389,12 +389,12 @@ public:
     map<string, BufferInfo> find(const Func &func) {
         buffer_calls.clear();
         vector<Expr> vals = func.values().as_vector();
-        for (Expr val : vals) {
+        for (const Expr &val : vals) {
             val.accept(this);
         }
         for (int update_id = 0; update_id < func.num_update_definitions(); update_id++) {
             vals = func.update_values(update_id).as_vector();
-            for (Expr val : vals) {
+            for (const Expr &val : vals) {
                 val.accept(this);
             }
         }

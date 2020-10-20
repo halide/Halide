@@ -448,7 +448,7 @@ class PromoteToMemoryType : public IRMutator {
         Type t = upgrade(op->type);
         if (t != op->type) {
             vector<Expr> extents;
-            for (Expr e : op->extents) {
+            for (const Expr &e : op->extents) {
                 extents.push_back(mutate(e));
             }
             return Allocate::make(op->name, t, op->memory_type, extents,
@@ -473,7 +473,7 @@ Stmt storage_flattening(Stmt s,
     // Function corresponds to a tuple component. foo.0, foo.1, foo.2,
     // all point to the function foo.
     map<string, pair<Function, int>> tuple_env;
-    for (auto p : env) {
+    for (const auto &p : env) {
         if (p.second.outputs() > 1) {
             for (int i = 0; i < p.second.outputs(); i++) {
                 tuple_env[p.first + "." + std::to_string(i)] = {p.second, i};

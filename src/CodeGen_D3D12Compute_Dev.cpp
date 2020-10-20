@@ -1013,7 +1013,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     s = fsa.mutate(s);
 
     uint32_t total_shared_bytes = 0;
-    for (Stmt sop : fsa.allocs) {
+    for (const Stmt &sop : fsa.allocs) {
         const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);

@@ -326,7 +326,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
 
     internal_assert(!op->extents.empty());
     Expr extent = 1;
-    for (Expr e : op->extents) {
+    for (const Expr &e : op->extents) {
         extent *= e;
     }
     extent = simplify(extent);

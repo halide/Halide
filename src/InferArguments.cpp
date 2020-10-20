@@ -148,7 +148,7 @@ private:
     }
 
     void visit_exprs(const vector<Expr> &v) {
-        for (Expr i : v) {
+        for (const Expr &i : v) {
             visit_expr(i);
         }
     }

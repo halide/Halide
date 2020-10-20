@@ -127,7 +127,7 @@ Func make_param_func(const Parameter &p, const std::string &name) {
 std::vector<Type> parse_halide_type_list(const std::string &types) {
     const auto &e = get_halide_type_enum_map();
     std::vector<Type> result;
-    for (auto t : split_string(types, ",")) {
+    for (const auto &t : split_string(types, ",")) {
         auto it = e.find(t);
         user_assert(it != e.end()) << "Type not found: " << t;
         result.push_back(it->second);
@@ -172,7 +172,7 @@ void ValueTracker::track_values(const std::string &name, const std::vector<Expr>
             std::ostringstream o;
             o << "Saw too many unique values in ValueTracker[" + std::to_string(i) + "]; "
               << "expected a maximum of " << max_unique_values << ":\n";
-            for (auto e : history[i]) {
+            for (const auto &e : history[i]) {
                 o << "    " << e << "\n";
             }
             user_error << o.str();
@@ -339,7 +339,7 @@ void StubEmitter::emit_inputs_struct() {
     const std::string name = "Inputs";
     stream << get_indent() << "struct " << name << " final {\n";
     indent_level++;
-    for (auto in : in_info) {
+    for (const auto &in : in_info) {
         stream << get_indent() << in.c_type << " " << in.name << ";\n";
     }
     stream << "\n";
@@ -350,7 +350,7 @@ void StubEmitter::emit_inputs_struct() {
         stream << get_indent() << name << "(\n";
         indent_level++;
         std::string comma = "";
-        for (auto in : in_info) {
+        for (const auto &in : in_info) {
             stream << get_indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
             comma = ", ";
         }
@@ -358,7 +358,7 @@ void StubEmitter::emit_inputs_struct() {
         stream << get_indent() << ") : \n";
         indent_level++;
         comma = "";
-        for (auto in : in_info) {
+        for (const auto &in : in_info) {
             stream << get_indent() << comma << in.name << "(" << in.name << ")\n";
             comma = ", ";
         }
@@ -689,7 +689,7 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
         }
     } else {
         // Generators with build() method can't have Output<>, hence can't have array outputs
-        for (auto output : p.outputs()) {
+        for (const auto &output : p.outputs()) {
             v.push_back(std::vector<Func>{output});
         }
     }
@@ -927,7 +927,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
             output_name_to_enum[it.second.name] = it.first;
         }
 
-        for (std::string opt : emit_flags) {
+        for (const std::string &opt : emit_flags) {
             auto it = output_name_to_enum.find(opt);
             if (it == output_name_to_enum.end()) {
                 cerr << "Unrecognized emit option: " << opt << " is not one of [";
@@ -967,7 +967,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
             if (it.first == "target") {
                 continue;
             }
-            std::string quote = it.second.string_value.find(" ") != std::string::npos ? "\\\"" : "";
+            std::string quote = it.second.string_value.find(' ') != std::string::npos ? "\\\"" : "";
             generator_args_string += sep + it.first + "=" + quote + it.second.string_value + quote;
             sep = " ";
         }

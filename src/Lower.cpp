@@ -97,7 +97,7 @@ Module lower(const vector<Function> &output_funcs,
 
     // Compute an environment
     map<string, Function> env;
-    for (Function f : output_funcs) {
+    for (const Function &f : output_funcs) {
         populate_environment(f, env);
     }
 
@@ -109,7 +109,7 @@ Module lower(const vector<Function> &output_funcs,
     result_module.set_any_strict_float(any_strict_float);
 
     // Output functions should all be computed and stored at root.
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         Func(f).compute_root().store_root();
     }
 
@@ -468,7 +468,7 @@ Module lower(const vector<Function> &output_funcs,
 
     vector<Argument> public_args = args;
     for (const auto &out : outputs) {
-        for (Parameter buf : out.output_buffers()) {
+        for (const Parameter &buf : out.output_buffers()) {
             public_args.emplace_back(buf.name(),
                                      Argument::OutputBuffer,
                                      buf.type(), buf.dimensions(), buf.get_argument_estimates());
@@ -486,7 +486,7 @@ Module lower(const vector<Function> &output_funcs,
         internal_assert(arg.arg.is_input()) << "Expected only input Arguments here";
 
         bool found = false;
-        for (Argument a : args) {
+        for (const Argument &a : args) {
             found |= (a.name == arg.arg.name);
         }
 

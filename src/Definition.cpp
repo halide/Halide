@@ -33,10 +33,10 @@ struct DefinitionContents {
             predicate.accept(visitor);
         }
 
-        for (Expr val : values) {
+        for (const Expr &val : values) {
             val.accept(visitor);
         }
-        for (Expr arg : args) {
+        for (const Expr &arg : args) {
             arg.accept(visitor);
         }
 
