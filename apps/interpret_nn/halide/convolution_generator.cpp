@@ -223,8 +223,13 @@ public:
         // Precompute the channel offset at root.
         // TODO: This gets recomputed often when the op is split up into small
         // pieces.
-        offset_c.compute_root();
-        offset_c.update().specialize(input_offset_ == 0);
+        offset_c.compute_root()
+            .vectorize(c, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
+        offset_c.update().specialize(input_offset_ != 0)
+            .split(r.z, rco, rci, vector_reduction)
+            .reorder(rci, rco, r.x, r.y, c)
+            .atomic()
+            .vectorize(rci, vector_reduction);
 
         // Compute the sum of the input outside the loops over channels.
         sum_input.compute_at(output_, xo)
