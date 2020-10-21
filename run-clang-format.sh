@@ -23,5 +23,5 @@ find "${ROOT_DIR}/apps" \
      "${ROOT_DIR}/test" \
      "${ROOT_DIR}/util" \
      "${ROOT_DIR}/python_bindings" \
-     \( -name *.cpp -o -name *.h -o -name *.c \) -and -not -wholename "*/.*" | \
+     \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" | \
      xargs ${CLANG_FORMAT_LLVM_INSTALL_DIR}/bin/clang-format -i -style=file
