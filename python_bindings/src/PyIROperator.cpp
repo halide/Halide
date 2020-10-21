@@ -185,6 +185,9 @@ void define_operators(py::module &m) {
     m.def("likely_if_innermost", &likely_if_innermost);
     m.def("saturating_cast", (Expr(*)(Type, Expr)) & saturating_cast);
     m.def("strict_float", &strict_float);
+    m.def("logical_not", [](const Expr &expr) -> Expr {
+        return !expr;
+    });
 }
 
 }  // namespace PythonBindings
