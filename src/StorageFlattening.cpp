@@ -29,7 +29,7 @@ public:
                       const vector<Function> &o,
                       const Target &t)
         : env(e), target(t) {
-        for (auto &f : o) {
+        for (const auto &f : o) {
             outputs.insert(f.name());
         }
     }

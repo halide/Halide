@@ -107,7 +107,7 @@ struct fail {
 
 // Combine type-and-code into a single integer to avoid nested switches.
 // Must be constexpr to allow use in case clauses.
-inline static constexpr int halide_type_code(halide_type_code_t code, int bits) {
+inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
     return (((int)code) << 8) | bits;
 }
 

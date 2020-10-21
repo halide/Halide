@@ -515,7 +515,7 @@ public:
             errors.emplace_back("argument number must be longer than 0");
             return false;
         }
-        if (prog_name == "") {
+        if (prog_name.empty()) {
             prog_name = argv[0];
         }
 
@@ -573,7 +573,7 @@ public:
                         errors.push_back(std::string("undefined short option: -") + argv[i][j - 1]);
                         continue;
                     }
-                    if (lookup[argv[i][j - 1]] == "") {
+                    if (lookup[argv[i][j - 1]].empty()) {
                         errors.push_back(std::string("ambiguous short option: -") + argv[i][j - 1]);
                         continue;
                     }
@@ -584,7 +584,7 @@ public:
                     errors.push_back(std::string("undefined short option: -") + last);
                     continue;
                 }
-                if (lookup[last] == "") {
+                if (lookup[last].empty()) {
                     errors.push_back(std::string("ambiguous short option: -") + last);
                     continue;
                 }
@@ -607,7 +607,7 @@ public:
             }
         }
 
-        return errors.size() == 0;
+        return errors.empty();
     }
 
     void parse_check(const std::string &arg) {
@@ -632,7 +632,7 @@ public:
     }
 
     std::string error() const {
-        return errors.size() > 0 ? errors[0] : "";
+        return !errors.empty() ? errors[0] : "";
     }
 
     std::string error_full() const {

@@ -2784,7 +2784,7 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
 
 namespace {
 
-static void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
+void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
     TRACELOG;
 
     D3D12_RESOURCE_BARRIER barrier = {};
@@ -2883,8 +2883,8 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
 
 namespace {
 
-static int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
-                                    uint64_t src_offset, uint64_t dst_offset, int dimensions) {
+int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
+                             uint64_t src_offset, uint64_t dst_offset, int dimensions) {
     TRACELOG;
 
     if (dimensions == 0) {

@@ -281,7 +281,7 @@ public:
 
 // A counter to use in tagging random variables
 namespace {
-static std::atomic<int> rand_counter{0};
+std::atomic<int> rand_counter{0};
 }
 
 Function::Function(const FunctionPtr &ptr)
@@ -530,7 +530,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         if (pure_type != values[i].type()) {
             std::ostringstream err;
             err << "In update definition " << update_idx << " of Func \"" << name() << "\":\n";
-            if (values.size()) {
+            if (!values.empty()) {
                 err << "Tuple element " << i << " of update definition has type ";
             } else {
                 err << "Update definition has type ";

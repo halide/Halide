@@ -1935,7 +1935,6 @@ protected:
     const TBase def_{TBase()};
     const Expr def_expr_;
 
-protected:
     Expr get_def_expr() const override {
         return def_expr_;
     }
@@ -2039,7 +2038,6 @@ protected:
 
     const Expr min_, max_;
 
-protected:
     void set_def_min_max() override {
         Super::set_def_min_max();
         // Don't set min/max for bool
@@ -2448,7 +2446,6 @@ protected:
         return t;
     }
 
-protected:
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t = {}, int d = -1)
         : Super(name, IOKind::Buffer, my_types(t), d) {
     }
@@ -2569,7 +2566,6 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-protected:
     GeneratorOutput_Func(const std::string &name)
         : Super(name, IOKind::Function, std::vector<Type>{}, -1) {
     }
@@ -2642,7 +2638,6 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-protected:
     explicit GeneratorOutput_Arithmetic(const std::string &name)
         : Super(name, IOKind::Function, {type_of<TBase>()}, 0) {
     }
@@ -3041,7 +3036,7 @@ class GeneratorParamInfo {
 public:
     friend class GeneratorBase;
 
-    GeneratorParamInfo(GeneratorBase *generator, const size_t size);
+    GeneratorParamInfo(GeneratorBase *generator, size_t size);
 
     const std::vector<Internal::GeneratorParamBase *> &generator_params() const {
         return filter_generator_params;
@@ -3078,7 +3073,7 @@ public:
     // Call build() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.
     Module build_module(const std::string &function_name = "",
-                        const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
+                        LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
     /**
      * Build a module that is suitable for using for gradient descent calculation in TensorFlow or PyTorch.

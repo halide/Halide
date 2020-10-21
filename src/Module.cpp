@@ -888,7 +888,7 @@ void compile_multitarget(const std::string &fn_name,
             }
             debug(1) << "compile_multitarget: compile_sub_target " << sub_out[Output::object] << "\n";
             sub_module.compile(sub_out);
-            auto *r = sub_module.get_auto_scheduler_results();
+            const auto *r = sub_module.get_auto_scheduler_results();
             auto_scheduler_results.push_back(r ? *r : AutoSchedulerResults());
         }
 

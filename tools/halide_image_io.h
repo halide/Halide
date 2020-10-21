@@ -1280,7 +1280,7 @@ bool save_tmp(ImageType &im, const std::string &filename) {
     for (int i = 0; i < im.dimensions(); ++i) {
         header[i] = im.dim(i).extent();
     }
-    auto *table = tmp_code_to_halide_type();
+    const auto *table = tmp_code_to_halide_type();
     for (int i = 0; i < kNumTmpCodes; i++) {
         if (im.type() == table[i]) {
             header[4] = i;
@@ -2017,7 +2017,7 @@ FormatInfo best_save_format(const ImageType &im, const std::set<FormatInfo> &inf
     FormatInfo best{};
     const halide_type_t im_type = im.type();
     const int im_dimensions = im.dimensions();
-    for (auto &f : info) {
+    for (const auto &f : info) {
         int score = 0;
         // If format has too-few dimensions, that's very bad.
         score += std::max(0, im_dimensions - f.dimensions) * 1024;

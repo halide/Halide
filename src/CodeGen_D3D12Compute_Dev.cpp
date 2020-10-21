@@ -266,7 +266,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        auto fence_type_ptr = as_const_int(op->args[0]);
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 
@@ -920,7 +920,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     auto isConstantBuffer = [&s](const DeviceArgument &arg) {
         return arg.is_buffer && CodeGen_GPU_Dev::is_buffer_constant(s, arg.name) && arg.size > 0;
     };
-    for (auto &arg : args) {
+    for (const auto &arg : args) {
         if (isConstantBuffer(arg)) {
             constants.emplace_back(arg.name, arg.size);
         }
@@ -1108,7 +1108,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
            << "uint3 tgroup_index  : SV_GroupID,\n"
            << " "
            << "uint3 tid_in_tgroup : SV_GroupThreadID";
-    for (auto &arg : args) {
+    for (const auto &arg : args) {
         stream << ",\n";
         stream << " ";
         if (arg.is_buffer) {

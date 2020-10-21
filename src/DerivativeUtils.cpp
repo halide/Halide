@@ -510,7 +510,7 @@ public:
 
     void visit(const Call *op) override {
         if (op->call_type == Call::Image || op->call_type == Call::Halide) {
-            if (func_name == "" || op->name == func_name) {
+            if (func_name.empty() || op->name == func_name) {
                 found = true;
             }
         }
