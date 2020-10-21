@@ -15,7 +15,7 @@ namespace {
 #if (__cplusplus == 201103L || _MSVC_LANG == 201103L)
 
 template<class T, class... Args>
-std::unique_ptr<T> make_unique(Args &&...args) {
+std::unique_ptr<T> make_unique(Args &&... args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
 
@@ -112,7 +112,7 @@ public:
         }
 
         std::vector<halide_dimension_t> shape(t->shape()->size());
-        for (int i = 0; i < (int) shape.size(); i++) {
+        for (int i = 0; i < (int)shape.size(); i++) {
             shape[i].min = 0;
             shape[i].extent = t->shape()->Get(shape.size() - 1 - i);
             shape[i].stride = 0;

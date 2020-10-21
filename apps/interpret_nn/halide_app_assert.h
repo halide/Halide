@@ -18,8 +18,7 @@ struct FatalError {
         msg << "\n";
     }
 
-    [[noreturn]]
-    ~FatalError() noexcept(false) {
+    [[noreturn]] ~FatalError() noexcept(false) {
         if (!msg.str().empty() && msg.str().back() != '\n') {
             msg << "\n";
         }
