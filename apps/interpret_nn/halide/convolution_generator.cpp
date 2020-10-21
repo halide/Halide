@@ -135,11 +135,13 @@ public:
         //    i32(filter_offset_) * i32(input_offset_)
         //
         // We can then separate this into several reductions. First, the terms that
-        // depend only on c.
+        // depend only on c. This is computed negated, and then negated later, so we
+        // can make the reduction a summation instead of a subtraction.
         Func offset_c("offset_c");
-        offset_c(c) = bias_(c);
-        offset_c(c) += i32(filter_offset_) * i32(input_offset_) -
-                       i32(filter_rdxyc) * i32(input_offset_);
+        Expr r_size = filter_width * filter_height * filter_depth;
+        offset_c(c) = -(bias_(c) + i32(filter_offset_) * i32(input_offset_) * r_size);
+        offset_c(c) += i32(filter_rdxyc) * i32(input_offset_);
+        offset_c(c) = -offset_c(c);
 
         // The sum of the input is used to compute the filter_offset * input term.
         // TODO: This is separable, but a bit messy to optimize this way.
@@ -225,11 +227,13 @@ public:
         // pieces.
         offset_c.compute_root()
             .vectorize(c, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
-        offset_c.update().specialize(input_offset_ != 0)
+        offset_c.update(0).specialize(input_offset_ != 0)
             .split(r.z, rco, rci, vector_reduction)
             .reorder(rci, c, rco, r.x, r.y)
             .atomic()
             .vectorize(rci, vector_reduction)
+            .vectorize(c, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
+        offset_c.update(1)
             .vectorize(c, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
 
         // Compute the sum of the input outside the loops over channels.
