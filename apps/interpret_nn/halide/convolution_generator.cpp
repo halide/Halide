@@ -227,9 +227,10 @@ public:
             .vectorize(c, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
         offset_c.update().specialize(input_offset_ != 0)
             .split(r.z, rco, rci, vector_reduction)
-            .reorder(rci, rco, r.x, r.y, c)
+            .reorder(rci, c, rco, r.x, r.y)
             .atomic()
-            .vectorize(rci, vector_reduction);
+            .vectorize(rci, vector_reduction)
+            .vectorize(c, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
 
         // Compute the sum of the input outside the loops over channels.
         sum_input.compute_at(output_, xo)
