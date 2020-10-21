@@ -99,17 +99,16 @@ public:
             .bound(c, 0, 3)
             .unroll(c);
 
-        Var yi;
         new_state
-            .split(y, y, yi, 32)
-            .vectorize(x, natural_vector_size<float>());
+            .tile(x, y, xi, yi, 256, 8)
+            .vectorize(xi, natural_vector_size<float>());
 
         blur
-            .compute_at(new_state, yi)
-            .vectorize(x, natural_vector_size<float>());
+            .compute_at(new_state, xi)
+            .vectorize(x);
 
         clamped
-            .store_at(new_state, y)
+            .store_at(new_state, x)
             .compute_at(new_state, yi);
 
         if (threads) {
