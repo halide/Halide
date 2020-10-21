@@ -535,7 +535,7 @@ halide_type_t u16v2 = u16v1.with_lanes(u16v1.lanes * 2);
 halide_type_t u32v2 = u32v1.with_lanes(u32v1.lanes * 2);
 
 #define INTRINSIC_128B(id) Intrinsic::hexagon_V6_##id##_128B
-static const HvxIntrinsic intrinsic_wrappers[] = {
+const HvxIntrinsic intrinsic_wrappers[] = {
     // Zero/sign extension:
     {INTRINSIC_128B(vzb), u16v2, "zxt.vub", {u8v1}},
     {INTRINSIC_128B(vzh), u32v2, "zxt.vuh", {u16v1}},
