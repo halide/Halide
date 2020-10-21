@@ -826,7 +826,6 @@ RUNTIME_LL_COMPONENTS = \
   aarch64 \
   arm \
   arm_no_neon \
-  hvx_64 \
   hvx_128 \
   mips \
   posix_math \
