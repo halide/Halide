@@ -72,7 +72,7 @@ void Model::Dump(std::ostream &os) {
     os << "Tensors: " << std::endl;
     for (const auto &i : tensors) {
         os << "  " << TensorTypeToString(i->Type()) << " x " << i->Shape()
-           << (i->is_allocated() ? " allocated " : " ") << i->Name() << std::endl;
+           << (i->IsAllocated() ? " allocated " : " ") << i->Name() << std::endl;
     }
 
     os << "Ops: " << std::endl;
@@ -82,7 +82,7 @@ void Model::Dump(std::ostream &os) {
     os << std::endl;
 }
 
-void Tensor::allocate() {
+void Tensor::Allocate() {
     size_t shape_size = 1;
     for (halide_dimension_t &i : shape_) {
         i.stride = shape_size;

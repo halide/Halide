@@ -173,11 +173,11 @@ public:
         return buf;
     }
 
-    bool is_allocated() const {
+    bool IsAllocated() const {
         return !data_.empty();
     }
-    void allocate();
-    void free() {
+    void Allocate();
+    void Free() {
         data_.resize(0);
     }
 };
