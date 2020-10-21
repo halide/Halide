@@ -71,8 +71,7 @@ const char *TensorTypeToString(TensorType t) {
 void Model::Dump(std::ostream &os) {
     os << "Tensors: " << std::endl;
     for (const auto &i : tensors) {
-        os << "  " << TensorTypeToString(i->Type()) << " x " << i->Shape()
-           << (i->IsAllocated() ? " allocated " : " ") << i->Name() << std::endl;
+        i->Dump(os);
     }
 
     os << "Ops: " << std::endl;
@@ -94,6 +93,11 @@ void Tensor::Allocate() {
     } else {
         halide_app_assert(data_.size() == shape_size);
     }
+}
+
+void Tensor::Dump(std::ostream &os) const {
+    os << "  " << TensorTypeToString(Type()) << " x " << Shape()
+       << (IsAllocated() ? " allocated " : " ") << Name() << std::endl;
 }
 
 namespace {
