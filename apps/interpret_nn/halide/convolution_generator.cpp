@@ -232,9 +232,9 @@ public:
             .reorder(rci, c, rco, r.x, r.y)
             .atomic()
             .vectorize(rci, vector_reduction)
-            .vectorize(c, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
+            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
         offset_c.update(1)
-            .vectorize(c, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
+            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
 
         // Compute the sum of the input outside the loops over channels.
         sum_input.compute_at(output_, xo)
@@ -242,7 +242,7 @@ public:
         sum_input.update()
             .reorder(x, r.z, r.x, r.y, y, b)
             .atomic()
-            .vectorize(r.z, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf)
+            .vectorize(r.z, vector_size * vector_reduction, TailStrategy::GuardWithIf)
             .unroll(x);
 
         // TODO: We only need this (and the boundary condition on c) when
