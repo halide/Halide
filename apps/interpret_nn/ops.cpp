@@ -1,6 +1,7 @@
 #include "ops.h"
 #include "halide_app_assert.h"
 
+#include <cmath>
 #include <iostream>
 
 #include "AddUint8Uint8.h"
@@ -23,7 +24,7 @@ std::pair<int, int> Intersect(std::pair<int, int> a, std::pair<int, int> b) {
 
 CropShape Intersect(CropShape a, const CropShape &b) {
     halide_app_assert(a.size() == b.size());
-    for (int i = 0; i < (int) a.size(); i++) {
+    for (int i = 0; i < (int)a.size(); i++) {
         a[i] = Intersect(a[i], b[i]);
     }
     return a;
@@ -50,6 +51,87 @@ std::vector<CropShape> SplitCrop(const CropShape &crop, int dim, int factor,
         splits.push_back(split_x);
     }
     return splits;
+}
+
+struct QuantizedMulAndShift {
+    int quantized_multiplier, shift;
+};
+
+// Adapted from tflite
+QuantizedMulAndShift GetQuantizedMulAndShift(double double_multiplier) {
+    if (double_multiplier == 0.) {
+        return {0, 0};
+    }
+
+    // TODO: consider adding a path here to avoid floating-point operations (eg for Hexagon)
+    int shift = 0;
+    const double q = std::frexp(double_multiplier, &shift);
+    int64_t q_fixed = (int64_t)std::round(q * (1LL << 31));
+    halide_app_assert(q_fixed <= (1LL << 31));
+
+    if (q_fixed == (1LL << 31)) {
+        q_fixed /= 2;
+        ++shift;
+    }
+    halide_app_assert(q_fixed <= std::numeric_limits<int32_t>::max());
+
+    if (shift < -31) {
+        shift = 0;
+        q_fixed = 0;
+    }
+    return {(int)q_fixed, shift};
+}
+
+// Adapted from tflite
+QuantizedMulAndShift GetQuantizedMulAndShiftSmallerThanOne(double double_multiplier) {
+    halide_app_assert(double_multiplier > 0.0 && double_multiplier < 1.0);
+    auto result = GetQuantizedMulAndShift(double_multiplier);
+    halide_app_assert(result.shift <= 0);
+    return result;
+}
+
+struct MinMax {
+    int min, max;
+};
+
+// Adapted from tfmini
+MinMax GetQuantizedMinMax(ActivationFunction activation, int zero_point, double scale) {
+    double real_activation_min = 0.0;
+    double real_activation_max = 0.0;
+    bool has_activation_min = false;
+    bool has_activation_max = false;
+    if (activation == ActivationFunction::None) {
+        // nothing
+    } else if (activation == ActivationFunction::Relu) {
+        real_activation_min = 0.0;
+        has_activation_min = true;
+    } else if (activation == ActivationFunction::Relu6) {
+        real_activation_min = 0.0;
+        has_activation_min = true;
+        real_activation_max = 6.0;
+        has_activation_max = true;
+    } else if (activation == ActivationFunction::ReluN1To1) {
+        real_activation_min = -1.0;
+        has_activation_min = true;
+        real_activation_max = 1.0;
+        has_activation_max = true;
+    } else {
+        halide_app_assert(false) << "Unsupported quantized activation function type.";
+    }
+    int output_activation_min = 0;
+    int output_activation_max = 255;
+    if (has_activation_min) {
+        output_activation_min = std::max(
+            output_activation_min,
+            zero_point + (int)std::round(real_activation_min / scale));
+    }
+    if (has_activation_max) {
+        output_activation_max = std::min(
+            output_activation_max,
+            zero_point + (int)std::round(real_activation_max / scale));
+    }
+
+    return {output_activation_min, output_activation_max};
 }
 
 }  // namespace
@@ -93,7 +175,6 @@ std::vector<CropShape> PoolOp::Split(const CropShape &crop) const {
     const int kSplit = 2;
     return SplitCrop(crop, 2, kSplit);
 }
-
 
 void AddOp::Execute(const CropShape &crop) {
     const Tensor *input1 = Input(0);
@@ -187,19 +268,59 @@ void Conv2DOp::Execute(const CropShape &crop) {
         auto bias_buf = bias->Data<int32_t>();
         auto output_buf = output->Data<uint8_t>(crop);
 
-        int16_t input_offset = 0;
-        int16_t filter_offset = 0;
-        int output_offset = 0;
-        int output_multiplier = 0;
-        int output_shift = 0;
-        int output_min = 0;
-        int output_max = 0;
+        const int input_offset = input->Quantization().zero.at(0);
+        const int filter_offset = filter->Quantization().zero.at(0);
+        const int bias_offset = bias->Quantization().zero.at(0);
+        const int output_offset = output->Quantization().zero.at(0);
+
+        // TODO: handle unexpected out-of-range data more cleanly.
+        halide_app_assert(input_offset >= 0 && input_offset <= 255);
+        halide_app_assert(filter_offset >= 0 && filter_offset <= 255);
+        halide_app_assert(bias_offset == 0);
+        halide_app_assert(output_offset >= 0 && output_offset <= 255);
+
+        const float input_scale = input->Quantization().scale.at(0);
+        const float filter_scale = filter->Quantization().scale.at(0);
+        const float bias_scale = bias->Quantization().scale.at(0);
+        const float output_scale = output->Quantization().scale.at(0);
+
+        const double input_product_scale = input_scale * filter_scale;
+        halide_app_assert(std::abs(input_product_scale - bias_scale) <=
+                          std::min(input_product_scale, (double)bias_scale) * 1e-6);
+
+        const double real_multiplier = input_product_scale / output_scale;
+        const auto mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_multiplier);
+        const int output_multiplier = mul_and_shift.quantized_multiplier;
+        // GetQuantizedMulAndShiftSmallerThanOne() returns a negative shift;
+        // ConvolutionUint8() expects a positive shift.
+        const int output_shift = -mul_and_shift.shift;
+
+        const auto min_max = GetQuantizedMinMax(activation_, output_offset, output_scale);
+        const int output_min = min_max.min;
+        const int output_max = min_max.max;
+        halide_app_assert(output_min >= 0 && output_min <= 255);
+        halide_app_assert(output_max >= 0 && output_max <= 255);
+
+        // TODO: remove this
+        // std::cout << "\n";
+        // std::cout << "input_offset " << input_offset << "\n";
+        // std::cout << "filter_offset " << filter_offset << "\n";
+        // std::cout << "stride_[0] " << stride_[0] << "\n";
+        // std::cout << "stride_[1] " << stride_[1] << "\n";
+        // std::cout << "dilation_[0] " << dilation_[0] << "\n";
+        // std::cout << "dilation_[1] " << dilation_[1] << "\n";
+        // std::cout << "real_multiplier " << real_multiplier << "\n";
+        // std::cout << "output_multiplier " << output_multiplier << "\n";
+        // std::cout << "output_shift " << output_shift << "\n";
+        // std::cout << "output_offset " << output_offset << "\n";
+        // std::cout << "output_min " << output_min << "\n";
+        // std::cout << "output_max " << output_max << "\n";
 
         halide_app_assert(
-            0 == ConvolutionUint8(input_buf, filter_buf, bias_buf, input_offset,
-                                  filter_offset, stride_[0], stride_[1],
-                                  dilation_[0], dilation_[1],
-                                  output_multiplier, output_shift, output_offset,
+            0 == ConvolutionUint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
+                                  (uint8_t)filter_offset, stride_[0], stride_[1],
+                                  dilation_[0], dilation_[1], output_multiplier,
+                                  output_shift, (uint8_t)output_offset,
                                   output_min, output_max, output_buf));
     }
 }
