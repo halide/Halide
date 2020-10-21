@@ -246,12 +246,30 @@ class CSEEveryExprInStmt : public IRMutator {
         }
         const Call *c = dummy.as<Call>();
         internal_assert(c && c->is_intrinsic(Call::bundle) && c->args.size() == 2);
-        Stmt s = Store::make(op->name, c->args[0], c->args[1],
-                             op->param, mutate(op->predicate), op->alignment);
-        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-            s = LetStmt::make(it->first, it->second, s);
+
+        // If the index of the store remains unchanged, then it means that we weren't
+        // able to CSE anything between op->index and op->value. In that case, moving
+        // lets before the store would put the lets too far away from their uses.
+        // This is ok except, there are passes like LoopCarry that are beneficial
+        // when they are able to see a long continuous block of stores (eg. when
+        // unrolling). If we don't do this, they'll see a long sequence of LetStmts.
+        // Handling this here means the LoopCarry pass need not be complicated.
+        if (equal(c->args[1], op->index)) {
+            Expr v = c->args[0];
+            for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+                v = Let::make(it->first, it->second, v);
+            }
+            Stmt s = Store::make(op->name, v, c->args[1],
+                                 op->param, mutate(op->predicate), op->alignment);
+            return s;
+        } else {
+            Stmt s = Store::make(op->name, c->args[0], c->args[1],
+                                 op->param, mutate(op->predicate), op->alignment);
+            for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+                s = LetStmt::make(it->first, it->second, s);
+            }
+            return s;
         }
-        return s;
     }
 
 public:

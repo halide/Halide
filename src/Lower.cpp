@@ -415,6 +415,8 @@ Module lower(const vector<Function> &output_funcs,
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
+    debug(2) << "Lowering after common subexpression elimination"
+             << s << "\n\n";
 
     if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Detecting varying attributes...\n";
