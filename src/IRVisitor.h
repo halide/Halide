@@ -20,8 +20,8 @@ namespace Internal {
  */
 class IRVisitor {
 public:
-    IRVisitor();
-    virtual ~IRVisitor();
+    IRVisitor() = default;
+    virtual ~IRVisitor() = default;
 
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement accept())

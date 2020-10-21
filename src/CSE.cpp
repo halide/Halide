@@ -361,8 +361,7 @@ class NormalizeVarNames : public IRMutator {
     }
 
 public:
-    NormalizeVarNames() {
-    }
+    NormalizeVarNames() = default;
 };
 
 void check(const Expr &in, const Expr &correct) {

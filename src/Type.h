@@ -122,7 +122,7 @@ struct halide_handle_cplusplus_type {
     }
 
     template<typename T>
-    static const halide_handle_cplusplus_type make();
+    static halide_handle_cplusplus_type make();
 };
 //@}
 
@@ -194,7 +194,7 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 //    };
 
 template<typename T>
-/*static*/ const halide_handle_cplusplus_type halide_handle_cplusplus_type::make() {
+/*static*/ halide_handle_cplusplus_type halide_handle_cplusplus_type::make() {
     constexpr bool is_ptr = std::is_pointer<T>::value;
     constexpr bool is_lvalue_reference = std::is_lvalue_reference<T>::value;
     constexpr bool is_rvalue_reference = std::is_rvalue_reference<T>::value;

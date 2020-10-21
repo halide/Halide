@@ -296,10 +296,10 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
 }
 
 Simplify::ScopedFact::~ScopedFact() {
-    for (auto v : pop_list) {
+    for (const auto *v : pop_list) {
         simplify->var_info.pop(v->name);
     }
-    for (auto v : bounds_pop_list) {
+    for (const auto *v : bounds_pop_list) {
         simplify->bounds_and_alignment_info.pop(v->name);
     }
     for (const auto &e : truths) {

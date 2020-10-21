@@ -96,8 +96,7 @@ struct ExprWithCompareCache {
     Expr expr;
     mutable IRCompareCache *cache = nullptr;
 
-    ExprWithCompareCache() {
-    }
+    ExprWithCompareCache() = default;
     ExprWithCompareCache(const Expr &e, IRCompareCache *c)
         : expr(e), cache(c) {
     }

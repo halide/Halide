@@ -208,7 +208,7 @@ void LoopNest::get_sites(StageMap<Sites> &sites,
         s.produce = this;
         s.task = task;
     }
-    for (auto f : store_at) {
+    for (const auto *f : store_at) {
         for (const auto &s : f->stages) {
             sites.get_or_create(&s).store = this;
         }
@@ -358,7 +358,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
             feat.working_set_at_root = working_set_here;
 
-            auto *p = sites.get(stage).produce;
+            const auto *p = sites.get(stage).produce;
             if (p) {
                 // Extent of the innermost dimension in the storage layout
                 int64_t innermost_storage_extent = 1;
@@ -612,7 +612,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         vector<pair<LoadJacobian, FunctionDAG::Node *>> jacobians;
         set<const FunctionDAG::Node *> done;
         while (!pending.empty()) {
-            auto p = pending.back();
+            const auto *p = pending.back();
             pending.pop_back();
             const auto &next_edges = p->incoming_edges;
             for (const auto *e : next_edges) {
@@ -625,7 +625,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                 if (innermost) {
                     if (e->consumer == stage) {
-                        for (auto &j : e->load_jacobians) {
+                        for (const auto &j : e->load_jacobians) {
                             jacobians.emplace_back(j, e->producer);
                         }
                     } else {
@@ -633,7 +633,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                         decltype(jacobians) new_jacobians;
                         for (auto &j1 : jacobians) {
                             if (e->consumer->node == j1.second) {
-                                for (auto &j2 : e->load_jacobians) {
+                                for (const auto &j2 : e->load_jacobians) {
                                     LoadJacobian j = j2 * j1.first;
                                     new_jacobians.emplace_back(j, e->producer);
                                 }
@@ -964,7 +964,7 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
         // b->validate();
         return b;
     }
-    auto bound = f->make_bound();
+    auto *bound = f->make_bound();
 
     // Compute the region required
     if (f->is_output && is_root()) {
@@ -1064,7 +1064,7 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
     } else {
         aslog(0) << "\n";
     }
-    for (auto p : store_at) {
+    for (const auto *p : store_at) {
         aslog(0) << prefix << "realize: " << p->func.name() << "\n";
     }
     for (size_t i = children.size(); i > 0; i--) {
@@ -1219,7 +1219,7 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
         // Set up a bound for the inside of the
         // loop. computed/required is still the full region, but
         // the loop nest will be a single representative point.
-        auto single_point = bounds->make_copy();
+        auto *single_point = bounds->make_copy();
         size_t loop_dim = f->stages[s].loop.size();
         node->size.resize(loop_dim);
 
@@ -1274,7 +1274,7 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
             one_vector->vector_dim = v;
             one_vector->size.resize(loop_dim, 1);
             one_vector->innermost = true;
-            auto b = node->get_bounds(f)->make_copy();
+            auto *b = node->get_bounds(f)->make_copy();
             // Set the region computed inside this node to be the first vector lane
             b->loops(s, node->vectorized_loop_index).set_extent(1);
             one_vector->set_bounds(f, b);
@@ -1311,7 +1311,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
     inner->bounds = bounds;
     inner->store_at = store_at;
 
-    auto b = inner->get_bounds(node)->make_copy();
+    auto *b = inner->get_bounds(node)->make_copy();
 
     // Then move factors from the outer loop to the inner loop
     const auto &parent_bounds = parent->get_bounds(node);
@@ -1482,7 +1482,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             inner->store_at = store_at;
 
             {
-                auto b = inner->get_bounds(node)->make_copy();
+                auto *b = inner->get_bounds(node)->make_copy();
 
                 // Then move factors from the outer loop to the inner loop
                 const auto &parent_bounds = parent->get_bounds(node);
@@ -1605,7 +1605,7 @@ void LoopNest::apply(LoopLevel here,
                      const LoopNest *parent,
                      const LoopNest *compute_site) const {
     if (is_root()) {
-        for (auto &c : children) {
+        for (const auto &c : children) {
             Func(c->node->func).compute_root();
             c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get());
             if (c->stage->index == 0) {
@@ -1846,7 +1846,7 @@ void LoopNest::apply(LoopLevel here,
             return;
         }
 
-        for (auto f : store_at) {
+        for (const auto *f : store_at) {
             Func(f->func).store_at(here);
         }
         for (auto s : size) {
@@ -1859,7 +1859,7 @@ void LoopNest::apply(LoopLevel here,
         } else {
             loop_level = "_at(" + here.func() + ", " + here.var().name() + ")";
         }
-        for (auto &c : children) {
+        for (const auto &c : children) {
             if (c->node != node) {
                 Func(c->node->func).compute_at(here);
             }
@@ -1869,9 +1869,9 @@ void LoopNest::apply(LoopLevel here,
                 state.schedule_source << "\n    .compute" << loop_level;
             }
         }
-        for (auto f : store_at) {
+        for (const auto *f : store_at) {
             bool computed_here = false;
-            for (auto &c : children) {
+            for (const auto &c : children) {
                 if (c->node == f) {
                     computed_here = true;
                     break;

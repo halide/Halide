@@ -386,7 +386,6 @@ public:
     }
     // @}
 
-public:
     // We forward numerous methods from the underlying Buffer
 #define HALIDE_BUFFER_FORWARD_CONST(method)                                                                                      \
     template<typename... Args>                                                                                                   \

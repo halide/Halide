@@ -297,7 +297,7 @@ protected:
         include_type(op->type);
         if (op->is_intrinsic(Call::lerp)) {
             // lower_lerp() can synthesize wider vector types.
-            for (auto &a : op->args) {
+            for (const auto &a : op->args) {
                 include_lerp_types(a.type());
             }
         }
@@ -1395,7 +1395,7 @@ void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
         t.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
         return;
     }
-    for (auto &ns : t.handle_type->namespaces) {
+    for (const auto &ns : t.handle_type->namespaces) {
         stream << "namespace " << ns << " { ";
     }
     switch (t.handle_type->inner_name.cpp_type_type) {
@@ -1415,7 +1415,7 @@ void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
         internal_error << "Passing pointers to enums is unsupported\n";
         break;
     }
-    for (auto &ns : t.handle_type->namespaces) {
+    for (const auto &ns : t.handle_type->namespaces) {
         (void)ns;
         stream << " }";
     }
@@ -1438,7 +1438,7 @@ void CodeGen_C::compile(const Module &input) {
     // we emit function prototypes, since those may need the types.
     stream << "\n";
     for (const auto &f : input.functions()) {
-        for (auto &arg : f.args) {
+        for (const auto &arg : f.args) {
             forward_declare_type_if_needed(arg.type);
         }
     }

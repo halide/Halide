@@ -538,7 +538,7 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
     // our existing usage.)
     std::string src_dir = dir_and_file(src_files_in.front()).first;
     std::vector<std::string> src_files;
-    for (auto &s_in : src_files_in) {
+    for (const auto &s_in : src_files_in) {
         auto df = dir_and_file(s_in);
         internal_assert(df.first == src_dir) << "All inputs to create_static_library() must be in the same directory";
         for (auto &s_existing : src_files) {

@@ -19,7 +19,7 @@ using std::vector;
 
 namespace {
 
-static const char *const dom_var_names[] = {"$x", "$y", "$z", "$w"};
+const char *const dom_var_names[] = {"$x", "$y", "$z", "$w"};
 
 // T is an ImageParam, Buffer<>, Input<Buffer<>>
 template<typename T>

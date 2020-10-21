@@ -38,7 +38,7 @@ static void cpuid(int info[4], int infoType, int extra) {
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
 #ifdef _LP64
-static void cpuid(int info[4], int infoType, int extra) {
+void cpuid(int info[4], int infoType, int extra) {
     __asm__ __volatile__(
         "cpuid                 \n\t"
         : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
@@ -941,15 +941,15 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     decltype(result.features) intersection_mask;
     decltype(result.features) matching_mask;
 
-    for (auto &feature : union_features) {
+    for (const auto &feature : union_features) {
         union_mask.set(feature);
     }
 
-    for (auto &feature : intersection_features) {
+    for (const auto &feature : intersection_features) {
         intersection_mask.set(feature);
     }
 
-    for (auto &feature : matching_features) {
+    for (const auto &feature : matching_features) {
         matching_mask.set(feature);
     }
 

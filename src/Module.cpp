@@ -118,8 +118,12 @@ public:
 private:
     const std::string dir_path;
     std::vector<std::string> dir_files;
+
+public:
     TemporaryObjectFileDir(const TemporaryObjectFileDir &) = delete;
-    void operator=(const TemporaryObjectFileDir &) = delete;
+    TemporaryObjectFileDir &operator=(const TemporaryObjectFileDir &) = delete;
+    TemporaryObjectFileDir(TemporaryObjectFileDir &&) = delete;
+    TemporaryObjectFileDir &operator=(TemporaryObjectFileDir &&) = delete;
 };
 
 // Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext
@@ -884,7 +888,7 @@ void compile_multitarget(const std::string &fn_name,
             }
             debug(1) << "compile_multitarget: compile_sub_target " << sub_out[Output::object] << "\n";
             sub_module.compile(sub_out);
-            auto *r = sub_module.get_auto_scheduler_results();
+            const auto *r = sub_module.get_auto_scheduler_results();
             auto_scheduler_results.push_back(r ? *r : AutoSchedulerResults());
         }
 

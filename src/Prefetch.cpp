@@ -68,7 +68,6 @@ private:
     const map<string, Box> &external_buffers;
     Scope<Box> buffer_bounds;
 
-private:
     using IRMutator::visit;
 
     Box get_buffer_bounds(const string &name, int dims) {

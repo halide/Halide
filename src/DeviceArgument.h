@@ -70,10 +70,7 @@ struct DeviceArgument {
     /** Alignment information for integer parameters. */
     ModulusRemainder alignment;
 
-    DeviceArgument()
-
-    {
-    }
+    DeviceArgument() = default;
 
     DeviceArgument(const std::string &_name,
                    bool _is_buffer,

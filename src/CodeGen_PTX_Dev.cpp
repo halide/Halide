@@ -165,7 +165,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         // arguments
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        auto fence_type_ptr = as_const_int(op->args[0]);
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
 
         llvm::Function *barrier0 = module->getFunction("llvm.nvvm.barrier0");
