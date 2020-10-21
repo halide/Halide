@@ -303,7 +303,7 @@ struct State {
             internal_assert(loop)
                 << "Could not compute plausible site for unscheduled Func: "
                 << n.func.name() << "\n";
-            for (auto &stage : n.stages) {
+            for (const auto &stage : n.stages) {
                 auto &site = sites.get_or_create(&stage);
                 site.compute = loop;
                 site.store = loop;
@@ -359,7 +359,7 @@ struct State {
 
         if (verbose) {
             for (auto it = features.begin(); it != features.end(); it++) {
-                auto &stage = *(it.key());
+                const auto &stage = *(it.key());
                 const auto &feat = it.value();
                 aslog(0) << "Schedule features for " << stage.stage.name() << "\n";
                 feat.dump();
@@ -587,7 +587,7 @@ struct State {
             bool should_parallelize = false;
             const vector<int64_t> *pure_size = nullptr;
             if (params.parallelism > 1) {
-                for (auto &c : root->children) {
+                for (const auto &c : root->children) {
                     if (c->node == node && node->dimensions > 0) {
                         if (c->stage->index == 0) {
                             pure_size = &(c->size);
@@ -649,7 +649,7 @@ struct State {
                     for (const auto &c : root->children) {
                         if (c->node == node) {
                             int64_t total = 1;
-                            for (auto &l : c->stage->loop) {
+                            for (const auto &l : c->stage->loop) {
                                 if (!l.rvar) {
                                     total *= o.tiling[l.pure_dim];
                                 }
@@ -880,7 +880,7 @@ struct State {
                 }
                 p.second->schedule_source << "\n    .reorder_storage(";
                 bool first = true;
-                for (auto v : storage_vars) {
+                for (const auto &v : storage_vars) {
                     if (!first) {
                         p.second->schedule_source << ", ";
                     }
@@ -1353,7 +1353,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 struct Adams2019 {
     void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
-        for (Func f : p.outputs()) {
+        for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
         Autoscheduler::generate_schedule(outputs, target, params, results);

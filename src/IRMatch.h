@@ -126,6 +126,7 @@ struct MatcherState {
     }
 
     HALIDE_ALWAYS_INLINE
+    // NOLINTNEXTLINE(modernize-use-equals-default): Can't use `= default`; clang-tidy complains about noexcept mismatch
     MatcherState() noexcept {
     }
 };
@@ -484,7 +485,7 @@ struct Wild {
     constexpr static bool foldable = true;
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
-        auto e = state.get_binding(i);
+        const auto *e = state.get_binding(i);
         ty = e->type;
         switch (e->node_type) {
         case IRNodeType::UIntImm:
@@ -602,7 +603,7 @@ IntLiteral pattern_arg(int64_t x) {
     return IntLiteral{x};
 }
 HALIDE_ALWAYS_INLINE
-const SpecificExpr pattern_arg(const Expr &e) {
+SpecificExpr pattern_arg(const Expr &e) {
     return {e};
 }
 

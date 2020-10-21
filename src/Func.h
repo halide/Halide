@@ -2512,7 +2512,7 @@ inline void schedule_scalar(Func f) {
     if (t.has_gpu_feature()) {
         f.gpu_single_thread();
     }
-    if (t.has_feature(Target::HVX_64) || t.has_feature(Target::HVX_128)) {
+    if (t.has_feature(Target::HVX)) {
         f.hexagon();
     }
 }

@@ -1,6 +1,6 @@
 #include <algorithm>
+#include <cstring>
 #include <iostream>
-#include <string.h>
 #include <utility>
 
 #ifdef _MSC_VER

@@ -3,7 +3,9 @@
 extern "C" {
 
 WEAK char *halide_string_to_string(char *dst, char *end, const char *arg) {
-    if (dst >= end) return dst;
+    if (dst >= end) {
+        return dst;
+    }
     while (1) {
         if (dst == end) {
             dst[-1] = 0;
@@ -235,7 +237,9 @@ WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg) {
     for (int i = 0; i < 16; i++) {
         *buf_ptr-- = hex_digits[bits & 15];
         bits >>= 4;
-        if (!bits) break;
+        if (!bits) {
+            break;
+        }
     }
     *buf_ptr-- = 'x';
     *buf_ptr = '0';

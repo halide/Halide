@@ -312,7 +312,7 @@ class RemoveRealizeOverOutput : public IRMutator {
     const vector<Function> &outputs;
 
     Stmt visit(const Realize *op) override {
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             if (op->name == f.name()) {
                 return mutate(op->body);
             }
@@ -333,7 +333,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
     InjectTracing tracing(env, t);
 
     // Add a dummy realize block for the output buffers
-    for (Function output : outputs) {
+    for (const Function &output : outputs) {
         Region output_region;
         Parameter output_buf = output.output_buffers()[0];
         internal_assert(output_buf.is_buffer());

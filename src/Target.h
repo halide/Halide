@@ -6,7 +6,7 @@
  */
 
 #include <bitset>
-#include <stdint.h>
+#include <cstdint>
 #include <string>
 
 #include "DeviceAPI.h"
@@ -31,7 +31,7 @@ struct Target {
         NoOS,
         Fuchsia,
         WebAssemblyRuntime
-    } os;
+    } os = OSUnknown;
 
     /** The architecture used by the target. Determines the
      * instruction set to use.
@@ -45,10 +45,10 @@ struct Target {
         POWERPC,
         WebAssembly,
         RISCV
-    } arch;
+    } arch = ArchUnknown;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
-    int bits;
+    int bits = 0;
 
     /** Optional features a target can have.
      * Corresponds to feature_name_map in Target.cpp.
@@ -93,8 +93,8 @@ struct Target {
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,
         HexagonDma = halide_target_feature_hexagon_dma,
-        HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
+        HVX = HVX_128,
         HVX_v62 = halide_target_feature_hvx_v62,
         HVX_v65 = halide_target_feature_hvx_v65,
         HVX_v66 = halide_target_feature_hvx_v66,
@@ -127,9 +127,7 @@ struct Target {
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         FeatureEnd = halide_target_feature_end
     };
-    Target()
-        : os(OSUnknown), arch(ArchUnknown), bits(0) {
-    }
+    Target() = default;
     Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
         for (const auto &f : initial_features) {

@@ -577,8 +577,8 @@ class PartitionLoops : public IRMutator {
         // we can prove the epilogue starts after the prologue ends,
         // we're OK.
         bool can_simplify_prologue = true;
-        for (Expr min_val : min_vals) {
-            for (Expr max_val : max_vals) {
+        for (const Expr &min_val : min_vals) {
+            for (const Expr &max_val : max_vals) {
                 Expr test = simplify(common_subexpression_elimination(min_val - 1 < max_val + 1));
                 if (!is_one(test)) {
                     can_simplify_prologue = false;
@@ -801,7 +801,7 @@ class RenormalizeGPULoops : public IRMutator {
 
         if (in_gpu_loop && !old_in_gpu_loop) {
             // This was the outermost GPU loop. Dump any lifted lets here.
-            while (lifted_lets.size()) {
+            while (!lifted_lets.empty()) {
                 stmt = LetStmt::make(lifted_lets.back().first,
                                      lifted_lets.back().second,
                                      stmt);

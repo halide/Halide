@@ -327,7 +327,7 @@ std::vector<Expr> parameter_constraints(const Parameter &p);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE std::string enum_to_string(const std::map<std::string, T> &enum_map, const T &t) {
-    for (auto key_value : enum_map) {
+    for (const auto &key_value : enum_map) {
         if (t == key_value.second) {
             return key_value.first;
         }
@@ -465,19 +465,18 @@ protected:
     void fail_wrong_type(const char *type);
 
 private:
-    // No copy
-    GeneratorParamBase(const GeneratorParamBase &) = delete;
-    void operator=(const GeneratorParamBase &) = delete;
-    // No move
-    GeneratorParamBase(GeneratorParamBase &&) = delete;
-    void operator=(GeneratorParamBase &&) = delete;
-
     // Generator which owns this GeneratorParam. Note that this will be null
     // initially; the GeneratorBase itself will set this field when it initially
     // builds its info about params. However, since it (generally) isn't
     // appropriate for GeneratorParam<> to be declared outside of a Generator,
     // all reasonable non-testing code should expect this to be non-null.
     GeneratorBase *generator{nullptr};
+
+public:
+    GeneratorParamBase(const GeneratorParamBase &) = delete;
+    GeneratorParamBase &operator=(const GeneratorParamBase &) = delete;
+    GeneratorParamBase(GeneratorParamBase &&) = delete;
+    GeneratorParamBase &operator=(GeneratorParamBase &&) = delete;
 };
 
 // This is strictly some syntactic sugar to suppress certain compiler warnings.
@@ -767,7 +766,7 @@ public:
         if (std::is_same<T, float>::value) {
             // If the constant has no decimal point ("1")
             // we must append one before appending "f"
-            if (oss.str().find(".") == std::string::npos) {
+            if (oss.str().find('.') == std::string::npos) {
                 oss << ".";
             }
             oss << "f";
@@ -1446,7 +1445,7 @@ public:
     const std::vector<Func> &funcs() const;
     const std::vector<Expr> &exprs() const;
 
-    virtual ~GIOBase();
+    virtual ~GIOBase() = default;
 
 protected:
     GIOBase(size_t array_size,
@@ -1498,12 +1497,11 @@ private:
     template<typename T>
     friend class GeneratorParam_Synthetic;
 
-    // No copy
+public:
     GIOBase(const GIOBase &) = delete;
-    void operator=(const GIOBase &) = delete;
-    // No move
+    GIOBase &operator=(const GIOBase &) = delete;
     GIOBase(GIOBase &&) = delete;
-    void operator=(GIOBase &&) = delete;
+    GIOBase &operator=(GIOBase &&) = delete;
 };
 
 template<>
@@ -1937,7 +1935,6 @@ protected:
     const TBase def_{TBase()};
     const Expr def_expr_;
 
-protected:
     Expr get_def_expr() const override {
         return def_expr_;
     }
@@ -2041,7 +2038,6 @@ protected:
 
     const Expr min_, max_;
 
-protected:
     void set_def_min_max() override {
         Super::set_def_min_max();
         // Don't set min/max for bool
@@ -2450,7 +2446,6 @@ protected:
         return t;
     }
 
-protected:
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t = {}, int d = -1)
         : Super(name, IOKind::Buffer, my_types(t), d) {
     }
@@ -2571,7 +2566,6 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-protected:
     GeneratorOutput_Func(const std::string &name)
         : Super(name, IOKind::Function, std::vector<Type>{}, -1) {
     }
@@ -2644,7 +2638,6 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-protected:
     explicit GeneratorOutput_Arithmetic(const std::string &name)
         : Super(name, IOKind::Function, {type_of<TBase>()}, 0) {
     }
@@ -2866,7 +2859,7 @@ public:
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
                               const MachineParams &machine_params = MachineParams::generic());
-    virtual ~GeneratorContext();
+    virtual ~GeneratorContext() = default;
 
     inline Target get_target() const {
         return target;
@@ -2926,12 +2919,11 @@ protected:
         return value_tracker;
     }
 
-    // No copy
+public:
     GeneratorContext(const GeneratorContext &) = delete;
-    void operator=(const GeneratorContext &) = delete;
-    // No move
+    GeneratorContext &operator=(const GeneratorContext &) = delete;
     GeneratorContext(GeneratorContext &&) = delete;
-    void operator=(GeneratorContext &&) = delete;
+    GeneratorContext &operator=(GeneratorContext &&) = delete;
 };
 
 class NamesInterface {
@@ -3044,7 +3036,7 @@ class GeneratorParamInfo {
 public:
     friend class GeneratorBase;
 
-    GeneratorParamInfo(GeneratorBase *generator, const size_t size);
+    GeneratorParamInfo(GeneratorBase *generator, size_t size);
 
     const std::vector<Internal::GeneratorParamBase *> &generator_params() const {
         return filter_generator_params;
@@ -3081,7 +3073,7 @@ public:
     // Call build() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.
     Module build_module(const std::string &function_name = "",
-                        const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
+                        LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
     /**
      * Build a module that is suitable for using for gradient descent calculation in TensorFlow or PyTorch.
@@ -3456,12 +3448,11 @@ private:
         return {build_input(Indices, std::get<Indices>(t))...};
     }
 
-    // No copy
+public:
     GeneratorBase(const GeneratorBase &) = delete;
-    void operator=(const GeneratorBase &) = delete;
-    // No move
+    GeneratorBase &operator=(const GeneratorBase &) = delete;
     GeneratorBase(GeneratorBase &&that) = delete;
-    void operator=(GeneratorBase &&that) = delete;
+    GeneratorBase &operator=(GeneratorBase &&that) = delete;
 };
 
 class GeneratorRegistry {
@@ -3483,8 +3474,12 @@ private:
     static GeneratorRegistry &get_registry();
 
     GeneratorRegistry() = default;
+
+public:
     GeneratorRegistry(const GeneratorRegistry &) = delete;
-    void operator=(const GeneratorRegistry &) = delete;
+    GeneratorRegistry &operator=(const GeneratorRegistry &) = delete;
+    GeneratorRegistry(GeneratorRegistry &&that) = delete;
+    GeneratorRegistry &operator=(GeneratorRegistry &&that) = delete;
 };
 
 }  // namespace Internal
@@ -3683,12 +3678,11 @@ private:
     friend void ::Halide::Internal::generator_test();
     friend class ::Halide::GeneratorContext;
 
-    // No copy
+public:
     Generator(const Generator &) = delete;
-    void operator=(const Generator &) = delete;
-    // No move
+    Generator &operator=(const Generator &) = delete;
     Generator(Generator &&that) = delete;
-    void operator=(Generator &&that) = delete;
+    Generator &operator=(Generator &&that) = delete;
 };
 
 namespace Internal {

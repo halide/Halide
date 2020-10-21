@@ -66,7 +66,9 @@ WEAK host_free_fn host_free = NULL;
 // This checks if there are any log messages available on the remote
 // side. It should be called after every remote call.
 WEAK void poll_log(void *user_context) {
-    if (!remote_poll_log) return;
+    if (!remote_poll_log) {
+        return;
+    }
 
     while (true) {
         char message[1024];
@@ -128,22 +130,38 @@ WEAK int init_hexagon_runtime(void *user_context) {
 
     // Get the symbols we need from the library.
     get_symbol(user_context, host_lib, "halide_hexagon_remote_load_library", remote_load_library);
-    if (!remote_load_library) return -1;
+    if (!remote_load_library) {
+        return -1;
+    }
     get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_v4", remote_get_symbol);
-    if (!remote_get_symbol) return -1;
+    if (!remote_get_symbol) {
+        return -1;
+    }
     get_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
-    if (!remote_run) return -1;
+    if (!remote_run) {
+        return -1;
+    }
     get_symbol(user_context, host_lib, "halide_hexagon_remote_release_library", remote_release_library);
-    if (!remote_release_library) return -1;
+    if (!remote_release_library) {
+        return -1;
+    }
 
     get_symbol(user_context, host_lib, "halide_hexagon_host_malloc_init", host_malloc_init);
-    if (!host_malloc_init) return -1;
+    if (!host_malloc_init) {
+        return -1;
+    }
     get_symbol(user_context, host_lib, "halide_hexagon_host_malloc_deinit", host_malloc_deinit);
-    if (!host_malloc_deinit) return -1;
+    if (!host_malloc_deinit) {
+        return -1;
+    }
     get_symbol(user_context, host_lib, "halide_hexagon_host_malloc", host_malloc);
-    if (!host_malloc) return -1;
+    if (!host_malloc) {
+        return -1;
+    }
     get_symbol(user_context, host_lib, "halide_hexagon_host_free", host_free);
-    if (!host_free) return -1;
+    if (!host_free) {
+        return -1;
+    }
 
     // These symbols are optional.
     get_symbol(user_context, host_lib, "halide_hexagon_remote_poll_log", remote_poll_log, /* required */ false);
@@ -212,7 +230,9 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                                            const uint8_t *code, uint64_t code_size,
                                            const uint8_t *runtime, uint64_t runtime_size) {
     int result = init_hexagon_runtime(user_context);
-    if (result != 0) return result;
+    if (result != 0) {
+        return result;
+    }
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
                         << ", state_ptr: " << state_ptr
                         << ", *state_ptr: " << *state_ptr
@@ -314,7 +334,9 @@ WEAK int map_arguments(void *user_context, int arg_count,
                        remote_buffer *mapped_args) {
     int mapped_count = 0;
     for (int i = 0; i < arg_count; i++) {
-        if ((arg_flags[i] & flag_mask) != flag_value) continue;
+        if ((arg_flags[i] & flag_mask) != flag_value) {
+            continue;
+        }
         remote_buffer &mapped_arg = mapped_args[mapped_count++];
         if (arg_flags[i] != 0) {
             // This is the way that HexagonOffload packages arguments for us.
@@ -357,7 +379,9 @@ WEAK int halide_hexagon_run(void *user_context,
     halide_assert(user_context, state_ptr != NULL);
     halide_assert(user_context, function != NULL);
     int result = init_hexagon_runtime(user_context);
-    if (result != 0) return result;
+    if (result != 0) {
+        return result;
+    }
 
     halide_hexagon_handle_t module = state_ptr ? ((module_state *)state_ptr)->module : 0;
     debug(user_context) << "Hexagon: halide_hexagon_run ("
@@ -382,8 +406,9 @@ WEAK int halide_hexagon_run(void *user_context,
 
     // Allocate some remote_buffer objects on the stack.
     int arg_count = 0;
-    while (arg_sizes[arg_count] > 0)
+    while (arg_sizes[arg_count] > 0) {
         arg_count++;
+    }
     remote_buffer *mapped_buffers =
         (remote_buffer *)__builtin_alloca(arg_count * sizeof(remote_buffer));
 
@@ -392,19 +417,25 @@ WEAK int halide_hexagon_run(void *user_context,
     remote_buffer *input_buffers = mapped_buffers;
     int input_buffer_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x3, 0x1,
                                            input_buffers);
-    if (input_buffer_count < 0) return input_buffer_count;
+    if (input_buffer_count < 0) {
+        return input_buffer_count;
+    }
 
     // Then the output buffers (bit 1 of flags is set).
     remote_buffer *output_buffers = input_buffers + input_buffer_count;
     int output_buffer_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x2, 0x2,
                                             output_buffers);
-    if (output_buffer_count < 0) return output_buffer_count;
+    if (output_buffer_count < 0) {
+        return output_buffer_count;
+    }
 
     // And the input scalars (neither bits 0 or 1 of flags is set).
     remote_buffer *input_scalars = output_buffers + output_buffer_count;
     int input_scalar_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x3, 0x0,
                                            input_scalars);
-    if (input_scalar_count < 0) return input_scalar_count;
+    if (input_scalar_count < 0) {
+        return input_scalar_count;
+    }
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -488,7 +519,9 @@ static const int min_ion_allocation_size = 4096;
 
 WEAK int halide_hexagon_device_malloc(void *user_context, halide_buffer_t *buf) {
     int result = init_hexagon_runtime(user_context);
-    if (result != 0) return result;
+    if (result != 0) {
+        return result;
+    }
 
     debug(user_context)
         << "Hexagon: halide_hexagon_device_malloc (user_context: " << user_context
@@ -814,7 +847,9 @@ WEAK int halide_hexagon_device_release_crop(void *user_context, struct halide_bu
 
 WEAK int halide_hexagon_power_hvx_on(void *user_context) {
     int result = init_hexagon_runtime(user_context);
-    if (result != 0) return result;
+    if (result != 0) {
+        return result;
+    }
 
     debug(user_context) << "halide_hexagon_power_hvx_on\n";
     if (!remote_power_hvx_on) {
@@ -845,7 +880,9 @@ WEAK int halide_hexagon_power_hvx_on(void *user_context) {
 
 WEAK int halide_hexagon_power_hvx_off(void *user_context) {
     int result = init_hexagon_runtime(user_context);
-    if (result != 0) return result;
+    if (result != 0) {
+        return result;
+    }
 
     debug(user_context) << "halide_hexagon_power_hvx_off\n";
     if (!remote_power_hvx_off) {
@@ -880,7 +917,9 @@ WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * 
 
 WEAK int halide_hexagon_set_performance_mode(void *user_context, halide_hexagon_power_mode_t mode) {
     int result = init_hexagon_runtime(user_context);
-    if (result != 0) return result;
+    if (result != 0) {
+        return result;
+    }
 
     debug(user_context) << "halide_hexagon_set_performance_mode\n";
     if (!remote_set_performance_mode) {
@@ -901,7 +940,9 @@ WEAK int halide_hexagon_set_performance_mode(void *user_context, halide_hexagon_
 
 WEAK int halide_hexagon_set_performance(void *user_context, halide_hexagon_power_t *perf) {
     int result = init_hexagon_runtime(user_context);
-    if (result != 0) return result;
+    if (result != 0) {
+        return result;
+    }
 
     debug(user_context) << "halide_hexagon_set_performance\n";
     if (!remote_set_performance) {
@@ -930,7 +971,9 @@ WEAK int halide_hexagon_set_performance(void *user_context, halide_hexagon_power
 
 WEAK int halide_hexagon_set_thread_priority(void *user_context, int priority) {
     int result = init_hexagon_runtime(user_context);
-    if (result != 0) return result;
+    if (result != 0) {
+        return result;
+    }
 
     debug(user_context) << "halide_hexagon_set_thread_priority\n";
     if (!remote_set_thread_priority) {

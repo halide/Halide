@@ -33,7 +33,9 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     // Create a new pipeline stats entry.
     halide_profiler_pipeline_stats *p =
         (halide_profiler_pipeline_stats *)malloc(sizeof(halide_profiler_pipeline_stats));
-    if (!p) return NULL;
+    if (!p) {
+        return NULL;
+    }
     p->next = s->pipelines;
     p->name = pipeline_name;
     p->first_func_id = s->first_free_id;
@@ -292,7 +294,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
         float t = p->time / 1000000.0f;
-        if (!p->runs) continue;
+        if (!p->runs) {
+            continue;
+        }
         sstr.clear();
         int alloc_avg = 0;
         if (p->num_allocs != 0) {
@@ -331,7 +335,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
                 // The first func is always a catch-all overhead
                 // slot. Only report overhead time if it's non-zero
-                if (i == 0 && fs->time == 0) continue;
+                if (i == 0 && fs->time == 0) {
+                    continue;
+                }
 
                 sstr << "  " << fs->name << ": ";
                 cursor += 25;
