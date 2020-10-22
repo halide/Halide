@@ -35,10 +35,19 @@ int GetRecommendedAccumulators(const Target &target) {
     if (target.has_feature(Target::AVX512_Skylake) ||
         (target.arch == Target::ARM && target.bits == 64)) {
         // 32 registers total.
-        return 20;
+        return 24;
     } else {
         // 16 reigsters total.
         return 16;
+    }
+}
+
+int SmallerPowerOfTwo(int x) {
+    int log2_next = std::lround(std::ceil(std::log2(x) - 1.0f));
+    if (log2_next >= 0) {
+        return 1 << log2_next;
+    } else {
+        return 0;
     }
 }
 
@@ -169,14 +178,17 @@ public:
 
         output_.compute_root();
 
-        // Figure out how big the tile should be by getting the total number of
-        // accumulators best for this target and figuring out a tile size.
-        int tile_c_max = 4;
-        int tile_x = GetRecommendedAccumulators(get_target()) / tile_c_max;
-        if (tile_c_max > tile_x) {
-            // Prefer bigger x tiles to c tiles.
-            std::swap(tile_c_max, tile_x);
+        // Figure out how big the tiles we should optimize for should be by getting
+        // the total number of accumulators best for this target and figuring out
+        // tile sizes.
+        const int accumulators = GetRecommendedAccumulators(get_target());
+        const int tile_x = 4;
+        std::vector<std::pair<int, int>> tile_sizes;
+        for (int tile_c = accumulators / tile_x; tile_c >= 1;
+             tile_c = SmallerPowerOfTwo(tile_c)) {
+            tile_sizes.emplace_back(tile_c, tile_x);
         }
+        tile_sizes.emplace_back(4, 1);
 
         // We need to tile the output, but we can't use GuardWithIf because we need
         // things computed at the tile to have constant size. We can't assume the
@@ -186,15 +198,17 @@ public:
         Var xo("xo");
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
-        for (int tile_c = tile_c_max; tile_c >= 1; tile_c /= 2) {
+        for (auto i : tile_sizes) {
+            int tile_c = i.first;
+            int tile_x = i.second;
             output_
                 .specialize(output_channels >= tile_c * vector_size &&
                             output_width >= tile_x)
                 .tile(c, x, co, xo, c, x, tile_c * vector_size, tile_x,
                       TailStrategy::ShiftInwards)
                 .reorder(c, x, co, xo, y, b)
-                .vectorize(c)
-                .unroll(x);
+                .vectorize(c, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf)
+                .unroll(c);
         }
 
         // In case there are no suitable tile sizes, just make a dummy split so the
