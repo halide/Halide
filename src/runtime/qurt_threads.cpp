@@ -86,9 +86,10 @@ struct thread_parker {
     qurt_cond_t condvar;
     bool should_park = false;
 
-#if __cplusplus >= 201103L
     thread_parker(const thread_parker &) = delete;
-#endif
+    thread_parker &operator=(const thread_parker &) = delete;
+    thread_parker(thread_parker &&) = delete;
+    thread_parker &operator=(thread_parker &&) = delete;
 
     ALWAYS_INLINE thread_parker() {
         qurt_mutex_init(&mutex);

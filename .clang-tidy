@@ -18,6 +18,7 @@ Checks: >
     modernize-use-emplace,
     modernize-use-equals-default,
     modernize-use-equals-delete,
+    modernize-use-nullptr,
     modernize-use-override,
     performance-*,
     -performance-inefficient-string-concatenation,

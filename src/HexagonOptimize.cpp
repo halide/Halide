@@ -2264,7 +2264,7 @@ class SyncronizationBarriers : public IRMutator {
     // Trail of For Blocks to reach a stmt.
     vector<const Stmt *> curr_path;
     // Current Stmt being mutated.
-    const Stmt *curr = NULL;
+    const Stmt *curr = nullptr;
     // Track where the Stmt generated a scatter-release.
     std::map<const Stmt *, Expr> sync;
 

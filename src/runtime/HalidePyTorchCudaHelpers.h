@@ -2,7 +2,7 @@
 #define HL_PYTORCH_CUDA_HELPERS_H
 
 /** \file
- * Override Halide's CUDA hooks so that the Halide code called from PyTorch uses 
+ * Override Halide's CUDA hooks so that the Halide code called from PyTorch uses
  * the correct GPU device and stream.
  */
 
@@ -29,17 +29,17 @@ typedef struct UserContext {
 extern "C" {
 
 int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create = true) {
-    if (user_context != NULL) {
+    if (user_context != nullptr) {
         Halide::PyTorch::UserContext *user_ctx = (Halide::PyTorch::UserContext *)user_context;
         *ctx = *user_ctx->cuda_context;
     } else {
-        *ctx = NULL;
+        *ctx = nullptr;
     }
     return 0;
 }
 
 int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) {
-    if (user_context != NULL) {
+    if (user_context != nullptr) {
         Halide::PyTorch::UserContext *user_ctx = (Halide::PyTorch::UserContext *)user_context;
         *stream = *user_ctx->stream;
     } else {
@@ -49,7 +49,7 @@ int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) 
 }
 
 int halide_get_gpu_device(void *user_context) {
-    if (user_context != NULL) {
+    if (user_context != nullptr) {
         Halide::PyTorch::UserContext *user_ctx = (Halide::PyTorch::UserContext *)user_context;
         return user_ctx->device_id;
     } else {

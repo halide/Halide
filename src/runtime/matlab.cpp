@@ -174,9 +174,9 @@ ALWAYS_INLINE const T *get_data(const mxArray *a) {
 template<typename T>
 ALWAYS_INLINE T get_mex_symbol(void *user_context, const char *name, bool required) {
     T s = (T)halide_get_symbol(name);
-    if (required && s == NULL) {
+    if (required && s == nullptr) {
         error(user_context) << "mex API not found: " << name << "\n";
-        return NULL;
+        return nullptr;
     }
     return s;
 }
@@ -257,7 +257,7 @@ WEAK void halide_matlab_print(void *, const char *msg) {
 
 WEAK int halide_matlab_init(void *user_context) {
     // Assume that if mexWarnMsgTxt exists, we've already attempted initialization.
-    if (mexWarnMsgTxt != NULL) {
+    if (mexWarnMsgTxt != nullptr) {
         return halide_error_code_success;
     }
 

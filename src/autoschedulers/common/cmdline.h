@@ -133,7 +133,7 @@ Target lexical_cast(const Source &arg) {
 static inline std::string demangle(const std::string &name) {
 #if !defined(_WIN32)
     int status = 0;
-    char *p = abi::__cxa_demangle(name.c_str(), 0, 0, &status);
+    char *p = abi::__cxa_demangle(name.c_str(), nullptr, nullptr, &status);
     std::string ret(p);
     free(p);
     return ret;
@@ -441,7 +441,7 @@ public:
         return p->get();
 #else
         const option_with_value<T> *p = dynamic_cast<const option_with_value<T> *>(options.find(name)->second);
-        if (p == NULL) {
+        if (p == nullptr) {
             throw_cmdline_error("type mismatch flag '" + name + "'");
         }
         return p->get();

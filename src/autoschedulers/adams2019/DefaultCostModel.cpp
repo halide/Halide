@@ -350,7 +350,7 @@ void DefaultCostModel::load_weights() {
     }
 
     if (need_randomize) {
-        auto seed = time(NULL);
+        auto seed = time(nullptr);
         std::cout << "Randomizing weights using seed = " << seed << "\n";
         weights.randomize((uint32_t)seed);
     }
