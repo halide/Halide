@@ -6,8 +6,8 @@
 #define FUNCTION_DAG_H
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
-#include <stdint.h>
 #include <string>
 #include <utility>
 
@@ -306,7 +306,7 @@ struct BoundContents {
     }
 
     BoundContents *make_copy() const {
-        auto b = layout->make();
+        auto *b = layout->make();
         size_t bytes = sizeof(data()[0]) * layout->total_size;
         memcpy(b->data(), data(), bytes);
         return b;
@@ -571,12 +571,15 @@ private:
     // Compute the featurization for the entire DAG
     void featurize();
 
-    // This class uses a lot of internal pointers, so we'll hide the copy constructor.
-    FunctionDAG(const FunctionDAG &other) = delete;
-    void operator=(const FunctionDAG &other) = delete;
-
     template<typename OS>
     void dump_internal(OS &os) const;
+
+public:
+    // This class uses a lot of internal pointers, so we'll make it uncopyable/unmovable.
+    FunctionDAG(const FunctionDAG &other) = delete;
+    FunctionDAG &operator=(const FunctionDAG &other) = delete;
+    FunctionDAG(FunctionDAG &&other) = delete;
+    FunctionDAG &operator=(FunctionDAG &&other) = delete;
 };
 
 }  // namespace Autoscheduler

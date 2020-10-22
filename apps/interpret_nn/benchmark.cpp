@@ -24,7 +24,7 @@ void RunBenchmark(const std::string &filename) {
 
     model.Dump(std::cout);
     for (auto &i : model.tensors) {
-        i->allocate();
+        i->Allocate();
     }
 
     ModelInterpreter interpreter(&model);

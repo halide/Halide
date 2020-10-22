@@ -2077,8 +2077,9 @@ static void commit_command_list(d3d12_compute_command_list *cmdList) {
 
 static bool spinlock_until_signaled(uint64_t signal) {
     TRACELOG;
-    while (queue_fence->GetCompletedValue() < signal)
-        ;
+    while (queue_fence->GetCompletedValue() < signal) {
+        // nothing
+    }
     return true;
 }
 
@@ -2213,10 +2214,12 @@ static void buffer_copy_command(d3d12_copy_command_list *cmdList,
         }
     }
 
-    if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter)
+    if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter) {
         (*cmdList)->ResourceBarrier(1, &src_barrier);
-    if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter)
+    }
+    if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter) {
         (*cmdList)->ResourceBarrier(1, &dst_barrier);
+    }
 
     UINT64 SrcOffset = src_byte_offset;
     UINT64 DstOffset = dst_byte_offset;
@@ -2227,10 +2230,12 @@ static void buffer_copy_command(d3d12_copy_command_list *cmdList,
     swap(src_barrier.Transition.StateBefore, src_barrier.Transition.StateAfter);  // restore resource state
     swap(dst_barrier.Transition.StateBefore, dst_barrier.Transition.StateAfter);  // restore resource state
 
-    if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter)
+    if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter) {
         (*cmdList)->ResourceBarrier(1, &src_barrier);
-    if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter)
+    }
+    if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter) {
         (*cmdList)->ResourceBarrier(1, &dst_barrier);
+    }
 }
 
 static void synchronize_host_and_device_buffer_contents(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
@@ -2779,7 +2784,7 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
 
 namespace {
 
-static void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
+void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
     TRACELOG;
 
     D3D12_RESOURCE_BARRIER barrier = {};
@@ -2878,8 +2883,8 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
 
 namespace {
 
-static int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
-                                    uint64_t src_offset, uint64_t dst_offset, int dimensions) {
+int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
+                             uint64_t src_offset, uint64_t dst_offset, int dimensions) {
     TRACELOG;
 
     if (dimensions == 0) {

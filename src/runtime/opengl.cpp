@@ -297,10 +297,11 @@ WEAK void GLStateSaver::restore() {
     free(texture_2d_binding);
 
     for (int i = 0; i < max_vertex_attribs; i++) {
-        if (vertex_attrib_array_enabled[i])
+        if (vertex_attrib_array_enabled[i]) {
             global_state.EnableVertexAttribArray(i);
-        else
+        } else {
             global_state.DisableVertexAttribArray(i);
+        }
     }
     free(vertex_attrib_array_enabled);
 
@@ -458,8 +459,9 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
     const char *line = kernel->source;
     while (*line) {
         const char *next_line = strchr(line, '\n') + 1;
-        if (!next_line)
+        if (!next_line) {
             next_line = line + size;
+        }
 
         const char *args;
         if ((args = match_prefix(line, kernel_marker))) {
@@ -1571,7 +1573,9 @@ WEAK int halide_opengl_run(void *user_context,
     GLint num_output_textures = 0;
     kernel_arg = kernel->arguments;
     for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
-        if (kernel_arg->kind != Argument::Outbuf) continue;
+        if (kernel_arg->kind != Argument::Outbuf) {
+            continue;
+        }
 
         halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.");
 
@@ -1874,8 +1878,9 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
         int num_varying_float = 2;
 
         for (Argument *arg = kernel->arguments; arg; arg = arg->next) {
-            if (arg->kind == Argument::Varying)
+            if (arg->kind == Argument::Varying) {
                 ++num_varying_float;
+            }
         }
 
         int num_packed_varying_float = ((num_varying_float + 3) & ~0x3) / 4;
@@ -1967,7 +1972,9 @@ WEAK const halide_device_interface_t *halide_opengl_device_interface() {
 }
 
 WEAK void halide_opengl_context_lost(void *user_context) {
-    if (!global_state.initialized) return;
+    if (!global_state.initialized) {
+        return;
+    }
 
     debug(user_context) << "halide_opengl_context_lost\n";
     for (ModuleState *mod = state_list; mod; mod = mod->next) {
@@ -1976,7 +1983,6 @@ WEAK void halide_opengl_context_lost(void *user_context) {
     }
 
     global_state.init();
-    return;
 }
 
 WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, uint64_t texture_id) {

@@ -8,7 +8,7 @@
  */
 
 #include <atomic>
-#include <stdlib.h>
+#include <cstdlib>
 
 #include "runtime/HalideRuntime.h"  // for HALIDE_ALWAYS_INLINE
 

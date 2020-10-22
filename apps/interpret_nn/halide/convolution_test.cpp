@@ -5,10 +5,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "common_reference.h"
 #include "ConvolutionUint8.h"
-#include "halide_benchmark.h"
 #include "HalideBuffer.h"
+#include "common_reference.h"
+#include "halide_benchmark.h"
 
 using interpret_nn::MultiplyByQuantizedMultiplierSmallerThanOneReference;
 

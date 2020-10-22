@@ -241,7 +241,8 @@ public:
         // TODO: This gets recomputed often when the op is split up into small
         // pieces.
         offset_c.compute_root();
-        offset_c.update(0).specialize(input_offset_ != 0)
+        offset_c.update(0)
+            .specialize(input_offset_ != 0)
             .split(r.z, rco, rci, vector_reduction)
             .reorder(rci, c, rco, r.x, r.y)
             .atomic()

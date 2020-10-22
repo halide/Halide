@@ -2,12 +2,12 @@
 #include "HalideTraceUtils.h"
 #include "halide_image_io.h"
 
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fcntl.h>
 #include <map>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <string>
 #include <vector>
 
@@ -46,8 +46,7 @@ struct FuncInfo {
     halide_type_t type;
     Buffer<> values;
 
-    FuncInfo() {
-    }
+    FuncInfo() = default;
     FuncInfo(Packet *p) {
         int real_dims = p->dimensions / p->type.lanes;
         if (real_dims > 16) {

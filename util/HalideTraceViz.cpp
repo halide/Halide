@@ -107,7 +107,7 @@ struct fail {
 
 // Combine type-and-code into a single integer to avoid nested switches.
 // Must be constexpr to allow use in case clauses.
-inline static constexpr int halide_type_code(halide_type_code_t code, int bits) {
+inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
     return (((int)code) << 8) | bits;
 }
 
@@ -567,13 +567,13 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
         if (fi.config.zoom > 100.f) {
             // Zooms this large are usually for things like input matrices.
             // Perhaps clamp at something smaller?
-            fi.config.zoom = floor(fi.config.zoom / 100.f) * 100.f;
+            fi.config.zoom = std::floor(fi.config.zoom / 100.f) * 100.f;
         } else if (fi.config.zoom > 10.f) {
-            fi.config.zoom = floor(fi.config.zoom / 10.f) * 10.f;
+            fi.config.zoom = std::floor(fi.config.zoom / 10.f) * 10.f;
         } else if (fi.config.zoom > 1.f) {
-            fi.config.zoom = floor(fi.config.zoom * 2.f) / 2.f;
+            fi.config.zoom = std::floor(fi.config.zoom * 2.f) / 2.f;
         } else if (fi.config.zoom < 1.f) {
-            fi.config.zoom = ceil(fi.config.zoom * 20.f) / 20.f;
+            fi.config.zoom = std::ceil(fi.config.zoom * 20.f) / 20.f;
         }
         info() << "zoom for " << func_name << " is " << zoom_x << " " << zoom_y << " -> " << fi.config.zoom << "\n";
     }
@@ -615,10 +615,10 @@ void do_auto_layout(VizState &state) {
 
 float calc_side_length(int min_cells, int width, int height) {
     const float aspect_ratio = (float)width / (float)height;
-    const float p = ceil(sqrt(min_cells * aspect_ratio));
+    const float p = std::ceil(std::sqrt(min_cells * aspect_ratio));
     const float par = p / aspect_ratio;
-    const float s = floor(par) * p < min_cells ?
-                        height / ceil(par) :
+    const float s = std::floor(par) * p < min_cells ?
+                        height / std::ceil(par) :
                         width / p;
     return s;
 }
@@ -885,7 +885,7 @@ struct Surface {
 
     // TODO this doesn't bounds-check against frame_size
     void do_draw_pixel(const float zoom, const int x, const int y, const uint32_t color, uint32_t *dst) {
-        const int izoom = (int)ceil(zoom);
+        const int izoom = (int)std::ceil(zoom);
         const int y_advance = frame_size.x - izoom;
         dst += frame_size.x * y + x;
         for (int dy = 0; dy < izoom; dy++) {
@@ -933,7 +933,7 @@ struct Surface {
         if (2 * current_dimension == p.dimensions) {
             const int x_min = x_off * fi.config.zoom + fi.config.pos.x;
             const int y_min = y_off * fi.config.zoom + fi.config.pos.y;
-            const int izoom = (int)ceil(fi.config.zoom);
+            const int izoom = (int)std::ceil(fi.config.zoom);
             fill_rect(x_min, y_min, izoom, izoom, color, dst);
         } else {
             const int *coords = p.coordinates();

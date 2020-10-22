@@ -8,9 +8,8 @@
 
 #
 # The desired change here is just to remove:
-#
-#     performance-unnecessary-copy-initialization
-#     performance-unnecessary-value-param
+#       bugprone-sizeof-expression
+#       misc-definitions-in-headers
 #
 
 ---
@@ -18,12 +17,13 @@ Checks: >
     -*,
     bugprone-macro-parenthesis,
     bugprone-parent-virtual-call,
-    bugprone-sizeof-expression,
+    -bugprone-sizeof-expression,
     bugprone-string-constructor,
     misc-*,
+    -misc-definitions-in-headers,
     -misc-non-private-member-variables-in-classes,
-    -misc-unconventional-assign-operator,
     -misc-unused-parameters,
+    -misc-unconventional-assign-operator,
     modernize-deprecated-headers,
     modernize-use-default-member-init,
     modernize-use-emplace,
@@ -33,8 +33,6 @@ Checks: >
     performance-*,
     -performance-inefficient-string-concatenation,
     -performance-inefficient-vector-operation,
-    -performance-unnecessary-copy-initialization,
-    -performance-unnecessary-value-param,
     readability-avoid-const-params-in-decls,
     readability-braces-around-statements,
     readability-const-return-type,

@@ -118,8 +118,12 @@ public:
 private:
     const std::string dir_path;
     std::vector<std::string> dir_files;
+
+public:
     TemporaryObjectFileDir(const TemporaryObjectFileDir &) = delete;
-    void operator=(const TemporaryObjectFileDir &) = delete;
+    TemporaryObjectFileDir &operator=(const TemporaryObjectFileDir &) = delete;
+    TemporaryObjectFileDir(TemporaryObjectFileDir &&) = delete;
+    TemporaryObjectFileDir &operator=(TemporaryObjectFileDir &&) = delete;
 };
 
 // Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext
@@ -139,7 +143,7 @@ std::string add_suffix(const std::string &path, const std::string &suffix) {
 void validate_outputs(const std::map<Output, std::string> &in) {
     // We don't care about the extensions, so any Target will do
     auto known = get_output_info(Target());
-    for (auto it : in) {
+    for (const auto &it : in) {
         internal_assert(!it.second.empty()) << "Empty value for output: " << known.at(it.first).name;
     }
 }
@@ -767,8 +771,7 @@ void compile_multitarget(const std::string &fn_name,
     user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
 
     const auto suffix_for_entry = [&](int i) -> std::string {
-        const std::string suffix = "-" + (suffixes.empty() ? targets[i].to_string() : suffixes[i]);
-        return suffix;
+        return "-" + (suffixes.empty() ? targets[i].to_string() : suffixes[i]);
     };
 
     const auto add_suffixes = [&](const std::map<Output, std::string> &in, const std::string &suffix) -> std::map<Output, std::string> {
@@ -885,7 +888,7 @@ void compile_multitarget(const std::string &fn_name,
             }
             debug(1) << "compile_multitarget: compile_sub_target " << sub_out[Output::object] << "\n";
             sub_module.compile(sub_out);
-            auto *r = sub_module.get_auto_scheduler_results();
+            const auto *r = sub_module.get_auto_scheduler_results();
             auto_scheduler_results.push_back(r ? *r : AutoSchedulerResults());
         }
 

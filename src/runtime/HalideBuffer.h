@@ -9,10 +9,10 @@
 #include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
-#include <stdint.h>
-#include <string.h>
 #include <vector>
 
 #if defined(__has_feature)

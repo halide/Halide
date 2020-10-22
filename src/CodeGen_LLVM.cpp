@@ -3172,7 +3172,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
 
         // Create a null-initialized global to track this object.
-        const auto base_fn = sub_fns.back().fn;
+        auto *const base_fn = sub_fns.back().fn;
         const string global_name = unique_name(base_fn->getName().str() + "_indirect_fn_ptr");
         GlobalVariable *global = new GlobalVariable(
             *module,
@@ -4636,7 +4636,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
 }  // namespace Internal
 
 void CodeGen_LLVM::visit(const Atomic *op) {
-    if (op->mutex_name != "") {
+    if (!op->mutex_name.empty()) {
         internal_assert(!inside_atomic_mutex_node)
             << "Nested atomic mutex locks detected. This might causes a deadlock.\n";
         ScopedValue<bool> old_inside_atomic_mutex_node(inside_atomic_mutex_node, true);

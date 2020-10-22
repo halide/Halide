@@ -1,8 +1,8 @@
 #include "HalideTraceUtils.h"
-#include <assert.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cassert>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 
 namespace Halide {
 namespace Internal {

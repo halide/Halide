@@ -16,11 +16,14 @@ inline std::ostream &operator<<(std::ostream &s,
     return s << "{" << dim.min << ", " << dim.extent << ", " << dim.stride << "}";
 }
 
-inline std::ostream &operator<<(std::ostream &s,
-                                const std::vector<halide_dimension_t> &shape) {
+template<typename T>
+inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {
     s << "{";
-    for (halide_dimension_t i : shape) {
-        s << i << ",";
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (i > 0) {
+            s << ", ";
+        }
+        s << v[i];
     }
     return s << "}";
 }
@@ -99,6 +102,11 @@ struct QuantizationInfo {
     int32_t dimension;
 };
 
+inline std::ostream &operator<<(std::ostream &s,
+                                const QuantizationInfo &q) {
+    return s << "{" << q.scale << ", " << q.zero << ", " << q.dimension << "}";
+}
+
 using CropShape = std::vector<std::pair<int, int>>;
 
 inline CropShape WithoutStrides(const std::vector<halide_dimension_t> &shape) {
@@ -173,13 +181,15 @@ public:
         return buf;
     }
 
-    bool is_allocated() const {
+    bool IsAllocated() const {
         return !data_.empty();
     }
-    void allocate();
-    void free() {
+    void Allocate();
+    void Free() {
         data_.resize(0);
     }
+
+    void Dump(std::ostream &os) const;
 };
 
 class Op {

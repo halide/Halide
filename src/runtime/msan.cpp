@@ -28,8 +28,9 @@ namespace Runtime {
 namespace Internal {
 
 WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
-    while (d >= 0 && c.extent[d] == 1)
+    while (d >= 0 && c.extent[d] == 1) {
         d--;
+    }
 
     if (d == -1) {
         const void *from = (void *)(c.src + off);
@@ -43,8 +44,9 @@ WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
 };
 
 WEAK void check_helper(void *uc, const device_copy &c, int d, int64_t off, const char *buf_name) {
-    while (d >= 0 && c.extent[d] == 1)
+    while (d >= 0 && c.extent[d] == 1) {
         d--;
+    }
 
     if (d == -1) {
         const void *from = (void *)(c.src + off);

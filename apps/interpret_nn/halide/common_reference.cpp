@@ -27,4 +27,3 @@ int32_t MultiplyByQuantizedMultiplierSmallerThanOneReference(int32_t x, int32_t 
 }
 
 }  // namespace interpret_nn
-

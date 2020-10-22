@@ -138,7 +138,8 @@ public:
             .unroll(x)
             .unroll(y)
             .vectorize(c);
-        convolved.update().specialize(filter_width == 3 && filter_height == 3)
+        convolved.update()
+            .specialize(filter_width == 3 && filter_height == 3)
             .unroll(r.x);
 
         // TODO: This gets recomputed often when the op is split up into small

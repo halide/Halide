@@ -253,8 +253,9 @@ int halide_hexagon_dma_wrapper(void *user_context, struct halide_buffer_t *src,
         << "Hexagon: Recommended ROI(w: " << roi_width << " h: " << roi_height << " s: " << roi_stride << ")\n";
 
     // account for folding, where the dim[1].stride reflects the fold_storage stride
-    if (dst->dim[1].stride > roi_stride)
+    if (dst->dim[1].stride > roi_stride) {
         roi_stride = dst->dim[1].stride;
+    }
 
     // Assert if destination stride is a multipe of recommended stride
     halide_assert(user_context, ((dst->dim[1].stride % roi_stride) == 0));

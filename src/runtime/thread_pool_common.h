@@ -324,7 +324,9 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                        job->make_runnable()) {
                     iters++;
                 }
-                if (iters == 0) break;
+                if (iters == 0) {
+                    break;
+                }
 
                 // Do them
                 result = halide_do_loop_task(job->user_context, job->task.fn,

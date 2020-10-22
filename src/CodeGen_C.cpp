@@ -297,7 +297,7 @@ protected:
         include_type(op->type);
         if (op->is_intrinsic(Call::lerp)) {
             // lower_lerp() can synthesize wider vector types.
-            for (auto &a : op->args) {
+            for (const auto &a : op->args) {
                 include_lerp_types(a.type());
             }
         }
@@ -405,8 +405,7 @@ CodeGen_C::~CodeGen_C() {
             if (target.has_feature(Target::CUDA)) {
                 stream << halide_internal_runtime_header_HalideRuntimeCuda_h << "\n";
             }
-            if (target.has_feature(Target::HVX_128) ||
-                target.has_feature(Target::HVX_64)) {
+            if (target.has_feature(Target::HVX)) {
                 stream << halide_internal_runtime_header_HalideRuntimeHexagonHost_h << "\n";
             }
             if (target.has_feature(Target::Metal)) {
@@ -1396,7 +1395,7 @@ void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
         t.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
         return;
     }
-    for (auto &ns : t.handle_type->namespaces) {
+    for (const auto &ns : t.handle_type->namespaces) {
         stream << "namespace " << ns << " { ";
     }
     switch (t.handle_type->inner_name.cpp_type_type) {
@@ -1416,7 +1415,7 @@ void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
         internal_error << "Passing pointers to enums is unsupported\n";
         break;
     }
-    for (auto &ns : t.handle_type->namespaces) {
+    for (const auto &ns : t.handle_type->namespaces) {
         (void)ns;
         stream << " }";
     }
@@ -1439,7 +1438,7 @@ void CodeGen_C::compile(const Module &input) {
     // we emit function prototypes, since those may need the types.
     stream << "\n";
     for (const auto &f : input.functions()) {
-        for (auto &arg : f.args) {
+        for (const auto &arg : f.args) {
             forward_declare_type_if_needed(arg.type);
         }
     }
@@ -2711,7 +2710,7 @@ void CodeGen_C::visit(const Shuffle *op) {
     }
 
     std::vector<string> vecs;
-    for (Expr v : op->vectors) {
+    for (const Expr &v : op->vectors) {
         vecs.push_back(print_expr(v));
     }
     ostringstream rhs;

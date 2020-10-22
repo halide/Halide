@@ -27,8 +27,8 @@ inline void RequireSameExtentCX(Halide::OutputImageParam first,
 
 // Check if the first two dimensions of a buffer can be fused cleanly.
 inline Halide::Expr CanFuseCX(Halide::OutputImageParam p) {
-  return p.dim(0).min() == 0 && p.dim(1).stride() > 0 &&
-         p.dim(1).stride() == p.dim(0).extent();
+    return p.dim(0).min() == 0 && p.dim(1).stride() > 0 &&
+           p.dim(1).stride() == p.dim(0).extent();
 }
 
 // A boundary condition, without likelies that cause loop partitioning.

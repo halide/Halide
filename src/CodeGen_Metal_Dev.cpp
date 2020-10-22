@@ -216,7 +216,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        auto fence_type_ptr = as_const_int(op->args[0]);
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 
@@ -474,11 +474,9 @@ void CodeGen_Metal_Dev::add_kernel(Stmt s,
 namespace {
 struct BufferSize {
     string name;
-    size_t size;
+    size_t size = 0;
 
-    BufferSize()
-        : size(0) {
-    }
+    BufferSize() = default;
     BufferSize(string name, size_t size)
         : name(std::move(name)), size(size) {
     }

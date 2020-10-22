@@ -75,7 +75,8 @@ public:
                   std::vector<int> filter_size, Padding padding,
                   ActivationFunction activation)
         : PoolOp(input, output, std::move(stride),
-          std::move(filter_size), padding, activation) {}
+                 std::move(filter_size), padding, activation) {
+    }
 
     void Execute(const CropShape &crop);
 
@@ -179,7 +180,8 @@ public:
               std::vector<int> filter_size, Padding padding,
               ActivationFunction activation)
         : PoolOp(input, output, std::move(stride),
-          std::move(filter_size), padding, activation) {}
+                 std::move(filter_size), padding, activation) {
+    }
 
     void Execute(const CropShape &crop);
 
