@@ -6,6 +6,7 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -247,29 +248,26 @@ class CSEEveryExprInStmt : public IRMutator {
         const Call *c = dummy.as<Call>();
         internal_assert(c && c->is_intrinsic(Call::bundle) && c->args.size() == 2);
 
-        // If the index of the store remains unchanged, then it means that we weren't
-        // able to CSE anything between op->index and op->value. In that case, moving
-        // lets before the store would put the lets too far away from their uses.
-        // This is ok except, there are passes like LoopCarry that are beneficial
-        // when they are able to see a long continuous block of stores (eg. when
-        // unrolling). If we don't do this, they'll see a long sequence of LetStmts.
-        // Handling this here means the LoopCarry pass need not be complicated.
-        if (equal(c->args[1], op->index)) {
-            Expr v = c->args[0];
-            for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+        // Iterate over the the values that were CSEd. Those that are used by
+        // the store index will need to become LetStmts before the store. The
+        // others can be Let expressions around the store value.
+        vector<pair<string,Expr>> lets_for_letstmts;
+        Expr v = c->args[0];
+        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            if (expr_uses_var(c->args[1], it->first)) {
+                lets_for_letstmts.emplace_back(it->first, it->second);
+            } else {
                 v = Let::make(it->first, it->second, v);
             }
-            Stmt s = Store::make(op->name, v, c->args[1],
-                                 op->param, mutate(op->predicate), op->alignment);
-            return s;
-        } else {
-            Stmt s = Store::make(op->name, c->args[0], c->args[1],
-                                 op->param, mutate(op->predicate), op->alignment);
-            for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                s = LetStmt::make(it->first, it->second, s);
-            }
-            return s;
         }
+        
+        Stmt s = Store::make(op->name, v, c->args[1],
+                             op->param, mutate(op->predicate), op->alignment);
+
+        for (auto it = lets_for_letstmts.begin(); it != lets_for_letstmts.end(); ++it) {
+            s = LetStmt::make(it->first, it->second, s);
+        }
+        return s;
     }
 
 public:
