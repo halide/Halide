@@ -41,23 +41,24 @@ HEXAGON_SDK_LIBS ?= "${HEXAGON_SDK_ROOT}/libs"
 
 COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef -I../
 COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release
+COMMON_CXXFLAGS = -std=c++11
 HEXAGON_QAICFLAGS = ${COMMON_FLAGS}
 
 BIN ?= bin
 
 CC-host = ${CXX}
-CXX-host = ${CXX}
+CXX-host = ${CXX} $(COMMON_CXXFLAGS)
 
 CC-v62 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang
-CXX-v62 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang++
+CXX-v62 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang++ $(COMMON_CXXFLAGS)
 LD-v62 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-link
 
 CC-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc
-CXX-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-g++
+CXX-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-g++ $(COMMON_CXXFLAGS)
 CCFLAGS-arm-64-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm64
 
 CC-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-gcc
-CXX-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-g++
+CXX-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-g++ $(COMMON_CXXFLAGS)
 CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm
 
 CCFLAGS-host := ${CCFLAGS} -I../ -I ${HEXAGON_TOOLS_ROOT}/Tools/include/iss/ -fPIC \
@@ -153,7 +154,7 @@ $(BIN)/%/sim_remote.o: sim_remote.cpp sim_protocol.h known_symbols.h $(BIN)/src/
 
 $(BIN)/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
-	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c sim_host.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -c sim_host.cpp -o $@
 
 $(BIN)/%/sim_qurt.o: sim_qurt.cpp
 	mkdir -p $(@D)
