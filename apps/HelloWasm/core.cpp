@@ -13,7 +13,7 @@
 
 const int W = 1024, H = 1024;
 
-struct context {
+struct Context {
     SDL_Renderer *renderer = nullptr;
     SDL_Texture *tex = nullptr;
     int iteration = 0;
@@ -30,7 +30,7 @@ struct context {
 };
 
 void mainloop(void *arg) {
-    context *ctx = static_cast<context *>(arg);
+    Context *ctx = static_cast<Context *>(arg);
     SDL_Renderer *renderer = ctx->renderer;
 
     // Grab mouse position somehow
@@ -100,7 +100,7 @@ int main() {
     SDL_Renderer *renderer;
     SDL_CreateWindowAndRenderer(W, H, 0, &window, &renderer);
 
-    context ctx;
+    Context ctx;
     ctx.renderer = renderer;
     ctx.buf1 = Halide::Runtime::Buffer<float>(W, H, 3);
     ctx.buf2 = Halide::Runtime::Buffer<float>(W, H, 3);

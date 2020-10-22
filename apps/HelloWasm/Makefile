@@ -16,6 +16,7 @@ $(GENERATOR_BIN)/reaction_diffusion_generator: reaction_diffusion_generator.cpp 
 $(BIN)/wasm/reaction_diffusion_%.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
 	$< -g reaction_diffusion_$* -e $(GENERATOR_OUTPUTS) -o $(@D) target=wasm-32-wasmrt-no_runtime threads=false
+
 $(BIN)/wasm/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(@D) target=wasm-32-wasmrt
