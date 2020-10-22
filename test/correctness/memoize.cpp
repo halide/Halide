@@ -491,6 +491,44 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Test multiple argument memoize_tag. This can be unsafe but
+        // models cases where one uses a hash of image data as part of
+        // a tag to memoize an expensive computation.
+        ImageParam input(UInt(8), 1);
+        Param<int> key;
+        Func f, g;
+        RDom extent(input);
+
+        g() = memoize_tag(sum(input(extent)), key);
+        f() = g() + 42;
+        g.compute_root().memoize();
+
+        Buffer<uint8_t> in(10);
+        input.set(in);
+
+        in.fill(42);
+
+        key.set(0);
+        Buffer<uint8_t> result = f.realize();
+        assert(result() == (462 % 256));
+
+        // Change image data without channging tag
+        in(0) = 41;
+        result = f.realize();
+
+        // Result is likely stale. This is not strictly guaranteed due to e.g.
+        // cache size. Hence allow correct value to make test express the
+        // contract.
+        assert((result() == (462 % 256)) ||
+               (result() == (461 % 256)));
+
+        // Change tag, thus ensuring correct result.
+        key.set(1);
+        result = f.realize();
+        assert(result() == (461 %256));
+    }
+
+    {
         Param<float> val;
 
         Func f;
