@@ -342,8 +342,6 @@ void define_func(py::module &m) {
 
             .def("bound_extent", &Func::bound_extent, py::arg("var"), py::arg("extent"))
 
-            .def("gpu_lanes", &Func::gpu_lanes, py::arg("thread_x"), py::arg("device_api") = DeviceAPI::Default_GPU)
-
             .def("shader", &Func::shader, py::arg("x"), py::arg("y"), py::arg("c"), py::arg("device_api"))
 
             .def("glsl", &Func::glsl, py::arg("x"), py::arg("y"), py::arg("c"))
