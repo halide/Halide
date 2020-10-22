@@ -525,7 +525,7 @@ int main(int argc, char **argv) {
         // Change tag, thus ensuring correct result.
         key.set(1);
         result = f.realize();
-        assert(result() == (461 %256));
+        assert(result() == (461 % 256));
     }
 
     {
