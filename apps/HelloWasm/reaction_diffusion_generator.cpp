@@ -61,9 +61,14 @@ public:
         Expr dG = (1 - B) * (R - G);
         Expr dB = 1 - B + 2 * G * R - R - G;
 
-        R += dR * 0.15f;
-        G += dG * 0.05f;
-        B += dB * 0.07f;
+        // Boost reaction rate using distance from mouse
+        Expr mx = (mouse_x - x);
+        Expr my = (mouse_y - y);
+        Expr boost = 5 * max(0, (1.f - (mx * mx + my * my) * 0.001f)) + 1;
+
+        R += dR * 0.14f * boost;
+        G += dG * 0.05f * boost;
+        B += dB * 0.065f * boost;
 
         R = clamp(R, 0.0f, 1.0f);
         G = clamp(G, 0.0f, 1.0f);
@@ -77,18 +82,25 @@ public:
         new_state(state.dim(0).min(), y, c) = random_float(frame) * 0.2f;
         new_state(state.dim(0).max(), y, c) = random_float(frame) * 0.2f;
 
-        // Add some white where the mouse is
-        Expr min_x = clamp(mouse_x - 20, 0, state.dim(0).extent() - 1);
-        Expr max_x = clamp(mouse_x + 20, 0, state.dim(0).extent() - 1);
-        Expr min_y = clamp(mouse_y - 20, 0, state.dim(1).extent() - 1);
-        Expr max_y = clamp(mouse_y + 20, 0, state.dim(1).extent() - 1);
+        noise(x, y, c) = random_float(frame);
+
+        blurry_noise(x, y, c) = 0.25f * (noise(x, y, c) +
+                                         noise(x + 1, y, c) +
+                                         noise(x + 1, y + 1, c) +
+                                         noise(x, y + 1, c));
+
+        // Add some noise where the mouse is
+        Expr min_x = clamp(mouse_x - 10, 0, state.dim(0).extent() - 1);
+        Expr max_x = clamp(mouse_x + 10, 0, state.dim(0).extent() - 1);
+        Expr min_y = clamp(mouse_y - 10, 0, state.dim(1).extent() - 1);
+        Expr max_y = clamp(mouse_y + 10, 0, state.dim(1).extent() - 1);
         clobber = RDom(min_x, max_x - min_x + 1, min_y, max_y - min_y + 1);
 
         Expr dx = clobber.x - mouse_x;
         Expr dy = clobber.y - mouse_y;
         Expr radius = dx * dx + dy * dy;
-        new_state(clobber.x, clobber.y, c) = select(radius < 400.0f,
-                                                    1.0f,
+        new_state(clobber.x, clobber.y, c) = select(radius < 100.0f,
+                                                    blurry_noise(clobber.x, clobber.y, c),
                                                     new_state(clobber.x, clobber.y, c));
     }
 
@@ -98,6 +110,9 @@ public:
             .reorder(c, x, y)
             .bound(c, 0, 3)
             .unroll(c);
+
+        noise.compute_root()
+            .vectorize(x, natural_vector_size<float>());
 
         new_state
             .tile(x, y, xi, yi, 256, 8)
@@ -117,7 +132,7 @@ public:
     }
 
 private:
-    Func blur_x, blur_y, blur, clamped;
+    Func blur_x, blur_y, blur, clamped, noise, blurry_noise;
     Var x, y, xi, yi, c;
     RDom clobber;
 };
@@ -140,8 +155,8 @@ public:
         Expr c1 = contour(x, y, 1);
         Expr c2 = contour(x, y, 2);
 
-        Expr R = min(c0, max(c1, c2));
-        Expr G = min(1.0f, (c0 + c1 + c2) / 2);
+        Expr R = min(c0, (c1 + c2) / 2);
+        Expr G = clamp((c1 + c0 + c2) / 2, 0.0f, 1.0f);
         Expr B = max(c0, max(c1, c2));
 
         R = cast<uint32_t>(R * 255) & 0xff;
