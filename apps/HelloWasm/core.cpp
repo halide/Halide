@@ -33,7 +33,7 @@ void mainloop(void *arg) {
     context *ctx = static_cast<context *>(arg);
     SDL_Renderer *renderer = ctx->renderer;
 
-    // TODO: grab mouse position somehow
+    // Grab mouse position somehow
     int mx = W / 2, my = H / 2;
     SDL_GetMouseState(&mx, &my);
 
@@ -75,12 +75,13 @@ void mainloop(void *arg) {
                  "Time for blit to framebuffer: %0.2f ms<br>"
                  "Frame rate: %2.0f fps",
                  ctx->smoothed_runtime, ctx->smoothed_blit_time, ctx->smoothed_fps);
+        // Run some javascript inline to update the web-page
         EM_ASM({
             document.getElementById(UTF8ToString($0)).innerHTML = UTF8ToString($1);
         },
                "runtime", buf);
 
-        // Read from the UI
+        // Read the threads slider from the UI
         int threads = EM_ASM_INT({
             return parseInt(document.getElementById("threads").value);
         });
@@ -110,6 +111,7 @@ int main() {
                                 SDL_TEXTUREACCESS_STREAMING,
                                 W, H);
 
+    // Read the initial thread count from the DOM
     int threads = EM_ASM_INT({
         return parseInt(document.getElementById("threads").value);
     });
@@ -117,8 +119,11 @@ int main() {
 
     reaction_diffusion_init(ctx.buf1);
 
-    const int simulate_infinite_loop = 1;  // call the function repeatedly
-    const int fps = -1;                    // call the function as fast as the browser wants to render (typically 60fps)
+    // call the function repeatedly
+    const int simulate_infinite_loop = 1;
+
+    // call the function as fast as the browser wants to render (typically 60fps)
+    const int fps = -1;
     emscripten_set_main_loop_arg(mainloop, &ctx, fps, simulate_infinite_loop);
 
     SDL_DestroyRenderer(renderer);
