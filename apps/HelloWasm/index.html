@@ -56,18 +56,18 @@ div.options {
       if (urlParams.has('simd')) {
           if (urlParams.has('threads')) {
               document.getElementById('link_simd_threads').style.backgroundColor='lightgray';
-              s.setAttribute('src', 'bin/index_simd_threads.js');
+              s.setAttribute('src', 'js/index_simd_threads.js');
           } else {
               document.getElementById('link_simd').style.backgroundColor='lightgray';
-              s.setAttribute('src', 'bin/index_simd.js');
+              s.setAttribute('src', 'js/index_simd.js');
           }
       } else {
           if (urlParams.has('threads')) {
               document.getElementById('link_threads').style.backgroundColor='lightgray';
-              s.setAttribute('src', 'bin/index_threads.js');
+              s.setAttribute('src', 'js/index_threads.js');
           } else {
               document.getElementById('link').style.backgroundColor='lightgray';
-              s.setAttribute('src', 'bin/index.js');
+              s.setAttribute('src', 'js/index.js');
           }
       }
       document.body.appendChild(s);
