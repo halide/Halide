@@ -9,17 +9,30 @@
 
 namespace interpret_nn {
 
+namespace {
+
+std::vector<char> ReadEntireFile(const std::string &filename) {
+    std::vector<char> result;
+
+    std::ifstream f(filename, std::ios::in | std::ios::binary);
+    halide_app_assert(f.is_open()) << "Unable to open file: " << filename;
+    f.seekg(0, std::ifstream::end);
+    size_t size = f.tellg();
+    result.resize(size);
+    f.seekg(0, std::ifstream::beg);
+    f.read(result.data(), result.size());
+    halide_app_assert(f.good()) << "Unable to read file: " << filename;
+    f.close();
+
+    return result;
+}
+
+}  // namespace
+
 void RunBenchmark(const std::string &filename) {
     std::cout << "Benchmarking " << filename << std::endl;
 
-    std::string output;
-    std::ifstream file(filename);
-    file.seekg(0, std::ios::end);
-    size_t size = file.tellg();
-    std::vector<char> buffer(size);
-    file.seekg(0);
-    file.read(&buffer[0], size);
-
+    std::vector<char> buffer = ReadEntireFile(filename);
     Model model = ParseTfLiteModel(tflite::GetModel(buffer.data()));
 
     model.Dump(std::cout);

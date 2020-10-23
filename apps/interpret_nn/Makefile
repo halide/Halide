@@ -76,17 +76,24 @@ $(BIN)/%/tflite_parser.o: tflite_parser.cpp $(BIN)/%/tflite_schema_generated.h
 
 TFLITE_TAG ?= master
 
-.PRECIOUS: $(BIN)/%/tflite_schema_generated.h
+.PRECIOUS: $(BIN)/%/tflite_schema.fbs
 $(BIN)/%/tflite_schema.fbs:
 	@echo Fetching tflite_schema.fbs...
 	@mkdir -p $(@D)
 	@wget --quiet -O $@ https://github.com/tensorflow/tensorflow/raw/$(TFLITE_TAG)/tensorflow/lite/schema/schema.fbs
 
-FLATC_ARGS ?= --gen-object-api --gen-compare --no-includes --gen-mutable --reflect-names --cpp-ptr-type flatbuffers::unique_ptr
-
+# This is a very minimal .h file that allows only for reading a flatbuffer...
+# which is all tflite_parser needs.
+.PRECIOUS: $(BIN)/%/tflite_schema_generated.h
 $(BIN)/%/tflite_schema_generated.h: $(BIN)/%/tflite_schema.fbs
 	@mkdir -p $(@D)
-	flatc --cpp $(FLATC_ARGS) -o $(BIN)/$* $<
+	flatc --cpp --no-includes -o $(BIN)/$* $<
+
+# This include extra API needed only by utilities that do flatbuffer surgery (eg tflite_exploder)
+.PRECIOUS: $(BIN)/%/tflite_schema_direct_generated.h
+$(BIN)/%/tflite_schema_direct_generated.h: $(BIN)/%/tflite_schema.fbs
+	@mkdir -p $(@D)
+	flatc --cpp --no-includes --gen-object-api --filename-suffix _direct_generated -o $(BIN)/$* $<
 
 $(BIN)/%/benchmark: benchmark.cpp $(BIN)/%/interpret_nn.o $(BIN)/%/tflite_parser.o $(BIN)/%/tflite_schema_generated.h $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
@@ -110,3 +117,9 @@ $(eval $(call DEFINE_RUNGEN,AveragePoolUint8,$(BIN)/%/runtime.a))
 $(eval $(call DEFINE_RUNGEN,ConvolutionUint8,$(BIN)/%/runtime.a))
 $(eval $(call DEFINE_RUNGEN,DepthwiseConvolutionUint8,$(BIN)/%/runtime.a))
 $(eval $(call DEFINE_RUNGEN,MaxPoolUint8,$(BIN)/%/runtime.a))
+
+
+$(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/%/tflite_schema_direct_generated.h
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
+

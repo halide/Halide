@@ -29,13 +29,6 @@ tflite::BuiltinOperator GetBuiltinCode(const tflite::OperatorCode *op_code) {
         static_cast<tflite::BuiltinOperator>(op_code->deprecated_builtin_code()));
 }
 
-tflite::BuiltinOperator GetBuiltinCode(const tflite::OperatorCodeT *op_code) {
-    halide_app_assert(op_code != nullptr);
-
-    return std::max(op_code->builtin_code, static_cast<tflite::BuiltinOperator>(
-                                               op_code->deprecated_builtin_code));
-}
-
 class Parser {
     const tflite::Model *model_;
     Model result_;
