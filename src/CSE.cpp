@@ -6,16 +6,15 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
 using std::pair;
+using std::set;
 using std::string;
 using std::vector;
-using std::set;
 
 namespace {
 
@@ -234,6 +233,7 @@ private:
     void visit(const Variable *op) {
         vars_used.insert(op->name);
     }
+
 public:
     set<string> vars_used;
 };
@@ -264,7 +264,7 @@ class CSEEveryExprInStmt : public IRMutator {
         GetVarsUsed g;
         c->args[1].accept(&g);
 
-        vector<pair<string,Expr>> lets_for_letstmts;
+        vector<pair<string, Expr>> lets_for_letstmts;
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
             if (g.vars_used.count(it->first)) {
                 lets_for_letstmts.emplace_back(it->first, it->second);
@@ -279,7 +279,7 @@ class CSEEveryExprInStmt : public IRMutator {
                 v = Let::make(it->first, it->second, v);
             }
         }
-        
+
         Stmt s = Store::make(op->name, v, c->args[1],
                              op->param, mutate(op->predicate), op->alignment);
 
