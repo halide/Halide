@@ -15,6 +15,7 @@ using std::map;
 using std::pair;
 using std::string;
 using std::vector;
+using std::set;
 
 namespace {
 
@@ -227,6 +228,15 @@ class RemoveLets : public IRGraphMutator {
     }
 };
 
+class GetVarsUsed : public IRVisitor {
+private:
+    using IRVisitor::visit;
+    void visit(const Variable *op) {
+        vars_used.insert(op->name);
+    }
+public:
+    set<string> vars_used;
+};
 class CSEEveryExprInStmt : public IRMutator {
     bool lift_all;
     using IRMutator::visit;
@@ -251,12 +261,21 @@ class CSEEveryExprInStmt : public IRMutator {
         // Iterate over the the values that were CSEd. Those that are used by
         // the store index will need to become LetStmts before the store. The
         // others can be Let expressions around the store value.
+        GetVarsUsed g;
+        c->args[1].accept(&g);
+
         vector<pair<string,Expr>> lets_for_letstmts;
+        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            if (g.vars_used.count(it->first)) {
+                lets_for_letstmts.emplace_back(it->first, it->second);
+                it->second.accept(&g);
+            }
+        }
+
+        // First, add Let expressions, if any, around the store value.
         Expr v = c->args[0];
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-            if (expr_uses_var(c->args[1], it->first)) {
-                lets_for_letstmts.emplace_back(it->first, it->second);
-            } else {
+            if (!g.vars_used.count(it->first)) {
                 v = Let::make(it->first, it->second, v);
             }
         }
@@ -264,6 +283,7 @@ class CSEEveryExprInStmt : public IRMutator {
         Stmt s = Store::make(op->name, v, c->args[1],
                              op->param, mutate(op->predicate), op->alignment);
 
+        // Then add LetStmts if any around the store.
         for (auto it = lets_for_letstmts.begin(); it != lets_for_letstmts.end(); ++it) {
             s = LetStmt::make(it->first, it->second, s);
         }
