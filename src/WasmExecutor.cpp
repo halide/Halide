@@ -1297,6 +1297,10 @@ wabt::Features calc_features(const Target &target) {
     if (target.has_feature(Target::WasmSatFloatToInt)) {
         f.enable_sat_float_to_int();
     }
+    if (target.has_feature(Target::WasmThreads)) {
+        f.enable_bulk_memory();
+        f.enable_threads();
+    }
     return f;
 }
 
