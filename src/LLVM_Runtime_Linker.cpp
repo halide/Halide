@@ -245,10 +245,12 @@ DECLARE_NO_INITMOD(hexagon_cpu_features)
 
 #ifdef WITH_WEBASSEMBLY
 DECLARE_CPP_INITMOD(wasm_cpu_features)
+DECLARE_CPP_INITMOD(wasm_host_cpu_count)
 DECLARE_CPP_INITMOD(wasm_yield)
 DECLARE_LL_INITMOD(wasm_math)
 #else
 DECLARE_NO_INITMOD(wasm_cpu_features)
+DECLARE_NO_INITMOD(wasm_host_cpu_count)
 DECLARE_NO_INITMOD(wasm_yield)
 DECLARE_NO_INITMOD(wasm_math)
 #endif  // WITH_WEBASSEMBLY
@@ -709,8 +711,8 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(std::move(extra_module));
     if (t.has_feature(Target::WasmThreads)) {
-        modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-        modules.push_back(get_initmod_wasm_yield(c, bits_64, debug));
+        // modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+        // modules.push_back(get_initmod_wasm_yield(c, bits_64, debug));
     } else {
         modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
     }
@@ -805,6 +807,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.has_feature(Target::WasmThreads)) {
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                     modules.push_back(get_initmod_wasm_yield(c, bits_64, debug));
+                    modules.push_back(get_initmod_wasm_host_cpu_count(c, bits_64, debug));
                 } else {
                     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
                 }

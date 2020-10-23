@@ -8,8 +8,12 @@
 using std::vector;
 using namespace Halide::Runtime;
 
+extern "C" int halide_host_cpu_count();
+
 int main(int argc, char **argv) {
     Buffer<float> input(1024, 1024);
+
+printf("halide_host_cpu_count is %d\n", halide_host_cpu_count());
 
     // Put some junk in the input. Keep it to small integers so the float averaging stays exact.
     for (int y = 0; y < input.height(); y++) {

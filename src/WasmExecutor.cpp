@@ -21,6 +21,11 @@
 #include <unordered_map>
 #include <vector>
 
+#ifdef _MSC_VER
+#else
+#include <unistd.h>
+#endif
+
 #if WITH_WABT
 #include "wabt-src/src/binary-reader.h"
 #include "wabt-src/src/error-formatter.h"
@@ -870,6 +875,18 @@ WABT_HOST_CALLBACK(abort) {
     return wabt::Result::Ok;
 }
 
+WABT_HOST_CALLBACK(atoi) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+    const int32_t s = args[0].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+    int32_t r = atoi((char *)base + s);
+
+    results[0] = wabt::interp::Value::Make(r);
+    return wabt::Result::Ok;
+}
+
+
 WABT_HOST_CALLBACK_UNIMPLEMENTED(fclose)
 
 WABT_HOST_CALLBACK_UNIMPLEMENTED(fileno)
@@ -993,6 +1010,23 @@ WABT_HOST_CALLBACK(halide_error) {
     return wabt::Result::Ok;
 }
 
+static int32_t num_processors_online() {
+#ifdef _WIN32
+    char *num_cores = getenv("NUMBER_OF_PROCESSORS");
+    return num_cores ? atoi(num_cores) : 8;
+#else
+    return sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+}
+
+WABT_HOST_CALLBACK(halide_host_cpu_count) {
+    wassert(args.size() == 0);
+
+    results[0] = wabt::interp::Value::Make(num_processors_online());
+
+    return wabt::Result::Ok;
+}
+
 WABT_HOST_CALLBACK(malloc) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
@@ -1049,6 +1083,167 @@ WABT_HOST_CALLBACK(memcmp) {
     return wabt::Result::Ok;
 }
 
+WABT_HOST_CALLBACK(pthread_cond_destroy) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t l = args[0].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+    pthread_cond_t *cond = (pthread_cond_t *)(base + l);
+    int r = pthread_cond_destroy(cond);
+
+    results[0] = wabt::interp::Value::Make(r);
+    return wabt::Result::Ok;
+}
+
+WABT_HOST_CALLBACK(pthread_cond_init) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t l = args[0].Get<int32_t>();
+    const int32_t a = args[1].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+    pthread_cond_t *cond = (pthread_cond_t *)(base + l);
+    const pthread_condattr_t *attr = (const pthread_condattr_t *)(base + a);
+    int r = pthread_cond_init(cond, attr);
+
+    results[0] = wabt::interp::Value::Make(r);
+    return wabt::Result::Ok;
+}
+
+WABT_HOST_CALLBACK(pthread_cond_signal) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t l = args[0].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+    pthread_cond_t *cond = (pthread_cond_t *)(base + l);
+    int r = pthread_cond_signal(cond);
+
+    results[0] = wabt::interp::Value::Make(r);
+    return wabt::Result::Ok;
+}
+
+WABT_HOST_CALLBACK(pthread_cond_wait) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t l = args[0].Get<int32_t>();
+    const int32_t m = args[1].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+    pthread_cond_t *cond = (pthread_cond_t *)(base + l);
+    pthread_mutex_t *mutex = (pthread_mutex_t *)(base + m);
+    int r = pthread_cond_wait(cond, mutex);
+
+    results[0] = wabt::interp::Value::Make(r);
+    return wabt::Result::Ok;
+}
+
+WABT_HOST_CALLBACK(pthread_create) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    // NB: sizeof(pthread_t) == 8 in wasm32. We will assume this
+    // is the case in the host, too.
+    static_assert(sizeof(pthread_t) == 8, "WasmExecutor assumes sizeof(pthread_t) == 8");
+
+    const int32_t t = args[0].Get<int32_t>();
+    const int32_t a = args[1].Get<int32_t>();
+    const int32_t f = args[2].Get<int32_t>();
+    const int32_t g = args[3].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+
+    using StartRoutine = void *(*)(void *);
+
+    pthread_t *thred = (pthread_t *)(base + t);
+    const pthread_attr_t *attr = (pthread_attr_t *)(base + a);
+    StartRoutine start_routine = (StartRoutine)(base + f);
+    void *arg = (void *)(base + g);
+    int r = pthread_create(thred, attr, start_routine, arg);
+
+    results[0] = wabt::interp::Value::Make(r);
+    return wabt::Result::Ok;
+}
+
+
+WABT_HOST_CALLBACK(pthread_join) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    // NB: sizeof(pthread_t) == 8 in wasm32. We will assume this
+    // is the case in the host, too.
+    static_assert(sizeof(pthread_t) == 8, "WasmExecutor assumes sizeof(pthread_t) == 8");
+
+    const int64_t t = args[0].Get<int64_t>();
+    const int32_t a = args[1].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+
+    pthread_t thred = (pthread_t)(t);
+    void *retval = 0;
+    int r = pthread_join(thred, a ? &retval : nullptr);
+    if (a) {
+        int32_t retval_i = (int32_t) (intptr_t) retval;
+        memcpy(base + a, &retval_i, sizeof(int32_t));
+    }
+
+    results[0] = wabt::interp::Value::Make(r);
+    return wabt::Result::Ok;
+}
+
+WABT_HOST_CALLBACK(pthread_mutex_destroy) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t l = args[0].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+    pthread_mutex_t *mutex = (pthread_mutex_t *)(base + l);
+    int r = pthread_mutex_destroy(mutex);
+
+    results[0] = wabt::interp::Value::Make(r);
+    return wabt::Result::Ok;
+}
+
+WABT_HOST_CALLBACK(pthread_mutex_init) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t l = args[0].Get<int32_t>();
+    const int32_t a = args[1].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+    pthread_mutex_t *mutex = (pthread_mutex_t *)(base + l);
+    const pthread_mutexattr_t *attr = (const pthread_mutexattr_t *)(base + a);
+    int r = pthread_mutex_init(mutex, attr);
+
+    results[0] = wabt::interp::Value::Make(r);
+    return wabt::Result::Ok;
+}
+
+WABT_HOST_CALLBACK(pthread_mutex_lock) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t l = args[0].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+    pthread_mutex_t *mutex = (pthread_mutex_t *)(base + l);
+    int r = pthread_mutex_lock(mutex);
+
+    results[0] = wabt::interp::Value::Make(r);
+    return wabt::Result::Ok;
+}
+
+WABT_HOST_CALLBACK(pthread_mutex_unlock) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t l = args[0].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+    pthread_mutex_t *mutex = (pthread_mutex_t *)(base + l);
+    int r = pthread_mutex_unlock(mutex);
+
+    results[0] = wabt::interp::Value::Make(r);
+    return wabt::Result::Ok;
+}
+
 WABT_HOST_CALLBACK(strlen) {
     WabtContext &wabt_context = get_wabt_context(thread);
     const int32_t s = args[0].Get<int32_t>();
@@ -1076,6 +1271,7 @@ const HostCallbackMap &get_host_callback_map() {
         DEFINE_CALLBACK(__extendhfsf2)
         DEFINE_CALLBACK(__truncsfhf2)
         DEFINE_CALLBACK(abort)
+        DEFINE_CALLBACK(atoi)
         DEFINE_CALLBACK(fclose)
         DEFINE_CALLBACK(fileno)
         DEFINE_CALLBACK(fopen)
@@ -1083,12 +1279,23 @@ const HostCallbackMap &get_host_callback_map() {
         DEFINE_CALLBACK(fwrite)
         DEFINE_CALLBACK(getenv)
         DEFINE_CALLBACK(halide_error)
+        DEFINE_CALLBACK(halide_host_cpu_count)
         DEFINE_CALLBACK(halide_print)
         DEFINE_CALLBACK(halide_trace_helper)
         DEFINE_CALLBACK(malloc)
         DEFINE_CALLBACK(memcmp)
         DEFINE_CALLBACK(memcpy)
         DEFINE_CALLBACK(memset)
+        DEFINE_CALLBACK(pthread_create)
+        DEFINE_CALLBACK(pthread_join)
+        DEFINE_CALLBACK(pthread_cond_destroy)
+        DEFINE_CALLBACK(pthread_cond_init)
+        DEFINE_CALLBACK(pthread_cond_signal)
+        DEFINE_CALLBACK(pthread_cond_wait)
+        DEFINE_CALLBACK(pthread_mutex_destroy)
+        DEFINE_CALLBACK(pthread_mutex_init)
+        DEFINE_CALLBACK(pthread_mutex_lock)
+        DEFINE_CALLBACK(pthread_mutex_unlock)
         DEFINE_CALLBACK(strlen)
         DEFINE_CALLBACK(write)
 

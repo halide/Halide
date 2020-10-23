@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <pthread.h>
 
 using namespace Halide;
 
@@ -19,6 +20,9 @@ extern "C" DLLEXPORT int expensive(int x) {
 HalideExtern_1(int, expensive, int);
 
 int main(int argc, char **argv) {
+
+static_assert(sizeof(pthread_t) == 8, "nope");
+
     const Target t = get_jit_target_from_environment();
     if (t.arch == Target::WebAssembly && !t.has_feature(Target::WasmThreads)) {
         printf("[SKIP] WebAssembly does not support async() without wasm_threads enabled.\n");

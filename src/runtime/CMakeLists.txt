@@ -83,6 +83,7 @@ set(RUNTIME_CPP
     trace_helper
     tracing
     wasm_cpu_features
+    wasm_host_cpu_count
     wasm_yield
     windows_clock
     windows_cuda
