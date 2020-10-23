@@ -230,7 +230,7 @@ class RemoveLets : public IRGraphMutator {
 class GetVarsUsed : public IRVisitor {
 private:
     using IRVisitor::visit;
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         vars_used.insert(op->name);
     }
 
