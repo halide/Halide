@@ -13,7 +13,14 @@ WEAK CpuFeatures halide_get_cpu_features() {
     // even load. So just declare that all wasm-related features are
     // known and available.
     features.set_known(halide_target_feature_wasm_simd128);
+    features.set_known(halide_target_feature_wasm_signext);
+    features.set_known(halide_target_feature_wasm_sat_float_to_int);
+    features.set_known(halide_target_feature_wasm_threads);
+
     features.set_available(halide_target_feature_wasm_simd128);
+    features.set_available(halide_target_feature_wasm_signext);
+    features.set_available(halide_target_feature_wasm_sat_float_to_int);
+    features.set_available(halide_target_feature_wasm_threads);
 
     return features;
 }

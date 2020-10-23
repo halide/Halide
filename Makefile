@@ -809,6 +809,7 @@ RUNTIME_CPP_COMPONENTS = \
   trace_helper \
   tracing \
   wasm_cpu_features \
+  wasm_yield \
   windows_clock \
   windows_cuda \
   windows_d3d12compute_x86 \
