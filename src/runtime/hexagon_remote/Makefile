@@ -41,7 +41,7 @@ HEXAGON_SDK_LIBS ?= "${HEXAGON_SDK_ROOT}/libs"
 
 COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef -I../
 COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release
-COMMON_CXXFLAGS = -std=c++11
+COMMON_CXXFLAGS = -std=c++11 -fno-threadsafe-statics
 HEXAGON_QAICFLAGS = ${COMMON_FLAGS}
 
 BIN ?= bin
