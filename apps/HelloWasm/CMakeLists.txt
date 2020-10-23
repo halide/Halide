@@ -1,27 +1,27 @@
 cmake_minimum_required(VERSION 3.16)
 project(HelloWasm)
 
+enable_testing()
+
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
-enable_testing()
-
 find_package(Halide REQUIRED)
-set(Halide_INCLUDE_DIRS "$<TARGET_PROPERTY:Halide::Runtime,INTERFACE_INCLUDE_DIRECTORIES>")
+set(halide_includes "$<TARGET_PROPERTY:Halide::Runtime,INTERFACE_INCLUDE_DIRECTORIES>")
 
 find_program(EMCC emcc HINTS "$ENV{EMSDK}/upstream/emscripten")
 if (NOT EMCC)
     message(FATAL_ERROR "Could not find emscripten/emcc!")
 endif ()
 
-set(EMCC_FLAGS -s WASM=1 -s USE_SDL=2 -s TOTAL_MEMORY=512MB -O3 -I "$<JOIN:${Halide_INCLUDE_DIRS}, -I>")
+configure_file(index.html index.html COPYONLY)
+
+set(EMCC_FLAGS -s WASM=1 -s USE_SDL=2 -s TOTAL_MEMORY=512MB -O3)
 set(EMCC_FLAGS_threads -pthread -matomics -mbulk-memory)
 
 add_executable(reaction_diffusion_generator reaction_diffusion_generator.cpp)
 target_link_libraries(reaction_diffusion_generator PRIVATE Halide::Generator)
-
-configure_file(index.html index.html COPYONLY)
 
 set(features_simd -wasm_simd128)
 set(features_threads -wasm_threads)
@@ -34,33 +34,27 @@ foreach (simd IN ITEMS "" "_simd")
 
         set(target "wasm-32-wasmrt${features${simd}}${features${threads}}")
 
-        add_halide_library(${config}_init FROM reaction_diffusion_generator
-                           GENERATOR reaction_diffusion_init
-                           FUNCTION_NAME reaction_diffusion_init
-                           PARAMS ${params${threads}}
-                           TARGETS ${target})
+        foreach (gen IN ITEMS init update render)
+            add_halide_library(${config}_${gen} FROM reaction_diffusion_generator
+                               GENERATOR reaction_diffusion_${gen}
+                               FUNCTION_NAME reaction_diffusion_${gen}
+                               PARAMS ${params${threads}}
+                               TARGETS ${target})
+        endforeach ()
 
-        add_halide_library(${config}_update FROM reaction_diffusion_generator
-                           GENERATOR reaction_diffusion_update
-                           FUNCTION_NAME reaction_diffusion_update
-                           PARAMS ${params${threads}}
-                           TARGETS ${target})
-
-        add_halide_library(${config}_render FROM reaction_diffusion_generator
-                           GENERATOR reaction_diffusion_render
-                           FUNCTION_NAME reaction_diffusion_render
-                           PARAMS ${params${threads}}
-                           TARGETS ${target})
-
-        set(includes "$<TARGET_PROPERTY:${config}_init,INTERFACE_INCLUDE_DIRECTORIES>")
+        set(pipeline_includes "$<TARGET_PROPERTY:${config}_init,INTERFACE_INCLUDE_DIRECTORIES>")
         add_custom_command(OUTPUT ${js_file}
-                           COMMAND ${EMCC}
-                           $<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/core.cpp>
-                           $<TARGET_FILE:${config}_init> $<TARGET_FILE:${config}_update> $<TARGET_FILE:${config}_render>
-                           $<TARGET_FILE:${config}_init.runtime>
-                           ${EMCC_FLAGS} ${EMCC_FLAGS${threads}}
-                           "-I$<JOIN:${includes},;-I>"
-                           -o ${js_file}
+                           COMMAND "${EMCC}"
+                           "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/core.cpp>"
+                           "$<TARGET_FILE:${config}_init>"
+                           "$<TARGET_FILE:${config}_update>"
+                           "$<TARGET_FILE:${config}_render>"
+                           "$<TARGET_FILE:${config}_init.runtime>"
+                           ${EMCC_FLAGS}
+                           ${EMCC_FLAGS${threads}}
+                           "-I$<JOIN:${halide_includes},;-I>"
+                           "-I$<JOIN:${pipeline_includes},;-I>"
+                           -o "${js_file}"
                            VERBATIM
                            DEPENDS ${config}_init ${config}_update ${config}_render
                            COMMAND_EXPAND_LISTS)
@@ -69,17 +63,11 @@ foreach (simd IN ITEMS "" "_simd")
     endforeach ()
 endforeach ()
 
-add_halide_library(reaction_diffusion_init FROM reaction_diffusion_generator
-                   REGISTRATION init_cpp
-                   PARAMS threads=true)
-
-add_halide_library(reaction_diffusion_update FROM reaction_diffusion_generator
-                   REGISTRATION update_cpp
-                   PARAMS threads=true)
-
-add_halide_library(reaction_diffusion_render FROM reaction_diffusion_generator
-                   REGISTRATION render_cpp
-                   PARAMS threads=true)
+foreach (gen IN ITEMS init update render)
+    add_halide_library(reaction_diffusion_${gen} FROM reaction_diffusion_generator
+                       REGISTRATION ${gen}_cpp
+                       PARAMS threads=true)
+endforeach ()
 
 add_executable(run ${init_cpp} ${update_cpp} ${render_cpp})
 target_link_libraries(run PRIVATE Halide::RunGenMain reaction_diffusion_init reaction_diffusion_update reaction_diffusion_render)
