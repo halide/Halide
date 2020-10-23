@@ -1185,8 +1185,9 @@ void test_async_tuple(const Backend &backend) {
 }
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] Skipping test for WebAssembly as it does not support atomics yet.\n");
+    const Target t = get_jit_target_from_environment();
+    if (t.arch == Target::WebAssembly && !t.has_feature(Target::WasmThreads)) {
+        printf("[SKIP] Skipping test for WebAssembly as it does not support atomics without wasm_threads enabled.\n");
         return 0;
     }
 

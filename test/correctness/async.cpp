@@ -19,8 +19,9 @@ extern "C" DLLEXPORT int expensive(int x) {
 HalideExtern_1(int, expensive, int);
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly does not support async() yet.\n");
+    const Target t = get_jit_target_from_environment();
+    if (t.arch == Target::WebAssembly && !t.has_feature(Target::WasmThreads)) {
+        printf("[SKIP] WebAssembly does not support async() without wasm_threads enabled.\n");
         return 0;
     }
 
