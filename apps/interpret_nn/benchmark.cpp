@@ -3,7 +3,7 @@
 #include <iostream>
 
 #include "halide_app_assert.h"
-#include "interpret_nn.h"
+#include "interpreter.h"
 #include "tflite_parser.h"
 #include "tflite_schema_generated.h"
 

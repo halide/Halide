@@ -1,7 +1,7 @@
 #ifndef OPS_H_
 #define OPS_H_
 
-#include "interpret_nn.h"
+#include "model.h"
 
 namespace interpret_nn {
 

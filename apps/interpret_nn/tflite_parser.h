@@ -3,7 +3,7 @@
 
 #include <memory>
 
-#include "interpret_nn.h"
+#include "model.h"
 
 namespace tflite {
 

@@ -62,7 +62,11 @@ OPS_HALIDE = \
 	$(BIN)/%/MaxPoolUint8.a \
 	$(BIN)/%/runtime.a
 
-$(BIN)/%/interpret_nn.o: interpret_nn.cpp
+$(BIN)/%/interpreter.o: interpreter.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -c $< -o $@
+
+$(BIN)/%/model.o: model.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -c $< -o $@
 
@@ -95,7 +99,7 @@ $(BIN)/%/tflite_schema_direct_generated.h: $(BIN)/%/tflite_schema.fbs
 	@mkdir -p $(@D)
 	flatc --cpp --no-includes --gen-object-api --filename-suffix _direct_generated -o $(BIN)/$* $<
 
-$(BIN)/%/benchmark: benchmark.cpp $(BIN)/%/interpret_nn.o $(BIN)/%/tflite_parser.o $(BIN)/%/tflite_schema_generated.h $(BIN)/%/ops.o $(OPS_HALIDE)
+$(BIN)/%/benchmark: benchmark.cpp $(BIN)/%/interpreter.o $(BIN)/%/model.o $(BIN)/%/tflite_parser.o $(BIN)/%/tflite_schema_generated.h $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
 
