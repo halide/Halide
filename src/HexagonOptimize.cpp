@@ -288,7 +288,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
         if (expr_match(p.pattern, x, matches)) {
             debug(3) << "matched " << p.pattern << "\n";
             debug(3) << "matches:\n";
-            for (Expr i : matches) {
+            for (const Expr &i : matches) {
                 debug(3) << i << "\n";
             }
 
@@ -1071,7 +1071,7 @@ private:
 
             // If we didn't find a pattern, try using one of the
             // rewrites above.
-            for (auto i : cast_rewrites) {
+            for (const auto &i : cast_rewrites) {
                 if (expr_match(i.first, cast, matches)) {
                     debug(3) << "rewriting cast to: " << i.first << " from " << cast << "\n";
                     Expr replacement = with_lanes(i.second, op->type.lanes());
@@ -1455,7 +1455,7 @@ class EliminateInterleaves : public IRMutator {
             // We assume that any hexagon intrinsic is interleavable
             // as long as all of the vector operands have the same
             // number of lanes and lane width as the return type.
-            for (Expr i : op->args) {
+            for (const Expr &i : op->args) {
                 if (i.type().is_scalar()) {
                     continue;
                 }
@@ -1799,7 +1799,7 @@ class OptimizeShuffles : public IRMutator {
                 ((unaligned_index_bounds.max + align) / align) * align - 1};
             ModulusRemainder alignment(align, 0);
 
-            for (Interval index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
+            for (const Interval &index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
                 Expr index_span = span_of_bounds(index_bounds);
                 index_span = common_subexpression_elimination(index_span);
                 index_span = simplify(index_span);
@@ -2264,7 +2264,7 @@ class SyncronizationBarriers : public IRMutator {
     // Trail of For Blocks to reach a stmt.
     vector<const Stmt *> curr_path;
     // Current Stmt being mutated.
-    const Stmt *curr = NULL;
+    const Stmt *curr = nullptr;
     // Track where the Stmt generated a scatter-release.
     std::map<const Stmt *, Expr> sync;
 

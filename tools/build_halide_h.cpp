@@ -1,8 +1,8 @@
-#include <assert.h>
+#include <cassert>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <set>
-#include <stdio.h>
-#include <string.h>
 #include <string>
 
 std::set<std::string> done;

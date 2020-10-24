@@ -15,7 +15,7 @@
 #endif
 #include <windows.h>
 #else
-#include <stdio.h>
+#include <cstdio>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -447,7 +447,7 @@ std::string get_current_directory() {
     // Note that passing null for the first arg isn't strictly POSIX, but is
     // supported everywhere we currently build.
     char *p = getcwd(nullptr, 0);
-    internal_assert(p != NULL) << "getcwd() failed";
+    internal_assert(p != nullptr) << "getcwd() failed";
     dir = p;
     free(p);
     return dir;
@@ -538,7 +538,7 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
     // our existing usage.)
     std::string src_dir = dir_and_file(src_files_in.front()).first;
     std::vector<std::string> src_files;
-    for (auto &s_in : src_files_in) {
+    for (const auto &s_in : src_files_in) {
         auto df = dir_and_file(s_in);
         internal_assert(df.first == src_dir) << "All inputs to create_static_library() must be in the same directory";
         for (auto &s_existing : src_files) {

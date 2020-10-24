@@ -381,14 +381,14 @@ int main(int argc, char **argv) {
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(4);
 
-    auto seed = time(NULL);
+    auto seed = time(nullptr);
     std::mt19937 rng((uint32_t)seed);
 
     std::cout << "Iterating over " << samples.size() << " samples using seed = " << seed << "\n";
     decltype(samples) validation_set;
     uint64_t unique_schedules = 0;
     if (samples.size() > 16) {
-        for (auto p : samples) {
+        for (const auto &p : samples) {
             unique_schedules += p.second.schedules.size();
             // Whether or not a pipeline is part of the validation set
             // can't be a call to rand. It must be a fixed property of a
@@ -401,7 +401,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        for (auto p : validation_set) {
+        for (const auto &p : validation_set) {
             samples.erase(p.first);
         }
     }

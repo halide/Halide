@@ -1,9 +1,9 @@
 #ifndef FEATURIZATION_H
 #define FEATURIZATION_H
 
+#include <cstdint>
 #include <cstring>
 #include <iostream>
-#include <stdint.h>
 
 #include "ASLog.h"
 

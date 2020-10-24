@@ -7,7 +7,10 @@
 # where specialization is needed.
 
 #
-# The desired change here is just to remove two performance checks.
+# The desired change here is just to remove:
+#
+#     performance-unnecessary-copy-initialization
+#     performance-unnecessary-value-param
 #
 
 ---
@@ -17,16 +20,42 @@ Checks: >
     bugprone-parent-virtual-call,
     bugprone-sizeof-expression,
     bugprone-string-constructor,
+    misc-*,
+    -misc-non-private-member-variables-in-classes,
+    -misc-unconventional-assign-operator,
+    -misc-unused-parameters,
+    modernize-deprecated-headers,
+    modernize-use-default-member-init,
     modernize-use-emplace,
+    modernize-use-equals-default,
+    modernize-use-equals-delete,
+    modernize-use-nullptr,
     modernize-use-override,
-    performance-move-const-arg,
-    performance-noexcept-move-constructor,
-    performance-trivially-destructible,
+    performance-*,
+    -performance-inefficient-string-concatenation,
+    -performance-inefficient-vector-operation,
     -performance-unnecessary-copy-initialization,
     -performance-unnecessary-value-param,
-    readability-braces-around-statements
+    readability-avoid-const-params-in-decls,
+    readability-braces-around-statements,
+    readability-const-return-type,
+    readability-container-size-empty,
+    readability-misplaced-array-index,
+    readability-qualified-auto,
+    readability-redundant-access-specifiers,
+    readability-redundant-control-flow,
+    readability-redundant-function-ptr-dereference,
+    readability-redundant-preprocessor,
+    readability-redundant-smartptr-get,
+    readability-redundant-string-cstr,
+    readability-simplify-subscript-expr,
+    readability-static-accessed-through-instance,
+    readability-static-definition-in-anonymous-namespace,
 
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
 FormatStyle: 'file'
+CheckOptions:
+    - key:   modernize-use-default-member-init.UseAssignment
+      value: 1
 ...

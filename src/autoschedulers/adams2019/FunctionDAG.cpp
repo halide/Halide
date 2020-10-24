@@ -352,7 +352,7 @@ BoundContents::Layout::~Layout() {
     for (auto *b : pool) {
         b->~BoundContents();
     }
-    for (auto b : blocks) {
+    for (auto *b : blocks) {
         free(b);
     }
 }
@@ -551,7 +551,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
 
 FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target) {
     map<string, Function> env;
-    for (Function o : outputs) {
+    for (const Function &o : outputs) {
         populate_environment(o, env);
     }
 
@@ -847,7 +847,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             if (node.is_output) {
                 // Get the bounds estimate
                 map<string, Span> estimates;
-                for (auto b : consumer.schedule().estimates()) {
+                for (const auto &b : consumer.schedule().estimates()) {
                     int64_t i_min = *as_const_int(b.min);
                     int64_t i_extent = *as_const_int(b.extent);
 
@@ -870,7 +870,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                         estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
                     }
                 }
-                for (auto b : consumer.schedule().bounds()) {
+                for (const auto &b : consumer.schedule().bounds()) {
                     const int64_t *i_min = as_const_int(b.min);
                     const int64_t *i_extent = as_const_int(b.extent);
                     if (i_min && i_extent) {

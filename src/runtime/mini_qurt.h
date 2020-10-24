@@ -103,7 +103,7 @@ static inline void qurt_thread_attr_init(qurt_thread_attr_t *attr) {
     attr->bus_priority = QURT_THREAD_ATTR_BUS_PRIO_DEFAULT;
     attr->timetest_id = QURT_THREAD_ATTR_TIMETEST_ID_DEFAULT;
     attr->stack_size = 0;
-    attr->stack_addr = 0;
+    attr->stack_addr = nullptr;
 }
 
 /**

@@ -260,7 +260,7 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
 
         // If there is no type info or is generating C (not C++) and
         // the type is a class or in an inner scope, just use void *.
-        if (type.handle_type == NULL ||
+        if (type.handle_type == nullptr ||
             (!c_plus_plus &&
              (!type.handle_type->namespaces.empty() ||
               !type.handle_type->enclosing_types.empty() ||

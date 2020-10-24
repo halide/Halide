@@ -24,7 +24,7 @@ protected:
     Internal::Parameter param;
 
     /** Is this an input or an output? OutputImageParam is the base class for both. */
-    Argument::Kind kind;
+    Argument::Kind kind = Argument::InputScalar;
 
     /** If Input: Func representation of the ImageParam.
      * If Output: Func that creates this OutputImageParam.
@@ -41,9 +41,7 @@ protected:
 
 public:
     /** Construct a null image parameter handle. */
-    OutputImageParam()
-        : kind(Argument::InputScalar) {
-    }
+    OutputImageParam() = default;
 
     /** Get the name of this Param */
     const std::string &name() const;
@@ -60,7 +58,7 @@ public:
 
     /** Get a handle on one of the dimensions for the purposes of
      * inspecting its min, extent, or stride. */
-    const Internal::Dimension dim(int i) const;
+    Internal::Dimension dim(int i) const;
 
     /** Get the alignment of the host pointer in bytes. Defaults to
      * the size of type. */

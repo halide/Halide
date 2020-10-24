@@ -97,7 +97,7 @@ Module lower(const vector<Function> &output_funcs,
 
     // Compute an environment
     map<string, Function> env;
-    for (Function f : output_funcs) {
+    for (const Function &f : output_funcs) {
         populate_environment(f, env);
     }
 
@@ -109,7 +109,7 @@ Module lower(const vector<Function> &output_funcs,
     result_module.set_any_strict_float(any_strict_float);
 
     // Output functions should all be computed and stored at root.
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         Func(f).compute_root().store_root();
     }
 
@@ -207,7 +207,7 @@ Module lower(const vector<Function> &output_funcs,
          t.has_feature(Target::OpenGLCompute) ||
          t.has_feature(Target::OpenGL) ||
          t.has_feature(Target::HexagonDma) ||
-         (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))));
+         (t.arch != Target::Hexagon && (t.has_feature(Target::HVX))));
 
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
@@ -448,7 +448,7 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 
-    if (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))) {
+    if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
         debug(1) << "Splitting off Hexagon offload...\n";
         s = inject_hexagon_rpc(s, t, result_module);
         debug(2) << "Lowering after splitting off Hexagon offload:\n"
@@ -468,7 +468,7 @@ Module lower(const vector<Function> &output_funcs,
 
     vector<Argument> public_args = args;
     for (const auto &out : outputs) {
-        for (Parameter buf : out.output_buffers()) {
+        for (const Parameter &buf : out.output_buffers()) {
             public_args.emplace_back(buf.name(),
                                      Argument::OutputBuffer,
                                      buf.type(), buf.dimensions(), buf.get_argument_estimates());
@@ -486,7 +486,7 @@ Module lower(const vector<Function> &output_funcs,
         internal_assert(arg.arg.is_input()) << "Expected only input Arguments here";
 
         bool found = false;
-        for (Argument a : args) {
+        for (const Argument &a : args) {
             found |= (a.name == arg.arg.name);
         }
 

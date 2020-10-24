@@ -8,7 +8,7 @@
 #endif
 
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
-#include <stddef.h>
+#include <cstddef>
 
 // No msvc warnings from llvm headers please
 #ifdef _MSC_VER

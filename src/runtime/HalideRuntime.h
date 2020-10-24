@@ -2,10 +2,16 @@
 #define HALIDE_HALIDERUNTIME_H
 
 #ifndef COMPILING_HALIDE_RUNTIME
+#ifdef __cplusplus
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#else
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#endif
 #else
 #include "runtime_internal.h"
 #endif
@@ -544,8 +550,7 @@ struct halide_trace_event_t {
 #ifdef __cplusplus
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_event_t() {
-    }
+    HALIDE_ALWAYS_INLINE halide_trace_event_t() = default;
 #endif
 };
 
@@ -614,8 +619,7 @@ struct halide_trace_packet_t {
 #ifdef __cplusplus
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_packet_t() {
-    }
+    HALIDE_ALWAYS_INLINE halide_trace_packet_t() = default;
 
     /** Get the coordinates array, assuming this packet is laid out in
      * memory as it was written. The coordinates array comes
@@ -1286,7 +1290,6 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_large_buffers,  ///< Enable 64-bit buffer indexing to support buffers > 2GB. Ignored if bits != 64.
 
-    halide_target_feature_hvx_64,                 ///< Enable HVX 64 byte mode.
     halide_target_feature_hvx_128,                ///< Enable HVX 128 byte mode.
     halide_target_feature_hvx_v62,                ///< Enable Hexagon v62 architecture.
     halide_target_feature_fuzz_float_stores,      ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
@@ -1365,15 +1368,13 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
 extern int halide_default_can_use_target_features(int count, const uint64_t *features);
 
 typedef struct halide_dimension_t {
-    int32_t min, extent, stride;
+#ifdef __cplusplus
+    int32_t min = 0, extent = 0, stride = 0;
 
     // Per-dimension flags. None are defined yet (This is reserved for future use).
-    uint32_t flags;
+    uint32_t flags = 0;
 
-#ifdef __cplusplus
-    HALIDE_ALWAYS_INLINE halide_dimension_t()
-        : min(0), extent(0), stride(0), flags(0) {
-    }
+    HALIDE_ALWAYS_INLINE halide_dimension_t() = default;
     HALIDE_ALWAYS_INLINE halide_dimension_t(int32_t m, int32_t e, int32_t s, uint32_t f = 0)
         : min(m), extent(e), stride(s), flags(f) {
     }
@@ -1388,6 +1389,11 @@ typedef struct halide_dimension_t {
     HALIDE_ALWAYS_INLINE bool operator!=(const halide_dimension_t &other) const {
         return !(*this == other);
     }
+#else
+    int32_t min, extent, stride;
+
+    // Per-dimension flags. None are defined yet (This is reserved for future use).
+    uint32_t flags;
 #endif
 } halide_dimension_t;
 
@@ -1514,7 +1520,7 @@ typedef struct halide_buffer_t {
     /** Attempt to call device_sync for the buffer. If the buffer
      * has no device_interface (or no device_sync), this is a quiet no-op.
      * Calling this explicitly should rarely be necessary, except for profiling. */
-    HALIDE_ALWAYS_INLINE int device_sync(void *ctx = NULL) {
+    HALIDE_ALWAYS_INLINE int device_sync(void *ctx = nullptr) {
         if (device_interface && device_interface->device_sync) {
             return device_interface->device_sync(ctx, this);
         }
@@ -1526,7 +1532,7 @@ typedef struct halide_buffer_t {
      * this both adds clarity to code and will facilitate moving to
      * another representation for bounds query arguments. */
     HALIDE_ALWAYS_INLINE bool is_bounds_query() const {
-        return host == NULL && device == 0;
+        return host == nullptr && device == 0;
     }
 
 #endif

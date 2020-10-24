@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     // and in another we'll mess with the number of threads we want
     // running. The intent is to hunt for deadlocks.
 
-    halide_thread *t = halide_spawn_thread(&mess_with_num_threads, NULL);
+    halide_thread *t = halide_spawn_thread(&mess_with_num_threads, nullptr);
 
     Buffer<float> out(64, 64);
 

@@ -96,6 +96,7 @@ CXX-host-cuda ?= $(CXX)
 CXX-host-metal ?= $(CXX)
 CXX-host-hvx_128 ?= $(CXX)
 CXX-host-hvx_64 ?= $(CXX)
+CXX-host-hvx ?= $(CXX)
 CXX-$(HL_TARGET) ?= $(CXX)
 CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++

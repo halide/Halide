@@ -15,11 +15,9 @@ using std::vector;
 /** Normalizes image loads/stores and produces glsl_texture_load/stores. */
 class InjectOpenGLIntrinsics : public IRMutator {
 public:
-    InjectOpenGLIntrinsics()
-        : inside_kernel_loop(false) {
-    }
+    InjectOpenGLIntrinsics() = default;
     Scope<int> scope;
-    bool inside_kernel_loop;
+    bool inside_kernel_loop = false;
 
 private:
     using IRMutator::visit;

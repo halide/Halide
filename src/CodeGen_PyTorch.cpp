@@ -188,7 +188,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         if (is_cuda) {
             stream << get_indent() << "halide_memoization_cache_cleanup(__user_context);\n";
         } else {
-            stream << get_indent() << "halide_memoization_cache_cleanup(NULL);\n";
+            stream << get_indent() << "halide_memoization_cache_cleanup(nullptr);\n";
         }
     }
 

@@ -133,7 +133,7 @@ Target lexical_cast(const Source &arg) {
 static inline std::string demangle(const std::string &name) {
 #if !defined(_WIN32)
     int status = 0;
-    char *p = abi::__cxa_demangle(name.c_str(), 0, 0, &status);
+    char *p = abi::__cxa_demangle(name.c_str(), nullptr, nullptr, &status);
     std::string ret(p);
     free(p);
     return ret;
@@ -192,8 +192,7 @@ public:
     cmdline_error(const std::string &msg)
         : msg(msg) {
     }
-    ~cmdline_error() throw() override {
-    }
+    ~cmdline_error() throw() override = default;
     const char *what() const throw() override {
         return msg.c_str();
     }
@@ -376,8 +375,7 @@ oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5, T a6, T a7, T a8, T a9, T a1
 
 class parser {
 public:
-    parser() {
-    }
+    parser() = default;
     ~parser() {
         for (std::map<std::string, option_base *>::iterator p = options.begin();
              p != options.end(); p++) {
@@ -443,7 +441,7 @@ public:
         return p->get();
 #else
         const option_with_value<T> *p = dynamic_cast<const option_with_value<T> *>(options.find(name)->second);
-        if (p == NULL) {
+        if (p == nullptr) {
             throw_cmdline_error("type mismatch flag '" + name + "'");
         }
         return p->get();
@@ -517,7 +515,7 @@ public:
             errors.emplace_back("argument number must be longer than 0");
             return false;
         }
-        if (prog_name == "") {
+        if (prog_name.empty()) {
             prog_name = argv[0];
         }
 
@@ -575,7 +573,7 @@ public:
                         errors.push_back(std::string("undefined short option: -") + argv[i][j - 1]);
                         continue;
                     }
-                    if (lookup[argv[i][j - 1]] == "") {
+                    if (lookup[argv[i][j - 1]].empty()) {
                         errors.push_back(std::string("ambiguous short option: -") + argv[i][j - 1]);
                         continue;
                     }
@@ -586,7 +584,7 @@ public:
                     errors.push_back(std::string("undefined short option: -") + last);
                     continue;
                 }
-                if (lookup[last] == "") {
+                if (lookup[last].empty()) {
                     errors.push_back(std::string("ambiguous short option: -") + last);
                     continue;
                 }
@@ -609,7 +607,7 @@ public:
             }
         }
 
-        return errors.size() == 0;
+        return errors.empty();
     }
 
     void parse_check(const std::string &arg) {
@@ -634,7 +632,7 @@ public:
     }
 
     std::string error() const {
-        return errors.size() > 0 ? errors[0] : "";
+        return !errors.empty() ? errors[0] : "";
     }
 
     std::string error_full() const {
@@ -715,8 +713,7 @@ private:
 
     class option_base {
     public:
-        virtual ~option_base() {
-        }
+        virtual ~option_base() = default;
 
         virtual bool has_value() const = 0;
         virtual bool set() = 0;
@@ -738,8 +735,7 @@ private:
                              const std::string &desc)
             : nam(name), snam(short_name), desc(desc), has(false) {
         }
-        ~option_without_value() override {
-        }
+        ~option_without_value() override = default;
 
         bool has_value() const override {
             return false;
@@ -800,8 +796,7 @@ private:
             : nam(name), snam(short_name), need(need), has(false), def(def), actual(def) {
             this->desc = full_description(desc);
         }
-        ~option_with_value() override {
-        }
+        ~option_with_value() override = default;
 
         const T &get() const {
             return actual;

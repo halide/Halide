@@ -296,10 +296,10 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
 }
 
 Simplify::ScopedFact::~ScopedFact() {
-    for (auto v : pop_list) {
+    for (const auto *v : pop_list) {
         simplify->var_info.pop(v->name);
     }
-    for (auto v : bounds_pop_list) {
+    for (const auto *v : bounds_pop_list) {
         simplify->bounds_and_alignment_info.pop(v->name);
     }
     for (const auto &e : truths) {
@@ -384,7 +384,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
         static std::mt19937 rng(0);
         for (int i = 0; i < 100; i++) {
             map<string, Expr> s;
-            for (auto p : renamer.out_vars) {
+            for (const auto &p : renamer.out_vars) {
                 if (p.first.is_handle()) {
                     // This aint gonna work
                     return false;

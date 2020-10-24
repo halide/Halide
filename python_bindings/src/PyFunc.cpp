@@ -64,7 +64,7 @@ void define_set_func_ref<double>(py::class_<Func> &func_class) {
                      std::ostringstream os;
                      os << "Loss of precision detected when casting " << rhs << " to a single precision float. The difference is " << diff << ".";
                      std::string msg = os.str();
-                     PyErr_WarnEx(NULL, msg.c_str(), 1);
+                     PyErr_WarnEx(nullptr, msg.c_str(), 1);
                  }
                  return func(lhs) = Expr(f);
              });
@@ -341,8 +341,6 @@ void define_func(py::module &m) {
             .def("align_bounds", &Func::align_bounds, py::arg("var"), py::arg("modulus"), py::arg("remainder") = 0)
 
             .def("bound_extent", &Func::bound_extent, py::arg("var"), py::arg("extent"))
-
-            .def("gpu_lanes", &Func::gpu_lanes, py::arg("thread_x"), py::arg("device_api") = DeviceAPI::Default_GPU)
 
             .def("shader", &Func::shader, py::arg("x"), py::arg("y"), py::arg("c"), py::arg("device_api"))
 

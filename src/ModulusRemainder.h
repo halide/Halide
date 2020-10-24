@@ -5,7 +5,7 @@
  * Routines for statically determining what expressions are divisible by.
  */
 
-#include <stdint.h>
+#include <cstdint>
 
 namespace Halide {
 
@@ -29,14 +29,12 @@ class Scope;
  * remainder == 0). */
 
 struct ModulusRemainder {
-    ModulusRemainder()
-        : modulus(1), remainder(0) {
-    }
+    ModulusRemainder() = default;
     ModulusRemainder(int64_t m, int64_t r)
         : modulus(m), remainder(r) {
     }
 
-    int64_t modulus, remainder;
+    int64_t modulus = 1, remainder = 0;
 
     // Take a conservatively-large union of two sets. Contains all
     // elements from both sets, and maybe some more stuff.

@@ -158,7 +158,7 @@ Stmt add_image_checks_inner(Stmt s,
     map<string, FindBuffers::Result> &bufs = finder.buffers;
 
     // Add the output buffer(s).
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         for (size_t i = 0; i < f.values().size(); i++) {
             FindBuffers::Result output_buffer;
             output_buffer.type = f.values()[i].type();
@@ -241,7 +241,7 @@ Stmt add_image_checks_inner(Stmt s,
         bool is_output_buffer = false;
         bool is_secondary_output_buffer = false;
         string buffer_name = name;
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             for (size_t i = 0; i < f.output_buffers().size(); i++) {
                 if (param.defined() &&
                     param.same_as(f.output_buffers()[i])) {

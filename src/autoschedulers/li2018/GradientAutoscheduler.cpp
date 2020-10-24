@@ -251,7 +251,7 @@ void parallelize_vars_and_rvars_gpu(
     // Reorder: the order is rvars -> gpu_threads -> gpu_blocks
     std::vector<VarOrRVar> all_vars;
     all_vars.reserve(serial_rvars.size() + 4);
-    for (RVar v : serial_rvars) {
+    for (const RVar &v : serial_rvars) {
         all_vars.emplace_back(v);
     }
     if (!r_gpu_threads.empty()) {
@@ -443,7 +443,7 @@ void parallelize_vars_and_rvars_cpu(
     //                       fused_rvars -> fused_vars
     std::vector<VarOrRVar> all_vars;
     all_vars.reserve(serial_rvars.size() + 4);
-    for (RVar v : serial_rvars) {
+    for (const RVar &v : serial_rvars) {
         all_vars.emplace_back(v);
     }
     if (!vectorized_rvar.empty()) {
@@ -603,7 +603,7 @@ void apply_schedule(const MachineParams &params,
         std::vector<int> rvar_bounds = get_rvar_bounds(reduction_vars);
         std::vector<RVar> rvars;
         rvars.reserve(reduction_vars.size());
-        for (ReductionVariable r : reduction_vars) {
+        for (const ReductionVariable &r : reduction_vars) {
             rvars.emplace_back(r.var);
         }
         int rdomain_size = 1;
@@ -670,7 +670,7 @@ void apply_schedule(const MachineParams &params,
                         std::vector<Var> interim_vars;
                         preserved.reserve(outer_rvars.size());
                         interim_vars.reserve(outer_rvars.size());
-                        for (RVar r : outer_rvars) {
+                        for (const RVar &r : outer_rvars) {
                             Var v;
                             preserved.emplace_back(r, v);
                             interim_vars.push_back(v);
@@ -846,7 +846,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (inline_all_trivial_functions(outputs, top_order, env)) {
         // Recompute env map since some functions are inlined.
         env.clear();
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             std::map<std::string, Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
@@ -857,7 +857,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     while (inline_all_element_wise_functions(outputs, order, env)) {
         // Recompute env map since some functions are inlined.
         env.clear();
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             std::map<std::string, Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
@@ -931,7 +931,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 struct Li2018 {
     void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
-        for (Func f : p.outputs()) {
+        for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
         generate_schedule(outputs, target, params, results);
