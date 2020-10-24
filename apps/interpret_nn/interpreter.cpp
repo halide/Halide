@@ -1,5 +1,5 @@
 #include "interpreter.h"
-#include "halide_app_assert.h"
+#include "app_util.h"
 
 #include <cmath>
 #include <list>
@@ -29,7 +29,7 @@ int64_t TotalExtent(const CropShape &s) {
 }
 
 float ShapeDistance(const CropShape &a, const CropShape &b) {
-    halide_app_assert(a.size() == b.size());
+    APP_CHECK(a.size() == b.size());
     float size_cost = std::log(TotalExtent(a) + TotalExtent(b));
     float max_distance = 0.0f;
     for (int d = 0; d < (int)a.size(); d++) {

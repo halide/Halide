@@ -4,7 +4,7 @@
 #include <iostream>
 #include <memory>
 
-#include "halide_app_assert.h"
+#include "app_util.h"
 #include "ops.h"
 #include "tflite_schema_generated.h"
 
@@ -22,7 +22,7 @@ std::unique_ptr<T> make_unique(Args &&... args) {
 #endif
 
 tflite::BuiltinOperator GetBuiltinCode(const tflite::OperatorCode *op_code) {
-    halide_app_assert(op_code != nullptr);
+    APP_CHECK(op_code != nullptr);
 
     return std::max(
         op_code->builtin_code(),
@@ -228,7 +228,7 @@ public:
 
         std::string name;
         auto builtin_code = GetBuiltinCode(opcode);
-        halide_app_assert(builtin_code != tflite::BuiltinOperator_CUSTOM);
+        APP_CHECK(builtin_code != tflite::BuiltinOperator_CUSTOM);
         switch (builtin_code) {
         case tflite::BuiltinOperator_ADD:
             return ParseAdd(op);
@@ -243,14 +243,14 @@ public:
         case tflite::BuiltinOperator_RESHAPE:
             return ParseReshape(op);
         default:
-            halide_app_error << "Unsupported op "
-                             << tflite::EnumNameBuiltinOperator(builtin_code);
+            APP_FATAL << "Unsupported op "
+                      << tflite::EnumNameBuiltinOperator(builtin_code);
         }
     }
 
     Model Parse() {
         const auto &subgraphs = *model_->subgraphs();
-        halide_app_assert(subgraphs.size() == 1) << "Only 1 subgraph is currently supported.";
+        APP_CHECK(subgraphs.size() == 1) << "Only 1 subgraph is currently supported.";
         const tflite::SubGraph &subgraph = *subgraphs[0];
 
         for (const tflite::Tensor *t : *subgraph.tensors()) {

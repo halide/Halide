@@ -1,5 +1,5 @@
 #include "model.h"
-#include "halide_app_assert.h"
+#include "app_util.h"
 
 #include <cmath>
 #include <list>
@@ -31,7 +31,7 @@ size_t SizeOfTensorType(TensorType t) {
     // case TensorType::String:  fallthru
     // case TensorType::Bool:    fallthru
     default:
-        halide_app_error << "Unknown size of type";
+        APP_FATAL << "Unknown size of type";
         return 0;
     }
 }
@@ -63,7 +63,7 @@ const char *TensorTypeToString(TensorType t) {
     case TensorType::Bool:
         return "bool";
     default:
-        halide_app_error << "Unhandled interpret_nn::TensorType";
+        APP_FATAL << "Unhandled interpret_nn::TensorType";
         return "";
     }
 }
@@ -91,7 +91,7 @@ void Tensor::Allocate() {
     if (data_.empty()) {
         data_.resize(shape_size);
     } else {
-        halide_app_assert(data_.size() == shape_size);
+        APP_CHECK(data_.size() == shape_size);
     }
 }
 

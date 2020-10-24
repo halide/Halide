@@ -2,32 +2,14 @@
 #include <fstream>
 #include <iostream>
 
-#include "halide_app_assert.h"
+#include "app_util.h"
 #include "interpreter.h"
 #include "tflite_parser.h"
 #include "tflite_schema_generated.h"
 
+using app_util::ReadEntireFile;
+
 namespace interpret_nn {
-
-namespace {
-
-std::vector<char> ReadEntireFile(const std::string &filename) {
-    std::vector<char> result;
-
-    std::ifstream f(filename, std::ios::in | std::ios::binary);
-    halide_app_assert(f.is_open()) << "Unable to open file: " << filename;
-    f.seekg(0, std::ifstream::end);
-    size_t size = f.tellg();
-    result.resize(size);
-    f.seekg(0, std::ifstream::beg);
-    f.read(result.data(), result.size());
-    halide_app_assert(f.good()) << "Unable to read file: " << filename;
-    f.close();
-
-    return result;
-}
-
-}  // namespace
 
 void RunBenchmark(const std::string &filename) {
     std::cout << "Benchmarking " << filename << std::endl;

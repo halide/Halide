@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "HalideBuffer.h"
-#include "halide_app_assert.h"
+#include "app_util.h"
 
 namespace interpret_nn {
 
@@ -154,7 +154,7 @@ public:
 
     template<class T>
     HalideBuffer<T> Data() {
-        halide_app_assert(IsType<T>(type_));
+        APP_CHECK(IsType<T>(type_));
         return HalideBuffer<T>(
             reinterpret_cast<T *>(data_.data()),
             shape_.size(), shape_.data());
@@ -162,7 +162,7 @@ public:
 
     template<class T>
     HalideBuffer<const T> Data() const {
-        halide_app_assert(IsType<T>(type_));
+        APP_CHECK(IsType<T>(type_));
         return HalideBuffer<const T>(reinterpret_cast<const T *>(data_.data()),
                                      shape_.size(), shape_.data());
     }
@@ -209,7 +209,7 @@ public:
         if (OutputCount() == 1) {
             return WithoutStrides(Output(0)->Shape());
         } else {
-            halide_app_error << "More than one output requires GetFullCrop override.";
+            APP_FATAL << "More than one output requires GetFullCrop override.";
             return CropShape();
         }
     }

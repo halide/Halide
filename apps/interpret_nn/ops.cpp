@@ -1,5 +1,5 @@
 #include "ops.h"
-#include "halide_app_assert.h"
+#include "app_util.h"
 
 #include <cmath>
 #include <iostream>
@@ -23,7 +23,7 @@ std::pair<int, int> Intersect(std::pair<int, int> a, std::pair<int, int> b) {
 }
 
 CropShape Intersect(CropShape a, const CropShape &b) {
-    halide_app_assert(a.size() == b.size());
+    APP_CHECK(a.size() == b.size());
     for (int i = 0; i < (int)a.size(); i++) {
         a[i] = Intersect(a[i], b[i]);
     }
@@ -67,13 +67,13 @@ QuantizedMulAndShift GetQuantizedMulAndShift(double double_multiplier) {
     int shift = 0;
     const double q = std::frexp(double_multiplier, &shift);
     int64_t q_fixed = (int64_t)std::round(q * (1LL << 31));
-    halide_app_assert(q_fixed <= (1LL << 31));
+    APP_CHECK(q_fixed <= (1LL << 31));
 
     if (q_fixed == (1LL << 31)) {
         q_fixed /= 2;
         ++shift;
     }
-    halide_app_assert(q_fixed <= std::numeric_limits<int32_t>::max());
+    APP_CHECK(q_fixed <= std::numeric_limits<int32_t>::max());
 
     if (shift < -31) {
         shift = 0;
@@ -84,9 +84,9 @@ QuantizedMulAndShift GetQuantizedMulAndShift(double double_multiplier) {
 
 // Adapted from tflite
 QuantizedMulAndShift GetQuantizedMulAndShiftSmallerThanOne(double double_multiplier) {
-    halide_app_assert(double_multiplier > 0.0 && double_multiplier < 1.0);
+    APP_CHECK(double_multiplier > 0.0 && double_multiplier < 1.0);
     auto result = GetQuantizedMulAndShift(double_multiplier);
-    halide_app_assert(result.shift <= 0);
+    APP_CHECK(result.shift <= 0);
     return result;
 }
 
@@ -116,7 +116,7 @@ MinMax GetQuantizedMinMax(ActivationFunction activation, int zero_point, double 
         real_activation_max = 1.0;
         has_activation_max = true;
     } else {
-        halide_app_assert(false) << "Unsupported quantized activation function type.";
+        APP_CHECK(false) << "Unsupported quantized activation function type.";
     }
     int output_activation_min = 0;
     int output_activation_max = 255;
@@ -200,11 +200,11 @@ void AddOp::Execute(const CropShape &crop) {
         int output_shift = 0;
         int output_min = 0;
         int output_max = 0;
-        halide_app_assert(0 == AddUint8Uint8(left_shift, input1_buf, input2_buf,
-                                             input1_offset, input1_multiplier, input1_shift,
-                                             input2_offset, input2_multiplier, input2_shift,
-                                             output_offset, output_multiplier, output_shift,
-                                             output_min, output_max, output_buf));
+        APP_CHECK(0 == AddUint8Uint8(left_shift, input1_buf, input2_buf,
+                                     input1_offset, input1_multiplier, input1_shift,
+                                     input2_offset, input2_multiplier, input2_shift,
+                                     output_offset, output_multiplier, output_shift,
+                                     output_min, output_max, output_buf));
     }
 }
 
@@ -220,7 +220,7 @@ void AveragePoolOp::Execute(const CropShape &crop) {
         int output_min = 0;
         int output_max = 0;
 
-        halide_app_assert(
+        APP_CHECK(
             0 == AveragePoolUint8(input_buf, stride_[0], stride_[1],
                                   filter_size_[0], filter_size_[1],
                                   output_min, output_max, output_buf));
@@ -274,10 +274,10 @@ void Conv2DOp::Execute(const CropShape &crop) {
         const int output_offset = output->Quantization().zero.at(0);
 
         // TODO: handle unexpected out-of-range data more cleanly.
-        halide_app_assert(input_offset >= 0 && input_offset <= 255);
-        halide_app_assert(filter_offset >= 0 && filter_offset <= 255);
-        halide_app_assert(bias_offset == 0);
-        halide_app_assert(output_offset >= 0 && output_offset <= 255);
+        APP_CHECK(input_offset >= 0 && input_offset <= 255);
+        APP_CHECK(filter_offset >= 0 && filter_offset <= 255);
+        APP_CHECK(bias_offset == 0);
+        APP_CHECK(output_offset >= 0 && output_offset <= 255);
 
         const float input_scale = input->Quantization().scale.at(0);
         const float filter_scale = filter->Quantization().scale.at(0);
@@ -285,8 +285,8 @@ void Conv2DOp::Execute(const CropShape &crop) {
         const float output_scale = output->Quantization().scale.at(0);
 
         const double input_product_scale = input_scale * filter_scale;
-        halide_app_assert(std::abs(input_product_scale - bias_scale) <=
-                          std::min(input_product_scale, (double)bias_scale) * 1e-6);
+        APP_CHECK(std::abs(input_product_scale - bias_scale) <=
+                  std::min(input_product_scale, (double)bias_scale) * 1e-6);
 
         const double real_multiplier = input_product_scale / output_scale;
         const auto mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_multiplier);
@@ -298,8 +298,8 @@ void Conv2DOp::Execute(const CropShape &crop) {
         const auto min_max = GetQuantizedMinMax(activation_, output_offset, output_scale);
         const int output_min = min_max.min;
         const int output_max = min_max.max;
-        halide_app_assert(output_min >= 0 && output_min <= 255);
-        halide_app_assert(output_max >= 0 && output_max <= 255);
+        APP_CHECK(output_min >= 0 && output_min <= 255);
+        APP_CHECK(output_max >= 0 && output_max <= 255);
 
         // TODO: remove this
         // std::cout << "\n";
@@ -316,7 +316,7 @@ void Conv2DOp::Execute(const CropShape &crop) {
         // std::cout << "output_min " << output_min << "\n";
         // std::cout << "output_max " << output_max << "\n";
 
-        halide_app_assert(
+        APP_CHECK(
             0 == ConvolutionUint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
                                   (uint8_t)filter_offset, stride_[0], stride_[1],
                                   dilation_[0], dilation_[1], output_multiplier,
@@ -379,7 +379,7 @@ void DepthwiseConv2DOp::Execute(const CropShape &crop) {
         int output_min = 0;
         int output_max = 0;
 
-        halide_app_assert(
+        APP_CHECK(
             0 == DepthwiseConvolutionUint8(
                      input_buf, filter_buf, bias_buf, depth_multiplier,
                      input_offset, filter_offset, stride_[0], stride_[1],
@@ -400,7 +400,7 @@ void MaxPoolOp::Execute(const CropShape &crop) {
         int output_min = 0;
         int output_max = 0;
 
-        halide_app_assert(
+        APP_CHECK(
             0 == MaxPoolUint8(input_buf, stride_[0], stride_[1],
                               filter_size_[0], filter_size_[1],
                               output_min, output_max, output_buf));
@@ -478,7 +478,7 @@ void ReshapeOp::Execute(const CropShape &crop) {
         auto output_buf = output->Data<uint8_t>(crop);
 
         // TODO: This should probably just be implemented by aliasing two of the tensors.
-        halide_app_assert(input_buf.number_of_elements() == output_buf.number_of_elements());
+        APP_CHECK(input_buf.number_of_elements() == output_buf.number_of_elements());
         // TODO: This should also check the strides are dense.
         memcpy(output_buf.data(), input_buf.data(), input_buf.number_of_elements());
     }

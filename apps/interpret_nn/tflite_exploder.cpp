@@ -35,46 +35,13 @@
 #include <string>
 #include <vector>
 
+#include "app_util.h"
 #include "flatbuffers/flatbuffers.h"
-#include "halide_app_assert.h"
 #include "tflite_schema_direct_generated.h"
 
-namespace {
-
-#if (__cplusplus == 201103L || _MSVC_LANG == 201103L)
-template<class T, class... Args>
-std::unique_ptr<T> make_unique(Args &&... args) {
-    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-}
-#endif
-
-std::vector<char> ReadEntireFile(const std::string &pathname) {
-    std::ifstream f(pathname, std::ios::in | std::ios::binary);
-    halide_app_assert(f.is_open()) << "Unable to open file: " << pathname;
-
-    std::vector<char> result;
-
-    f.seekg(0, std::ifstream::end);
-    size_t size = f.tellg();
-    result.resize(size);
-    f.seekg(0, std::ifstream::beg);
-    f.read(result.data(), result.size());
-    halide_app_assert(f.good()) << "Unable to read file: " << pathname;
-    f.close();
-    return result;
-}
-
-void WriteEntireFile(const std::string &pathname, const void *source, size_t source_len) {
-    std::ofstream f(pathname, std::ios::out | std::ios::binary);
-    halide_app_assert(f.is_open()) << "Unable to open file: " << pathname;
-
-    f.write(reinterpret_cast<const char *>(source), source_len);
-    f.flush();
-    halide_app_assert(f.good()) << "Unable to write file: " << pathname;
-    f.close();
-}
-
-}  // namespace
+using app_util::make_unique;
+using app_util::ReadEntireFile;
+using app_util::WriteEntireFile;
 
 int main(int argc, char **argv) {
     if (argc != 3) {
@@ -90,7 +57,7 @@ int main(int argc, char **argv) {
     const tflite::Model *model = tflite::GetModel(buffer.data());
 
     const auto *subgraphs = model->subgraphs();
-    halide_app_assert(subgraphs->size() == 1) << "Only 1 subgraph is currently supported.";
+    APP_CHECK(subgraphs->size() == 1) << "Only 1 subgraph is currently supported.";
     const tflite::SubGraph *subgraph = subgraphs->Get(0);
 
     int op_index = -1;
@@ -98,11 +65,11 @@ int main(int argc, char **argv) {
         op_index++;
 
         std::map<int32_t, int32_t> old_to_new_tensor_map;
-        halide_app_assert(op->inputs() != nullptr);
+        APP_CHECK(op->inputs() != nullptr);
         for (int32_t i : *op->inputs()) {
             old_to_new_tensor_map[i] = 0;
         }
-        halide_app_assert(op->outputs() != nullptr);
+        APP_CHECK(op->outputs() != nullptr);
         for (int32_t i : *op->outputs()) {
             old_to_new_tensor_map[i] = 0;
         }
