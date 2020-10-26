@@ -195,6 +195,9 @@ WEAK void dump_job_state() {
 WEAK void worker_thread(void *);
 
 WEAK void worker_thread_already_locked(work *owned_job) {
+    int spin_count = 0;
+    const int max_spin_count = 40;
+
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
@@ -273,11 +276,18 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         if (!job) {
             // There is no runnable job. Go to sleep.
             if (owned_job) {
-                work_queue.owners_sleeping++;
-                owned_job->owner_is_sleeping = true;
-                halide_cond_wait(&work_queue.wake_owners, &work_queue.mutex);
-                owned_job->owner_is_sleeping = false;
-                work_queue.owners_sleeping--;
+                if (spin_count++ < max_spin_count) {
+                    // Give the workers a chance to finish up before sleeping
+                    halide_mutex_unlock(&work_queue.mutex);
+                    halide_thread_yield();
+                    halide_mutex_lock(&work_queue.mutex);
+                } else {
+                    work_queue.owners_sleeping++;
+                    owned_job->owner_is_sleeping = true;
+                    halide_cond_wait(&work_queue.wake_owners, &work_queue.mutex);
+                    owned_job->owner_is_sleeping = false;
+                    work_queue.owners_sleeping--;
+                }
             } else {
                 work_queue.workers_sleeping++;
                 if (work_queue.a_team_size > work_queue.target_a_team_size) {
@@ -285,12 +295,19 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                     work_queue.a_team_size--;
                     halide_cond_wait(&work_queue.wake_b_team, &work_queue.mutex);
                     work_queue.a_team_size++;
+                } else if (spin_count++ < max_spin_count) {
+                    // Spin waiting for new work
+                    halide_mutex_unlock(&work_queue.mutex);
+                    halide_thread_yield();
+                    halide_mutex_lock(&work_queue.mutex);
                 } else {
                     halide_cond_wait(&work_queue.wake_a_team, &work_queue.mutex);
                 }
                 work_queue.workers_sleeping--;
             }
             continue;
+        } else {
+            spin_count = 0;
         }
 
         log_message("Working on job " << job->task.name);
