@@ -353,6 +353,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"wasm_simd128", Target::WasmSimd128},
     {"wasm_signext", Target::WasmSignExt},
     {"wasm_sat_float_to_int", Target::WasmSatFloatToInt},
+    {"wasm_threads", Target::WasmThreads},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
@@ -934,7 +935,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
     const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
 
-    const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, HVX_shared_object}};
+    const std::array<Feature, 12> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, HVX_shared_object, WasmSimd128, WasmSignExt, WasmSatFloatToInt, WasmThreads}};
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;
