@@ -5,6 +5,7 @@
 ---
 Checks: >
     -*,
+    bugprone-argument-comment,
     bugprone-macro-parenthesis,
     bugprone-parent-virtual-call,
     bugprone-sizeof-expression,
