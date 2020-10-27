@@ -709,7 +709,8 @@ public:
 
     /** Standard assignment operator */
     Buffer<T, D> &operator=(const Buffer<T, D> &other) {
-        if (this == &other) {
+        // The cast to void* here is just to satisfy clang-tidy
+        if ((const void *)this == (const void *)&other) {
             return *this;
         }
         other.incref();

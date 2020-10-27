@@ -7,7 +7,8 @@
 # where specialization is needed.
 
 #
-# The desired change here is just to remove:
+# The desired change here is to remove:
+#       bugprone-dynamic-static-initializers
 #       bugprone-sizeof-expression
 #       misc-definitions-in-headers
 #
@@ -15,11 +16,16 @@
 ---
 Checks: >
     -*,
-    bugprone-argument-comment,
-    bugprone-macro-parenthesis,
-    bugprone-parent-virtual-call,
+    bugprone-*,
+    -bugprone-branch-clone,
+    -bugprone-dynamic-static-initializers,
+    -bugprone-exception-escape,
+    -bugprone-incorrect-roundings,
+    -bugprone-integer-division,
+    -bugprone-macro-parentheses,
+    -bugprone-narrowing-conversions,
+    -bugprone-signed-char-misuse,
     -bugprone-sizeof-expression,
-    bugprone-string-constructor,
     misc-*,
     -misc-definitions-in-headers,
     -misc-non-private-member-variables-in-classes,
