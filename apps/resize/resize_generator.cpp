@@ -71,19 +71,15 @@ public:
     Var x, y, c, k;
 
     // Intermediate Funcs
-    Func as_float, clamped, resized_x, resized_y,
+    Func as_float, resized_x, resized_y,
         unnormalized_kernel_x, unnormalized_kernel_y,
         kernel_x, kernel_y,
         kernel_sum_x, kernel_sum_y;
 
     void generate() {
 
-        clamped = BoundaryConditions::repeat_edge(input,
-                                                  {{input.dim(0).min(), input.dim(0).extent()},
-                                                   {input.dim(1).min(), input.dim(1).extent()}});
-
         // Handle different types by just casting to float
-        as_float(x, y, c) = cast<float>(clamped(x, y, c));
+        as_float(x, y, c) = cast<float>(input(x, y, c));
 
         // For downscaling, widen the interpolation kernel to perform lowpass
         // filtering.
@@ -92,7 +88,7 @@ public:
 
         Expr kernel_radius = 0.5f * kernel_info[interpolation_type].taps / kernel_scaling;
 
-        Expr kernel_taps = ceil(kernel_info[interpolation_type].taps / kernel_scaling);
+        Expr kernel_taps = cast<int>(ceil(kernel_info[interpolation_type].taps / kernel_scaling));
 
         // source[xy] are the (non-integer) coordinates inside the source image
         Expr sourcex = (x + 0.5f) / scale_factor - 0.5f;
@@ -103,8 +99,10 @@ public:
         // and y coordinate.
         Expr beginx = cast<int>(ceil(sourcex - kernel_radius));
         Expr beginy = cast<int>(ceil(sourcey - kernel_radius));
+        beginx = clamp(beginx, input.dim(0).min(), input.dim(0).max() + 1 - kernel_taps);
+        beginy = clamp(beginy, input.dim(1).min(), input.dim(1).max() + 1 - kernel_taps);
 
-        RDom r(0, cast<int>(kernel_taps));
+        RDom r(0, kernel_taps);
         const KernelInfo &info = kernel_info[interpolation_type];
 
         unnormalized_kernel_x(x, k) = info.kernel((k + beginx - sourcex) * kernel_scaling);
@@ -138,6 +136,8 @@ public:
     }
 
     void schedule() {
+        const int vec = natural_vector_size<float>();
+
         Var xi, yi;
         unnormalized_kernel_x
             .compute_at(kernel_x, x)
@@ -148,18 +148,18 @@ public:
         kernel_x
             .compute_root()
             .reorder(k, x)
-            .vectorize(x, 8);
+            .vectorize(x, vec);
 
         unnormalized_kernel_y
             .compute_at(kernel_y, y)
-            .vectorize(y, 8);
+            .vectorize(y, vec);
         kernel_sum_y
             .compute_at(kernel_y, y)
             .vectorize(y);
         kernel_y
             .compute_at(output, y)
             .reorder(k, y)
-            .vectorize(y, 8);
+            .vectorize(y, vec);
 
         if (upsample) {
             output
@@ -168,10 +168,10 @@ public:
                 .vectorize(xi);
             resized_x
                 .compute_at(output, x)
-                .vectorize(x, 8);
-            as_float
-                .compute_at(output, y)
-                .vectorize(x, 8);
+                .vectorize(x);
+            resized_y
+                .compute_at(output, xi)
+                .unroll(c);
         } else {
             output
                 .tile(x, y, xi, yi, 32, 8)
@@ -179,9 +179,10 @@ public:
                 .vectorize(xi);
             resized_y
                 .compute_at(output, y)
-                .vectorize(x, 8);
+                .vectorize(x, vec);
             resized_x
-                .compute_at(output, xi);
+                .compute_at(output, xi)
+                .unroll(c);
         }
 
         // Allow the input and output to have arbitrary memory layout,
