@@ -135,7 +135,7 @@ public:
     }
 
     IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {
-        if (other.ptr == ptr) {
+        if (this == &other) {
             return *this;
         }
         // Other can be inside of something owned by this, so we
