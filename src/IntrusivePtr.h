@@ -134,8 +134,9 @@ public:
         other.ptr = nullptr;
     }
 
+    // NOLINTNEXTLINE(bugprone-unhandled-self-assignment)
     IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {
-        if (other.ptr == ptr) {  // NOLINT(bugprone-unhandled-self-assignment)
+        if (other.ptr == ptr) {
             return *this;
         }
         // Other can be inside of something owned by this, so we
