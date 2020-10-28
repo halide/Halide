@@ -84,21 +84,28 @@ public:
         // For downscaling, widen the interpolation kernel to perform lowpass
         // filtering.
 
+        // Invert the scale factor in a single place and do it
+        // strictly, to avoid getting different ratios showing up in
+        // different places.
+        Expr inverse_scale_factor = strict_float(1.0f / scale_factor);
+
         Expr kernel_scaling = upsample ? Expr(1.0f) : scale_factor;
+        Expr inverse_kernel_scaling = upsample ? Expr(1.0f) : inverse_scale_factor;
 
-        Expr kernel_radius = 0.5f * kernel_info[interpolation_type].taps / kernel_scaling;
+        Expr kernel_radius = 0.5f * kernel_info[interpolation_type].taps * inverse_kernel_scaling;
 
-        Expr kernel_taps = cast<int>(ceil(kernel_info[interpolation_type].taps / kernel_scaling));
+        Expr kernel_taps = cast<int>(ceil(kernel_info[interpolation_type].taps * inverse_kernel_scaling));
 
         // source[xy] are the (non-integer) coordinates inside the source image
-        Expr sourcex = (x + 0.5f) / scale_factor - 0.5f;
-        Expr sourcey = (y + 0.5f) / scale_factor - 0.5f;
+        Expr sourcex = (x + 0.5f) * inverse_scale_factor - 0.5f;
+        Expr sourcey = (y + 0.5f) * inverse_scale_factor - 0.5f;
 
-        // Initialize interpolation kernels. Since we allow an arbitrary
-        // scaling factor, the filter coefficients are different for each x
-        // and y coordinate.
-        Expr beginx = cast<int>(ceil(sourcex - kernel_radius));
-        Expr beginy = cast<int>(ceil(sourcey - kernel_radius));
+        // Initialize interpolation kernels. Since we allow an
+        // arbitrary scaling factor, the filter coefficients are
+        // different for each x and y coordinate. Use strict-float to
+        // ensure fast-math doesn't mess up our bounds inference.
+        Expr beginx = cast<int>(strict_float(ceil(sourcex - kernel_radius)));
+        Expr beginy = cast<int>(strict_float(ceil(sourcey - kernel_radius)));
         beginx = clamp(beginx, input.dim(0).min(), input.dim(0).max() + 1 - kernel_taps);
         beginy = clamp(beginy, input.dim(1).min(), input.dim(1).max() + 1 - kernel_taps);
 
