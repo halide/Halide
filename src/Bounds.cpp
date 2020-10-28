@@ -564,9 +564,9 @@ private:
         } else if (can_prove(b.min == b.max)) {
             Expr e1 = a.has_lower_bound() ? a.min / b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max / b.max : a.max;
-            if (op->type.is_uint() || can_prove(b.min >= 0)) {
+            if (op->type.is_uint() || is_positive_const(b.min) || (op->type.is_int() && can_prove(b.min >= 0))) {
                 interval = Interval(e1, e2);
-            } else if (can_prove(b.min <= 0)) {
+            } else if (is_negative_const(b.min) || (op->type.is_int() && can_prove(b.min <= 0))) {
                 if (e1.same_as(Interval::neg_inf())) {
                     e1 = Interval::pos_inf();
                 }
