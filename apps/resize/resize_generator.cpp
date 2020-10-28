@@ -168,6 +168,7 @@ public:
                 .vectorize(xi);
             resized_x
                 .compute_at(output, x)
+                .store_in(MemoryType::Stack)
                 .vectorize(x);
             resized_y
                 .compute_at(output, xi)
