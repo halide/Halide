@@ -16,10 +16,14 @@
 ---
 Checks: >
     -*,
-    bugprone-macro-parenthesis,
-    bugprone-parent-virtual-call,
-    bugprone-sizeof-expression,
-    bugprone-string-constructor,
+    bugprone-*,
+    -bugprone-branch-clone,
+    -bugprone-exception-escape,
+    -bugprone-incorrect-roundings,
+    -bugprone-integer-division,
+    -bugprone-macro-parentheses,
+    -bugprone-narrowing-conversions,
+    -bugprone-signed-char-misuse,
     misc-*,
     -misc-non-private-member-variables-in-classes,
     -misc-unconventional-assign-operator,
