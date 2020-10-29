@@ -17,6 +17,7 @@
 namespace Halide {
 namespace Internal {
 
+using std::string;
 using std::vector;
 
 using namespace Halide::ConciseCasts;
@@ -71,6 +72,8 @@ struct Pattern {
         PassOps = PassOnlyOp0 | PassOnlyOp1 | PassOnlyOp2 | PassOnlyOp3,
         BeginPassOnlyOp = 0,  // BeginPassOnlyOp and EndPassOnlyOp ensure that we check only
         EndPassOnlyOp = 4,    // PassOps[0|1|2|3].
+
+        SameOp01 = 1 << 27,
     };
 
     std::string intrin;  // Name of the intrinsic
@@ -111,6 +114,10 @@ Expr bc(Expr x) {
 
 Expr vector_reduce(VectorReduce::Operator op, Expr x) {
   return VectorReduce::make(op, x, 0);
+}
+
+Expr call(const string& name, Expr return_type, vector<Expr> args) {
+  return Call::make(return_type.type(), name, move(args), Call::PureExtern);
 }
 
 // Check if the matches satisfy the given pattern flags, and mutate the matches
@@ -168,6 +175,15 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
         internal_assert(matches.size() >= 3);
         std::swap(matches[1], matches[2]);
     }
+
+    if (flags & Pattern::SameOp01) {
+        internal_assert(matches.size() == 2);
+        if (!graph_equal(matches[0], matches[1])) {
+            return false;
+        }
+        matches = {matches[0]};
+    }
+
     return true;
 }
 
@@ -212,13 +228,17 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
             }
 
             Type old_type = x.type();
-            if (p.flags & Pattern::AccumulatorOutput48) {
+            if (p.flags & Pattern::AccumulatorOutput24) {
+                x = cast(Type(Type::Int, 24, x.type().lanes()), x);
+            } else if (p.flags & Pattern::AccumulatorOutput48) {
                 x = cast(Type(Type::Int, 48, x.type().lanes()), x);
             } else if (p.flags & Pattern::AccumulatorOutput64) {
                 x = cast(Type(Type::Int, 64, x.type().lanes()), x);
             }
             x = replace_pattern(x, matches, p);
-            if ((p.flags & Pattern::AccumulatorOutput48) || (p.flags & Pattern::AccumulatorOutput64)) {
+            if ((p.flags & Pattern::AccumulatorOutput24)
+                || (p.flags & Pattern::AccumulatorOutput48)
+                || (p.flags & Pattern::AccumulatorOutput64)) {
                 x = cast(old_type, x);
             }
 
@@ -366,32 +386,50 @@ private:
     Expr visit(const Add *op) override {
         if (op->type.is_vector()) {
             static const std::vector<Pattern> adds = {
+                // Predicated addition
+                // {"halide_xtensa_pred_add_i8", wild_i8x + select(wild_u1x, wild_i8x, wild_i8x)},
+                // {"halide_xtensa_pred_add_i16", wild_i16x + select(wild_u1x, wild_i16x, wild_i16x)},
+                // {"halide_xtensa_pred_add_i32", wild_i32x + select(wild_u1x, wild_i32x, wild_i32x)},
+
+//                 {"halide_xtensa_widen_pair_mul_vu8_si16_i24",
+//                                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})) +
+//                                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})),
+//                                    Pattern::AccumulatorOutput24},
+
+//                 {"halide_xtensa_widen_mul_add_vu8_si16_i24",
+//                                    i16(wild_i24x) +
+//                                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})),
+//                                    Pattern::AccumulatorOutput24},
+
                 {"halide_xtensa_widen_pair_mul_i48", wild_i32x * wild_i32x + wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_pair_mul_u48", wild_u32x * wild_u32x + wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
 
                 // Multiply-add to accumulator type.
                 {"halide_xtensa_widen_pair_mul_add_i48", i32(halide_xtensa_widen_mul_add_i48(wild_i48x, wild_i16x, wild_i16x)) + i32(halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_add_i48", i32(wild_i48x) + i32(halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput48},
+
+                {"halide_xtensa_widen_mul_add_vu8_si16_i24", i16(wild_i24x) + i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})), Pattern::AccumulatorOutput24},
+
                 // Add to accumulator type.
                 // Paired add.
                 {"halide_xtensa_widen_pair_add_i48", i32(halide_xtensa_widen_add_i48(wild_i48x, wild_i16x)) + wild_i16x, Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_pair_add_i48", i32(halide_xtensa_widen_add_i48(wild_i48x, wild_i16x)) + wild_i32x, Pattern::AccumulatorOutput48 | Pattern::NarrowOp2},
                 {"halide_xtensa_widen_pair_add_u48", u32(halide_xtensa_widen_add_u48(wild_i48x, wild_u16x)) + wild_u16x, Pattern::AccumulatorOutput48},
-                {"halide_xtensa_widen_pair_add_u48", u32(halide_xtensa_widen_add_u48(wild_i48x, wild_u16x)) + wild_u32x, Pattern::AccumulatorOutput48 | Pattern::NarrowOp2},
+                {"halide_xtensa_widen_pair_add_u48", u32(halide_xtensa_widen_add_u48(wild_i48x, wild_u16x)) + wild_u32x, Pattern::AccumulatorOutput48 | Pattern::NarrowUnsignedOp2},
                 // Single add.
                 {"halide_xtensa_widen_add_i48", i32(wild_i48x) + wild_i16x, Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_add_i48", i32(wild_i48x) + wild_i32x, Pattern::AccumulatorOutput48 | Pattern::NarrowOp1},
                 {"halide_xtensa_widen_add_u48", u32(wild_i48x) + wild_u16x, Pattern::AccumulatorOutput48},
-                {"halide_xtensa_widen_add_u48", u32(wild_i48x) + wild_u32x, Pattern::AccumulatorOutput48 | Pattern::NarrowOp1},
+                {"halide_xtensa_widen_add_u48", u32(wild_i48x) + wild_u32x, Pattern::AccumulatorOutput48 | Pattern::NarrowUnsignedOp1},
+
+                {"halide_xtensa_widen_add_i24", i16(wild_i24x) + wild_i8x, Pattern::AccumulatorOutput24},
+                {"halide_xtensa_widen_add_i24", i16(wild_i24x) + wild_i16x, Pattern::AccumulatorOutput24 | Pattern::NarrowOp1},
 
                 // Widening addition
-                {"halide_xtensa_widen_add_u48", wild_u32x + wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
+                {"halide_xtensa_widen_add_u48", wild_u32x + wild_u32x, Pattern::NarrowUnsignedOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_add_i48", wild_i32x + wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
 
                 {"halide_xtensa_widen_mul_add_i64", wild_i64x * wild_i64x + wild_i64x, Pattern::NarrowOps | Pattern::AccumulatorOutput64},
-
-                // Predicated addition
-                // {"halide_xtensa_pred_add_i16", wild_i16x + select(wild_u1x, wild_i16x, wild_i16x)}
             };
 
             Expr new_expr = apply_commutative_patterns(op, adds, this);
@@ -406,7 +444,10 @@ private:
     Expr visit(const Sub *op) override {
         if (op->type.is_vector()) {
             static const std::vector<Pattern> subs = {
-                // {"halide_xtensa_pred_sub_i16", wild_i16x - select(wild_u1x, wild_i16x, wild_i16x)}
+                // // Predicated sub.
+                // {"halide_xtensa_pred_sub_i8", wild_i8x - select(wild_u1x, wild_i8x, wild_i8x)},
+                // {"halide_xtensa_pred_sub_i16", wild_i16x - select(wild_u1x, wild_i16x, wild_i16x)},
+                // {"halide_xtensa_pred_sub_i32", wild_i32x - select(wild_u1x, wild_i32x, wild_i32x)},
             };
 
             Expr new_expr = apply_patterns(op, subs, this);
@@ -423,7 +464,11 @@ private:
             static const std::vector<Pattern> scalar_muls = {};
 
             static const std::vector<Pattern> muls = {
-                // Widening multiplication
+                // {"halide_xtensa_widen_mul_u24", wild_u16x * wild_u16x, Pattern::NarrowOps | Pattern::AccumulatorOutput24},
+                {"halide_xtensa_widen_mul_vu8_si16_i24", wild_i16x * bc(wild_i16x), Pattern::NarrowUnsignedOp0 | Pattern::AccumulatorOutput24},
+
+              // Widening multiplication
+                // {"halide_xtensa_widen_sqr_i48", wild_i32x * wild_i32x, Pattern::SameOp01 | Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_i48", wild_i32x * bc(wild_i32), Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_u48", wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_i48", wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
@@ -494,7 +539,7 @@ private:
 
     Expr visit(const LT *op) override {
         static const vector<Pattern> lts = {
-            // {"halide_xtensa_i48x_gt_zero", 0 < i32(wild_i48x)},
+            // {"halide_xtensa_i16_neq_zero", 0 < i32(wild_i32x * wild_i32x), Pattern::SameOp01 | Pattern::NarrowOps},
             // {"halide_xtensa_i48x_gt_zero", 0 < u32(wild_i48x)},
         };
 
@@ -542,6 +587,9 @@ private:
             {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x >> bc(wild_i64))},
             {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x / bc(wild_i64)), Pattern::ExactLog2Op1},
 
+            {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) >> bc(wild_i16))},
+            {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) / bc(wild_i16)), Pattern::ExactLog2Op1},
+
             // Concat and cast.
             {"halide_xtensa_convert_concat_i16_to_i8", i8(halide_xtensa_concat_from_native_i16(wild_i16x, wild_i16x))},
             {"halide_xtensa_convert_concat_i16_to_u8", u8(halide_xtensa_concat_from_native_i16(wild_i16x, wild_i16x))},
@@ -549,6 +597,7 @@ private:
             {"halide_xtensa_convert_concat_u16_to_u8", u8(halide_xtensa_concat_from_native_u16(wild_u16x, wild_u16x))},
             {"halide_xtensa_convert_concat_i32_to_i16", i16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x))},
             {"halide_xtensa_convert_concat_i32_to_u16", u16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x))},
+
             {"halide_xtensa_convert_concat_u32_to_i16", i16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
             {"halide_xtensa_convert_concat_u32_to_u16", u16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
 
@@ -578,6 +627,16 @@ private:
                                   Call::PureExtern);
             } else if (op->type.is_uint()) {
                 return Call::make(op->type, "halide_xtensa_interleave_u16",
+                                  {mutate(op->vectors[0]), mutate(op->vectors[1])},
+                                  Call::PureExtern);
+            }
+        } else if (op->is_interleave() && op->type.is_int_or_uint() && (op->type.bits() == 8) && (op->type.lanes() == 128)) {
+            if (op->type.is_int()) {
+                return Call::make(op->type, "halide_xtensa_interleave_i8",
+                                  {mutate(op->vectors[0]), mutate(op->vectors[1])},
+                                  Call::PureExtern);
+            } else if (op->type.is_uint()) {
+                return Call::make(op->type, "halide_xtensa_interleave_u8",
                                   {mutate(op->vectors[0]), mutate(op->vectors[1])},
                                   Call::PureExtern);
             }
@@ -641,6 +700,63 @@ private:
                     }
                 }
             }
+        // TODO(vksnk): That's actually an interleave op.
+        } else if (op->type.is_int_or_uint() && (op->type.bits() == 8) && (op->type.lanes() == 64)) {
+            if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 128)) {
+                bool is_deinterleave_even = true;
+                for (int ix = 0; ix < (int)op->indices.size(); ix++) {
+                    is_deinterleave_even = is_deinterleave_even && (op->indices[ix] == 2 * ix);
+                }
+
+                if (is_deinterleave_even) {
+                    if (op->type.is_int()) {
+                        return Call::make(op->type, "halide_xtensa_deinterleave_even_i8",
+                                        {mutate(op->vectors[0])},
+                                        Call::PureExtern);
+                    } else if (op->type.is_uint()) {
+                        return Call::make(op->type, "halide_xtensa_deinterleave_even_u8",
+                                        {mutate(op->vectors[0])},
+                                        Call::PureExtern);
+                    }
+                }
+                bool is_deinterleave_odd = true;
+                for (int ix = 0; ix < (int)op->indices.size(); ix++) {
+                    is_deinterleave_odd = is_deinterleave_odd && (op->indices[ix] == 2 * ix + 1);
+                }
+
+                if (is_deinterleave_odd) {
+                    if (op->type.is_int()) {
+                        return Call::make(op->type, "halide_xtensa_deinterleave_odd_i8",
+                                        {mutate(op->vectors[0])},
+                                        Call::PureExtern);
+                    } else if (op->type.is_uint()) {
+                        return Call::make(op->type, "halide_xtensa_deinterleave_odd_u8",
+                                        {mutate(op->vectors[0])},
+                                        Call::PureExtern);
+                    }
+                }
+            } else if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 192)) {
+                bool is_extract_off_0_3 = true;
+                for (int ix = 0; ix < (int)op->indices.size(); ix++) {
+                    is_extract_off_0_3 = is_extract_off_0_3 && (op->indices[ix] == 3 * ix);
+                }
+
+                if (is_extract_off_0_3) {
+                    Expr op_vector = mutate(op->vectors[0]);
+                    vector<Expr> args = {op_vector};
+                    const Shuffle* maybe_shuffle = op_vector.as<Shuffle>();
+                    if (maybe_shuffle && maybe_shuffle->is_concat()) {
+                        args = maybe_shuffle->vectors;
+                    }
+                    if (op->type.is_int()) {
+                        return Call::make(op->type, "halide_xtensa_extract_0_off_3_i8",
+                                        args, Call::PureExtern);
+                    } else if (op->type.is_uint()) {
+                        return Call::make(op->type, "halide_xtensa_extract_0_off_3_u8",
+                                        args, Call::PureExtern);
+                    }
+                }
+            }
         }
 
         return IRGraphMutator::visit(op);
@@ -676,8 +792,8 @@ private:
             // Narrowing with shifting.
             {"halide_xtensa_narrow_i48x_with_shift_i16", halide_xtensa_narrow_with_shift_i16(i32(wild_i48x), wild_i32)},
             {"halide_xtensa_narrow_i48x_with_shift_u16", halide_xtensa_narrow_with_shift_u16(i32(wild_i48x), wild_i32)},
-            {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
-            {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
+            // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
+            // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
             // Slice and convert
             {"halide_xtensa_convert_u8_low_u16", halide_xtensa_slice_to_native_u16(u16(wild_u8x), 0, wild_i32, wild_i32)},
             {"halide_xtensa_convert_u8_high_u16", halide_xtensa_slice_to_native_u16(u16(wild_u8x), 1, wild_i32, wild_i32)},
@@ -864,7 +980,7 @@ class OptimizeShuffles : public IRMutator {
                     int const_extent = as_const_int(index_span) ? (((*as_const_int(index_span) + align) / align) * align) : 64;
                     Expr base = simplify(index_bounds.min);
 
-                    debug(0) << "const_extent - " << const_extent << "\n";
+                    // debug(0) << "const_extent - " << const_extent << "\n";
                     // Load all of the possible indices loaded from the
                     // LUT. Note that for clamped ramps, this loads up to 1
                     // vector past the max. CodeGen_Hexagon::allocation_padding
@@ -877,7 +993,7 @@ class OptimizeShuffles : public IRMutator {
                     // can safely cast the index to 16 bit, which
                     // dynamic_shuffle requires.
                     index = simplify(cast(Int(op->type.bits()).with_lanes(op->type.lanes()), index - base));
-                    return Call::make(op->type, "halide_xtensa_dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureExtern);
+                    return Call::make(op->type, "halide_xtensa_dynamic_shuffle", {lut, index/*, 0, const_extent - 1*/}, Call::PureExtern);
                 }
                 // Only the first iteration of this loop is aligned.
                 alignment = ModulusRemainder();
@@ -1201,6 +1317,7 @@ public:
 /** If an integer expression varies linearly with the variables in the
  * scope, return the linear term. Otherwise return an undefined
  * Expr. */
+/*
 Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     if (e.type() != Int(32)) {
         return Expr();
@@ -1352,7 +1469,7 @@ class FindDirectCopies : public IRMutator {
 public:
     FindDirectCopies() { }
 };
-
+*/
 Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
     // s = FindDirectCopies().mutate(s);
