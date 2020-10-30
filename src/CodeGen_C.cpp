@@ -734,6 +734,15 @@ CppVector<ElementType, Lanes> operator|(const CppVector<ElementType, Lanes> &a, 
 }
 
 template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator^(const CppVector<ElementType, Lanes> &a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] ^ b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
 CppVector<ElementType, Lanes> operator+(const CppVector<ElementType, Lanes> &a, const ElementType b) {
     CppVector<ElementType, Lanes> r;
     for (size_t i = 0; i < Lanes; i++) {
@@ -815,6 +824,15 @@ CppVector<ElementType, Lanes> operator|(const CppVector<ElementType, Lanes> &a, 
 }
 
 template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator^(const CppVector<ElementType, Lanes> &a, const ElementType b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] ^ b;
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
 CppVector<ElementType, Lanes> operator+(const ElementType a, const CppVector<ElementType, Lanes> &b) {
     CppVector<ElementType, Lanes> r;
     for (size_t i = 0; i < Lanes; i++) {
@@ -891,6 +909,15 @@ CppVector<ElementType, Lanes> operator|(const ElementType a, const CppVector<Ele
     CppVector<ElementType, Lanes> r;
     for (size_t i = 0; i < Lanes; i++) {
         r[i] = a | b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator^(const ElementType a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a ^ b[i];
     }
     return r;
 }
