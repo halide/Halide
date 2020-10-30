@@ -118,7 +118,7 @@ else ()
     message(STATUS "Compiling Halide WITHOUT RTTI.")
     target_compile_options(Halide_LanguageOptions INTERFACE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
-                           $<$<COMPILE_LANG_AND_ID:CXX,GCC,Clang,AppleClang>:-fno-rtti>)
+                           $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-rtti>)
 endif ()
 
 option(Halide_ENABLE_EXCEPTIONS "Enable exceptions" ON)
@@ -129,7 +129,7 @@ else ()
     message(STATUS "Compiling Halide WITHOUT exceptions.")
     target_compile_options(Halide_LanguageOptions INTERFACE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/EHs-c->
-                           $<$<COMPILE_LANG_AND_ID:CXX,GCC,Clang,AppleClang>:-fno-exceptions>)
+                           $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-exceptions>)
     target_compile_definitions(Halide_LanguageOptions INTERFACE
                                $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>)
 endif ()
