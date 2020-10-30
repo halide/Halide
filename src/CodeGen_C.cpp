@@ -81,8 +81,10 @@ void halide_profiler_pipeline_end(void *, void *);
 }
 
 #ifdef _WIN32
+#ifndef _MT
 __declspec(dllimport) float __cdecl roundf(float);
 __declspec(dllimport) double __cdecl round(double);
+#endif
 #else
 inline float asinh_f32(float x) {return asinhf(x);}
 inline float acosh_f32(float x) {return acoshf(x);}
