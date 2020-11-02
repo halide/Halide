@@ -1099,6 +1099,102 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
     return 0;
 }
 
+namespace {
+WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t *buf, bool sampled) {
+    debug(user_context)
+        << "CUDA: halide_cuda_get_texture (user_context: " << user_context << ", buffer: " << buf << ")\n";
+
+    halide_assert(user_context, buf->device_interface == halide_cuda_device_interface() && buf->device);
+
+    if (!cuTexObjectCreate) {
+        error(user_context) << "requesting texture object but don't have runtime functions";
+        return 0;
+    }
+
+    CUDA_RESOURCE_DESC resourceDesc;
+    CUDA_TEXTURE_DESC textureDesc;
+    // CUDA_RESOURCE_VIEW_DESC resourceViewDesc;
+
+    memset(&resourceDesc, 0, sizeof(resourceDesc));
+    memset(&textureDesc, 0, sizeof(textureDesc));
+
+    // textureDesc.filterMode = CU_TR_FILTER_MODE_POINT;
+
+    CUarray_format format = (CUarray_format)0;
+    struct halide_type_t type = buf->type;
+    if (type.code == halide_type_int) {
+        if (type.bits == 8) {
+            format = CU_AD_FORMAT_SIGNED_INT8;
+        } else if (type.bits == 16) {
+            format = CU_AD_FORMAT_SIGNED_INT16;
+        } else if (type.bits == 32) {
+            format = CU_AD_FORMAT_SIGNED_INT32;
+        }
+    } else if (type.code == halide_type_uint) {
+        if (type.bits == 8) {
+            format = CU_AD_FORMAT_UNSIGNED_INT8;
+        } else if (type.bits == 16) {
+            format = CU_AD_FORMAT_UNSIGNED_INT16;
+        } else if (type.bits == 32) {
+            format = CU_AD_FORMAT_UNSIGNED_INT32;
+        }
+    } else if (type.code == halide_type_float) {
+        if (type.bits == 16) {
+            format = CU_AD_FORMAT_HALF;
+        } else if (type.bits == 32) {
+            format = CU_AD_FORMAT_FLOAT;
+        }
+    }
+    if (format == 0) {
+        error(user_context) << "Unhandled datatype for CUDA texture object: " << type;
+        return 0;
+    }
+
+    resourceDesc.flags = 0;
+    if (buf->dimensions == 1) {
+        resourceDesc.resType = CU_RESOURCE_TYPE_LINEAR;
+        resourceDesc.res.linear.devPtr = (CUdeviceptr)buf->device; 
+        resourceDesc.res.linear.format = format;
+        resourceDesc.res.linear.numChannels = 1;
+        resourceDesc.res.linear.sizeInBytes = buf->size_in_bytes();
+    } else if (buf->dimensions == 2) {
+        resourceDesc.resType = CU_RESOURCE_TYPE_PITCH2D;
+        resourceDesc.res.pitch2D.devPtr = (CUdeviceptr)buf->device;
+        resourceDesc.res.pitch2D.format = format;
+        resourceDesc.res.pitch2D.numChannels = 1;
+        resourceDesc.res.pitch2D.width = buf->dim[0].extent;
+        resourceDesc.res.pitch2D.height = buf->dim[1].extent;
+        resourceDesc.res.pitch2D.pitchInBytes = buf->dim[1].stride;
+    } else {
+        error(user_context) << "cuda texture support only handles 1d and td textures";
+        return 0;
+    }
+
+    CUtexObject texture = 0;
+    CUresult err = cuTexObjectCreate(&texture, &resourceDesc, &textureDesc, nullptr);
+
+    if (err != CUDA_SUCCESS) {
+        error(user_context)
+            << "CUDA: cuTexObjectCreate failed ("
+            << Halide::Runtime::Internal::Cuda::get_error_name(err)
+            << ")";
+        return 0;
+    }
+
+    debug(user_context) << "    got texture " << texture << "\n";
+
+    return texture;
+}
+
+WEAK int halide_cuda_free_texture(void *user_context, struct halide_buffer_t *buf, uint64_t texture_object) {
+    if (!cuTexObjectDestroy && texture_object) {
+        error(user_context) << "attempting to free texture object but don't have runtime functions";
+    }
+
+    return cuTexObjectDestroy(texture_object);
+}
+}  // namespace
+
 WEAK int halide_cuda_run(void *user_context,
                          void *state_ptr,
                          const char *entry_name,
@@ -1164,19 +1260,16 @@ WEAK int halide_cuda_run(void *user_context,
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
             if (arg_is_buffer[i] == 2) {
-                cudaResourceDesc rdesc;
-                cudaTextureDesc tdesc;
-                cudaResourceViewDesc rviewdesc;
-                cudaTextureObject_t *texture = (cudaTextureObject_t *)&dev_handles[i];
-                err = cudaCreateTextureObject(texture, &rdesc, &tdesc, &rviewdesc);
-                if (err != CUDA_SUCCESS) {
-                    error(user_context) << "CUDA: cudaCreateTextureObject for arg " << (int)i << "failed: "
-                                        << get_error_name(err);
+                CUtexObject texture = halide_cuda_get_texture(user_context, (halide_buffer_t *)args[i], true);
+
+                if (!texture) {
+                    error(user_context) << "CUDA: cudaCreateTextureObject for arg " << (int)i << "failed";
                     free(dev_handles);
                     free(translated_args);
-                    return err;
+                    return -1;
                 }
-                translated_args[i] = (void *)*texture;
+                dev_handles[i] = texture;
+                translated_args[i] = &(dev_handles[i]);
             } else {
                 dev_handles[i] = ((halide_buffer_t *)args[i])->device;
                 translated_args[i] = &(dev_handles[i]);
@@ -1211,8 +1304,8 @@ WEAK int halide_cuda_run(void *user_context,
 
     for (size_t i = 0; i <= num_args; i++) {  // Get nullptr at end.
         if (arg_is_buffer[i] == 2) {
-            cudaTextureObject_t texture = (cudaTextureObject_t)translated_args[i];
-            cudaDestroyTextureObject(texture);
+            CUtexObject texture = (CUtexObject)dev_handles[i];
+            halide_cuda_free_texture(user_context, (halide_buffer_t *)args[i], texture);
         }
     }
 
@@ -1333,38 +1426,6 @@ WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *min
     }
 
     return 0;
-}
-
-WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t *buf, bool sampled) {
-    if (!cudaCreateTextureObject) {
-        debug(user_context) << "requesting texture object but don't have runtime functions";
-        return -1;
-    }
-
-    struct cudaResourceDesc resourceDesc;
-    struct cudaTextureDesc textureDesc;
-    struct cudaResourceViewDesc resourceViewDesc;
-
-    cudaTextureObject_t texture;
-    CUresult err = cudaCreateTextureObject(&texture, &resourceDesc, &textureDesc, &resourceViewDesc);
-
-    if (err != CUDA_SUCCESS) {
-        error(user_context)
-            << "CUDA: cudaCreateTextureObject failed ("
-            << Halide::Runtime::Internal::Cuda::get_error_name(err)
-            << ")";
-        return 0;
-    }
-
-    return texture;
-}
-
-WEAK int halide_cuda_free_texture(void *user_context, struct halide_buffer_t *buf, uint64_t texture_object) {
-    if (!cudaDestroyTextureObject && texture_object) {
-        error(user_context) << "attempting to free texture object but don't have runtime functions";
-    }
-
-    return cudaDestroyTextureObject(texture_object);
 }
 
 namespace {
