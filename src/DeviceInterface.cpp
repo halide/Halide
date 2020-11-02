@@ -164,7 +164,7 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
 }
 
 namespace Internal {
-Expr make_device_interface_call(DeviceAPI device_api) {
+Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type) {
     if (device_api == DeviceAPI::Host) {
         return make_zero(type_of<const halide_device_interface_t *>());
     }
@@ -175,7 +175,11 @@ Expr make_device_interface_call(DeviceAPI device_api) {
         interface_name = "halide_cuda_device_interface";
         break;
     case DeviceAPI::OpenCL:
-        interface_name = "halide_opencl_device_interface";
+        if (memory_type == MemoryType::GPUTexture) {
+            interface_name = "halide_opencl_image_device_interface";
+        } else {
+            interface_name = "halide_opencl_device_interface";
+        }
         break;
     case DeviceAPI::Metal:
         interface_name = "halide_metal_device_interface";

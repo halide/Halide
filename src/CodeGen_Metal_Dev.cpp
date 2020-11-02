@@ -216,7 +216,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        auto fence_type_ptr = as_const_int(op->args[0]);
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 
@@ -474,11 +474,9 @@ void CodeGen_Metal_Dev::add_kernel(Stmt s,
 namespace {
 struct BufferSize {
     string name;
-    size_t size;
+    size_t size = 0;
 
-    BufferSize()
-        : size(0) {
-    }
+    BufferSize() = default;
     BufferSize(string name, size_t size)
         : name(std::move(name)), size(size) {
     }
@@ -579,7 +577,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
         if (args[i].is_buffer) {
             stream << ",\n";
             stream << " " << get_memory_space(args[i].name) << " ";
-            if (!args[i].write) stream << "const ";
+            if (!args[i].write) {
+                stream << "const ";
+            }
             stream << print_storage_type(args[i].type) << " *"
                    << print_name(args[i].name) << " [[ buffer(" << buffer_index++ << ") ]]";
             Allocation alloc;
@@ -697,8 +697,6 @@ void CodeGen_Metal_Dev::init_module() {
                << "#define _halide_mem_fence_device_and_threadgroup mem_flags::mem_device_and_threadgroup\n"
                << "#endif\n"
                << "}\n";  // close namespace
-
-    metal_c.add_common_macros(src_stream);
 
     src_stream << "#define halide_unused(x) (void)(x)\n";
 

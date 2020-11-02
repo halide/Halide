@@ -115,6 +115,7 @@ WITH_RISCV ?= $(findstring riscv, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
 WITH_NVPTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
+WITH_WEBASSEMBLY ?= $(findstring webassembly, $(LLVM_COMPONENTS))
 # AMDGPU target is WIP
 WITH_AMDGPU ?= $(findstring amdgpu, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
@@ -124,6 +125,7 @@ WITH_D3D12 ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
+
 
 # If HL_TARGET or HL_JIT_TARGET aren't set, use host
 HL_TARGET ?= host
@@ -172,6 +174,9 @@ EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DHALIDE_WITH_EXCEPTIONS -fexcepti
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON, )
 HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
 
+WEBASSEMBLY_CXX_FLAGS=$(if $(WITH_WEBASSEMBLY), -DWITH_WEBASSEMBLY, )
+WEBASSEMBLY_LLVM_CONFIG_LIB=$(if $(WITH_WEBASSEMBLY), webassembly, )
+
 LLVM_HAS_NO_RTTI = $(findstring -fno-rtti, $(LLVM_CXX_FLAGS))
 WITH_RTTI ?= $(if $(LLVM_HAS_NO_RTTI),, not-empty)
 RTTI_CXX_FLAGS=$(if $(WITH_RTTI), , -fno-rtti )
@@ -208,6 +213,7 @@ CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 CXX_FLAGS += $(AMDGPU_CXX_FLAGS)
 CXX_FLAGS += $(RISCV_CXX_FLAGS)
+CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
 # everything with -fno-exceptions.  Without -funwind-tables, libHalide.so fails
@@ -826,7 +832,6 @@ RUNTIME_LL_COMPONENTS = \
   aarch64 \
   arm \
   arm_no_neon \
-  hvx_64 \
   hvx_128 \
   mips \
   posix_math \
@@ -837,6 +842,7 @@ RUNTIME_LL_COMPONENTS = \
   x86 \
   x86_avx \
   x86_avx2 \
+  x86_avx512 \
   x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
@@ -1098,6 +1104,9 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_multitarget,$(GENERATOR_
 # Note that many of the AOT-CPP tests are broken right now;
 # remove AOT-CPP tests that don't (yet) work for C++ backend
 # (each tagged with the *known* blocking issue(s))
+
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_texture,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_acquire_release,$(GENERATOR_AOTCPP_TESTS))
@@ -1535,7 +1544,7 @@ $(BIN_DIR)/$(TARGET)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $
 # Also make AOT testing targets that depends on the .cpp output (rather than .a).
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.halide_generated.cpp $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(OPTIMIZE) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
 # MSAN test doesn't use the standard runtime
 $(BIN_DIR)/$(TARGET)/generator_aot_msan: $(ROOT_DIR)/test/generator/msan_aottest.cpp $(FILTERS_DIR)/msan.a $(FILTERS_DIR)/msan.h $(RUNTIME_EXPORTED_INCLUDES)
@@ -2058,7 +2067,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 90 100 110 120))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 100 110 120))
 LLVM_OK=yes
 endif
 
@@ -2238,51 +2247,25 @@ $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(INCLUDE_DIR)/Ha
 $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++17 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
-# Run clang-format on most of the source. The tutorials directory is
-# explicitly skipped, as those files are manually formatted to
-# maximize readability. NB: clang-format is *not* stable across versions;
-# we are currently standardized on the formatting from clang-format-10.
-# If CLANG_FORMAT points to a different version, you may get incorrectly-formatted code.
-CLANG_FORMAT ?= ${CLANG}-format
+# Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
+# Let's default to the Ubuntu install location.
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
 
 .PHONY: format
 format:
-	find "${ROOT_DIR}/apps" "${ROOT_DIR}/src" "${ROOT_DIR}/tools" "${ROOT_DIR}/test" "${ROOT_DIR}/util" "${ROOT_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG_FORMAT} -i -style=file
+	@CLANG_FORMAT_LLVM_INSTALL_DIR=$(CLANG_FORMAT_LLVM_INSTALL_DIR) ${ROOT_DIR}/run-clang-format.sh
 
-# run-clang-tidy.py is a script that comes with LLVM for running clang
-# tidy in parallel. Assume it's in the standard install path relative to clang.
-RUN_CLANG_TIDY ?= $(shell dirname $(CLANG))/../share/clang/run-clang-tidy.py
-
-# Run clang-tidy on everything in src/. In future we may increase this
-# surface. Not doing it for now because things outside src are not
-# performance-critical.
-CLANG_TIDY_TARGETS= $(addprefix $(SRC_DIR)/,$(SOURCE_FILES))
-
-INVOKE_CLANG_TIDY ?= $(RUN_CLANG_TIDY) -p $(BUILD_DIR) $(CLANG_TIDY_TARGETS) -clang-tidy-binary $(CLANG)-tidy -clang-apply-replacements-binary $(CLANG)-apply-replacements -quiet
-
-$(BUILD_DIR)/compile_commands.json:
-	mkdir -p $(BUILD_DIR)
-	echo '[' >> $@
-	BD=$$(realpath $(BUILD_DIR)); \
-	SD=$$(realpath $(SRC_DIR)); \
-	ID=$$(realpath $(INCLUDE_DIR)); \
-	for S in $(SOURCE_FILES); do \
-	echo "{ \"directory\": \"$${BD}\"," >> $@; \
-	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -c $$SD/$$S -o /dev/null\"," >> $@; \
-	echo "  \"file\": \"$$SD/$$S\" }," >> $@; \
-	done
-	# Add a sentinel to make it valid json (no trailing comma)
-	echo "{ \"directory\": \"$${BD}\"," >> $@; \
-	echo "  \"command\": \"$(CXX) -c /dev/null -o /dev/null\"," >> $@; \
-	echo "  \"file\": \"$$S\" }]" >> $@; \
+# Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
+# Let's default to the Ubuntu install location.
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
 
 .PHONY: clang-tidy
-clang-tidy: $(BUILD_DIR)/compile_commands.json
-	@$(INVOKE_CLANG_TIDY) 2>&1 | grep -v "warnings generated" | grep -v '^$(CLANG)-tidy '
+clang-tidy:
+	@CLANG_TIDY_LLVM_INSTALL_DIR=$(CLANG_TIDY_LLVM_INSTALL_DIR) ${ROOT_DIR}/run-clang-tidy.sh
 
 .PHONY: clang-tidy-fix
-clang-tidy-fix: $(BUILD_DIR)/compile_commands.json
-	@$(INVOKE_CLANG_TIDY) -fix 2>&1 | grep -v "warnings generated" | grep -v '^$(CLANG)-tidy '
+clang-tidy-fix:
+	@CLANG_TIDY_LLVM_INSTALL_DIR=$(CLANG_TIDY_LLVM_INSTALL_DIR) ${ROOT_DIR}/run-clang-tidy.sh -fix
 
 # Build the documentation. Be sure to keep this synchronized with doc/CMakeLists.txt
 # if you choose to edit it.
@@ -2310,6 +2293,7 @@ HIDE_UNDOC_MEMBERS     = YES
 JAVADOC_AUTOBRIEF      = YES
 QT_AUTOBRIEF           = YES
 QUIET                  = YES
+RECURSIVE              = YES
 REFERENCED_BY_RELATION = YES
 REFERENCES_RELATION    = YES
 SORT_BY_SCOPE_NAME     = YES

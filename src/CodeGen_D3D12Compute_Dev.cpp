@@ -153,7 +153,9 @@ string simt_intrinsic(const string &name) {
 }  // namespace
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op) {
-    if (is_const(op->value)) return;
+    if (is_const(op->value)) {
+        return;
+    }
     print_expr(op->value);
 }
 
@@ -251,8 +253,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
         << "(";
     for (int i = 0; i < op->lanes; ++i) {
         rhs << id_value;
-        if (i < op->lanes - 1)
+        if (i < op->lanes - 1) {
             rhs << ", ";
+        }
     }
     rhs << ")";
 
@@ -263,7 +266,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        auto fence_type_ptr = as_const_int(op->args[0]);
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 
@@ -481,8 +484,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
             if (shared_promotion_required) {
                 rhs << ")";
             }
-            if (i < lanes - 1)
+            if (i < lanes - 1) {
                 rhs << ", ";
+            }
         }
         rhs << ")";
 
@@ -884,11 +888,9 @@ void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
 namespace {
 struct BufferSize {
     string name;
-    size_t size;
+    size_t size = 0;
 
-    BufferSize()
-        : size(0) {
-    }
+    BufferSize() = default;
     BufferSize(string name, size_t size)
         : name(std::move(name)), size(size) {
     }
@@ -918,7 +920,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     auto isConstantBuffer = [&s](const DeviceArgument &arg) {
         return arg.is_buffer && CodeGen_GPU_Dev::is_buffer_constant(s, arg.name) && arg.size > 0;
     };
-    for (auto &arg : args) {
+    for (const auto &arg : args) {
         if (isConstantBuffer(arg)) {
             constants.emplace_back(arg.name, arg.size);
         }
@@ -1009,7 +1011,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     s = fsa.mutate(s);
 
     uint32_t total_shared_bytes = 0;
-    for (Stmt sop : fsa.allocs) {
+    for (const Stmt &sop : fsa.allocs) {
         const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);
@@ -1053,10 +1055,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     struct FindThreadGroupSize : public IRVisitor {
         using IRVisitor::visit;
         void visit(const For *loop) override {
-            if (!is_gpu_var(loop->name))
+            if (!is_gpu_var(loop->name)) {
                 return loop->body.accept(this);
-            if (loop->for_type != ForType::GPUThread)
+            }
+            if (loop->for_type != ForType::GPUThread) {
                 return loop->body.accept(this);
+            }
             internal_assert(is_zero(loop->min));
             int index = thread_loop_workgroup_index(loop->name);
             user_assert(index >= 0) << "Invalid 'numthreads' index for loop variable '" << loop->name << "'.\n";
@@ -1104,7 +1108,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
            << "uint3 tgroup_index  : SV_GroupID,\n"
            << " "
            << "uint3 tid_in_tgroup : SV_GroupThreadID";
-    for (auto &arg : args) {
+    for (const auto &arg : args) {
         stream << ",\n";
         stream << " ";
         if (arg.is_buffer) {
@@ -1250,8 +1254,6 @@ void CodeGen_D3D12Compute_Dev::init_module() {
     //<< "}\n"; // close namespace
 
     src_stream << "\n";
-
-    d3d12compute_c.add_common_macros(src_stream);
 
     cur_kernel_name = "";
 }

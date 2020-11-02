@@ -707,7 +707,7 @@ Expr Shuffle::make(const std::vector<Expr> &vectors,
     internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
     Type element_ty = vectors.front().type().element_of();
     int input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         internal_assert(i.type().element_of() == element_ty) << "Shuffle of vectors of mismatched types.\n";
         input_lanes += i.type().lanes();
     }
@@ -731,7 +731,7 @@ Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
 
     int lanes = vectors.front().type().lanes();
 
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         internal_assert(i.type().lanes() == lanes)
             << "Interleave of vectors with different sizes.\n";
     }
@@ -799,7 +799,7 @@ bool Shuffle::is_interleave() const {
         return false;
     }
 
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         if (i.type().lanes() != lanes) {
             return false;
         }
@@ -871,7 +871,7 @@ bool is_ramp(const std::vector<int> &indices, int stride = 1) {
 
 bool Shuffle::is_concat() const {
     size_t input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         input_lanes += i.type().lanes();
     }
 
@@ -882,7 +882,7 @@ bool Shuffle::is_concat() const {
 
 bool Shuffle::is_slice() const {
     size_t input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         input_lanes += i.type().lanes();
     }
 

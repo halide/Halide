@@ -40,7 +40,9 @@ function(halide_define_aot_test NAME)
         add_wasm_halide_test("${TARGET}" GROUPS generator)
     else ()
         add_executable("${TARGET}" "${NAME}_aottest.cpp")
-        target_include_directories("${TARGET}" PRIVATE "${Halide_SOURCE_DIR}/test/common")
+        target_include_directories("${TARGET}" PRIVATE
+            "${Halide_SOURCE_DIR}/test/common"
+            "${Halide_SOURCE_DIR}/tools")
         if (NOT args_OMIT_DEFAULT_GENERATOR)
             target_link_libraries(${TARGET} PRIVATE ${NAME})
         endif ()
@@ -263,6 +265,10 @@ halide_define_aot_test(gpu_object_lifetime FEATURES debug)
 # gpu_only_generator.cpp
 halide_define_aot_test(gpu_only)
 
+# gpu_texture_aottest.cpp
+# gpu_texture_generator.cpp
+halide_define_aot_test(gpu_texture)
+
 # image_from_array_aottest.cpp
 # image_from_array_generator.cpp
 halide_define_aot_test(image_from_array)
@@ -387,6 +393,10 @@ halide_define_aot_test(string_param PARAMS "rpn_expr=5 y * x +")
 # stubuser_aottest.cpp
 # stubuser_generator.cpp
 # stubs not supported in CMake
+
+# shuffler_aottest.cpp
+# shuffler_generator.cpp
+halide_define_aot_test(shuffler)
 
 # tiled_blur_aottest.cpp
 # tiled_blur_generator.cpp

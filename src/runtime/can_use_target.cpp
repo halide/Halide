@@ -55,9 +55,9 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
     if (count != CpuFeatures::kWordCount) {
         // This should not happen unless our runtime is out of sync with the rest of libHalide.
 #ifdef DEBUG_RUNTIME
-        debug(NULL) << "count " << count << " CpuFeatures::kWordCount " << CpuFeatures::kWordCount << "\n";
+        debug(nullptr) << "count " << count << " CpuFeatures::kWordCount " << CpuFeatures::kWordCount << "\n";
 #endif
-        halide_error(NULL, "Internal error: wrong structure size passed to halide_can_use_target_features()\n");
+        halide_error(nullptr, "Internal error: wrong structure size passed to halide_can_use_target_features()\n");
     }
     const CpuFeatures *cpu_features = reinterpret_cast<const CpuFeatures *>(&halide_cpu_features_storage[0]);
     for (int i = 0; i < CpuFeatures::kWordCount; ++i) {

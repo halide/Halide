@@ -47,10 +47,8 @@ class UsesExternImage : public IRVisitor {
     }
 
 public:
-    UsesExternImage()
-        : result(false) {
-    }
-    bool result;
+    UsesExternImage() = default;
+    bool result = false;
 };
 
 inline bool uses_extern_image(const Stmt &s) {
@@ -121,7 +119,7 @@ class SplitTuples : public IRMutator {
                 name += "." + std::to_string(op->value_index);
             }
             vector<Expr> args;
-            for (Expr e : op->args) {
+            for (const Expr &e : op->args) {
                 args.push_back(mutate(e));
             }
             // It's safe to hook up the pointer to the function
@@ -146,7 +144,7 @@ class SplitTuples : public IRMutator {
 
         // Mutate the args
         vector<Expr> args;
-        for (Expr e : op->args) {
+        for (const Expr &e : op->args) {
             args.push_back(mutate(e));
         }
 

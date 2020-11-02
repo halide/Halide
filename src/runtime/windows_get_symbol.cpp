@@ -25,14 +25,14 @@ WIN32API unsigned SetErrorMode(unsigned);
 #define CP_UTF8 65001
 
 WEAK void *halide_default_get_symbol(const char *name) {
-    return GetProcAddress(NULL, name);
+    return GetProcAddress(nullptr, name);
 }
 
 WEAK void *halide_default_load_library(const char *name) {
     // Suppress dialog windows during library open.
     unsigned old_mode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
-    void *lib = NULL;
-    int wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, NULL, 0);
+    void *lib = nullptr;
+    int wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, nullptr, 0);
     if (wide_len > 0) {
         WCHAR *wide_lib = (WCHAR *)malloc(wide_len * sizeof(*wide_lib));
         wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, wide_lib, wide_len);

@@ -458,7 +458,8 @@ private:
 
         if ((fixed_size_thread_allocation &&
              op->memory_type != MemoryType::Heap &&
-             op->memory_type != MemoryType::GPUShared) ||
+             op->memory_type != MemoryType::GPUShared &&
+             op->memory_type != MemoryType::GPUTexture) ||
             op->memory_type == MemoryType::Register ||
             op->memory_type == MemoryType::Stack) {
             // These allocations go in register or local memory
@@ -467,6 +468,7 @@ private:
 
         user_assert(op->memory_type == MemoryType::Auto ||
                     op->memory_type == MemoryType::GPUShared ||
+                    op->memory_type == MemoryType::GPUTexture ||
                     op->memory_type == MemoryType::Heap)
             << "Allocation " << op->name << " must live in shared or heap memory, "
             << "but is scheduled to live in " << op->memory_type << " memory.\n";
@@ -983,7 +985,9 @@ public:
     }
 
     Stmt compute_shared_memory_sizes_on_host(Stmt result) {
-        if (!host_side_preamble.defined()) return result;
+        if (!host_side_preamble.defined()) {
+            return result;
+        }
 
         // Make all the let stmts that define the size vars
         for (auto &alloc : allocations) {
@@ -1207,12 +1211,12 @@ class InjectThreadBarriers : public IRMutator {
     std::set<std::string> device_loads;
 
     MemoryType memory_type_for_name(const std::string &name) {
-        for (auto &x : register_allocs.allocations) {
+        for (const auto &x : register_allocs.allocations) {
             if (x.name == name) {
                 return x.memory_type;
             }
         }
-        for (auto &x : block_allocs.allocations) {
+        for (const auto &x : block_allocs.allocations) {
             if (x.name == name) {
                 return x.memory_type;
             }
@@ -1263,6 +1267,7 @@ class InjectThreadBarriers : public IRMutator {
             break;
         case MemoryType::Auto:
         case MemoryType::Heap:
+        case MemoryType::GPUTexture:
             debug(4) << "   memory type is heap or auto\n";
             device_stores.insert(op->name);
             break;
@@ -1286,6 +1291,7 @@ class InjectThreadBarriers : public IRMutator {
             break;
         case MemoryType::Auto:
         case MemoryType::Heap:
+        case MemoryType::GPUTexture:
             debug(4) << "   memory type is heap or auto\n";
             device_loads.insert(op->name);
             break;
@@ -1315,14 +1321,14 @@ class InjectThreadBarriers : public IRMutator {
             // load from something stored in first, insert the appropriate
             // fence type
             int mask = 0;
-            for (auto &st : shared_stores) {
+            for (const auto &st : shared_stores) {
                 auto elem = shared_loads.find(st);
                 if (elem != shared_loads.end()) {
                     mask |= CodeGen_GPU_Dev::MemoryFenceType::Shared;
                     break;
                 }
             }
-            for (auto &st : device_stores) {
+            for (const auto &st : device_stores) {
                 auto elem = device_loads.find(st);
                 if (elem != device_loads.end()) {
                     mask |= CodeGen_GPU_Dev::MemoryFenceType::Device;
@@ -1473,7 +1479,7 @@ class FuseGPUThreadLoops : public IRMutator {
 };
 
 class ZeroGPULoopMins : public IRMutator {
-    bool in_non_glsl_gpu;
+    bool in_non_glsl_gpu = false;
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
@@ -1496,9 +1502,7 @@ class ZeroGPULoopMins : public IRMutator {
     }
 
 public:
-    ZeroGPULoopMins()
-        : in_non_glsl_gpu(false) {
-    }
+    ZeroGPULoopMins() = default;
 };
 
 class ValidateGPULoopNesting : public IRVisitor {

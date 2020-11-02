@@ -54,7 +54,6 @@ void CodeGen_OpenGL_Dev::add_kernel(Stmt s, const string &name,
 void CodeGen_OpenGL_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
-    glc->add_common_macros(src_stream);
     cur_kernel_name = "";
 }
 
@@ -300,7 +299,9 @@ void CodeGen_GLSLBase::visit(const Call *op) {
 
         rhs << builtin[op->name] << "(";
         for (size_t i = 0; i < op->args.size(); i++) {
-            if (i > 0) rhs << ", ";
+            if (i > 0) {
+                rhs << ", ";
+            }
             rhs << print_expr(op->args[i]);
         }
         rhs << ")";
@@ -837,8 +838,9 @@ void CodeGen_GLSL::visit(const Ramp *op) {
     ostringstream rhs;
     rhs << print_type(op->type) << "(";
 
-    if (op->lanes > 4)
+    if (op->lanes > 4) {
         internal_error << "GLSL: ramp lanes " << op->lanes << " is not supported\n";
+    }
 
     rhs << print_expr(op->base);
 

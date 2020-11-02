@@ -883,8 +883,12 @@ class InjectHexagonRpc : public IRMutator {
             // buffer is read, bit 1 set indicates the buffer is
             // written. If neither are set, the argument is a scalar.
             int flags = 0;
-            if (i.second.read) flags |= 0x1;
-            if (i.second.write) flags |= 0x2;
+            if (i.second.read) {
+                flags |= 0x1;
+            }
+            if (i.second.write) {
+                flags |= 0x2;
+            }
             arg_flags.emplace_back(flags);
         }
         for (const auto &i : c.vars) {
@@ -968,7 +972,6 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
     static const Target::Feature shared_features[] = {
         Target::Profile,
         Target::NoAsserts,
-        Target::HVX_64,
         Target::HVX_128,
         Target::HVX_v62,
         Target::HVX_v65,

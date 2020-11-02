@@ -12,6 +12,7 @@ namespace Internal {
 
 using std::map;
 using std::pair;
+using std::set;
 using std::string;
 using std::vector;
 
@@ -226,6 +227,16 @@ class RemoveLets : public IRGraphMutator {
     }
 };
 
+class GetVarsUsed : public IRVisitor {
+private:
+    using IRVisitor::visit;
+    void visit(const Variable *op) override {
+        vars_used.insert(op->name);
+    }
+
+public:
+    set<string> vars_used;
+};
 class CSEEveryExprInStmt : public IRMutator {
     bool lift_all;
     using IRMutator::visit;
@@ -246,9 +257,34 @@ class CSEEveryExprInStmt : public IRMutator {
         }
         const Call *c = dummy.as<Call>();
         internal_assert(c && c->is_intrinsic(Call::bundle) && c->args.size() == 2);
-        Stmt s = Store::make(op->name, c->args[0], c->args[1],
-                             op->param, mutate(op->predicate), op->alignment);
+
+        // Iterate over the the values that were CSEd. Those that are used by
+        // the store index will need to become LetStmts before the store. The
+        // others can be Let expressions around the store value.
+        GetVarsUsed g;
+        c->args[1].accept(&g);
+
+        vector<pair<string, Expr>> lets_for_letstmts;
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            if (g.vars_used.count(it->first)) {
+                lets_for_letstmts.emplace_back(it->first, it->second);
+                it->second.accept(&g);
+            }
+        }
+
+        // First, add Let expressions, if any, around the store value.
+        Expr v = c->args[0];
+        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            if (!g.vars_used.count(it->first)) {
+                v = Let::make(it->first, it->second, v);
+            }
+        }
+
+        Stmt s = Store::make(op->name, v, c->args[1],
+                             op->param, mutate(op->predicate), op->alignment);
+
+        // Then add LetStmts if any around the store.
+        for (auto it = lets_for_letstmts.begin(); it != lets_for_letstmts.end(); ++it) {
             s = LetStmt::make(it->first, it->second, s);
         }
         return s;
@@ -272,7 +308,9 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     Expr e = e_in;
 
     // Early-out for trivial cases.
-    if (is_const(e) || e.as<Variable>()) return e;
+    if (is_const(e) || e.as<Variable>()) {
+        return e;
+    }
 
     debug(4) << "\n\n\nInput to CSE " << e << "\n";
 
@@ -335,7 +373,7 @@ namespace {
 // Normalize all names in an expr so that expr compares can be done
 // without worrying about mere name differences.
 class NormalizeVarNames : public IRMutator {
-    int counter;
+    int counter = 0;
 
     map<string, string> new_names;
 
@@ -359,9 +397,7 @@ class NormalizeVarNames : public IRMutator {
     }
 
 public:
-    NormalizeVarNames()
-        : counter(0) {
-    }
+    NormalizeVarNames() = default;
 };
 
 void check(const Expr &in, const Expr &correct) {

@@ -34,7 +34,7 @@ class FindLinearExpressions : public IRMutator {
 protected:
     using IRMutator::visit;
 
-    bool in_glsl_loops;
+    bool in_glsl_loops = false;
 
     Expr tag_linear_expression(Expr e, const std::string &name = unique_name('a')) {
 
@@ -402,18 +402,16 @@ public:
     unsigned int order;
     bool found;
 
-    unsigned int total_found;
+    unsigned int total_found = 0;
 
     // This parameter controls the maximum number of linearly varying
     // expressions halide will pull out of the fragment shader and evaluate per
     // vertex, and allow the GPU to linearly interpolate across the domain. For
     // OpenGL ES 2.0 we can pass 16 vec4 varying attributes, or 64 scalars. Two
     // scalar slots are used by boilerplate code to pass pixel coordinates.
-    const unsigned int max_expressions;
+    const unsigned int max_expressions = 62;
 
-    FindLinearExpressions()
-        : in_glsl_loops(false), total_found(0), max_expressions(62) {
-    }
+    FindLinearExpressions() = default;
 };
 
 Stmt find_linear_expressions(const Stmt &s) {
@@ -974,17 +972,20 @@ void IRFilter::visit(const Allocate *op) {
     stmt = Stmt();
     for (size_t i = 0; i < op->extents.size(); i++) {
         Stmt new_extent = mutate(op->extents[i]);
-        if (new_extent.defined())
+        if (new_extent.defined()) {
             stmt = make_block(new_extent, stmt);
+        }
     }
 
     Stmt body = mutate(op->body);
-    if (body.defined())
+    if (body.defined()) {
         stmt = make_block(body, stmt);
+    }
 
     Stmt condition = mutate(op->condition);
-    if (condition.defined())
+    if (condition.defined()) {
         stmt = make_block(condition, stmt);
+    }
 }
 
 void IRFilter::visit(const Free *op) {
@@ -1000,19 +1001,23 @@ void IRFilter::visit(const Realize *op) {
         Stmt new_min = mutate(old_min);
         Stmt new_extent = mutate(old_extent);
 
-        if (new_min.defined())
+        if (new_min.defined()) {
             stmt = make_block(new_min, stmt);
-        if (new_extent.defined())
+        }
+        if (new_extent.defined()) {
             stmt = make_block(new_extent, stmt);
+        }
     }
 
     Stmt body = mutate(op->body);
-    if (body.defined())
+    if (body.defined()) {
         stmt = make_block(body, stmt);
+    }
 
     Stmt condition = mutate(op->condition);
-    if (condition.defined())
+    if (condition.defined()) {
         stmt = make_block(condition, stmt);
+    }
 }
 
 void IRFilter::visit(const Block *op) {

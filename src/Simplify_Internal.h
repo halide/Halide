@@ -186,6 +186,8 @@ public:
     IRMatcher::WildConst<1> c1;
     IRMatcher::WildConst<2> c2;
     IRMatcher::WildConst<3> c3;
+    IRMatcher::WildConst<4> c4;
+    IRMatcher::WildConst<5> c5;
 
     // Tracks whether or not we're inside a vector loop. Certain
     // transformations are not a good idea if the code is to be
@@ -208,8 +210,12 @@ public:
     // Put the args to a commutative op in a canonical order
     HALIDE_ALWAYS_INLINE
     bool should_commute(const Expr &a, const Expr &b) {
-        if (a.node_type() < b.node_type()) return true;
-        if (a.node_type() > b.node_type()) return false;
+        if (a.node_type() < b.node_type()) {
+            return true;
+        }
+        if (a.node_type() > b.node_type()) {
+            return false;
+        }
 
         if (a.node_type() == IRNodeType::Variable) {
             const Variable *va = a.as<Variable>();

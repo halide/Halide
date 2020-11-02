@@ -236,11 +236,9 @@ DECLARE_NO_INITMOD(powerpc_cpu_features)
 #endif  // WITH_POWERPC
 
 #ifdef WITH_HEXAGON
-DECLARE_LL_INITMOD(hvx_64)
 DECLARE_LL_INITMOD(hvx_128)
 DECLARE_CPP_INITMOD(hexagon_cpu_features)
 #else
-DECLARE_NO_INITMOD(hvx_64)
 DECLARE_NO_INITMOD(hvx_128)
 DECLARE_NO_INITMOD(hexagon_cpu_features)
 #endif  // WITH_HEXAGON
@@ -267,68 +265,28 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
         if (target.bits == 32) {
             if (target.os == Target::OSX) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
-#else
-                return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
-#endif
             } else if (target.os == Target::IOS) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
-#else
-                return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
-#endif
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
-#else
-                return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
-#endif
             } else if (target.os == Target::Windows) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
-#else
-                return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
-#endif
             } else {
                 // Linux/Android
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:32-n8:16:32-S128");
-#else
-                return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
-#endif
             }
         } else {  // 64-bit
             if (target.os == Target::OSX) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-#else
-                return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
-#endif
             } else if (target.os == Target::IOS) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-#else
-                return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
-#endif
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-#else
-                return llvm::DataLayout("e-m:w-i64:64-f80:128-n8:16:32:64-S128");
-#endif
             } else if (target.os == Target::Windows) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-#else
-                return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
-#endif
             } else {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-#else
-                return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
-#endif
             }
         }
     } else if (target.arch == Target::ARM) {
@@ -836,7 +794,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
-                modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                if (t.has_feature(Target::WasmThreads)) {
+                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_fake_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -969,8 +931,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
 
             if (t.arch == Target::Hexagon ||
-                t.has_feature(Target::HVX_64) ||
-                t.has_feature(Target::HVX_128)) {
+                t.has_feature(Target::HVX)) {
                 modules.push_back(get_initmod_alignment_128(c, bits_64, debug));
             } else if (t.arch == Target::X86) {
                 // AVX-512 requires 64-byte alignment. Could only increase alignment
@@ -1032,11 +993,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_qurt_hvx(c, bits_64, debug));
-                if (t.has_feature(Target::HVX_64)) {
-                    modules.push_back(get_initmod_hvx_64_ll(c));
-                } else if (t.has_feature(Target::HVX_128)) {
-                    modules.push_back(get_initmod_hvx_128_ll(c));
-                }
+                modules.push_back(get_initmod_hvx_128_ll(c));
                 if (t.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
                     modules.push_back(get_initmod_qurt_hvx_vtcm(c, bits_64,
                                                                 debug));
@@ -1163,7 +1120,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             user_assert(t.os == Target::Windows) << "D3D12Compute target only available on Windows targets.\n";
             modules.push_back(get_initmod_windows_d3d12compute_x86(c, bits_64, debug));
         }
-        if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_host(c, bits_64, debug));
         }

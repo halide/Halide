@@ -19,9 +19,9 @@ WEAK void *halide_default_load_library(const char *name) {
 }
 
 WEAK void *halide_default_get_library_symbol(void *lib, const char *name) {
-    // We want our semantics to be such that if lib is NULL, this call
+    // We want our semantics to be such that if lib is nullptr, this call
     // is equivalent to halide_get_symbol.
-    if (lib == NULL) {
+    if (lib == nullptr) {
         lib = RTLD_DEFAULT;
     }
     return dlsym(lib, name);

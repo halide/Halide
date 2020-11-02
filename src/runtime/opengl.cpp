@@ -69,7 +69,7 @@
 
 // List of all OpenGL functions used by the runtime, which may not
 // exist due to an older or less capable version of GL. In using any
-// of these functions, code must test if they are NULL.
+// of these functions, code must test if they are nullptr.
 #define OPTIONAL_GL_FUNCTIONS                            \
     GLFUNC(PFNGLGENVERTEXARRAYS, GenVertexArrays);       \
     GLFUNC(PFNGLBINDVERTEXARRAY, BindVertexArray);       \
@@ -281,13 +281,13 @@ WEAK void GLStateSaver::save() {
     }
 
 #ifdef DEBUG_RUNTIME
-    debug(NULL) << "Saved OpenGL state\n";
+    debug(nullptr) << "Saved OpenGL state\n";
 #endif
 }
 
 WEAK void GLStateSaver::restore() {
 #ifdef DEBUG_RUNTIME
-    debug(NULL) << "Restoring OpenGL state\n";
+    debug(nullptr) << "Restoring OpenGL state\n";
 #endif
 
     for (int i = 0; i < max_combined_texture_image_units; i++) {
@@ -297,10 +297,11 @@ WEAK void GLStateSaver::restore() {
     free(texture_2d_binding);
 
     for (int i = 0; i < max_vertex_attribs; i++) {
-        if (vertex_attrib_array_enabled[i])
+        if (vertex_attrib_array_enabled[i]) {
             global_state.EnableVertexAttribArray(i);
-        else
+        } else {
             global_state.DisableVertexAttribArray(i);
+        }
     }
     free(vertex_attrib_array_enabled);
 
@@ -370,7 +371,7 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
     if (*source == '\0') {
         debug(user_context) << "Halide GLSL: passed shader source is empty, using default.\n";
         const char *default_shader = "varying vec2 pixcoord;\n void main() { }";
-        global_state.ShaderSource(shader, 1, (const GLchar **)&default_shader, NULL);
+        global_state.ShaderSource(shader, 1, (const GLchar **)&default_shader, nullptr);
     } else {
         global_state.ShaderSource(shader, 1, (const GLchar **)&source, length);
     }
@@ -391,7 +392,7 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
         HalideMalloc log_tmp(user_context, log_len);
         if (log_tmp.ptr) {
             char *log = (char *)log_tmp.ptr;
-            global_state.GetShaderInfoLog(shader, log_len, NULL, log);
+            global_state.GetShaderInfoLog(shader, log_len, nullptr, log);
             print(user_context) << log << "\n";
         }
         global_state.DeleteShader(shader);
@@ -401,12 +402,12 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
 }
 
 // Check whether string starts with a given prefix.
-// Returns pointer to character after matched prefix if successful or NULL.
+// Returns pointer to character after matched prefix if successful or nullptr.
 WEAK const char *match_prefix(const char *s, const char *prefix) {
     if (0 == strncmp(s, prefix, strlen(prefix))) {
         return s + strlen(prefix);
     }
-    return NULL;
+    return nullptr;
 }
 
 // Parse declaration of the form "type name" and construct matching Argument.
@@ -433,14 +434,14 @@ WEAK Argument *parse_argument(void *user_context, const char *src,
     }
     if (type == Argument::Void) {
         error(user_context) << "Internal error: argument type not supported";
-        return NULL;
+        return nullptr;
     }
 
     Argument *arg = (Argument *)malloc(sizeof(Argument));
     arg->name = strndup(name, end - name);
     arg->type = type;
     arg->kind = Argument::Invalid;
-    arg->next = 0;
+    arg->next = nullptr;
     return arg;
 }
 
@@ -449,7 +450,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
     KernelInfo *kernel = (KernelInfo *)malloc(sizeof(KernelInfo));
 
     kernel->source = strndup(src, size);
-    kernel->arguments = NULL;
+    kernel->arguments = nullptr;
     kernel->program_id = 0;
 
     debug(user_context) << "Compiling GLSL kernel (size = " << size << "):\n";
@@ -458,8 +459,9 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
     const char *line = kernel->source;
     while (*line) {
         const char *next_line = strchr(line, '\n') + 1;
-        if (!next_line)
+        if (!next_line) {
             next_line = line + size;
+        }
 
         const char *args;
         if ((args = match_prefix(line, kernel_marker))) {
@@ -513,7 +515,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
     // Arguments are currently in reverse order, flip the list.
     {
         Argument *cur = kernel->arguments;
-        kernel->arguments = NULL;
+        kernel->arguments = nullptr;
         while (cur) {
             Argument *next = cur->next;
             cur->next = kernel->arguments;
@@ -525,7 +527,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
     return kernel;
 error:
     free(kernel);
-    return NULL;
+    return nullptr;
 }
 
 // Delete all data associated with a kernel. Also release associated OpenGL
@@ -565,8 +567,8 @@ WEAK void GlobalState::init() {
     have_vertex_array_objects = false;
     have_texture_rg = false;
     have_texture_rgb8_rgba8 = false;
-    // Initialize all GL function pointers to NULL
-#define GLFUNC(type, name) name = NULL;
+    // Initialize all GL function pointers to nullptr
+#define GLFUNC(type, name) name = nullptr;
     USED_GL_FUNCTIONS;
     OPTIONAL_GL_FUNCTIONS;
 #undef GLFUNC
@@ -647,13 +649,13 @@ WEAK const char *parse_int(const char *str, int *val) {
         *val = v;
         return &str[i];
     }
-    return NULL;
+    return nullptr;
 }
 
 WEAK const char *parse_opengl_version(const char *str, int *major, int *minor) {
     str = parse_int(str, major);
-    if (str == NULL || *str != '.') {
-        return NULL;
+    if (str == nullptr || *str != '.') {
+        return nullptr;
     }
     return parse_int(str + 1, minor);
 }
@@ -752,7 +754,7 @@ WEAK int halide_opengl_device_release(void *user_context) {
     ModuleState *mod = state_list;
     while (mod) {
         delete_kernel(user_context, mod->kernel);
-        mod->kernel = NULL;
+        mod->kernel = nullptr;
         ModuleState *next = mod->next;
         // do not call free(mod) to avoid dangling pointers: the module state
         // is still referenced in the code generated by Halide (see
@@ -954,7 +956,7 @@ WEAK int halide_opengl_device_malloc(void *user_context, halide_buffer_t *buf) {
             return 1;
         }
 
-        global_state.TexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, format, type, NULL);
+        global_state.TexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, format, type, nullptr);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc TexImage2D")) {
             global_state.DeleteTextures(1, &tex);
             return 1;
@@ -997,7 +999,7 @@ WEAK int halide_opengl_device_free(void *user_context, halide_buffer_t *buf) {
     }
     buf->device = 0;
     buf->device_interface->impl->release_module();
-    buf->device_interface = NULL;
+    buf->device_interface = nullptr;
 
     return result;
 }
@@ -1083,7 +1085,7 @@ WEAK int halide_opengl_copy_to_device(void *user_context, halide_buffer_t *buf) 
 
     if (!buf->host || !buf->device) {
         debug_buffer(user_context, buf);
-        error(user_context) << "Invalid copy_to_device operation: host or device NULL";
+        error(user_context) << "Invalid copy_to_device operation: host or device nullptr";
         return 1;
     }
 
@@ -1167,7 +1169,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, halide_buffer_t *buf) {
 
     if (!buf->host || !buf->device) {
         debug_buffer(user_context, buf);
-        error(user_context) << "Invalid copy_to_host operation: host or dev NULL";
+        error(user_context) << "Invalid copy_to_host operation: host or dev nullptr";
         return 1;
     }
 
@@ -1313,7 +1315,7 @@ using namespace Halide::Runtime::Internal::OpenGL;
 WEAK ModuleState *find_module(const char *stage_name) {
     ModuleState *state_ptr = state_list;
 
-    while (state_ptr != NULL) {
+    while (state_ptr != nullptr) {
         KernelInfo *kernel = state_ptr->kernel;
         if (kernel && strcmp(stage_name, kernel->name) == 0) {
             return state_ptr;
@@ -1321,7 +1323,7 @@ WEAK ModuleState *find_module(const char *stage_name) {
         state_ptr = state_ptr->next;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 //  Create wrappers that satisfy old naming conventions
@@ -1430,7 +1432,7 @@ WEAK int halide_opengl_run(void *user_context,
             // the Halide runtime
             uint64_t handle = ((halide_buffer_t *)args[i])->device;
             if (!handle) {
-                error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
+                error(user_context) << "GLSL: Encountered invalid nullptr dev pointer";
                 return 1;
             }
             if (handle == HALIDE_OPENGL_RENDER_TARGET) {
@@ -1451,7 +1453,7 @@ WEAK int halide_opengl_run(void *user_context,
             }
             uint64_t handle = ((halide_buffer_t *)args[i])->device;
             if (!handle) {
-                error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
+                error(user_context) << "GLSL: Encountered invalid nullptr dev pointer";
                 return 1;
             }
             global_state.ActiveTexture(GL_TEXTURE0 + num_active_textures);
@@ -1571,7 +1573,9 @@ WEAK int halide_opengl_run(void *user_context,
     GLint num_output_textures = 0;
     kernel_arg = kernel->arguments;
     for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
-        if (kernel_arg->kind != Argument::Outbuf) continue;
+        if (kernel_arg->kind != Argument::Outbuf) {
+            continue;
+        }
 
         halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.");
 
@@ -1586,7 +1590,7 @@ WEAK int halide_opengl_run(void *user_context,
         halide_assert(user_context, buf->dimensions >= 2);
         uint64_t handle = buf->device;
         if (!handle) {
-            error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
+            error(user_context) << "GLSL: Encountered invalid nullptr dev pointer";
             return 1;
         }
         GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
@@ -1781,7 +1785,7 @@ WEAK int halide_opengl_run(void *user_context,
     }
 
     // Draw the scene
-    global_state.DrawElements(GL_TRIANGLES, element_buffer_size, GL_UNSIGNED_INT, NULL);
+    global_state.DrawElements(GL_TRIANGLES, element_buffer_size, GL_UNSIGNED_INT, nullptr);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run DrawElements et al")) {
         return 1;
     }
@@ -1843,7 +1847,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
 
         // Construct a new ModuleState and add it to the global list
         module = (ModuleState *)malloc(sizeof(ModuleState));
-        module->kernel = NULL;
+        module->kernel = nullptr;
         module->next = state_list;
         state_list = module;
         *state = module;
@@ -1874,8 +1878,9 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
         int num_varying_float = 2;
 
         for (Argument *arg = kernel->arguments; arg; arg = arg->next) {
-            if (arg->kind == Argument::Varying)
+            if (arg->kind == Argument::Varying) {
                 ++num_varying_float;
+            }
         }
 
         int num_packed_varying_float = ((num_varying_float + 3) & ~0x3) / 4;
@@ -1913,7 +1918,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
 
         // Initialize vertex shader.
         GLuint vertex_shader_id = make_shader(user_context,
-                                              GL_VERTEX_SHADER, vertex_src.buf, NULL);
+                                              GL_VERTEX_SHADER, vertex_src.buf, nullptr);
         if (vertex_shader_id == 0) {
             halide_error(user_context, "Failed to create vertex shader");
             return 1;
@@ -1921,7 +1926,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
 
         // Create the fragment shader
         GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
-                                                kernel->source, NULL);
+                                                kernel->source, nullptr);
         // Link GLSL program
         GLuint program = global_state.CreateProgram();
         global_state.AttachShader(program, vertex_shader_id);
@@ -1940,7 +1945,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
             HalideMalloc log_tmp(user_context, log_len);
             if (log_tmp.ptr) {
                 char *log = (char *)log_tmp.ptr;
-                global_state.GetProgramInfoLog(program, log_len, NULL, log);
+                global_state.GetProgramInfoLog(program, log_len, nullptr, log);
                 debug(user_context) << "Could not link GLSL program:\n"
                                     << log << "\n";
             }
@@ -1967,7 +1972,9 @@ WEAK const halide_device_interface_t *halide_opengl_device_interface() {
 }
 
 WEAK void halide_opengl_context_lost(void *user_context) {
-    if (!global_state.initialized) return;
+    if (!global_state.initialized) {
+        return;
+    }
 
     debug(user_context) << "halide_opengl_context_lost\n";
     for (ModuleState *mod = state_list; mod; mod = mod->next) {
@@ -1976,7 +1983,6 @@ WEAK void halide_opengl_context_lost(void *user_context) {
     }
 
     global_state.init();
-    return;
 }
 
 WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, uint64_t texture_id) {
@@ -2023,7 +2029,7 @@ WEAK int halide_opengl_detach_texture(void *user_context, halide_buffer_t *buf) 
     halide_assert(user_context, buf->device_interface == &opengl_device_interface);
     buf->device = 0;
     buf->device_interface->impl->release_module();
-    buf->device_interface = NULL;
+    buf->device_interface = nullptr;
     return 0;
 }
 
@@ -2039,7 +2045,7 @@ WEAK uintptr_t halide_opengl_get_texture(void *user_context, halide_buffer_t *bu
 
 namespace {
 WEAK __attribute__((destructor)) void halide_opengl_cleanup() {
-    halide_opengl_device_release(NULL);
+    halide_opengl_device_release(nullptr);
 }
 }  // namespace
 
@@ -2083,7 +2089,7 @@ WEAK halide_device_interface_t opengl_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
-    NULL,
+    nullptr,
     &opengl_device_interface_impl};
 
 }  // namespace OpenGL

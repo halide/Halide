@@ -10,8 +10,7 @@
 
 /* Returns -1 if something went wrong, 0 otherwise */
 int32_t the_sort_func(halide_buffer_t *data) {
-    // if(data.host == NULL)
-    if (data->host == 0) {
+    if (!data->host) {
         return -1;
     }
 

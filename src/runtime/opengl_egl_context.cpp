@@ -68,20 +68,25 @@ EGLAPI void *eglGetProcAddress(const char *procname);
 extern int strcmp(const char *, const char *);
 
 WEAK int halide_opengl_create_context(void *user_context) {
-    if (eglGetCurrentContext() != EGL_NO_CONTEXT)
+    if (eglGetCurrentContext() != EGL_NO_CONTEXT) {
         return 0;
+    }
 
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (display == EGL_NO_DISPLAY || !eglInitialize(display, 0, 0)) {
+    if (display == EGL_NO_DISPLAY || !eglInitialize(display, nullptr, nullptr)) {
         PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT =
             reinterpret_cast<PFNEGLQUERYDEVICESEXTPROC>(
                 eglGetProcAddress("eglQueryDevicesEXT"));
-        if (eglQueryDevicesEXT == NULL) return 1;
+        if (eglQueryDevicesEXT == nullptr) {
+            return 1;
+        }
 
         PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT =
             reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
                 eglGetProcAddress("eglGetPlatformDisplayEXT"));
-        if (eglGetPlatformDisplayEXT == NULL) return 1;
+        if (eglGetPlatformDisplayEXT == nullptr) {
+            return 1;
+        }
 
         const int kMaxDevices = 32;
         EGLDeviceEXT egl_devices[kMaxDevices];
@@ -95,7 +100,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
         EGLBoolean initialized = EGL_FALSE;
         for (EGLint i = 0; i < num_devices; ++i) {
             display = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT,
-                                               egl_devices[i], NULL);
+                                               egl_devices[i], nullptr);
             if (eglGetError() == EGL_SUCCESS && display != EGL_NO_DISPLAY) {
                 int major, minor;
                 initialized = eglInitialize(display, &major, &minor);

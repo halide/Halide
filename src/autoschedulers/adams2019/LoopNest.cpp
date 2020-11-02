@@ -35,7 +35,7 @@ bool may_subtile() {
 vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor, bool allow_splits) {
     vector<vector<int64_t>> result;
     if (d == -1) {
-        result.push_back(vector<int64_t>());
+        result.emplace_back();
     } else {
         vector<vector<int64_t>> v = generate_tilings(s, d - 1, factor, allow_splits);
         // If we're already generated too many tiling configurations
@@ -69,22 +69,36 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                 int max_inner = 0;
                 for (int inner = 1; inner < s[d]; inner *= factor) {
                     int outer = (s[d] + inner - 1) / inner;
-                    if (is_one && outer == 1) continue;
-                    if (is_full && outer == s[d]) continue;
+                    if (is_one && outer == 1) {
+                        continue;
+                    }
+                    if (is_full && outer == s[d]) {
+                        continue;
+                    }
                     // Stop when we hit inner sizes that would do too much recompute
-                    if (inner > 1 && inner * outer * 7 > s[d] * 8) break;
+                    if (inner > 1 && inner * outer * 7 > s[d] * 8) {
+                        break;
+                    }
                     max_inner = inner;
                     t.back() = outer;
                     result.push_back(t);
                 }
                 for (int outer = 1; outer <= s[d]; outer *= factor) {
                     int inner = (s[d] + outer - 1) / outer;
-                    if (is_one && outer == 1) continue;
-                    if (is_full && outer == s[d]) continue;
+                    if (is_one && outer == 1) {
+                        continue;
+                    }
+                    if (is_full && outer == s[d]) {
+                        continue;
+                    }
                     // Stop when we get into the regime covered by the loop above.
-                    if (outer > 1 && inner < max_inner * 2) break;
+                    if (outer > 1 && inner < max_inner * 2) {
+                        break;
+                    }
                     // Or when the wasted compute gets too bad.
-                    if (inner * outer * 7 > s[d] * 8) break;
+                    if (inner * outer * 7 > s[d] * 8) {
+                        break;
+                    }
                     t.back() = outer;
                     result.push_back(t);
                 }
@@ -126,7 +140,9 @@ void LoopNest::copy_from(const LoopNest &n) {
 // used as the hash function for the coarse-to-fine beam search in
 // the paper.
 void LoopNest::structural_hash(uint64_t &h, int depth) const {
-    if (depth < 0) return;
+    if (depth < 0) {
+        return;
+    }
 
     // Which Funcs are store_at this level?
     for (const auto *n : store_at) {
@@ -192,7 +208,7 @@ void LoopNest::get_sites(StageMap<Sites> &sites,
         s.produce = this;
         s.task = task;
     }
-    for (auto f : store_at) {
+    for (const auto *f : store_at) {
         for (const auto &s : f->stages) {
             sites.get_or_create(&s).store = this;
         }
@@ -342,7 +358,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
             feat.working_set_at_root = working_set_here;
 
-            auto *p = sites.get(stage).produce;
+            const auto *p = sites.get(stage).produce;
             if (p) {
                 // Extent of the innermost dimension in the storage layout
                 int64_t innermost_storage_extent = 1;
@@ -455,7 +471,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         while (!pending.empty()) {
             const auto *e = pending.back();
             pending.pop_back();
-            if (done.count(e->producer)) continue;
+            if (done.count(e->producer)) {
+                continue;
+            }
             done.insert(e->producer);
             const auto &site = sites.get(&(e->producer->stages[0]));
             if (site.store->is_root()) {
@@ -594,7 +612,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         vector<pair<LoadJacobian, FunctionDAG::Node *>> jacobians;
         set<const FunctionDAG::Node *> done;
         while (!pending.empty()) {
-            auto p = pending.back();
+            const auto *p = pending.back();
             pending.pop_back();
             const auto &next_edges = p->incoming_edges;
             for (const auto *e : next_edges) {
@@ -607,7 +625,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                 if (innermost) {
                     if (e->consumer == stage) {
-                        for (auto &j : e->load_jacobians) {
+                        for (const auto &j : e->load_jacobians) {
                             jacobians.emplace_back(j, e->producer);
                         }
                     } else {
@@ -615,7 +633,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                         decltype(jacobians) new_jacobians;
                         for (auto &j1 : jacobians) {
                             if (e->consumer->node == j1.second) {
-                                for (auto &j2 : e->load_jacobians) {
+                                for (const auto &j2 : e->load_jacobians) {
                                     LoadJacobian j = j2 * j1.first;
                                     new_jacobians.emplace_back(j, e->producer);
                                 }
@@ -668,7 +686,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                     // Grab the Jacobians that describe the memory dependence
                     for (const auto &jac : jacobians) {
-                        if (jac.second != e->producer) continue;
+                        if (jac.second != e->producer) {
+                            continue;
+                        }
                         double n = jac.first.count();
 
                         // Classify them to figure out what's going on in the vector dimension.
@@ -944,7 +964,7 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
         // b->validate();
         return b;
     }
-    auto bound = f->make_bound();
+    auto *bound = f->make_bound();
 
     // Compute the region required
     if (f->is_output && is_root()) {
@@ -1044,7 +1064,7 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
     } else {
         aslog(0) << "\n";
     }
-    for (auto p : store_at) {
+    for (const auto *p : store_at) {
         aslog(0) << prefix << "realize: " << p->func.name() << "\n";
     }
     for (size_t i = children.size(); i > 0; i--) {
@@ -1058,7 +1078,9 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
 // Does this loop nest access the given Func
 bool LoopNest::calls(const FunctionDAG::Node *f) const {
     for (const auto &c : children) {
-        if (c->calls(f)) return true;
+        if (c->calls(f)) {
+            return true;
+        }
     }
     for (const auto *e : f->outgoing_edges) {
         if (e->consumer == stage) {
@@ -1094,24 +1116,36 @@ int64_t LoopNest::max_inlined_calls() const {
 // out the bounds so that it won't fault.
 bool LoopNest::accesses_input_buffer() const {
     for (const auto &c : children) {
-        if (c->accesses_input_buffer()) return true;
+        if (c->accesses_input_buffer()) {
+            return true;
+        }
     }
-    if (is_root()) return false;
+    if (is_root()) {
+        return false;
+    }
 
     auto check = [&](const FunctionDAG::Node::Stage *s) {
         for (const auto *e : s->incoming_edges) {
-            if (e->producer->is_input) return true;
+            if (e->producer->is_input) {
+                return true;
+            }
         }
 
         for (int t = 0; t < (int)PipelineFeatures::ScalarType::NumScalarTypes; t++) {
-            if (s->features.op_histogram[(int)PipelineFeatures::OpType::ImageCall][t] > 0) return true;
+            if (s->features.op_histogram[(int)PipelineFeatures::OpType::ImageCall][t] > 0) {
+                return true;
+            }
         }
         return false;
     };
 
-    if (check(stage)) return true;
+    if (check(stage)) {
+        return true;
+    }
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
-        if (check(&(it.key()->stages[0]))) return true;
+        if (check(&(it.key()->stages[0]))) {
+            return true;
+        }
     }
     return false;
 }
@@ -1125,7 +1159,9 @@ bool LoopNest::computes(const FunctionDAG::Node *f) const {
         return true;
     }
     for (const auto &c : children) {
-        if (c->computes(f)) return true;
+        if (c->computes(f)) {
+            return true;
+        }
     }
     return false;
 }
@@ -1183,7 +1219,7 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
         // Set up a bound for the inside of the
         // loop. computed/required is still the full region, but
         // the loop nest will be a single representative point.
-        auto single_point = bounds->make_copy();
+        auto *single_point = bounds->make_copy();
         size_t loop_dim = f->stages[s].loop.size();
         node->size.resize(loop_dim);
 
@@ -1223,7 +1259,7 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
         }
 
         // Leave region required blank inside the computation of a Func
-        node->set_bounds(f, std::move(single_point));
+        node->set_bounds(f, single_point);
         node->vector_dim = v;
 
         if (node->vectorized_loop_index >= 0) {
@@ -1238,7 +1274,7 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
             one_vector->vector_dim = v;
             one_vector->size.resize(loop_dim, 1);
             one_vector->innermost = true;
-            auto b = node->get_bounds(f)->make_copy();
+            auto *b = node->get_bounds(f)->make_copy();
             // Set the region computed inside this node to be the first vector lane
             b->loops(s, node->vectorized_loop_index).set_extent(1);
             one_vector->set_bounds(f, b);
@@ -1275,10 +1311,10 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
     inner->bounds = bounds;
     inner->store_at = store_at;
 
-    auto b = inner->get_bounds(node)->make_copy();
+    auto *b = inner->get_bounds(node)->make_copy();
 
     // Then move factors from the outer loop to the inner loop
-    auto parent_bounds = parent->get_bounds(node);
+    const auto &parent_bounds = parent->get_bounds(node);
 
     for (size_t i = 0; i < stage->loop.size(); i++) {
         int l = stage->loop[i].pure_dim;
@@ -1337,7 +1373,9 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         const auto &p_parent = bounds_at_parent->region_computed(v);
         int64_t e = p.extent();
         int64_t ep = p_parent.extent();
-        if (ep >= f->vector_size && e < f->vector_size) return result;
+        if (ep >= f->vector_size && e < f->vector_size) {
+            return result;
+        }
 
         // Don't descend into loops if the bounds required don't
         // shrink.
@@ -1348,7 +1386,9 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             total_here *= range_here.extent();
             total_at_parent *= range_at_parent.extent();
         }
-        if (total_here >= total_at_parent) return result;
+        if (total_here >= total_at_parent) {
+            return result;
+        }
     }
 
     // Figure out which child we can fuse this into
@@ -1416,7 +1456,9 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
 
                 const double tasks_per_core = (double)total / params.parallelism;
                 const double idle_cores = std::ceil(tasks_per_core) / tasks_per_core;
-                if (idle_cores > 1.1) continue;
+                if (idle_cores > 1.1) {
+                    continue;
+                }
             }
 
             // Tile this loop and place the computation at some coarser granularity
@@ -1440,10 +1482,10 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             inner->store_at = store_at;
 
             {
-                auto b = inner->get_bounds(node)->make_copy();
+                auto *b = inner->get_bounds(node)->make_copy();
 
                 // Then move factors from the outer loop to the inner loop
-                auto parent_bounds = parent->get_bounds(node);
+                const auto &parent_bounds = parent->get_bounds(node);
 
                 for (size_t i = 0; i < t.size(); i++) {
                     int64_t outer_extent = t[i];
@@ -1563,7 +1605,7 @@ void LoopNest::apply(LoopLevel here,
                      const LoopNest *parent,
                      const LoopNest *compute_site) const {
     if (is_root()) {
-        for (auto &c : children) {
+        for (const auto &c : children) {
             Func(c->node->func).compute_root();
             c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get());
             if (c->stage->index == 0) {
@@ -1659,8 +1701,9 @@ void LoopNest::apply(LoopLevel here,
             if (innermost) {
                 if (vectorized_loop_index >= 0) {
                     size_t i = 0;
-                    while (!state.vars[i].innermost_pure_dim)
+                    while (!state.vars[i].innermost_pure_dim) {
                         i++;
+                    }
                     auto &v = state.vars[i];
                     internal_assert(v.innermost_pure_dim && v.exists) << v.var.name() << "\n";
                     // Is the result of a split
@@ -1783,7 +1826,9 @@ void LoopNest::apply(LoopLevel here,
 
                 bool found = false;
                 for (const auto &v : state.vars) {
-                    if (!v.exists) continue;
+                    if (!v.exists) {
+                        continue;
+                    }
                     here = LoopLevel(node->func, v.var);
                     found = true;
                     break;
@@ -1801,7 +1846,7 @@ void LoopNest::apply(LoopLevel here,
             return;
         }
 
-        for (auto f : store_at) {
+        for (const auto *f : store_at) {
             Func(f->func).store_at(here);
         }
         for (auto s : size) {
@@ -1814,7 +1859,7 @@ void LoopNest::apply(LoopLevel here,
         } else {
             loop_level = "_at(" + here.func() + ", " + here.var().name() + ")";
         }
-        for (auto &c : children) {
+        for (const auto &c : children) {
             if (c->node != node) {
                 Func(c->node->func).compute_at(here);
             }
@@ -1824,9 +1869,9 @@ void LoopNest::apply(LoopLevel here,
                 state.schedule_source << "\n    .compute" << loop_level;
             }
         }
-        for (auto f : store_at) {
+        for (const auto *f : store_at) {
             bool computed_here = false;
-            for (auto &c : children) {
+            for (const auto &c : children) {
                 if (c->node == f) {
                     computed_here = true;
                     break;

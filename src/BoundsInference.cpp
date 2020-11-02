@@ -50,10 +50,8 @@ class DependsOnBoundsInference : public IRVisitor {
     }
 
 public:
-    bool result;
-    DependsOnBoundsInference()
-        : result(false) {
-    }
+    bool result = false;
+    DependsOnBoundsInference() = default;
 };
 
 bool depends_on_bounds_inference(const Expr &e) {
@@ -808,7 +806,9 @@ public:
         // this is straight-forward.
         for (size_t i = 0; i < f.size(); i++) {
 
-            if (inlined[i]) continue;
+            if (inlined[i]) {
+                continue;
+            }
 
             Stage s;
             s.func = f[i];
@@ -954,7 +954,7 @@ public:
         }
 
         // The region required of the each output is expanded to include the size of the output buffer.
-        for (Function output : outputs) {
+        for (const Function &output : outputs) {
             Box output_box;
             string buffer_name = output.name();
             if (output.outputs() > 1) {
@@ -981,7 +981,9 @@ public:
             }
             for (size_t i = 0; i < stages.size(); i++) {
                 Stage &s = stages[i];
-                if (!s.func.same_as(output)) continue;
+                if (!s.func.same_as(output)) {
+                    continue;
+                }
                 s.bounds[{s.name, s.stage}] = output_box;
             }
         }
