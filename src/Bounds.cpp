@@ -564,9 +564,11 @@ private:
         } else if (can_prove(b.min == b.max)) {
             Expr e1 = a.has_lower_bound() ? a.min / b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max / b.max : a.max;
-            if (is_positive_const(b.min) || op->type.is_uint()) {
+            // TODO: handle real numbers with can_prove(b.min > 0) and can_prove(b.min < 0) as well - treating floating point as
+            // reals can be error prone when dealing with division near 0, so for now we only consider integers in the can_prove() path
+            if (op->type.is_uint() || is_positive_const(b.min) || (op->type.is_int() && can_prove(b.min >= 0))) {
                 interval = Interval(e1, e2);
-            } else if (is_negative_const(b.min)) {
+            } else if (is_negative_const(b.min) || (op->type.is_int() && can_prove(b.min <= 0))) {
                 if (e1.same_as(Interval::neg_inf())) {
                     e1 = Interval::pos_inf();
                 }

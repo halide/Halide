@@ -134,7 +134,10 @@ public:
         other.ptr = nullptr;
     }
 
+    // NOLINTNEXTLINE(bugprone-unhandled-self-assignment)
     IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {
+        // Same-ptr but different-this happens frequently enough
+        // to check for (see https://github.com/halide/Halide/pull/5412)
         if (other.ptr == ptr) {
             return *this;
         }
