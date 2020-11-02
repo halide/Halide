@@ -21,7 +21,7 @@ using namespace Halide::Tools;
 int main(int argc, char **argv) {
     if (argc < 8) {
         printf("Usage: ./process raw.png color_temp gamma contrast sharpen timing_iterations output.png\n"
-               "e.g. ./process raw.png 3700 2.0 50 1.0 5 output.png");
+               "e.g. ./process raw.png 3700 2.0 50 1.0 5 output.png\n");
         return 0;
     }
 

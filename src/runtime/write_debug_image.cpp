@@ -98,7 +98,9 @@ WEAK bool ends_with(const char *filename, const char *suffix) {
         s++;
     }
     while (s != suffix && f != filename) {
-        if (*f != *s) return false;
+        if (*f != *s) {
+            return false;
+        }
         f--;
         s--;
     }
@@ -141,7 +143,9 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
     halide_copy_to_host(user_context, buf);
 
     ScopedFile f(filename, "wb");
-    if (!f.open()) return -2;
+    if (!f.open()) {
+        return -2;
+    }
 
     size_t elts = 1;
     halide_dimension_t shape[4];

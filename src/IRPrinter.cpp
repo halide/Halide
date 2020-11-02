@@ -129,6 +129,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     case MemoryType::GPUShared:
         out << "GPUShared";
         break;
+    case MemoryType::GPUTexture:
+        out << "GPUTexture";
+        break;
     case MemoryType::LockedCache:
         out << "LockedCache";
         break;
@@ -856,7 +859,9 @@ void IRPrinter::visit(const Realize *op) {
         stream << ", ";
         print_no_parens(op->bounds[i].extent);
         stream << "]";
-        if (i < op->bounds.size() - 1) stream << ", ";
+        if (i < op->bounds.size() - 1) {
+            stream << ", ";
+        }
     }
     stream << ")";
     if (op->memory_type != MemoryType::Auto) {
@@ -892,7 +897,9 @@ void IRPrinter::visit(const Prefetch *op) {
         stream << ", ";
         print_no_parens(op->bounds[i].extent);
         stream << "]";
-        if (i < op->bounds.size() - 1) stream << ", ";
+        if (i < op->bounds.size() - 1) {
+            stream << ", ";
+        }
     }
     stream << ")\n";
     if (has_cond) {
@@ -918,7 +925,7 @@ void IRPrinter::visit(const Fork *op) {
     stmts.push_back(rest);
 
     stream << get_indent() << "fork ";
-    for (Stmt s : stmts) {
+    for (const Stmt &s : stmts) {
         stream << "{\n";
         indent++;
         print(s);

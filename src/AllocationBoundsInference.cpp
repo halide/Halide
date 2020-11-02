@@ -126,7 +126,9 @@ public:
                 touched_by_extern.insert(f.name());
                 for (size_t i = 0; i < f.extern_arguments().size(); i++) {
                     ExternFuncArgument arg = f.extern_arguments()[i];
-                    if (!arg.is_func()) continue;
+                    if (!arg.is_func()) {
+                        continue;
+                    }
                     Function input(arg.func);
                     touched_by_extern.insert(input.name());
                 }

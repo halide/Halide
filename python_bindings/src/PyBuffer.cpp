@@ -20,7 +20,7 @@ std::ostream &operator<<(std::ostream &stream, const halide_dimension_t &d) {
 std::ostream &operator<<(std::ostream &stream, const std::vector<halide_dimension_t> &shape) {
     stream << "[";
     bool need_comma = false;
-    for (auto &d : shape) {
+    for (const auto &d : shape) {
         if (need_comma) {
             stream << ",";
         }
@@ -286,8 +286,7 @@ public:
         this->set_host_dirty();
     }
 
-    ~PyBuffer() override {
-    }
+    ~PyBuffer() override = default;
 };
 
 }  // namespace
@@ -364,7 +363,7 @@ void define_buffer(py::module &m) {
             .def("set_name", &Buffer<>::set_name)
             .def("name", &Buffer<>::name)
 
-            .def("same_as", (bool (Buffer<>::*)(const Buffer<> &other)) & Buffer<>::same_as, py::arg("other"))
+            .def("same_as", (bool (Buffer<>::*)(const Buffer<> &other) const) & Buffer<>::same_as, py::arg("other"))
             .def("defined", &Buffer<>::defined)
 
             .def("type", &Buffer<>::type)

@@ -364,7 +364,7 @@ public:
 
     /** Check if two Buffer objects point to the same underlying Buffer */
     template<typename T2>
-    bool same_as(const Buffer<T2> &other) {
+    bool same_as(const Buffer<T2> &other) const {
         return (const void *)(contents.get()) == (const void *)(other.contents.get());
     }
 
@@ -386,7 +386,6 @@ public:
     }
     // @}
 
-public:
     // We forward numerous methods from the underlying Buffer
 #define HALIDE_BUFFER_FORWARD_CONST(method)                                                                                      \
     template<typename... Args>                                                                                                   \

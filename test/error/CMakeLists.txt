@@ -36,6 +36,7 @@ tests(GROUPS error
       define_after_use.cpp
       device_dirty_with_no_device_support.cpp
       device_target_mismatch.cpp
+      dupe_param_name.cpp
       expanding_reduction.cpp
       extern_func_self_argument.cpp
       five_d_gpu_buffer.cpp

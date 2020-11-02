@@ -5,8 +5,7 @@
 namespace Halide {
 namespace Internal {
 
-CodeGen_GPU_Dev::~CodeGen_GPU_Dev() {
-}
+CodeGen_GPU_Dev::~CodeGen_GPU_Dev() = default;
 
 bool CodeGen_GPU_Dev::is_gpu_var(const std::string &name) {
     return is_gpu_block_var(name) || is_gpu_thread_var(name);
@@ -40,11 +39,9 @@ class IsBlockUniform : public IRVisitor {
     }
 
 public:
-    bool result;
+    bool result = true;
 
-    IsBlockUniform()
-        : result(true) {
-    }
+    IsBlockUniform() = default;
 };
 }  // namespace
 

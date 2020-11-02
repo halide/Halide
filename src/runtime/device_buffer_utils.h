@@ -46,8 +46,9 @@ struct device_copy {
 
 WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
     // Skip size-1 dimensions
-    while (d >= 0 && copy.extent[d] == 1)
+    while (d >= 0 && copy.extent[d] == 1) {
         d--;
+    }
 
     if (d == -1) {
         const void *from = (void *)(copy.src + src_off);
@@ -130,7 +131,7 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
             c.src_stride_bytes[j] = c.src_stride_bytes[j - 1];
         }
         c.extent[insert] = dst->dim[i].extent;
-        // debug(NULL) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
+        // debug(nullptr) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
         c.dst_stride_bytes[insert] = dst_stride_bytes;
         c.src_stride_bytes[insert] = src_stride_bytes;
     };

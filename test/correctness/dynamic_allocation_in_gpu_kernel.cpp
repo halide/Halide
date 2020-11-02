@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     // [f1,f3,f6], another for [f2,f4], and a third for f5.
 
     Var xi, yi;
-    g.gpu_tile(x, y, xi, yi, 32, 16);
+    g.gpu_tile(x, y, xi, yi, 16, 8);
     f1.compute_at(g, x).store_in(MemoryType::Heap);
     f2.compute_at(g, x).store_in(MemoryType::Heap);
     f3.compute_at(g, x).store_in(MemoryType::Heap);

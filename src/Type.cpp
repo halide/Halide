@@ -100,8 +100,12 @@ bool Type::is_min(uint64_t x) const {
 }
 
 bool Type::can_represent(Type other) const {
-    if (*this == other) return true;
-    if (lanes() != other.lanes()) return false;
+    if (*this == other) {
+        return true;
+    }
+    if (lanes() != other.lanes()) {
+        return false;
+    }
     if (is_int()) {
         return ((other.is_int() && other.bits() <= bits()) ||
                 (other.is_uint() && other.bits() < bits()));
@@ -256,7 +260,7 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
 
         // If there is no type info or is generating C (not C++) and
         // the type is a class or in an inner scope, just use void *.
-        if (type.handle_type == NULL ||
+        if (type.handle_type == nullptr ||
             (!c_plus_plus &&
              (!type.handle_type->namespaces.empty() ||
               !type.handle_type->enclosing_types.empty() ||
@@ -339,8 +343,9 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
             user_error << "Can't represent an integer with this many bits in C: " << type << "\n";
         }
     }
-    if (include_space && needs_space)
+    if (include_space && needs_space) {
         oss << " ";
+    }
     return oss.str();
 }
 

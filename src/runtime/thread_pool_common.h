@@ -14,7 +14,7 @@ int gettid() {
 }
 }  // namespace
 
-#define log_message(stuff) print(NULL) << gettid() << ": " << stuff << "\n"
+#define log_message(stuff) print(nullptr) << gettid() << ": " << stuff << "\n"
 #else
 #define log_message(stuff)
 #endif
@@ -40,7 +40,7 @@ struct work {
     int active_workers;
     int exit_status;
     int next_semaphore;
-    // which condition variable is the owner sleeping on. NULL if it isn't sleeping.
+    // which condition variable is the owner sleeping on. nullptr if it isn't sleeping.
     bool owner_is_sleeping;
 
     ALWAYS_INLINE bool make_runnable() {
@@ -150,7 +150,7 @@ struct work_queue_t {
         while (bytes < limit && *bytes == 0) {
             bytes++;
         }
-        halide_assert(NULL, bytes == limit && "Logic error in thread pool work queue initialization.\n");
+        halide_assert(nullptr, bytes == limit && "Logic error in thread pool work queue initialization.\n");
     }
 
     // Return the work queue to initial state. Must be called while locked
@@ -166,8 +166,8 @@ struct work_queue_t {
 WEAK work_queue_t work_queue = {};
 
 #if EXTENDED_DEBUG
-WEAK void print_job(work *job, const char *indent, const char *prefix = NULL) {
-    if (prefix == NULL) {
+WEAK void print_job(work *job, const char *indent, const char *prefix = nullptr) {
+    if (prefix == nullptr) {
         prefix = indent;
     }
     const char *name = job->task.name ? job->task.name : "<no name>";
@@ -181,7 +181,7 @@ WEAK void print_job(work *job, const char *indent, const char *prefix = NULL) {
 WEAK void dump_job_state() {
     log_message("Dumping job state, jobs in queue:");
     work *job = work_queue.jobs;
-    while (job != NULL) {
+    while (job != nullptr) {
         print_job(job, "    ");
         job = job->next_job;
     }
@@ -234,7 +234,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             work *parent_job = job->parent_job;
 
             int threads_available;
-            if (parent_job == NULL) {
+            if (parent_job == nullptr) {
                 // The + 1 is because work_queue.threads_created does not include the main thread.
                 threads_available = (work_queue.threads_created + 1) - work_queue.threads_reserved;
             } else {
@@ -300,7 +300,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         // though there are no outstanding tasks for it.
         job->active_workers++;
 
-        if (job->parent_job == NULL) {
+        if (job->parent_job == nullptr) {
             work_queue.threads_reserved += job->task.min_threads;
             log_message("Reserved " << job->task.min_threads << " on work queue for " << job->task.name << " giving " << work_queue.threads_reserved << " of " << work_queue.threads_created + 1);
         } else {
@@ -324,7 +324,9 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                        job->make_runnable()) {
                     iters++;
                 }
-                if (iters == 0) break;
+                if (iters == 0) {
+                    break;
+                }
 
                 // Do them
                 result = halide_do_loop_task(job->user_context, job->task.fn,
@@ -390,7 +392,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             }
         }
 
-        if (job->parent_job == NULL) {
+        if (job->parent_job == nullptr) {
             work_queue.threads_reserved -= job->task.min_threads;
             log_message("Returned " << job->task.min_threads << " to work queue for " << job->task.name << " giving " << work_queue.threads_reserved << " of " << work_queue.threads_created + 1);
         } else {
@@ -465,7 +467,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         }
     }
 
-    if (task_parent == NULL) {
+    if (task_parent == nullptr) {
         // This is here because some top-level jobs may block, but are not accounted for
         // in any enclosing min_threads count. In order to handle extern stages and such
         // correctly, we likely need to make the total min_threads for an invocation of
@@ -488,7 +490,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
             // increased, or if there aren't enough threads to complete this new task.
             work_queue.a_team_size++;
             work_queue.threads[work_queue.threads_created++] =
-                halide_spawn_thread(worker_thread, NULL);
+                halide_spawn_thread(worker_thread, nullptr);
         }
         log_message("enqueue_work_already_locked top level job " << jobs[0].task.name << " with min_threads " << min_threads << " work_queue.threads_created " << work_queue.threads_created << " work_queue.threads_reserved " << work_queue.threads_reserved);
         if (job_has_acquires || job_may_block) {
@@ -496,9 +498,9 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         }
     } else {
         log_message("enqueue_work_already_locked job " << jobs[0].task.name << " with min_threads " << min_threads << " task_parent " << task_parent->task.name << " task_parent->task.min_threads " << task_parent->task.min_threads << " task_parent->threads_reserved " << task_parent->threads_reserved);
-        halide_assert(NULL, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
-                                             task_parent->threads_reserved)) &&
-                                "Logic error: thread over commit.\n");
+        halide_assert(nullptr, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
+                                                task_parent->threads_reserved)) &&
+                                   "Logic error: thread over commit.\n");
         if (job_has_acquires || job_may_block) {
             task_parent->threads_reserved++;
         }
@@ -537,7 +539,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
     }
 
     if (job_has_acquires || job_may_block) {
-        if (task_parent != NULL) {
+        if (task_parent != nullptr) {
             task_parent->threads_reserved--;
         } else {
             work_queue.threads_reserved--;
@@ -585,15 +587,15 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     }
 
     work job;
-    job.task.fn = NULL;
+    job.task.fn = nullptr;
     job.task.min = min;
     job.task.extent = size;
     job.task.serial = false;
-    job.task.semaphores = NULL;
+    job.task.semaphores = nullptr;
     job.task.num_semaphores = 0;
     job.task.closure = closure;
     job.task.min_threads = 0;
-    job.task.name = NULL;
+    job.task.name = nullptr;
     job.task_fn = f;
     job.user_context = user_context;
     job.exit_status = 0;
@@ -602,9 +604,9 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.owner_is_sleeping = false;
     job.siblings = &job;  // guarantees no other job points to the same siblings.
     job.sibling_count = 0;
-    job.parent_job = NULL;
+    job.parent_job = nullptr;
     halide_mutex_lock(&work_queue.mutex);
-    enqueue_work_already_locked(1, &job, NULL);
+    enqueue_work_already_locked(1, &job, nullptr);
     worker_thread_already_locked(&job);
     halide_mutex_unlock(&work_queue.mutex);
     return job.exit_status;
@@ -622,7 +624,7 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
             continue;
         }
         jobs[i].task = *tasks++;
-        jobs[i].task_fn = NULL;
+        jobs[i].task_fn = nullptr;
         jobs[i].user_context = user_context;
         jobs[i].exit_status = 0;
         jobs[i].active_workers = 0;
@@ -652,7 +654,7 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
 
 WEAK int halide_set_num_threads(int n) {
     if (n < 0) {
-        halide_error(NULL, "halide_set_num_threads: must be >= 0.");
+        halide_error(nullptr, "halide_set_num_threads: must be >= 0.");
     }
     // Don't make this an atomic swap - we don't want to be changing
     // the desired number of threads while another thread is in the

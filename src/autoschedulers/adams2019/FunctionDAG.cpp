@@ -352,7 +352,7 @@ BoundContents::Layout::~Layout() {
     for (auto *b : pool) {
         b->~BoundContents();
     }
-    for (auto b : blocks) {
+    for (auto *b : blocks) {
         free(b);
     }
 }
@@ -496,7 +496,9 @@ FunctionDAG::Edge::BoundInfo::BoundInfo(const Expr &e, const Node::Stage &consum
 
 void FunctionDAG::Edge::add_load_jacobian(LoadJacobian j1) {
     for (auto &j2 : load_jacobians) {
-        if (j2.merge(j1)) return;
+        if (j2.merge(j1)) {
+            return;
+        }
     }
     load_jacobians.emplace_back(std::move(j1));
 }
@@ -549,7 +551,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
 
 FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target) {
     map<string, Function> env;
-    for (Function o : outputs) {
+    for (const Function &o : outputs) {
         populate_environment(o, env);
     }
 
@@ -699,7 +701,9 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             for (size_t i = 0; i < sched.dims().size(); i++) {
                 const auto &d = sched.dims()[i];
                 // Skip synthetic loops like "__outermost"
-                if (!stage_scope_with_symbolic_rvar_bounds.contains(d.var)) continue;
+                if (!stage_scope_with_symbolic_rvar_bounds.contains(d.var)) {
+                    continue;
+                }
 
                 Node::Loop l;
                 l.var = d.var;
@@ -807,7 +811,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 int leaves = 0;
                 Type narrowest_type;
                 map<string, int> calls;
-                CheckTypes(Function f)
+                CheckTypes(const Function &f)
                     : func(f) {
                 }
             };
@@ -843,7 +847,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             if (node.is_output) {
                 // Get the bounds estimate
                 map<string, Span> estimates;
-                for (auto b : consumer.schedule().estimates()) {
+                for (const auto &b : consumer.schedule().estimates()) {
                     int64_t i_min = *as_const_int(b.min);
                     int64_t i_extent = *as_const_int(b.extent);
 
@@ -866,7 +870,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                         estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
                     }
                 }
-                for (auto b : consumer.schedule().bounds()) {
+                for (const auto &b : consumer.schedule().bounds()) {
                     const int64_t *i_min = as_const_int(b.min);
                     const int64_t *i_extent = as_const_int(b.extent);
                     if (i_min && i_extent) {

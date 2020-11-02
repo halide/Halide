@@ -1,6 +1,6 @@
+#include <cstdint>
 #include <mutex>
 #include <set>
-#include <stdint.h>
 #include <string>
 
 #ifdef _WIN32
@@ -54,37 +54,8 @@ bool have_symbol(const char *s) {
 
 typedef struct CUctx_st *CUcontext;
 
-struct SharedCudaContext {
-    CUctx_st *ptr;
-    volatile int lock;
-
-    // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext()
-        : ptr(0), lock(0) {
-    }
-
-    // Note that we never free the context, because static destructor
-    // order is unpredictable, and we can't free the context before
-    // all JITModules are freed. Users may be stashing Funcs or Images
-    // in globals, and these keep JITModules around.
-} cuda_ctx;
-
 typedef struct cl_context_st *cl_context;
 typedef struct cl_command_queue_st *cl_command_queue;
-
-// A single global OpenCL context and command queue to share between
-// jitted functions.
-struct SharedOpenCLContext {
-    cl_context context;
-    cl_command_queue command_queue;
-    volatile int lock;
-
-    SharedOpenCLContext()
-        : context(nullptr), command_queue(nullptr), lock(0) {
-    }
-
-    // We never free the context, for the same reason as above.
-} cl_ctx;
 
 void load_opengl() {
 #if defined(__linux__)
@@ -138,9 +109,7 @@ public:
     mutable RefCount ref_count;
 
     // Just construct a module with symbols to import into other modules.
-    JITModuleContents()
-        : execution_engine(nullptr) {
-    }
+    JITModuleContents() = default;
 
     ~JITModuleContents() {
         if (execution_engine != nullptr) {
@@ -151,7 +120,7 @@ public:
 
     std::map<std::string, JITModule::Symbol> exports;
     llvm::LLVMContext context;
-    ExecutionEngine *execution_engine;
+    ExecutionEngine *execution_engine = nullptr;
     std::vector<JITModule> dependencies;
     JITModule::Symbol entrypoint;
     JITModule::Symbol argv_entrypoint;
@@ -174,7 +143,7 @@ namespace {
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
-    llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
+    llvm::Function *fn = ee.FindFunctionNamed(name);
     internal_assert(fn->getName() == name);
     void *f = (void *)ee.getFunctionAddress(name);
     if (!f) {
@@ -304,7 +273,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     }
     ExecutionEngine *ee = engine_builder.create(tm);
 
-    if (!ee) std::cerr << error_string << "\n";
+    if (!ee) {
+        std::cerr << error_string << "\n";
+    }
     internal_assert(ee) << "Couldn't create execution engine\n";
 
     // Do any target-specific initialization
@@ -400,7 +371,9 @@ JITModule::Symbol JITModule::find_symbol_by_name(const std::string &name) const 
     }
     for (const JITModule &dep : jit_module->dependencies) {
         JITModule::Symbol s = dep.find_symbol_by_name(name);
-        if (s.address) return s;
+        if (s.address) {
+            return s;
+        }
     }
     return JITModule::Symbol();
 }
@@ -672,8 +645,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::OpenCL, false);
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
-        one_gpu.set_feature(Target::HVX_64, false);
-        one_gpu.set_feature(Target::HVX_128, false);
+        one_gpu.set_feature(Target::HVX, false);
         one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
@@ -732,11 +704,11 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
-            one_gpu.set_feature(Target::HVX_64);
+            one_gpu.set_feature(Target::HVX);
             module_name = "debug_hexagon";
             break;
         case Hexagon:
-            one_gpu.set_feature(Target::HVX_64);
+            one_gpu.set_feature(Target::HVX);
             module_name += "hexagon";
             break;
         case D3D12ComputeDebug:
@@ -894,7 +866,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (target.has_feature(Target::HVX)) {
         auto kind = target.has_feature(Target::Debug) ? HexagonDebug : Hexagon;
         JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {

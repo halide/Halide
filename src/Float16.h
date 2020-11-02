@@ -2,7 +2,7 @@
 #define HALIDE_FLOAT16_H
 
 #include "runtime/HalideRuntime.h"
-#include <stdint.h>
+#include <cstdint>
 #include <string>
 
 namespace Halide {
