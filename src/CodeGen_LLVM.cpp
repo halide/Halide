@@ -1245,7 +1245,11 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
+#if LLVM_VERSION >= 120
+    llvm::PassBuilder pb(/*DebugLogging*/ false, tm.get(), pto);
+#else
     llvm::PassBuilder pb(tm.get(), pto);
+#endif
 
     bool debug_pass_manager = false;
     // These analysis managers have to be declared in this order.
