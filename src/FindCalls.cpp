@@ -9,7 +9,6 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::pair;
 using std::string;
 
 namespace {
