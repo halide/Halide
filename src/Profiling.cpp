@@ -351,7 +351,7 @@ Stmt inject_profiling(Stmt s, const string &pipeline_name) {
                            MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
-    for (std::pair<string, int> &p : profiling.indices) {
+    for (const std::pair<string, int> &p : profiling.indices) {
         s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
     }
 
