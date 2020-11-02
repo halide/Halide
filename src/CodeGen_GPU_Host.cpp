@@ -441,7 +441,14 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                          i));
             }
 
-            builder->CreateStore(ConstantInt::get(i8_t, closure_args[i].is_buffer),
+            int8_t buffer_type = 0;
+            if (closure_args[i].is_buffer && closure_args[i].memory_type == MemoryType::GPUTexture) {
+                buffer_type = 2;
+            } else if (closure_args[i].is_buffer) {
+                buffer_type = 1;
+            }
+
+            builder->CreateStore(ConstantInt::get(i8_t, buffer_type),
                                  builder->CreateConstGEP2_32(
                                      gpu_arg_is_buffer_arr_type,
                                      gpu_arg_is_buffer_arr,

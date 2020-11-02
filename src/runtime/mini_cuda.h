@@ -229,6 +229,136 @@ typedef struct CUDA_MEMCPY3D_st {
     size_t Depth;        /**< Depth of 3D memory copy */
 } CUDA_MEMCPY3D;
 
+typedef unsigned long long cudaTextureObject_t;
+
+enum cudaChannelFormatKind {
+    cudaChannelFormatKindSigned = 0,   /**< Signed channel format */
+    cudaChannelFormatKindUnsigned = 1, /**< Unsigned channel format */
+    cudaChannelFormatKindFloat = 2,    /**< Float channel format */
+    cudaChannelFormatKindNone = 3      /**< No channel format */
+};
+
+enum cudaResourceType {
+    cudaResourceTypeArray = 0x00,
+    cudaResourceTypeMipmappedArray = 0x01,
+    cudaResourceTypeLinear = 0x02,
+    cudaResourceTypePitch2D = 0x03
+};
+
+struct cudaChannelFormatDesc {
+    int x, y, z, w;
+    enum cudaChannelFormatKind f;
+};
+
+enum cudaTextureAddressMode {
+    cudaAddressModeWrap = 0,
+    cudaAddressModeClamp = 1,
+    cudaAddressModeMirror = 2,
+    cudaAddressModeBorder = 3
+};
+
+enum cudaTextureFilterMode {
+    cudaFilterModePoint = 0,
+    cudaFilterModeLinear = 1
+};
+
+enum cudaTextureReadMode {
+    cudaReadModeElementType = 0,
+    cudaReadModeNormalizedFloat = 1
+};
+
+/**
+ * CUDA texture resource view formats
+ */
+enum cudaResourceViewFormat
+{
+    cudaResViewFormatNone                      = 0x00, /**< No resource view format (use underlying resource format) */
+    cudaResViewFormatUnsignedChar1             = 0x01, /**< 1 channel unsigned 8-bit integers */
+    cudaResViewFormatUnsignedChar2             = 0x02, /**< 2 channel unsigned 8-bit integers */
+    cudaResViewFormatUnsignedChar4             = 0x03, /**< 4 channel unsigned 8-bit integers */
+    cudaResViewFormatSignedChar1               = 0x04, /**< 1 channel signed 8-bit integers */
+    cudaResViewFormatSignedChar2               = 0x05, /**< 2 channel signed 8-bit integers */
+    cudaResViewFormatSignedChar4               = 0x06, /**< 4 channel signed 8-bit integers */
+    cudaResViewFormatUnsignedShort1            = 0x07, /**< 1 channel unsigned 16-bit integers */
+    cudaResViewFormatUnsignedShort2            = 0x08, /**< 2 channel unsigned 16-bit integers */
+    cudaResViewFormatUnsignedShort4            = 0x09, /**< 4 channel unsigned 16-bit integers */
+    cudaResViewFormatSignedShort1              = 0x0a, /**< 1 channel signed 16-bit integers */
+    cudaResViewFormatSignedShort2              = 0x0b, /**< 2 channel signed 16-bit integers */
+    cudaResViewFormatSignedShort4              = 0x0c, /**< 4 channel signed 16-bit integers */
+    cudaResViewFormatUnsignedInt1              = 0x0d, /**< 1 channel unsigned 32-bit integers */
+    cudaResViewFormatUnsignedInt2              = 0x0e, /**< 2 channel unsigned 32-bit integers */
+    cudaResViewFormatUnsignedInt4              = 0x0f, /**< 4 channel unsigned 32-bit integers */
+    cudaResViewFormatSignedInt1                = 0x10, /**< 1 channel signed 32-bit integers */
+    cudaResViewFormatSignedInt2                = 0x11, /**< 2 channel signed 32-bit integers */
+    cudaResViewFormatSignedInt4                = 0x12, /**< 4 channel signed 32-bit integers */
+    cudaResViewFormatHalf1                     = 0x13, /**< 1 channel 16-bit floating point */
+    cudaResViewFormatHalf2                     = 0x14, /**< 2 channel 16-bit floating point */
+    cudaResViewFormatHalf4                     = 0x15, /**< 4 channel 16-bit floating point */
+    cudaResViewFormatFloat1                    = 0x16, /**< 1 channel 32-bit floating point */
+    cudaResViewFormatFloat2                    = 0x17, /**< 2 channel 32-bit floating point */
+    cudaResViewFormatFloat4                    = 0x18, /**< 4 channel 32-bit floating point */
+    cudaResViewFormatUnsignedBlockCompressed1  = 0x19, /**< Block compressed 1 */
+    cudaResViewFormatUnsignedBlockCompressed2  = 0x1a, /**< Block compressed 2 */
+    cudaResViewFormatUnsignedBlockCompressed3  = 0x1b, /**< Block compressed 3 */
+    cudaResViewFormatUnsignedBlockCompressed4  = 0x1c, /**< Block compressed 4 unsigned */
+    cudaResViewFormatSignedBlockCompressed4    = 0x1d, /**< Block compressed 4 signed */
+    cudaResViewFormatUnsignedBlockCompressed5  = 0x1e, /**< Block compressed 5 unsigned */
+    cudaResViewFormatSignedBlockCompressed5    = 0x1f, /**< Block compressed 5 signed */
+    cudaResViewFormatUnsignedBlockCompressed6H = 0x20, /**< Block compressed 6 unsigned half-float */
+    cudaResViewFormatSignedBlockCompressed6H   = 0x21, /**< Block compressed 6 signed half-float */
+    cudaResViewFormatUnsignedBlockCompressed7  = 0x22  /**< Block compressed 7 */
+};
+
+struct cudaResourceViewDesc {
+    enum cudaResourceViewFormat format;
+    size_t width;
+    size_t height;
+    size_t depth;
+    unsigned int firstMipmapLevel;
+    unsigned int lastMipmapLevel;
+    unsigned int firstLayer;
+    unsigned int lastLayer;
+};
+
+struct cudaTextureDesc {
+    enum cudaTextureAddressMode addressMode[3];
+    enum cudaTextureFilterMode filterMode;
+    enum cudaTextureReadMode readMode;
+    int sRGB;
+    float borderColor[4];
+    int normalizedCoords;
+    unsigned int maxAnisotropy;
+    enum cudaTextureFilterMode mipmapFilterMode;
+    float mipmapLevelBias;
+    float minMipmapLevelClamp;
+    float maxMipmapLevelClamp;
+};
+
+struct cudaResourceDesc {
+    enum cudaResourceType resType;
+
+    union {
+        struct {
+            // cudaArray_t array;
+        } array;
+        struct {
+            // cudaMipmappedArray_t mipmap;
+        } mipmap;
+        struct {
+            void *devPtr;
+            struct cudaChannelFormatDesc desc;
+            size_t sizeInBytes;
+        } linear;
+        struct {
+            void *devPtr;
+            struct cudaChannelFormatDesc desc;
+            size_t width;
+            size_t height;
+            size_t pitchInBytes;
+        } pitch2D;
+    } res;
+};
+
 #define CU_POINTER_ATTRIBUTE_CONTEXT 1
 
 }  // namespace Cuda

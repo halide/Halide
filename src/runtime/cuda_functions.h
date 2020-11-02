@@ -47,6 +47,9 @@ CUDA_FN(CUresult, cuPointerGetAttribute, (void *result, int query, CUdeviceptr p
 
 CUDA_FN_OPTIONAL(CUresult, cuStreamSynchronize, (CUstream hStream));
 
+CUDA_FN_OPTIONAL(CUresult,  cudaCreateTextureObject, (cudaTextureObject_t *pTexObject, const struct cudaResourceDesc *pResDesc, const struct cudaTextureDesc *pTexDesc, const struct cudaResourceViewDesc *pResViewDesc));
+CUDA_FN_OPTIONAL(CUresult, cudaDestroyTextureObject, (cudaTextureObject_t texObject));
+
 #undef CUDA_FN
 #undef CUDA_FN_OPTIONAL
 #undef CUDA_FN_3020

@@ -1163,8 +1163,24 @@ WEAK int halide_cuda_run(void *user_context,
     for (size_t i = 0; i <= num_args; i++) {  // Get nullptr at end.
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            dev_handles[i] = ((halide_buffer_t *)args[i])->device;
-            translated_args[i] = &(dev_handles[i]);
+            if (arg_is_buffer[i] == 2) {
+                cudaResourceDesc rdesc;
+                cudaTextureDesc tdesc;
+                cudaResourceViewDesc rviewdesc;
+                cudaTextureObject_t *texture = (cudaTextureObject_t *)&dev_handles[i];
+                err = cudaCreateTextureObject(texture, &rdesc, &tdesc, &rviewdesc);
+                if (err != CUDA_SUCCESS) {
+                    error(user_context) << "CUDA: cudaCreateTextureObject for arg " << (int)i << "failed: "
+                                        << get_error_name(err);
+                    free(dev_handles);
+                    free(translated_args);
+                    return err;
+                }
+                translated_args[i] = (void *)*texture;
+            } else {
+                dev_handles[i] = ((halide_buffer_t *)args[i])->device;
+                translated_args[i] = &(dev_handles[i]);
+            }
             debug(user_context) << "    halide_cuda_run translated arg" << (int)i
                                 << " [" << (*((void **)translated_args[i])) << " ...]\n";
         } else {
@@ -1192,6 +1208,14 @@ WEAK int halide_cuda_run(void *user_context,
                          stream,
                          translated_args,
                          nullptr);
+
+    for (size_t i = 0; i <= num_args; i++) {  // Get nullptr at end.
+        if (arg_is_buffer[i] == 2) {
+            cudaTextureObject_t texture = (cudaTextureObject_t)translated_args[i];
+            cudaDestroyTextureObject(texture);
+        }
+    }
+
     free(dev_handles);
     free(translated_args);
     if (err != CUDA_SUCCESS) {
@@ -1309,6 +1333,38 @@ WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *min
     }
 
     return 0;
+}
+
+WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t *buf, bool sampled) {
+    if (!cudaCreateTextureObject) {
+        debug(user_context) << "requesting texture object but don't have runtime functions";
+        return -1;
+    }
+
+    struct cudaResourceDesc resourceDesc;
+    struct cudaTextureDesc textureDesc;
+    struct cudaResourceViewDesc resourceViewDesc;
+
+    cudaTextureObject_t texture;
+    CUresult err = cudaCreateTextureObject(&texture, &resourceDesc, &textureDesc, &resourceViewDesc);
+
+    if (err != CUDA_SUCCESS) {
+        error(user_context)
+            << "CUDA: cudaCreateTextureObject failed ("
+            << Halide::Runtime::Internal::Cuda::get_error_name(err)
+            << ")";
+        return 0;
+    }
+
+    return texture;
+}
+
+WEAK int halide_cuda_free_texture(void *user_context, struct halide_buffer_t *buf, uint64_t texture_object) {
+    if (!cudaDestroyTextureObject && texture_object) {
+        error(user_context) << "attempting to free texture object but don't have runtime functions";
+    }
+
+    return cudaDestroyTextureObject(texture_object);
 }
 
 namespace {

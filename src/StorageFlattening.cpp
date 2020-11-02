@@ -42,6 +42,7 @@ private:
     Scope<> realizations, shader_scope_realizations;
     bool in_shader = false;
     bool in_gpu = false;
+    DeviceAPI in_device_api = DeviceAPI::None;
 
     Expr make_shape_var(string name, const string &field, size_t dim,
                         const Buffer<> &buf, const Parameter &param) {
@@ -259,7 +260,7 @@ private:
             Expr store = Call::make(value.type(), Call::image_store,
                                     args, Call::Intrinsic);
             return Evaluate::make(store);
-        } else if (in_gpu && textures.count(op->name)) {
+        } else if (in_gpu && textures.count(op->name) && false && in_device_api != DeviceAPI::CUDA) { // CUDA writes are still directly to memory
             Expr buffer_var =
                 Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer", output_buf);
             vector<Expr> args(2);
@@ -398,6 +399,7 @@ private:
     Stmt visit(const For *op) override {
         bool old_in_shader = in_shader;
         bool old_in_gpu = in_gpu;
+        DeviceAPI old_in_device_api = in_device_api;
         if ((op->for_type == ForType::GPUBlock ||
              op->for_type == ForType::GPUThread) &&
             op->device_api == DeviceAPI::GLSL) {
@@ -406,10 +408,12 @@ private:
         if (op->for_type == ForType::GPUBlock ||
             op->for_type == ForType::GPUThread) {
             in_gpu = true;
+            in_device_api = op->device_api;
         }
         Stmt stmt = IRMutator::visit(op);
         in_shader = old_in_shader;
         in_gpu = old_in_gpu;
+        in_device_api = old_in_device_api;
         return stmt;
     }
 };

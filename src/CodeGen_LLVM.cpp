@@ -1435,7 +1435,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
                     value->getType() == llvm_type_of(e.type()))
         << "Codegen of Expr " << e
         << " of type " << e.type()
-        << " did not produce llvm IR of the corresponding llvm type.\n";
+        << " did not produce llvm IR of the corresponding llvm type.  Llvm was " << llvm_type_of(e.type()) << "\n";
     return value;
 }
 

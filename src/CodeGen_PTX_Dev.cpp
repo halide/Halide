@@ -70,7 +70,11 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            arg_types[i] = llvm_type_of(UInt(8))->getPointerTo();
+            if (args[i].memory_type == MemoryType::GPUTexture) {
+                arg_types[i] = llvm_type_of(Int(64));
+            } else {
+                arg_types[i] = llvm_type_of(UInt(8))->getPointerTo();
+            }
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
         }
@@ -172,6 +176,43 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
         builder->CreateCall(barrier0);
         value = ConstantInt::get(i32_t, 0);
+    } else if (op->is_intrinsic(Call::image_load)) {
+        int num_args = (op->args.size() - 2) / 2;
+        user_assert(num_args >= 1 && num_args <= 2);
+
+        string res_desc = "";
+        user_assert(op->type.bits() == 32) << "ptx texture sampler only supports 32 bit results";
+        Type res_type;
+        if (op->type.is_float()) {
+            res_desc = "f32";
+            res_type = Type(Type::Float, 32, 4);
+        } else {
+            res_desc = "s32";
+            res_type = Type(Type::Int, 32, 4);
+        }
+
+        string coord_desc = "";
+        if (op->args[2].type().is_float()) {
+            coord_desc = ".f32";
+        } else {
+            coord_desc = ".s32";
+        }
+
+        string dim = std::to_string(num_args) + "d";
+        string intrinsic = "llvm.nvvm.tex.unified." + dim + ".v4" + res_desc + coord_desc;
+
+        vector<Expr> coords;
+        coords.push_back(Variable::make(Int(64), op->args[0].as<StringImm>()->value));
+        for (size_t i = 2; i < op->args.size(); i += 2) {
+            internal_assert(op->args[i].type() == op->args[2].type()) << "all coordinates must be same type";
+            coords.push_back(op->args[i]);
+        }
+        llvm::CallInst *call = (llvm::CallInst *)call_intrin(res_type, 4, intrinsic, coords);
+        // call->getCalledFunction()->setCallingConv(CallingConv::Tail);
+        // call = (llvm::CallInst *)call_intrin(res_type, 4, intrinsic, coords);
+        // call->setTailCall(true);
+        value = builder->CreateExtractElement(call, ConstantInt::get(i32_t, 0));
+
     } else {
         CodeGen_LLVM::visit(op);
     }
