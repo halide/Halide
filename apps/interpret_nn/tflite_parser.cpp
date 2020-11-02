@@ -271,4 +271,8 @@ Model ParseTfLiteModel(const tflite::Model *model) {
     return Parser(model).Parse();
 }
 
+Model ParseTfLiteModelFromBuffer(const void *buffer) {
+    return ParseTfLiteModel(tflite::GetModel(buffer));
+}
+
 }  // namespace interpret_nn

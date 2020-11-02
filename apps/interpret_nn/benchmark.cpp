@@ -5,7 +5,6 @@
 #include "app_util.h"
 #include "interpreter.h"
 #include "tflite_parser.h"
-#include "tflite_schema_generated.h"
 
 using app_util::ReadEntireFile;
 
@@ -15,7 +14,7 @@ void RunBenchmark(const std::string &filename) {
     std::cout << "Benchmarking " << filename << std::endl;
 
     std::vector<char> buffer = ReadEntireFile(filename);
-    Model model = ParseTfLiteModel(tflite::GetModel(buffer.data()));
+    Model model = ParseTfLiteModelFromBuffer(buffer.data());
 
     model.Dump(std::cout);
     for (auto &i : model.tensors) {

@@ -5,7 +5,7 @@ include ../support/Makefile.inc
 # Note: this requires that you have flatbuffers installed locally.
 # e.g. brew install flatbuffers
 
-build: $(BIN)/$(HL_TARGET)/benchmark
+build: $(BIN)/$(HL_TARGET)/benchmark $(BIN)/$(HL_TARGET)/convolution_test $(BIN)/host/tflite_exploder
 
 test: $(BIN)/$(HL_TARGET)/benchmark
 	$(BIN)/$(HL_TARGET)/benchmark
@@ -99,7 +99,7 @@ $(BIN)/%/tflite_schema_direct_generated.h: $(BIN)/%/tflite_schema.fbs
 	@mkdir -p $(@D)
 	flatc --cpp --no-includes --gen-object-api --filename-suffix _direct_generated -o $(BIN)/$* $<
 
-$(BIN)/%/benchmark: benchmark.cpp $(BIN)/%/interpreter.o $(BIN)/%/model.o $(BIN)/%/tflite_parser.o $(BIN)/%/tflite_schema_generated.h $(BIN)/%/ops.o $(OPS_HALIDE)
+$(BIN)/%/benchmark: benchmark.cpp $(BIN)/%/interpreter.o $(BIN)/%/model.o $(BIN)/%/tflite_parser.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
 
