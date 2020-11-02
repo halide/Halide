@@ -70,7 +70,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            if (args[i].memory_type == MemoryType::GPUTexture) {
+            if (args[i].read && args[i].memory_type == MemoryType::GPUTexture) {
                 arg_types[i] = llvm_type_of(Int(64));
             } else {
                 arg_types[i] = llvm_type_of(UInt(8))->getPointerTo();
@@ -87,7 +87,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer && (args[i].write || args[i].memory_type != MemoryType::GPUTexture)) {
             function->addParamAttr(i, Attribute::NoAlias);
         }
     }
@@ -182,16 +182,19 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
 
         string res_desc = "";
         user_assert(op->type.bits() == 32) << "ptx texture sampler only supports 32 bit results";
-        Type res_type;
+        llvm::Type *res_type;
         if (op->type.is_float()) {
             res_desc = "f32";
-            res_type = Type(Type::Float, 32, 4);
+            auto element = llvm_type_of(Float(32));
+            res_type = llvm::StructType::get(element, element, element, element);
         } else {
             res_desc = "s32";
-            res_type = Type(Type::Int, 32, 4);
+            auto element = llvm_type_of(Int(32));
+            res_type = llvm::StructType::get(element, element, element, element);
         }
 
         string coord_desc = "";
+        user_assert(op->args[2].type().bits() == 32) << "ptx texture sampler only supports 32 bit args";
         if (op->args[2].type().is_float()) {
             coord_desc = ".f32";
         } else {
@@ -201,17 +204,17 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         string dim = std::to_string(num_args) + "d";
         string intrinsic = "llvm.nvvm.tex.unified." + dim + ".v4" + res_desc + coord_desc;
 
-        vector<Expr> coords;
-        coords.push_back(Variable::make(Int(64), op->args[0].as<StringImm>()->value));
+        vector<Value *> coords;
+        coords.push_back(codegen(Variable::make(Int(64), op->args[0].as<StringImm>()->value)));
         for (size_t i = 2; i < op->args.size(); i += 2) {
             internal_assert(op->args[i].type() == op->args[2].type()) << "all coordinates must be same type";
-            coords.push_back(op->args[i]);
+            coords.push_back(codegen(op->args[i]));
         }
-        llvm::CallInst *call = (llvm::CallInst *)call_intrin(res_type, 4, intrinsic, coords);
+        llvm::CallInst *call = (llvm::CallInst *)call_intrin(res_type, 1, intrinsic, coords);
         // call->getCalledFunction()->setCallingConv(CallingConv::Tail);
         // call = (llvm::CallInst *)call_intrin(res_type, 4, intrinsic, coords);
         // call->setTailCall(true);
-        value = builder->CreateExtractElement(call, ConstantInt::get(i32_t, 0));
+        value = builder->CreateExtractValue(call, {0});
 
     } else {
         CodeGen_LLVM::visit(op);
