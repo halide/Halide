@@ -211,9 +211,6 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
             coords.push_back(codegen(op->args[i]));
         }
         llvm::CallInst *call = (llvm::CallInst *)call_intrin(res_type, 1, intrinsic, coords);
-        // call->getCalledFunction()->setCallingConv(CallingConv::Tail);
-        // call = (llvm::CallInst *)call_intrin(res_type, 4, intrinsic, coords);
-        // call->setTailCall(true);
         value = builder->CreateExtractValue(call, {0});
 
     } else {

@@ -8,6 +8,7 @@ set(HEADER_FILES
     AddAtomicMutex.h
     AddImageChecks.h
     AddParameterChecks.h
+    AlignGPUBuffers.h
     AlignLoads.h
     AllocationBoundsInference.h
     ApplySplit.h
@@ -173,6 +174,7 @@ set(SOURCE_FILES
     AddAtomicMutex.cpp
     AddImageChecks.cpp
     AddParameterChecks.cpp
+    AlignGPUBuffers.cpp
     AlignLoads.cpp
     AllocationBoundsInference.cpp
     ApplySplit.cpp

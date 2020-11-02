@@ -371,6 +371,8 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         int max_block_size[] = {0, 0, 0};
         int max_grid_size[] = {0, 0, 0};
         int max_shared_mem = 0, max_constant_mem = 0;
+        int max_texture1d = 0, max_texture2d_width = 0, max_texture2d_height = 0;
+        int texture_pitch_align = 0, max_texture2d_linear_pitch = 0;
         int cc_major = 0, cc_minor = 0;
 
         struct {
@@ -390,6 +392,11 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
             {&max_constant_mem, CU_DEVICE_ATTRIBUTE_TOTAL_CONSTANT_MEMORY},
             {&cc_major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR},
             {&cc_minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR},
+            {&max_texture1d, CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE1D_LINEAR_WIDTH},
+            {&max_texture2d_width, CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_WIDTH},
+            {&max_texture2d_height, CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_HEIGHT},
+            {&texture_pitch_align, CU_DEVICE_ATTRIBUTE_TEXTURE_PITCH_ALIGNMENT},
+            {&max_texture2d_linear_pitch, CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_LINEAR_PITCH},
             {nullptr, CU_DEVICE_ATTRIBUTE_MAX}};
 
         // Do all the queries.
@@ -441,7 +448,10 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
             << "      max constant memory per block: " << max_constant_mem << "\n"
             << "      compute capability " << cc_major << "." << cc_minor << "\n"
             << "      cuda cores: " << num_cores << " x " << threads_per_core
-            << " = " << num_cores * threads_per_core << "\n";
+            << " = " << num_cores * threads_per_core << "\n"
+            << "      texture pitch align: " << texture_pitch_align << "\n"
+            << "      texture max 2d pitch: " << max_texture2d_linear_pitch << "\n"
+            << "      texture max size: 1d: " << max_texture1d << " 2d: (" << max_texture2d_width << "," << max_texture2d_height << ") \n";
     }
 #endif
 
@@ -1101,6 +1111,8 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
 
 namespace {
 WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t *buf, bool sampled) {
+    CUresult err;
+    int texture_row_pitch_align_required = 0;
     debug(user_context)
         << "CUDA: halide_cuda_get_texture (user_context: " << user_context << ", buffer: " << buf << ")\n";
 
@@ -1111,6 +1123,34 @@ WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t
         return 0;
     }
 
+    {
+        Context ctx(user_context);
+        if (ctx.error != 0) {
+            return 0;
+        }
+
+        CUresult err;
+
+        CUdevice dev;
+        err = cuCtxGetDevice(&dev);
+        if (err != CUDA_SUCCESS) {
+            error(user_context)
+                << "CUDA: cuCtxGetDevice failed ("
+                << Halide::Runtime::Internal::Cuda::get_error_name(err)
+                << ")";
+            return 0;
+        }
+
+        err = cuDeviceGetAttribute(&texture_row_pitch_align_required, CU_DEVICE_ATTRIBUTE_TEXTURE_PITCH_ALIGNMENT, dev);
+        if (err != CUDA_SUCCESS) {
+            error(user_context)
+                << "CUDA: cuDeviceGetAttribute failed ("
+                << get_error_name(err)
+                << ")";
+            return 0;
+        }
+    }
+
     CUDA_RESOURCE_DESC resourceDesc;
     CUDA_TEXTURE_DESC textureDesc;
     // CUDA_RESOURCE_VIEW_DESC resourceViewDesc;
@@ -1118,7 +1158,7 @@ WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t
     memset(&resourceDesc, 0, sizeof(resourceDesc));
     memset(&textureDesc, 0, sizeof(textureDesc));
 
-    // textureDesc.filterMode = CU_TR_FILTER_MODE_POINT;
+    // textureDesc.filterMode = CU_TR_FILTER_MODE_POINT
 
     CUarray_format format = (CUarray_format)0;
     struct halide_type_t type = buf->type;
@@ -1130,6 +1170,7 @@ WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t
         } else if (type.bits == 32) {
             format = CU_AD_FORMAT_SIGNED_INT32;
         }
+        textureDesc.flags |= CU_TRSF_READ_AS_INTEGER;
     } else if (type.code == halide_type_uint) {
         if (type.bits == 8) {
             format = CU_AD_FORMAT_UNSIGNED_INT8;
@@ -1138,6 +1179,7 @@ WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t
         } else if (type.bits == 32) {
             format = CU_AD_FORMAT_UNSIGNED_INT32;
         }
+        textureDesc.flags |= CU_TRSF_READ_AS_INTEGER;
     } else if (type.code == halide_type_float) {
         if (type.bits == 16) {
             format = CU_AD_FORMAT_HALF;
@@ -1150,13 +1192,20 @@ WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t
         return 0;
     }
 
+    debug(user_context) << " buffer dims " << buf->dimensions;
+
+    if (buf->dim[0].stride != 1) {
+        error(user_context) << "CUDA requires inner stride to be 1";
+    }
+
     resourceDesc.flags = 0;
     if (buf->dimensions == 1) {
         resourceDesc.resType = CU_RESOURCE_TYPE_LINEAR;
-        resourceDesc.res.linear.devPtr = (CUdeviceptr)buf->device; 
+        resourceDesc.res.linear.devPtr = (CUdeviceptr)buf->device;
         resourceDesc.res.linear.format = format;
         resourceDesc.res.linear.numChannels = 1;
         resourceDesc.res.linear.sizeInBytes = buf->size_in_bytes();
+
     } else if (buf->dimensions == 2) {
         resourceDesc.resType = CU_RESOURCE_TYPE_PITCH2D;
         resourceDesc.res.pitch2D.devPtr = (CUdeviceptr)buf->device;
@@ -1164,14 +1213,23 @@ WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t
         resourceDesc.res.pitch2D.numChannels = 1;
         resourceDesc.res.pitch2D.width = buf->dim[0].extent;
         resourceDesc.res.pitch2D.height = buf->dim[1].extent;
-        resourceDesc.res.pitch2D.pitchInBytes = buf->dim[1].stride;
+        resourceDesc.res.pitch2D.pitchInBytes = buf->dim[1].stride * type.bytes();
+
+        debug(user_context) << " type " << format << " width " << (int)resourceDesc.res.pitch2D.width
+                            << " height " << (int)resourceDesc.res.pitch2D.height << " pitch " << (int)resourceDesc.res.pitch2D.pitchInBytes << "\n";
+
+        if (resourceDesc.res.pitch2D.pitchInBytes % texture_row_pitch_align_required) {
+            error(user_context) << "row stride of " << (int)resourceDesc.res.pitch2D.pitchInBytes
+                                << " must be aligned to " << texture_row_pitch_align_required << " bytes for CUDA textures";
+            return 0;
+        }
     } else {
         error(user_context) << "cuda texture support only handles 1d and td textures";
         return 0;
     }
 
     CUtexObject texture = 0;
-    CUresult err = cuTexObjectCreate(&texture, &resourceDesc, &textureDesc, nullptr);
+    err = cuTexObjectCreate(&texture, &resourceDesc, &textureDesc, nullptr);
 
     if (err != CUDA_SUCCESS) {
         error(user_context)
@@ -1263,7 +1321,7 @@ WEAK int halide_cuda_run(void *user_context,
                 CUtexObject texture = halide_cuda_get_texture(user_context, (halide_buffer_t *)args[i], true);
 
                 if (!texture) {
-                    error(user_context) << "CUDA: cudaCreateTextureObject for arg " << (int)i << "failed";
+                    error(user_context) << "CUDA: halide_cuda_get_texture for arg " << (int)i << " failed";
                     free(dev_handles);
                     free(translated_args);
                     return -1;

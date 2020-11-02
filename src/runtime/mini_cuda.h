@@ -388,6 +388,31 @@ typedef struct CUDA_RESOURCE_DESC_st
 
 #define CU_POINTER_ATTRIBUTE_CONTEXT 1
 
+/**
+ * Override the texref format with a format inferred from the array.
+ * Flag for ::cuTexRefSetArray()
+ */
+#define CU_TRSA_OVERRIDE_FORMAT 0x01
+
+/**
+ * Read the texture as integers rather than promoting the values to floats
+ * in the range [0,1].
+ * Flag for ::cuTexRefSetFlags()
+ */
+#define CU_TRSF_READ_AS_INTEGER         0x01
+
+/**
+ * Use normalized texture coordinates in the range [0,1) instead of [0,dim).
+ * Flag for ::cuTexRefSetFlags()
+ */
+#define CU_TRSF_NORMALIZED_COORDINATES  0x02
+
+/**
+ * Perform sRGB->linear conversion during texture read.
+ * Flag for ::cuTexRefSetFlags()
+ */
+#define CU_TRSF_SRGB  0x10
+
 }  // namespace Cuda
 }  // namespace Internal
 }  // namespace Runtime
