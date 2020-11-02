@@ -226,7 +226,6 @@ public:
         int opcode_index = op->opcode_index();
         const auto *opcode = opcodes->Get(opcode_index);
 
-        std::string name;
         auto builtin_code = GetBuiltinCode(opcode);
         APP_CHECK(builtin_code != tflite::BuiltinOperator_CUSTOM);
         switch (builtin_code) {

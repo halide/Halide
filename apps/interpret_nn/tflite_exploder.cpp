@@ -43,6 +43,18 @@ using app_util::make_unique;
 using app_util::ReadEntireFile;
 using app_util::WriteEntireFile;
 
+namespace {
+
+tflite::BuiltinOperator GetBuiltinCode(const tflite::OperatorCode *op_code) {
+    APP_CHECK(op_code != nullptr);
+
+    return std::max(
+        op_code->builtin_code(),
+        static_cast<tflite::BuiltinOperator>(op_code->deprecated_builtin_code()));
+}
+
+}  // namespace
+
 int main(int argc, char **argv) {
     if (argc != 3) {
         printf("Usage: %s input.tflite output_dir\n", argv[0]);
@@ -56,6 +68,8 @@ int main(int argc, char **argv) {
 
     const tflite::Model *model = tflite::GetModel(buffer.data());
 
+    const auto *opcodes = model->operator_codes();
+
     const auto *subgraphs = model->subgraphs();
     APP_CHECK(subgraphs->size() == 1) << "Only 1 subgraph is currently supported.";
     const tflite::SubGraph *subgraph = subgraphs->Get(0);
@@ -63,6 +77,9 @@ int main(int argc, char **argv) {
     int op_index = -1;
     for (const tflite::Operator *op : *subgraph->operators()) {
         op_index++;
+
+        const auto *opcode = opcodes->Get(op->opcode_index());
+        std::string op_name = tflite::EnumNameBuiltinOperator(GetBuiltinCode(opcode));
 
         std::map<int32_t, int32_t> old_to_new_tensor_map;
         APP_CHECK(op->inputs() != nullptr);
@@ -147,7 +164,7 @@ int main(int argc, char **argv) {
 
         fbb.Finish(model_offset, tflite::ModelIdentifier());
 
-        std::string outpath = output_dir + "/" + std::to_string(op_index) + ".tflite";
+        std::string outpath = output_dir + "/" + std::to_string(op_index) + "." + op_name + ".tflite";
         std::cerr << "Writing to " << outpath << "\n";
         WriteEntireFile(outpath, fbb.GetBufferPointer(), fbb.GetSize());
     }
