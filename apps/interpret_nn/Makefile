@@ -99,7 +99,14 @@ $(BIN)/%/tflite_schema_direct_generated.h: $(BIN)/%/tflite_schema.fbs
 	@mkdir -p $(@D)
 	flatc --cpp --no-includes --gen-object-api --filename-suffix _direct_generated -o $(BIN)/$* $<
 
-$(BIN)/%/benchmark: benchmark.cpp $(BIN)/%/interpreter.o $(BIN)/%/model.o $(BIN)/%/tflite_parser.o $(BIN)/%/ops.o $(OPS_HALIDE)
+INTERPRETER_DEPS = \
+	$(BIN)/%/interpreter.o \
+	$(BIN)/%/model.o \
+	$(BIN)/%/tflite_parser.o \
+	$(BIN)/%/ops.o \
+	$(OPS_HALIDE)
+
+$(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
 
