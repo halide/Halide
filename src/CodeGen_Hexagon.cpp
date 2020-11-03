@@ -2115,11 +2115,6 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
     return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
 }
 
-namespace {
-
-
-}  // namespace
-
 Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
                                     vector<Expr> args, bool maybe) {
     llvm::Function *fn = module->getFunction(name);
