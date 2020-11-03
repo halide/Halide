@@ -342,6 +342,7 @@ compiled.
 | `Halide_BUNDLE_LLVM`                     | `OFF`                 | When building Halide as a static library, unpack the LLVM static libraries and add those objects to libHalide.a. |
 | `Halide_SHARED_LLVM`                     | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                                    |
 | `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                                  |
+| `Halide_CLANG_TIDY_BUILD`                | `OFF`                 | Used internally to generate fake compile job when running clang-tidy                                             |
 | `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                           |
 | `Halide_USE_CODEMODEL_LARGE`             | `OFF`                 | Use the Large LLVM codemodel                                                                                     |
 | `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                |
