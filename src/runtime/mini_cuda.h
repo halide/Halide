@@ -235,32 +235,32 @@ typedef unsigned long long CUtexObject;
  * Array formats
  */
 typedef enum CUarray_format_enum {
-    CU_AD_FORMAT_UNSIGNED_INT8  = 0x01, /**< Unsigned 8-bit integers */
+    CU_AD_FORMAT_UNSIGNED_INT8 = 0x01,  /**< Unsigned 8-bit integers */
     CU_AD_FORMAT_UNSIGNED_INT16 = 0x02, /**< Unsigned 16-bit integers */
     CU_AD_FORMAT_UNSIGNED_INT32 = 0x03, /**< Unsigned 32-bit integers */
-    CU_AD_FORMAT_SIGNED_INT8    = 0x08, /**< Signed 8-bit integers */
-    CU_AD_FORMAT_SIGNED_INT16   = 0x09, /**< Signed 16-bit integers */
-    CU_AD_FORMAT_SIGNED_INT32   = 0x0a, /**< Signed 32-bit integers */
-    CU_AD_FORMAT_HALF           = 0x10, /**< 16-bit floating point */
-    CU_AD_FORMAT_FLOAT          = 0x20  /**< 32-bit floating point */
+    CU_AD_FORMAT_SIGNED_INT8 = 0x08,    /**< Signed 8-bit integers */
+    CU_AD_FORMAT_SIGNED_INT16 = 0x09,   /**< Signed 16-bit integers */
+    CU_AD_FORMAT_SIGNED_INT32 = 0x0a,   /**< Signed 32-bit integers */
+    CU_AD_FORMAT_HALF = 0x10,           /**< 16-bit floating point */
+    CU_AD_FORMAT_FLOAT = 0x20           /**< 32-bit floating point */
 } CUarray_format;
 
 /**
  * Resource types
  */
 typedef enum CUresourcetype_enum {
-    CU_RESOURCE_TYPE_ARRAY           = 0x00, /**< Array resoure */
+    CU_RESOURCE_TYPE_ARRAY = 0x00,           /**< Array resoure */
     CU_RESOURCE_TYPE_MIPMAPPED_ARRAY = 0x01, /**< Mipmapped array resource */
-    CU_RESOURCE_TYPE_LINEAR          = 0x02, /**< Linear resource */
-    CU_RESOURCE_TYPE_PITCH2D         = 0x03  /**< Pitch 2D resource */
+    CU_RESOURCE_TYPE_LINEAR = 0x02,          /**< Linear resource */
+    CU_RESOURCE_TYPE_PITCH2D = 0x03          /**< Pitch 2D resource */
 } CUresourcetype;
 
 /**
  * Texture reference addressing modes
  */
 typedef enum CUaddress_mode_enum {
-    CU_TR_ADDRESS_MODE_WRAP   = 0, /**< Wrapping address mode */
-    CU_TR_ADDRESS_MODE_CLAMP  = 1, /**< Clamp to edge address mode */
+    CU_TR_ADDRESS_MODE_WRAP = 0,   /**< Wrapping address mode */
+    CU_TR_ADDRESS_MODE_CLAMP = 1,  /**< Clamp to edge address mode */
     CU_TR_ADDRESS_MODE_MIRROR = 2, /**< Mirror address mode */
     CU_TR_ADDRESS_MODE_BORDER = 3  /**< Border address mode */
 } CUaddress_mode;
@@ -269,57 +269,55 @@ typedef enum CUaddress_mode_enum {
  * Texture reference filtering modes
  */
 typedef enum CUfilter_mode_enum {
-    CU_TR_FILTER_MODE_POINT  = 0, /**< Point filter mode */
-    CU_TR_FILTER_MODE_LINEAR = 1  /**< Linear filter mode */
+    CU_TR_FILTER_MODE_POINT = 0, /**< Point filter mode */
+    CU_TR_FILTER_MODE_LINEAR = 1 /**< Linear filter mode */
 } CUfilter_mode;
 
 /**
  * CUDA texture resource view formats
  */
-typedef enum CUresourceViewFormat_enum
-{
-    CU_RES_VIEW_FORMAT_NONE          = 0x00, /**< No resource view format (use underlying resource format) */
-    CU_RES_VIEW_FORMAT_UINT_1X8      = 0x01, /**< 1 channel unsigned 8-bit integers */
-    CU_RES_VIEW_FORMAT_UINT_2X8      = 0x02, /**< 2 channel unsigned 8-bit integers */
-    CU_RES_VIEW_FORMAT_UINT_4X8      = 0x03, /**< 4 channel unsigned 8-bit integers */
-    CU_RES_VIEW_FORMAT_SINT_1X8      = 0x04, /**< 1 channel signed 8-bit integers */
-    CU_RES_VIEW_FORMAT_SINT_2X8      = 0x05, /**< 2 channel signed 8-bit integers */
-    CU_RES_VIEW_FORMAT_SINT_4X8      = 0x06, /**< 4 channel signed 8-bit integers */
-    CU_RES_VIEW_FORMAT_UINT_1X16     = 0x07, /**< 1 channel unsigned 16-bit integers */
-    CU_RES_VIEW_FORMAT_UINT_2X16     = 0x08, /**< 2 channel unsigned 16-bit integers */
-    CU_RES_VIEW_FORMAT_UINT_4X16     = 0x09, /**< 4 channel unsigned 16-bit integers */
-    CU_RES_VIEW_FORMAT_SINT_1X16     = 0x0a, /**< 1 channel signed 16-bit integers */
-    CU_RES_VIEW_FORMAT_SINT_2X16     = 0x0b, /**< 2 channel signed 16-bit integers */
-    CU_RES_VIEW_FORMAT_SINT_4X16     = 0x0c, /**< 4 channel signed 16-bit integers */
-    CU_RES_VIEW_FORMAT_UINT_1X32     = 0x0d, /**< 1 channel unsigned 32-bit integers */
-    CU_RES_VIEW_FORMAT_UINT_2X32     = 0x0e, /**< 2 channel unsigned 32-bit integers */
-    CU_RES_VIEW_FORMAT_UINT_4X32     = 0x0f, /**< 4 channel unsigned 32-bit integers */
-    CU_RES_VIEW_FORMAT_SINT_1X32     = 0x10, /**< 1 channel signed 32-bit integers */
-    CU_RES_VIEW_FORMAT_SINT_2X32     = 0x11, /**< 2 channel signed 32-bit integers */
-    CU_RES_VIEW_FORMAT_SINT_4X32     = 0x12, /**< 4 channel signed 32-bit integers */
-    CU_RES_VIEW_FORMAT_FLOAT_1X16    = 0x13, /**< 1 channel 16-bit floating point */
-    CU_RES_VIEW_FORMAT_FLOAT_2X16    = 0x14, /**< 2 channel 16-bit floating point */
-    CU_RES_VIEW_FORMAT_FLOAT_4X16    = 0x15, /**< 4 channel 16-bit floating point */
-    CU_RES_VIEW_FORMAT_FLOAT_1X32    = 0x16, /**< 1 channel 32-bit floating point */
-    CU_RES_VIEW_FORMAT_FLOAT_2X32    = 0x17, /**< 2 channel 32-bit floating point */
-    CU_RES_VIEW_FORMAT_FLOAT_4X32    = 0x18, /**< 4 channel 32-bit floating point */
-    CU_RES_VIEW_FORMAT_UNSIGNED_BC1  = 0x19, /**< Block compressed 1 */
-    CU_RES_VIEW_FORMAT_UNSIGNED_BC2  = 0x1a, /**< Block compressed 2 */
-    CU_RES_VIEW_FORMAT_UNSIGNED_BC3  = 0x1b, /**< Block compressed 3 */
-    CU_RES_VIEW_FORMAT_UNSIGNED_BC4  = 0x1c, /**< Block compressed 4 unsigned */
-    CU_RES_VIEW_FORMAT_SIGNED_BC4    = 0x1d, /**< Block compressed 4 signed */
-    CU_RES_VIEW_FORMAT_UNSIGNED_BC5  = 0x1e, /**< Block compressed 5 unsigned */
-    CU_RES_VIEW_FORMAT_SIGNED_BC5    = 0x1f, /**< Block compressed 5 signed */
+typedef enum CUresourceViewFormat_enum {
+    CU_RES_VIEW_FORMAT_NONE = 0x00,          /**< No resource view format (use underlying resource format) */
+    CU_RES_VIEW_FORMAT_UINT_1X8 = 0x01,      /**< 1 channel unsigned 8-bit integers */
+    CU_RES_VIEW_FORMAT_UINT_2X8 = 0x02,      /**< 2 channel unsigned 8-bit integers */
+    CU_RES_VIEW_FORMAT_UINT_4X8 = 0x03,      /**< 4 channel unsigned 8-bit integers */
+    CU_RES_VIEW_FORMAT_SINT_1X8 = 0x04,      /**< 1 channel signed 8-bit integers */
+    CU_RES_VIEW_FORMAT_SINT_2X8 = 0x05,      /**< 2 channel signed 8-bit integers */
+    CU_RES_VIEW_FORMAT_SINT_4X8 = 0x06,      /**< 4 channel signed 8-bit integers */
+    CU_RES_VIEW_FORMAT_UINT_1X16 = 0x07,     /**< 1 channel unsigned 16-bit integers */
+    CU_RES_VIEW_FORMAT_UINT_2X16 = 0x08,     /**< 2 channel unsigned 16-bit integers */
+    CU_RES_VIEW_FORMAT_UINT_4X16 = 0x09,     /**< 4 channel unsigned 16-bit integers */
+    CU_RES_VIEW_FORMAT_SINT_1X16 = 0x0a,     /**< 1 channel signed 16-bit integers */
+    CU_RES_VIEW_FORMAT_SINT_2X16 = 0x0b,     /**< 2 channel signed 16-bit integers */
+    CU_RES_VIEW_FORMAT_SINT_4X16 = 0x0c,     /**< 4 channel signed 16-bit integers */
+    CU_RES_VIEW_FORMAT_UINT_1X32 = 0x0d,     /**< 1 channel unsigned 32-bit integers */
+    CU_RES_VIEW_FORMAT_UINT_2X32 = 0x0e,     /**< 2 channel unsigned 32-bit integers */
+    CU_RES_VIEW_FORMAT_UINT_4X32 = 0x0f,     /**< 4 channel unsigned 32-bit integers */
+    CU_RES_VIEW_FORMAT_SINT_1X32 = 0x10,     /**< 1 channel signed 32-bit integers */
+    CU_RES_VIEW_FORMAT_SINT_2X32 = 0x11,     /**< 2 channel signed 32-bit integers */
+    CU_RES_VIEW_FORMAT_SINT_4X32 = 0x12,     /**< 4 channel signed 32-bit integers */
+    CU_RES_VIEW_FORMAT_FLOAT_1X16 = 0x13,    /**< 1 channel 16-bit floating point */
+    CU_RES_VIEW_FORMAT_FLOAT_2X16 = 0x14,    /**< 2 channel 16-bit floating point */
+    CU_RES_VIEW_FORMAT_FLOAT_4X16 = 0x15,    /**< 4 channel 16-bit floating point */
+    CU_RES_VIEW_FORMAT_FLOAT_1X32 = 0x16,    /**< 1 channel 32-bit floating point */
+    CU_RES_VIEW_FORMAT_FLOAT_2X32 = 0x17,    /**< 2 channel 32-bit floating point */
+    CU_RES_VIEW_FORMAT_FLOAT_4X32 = 0x18,    /**< 4 channel 32-bit floating point */
+    CU_RES_VIEW_FORMAT_UNSIGNED_BC1 = 0x19,  /**< Block compressed 1 */
+    CU_RES_VIEW_FORMAT_UNSIGNED_BC2 = 0x1a,  /**< Block compressed 2 */
+    CU_RES_VIEW_FORMAT_UNSIGNED_BC3 = 0x1b,  /**< Block compressed 3 */
+    CU_RES_VIEW_FORMAT_UNSIGNED_BC4 = 0x1c,  /**< Block compressed 4 unsigned */
+    CU_RES_VIEW_FORMAT_SIGNED_BC4 = 0x1d,    /**< Block compressed 4 signed */
+    CU_RES_VIEW_FORMAT_UNSIGNED_BC5 = 0x1e,  /**< Block compressed 5 unsigned */
+    CU_RES_VIEW_FORMAT_SIGNED_BC5 = 0x1f,    /**< Block compressed 5 signed */
     CU_RES_VIEW_FORMAT_UNSIGNED_BC6H = 0x20, /**< Block compressed 6 unsigned half-float */
-    CU_RES_VIEW_FORMAT_SIGNED_BC6H   = 0x21, /**< Block compressed 6 signed half-float */
-    CU_RES_VIEW_FORMAT_UNSIGNED_BC7  = 0x22  /**< Block compressed 7 */
+    CU_RES_VIEW_FORMAT_SIGNED_BC6H = 0x21,   /**< Block compressed 6 signed half-float */
+    CU_RES_VIEW_FORMAT_UNSIGNED_BC7 = 0x22   /**< Block compressed 7 */
 } CUresourceViewFormat;
 
 /**
  * Resource view descriptor
  */
-typedef struct CUDA_RESOURCE_VIEW_DESC_st
-{
+typedef struct CUDA_RESOURCE_VIEW_DESC_st {
     CUresourceViewFormat format;   /**< Resource view format */
     size_t width;                  /**< Width of the resource view */
     size_t height;                 /**< Height of the resource view */
@@ -347,9 +345,8 @@ typedef struct CUDA_TEXTURE_DESC_st {
     int reserved[12];
 } CUDA_TEXTURE_DESC;
 
-typedef struct CUDA_RESOURCE_DESC_st
-{
-    CUresourcetype resType;                   /**< Resource type */
+typedef struct CUDA_RESOURCE_DESC_st {
+    CUresourcetype resType; /**< Resource type */
 
     union {
         struct {
@@ -359,25 +356,25 @@ typedef struct CUDA_RESOURCE_DESC_st
             // CUmipmappedArray hMipmappedArray; /**< CUDA mipmapped array */
         } mipmap;
         struct {
-            CUdeviceptr devPtr;               /**< Device pointer */
-            CUarray_format format;            /**< Array format */
-            unsigned int numChannels;         /**< Channels per array element */
-            size_t sizeInBytes;               /**< Size in bytes */
+            CUdeviceptr devPtr;       /**< Device pointer */
+            CUarray_format format;    /**< Array format */
+            unsigned int numChannels; /**< Channels per array element */
+            size_t sizeInBytes;       /**< Size in bytes */
         } linear;
         struct {
-            CUdeviceptr devPtr;               /**< Device pointer */
-            CUarray_format format;            /**< Array format */
-            unsigned int numChannels;         /**< Channels per array element */
-            size_t width;                     /**< Width of the array in elements */
-            size_t height;                    /**< Height of the array in elements */
-            size_t pitchInBytes;              /**< Pitch between two rows in bytes */
+            CUdeviceptr devPtr;       /**< Device pointer */
+            CUarray_format format;    /**< Array format */
+            unsigned int numChannels; /**< Channels per array element */
+            size_t width;             /**< Width of the array in elements */
+            size_t height;            /**< Height of the array in elements */
+            size_t pitchInBytes;      /**< Pitch between two rows in bytes */
         } pitch2D;
         struct {
             int reserved[32];
         } reserved;
     } res;
 
-    unsigned int flags;                       /**< Flags (must be zero) */
+    unsigned int flags; /**< Flags (must be zero) */
 } CUDA_RESOURCE_DESC;
 
 #define CU_POINTER_ATTRIBUTE_CONTEXT 1
@@ -393,19 +390,19 @@ typedef struct CUDA_RESOURCE_DESC_st
  * in the range [0,1].
  * Flag for ::cuTexRefSetFlags()
  */
-#define CU_TRSF_READ_AS_INTEGER         0x01
+#define CU_TRSF_READ_AS_INTEGER 0x01
 
 /**
  * Use normalized texture coordinates in the range [0,1) instead of [0,dim).
  * Flag for ::cuTexRefSetFlags()
  */
-#define CU_TRSF_NORMALIZED_COORDINATES  0x02
+#define CU_TRSF_NORMALIZED_COORDINATES 0x02
 
 /**
  * Perform sRGB->linear conversion during texture read.
  * Flag for ::cuTexRefSetFlags()
  */
-#define CU_TRSF_SRGB  0x10
+#define CU_TRSF_SRGB 0x10
 
 }  // namespace Cuda
 }  // namespace Internal

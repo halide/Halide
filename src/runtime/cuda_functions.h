@@ -47,7 +47,7 @@ CUDA_FN(CUresult, cuPointerGetAttribute, (void *result, int query, CUdeviceptr p
 
 CUDA_FN_OPTIONAL(CUresult, cuStreamSynchronize, (CUstream hStream));
 
-CUDA_FN_OPTIONAL(CUresult, cuTexObjectCreate, (CUtexObject* pTexObject, const CUDA_RESOURCE_DESC* pResDesc, const CUDA_TEXTURE_DESC* pTexDesc, const CUDA_RESOURCE_VIEW_DESC* pResViewDesc));
+CUDA_FN_OPTIONAL(CUresult, cuTexObjectCreate, (CUtexObject * pTexObject, const CUDA_RESOURCE_DESC *pResDesc, const CUDA_TEXTURE_DESC *pTexDesc, const CUDA_RESOURCE_VIEW_DESC *pResViewDesc));
 CUDA_FN_OPTIONAL(CUresult, cuTexObjectDestroy, (CUtexObject texObject));
 
 #undef CUDA_FN
