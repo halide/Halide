@@ -191,7 +191,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
             element_type = llvm_type_of(Int(32));
         }
         // PTX returns a 4 element struct (not a vector!) regardless of
-        llvm::Type *res_type = llvm::StructType::get(element, element, element, element);
+        llvm::Type *res_type = llvm::StructType::get(element_type, element_type, element_type, element_type);
 
         string coord_desc = "";
         Type coord_type = op->args[2].type();
