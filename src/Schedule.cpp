@@ -219,10 +219,11 @@ struct FuncScheduleContents {
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
     MemoryType memory_type = MemoryType::Auto;
-    bool memoized = false, async = false;
+    bool memoized = false, async = false, dma = false;
 
     FuncScheduleContents()
-        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()){};
+        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
+          memory_type(MemoryType::Auto), memoized(false), async(false), dma(false) {};
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator *mutator) {
@@ -337,6 +338,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memory_type = contents->memory_type;
     copy.contents->memoized = contents->memoized;
     copy.contents->async = contents->async;
+    copy.contents->dma = contents->dma;
 
     // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
@@ -370,6 +372,14 @@ bool &FuncSchedule::async() {
 
 bool FuncSchedule::async() const {
     return contents->async;
+}
+
+bool &FuncSchedule::dma() {
+    return contents->dma;
+}
+
+bool FuncSchedule::dma() const {
+    return contents->dma;
 }
 
 std::vector<StorageDim> &FuncSchedule::storage_dims() {

@@ -2238,6 +2238,8 @@ public:
      */
     Func &async();
 
+    Func &dma();
+
     /** Allocate storage for this function within f's loop over
      * var. Scheduling storage is optional, and can be used to
      * separate the loop level at which storage occurs from the loop

@@ -2084,6 +2084,12 @@ Func &Func::async() {
     return *this;
 }
 
+Func &Func::dma() {
+    invalidate_cache();
+    func.schedule().dma() = true;
+    return *this;
+}
+
 Stage Func::specialize(const Expr &c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0).specialize(c);
