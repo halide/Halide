@@ -130,16 +130,16 @@ Expr bc(Expr x) {
 }
 
 // Helpers to generate horizontally reducing multiply operations.
-static Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
+Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
     Expr call = Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {std::move(v0), std::move(v1), std::move(c0), std::move(c1)}, Call::PureExtern);
     return native_interleave(call);
 }
 
-static Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
+Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
     return Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {std::move(v01), std::move(c01)}, Call::PureExtern);
 }
 
-static Expr halide_hexagon_add_4mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
+Expr halide_hexagon_add_4mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
     return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {std::move(v01), std::move(c01)}, Call::PureExtern);
 }
 
@@ -1229,7 +1229,7 @@ class VectorReducePatterns : public IRMutator {
     // .....
     // window_size != lanes
     // TODO: Their could be other patterns as well which we should match
-    int is_stencil_reduction(Expr op, int window_size) {
+    int is_stencil_reduction(const Expr &op, int window_size) {
         int lanes = op.type().lanes();
         internal_assert(lanes > window_size);
         if (const Shuffle *shuff = op.as<Shuffle>()) {
@@ -1244,21 +1244,11 @@ class VectorReducePatterns : public IRMutator {
         return false;
     }
 
-    typedef struct {
-        enum Flags {
-            SlidingWindow = 1,
-            ScalarB = 1 << 1
-        };
-        int rfac;
-        Type r_ty;
-        Type a_ty;
-        Type b_ty;
-        int flags;
-    } Signature;
-
     Expr visit(const Mul *op) override {
         if (const VectorReduce *vr = op->a.as<VectorReduce>()) {
             if (vr->op == VectorReduce::Add) {
+                // Move broadcasts inside the VectorReduce Node for
+                // vrmpy/vtmpy/vdmpy instructions.
                 const int lanes = vr->type.lanes();
                 const int arg_lanes = vr->value.type().lanes();
                 IRMatcher::Wild<0> x;
@@ -1272,6 +1262,18 @@ class VectorReducePatterns : public IRMutator {
         }
         return IRMutator::visit(op);
     }
+
+    typedef struct {
+        enum Flags {
+            SlidingWindow = 1,
+            ScalarB = 1 << 1
+        };
+        int rfac;
+        Type r_ty;
+        Type a_ty;
+        Type b_ty;
+        int flags;
+    } Signature;
 
     Expr visit(const VectorReduce *op) override {
         if (op->type.bits() == 8 || !op->type.is_vector() || op->type.is_float() || op->op != VectorReduce::Add) {
@@ -1329,7 +1331,7 @@ class VectorReducePatterns : public IRMutator {
             Type b_ty = (sig.flags & Signature::ScalarB) ? sig.b_ty : sig.b_ty.with_lanes(in_lanes);
             mpy_count = find_mpy_ops(op->value, a_ty, b_ty, 1, mpys, rest);
 
-            if (mpys.size() == 0) {
+            if (mpys.empty()) {
                 continue;
             }
             Expr a = simplify(mpys[0].first);
