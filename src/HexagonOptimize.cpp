@@ -1312,7 +1312,7 @@ class VectorReducePatterns : public IRMutator {
             {2, Int(32, 0), Int(16, 0), UInt(16, 2), Signature::ScalarB},  // Saturates
             {2, Int(32, 0), Int(16, 0), Int(16, 2), Signature::ScalarB},   // Saturates
             {2, Int(16, 0), UInt(8, 0), Int(8, 2), Signature::ScalarB},    // b_ty can be Int(8, 4).
-            // TODO: This would not match untill b_ty is changed to Int(8, 4)
+            // TODO: This would not match until b_ty is changed to Int(8, 4)
             {2, Int(32, 0), Int(16, 0), Int(8, 2), Signature::ScalarB},  // b_ty can be Int(8, 4).
             // Vector * Vector
             {2, Int(32, 0), Int(16, 0), Int(16, 32)},  // Saturates
