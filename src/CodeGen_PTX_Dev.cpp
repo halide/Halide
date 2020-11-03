@@ -203,7 +203,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         } else if (coord_type.is_int()) {
             coord_desc = ".s32";
         }
-        internal_assert(coord_type != "") << "unhandled coordinate type for ptx texture sampler " << coord_type;
+        internal_assert(coord_desc != "") << "unhandled coordinate type for ptx texture sampler " << coord_type;
 
         string dim = std::to_string(num_args) + "d";
         string intrinsic = "llvm.nvvm.tex.unified." + dim + ".v4" + res_desc + coord_desc;
