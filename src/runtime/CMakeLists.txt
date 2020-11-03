@@ -216,7 +216,7 @@ foreach (i IN LISTS RUNTIME_CPP)
                 set(dep_args "")
             endif ()
 
-            if (CMAKE_EXPORT_COMPILE_COMMANDS)
+            if (BUILDING_FOR_CLANG_TIDY)
                 # Create a 'fake' entry just so that clang-tidy will see a C++ compilation command
                 # that it can use for tidy-checking. (This branch should never be taken by 'normal'
                 # compilations.)
