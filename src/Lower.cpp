@@ -272,6 +272,13 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after bounding small realizations:\n"
              << s << "\n\n";
 
+    if (will_inject_host_copies) {
+        debug(1) << "Selecting a GPU API for GPU loops...\n";
+        s = select_gpu_api(s, t);
+        debug(2) << "Lowering after selecting a GPU API:\n"
+                 << s << "\n\n";
+    }
+
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n"
@@ -297,11 +304,6 @@ Module lower(const vector<Function> &output_funcs,
     }
 
     if (will_inject_host_copies) {
-        debug(1) << "Selecting a GPU API for GPU loops...\n";
-        s = select_gpu_api(s, t);
-        debug(2) << "Lowering after selecting a GPU API:\n"
-                 << s << "\n\n";
-
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n"
@@ -413,10 +415,10 @@ Module lower(const vector<Function> &output_funcs,
         debug(2) << "Lowering after injecting warp shuffles:\n"
                  << s << "\n\n";
 
-        debug(1) << "Aligning GPU Buffers...\n";
-        s = align_gpu_buffers(s, t);
-        debug(2) << "Lowering after aligning GPU buffers:\n"
-                 << s << "\n\n";
+        // debug(1) << "Aligning GPU Buffers...\n";
+        // s = align_gpu_buffers(s, t);
+        // debug(2) << "Lowering after aligning GPU buffers:\n"
+        //          << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";

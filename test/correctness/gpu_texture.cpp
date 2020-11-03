@@ -7,6 +7,7 @@ using namespace Halide::Internal;
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
+    bool success = true;
 
     if (!(t.has_feature(halide_target_feature_opencl) || t.has_feature(halide_target_feature_cuda_capability30))) {
         printf("[SKIP] No OpenCL or CUDA 3.0+ target enabled.\n");
@@ -26,7 +27,7 @@ int main(int argc, char **argv) {
 
     // Check dynamic allocations into Heap and Texture memory
     for (auto memory_type : {MemoryType::GPUTexture, MemoryType::Heap}) {
-        {
+        if (false) {
             // 1D stores/loads
             Buffer<int> input(100);
             input.fill(10);
@@ -51,13 +52,18 @@ int main(int argc, char **argv) {
                 int correct = 2 * x + 10;
                 if (out(x) != correct) {
                     printf("out[1D][%d](%d) = %d instead of %d\n", (int)memory_type, x, out(x), correct);
-                    return -1;
+                    success = false;
                 }
             }
         }
         {
+            int size = 17;
             // 2D stores/loads
-            Buffer<int> input(10, 10);
+
+            // to get a buffer with 32-byte row pitch
+            Buffer<int> input(24, size);
+            input.crop(0, 0, 17);
+
             input.fill(10);
             ImageParam param(Int(32), 2);
             param.set(input);
@@ -70,21 +76,24 @@ int main(int argc, char **argv) {
             f(x, y) = cast<float>(x + y);
             g(x) = param(x, x) + cast<int>(f(2 * x, x));
 
-            g.gpu_tile(x, xi, 16, TailStrategy::GuardWithIf);
+            g.gpu_tile(x, xi, 8);
 
             f.compute_root().store_in(memory_type).gpu_blocks(x, y);  // store f as integer
             g.store_in(memory_type);
+            g.bound(x, 0, size);
 
-            Buffer<int> out = g.realize(10);
-            for (int x = 0; x < 10; x++) {
+            g.compile_to_lowered_stmt("/tmp/stmt.html", {param}, Halide::HTML);
+
+            Buffer<int> out = g.realize(size);
+            for (int x = 0; x < size; x++) {
                 int correct = 3 * x + 10;
                 if (out(x) != correct) {
                     printf("out[2D][%d](%d) = %d instead of %d\n", (int)memory_type, x, out(x), correct);
-                    return -1;
+                    success = false;
                 }
             }
         }
-        {
+        if (t.has_feature(halide_target_feature_opencl)) {  // no 3d in our cuda support right now
             // 3D stores/loads
             Buffer<int> input(10, 10, 10);
             input.fill(10);
@@ -110,7 +119,7 @@ int main(int argc, char **argv) {
                 int correct = 4 * x + 10;
                 if (out(x) != correct) {
                     printf("out[3D][%d](%d) = %d instead of %d\n", (int)memory_type, x, out(x), correct);
-                    return -1;
+                    success = false;
                 }
             }
         }
@@ -143,12 +152,19 @@ int main(int argc, char **argv) {
                 int correct = 2 * x + 10;
                 if (out(x) != correct) {
                     printf("out[1D-shift][%d](%d) = %d instead of %d\n", (int)memory_type, x, out(x), correct);
-                    return -1;
+                    success = false;
                 }
             }
         }
+        if (!success) {
+            break;
+        }
     }
 
-    printf("Success!\n");
-    return 0;
+    if (success) {
+        printf("Success!\n");
+        return 0;
+    }
+    printf("Failed!\n");
+    return 1;
 }

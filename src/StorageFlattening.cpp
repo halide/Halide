@@ -22,6 +22,39 @@ using std::string;
 using std::vector;
 
 namespace {
+class FindBuffersInGPU : public IRVisitor {
+public:
+    map<string, set<DeviceAPI>> buffer_device_usage;
+
+private:
+    bool in_gpu = false;
+    DeviceAPI in_device_api = DeviceAPI::None;
+    using IRVisitor::visit;
+
+    void visit(const Call *op) override {
+        debug(2) << " candidate load to " << op->name << " " << in_device_api << "\n";
+        if (in_gpu &&
+            (op->call_type == Call::Halide || op->call_type == Call::Image)) {
+            debug(2) << " load call to " << op->name << " " << in_device_api << "\n";
+            buffer_device_usage[op->name].insert(in_device_api);
+        }
+
+        IRVisitor::visit(op);
+    }
+
+    void visit(const For *op) override {
+        bool old_in_gpu = in_gpu;
+        DeviceAPI old_in_device_api = in_device_api;
+        if (op->for_type == ForType::GPUBlock ||
+            op->for_type == ForType::GPUThread) {
+            in_gpu = true;
+            in_device_api = op->device_api;
+        }
+        IRVisitor::visit(op);
+        in_gpu = old_in_gpu;
+        in_device_api = old_in_device_api;
+    }
+};
 
 class FlattenDimensions : public IRMutator {
 public:
@@ -33,6 +66,8 @@ public:
             outputs.insert(f.name());
         }
     }
+
+    map<string, set<DeviceAPI>> buffer_apis;
 
 private:
     const map<string, pair<Function, int>> &env;
@@ -117,7 +152,7 @@ private:
 
         if (op->memory_type == MemoryType::GPUTexture) {
             textures.insert(op->name);
-            debug(2) << "found texture " << op->name << "\n";
+            debug(2) << "found texture " << op->name << " in " << in_device_api << "\n";
         }
 
         Stmt body = mutate(op->body);
@@ -153,10 +188,22 @@ private:
                     if (args[j] == storage_dims[i].var) {
                         storage_permutation.push_back((int)j);
                         Expr alignment = storage_dims[i].alignment;
+
                         if (alignment.defined()) {
                             allocation_extents[j] = ((extents[j] + alignment - 1) / alignment) * alignment;
                         } else {
                             allocation_extents[j] = extents[j];
+                        }
+
+                        // Promote row alignment for buffers used as CUDA Textures
+                        if (j == 0 && textures.count(op->name) && buffer_apis[op->name].count(DeviceAPI::CUDA)) {
+                            // This could be symbolically fetched from runtime I guess?
+                            int target_align_bytes = 32;
+                            int target_align_items = target_align_bytes / op->types[0].bytes();
+
+                            debug(2) << "promoting alignment for " << op->name << " to " << target_align_items << "\n";
+
+                            allocation_extents[j] = ((allocation_extents[j] + target_align_items - 1) / target_align_items) * target_align_items;
                         }
                     }
                 }
@@ -260,7 +307,7 @@ private:
             Expr store = Call::make(value.type(), Call::image_store,
                                     args, Call::Intrinsic);
             return Evaluate::make(store);
-        } else if (in_gpu && textures.count(op->name) && false && in_device_api != DeviceAPI::CUDA) { // CUDA writes are still directly to memory
+        } else if (in_gpu && textures.count(op->name) && in_device_api != DeviceAPI::CUDA) {  // CUDA writes are still directly to memory
             Expr buffer_var =
                 Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer", output_buf);
             vector<Expr> args(2);
@@ -487,7 +534,12 @@ Stmt storage_flattening(Stmt s,
         }
     }
 
-    s = FlattenDimensions(tuple_env, outputs, target).mutate(s);
+    FindBuffersInGPU finder;
+    s.accept(&finder);
+    FlattenDimensions flatten(tuple_env, outputs, target);
+    flatten.buffer_apis = finder.buffer_device_usage;
+
+    s = flatten.mutate(s);
     s = PromoteToMemoryType().mutate(s);
     return s;
 }
