@@ -190,7 +190,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
             res_desc = "s32";
             element_type = llvm_type_of(Int(32));
         }
-        // PTX returns a 4 element struct (not a vector!) regardless of 
+        // PTX returns a 4 element struct (not a vector!) regardless of
         llvm::Type *res_type = llvm::StructType::get(element, element, element, element);
 
         string coord_desc = "";
