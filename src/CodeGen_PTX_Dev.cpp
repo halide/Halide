@@ -195,7 +195,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
 
         string coord_desc = "";
         Type coord_type = op->args[2].type();
-        user_assert(coord_type.bits() == 32) << "ptx texture sampler only supports 32 bit args";
+        internal_assert(coord_type.bits() == 32) << "ptx texture sampler only supports 32 bit args";
         if (coord_type.is_float()) {
             coord_desc = ".f32";
         } else if (coord_type.is_uint()) {
@@ -203,7 +203,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         } else if (coord_type.is_int()) {
             coord_desc = ".s32";
         }
-        internal_assert(coord_desc != "") << "unhandled coordinate type for ptx texture sampler " << coord_type;
+        internal_assert(coord_desc.) << "unhandled coordinate type for ptx texture sampler " << coord_type;
 
         string dim = std::to_string(num_args) + "d";
         string intrinsic = "llvm.nvvm.tex.unified." + dim + ".v4" + res_desc + coord_desc;
