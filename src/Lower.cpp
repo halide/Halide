@@ -9,7 +9,6 @@
 #include "AddAtomicMutex.h"
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
-#include "AlignGPUBuffers.h"
 #include "AllocationBoundsInference.h"
 #include "AsyncProducers.h"
 #include "BoundSmallAllocations.h"
@@ -414,11 +413,6 @@ Module lower(const vector<Function> &output_funcs,
         s = lower_warp_shuffles(s);
         debug(2) << "Lowering after injecting warp shuffles:\n"
                  << s << "\n\n";
-
-        // debug(1) << "Aligning GPU Buffers...\n";
-        // s = align_gpu_buffers(s, t);
-        // debug(2) << "Lowering after aligning GPU buffers:\n"
-        //          << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";
