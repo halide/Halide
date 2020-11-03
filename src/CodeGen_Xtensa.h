@@ -28,8 +28,8 @@ protected:
 
     bool is_native_vector_type(Type t);
 
-    std::string print_cast_expr(const Type &, const Expr &) override;
-
+    std::string print_cast_expr(const Type& t, const Expr& e) override;
+    std::string print_type(Type t, CodeGen_C::AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
     std::string print_xtensa_call(const Call *op);
 
     void add_vector_typedefs(const std::set<Type> &vector_types) override;

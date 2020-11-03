@@ -1658,6 +1658,13 @@ string CodeGen_Xtensa::print_cast_expr(const Type &t, const Expr &e) {
     }
 }
 
+std::string CodeGen_Xtensa::print_type(Type t, AppendSpaceIfNeeded space_option) {
+  if (t.bits() == 1 && t.is_vector()) {
+      return "uint1x" + std::to_string(t.lanes()) + "_t" + (space_option == AppendSpace?" ":"");
+  }
+  return CodeGen_C::print_type(t, space_option);
+}
+
 void CodeGen_Xtensa::visit(const Mul *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {

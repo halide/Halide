@@ -1178,6 +1178,15 @@ public:
 
 #endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
 
+template <typename InputType, typename OutputType>
+OutputType full_reduce_add(const InputType& a) {
+  OutputType r = 0;
+  for (int i = 0; i < InputType::Lanes; i++) {
+    r += a[i];
+  }
+  return r;
+}
+
 }  // namespace
 
 )INLINE_CODE";
@@ -2506,6 +2515,39 @@ void CodeGen_C::visit(const Atomic *op) {
         ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
         op->body.accept(this);
     }
+}
+
+void CodeGen_C::visit(const VectorReduce *op) {
+    internal_assert(false) << "VectorReduce is not supported in Codegen_C\n";
+    /*
+    ostringstream rhs;
+    string reduce_op = "";
+
+    switch (op->op) {
+      case VectorReduce::Add:
+          reduce_op = "add";
+          break;
+      case VectorReduce::Mul:
+          reduce_op = "mul";
+          break;
+      case VectorReduce::Min:
+          reduce_op = "min";
+          break;
+      case VectorReduce::Max:
+          reduce_op = "max";
+          break;
+      case VectorReduce::And:
+          reduce_op = "and";
+          break;
+      case VectorReduce::Or:
+          reduce_op = "or";
+          break;
+    }
+
+    rhs << "full_reduce_" << reduce_op << "<" << print_type(op->value.type())
+        << ", " << print_type(op->type) << ">(" << print_expr(op->value) << ")";
+    print_assignment(op->type, rhs.str());
+    */
 }
 
 void CodeGen_C::visit(const For *op) {
