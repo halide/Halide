@@ -273,12 +273,6 @@ typedef enum CUfilter_mode_enum {
     CU_TR_FILTER_MODE_LINEAR = 1  /**< Linear filter mode */
 } CUfilter_mode;
 
-
-enum cudaTextureReadMode {
-    cudaReadModeElementType = 0,
-    cudaReadModeNormalizedFloat = 1
-};
-
 /**
  * CUDA texture resource view formats
  */

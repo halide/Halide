@@ -182,24 +182,28 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
 
         string res_desc = "";
         user_assert(op->type.bits() == 32) << "ptx texture sampler only supports 32 bit results";
-        llvm::Type *res_type;
+        llvm::Type *element_type;
         if (op->type.is_float()) {
             res_desc = "f32";
-            auto element = llvm_type_of(Float(32));
-            res_type = llvm::StructType::get(element, element, element, element);
+            element_type = llvm_type_of(Float(32));
         } else {
             res_desc = "s32";
-            auto element = llvm_type_of(Int(32));
-            res_type = llvm::StructType::get(element, element, element, element);
+            element_type = llvm_type_of(Int(32));
         }
+        // PTX returns a 4 element struct (not a vector!) regardless of 
+        llvm::Type *res_type = llvm::StructType::get(element, element, element, element);
 
         string coord_desc = "";
-        user_assert(op->args[2].type().bits() == 32) << "ptx texture sampler only supports 32 bit args";
-        if (op->args[2].type().is_float()) {
+        Type coord_type = op->args[2].type();
+        user_assert(coord_type.bits() == 32) << "ptx texture sampler only supports 32 bit args";
+        if (coord_type.is_float()) {
             coord_desc = ".f32";
-        } else {
+        } else if (coord_type.is_uint()) {
+            coord_desc = ".u32";
+        } else if (coord_type.is_int()) {
             coord_desc = ".s32";
         }
+        internal_assert(coord_type != "") << "unhandled coordinate type for ptx texture sampler " << coord_type;
 
         string dim = std::to_string(num_args) + "d";
         string intrinsic = "llvm.nvvm.tex.unified." + dim + ".v4" + res_desc + coord_desc;
@@ -212,7 +216,6 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         }
         llvm::CallInst *call = (llvm::CallInst *)call_intrin(res_type, 1, intrinsic, coords);
         value = builder->CreateExtractValue(call, {0});
-
     } else {
         CodeGen_LLVM::visit(op);
     }

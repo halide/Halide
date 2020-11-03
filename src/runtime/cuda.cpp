@@ -1119,7 +1119,7 @@ WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t
     halide_assert(user_context, buf->device_interface == halide_cuda_device_interface() && buf->device);
 
     if (!cuTexObjectCreate) {
-        error(user_context) << "requesting texture object but don't have runtime functions";
+        error(user_context) << "CUDA requesting texture object but don't have runtime functions (cuTexObjectCreate)";
         return 0;
     }
 
@@ -1153,12 +1153,9 @@ WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t
 
     CUDA_RESOURCE_DESC resourceDesc;
     CUDA_TEXTURE_DESC textureDesc;
-    // CUDA_RESOURCE_VIEW_DESC resourceViewDesc;
 
     memset(&resourceDesc, 0, sizeof(resourceDesc));
     memset(&textureDesc, 0, sizeof(textureDesc));
-
-    // textureDesc.filterMode = CU_TR_FILTER_MODE_POINT
 
     CUarray_format format = (CUarray_format)0;
     struct halide_type_t type = buf->type;
@@ -1205,7 +1202,6 @@ WEAK uint64_t halide_cuda_get_texture(void *user_context, struct halide_buffer_t
         resourceDesc.res.linear.format = format;
         resourceDesc.res.linear.numChannels = 1;
         resourceDesc.res.linear.sizeInBytes = buf->size_in_bytes();
-
     } else if (buf->dimensions == 2) {
         resourceDesc.resType = CU_RESOURCE_TYPE_PITCH2D;
         resourceDesc.res.pitch2D.devPtr = (CUdeviceptr)buf->device;
