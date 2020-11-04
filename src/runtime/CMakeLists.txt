@@ -86,6 +86,7 @@ set(RUNTIME_CPP
     windows_clock
     windows_cuda
     windows_d3d12compute_x86
+	windows_d3d12compute_arm
     windows_get_symbol
     windows_io
     windows_opencl
@@ -169,25 +170,49 @@ foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
         # -fpic needs special treatment; see below on windows 64bits
         set(fpic -fpic)
-        if (j EQUAL 32)
-            if (i MATCHES "windows_.*")
-                # win32 uses the stdcall calling convention, which is x86-specific
-                set(TARGET "i386-unknown-unknown-unknown")
-            else ()
-                # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
-                set(TARGET "le32-unknown-nacl-unknown")
-            endif ()
-        else ()
-            if (i MATCHES "windows_.*")
-                # must omit -fpic, otherwise clang will complain with the following:
-                # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
-                set(fpic "")
-                set(TARGET "x86_64-unknown-windows-unknown")
-            else ()
-                # generic 64-bit code
-                set(TARGET "le64-unknown-unknown-unknown")
-            endif ()
-        endif ()
+		# Windows
+		if (i MATCHES "windows_.*")
+			# Windows x86/x64
+			if (i MATCHES "windows_.*_x86$")
+				if (j EQUAL 32)
+					# win32 uses the stdcall calling convention, which is x86-specific
+					set(fpic "")
+					set(TARGET "i386-unknown-windows-unknown")
+				else ()
+					# must omit -fpic, otherwise clang will complain with the following:
+					# clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
+					set(fpic "")
+					set(TARGET "x86_64-unknown-windows-unknown")
+				endif ()
+			# Windows on ARM
+			elseif (i MATCHES "windows_.*_arm$")
+				if (j EQUAL 32)
+					set(fpic "")
+					set(TARGET "arm-unknown-windows-unknown")
+				else ()
+					set(fpic "")
+					set(TARGET "aarch64-unknown-windows-unknown")
+				endif ()
+			# Windows Generic
+			else()
+				if (j EQUAL 32)
+					set(fpic "")
+					set(TARGET "i386-unknown-windows-unknown")
+				else ()
+					set(fpic "")
+					set(TARGET "x86_64-unknown-windows-unknown")
+				endif ()
+			endif()
+		# Everything else
+		else()
+			if (j EQUAL 32)
+				# (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
+				set(TARGET "le32-unknown-nacl-unknown")
+			else ()
+				# generic 64-bit code
+				set(TARGET "le64-unknown-unknown-unknown")
+			endif ()
+		endif ()
 
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
 

@@ -8,6 +8,6 @@
 // treat compiler messages as warnings, which would then be escalated to errors since
 // we generally build with warnings-as-errors enabled.
 #else
-#define HALIDE_D3D12_PLATFORM Windows_x64
+#define HALIDE_D3D12_PLATFORM Windows_ARM64
 #include "d3d12compute.cpp"
 #endif
