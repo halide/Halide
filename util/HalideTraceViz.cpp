@@ -1415,8 +1415,8 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
 
         // Print stats about the Func gleaned from the trace.
         std::vector<std::pair<std::string, FuncInfo>> funcs;
-        for (std::pair<std::string, FuncInfo> p : state.funcs) {
-            funcs.push_back(p);
+        for (const auto &p : state.funcs) {
+            funcs.emplace_back(p);
         }
         struct by_first_packet_idx {
             bool operator()(const std::pair<std::string, FuncInfo> &a,
