@@ -286,19 +286,18 @@ class InjectDmaTransfer : public IRMutator {
     const std::map<std::string, Function> &env;
 
     Stmt visit(const ProducerConsumer* op) override {
-      if (op->is_producer) {
-          auto it = env.find(op->name);
-          internal_assert(it != env.end());
-          Function f = it->second;
-          if (f.schedule().dma()) {
-              Stmt body = mutate(op->body);
-              debug(0) << "Found DMA producer " << op->name << "\n";
-              // debug(0) << op->body << "\n";
-              body = InjectDmaTransferIntoProducer(op->name).mutate(body);
-              return ProducerConsumer::make_produce(op->name, body);
-          }
-      }
-      return IRMutator::visit(op);
+        if (op->is_producer) {
+            auto it = env.find(op->name);
+            if (it != env.end()) {
+                Function f = it->second;
+                if (f.schedule().dma()) {
+                    Stmt body = mutate(op->body);
+                    body = InjectDmaTransferIntoProducer(op->name).mutate(body);
+                    return ProducerConsumer::make_produce(op->name, body);
+                }
+            }
+        }
+        return IRMutator::visit(op);
     }
 public:
     InjectDmaTransfer(const std::map<std::string, Function> &e) : env(e) { }
