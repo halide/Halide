@@ -158,12 +158,7 @@ Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
 
 Buffer<uint16_t> blur_halide_c(Buffer<uint16_t> in) {
     Buffer<uint16_t> out(in.width() - 8, in.height() - 2);
-
-    // Call it once to initialize the halide runtime stuff
     halide_blur_c(in, out);
-    // Copy-out result if it's device buffer and dirty.
-    out.copy_to_host();
-
     return out;
 }
 
