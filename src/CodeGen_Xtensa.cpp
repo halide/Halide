@@ -1637,27 +1637,6 @@ bool CodeGen_Xtensa::is_native_vector_type(Type t) {
     return false;
 }
 
-string CodeGen_Xtensa::print_cast_expr(const Type &t, const Expr &e) {
-    string value = print_expr(e);
-    string type = print_type(t);
-    if (t.is_int_or_uint() && e.type().is_int_or_uint() &&
-        (e.type().bits() == 16) && (e.type().lanes() == 32) &&
-        (t.bits() == 16) && (t.lanes() == 32)) {
-        // return print_assignment(t, "(" + type + ")(" + value + ")");
-        if (e.type().is_int()) {
-            return print_assignment(t, "xb_vecNx16_rtor_xb_vecNx16U(" + value + ")");
-        } else {
-            return print_assignment(t, "xb_vecNx16U_rtor_xb_vecNx16(" + value + ")");
-        }
-    } else if (t.is_vector() &&
-               t.lanes() == e.type().lanes() &&
-               t != e.type()) {
-        return print_assignment(t, "convert_to_" + type + "_from_" + print_type(e.type()) + "(" + value + ")");
-    } else {
-        return print_assignment(t, "(" + type + ")(" + value + ")");
-    }
-}
-
 std::string CodeGen_Xtensa::print_type(Type t, AppendSpaceIfNeeded space_option) {
   if (t.bits() == 1 && t.is_vector()) {
       return "uint1x" + std::to_string(t.lanes()) + "_t" + (space_option == AppendSpace?" ":"");
@@ -2401,6 +2380,29 @@ void CodeGen_Xtensa::visit(const Call *op) {
         print_assignment(op->type, "0");
     } else {
         print_assignment(op->type, rhs.str());
+    }
+}
+
+void CodeGen_Xtensa::visit(const Cast *op) {
+    const Type& t = op->type;
+    const Expr& e = op->value;
+    string value = print_expr(e);
+    string type = print_type(t);
+    if (t.is_int_or_uint() && e.type().is_int_or_uint() &&
+        (e.type().bits() == 16) && (e.type().lanes() == 32) &&
+        (t.bits() == 16) && (t.lanes() == 32)) {
+        // return print_assignment(t, "(" + type + ")(" + value + ")");
+        if (e.type().is_int()) {
+            id = print_assignment(t, "xb_vecNx16_rtor_xb_vecNx16U(" + value + ")");
+        } else {
+            id = print_assignment(t, "xb_vecNx16U_rtor_xb_vecNx16(" + value + ")");
+        }
+    } else if (t.is_vector() &&
+               t.lanes() == e.type().lanes() &&
+               t != e.type()) {
+        id = print_assignment(t, "convert_to_" + type + "_from_" + print_type(e.type()) + "(" + value + ")");
+    } else {
+        id = print_assignment(t, "(" + type + ")(" + value + ")");
     }
 }
 

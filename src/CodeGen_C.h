@@ -84,7 +84,7 @@ protected:
     std::string print_expr(const Expr &);
 
     /** Like print_expr, but cast the Expr to the given Type */
-    virtual std::string print_cast_expr(const Type &, const Expr &);
+    std::string print_cast_expr(const Type &, const Expr &);
 
     /** Emit a statement */
     void print_stmt(const Stmt &);

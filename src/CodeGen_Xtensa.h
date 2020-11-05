@@ -28,7 +28,6 @@ protected:
 
     bool is_native_vector_type(Type t);
 
-    std::string print_cast_expr(const Type& t, const Expr& e) override;
     std::string print_type(Type t, CodeGen_C::AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
     std::string print_xtensa_call(const Call *op);
 
@@ -42,6 +41,7 @@ protected:
     void visit(const Ramp *op) override;
     void visit(const Broadcast *op) override;
     void visit(const Call *op) override;
+    void visit(const Cast *op) override;
     void visit(const Load *op) override;
     void visit(const EQ *op) override;
     void visit(const LT *op) override;
