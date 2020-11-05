@@ -1245,7 +1245,11 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
+#if LLVM_VERSION >= 120
+    llvm::PassBuilder pb(/*DebugLogging*/ false, tm.get(), pto);
+#else
     llvm::PassBuilder pb(tm.get(), pto);
+#endif
 
     bool debug_pass_manager = false;
     // These analysis managers have to be declared in this order.
@@ -1268,10 +1272,18 @@ void CodeGen_LLVM::optimize_module() {
     PassBuilder::OptimizationLevel level = PassBuilder::OptimizationLevel::O3;
 
     if (get_target().has_feature(Target::ASAN)) {
+#if LLVM_VERSION >= 120
+        pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm,
+                                               PassBuilder::OptimizationLevel) {
+            mpm.addPass(
+                RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
+        });
+#else
         pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm) {
             mpm.addPass(
                 RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
         });
+#endif
 #if LLVM_VERSION >= 110
         pb.registerOptimizerLastEPCallback(
             [](ModulePassManager &mpm, PassBuilder::OptimizationLevel level) {
@@ -1291,6 +1303,18 @@ void CodeGen_LLVM::optimize_module() {
                     compile_kernel, recover, use_after_scope));
             });
 #endif
+#if LLVM_VERSION >= 120
+        pb.registerPipelineStartEPCallback(
+            [](ModulePassManager &mpm, PassBuilder::OptimizationLevel) {
+                constexpr bool compile_kernel = false;
+                constexpr bool recover = false;
+                constexpr bool module_use_after_scope = false;
+                constexpr bool use_odr_indicator = true;
+                mpm.addPass(ModuleAddressSanitizerPass(
+                    compile_kernel, recover, module_use_after_scope,
+                    use_odr_indicator));
+            });
+#else
         pb.registerPipelineStartEPCallback(
             [](ModulePassManager &mpm) {
                 constexpr bool compile_kernel = false;
@@ -1301,6 +1325,7 @@ void CodeGen_LLVM::optimize_module() {
                     compile_kernel, recover, module_use_after_scope,
                     use_odr_indicator));
             });
+#endif
     }
 
     if (get_target().has_feature(Target::TSAN)) {
