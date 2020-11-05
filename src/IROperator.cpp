@@ -449,7 +449,12 @@ Expr lossless_cast(Type t, Expr e) {
     if (const Cast *c = e.as<Cast>()) {
         Expr v = lossless_cast(t, c->value);
         if (v.defined()) {
-            return v;
+            // We can recurse into widening casts.
+            if (c->type.can_represent(c->value.type())) {
+                return v;
+            } else {
+                return cast(t, cast(c->type, v));
+            }
         } else {
             return Expr();
         }
@@ -577,12 +582,18 @@ Expr lossless_cast(Type t, Expr e) {
     }
 
     if (const Ramp *ramp = e.as<Ramp>()) {
+        if (t.bits() > 32) {
+            return Expr();
+        }
         Type ty = t.with_lanes(ramp->type.lanes() / t.lanes());
+        Type wide_ty = ty.with_bits(64);
         Expr first = ramp->base;
-        Expr last = simplify(first + (ramp->lanes - 1) * ramp->stride);
+        // Cast to wide_ty to prevent overflows.
+        Expr last = simplify(cast(wide_ty, first) +
+                             cast(wide_ty, ramp->lanes - 1) * cast(wide_ty, ramp->stride));
         if (lossless_cast(ty, first).defined() &&
             lossless_cast(ty, last).defined()) {
-            return Ramp::make(cast(ty, first), cast(ty, ramp->stride), ramp->lanes);
+            return cast(t, e);
         } else {
             return Expr();
         }

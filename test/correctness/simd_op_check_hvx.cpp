@@ -648,14 +648,15 @@ public:
 
         int rfac = 4;
         RDom r(0, rfac);
-        check("vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r))));
-        check("vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * 34));
-        check("vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * r));
-        check("vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * u8(r)));
-        check("vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
-        check("vrmpy(v*.ub,v*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
-        check("vrmpy(v*.b,v*.b)", hvx_width / 4, sum(i32(in_i8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r))));
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * 34));
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * u8(r)));
+        check("v*.w  += vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * r));
+        check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
+        check("v*.w  += vrmpy(v*.ub,v*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
+        check("v*.w  += vrmpy(v*.b,v*.b)", hvx_width / 4, sum(i32(in_i8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         // Sliding window
+        // TODO: We can generate accumulative versions of below instructions.
         check("v*:*.uw = vrmpy(v*:*.ub, r*.ub, #*)", hvx_width, sum(u32(in_u8(x + r))));
         check("v*:*.uw = vrmpy(v*:*.ub, r*.ub, #*)", hvx_width, sum(u32(in_u8(x + r)) * 34));
         check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(u32(in_u8(x + r)) * r));
@@ -664,19 +665,21 @@ public:
 
         rfac = 2;
         RDom r2(0, rfac);
-        check("vdmpy(v*.ub, r*.b)", hvx_width / 2, sum(i16(in_u8(rfac * x + r2))));
-        check("vdmpy(v*.ub, r*.b)", hvx_width / 2, sum(i16(in_u8(rfac * x + r2)) * 34));
-        check("vdmpy(v*.h, r*.uh)", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * r2));
-        check("vdmpy(v*.h, r*.uh):sat", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * 15246));
-        check("vdmpy(v*.h, r*.h):sat", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * (-1246)));
+        check("v*.h += vdmpy(v*.ub, r*.b)", hvx_width / 2, sum(i16(in_u8(rfac * x + r2))));
+        check("v*.h += vdmpy(v*.ub, r*.b)", hvx_width / 2, sum(i16(in_u8(rfac * x + r2)) * 34));
+        check("v*.w += vdmpy(v*.h, r*.b)", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * r2));
+        check("v*.w += vdmpy(v*.h, r*.b)", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * r2));
+        check("v*.w = vdmpy(v*.h, r*.uh):sat", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * 15246));
+        check("v*.w = vdmpy(v*.h, r*.h):sat", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * (-1246)));
         // Sliding window
         // TODO: Check for the crash
         // check("v*:*.h = vdmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r2)) * i16(r2)));
+
         rfac = 3;
         RDom r3(0, rfac);
-        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width, sum(i16(in_i8(x + r3))));
-        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r3))));
-        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width, sum(i32(in_i16(x + r3))));
+        check("v*:*.h += vtmpy(v*:*.b, r*.b)", hvx_width, sum(i16(in_i8(x + r3))));
+        check("v*:*.h += vtmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r3))));
+        check("v*:*.w += vtmpy(v*:*.h, r*.b)", hvx_width, sum(i32(in_i16(x + r3))));
     }
 
 private:
