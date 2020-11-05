@@ -47,7 +47,7 @@ class FlattenRamps : public IRMutator {
         // want to do this if it's already a dense ramp.
         const Ramp *ramp = op->index.as<Ramp>();
         if (lanes > 1 &&
-            is_one(op->predicate) &&
+            is_const_one(op->predicate) &&
             (ramp == nullptr || ramp->lanes < lanes)) {
 
             Interval bounds_of_lanes = bounds_of_expr_in_scope(op->index, Scope<Interval>::empty_scope());

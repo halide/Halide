@@ -136,7 +136,7 @@ private:
 
     Stmt visit(const Store *op) override {
         Expr predicate = op->predicate;
-        if (!is_one(predicate)) {
+        if (!is_const_one(predicate)) {
             predicate = mutate(predicate);
         }
         Expr value = op->value;
@@ -158,7 +158,7 @@ private:
 
     Expr visit(const Load *op) override {
         Expr predicate = op->predicate;
-        if (!is_one(predicate)) {
+        if (!is_const_one(predicate)) {
             predicate = mutate(predicate);
         }
         Expr index = mutate(op->index);

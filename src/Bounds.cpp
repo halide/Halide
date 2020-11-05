@@ -83,7 +83,7 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
 }
 
 bool Box::maybe_unused() const {
-    return used.defined() && !is_one(used);
+    return used.defined() && !is_const_one(used);
 }
 
 std::ostream &operator<<(std::ostream &stream, const Box &b) {
@@ -476,7 +476,7 @@ private:
         } else if (b.is_single_point()) {
             Expr e1 = a.has_lower_bound() ? a.min * b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max * b.min : a.max;
-            if (is_zero(b.min)) {
+            if (is_const_zero(b.min)) {
                 interval = b;
             } else if (is_positive_const(b.min) || op->type.is_uint()) {
                 interval = Interval(e1, e2);
@@ -797,16 +797,16 @@ private:
     }
 
     Expr make_and(Expr a, Expr b) {
-        if (is_one(a)) {
+        if (is_const_one(a)) {
             return b;
         }
-        if (is_one(b)) {
+        if (is_const_one(b)) {
             return a;
         }
-        if (is_zero(a)) {
+        if (is_const_zero(a)) {
             return a;
         }
-        if (is_zero(b)) {
+        if (is_const_zero(b)) {
             return b;
         }
         return a && b;
@@ -832,16 +832,16 @@ private:
     }
 
     Expr make_or(Expr a, Expr b) {
-        if (is_one(a)) {
+        if (is_const_one(a)) {
             return a;
         }
-        if (is_one(b)) {
+        if (is_const_one(b)) {
             return b;
         }
-        if (is_zero(a)) {
+        if (is_const_zero(a)) {
             return b;
         }
-        if (is_zero(b)) {
+        if (is_const_zero(b)) {
             return a;
         }
         return a || b;
@@ -867,10 +867,10 @@ private:
     }
 
     Expr make_not(const Expr &e) {
-        if (is_one(e)) {
+        if (is_const_one(e)) {
             return make_zero(e.type());
         }
-        if (is_zero(e)) {
+        if (is_const_zero(e)) {
             return make_one(e.type());
         }
         return !e;
@@ -903,10 +903,10 @@ private:
         Interval cond = interval;
 
         if (cond.is_single_point()) {
-            if (is_one(cond.min)) {
+            if (is_const_one(cond.min)) {
                 interval = a;
                 return;
-            } else if (is_zero(cond.min)) {
+            } else if (is_const_zero(cond.min)) {
                 interval = b;
                 return;
             }
@@ -920,15 +920,15 @@ private:
             interval.min = a.min;
         } else if (cond.is_single_point()) {
             interval.min = select(cond.min, a.min, b.min);
-        } else if (is_zero(cond.min) && is_one(cond.max)) {
+        } else if (is_const_zero(cond.min) && is_const_one(cond.max)) {
             interval.min = Interval::make_min(a.min, b.min);
-        } else if (is_one(cond.max)) {
+        } else if (is_const_one(cond.max)) {
             // cond.min is non-trivial
             string var_name = unique_name('t');
             Expr var = Variable::make(t, var_name);
             interval.min = Interval::make_min(select(cond.min, var, b.min), var);
             interval.min = Let::make(var_name, a.min, interval.min);
-        } else if (is_zero(cond.min)) {
+        } else if (is_const_zero(cond.min)) {
             // cond.max is non-trivial
             string var_name = unique_name('t');
             Expr var = Variable::make(t, var_name);
@@ -950,15 +950,15 @@ private:
             interval.max = a.max;
         } else if (cond.is_single_point()) {
             interval.max = select(cond.min, a.max, b.max);
-        } else if (is_zero(cond.min) && is_one(cond.max)) {
+        } else if (is_const_zero(cond.min) && is_const_one(cond.max)) {
             interval.max = Interval::make_max(a.max, b.max);
-        } else if (is_one(cond.max)) {
+        } else if (is_const_one(cond.max)) {
             // cond.min is non-trivial
             string var_name = unique_name('t');
             Expr var = Variable::make(t, var_name);
             interval.max = Interval::make_max(select(cond.min, var, b.max), var);
             interval.max = Let::make(var_name, a.max, interval.max);
-        } else if (is_zero(cond.min)) {
+        } else if (is_const_zero(cond.min)) {
             // cond.max is non-trivial
             string var_name = unique_name('t');
             Expr var = Variable::make(t, var_name);
@@ -978,7 +978,7 @@ private:
     void visit(const Load *op) override {
         TRACK_BOUNDS_INTERVAL;
         op->index.accept(this);
-        if (!const_bound && interval.is_single_point() && is_one(op->predicate)) {
+        if (!const_bound && interval.is_single_point() && is_const_one(op->predicate)) {
             // If the index is const and it is not a predicated load,
             // we can return the load of that index
             Expr load_min =
@@ -1616,7 +1616,7 @@ void merge_boxes(Box &a, const Box &b) {
     if (a_maybe_unused && b_maybe_unused) {
         if (!equal(a.used, b.used)) {
             a.used = simplify(a.used || b.used);
-            if (is_one(a.used)) {
+            if (is_const_one(a.used)) {
                 a.used = Expr();
             }
         }

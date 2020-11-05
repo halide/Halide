@@ -1650,7 +1650,7 @@ void CodeGen_LLVM::visit(const Mul *op) {
 }
 
 void CodeGen_LLVM::visit(const Div *op) {
-    user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
+    user_assert(!is_const_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
     Type t = upgrade_type_for_arithmetic(op->type);
     if (t != op->type) {
@@ -2026,7 +2026,7 @@ void CodeGen_LLVM::visit(const Load *op) {
     }
 
     // Predicated load
-    if (!is_one(op->predicate)) {
+    if (!is_const_one(op->predicate)) {
         codegen_predicated_vector_load(op);
         return;
     }
@@ -2291,7 +2291,7 @@ void CodeGen_LLVM::scalarize(const Expr &e) {
 
 void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
     const Ramp *ramp = op->index.as<Ramp>();
-    if (ramp && is_one(ramp->stride)) {  // Dense vector store
+    if (ramp && is_const_one(ramp->stride)) {  // Dense vector store
         debug(4) << "Predicated dense vector store\n\t" << Stmt(op) << "\n";
         Value *vpred = codegen(op->predicate);
         Halide::Type value_type = op->value.type();
@@ -2380,7 +2380,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     debug(4) << "Vectorize predicated dense vector load:\n\t" << Expr(load) << "\n";
 
     const Ramp *ramp = load->index.as<Ramp>();
-    internal_assert(ramp && is_one(ramp->stride)) << "Should be dense vector load\n";
+    internal_assert(ramp && is_const_one(ramp->stride)) << "Should be dense vector load\n";
 
     bool is_external = (external_buffer.find(load->name) != external_buffer.end());
     int alignment = load->type.bytes();  // The size of a single element
@@ -2451,7 +2451,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
-    if (ramp && is_one(ramp->stride)) {  // Dense vector load
+    if (ramp && is_const_one(ramp->stride)) {  // Dense vector load
         Value *vpred = codegen(op->predicate);
         value = codegen_dense_vector_load(op, vpred);
     } else if (ramp && stride && stride->value == -1) {
@@ -2491,7 +2491,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
 
 void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
     // TODO: predicated store (see https://github.com/halide/Halide/issues/4298).
-    user_assert(is_one(op->predicate)) << "Atomic predicated store is not supported.\n";
+    user_assert(is_const_one(op->predicate)) << "Atomic predicated store is not supported.\n";
 
     // Detect whether we can describe this as an atomic-read-modify-write,
     // otherwise fallback to a compare-and-swap loop.
@@ -2850,8 +2850,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::Function *fn = Intrinsic::getDeclaration(module.get(),
                                                        (op->is_intrinsic(Call::count_leading_zeros)) ? Intrinsic::ctlz : Intrinsic::cttz,
                                                        arg_type);
-        llvm::Value *is_zero_undef = llvm::ConstantInt::getFalse(*context);
-        llvm::Value *args[2] = {codegen(op->args[0]), is_zero_undef};
+        llvm::Value *is_const_zero_undef = llvm::ConstantInt::getFalse(*context);
+        llvm::Value *args[2] = {codegen(op->args[0]), is_const_zero_undef};
         CallInst *call = builder->CreateCall(fn, args);
         value = call;
     } else if (op->is_intrinsic(Call::return_second)) {
@@ -3235,7 +3235,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
         value = call;
     } else if (op->is_intrinsic(Call::prefetch)) {
-        user_assert((op->args.size() == 4) && is_one(op->args[2]))
+        user_assert((op->args.size() == 4) && is_const_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported.\n";
 
         llvm::Function *prefetch_fn = module->getFunction("_halide_prefetch");
@@ -4096,7 +4096,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     }
 
     // Predicated store.
-    if (!is_one(op->predicate)) {
+    if (!is_const_one(op->predicate)) {
         codegen_predicated_vector_store(op);
         return;
     }
@@ -4114,7 +4114,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     } else {
         int alignment = value_type.bytes();
         const Ramp *ramp = op->index.as<Ramp>();
-        if (ramp && is_one(ramp->stride)) {
+        if (ramp && is_const_one(ramp->stride)) {
 
             int native_bits = native_vector_bits();
             int native_bytes = native_bits / 8;

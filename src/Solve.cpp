@@ -1632,7 +1632,7 @@ void solve_test() {
         Scope<Interval> s;
         s.push("x", Interval(-10, 10));
         Expr cond = and_condition_over_domain(lhs < 0, s);
-        internal_assert(!is_one(simplify(cond)));
+        internal_assert(!is_const_one(simplify(cond)));
     }
 
     {

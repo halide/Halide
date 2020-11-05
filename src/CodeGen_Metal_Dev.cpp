@@ -175,7 +175,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))
             << "kernel loop must be either gpu block or gpu thread\n";
-        internal_assert(is_zero(loop->min));
+        internal_assert(is_const_zero(loop->min));
 
         stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
                << " = " << simt_intrinsic(loop->name) << ";\n";
@@ -251,7 +251,7 @@ Expr is_ramp_one(const Expr &e) {
         return Expr();
     }
 
-    if (is_one(r->stride)) {
+    if (is_const_one(r->stride)) {
         return r->base;
     }
 
@@ -268,7 +268,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside Metal kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside Metal kernel.\n";
     user_assert(op->type.lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->type << ".\n";
 
     // If we're loading a contiguous ramp, load from a vector type pointer.
@@ -336,7 +336,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "Predicated store is not supported inside Metal kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported inside Metal kernel.\n";
     user_assert(op->value.type().lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->value.type() << ".\n";
 
     string id_value = print_expr(op->value);
