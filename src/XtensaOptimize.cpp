@@ -391,15 +391,15 @@ private:
                 // {"halide_xtensa_pred_add_i16", wild_i16x + select(wild_u1x, wild_i16x, wild_i16x)},
                 // {"halide_xtensa_pred_add_i32", wild_i32x + select(wild_u1x, wild_i32x, wild_i32x)},
 
-//                 {"halide_xtensa_widen_pair_mul_vu8_si16_i24",
-//                                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})) +
-//                                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})),
-//                                    Pattern::AccumulatorOutput24},
+                // {"halide_xtensa_widen_pair_mul_vu8_si16_i24",
+                //                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})) +
+                //                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})),
+                //                    Pattern::AccumulatorOutput24},
 
-//                 {"halide_xtensa_widen_mul_add_vu8_si16_i24",
-//                                    i16(wild_i24x) +
-//                                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})),
-//                                    Pattern::AccumulatorOutput24},
+                // {"halide_xtensa_widen_mul_add_vu8_si16_i24",
+                //                    i16(wild_i24x) +
+                //                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})),
+                //                    Pattern::AccumulatorOutput24},
 
                 {"halide_xtensa_widen_pair_mul_i48", wild_i32x * wild_i32x + wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_pair_mul_u48", wild_u32x * wild_u32x + wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
@@ -467,7 +467,7 @@ private:
                 // {"halide_xtensa_widen_mul_u24", wild_u16x * wild_u16x, Pattern::NarrowOps | Pattern::AccumulatorOutput24},
                 {"halide_xtensa_widen_mul_vu8_si16_i24", wild_i16x * bc(wild_i16x), Pattern::NarrowUnsignedOp0 | Pattern::AccumulatorOutput24},
 
-              // Widening multiplication
+                // Widening multiplication
                 // {"halide_xtensa_widen_sqr_i48", wild_i32x * wild_i32x, Pattern::SameOp01 | Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_i48", wild_i32x * bc(wild_i32), Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_u48", wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
@@ -582,7 +582,7 @@ private:
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
 
             {"halide_xtensa_narrow_high_i32", i32(wild_i64x >> 32)},
-            {"halide_xtensa_narrow_high_i32", i32(wild_i64x / Expr(4294967296))},
+            {"halide_xtensa_narrow_high_i32", i32(wild_i64x / IntImm::make(Int(64), 4294967296ll))},
 
             {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x >> bc(wild_i64))},
             {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x / bc(wild_i64)), Pattern::ExactLog2Op1},
@@ -1314,162 +1314,6 @@ public:
     }
 };
 
-/** If an integer expression varies linearly with the variables in the
- * scope, return the linear term. Otherwise return an undefined
- * Expr. */
-/*
-Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
-    if (e.type() != Int(32)) {
-        return Expr();
-    }
-    if (const Variable *v = e.as<Variable>()) {
-        if (linear.contains(v->name)) {
-            return linear.get(v->name);
-        } else {
-            return make_zero(v->type);
-        }
-    } else if (const IntImm *op = e.as<IntImm>()) {
-        return make_zero(op->type);
-    } else if (const Add *add = e.as<Add>()) {
-        Expr la = is_linear(add->a, linear);
-        Expr lb = is_linear(add->b, linear);
-        if (is_zero(lb)) {
-            return la;
-        } else if (is_zero(la)) {
-            return lb;
-        } else if (la.defined() && lb.defined()) {
-            return la + lb;
-        } else {
-            return Expr();
-        }
-    } else if (const Sub *sub = e.as<Sub>()) {
-        Expr la = is_linear(sub->a, linear);
-        Expr lb = is_linear(sub->b, linear);
-        if (is_zero(lb)) {
-            return la;
-        } else if (la.defined() && lb.defined()) {
-            return la - lb;
-        } else {
-            return Expr();
-        }
-    } else if (const Mul *mul = e.as<Mul>()) {
-        Expr la = is_linear(mul->a, linear);
-        Expr lb = is_linear(mul->b, linear);
-        if (is_zero(la) && is_zero(lb)) {
-            return la;
-        } else if (is_zero(la) && lb.defined()) {
-            return mul->a * lb;
-        } else if (la.defined() && is_zero(lb)) {
-            return la * mul->b;
-        } else {
-            return Expr();
-        }
-    } else if (const Div *div = e.as<Div>()) {
-        Expr la = is_linear(div->a, linear);
-        if (is_zero(la)) {
-            return la;
-        } else {
-            return Expr();
-        }
-    } else if (const Mod *mod = e.as<Mod>()) {
-        Expr la = is_linear(mod->a, linear);
-        if (is_zero(la)) {
-            return la;
-        } else {
-            return Expr();
-        }
-    } else if (const Ramp *r = e.as<Ramp>()) {
-        Expr la = is_linear(r->base, linear);
-        Expr lb = is_linear(r->stride, linear);
-        if (is_zero(lb)) {
-            return la;
-        } else {
-            return Expr();
-        }
-    } else if (const Broadcast *b = e.as<Broadcast>()) {
-        return is_linear(b->value, linear);
-    } else {
-        return Expr();
-    }
-}
-
-// Replace indirect loads with dynamic_shuffle intrinsics where
-// possible.
-class FindDirectCopies : public IRMutator {
-    using IRMutator::visit;
-
-    struct LoopVar {
-        std::string name;
-        Expr min;
-        Expr extent;
-    };
-
-    std::vector<LoopVar> loop_vars;
-    std::set<std::string> loops_to_be_removed;
-
-    Stmt visit(const For *op) override {
-      // debug(0) << "FindDirectCopies::for " << op->name << "\n";
-      loop_vars.push_back({op->name, op->min, op->extent});
-      Stmt mutated = IRMutator::visit(op);
-      loop_vars.pop_back();
-      if (loops_to_be_removed.count(op->name) > 0) {
-        loops_to_be_removed.erase(op->name);
-        return mutated.as<For>()->body;
-      }
-      return mutated;
-    }
-
-    Stmt visit(const Store *op) override {
-        // debug(0) << "[begin] FindDirectCopies::store\n";
-        Expr value = op->value;//mutate(op->value);
-        const Load* maybe_load = value.as<Load>();
-        if (maybe_load) {
-            // debug(0) << "FindDirectCopies::" << op->name << " " <<  maybe_load->name << "\n";
-            // debug(0) << op->index << "\n";
-            // debug(0) << maybe_load->index << "\n";
-          // for (const auto& v: loop_vars) {
-            const auto& v = loop_vars.back();
-            Scope<Expr> local_scope;
-            Expr var = Variable::make(op->index.type(), v.name);
-            // local_scope.push(v.name, var);
-            local_scope.push(v.name, 1);
-            // debug(0) << "is_linear (stride): " << v.name << " " << is_linear(op->index, local_scope) << "\n";
-            // debug(0) << "is_linear (stride): " << v.name << " " << is_linear(maybe_load->index, local_scope) << "\n";
-            Expr op_index = mutate(op->index);
-            Expr value_index = mutate(maybe_load->index);
-            Expr store_stride = is_linear(op_index, local_scope);
-            Expr value_stride = is_linear(value_index, local_scope);
-            if (is_one(store_stride) && is_one(value_stride)) {
-                loops_to_be_removed.insert(v.name);
-                Expr store_base = substitute(var, v.min, op_index);
-                store_base = simplify(store_base);
-                Expr value_base = substitute(var, v.min, value_index);
-                value_base = simplify(value_base);
-                debug(0) << "is_linear (stride): " << v.name << " " << is_linear(op_index, local_scope) << "\n";
-                debug(0) << "is_linear (stride): " << v.name << " " << is_linear(value_index, local_scope) << "\n";
-                debug(0) << ">>> " << store_base << "\n>>> "
-                          << value_base << "\n>>>" << v.extent << "\n";
-
-                Expr copy_call = Call::make(Int(32), "halide_xtensa_copy_1d", {op->name, store_base, maybe_load->name, value_base, v.extent, op->value.type().bytes()}, Call::PureExtern);
-                // Expr var_copy = Variable::make(copy_call.type(), op->name + "copy_id");
-                // Stmt was_copy_scheduled = AssertStmt::make(var_copy > 0, -1);
-                // Stmt copy_let = LetStmt::make(op->name + "copy_id", copy_call, was_copy_scheduled);
-
-                Expr wait_result = Call::make(Int(32), "halide_wait_for_copy", {copy_call}, Call::PureExtern);
-                Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
-
-                return wait_is_done;
-                // return Block::make(copy_let, wait_is_done);
-            }
-         // }
-        }
-        return IRMutator::visit(op);
-    }
-
-public:
-    FindDirectCopies() { }
-};
-*/
 Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
     // s = FindDirectCopies().mutate(s);
