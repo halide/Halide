@@ -874,8 +874,8 @@ class fast_mutex {
                 continue;
             }
 
-            // If no one is parked, spin with spin count.
-            if ((expected & parked_bit) == 0 && spinner.should_spin()) {
+            // Spin with spin count.
+            if (spinner.should_spin()) {
                 halide_thread_yield();
                 atomic_load_relaxed(&state, &expected);
                 continue;
