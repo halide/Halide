@@ -874,7 +874,9 @@ class fast_mutex {
                 continue;
             }
 
-            // Spin with spin count.
+            // Spin with spin count. Note that this occurs even if
+            // threads are parked. We're prioritizing throughput over
+            // fairness by letting sleeping threads lie.
             if (spinner.should_spin()) {
                 halide_thread_yield();
                 atomic_load_relaxed(&state, &expected);
