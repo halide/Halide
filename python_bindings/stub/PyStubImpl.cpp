@@ -86,7 +86,7 @@ StubInput to_stub_input(const py::object &o) {
 
 void append_input(const py::object &value, std::vector<StubInput> &v) {
     if (is_real_sequence(value)) {
-        for (auto o : py::reinterpret_borrow<py::sequence>(value)) {
+        for (const auto &o : py::reinterpret_borrow<py::sequence>(value)) {
             v.push_back(to_stub_input(o));
         }
     } else {

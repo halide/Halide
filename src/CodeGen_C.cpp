@@ -81,8 +81,10 @@ void halide_profiler_pipeline_end(void *, void *);
 }
 
 #ifdef _WIN32
+#ifndef _MT
 __declspec(dllimport) float __cdecl roundf(float);
 __declspec(dllimport) double __cdecl round(double);
+#endif
 #else
 inline float asinh_f32(float x) {return asinhf(x);}
 inline float acosh_f32(float x) {return acoshf(x);}
@@ -732,6 +734,15 @@ CppVector<ElementType, Lanes> operator|(const CppVector<ElementType, Lanes> &a, 
 }
 
 template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator^(const CppVector<ElementType, Lanes> &a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] ^ b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
 CppVector<ElementType, Lanes> operator+(const CppVector<ElementType, Lanes> &a, const ElementType b) {
     CppVector<ElementType, Lanes> r;
     for (size_t i = 0; i < Lanes; i++) {
@@ -813,6 +824,15 @@ CppVector<ElementType, Lanes> operator|(const CppVector<ElementType, Lanes> &a, 
 }
 
 template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator^(const CppVector<ElementType, Lanes> &a, const ElementType b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a[i] ^ b;
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
 CppVector<ElementType, Lanes> operator+(const ElementType a, const CppVector<ElementType, Lanes> &b) {
     CppVector<ElementType, Lanes> r;
     for (size_t i = 0; i < Lanes; i++) {
@@ -889,6 +909,15 @@ CppVector<ElementType, Lanes> operator|(const ElementType a, const CppVector<Ele
     CppVector<ElementType, Lanes> r;
     for (size_t i = 0; i < Lanes; i++) {
         r[i] = a | b[i];
+    }
+    return r;
+}
+
+template<typename ElementType, size_t Lanes>
+CppVector<ElementType, Lanes> operator^(const ElementType a, const CppVector<ElementType, Lanes> &b) {
+    CppVector<ElementType, Lanes> r;
+    for (size_t i = 0; i < Lanes; i++) {
+        r[i] = a ^ b[i];
     }
     return r;
 }

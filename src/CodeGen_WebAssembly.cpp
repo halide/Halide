@@ -136,6 +136,11 @@ string CodeGen_WebAssembly::mattrs() const {
         sep = ",";
     }
 
+    if (target.has_feature(Target::WasmThreads)) {
+        s << sep << ",+atomics,+bulk-memory";
+        sep = ",";
+    }
+
     user_assert(target.os == Target::WebAssemblyRuntime)
         << "wasmrt is the only supported 'os' for WebAssembly at this time.";
 
