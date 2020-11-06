@@ -582,6 +582,7 @@ const char *const intrinsic_op_names[] = {
     "absd",
     "add_image_checks_marker",
     "alloca",
+    "atomic_fetch_and_add",
     "bitwise_and",
     "bitwise_not",
     "bitwise_or",

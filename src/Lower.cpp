@@ -447,6 +447,53 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after removing dead allocations and hoisting loop invariant values:\n"
              << s << "\n\n";
 
+    class ContainsInnerParallelism : public IRVisitor {
+        using IRVisitor::visit;
+        void visit(const For *op) override {
+            result |= op->for_type != ForType::Serial;
+            op->body.accept(this);
+        }
+
+        void visit(const Fork *op) override {
+            result = true;
+        }
+
+        void visit(const Acquire *op) override {
+            result = true;
+        }
+
+    public:
+        bool result = false;
+    };
+
+    class UseAtomicsForLeafParallelLoops : public IRMutator {
+        using IRMutator::visit;
+        Stmt visit(const For *op) override {
+            if (op->for_type == ForType::Parallel && op->device_api == DeviceAPI::None) {
+                ContainsInnerParallelism check;
+                op->body.accept(&check);
+                if (check.result) {
+                    return IRMutator::visit(op);
+                }
+
+                Stmt body = op->body;
+                string counter_name = op->name + ".loop_var";
+                Expr counter = Variable::make(type_of<int *>(), counter_name);
+                Expr next_idx = Call::make(Int(32), Call::atomic_fetch_and_add, {counter, 1}, Call::Intrinsic);
+                body = Block::make(AssertStmt::make(Variable::make(Int(32), op->name) < op->min + op->extent, 0), body);
+                body = LetStmt::make(op->name, next_idx, body);
+                body = For::make(unique_name('t'), 0, Int(32).max(), ForType::Serial, DeviceAPI::None, body);
+                body = For::make(op->name + ".loop", op->min, op->extent, ForType::Parallel, op->device_api, body);
+                Stmt init = Store::make(counter_name, op->min, 0, Parameter(), const_true(), ModulusRemainder{});
+                body = Block::make(init, body);
+                return Allocate::make(counter_name, Int(32), MemoryType::Stack, {}, const_true(), body);
+            }
+            return IRMutator::visit(op);
+        }
+    };
+
+    s = UseAtomicsForLeafParallelLoops().mutate(s);
+
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 

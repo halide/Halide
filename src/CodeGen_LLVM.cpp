@@ -2640,7 +2640,13 @@ void CodeGen_LLVM::visit(const Call *op) {
     // cue for llvm to generate particular ops. In general these are
     // handled in the standard library, but ones with e.g. varying
     // types are handled here.
-    if (op->is_intrinsic(Call::debug_to_file)) {
+    if (op->is_intrinsic(Call::atomic_fetch_and_add)) {
+        internal_assert(op->args.size() == 2);
+        Value *ptr = codegen(op->args[0]);
+        Value *val = codegen(op->args[1]);
+        ptr = builder->CreatePointerCast(ptr, val->getType()->getPointerTo());
+        value = builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::Monotonic);
+    } else if (op->is_intrinsic(Call::debug_to_file)) {
         internal_assert(op->args.size() == 3);
         const StringImm *filename = op->args[0].as<StringImm>();
         internal_assert(filename) << "Malformed debug_to_file node\n";
@@ -2658,7 +2664,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         args.push_back(buffer);
 
         value = builder->CreateCall(debug_to_file, args);
-
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
@@ -2961,7 +2966,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
             }
         }
-
     } else if (op->is_intrinsic(Call::stringify)) {
         internal_assert(!op->args.empty());
 
@@ -3271,7 +3275,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         args[0] = builder->CreateBitCast(args[0], ptr_type);
 
         value = builder->CreateCall(prefetch_fn, args);
-
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"
