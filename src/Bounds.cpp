@@ -653,7 +653,7 @@ private:
                 interval.max = b.max - make_one(t);
             } else if (b.max.type().is_uint()) {
                 // if b.max = 0 then result is [0, 0], else [0, b.max - 1]
-                interval.max = select(is_zero(b.max), make_zero(t), b.max - make_one(t));
+                interval.max = select(b.max == make_zero(t), make_zero(t), b.max - make_one(t));
             } else if (b.max.type().is_int()) {
                 // x % [4,10] -> [0,9]
                 // x % [-8,-3] -> [0,7]
