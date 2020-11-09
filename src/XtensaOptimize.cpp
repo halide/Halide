@@ -33,18 +33,6 @@ struct Pattern {
         BeginExactLog2Op = 1,  // BeginExactLog2Op and EndExactLog2Op ensure that we check only op1 and op2
         EndExactLog2Op = 3,    // for ExactLog2Op
 
-        DeinterleaveOp0 = 1 << 5,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
-        DeinterleaveOp1 = 1 << 6,  // Same as above, but for operand 1.
-        DeinterleaveOp2 = 1 << 7,
-        DeinterleaveOps = DeinterleaveOp0 | DeinterleaveOp1 | DeinterleaveOp2,
-
-        BeginDeinterleaveOp = 0,  // BeginDeinterleaveOp and EndDeinterleaveOp ensure that we check only three
-        EndDeinterleaveOp = 3,    // deinterleave Op0, 1 and 2.
-        // Many patterns are instructions that widen only
-        // operand 0, which need to both deinterleave operand 0, and then
-        // re-interleave the result.
-        ReinterleaveOp0 = InterleaveResult | DeinterleaveOp0,
-
         NarrowOp0 = 1 << 10,  // Replace operand 0 with its half-width equivalent.
         NarrowOp1 = 1 << 11,  // Same as above, but for operand 1.
         NarrowOp2 = 1 << 12,
@@ -150,13 +138,6 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
         }
     }
 
-    // for (size_t i = Pattern::BeginDeinterleaveOp; i < Pattern::EndDeinterleaveOp; i++) {
-    //     if (flags & (Pattern::DeinterleaveOp0 << (i - Pattern::BeginDeinterleaveOp))) {
-    //         internal_assert(matches[i].type().is_vector());
-    //         matches[i] = native_deinterleave(matches[i]);
-    //     }
-    // }
-
     if (flags & Pattern::PassOps) {
         vector<Expr> new_matches;
         for (size_t i = Pattern::BeginPassOnlyOp; i < Pattern::EndPassOnlyOp; i++) {
@@ -190,10 +171,6 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
 // Replace an expression with the one specified by a pattern.
 Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
     x = Call::make(x.type(), p.intrin, matches, Call::PureExtern);
-    // if (p.flags & Pattern::InterleaveResult) {
-    //     // The pattern wants us to interleave the result.
-    //     x = native_interleave(x);
-    // }
     return x;
 }
 // Attempt to apply one of the patterns to x. If a match is
@@ -216,12 +193,6 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
                 continue;
             }
 
-            // // Don't apply pattern if it involves an interleave,
-            // // and is not a multiple of two vectors.
-            // // See https://github.com/halide/Halide/issues/1582
-            // if ((p.flags & Pattern::InterleaveResult) && !is_double_vector(x, target)) {
-            //     continue;
-            // }
             // Mutate the operands with the given mutator.
             for (Expr &op : matches) {
                 op = op_mutator->mutate(op);
@@ -387,10 +358,14 @@ private:
         if (op->type.is_vector()) {
             static const std::vector<Pattern> adds = {
                 // Predicated addition
+                // NOTE(vksnk): patterns below are for predicated instructions and look like they may
+                // be more efficient, but they are not according to simulator. We will need to check with
+                // Cadence about this.
                 // {"halide_xtensa_pred_add_i8", wild_i8x + select(wild_u1x, wild_i8x, wild_i8x)},
                 // {"halide_xtensa_pred_add_i16", wild_i16x + select(wild_u1x, wild_i16x, wild_i16x)},
                 // {"halide_xtensa_pred_add_i32", wild_i32x + select(wild_u1x, wild_i32x, wild_i32x)},
 
+                // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
                 // {"halide_xtensa_widen_pair_mul_vu8_si16_i24",
                 //                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})) +
                 //                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})),
@@ -444,7 +419,10 @@ private:
     Expr visit(const Sub *op) override {
         if (op->type.is_vector()) {
             static const std::vector<Pattern> subs = {
-                // // Predicated sub.
+                // Predicated sub.
+                // NOTE(vksnk): patterns below are for predicated instructions and look like they may
+                // be more efficient, but they are not according to simulator. We will need to check with
+                // Cadence about this.
                 // {"halide_xtensa_pred_sub_i8", wild_i8x - select(wild_u1x, wild_i8x, wild_i8x)},
                 // {"halide_xtensa_pred_sub_i16", wild_i16x - select(wild_u1x, wild_i16x, wild_i16x)},
                 // {"halide_xtensa_pred_sub_i32", wild_i32x - select(wild_u1x, wild_i32x, wild_i32x)},
@@ -464,10 +442,10 @@ private:
             static const std::vector<Pattern> scalar_muls = {};
 
             static const std::vector<Pattern> muls = {
-                // {"halide_xtensa_widen_mul_u24", wild_u16x * wild_u16x, Pattern::NarrowOps | Pattern::AccumulatorOutput24},
                 {"halide_xtensa_widen_mul_vu8_si16_i24", wild_i16x * bc(wild_i16x), Pattern::NarrowUnsignedOp0 | Pattern::AccumulatorOutput24},
 
                 // Widening multiplication
+                // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
                 // {"halide_xtensa_widen_sqr_i48", wild_i32x * wild_i32x, Pattern::SameOp01 | Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_i48", wild_i32x * bc(wild_i32), Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_u48", wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
@@ -510,6 +488,9 @@ private:
     Expr visit(const Max *op) override {
         if (op->type.is_vector()) {
             static const std::vector<Pattern> maxes = {
+                // NOTE(vksnk): patterns below are for predicated instructions and look like they may
+                // be more efficient, but they are not according to simulator. We will need to check with
+                // Cadence about this.
                 // {"halide_xtensa_pred_max_i16", max(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))}
             };
 
@@ -525,31 +506,14 @@ private:
     Expr visit(const Min *op) override {
         if (op->type.is_vector()) {
             static const std::vector<Pattern> maxes = {
+                // NOTE(vksnk): patterns below are for predicated instructions and look like they may
+                // be more efficient, but they are not according to simulator. We will need to check with
+                // Cadence about this.
                 // {"halide_xtensa_pred_min_i16", max(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))}
             };
 
             Expr new_expr = apply_commutative_patterns(op, maxes, this);
             if (!new_expr.same_as(op)) {
-                return new_expr;
-            }
-        }
-
-        return IRGraphMutator::visit(op);
-    }
-
-    Expr visit(const LT *op) override {
-        static const vector<Pattern> lts = {
-            // {"halide_xtensa_i16_neq_zero", 0 < i32(wild_i32x * wild_i32x), Pattern::SameOp01 | Pattern::NarrowOps},
-            // {"halide_xtensa_i48x_gt_zero", 0 < u32(wild_i48x)},
-        };
-
-        if (op->type.is_vector()) {
-            Expr lt = op;
-
-            std::vector<Expr> matches;
-
-            Expr new_expr = apply_patterns(lt, lts, this);
-            if (!new_expr.same_as(lt)) {
                 return new_expr;
             }
         }
@@ -601,6 +565,7 @@ private:
             {"halide_xtensa_convert_concat_u32_to_i16", i16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
             {"halide_xtensa_convert_concat_u32_to_u16", u16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
 
+            // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
             // {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_u32x))},
             // {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_i32x))},
         };
@@ -763,10 +728,10 @@ private:
     }
 
     Expr visit(const Call *op) override {
+        // NOTE(vksnk): there seems to be a single instructions which could do lerp-like compute,
+        // but documentation is confusing and I couldn't get it right, so need to revisit at some point.
         // if (op->is_intrinsic(Call::lerp) && op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
         //   internal_assert(op->args.size() == 3);
-        //   // debug(0) << "Lerp - " << op->args[0] << " " << op->args[1] << " " << op->args[2] << "\n";
-        //   // debug(0) << "Lerp types - " << op->args[0].type() << " " << op->args[1].type() << " " << op->args[2].type() << "\n";
         //   Expr weight = mutate(op->args[2]);
         //   const Broadcast* maybe_bc = weight.as<Broadcast>();
         //   if (maybe_bc) {
@@ -792,6 +757,7 @@ private:
             // Narrowing with shifting.
             {"halide_xtensa_narrow_i48x_with_shift_i16", halide_xtensa_narrow_with_shift_i16(i32(wild_i48x), wild_i32)},
             {"halide_xtensa_narrow_i48x_with_shift_u16", halide_xtensa_narrow_with_shift_u16(i32(wild_i48x), wild_i32)},
+            // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
             // Slice and convert
@@ -822,8 +788,10 @@ private:
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 2, 16, 64), Pattern::PassOnlyOp2},
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 3, 16, 64), Pattern::PassOnlyOp3},
 
-            // {"halide_xtensa_avg121_round_i16", halide_xtensa_avg_round_i16(halide_xtensa_avg_round_i16(wild_i16x, wild_i16x), wild_i16x)},
             // Predicated saturated add/sub.
+            // NOTE(vksnk): patterns below are for predicated instructions and look like they may
+            // be more efficient, but they are not according to simulator. We will need to check with
+            // Cadence about this.
             // {"halide_xtensa_pred_sat_add_i16", halide_xtensa_sat_add_i16(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))},
             // {"halide_xtensa_pred_sat_sub_i16", halide_xtensa_sat_sub_i16(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))},
         };
@@ -914,6 +882,8 @@ Expr span_of_bounds(const Interval &bounds) {
     }
 }
 
+// NOTE(vksnk): this is borrowed from HexagonOptimize.cpp, so
+// eventually need to generalize and share across two places.
 // Replace indirect loads with dynamic_shuffle intrinsics where
 // possible.
 class OptimizeShuffles : public IRMutator {
@@ -980,7 +950,6 @@ class OptimizeShuffles : public IRMutator {
                     int const_extent = as_const_int(index_span) ? (((*as_const_int(index_span) + align) / align) * align) : 64;
                     Expr base = simplify(index_bounds.min);
 
-                    // debug(0) << "const_extent - " << const_extent << "\n";
                     // Load all of the possible indices loaded from the
                     // LUT. Note that for clamped ramps, this loads up to 1
                     // vector past the max. CodeGen_Hexagon::allocation_padding
@@ -1082,6 +1051,7 @@ private:
         return IRMutator::visit(op);
     }
 
+    // NOTE(vksnk): not very clear if it's a good idea to slice loads/stores.
     //     Expr visit(const Load* op) {
     //         Expr dense_ramp_base = strided_ramp_base(op->index, 1);
     //         if (dense_ramp_base.defined()) {
@@ -1259,7 +1229,6 @@ private:
 public:
     SplitVectorsToNativeSizes() {
         types_to_split = {
-            //{Type(Type::UInt, 1, 64), Type(Type::UInt, 1, 32)},
             {Type(Type::Int, 16, 64), Type(Type::Int, 16, 32)},
             {Type(Type::UInt, 16, 64), Type(Type::UInt, 16, 32)},
             {Type(Type::Int, 32, 32), Type(Type::Int, 32, 16)},
@@ -1316,17 +1285,15 @@ public:
 
 Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
-    // s = FindDirectCopies().mutate(s);
-
     s = align_loads(s, 64);
+    // NOTE(vksnk): CSE seemed to break loop carry
     // s = common_subexpression_elimination(s);
-    // Don't simplify here, otherwise it will re-collapse the loads we
-    // want to carry across loop iterations.
 
     // Use at most 16 vector registers for carrying values.
+    // NOTE(vksnk): loop_carry seems to be a little finicky right now
+    // but looks like something we'd definitely want to have, so
+    // need to figure out where it goes wrong.
     // s = loop_carry(s, 16);
-    //     s = simplify(s);
-    //     s = substitute_in_all_lets(s);
     for (int ix = 0; ix < 10; ix++) {
         s = MatchXtensaPatterns().mutate(s);
     }
@@ -1336,6 +1303,7 @@ Stmt match_xtensa_patterns(Stmt s) {
     s = SimplifySliceConcat().mutate(s);
     // Extra run to replace cast + concat, etc.
     s = MatchXtensaPatterns().mutate(s);
+    // NOTE(vksnk): looks like we shouldn't do simplification in the end.
     // s = simplify(common_subexpression_elimination(s));
     s = common_subexpression_elimination(s);
 
