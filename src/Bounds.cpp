@@ -729,14 +729,14 @@ private:
 
         // a.max <(=) b.min implies a <(=) b, so a <(=) b is at least
         // as true as a.max <(=) b.min. This does not depend on a's
-        // lower bound or b's upper bound
+        // lower bound or b's upper bound.
         if (a.has_upper_bound() && b.has_lower_bound()) {
             interval.min = Cmp::make(a.max, b.min);
         }
 
         // a <(=) b implies a.min <(=) b.max, so a <(=) b is at most
         // as true as a.min <(=) b.max. This does not depend on a's
-        // upper bound or b's lower bound
+        // upper bound or b's lower bound.
         if (a.has_lower_bound() && b.has_upper_bound()) {
             interval.max = Cmp::make(a.min, b.max);
         }
@@ -783,10 +783,10 @@ private:
             if (a.is_bounded() && b.is_bounded()) {
                 interval.max = a.min <= b.max && b.min <= a.max;
             } else if (a.has_upper_bound() && b.has_lower_bound()) {
-                // a.min <= b.max is implied if a.min = -inf or b.max = +inf
+                // a.min <= b.max is implied if a.min = -inf or b.max = +inf.
                 interval.max = b.min <= a.max;
             } else if (a.has_lower_bound() && b.has_upper_bound()) {
-                // b.min <= a.max is implied if a.max = +inf or b.min = -inf
+                // b.min <= a.max is implied if a.max = +inf or b.min = -inf.
                 interval.max = a.min <= b.max;
             }
         }
@@ -813,14 +813,14 @@ private:
             if (a.is_bounded() && b.is_bounded()) {
                 interval.min = a.min > b.max || b.min > a.max;
             } else if (a.has_upper_bound() && b.has_lower_bound()) {
-                // a.min > b.max is false if a.min = -inf or b.max = +inf
+                // a.min > b.max is false if a.min = -inf or b.max = +inf.
                 // a does not need a lower bound nor does b need
-                // an upper bound for this condition
+                // an upper bound for this condition.
                 interval.min = b.min > a.max;
             } else if (a.has_lower_bound() && b.has_upper_bound()) {
-                // b.min > a.max is false if a.max = +inf or b.min = -inf
+                // b.min > a.max is false if a.max = +inf or b.min = -inf.
                 // a does not need an upper bound nor does b need
-                // a lower bound for this condition
+                // a lower bound for this condition.
                 interval.min = a.min > b.max;
             }
         }
