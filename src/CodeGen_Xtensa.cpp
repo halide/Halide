@@ -17,6 +17,7 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
+// Stores information about allocations in TCM (tightly coupled memory).
 struct TcmAllocation {
   string name;
   Type type;
@@ -164,10 +165,8 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f) {
                 stream << get_indent() << "halide_unused(_ucon);";
             }
 
-            // debug(0) << body;
             // Emit the body
             print(body);
-            // stream << get_indent() << "printf(\"C code executed\\n\");";
 
             // Return success.
             stream << get_indent() << "return 0;\n";
@@ -214,6 +213,9 @@ inline int GetCycleCount() {
 
 #define HALIDE_MAYBE_UNUSED __attribute__ ((unused))
 
+// NOTE(vksnk): we can use clang native vectors inplace of Xtensa
+// data types, and while they should be much more convinient, there is
+// a slight performance degradation, which needs to be investigation.
 //typedef int16_t int16x32_t __attribute__((ext_vector_type(32)));
 //typedef uint16_t uint16x32_t __attribute__((ext_vector_type(32)));
 //typedef int32_t int32x16_t __attribute__((ext_vector_type(16)));
@@ -234,6 +236,7 @@ typedef vboolN uint1x32_t;
 typedef vbool2N uint1x64_t;
 typedef xb_vecN_2xf32 float16;
 
+// TODO(vksnk): classes below can be templatized.
 class int32x32_t {
   typedef int32x32_t Vec;
   typedef int32_t ElementType;
@@ -1505,14 +1508,10 @@ HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_convert_u8_high_u16(const uint8x6
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_u8_low_i16(const uint8x64_t& src, int native_lanes, int total_lines) {
-//    xb_vec2Nx24 wide = src * uint8x64_t(1);
-//    return IVP_CVT16S2NX24L(wide);
     return IVP_MOVNX16_FROM2NX8(IVP_SEL2NX8I(int8x64_t(0), src, IVP_SELI_8B_INTERLEAVE_1_LO));
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_u8_high_i16(const uint8x64_t& src, int native_lanes, int total_lines) {
-//    xb_vec2Nx24 wide = src * uint8x64_t(1);
-//    return IVP_CVT16S2NX24H(wide);
     return IVP_MOVNX16_FROM2NX8(IVP_SEL2NX8I(int8x64_t(0), src, IVP_SELI_8B_INTERLEAVE_1_HI));
 }
 
@@ -1547,6 +1546,8 @@ HALIDE_ALWAYS_INLINE uint32x16_t halide_xtensa_convert_i48_high_u32(const int48x
 HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_concat_from_native(const uint1x16_t& a, const uint1x16_t& b) {
         return IVP_JOINBN_2(b, a);
 }
+// NOTE(vksnk): this is disabled by default, because iDMA is not part of cstub
+// so we need to get git repo compiling with xt-tools first.
 #if 0
 #include <xtensa/idma.h>
 
@@ -1566,7 +1567,6 @@ void idmaErrCB(const idma_error_details_t* data) {
 }
 
 void init_dma() {
-  printf("Initializing DMA\n");
   idma_log_handler(idmaLogHandler);
 
   idma_init(0, MAX_BLOCK_2, 16, TICK_CYCLES_2, 100000, idmaErrCB);
@@ -1576,17 +1576,14 @@ void init_dma() {
 }
 
 HALIDE_ALWAYS_INLINE int32_t halide_xtensa_copy_1d(void* dst, int32_t dst_base, void* src, int32_t src_base, int extent, int item_size) {
-    // printf("Starting dma copy\n");
     static bool is_initialized = false;
     if (!is_initialized) {
         init_dma();
         is_initialized = true;
         printf("Initialized DMA\n");
     }
-    //memcpy((uint8_t* )dst + dst_base * item_size, (uint8_t* )src + src_base * item_size, extent * item_size);
     xthal_dcache_region_writeback_inv((uint8_t* )src + src_base * item_size, extent * item_size);
     idma_copy_desc((uint8_t* )dst + dst_base * item_size, (uint8_t* )src + src_base * item_size, extent * item_size, 0);
-    //idma_hw_wait_all();
 
     return 0;
 }
@@ -1598,7 +1595,7 @@ HALIDE_ALWAYS_INLINE int32_t halide_xtensa_wait_for_copy(int32_t id) {
 #endif
 )INLINE_CODE";
 
-      // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
+      // Band-aid fix: on at least one config (our arm32 buildbot running gcc 5.4),
       // emitting this long text string was regularly garbled in a predictable
       // pattern; flushing the stream before or after heals it. Since C++
       // codegen is rarely on a compilation critical path, we'll just band-aid
@@ -1706,6 +1703,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     }
 
     string op_name = op->name;
+    // TODO(vksnk): replace with map.
     if (op->name == "halide_xtensa_sat_add_i16") {
         op_name = "IVP_ADDSNX16";
     } else if (op->name == "halide_xtensa_sat_sub_i16") {
@@ -1825,8 +1823,6 @@ void CodeGen_Xtensa::visit(const Select *op) {
     string false_val = print_expr(op->false_value);
     string cond = print_expr(op->condition);
 
-    // clang doesn't support the ternary operator on OpenCL style vectors.
-    // See: https://bugs.llvm.org/show_bug.cgi?id=33103
     if (op->condition.type().is_scalar()) {
         rhs << "(" << type << ")"
             << "(" << cond
@@ -1935,7 +1931,7 @@ void CodeGen_Xtensa::visit(const EQ *op) {
 }
 
 void CodeGen_Xtensa::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported by C backend." << Expr(op) << "\n";
+    user_assert(is_one(op->predicate)) << "Predicated load is not supported by Xtensa backend." << Expr(op) << "\n";
 
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
@@ -1962,6 +1958,7 @@ void CodeGen_Xtensa::visit(const Load *op) {
     } else if (op->index.type().is_vector()) {
         // If index is a vector, gather vector elements.
         internal_assert(t.is_vector());
+        // NOTE(vksnk): strided_load may be a good idea, but needs more work.
         // const Ramp* maybe_ramp = op->index.as<Ramp>();
         // if (maybe_ramp && is_const(maybe_ramp->stride)) {
         //     string id_index_base = print_expr(maybe_ramp->base);
@@ -1969,8 +1966,8 @@ void CodeGen_Xtensa::visit(const Load *op) {
         //     rhs << print_type(t) + "_strided_load(" << name << ", "
         //         << id_index_base << ", " << id_index_stride << ")";
         // } else {
-            string id_index = print_expr(op->index);
-            rhs << print_type(t) + "_gather_load(" << name << ", " << id_index << ")";
+        string id_index = print_expr(op->index);
+        rhs << print_type(t) + "_gather_load(" << name << ", " << id_index << ")";
         // }
     } else {
         string id_index = print_expr(op->index);
@@ -2021,11 +2018,8 @@ void CodeGen_Xtensa::visit(const Store *op) {
         // TODO(vksnk): generalize this!
         int native_lanes = 64 / op->value.type().element_of().bytes();
         if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
-            // debug(0) << "Aligned store\n";
             op_name = "aligned_store(";
         } else {
-            // debug(0) << "Unaligned store " << op->alignment.modulus << " " << op->alignment.remainder
-            //     << " " << op->value.type().lanes() << "\n";
             op_name = "store(";
         }
 
@@ -2120,11 +2114,11 @@ void CodeGen_Xtensa::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::count_leading_zeros)) {
         internal_assert(op->args.size() == 1);
         if (op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-            // TODO(vksnk): it seems that what halide is always matching IVP_NSAUN*?
+            // TODO(vksnk): it seems that what Halide does is always matching IVP_NSAUN*?
             string intrins_name = op->type.is_int() ? "(IVP_NSAUNX16(" : "xb_vecNx16_rtor_xb_vecNx16U(IVP_NSAUNX16U(";
             rhs << intrins_name << print_expr(op->args[0]) << "))";
         } else if (op->type.is_int_or_uint() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
-            // TODO(vksnk): it seems that what halide is always matching IVP_NSAUN*?
+            // TODO(vksnk): it seems that what Halide does is always matching IVP_NSAUN*?
             string intrins_name = op->type.is_int() ? "(IVP_NSAUN_2X32(" : "xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(IVP_NSAUN_2X32U(";
             rhs << intrins_name << print_expr(op->args[0]) << "))";
         } else if (op->args[0].type().is_vector()) {
@@ -2391,7 +2385,6 @@ void CodeGen_Xtensa::visit(const Cast *op) {
     if (t.is_int_or_uint() && e.type().is_int_or_uint() &&
         (e.type().bits() == 16) && (e.type().lanes() == 32) &&
         (t.bits() == 16) && (t.lanes() == 32)) {
-        // return print_assignment(t, "(" + type + ")(" + value + ")");
         if (e.type().is_int()) {
             id = print_assignment(t, "xb_vecNx16_rtor_xb_vecNx16U(" + value + ")");
         } else {
@@ -2418,6 +2411,7 @@ void CodeGen_Xtensa::visit(const For *op) {
             << "Can only emit serial or parallel for loops to C\n";
     }
 
+    // NOTE(vksnk): poor man's profiling below.
     // if (loop_level == 1) {
     //   stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
     //   stream << get_indent() << "cycles_start = GetCycleCount();\n";
@@ -2441,7 +2435,7 @@ void CodeGen_Xtensa::visit(const For *op) {
     op->body.accept(this);
 
     close_scope("for " + print_name(op->name));
-
+    // NOTE(vksnk): Second part of the poor man's profiling below.
     // if (loop_level == 2) {
     //   stream << get_indent() << "cycles_stop = GetCycleCount();\n";
     //   stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
@@ -2487,7 +2481,6 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
         string indices_name = unique_name('_');
         stream << get_indent() << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
         rhs << print_type(op->type) << "::shuffle(" << src << ", " << indices_name << ")";
-        // rhs << "halide_xtensa_dynamic_shuffle(" << src << ", " << indices_name << ")";
     }
     print_assignment(op->type, rhs.str());
 }

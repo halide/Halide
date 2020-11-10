@@ -12,8 +12,8 @@ namespace Internal {
 
 class CodeGen_Xtensa : public CodeGen_C {
 public:
-    CodeGen_Xtensa(std::ostream &s, Target t, OutputKind output_kind = CImplementation)
-        : CodeGen_C(s, t, output_kind) {
+    CodeGen_Xtensa(std::ostream &s, Target t, OutputKind kind = CImplementation)
+        : CodeGen_C(s, t, kind) {
     }
 
     /** Emit the declarations contained in the module as C code. */
