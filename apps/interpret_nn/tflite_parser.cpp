@@ -262,6 +262,13 @@ public:
 
         return std::move(result_);
     }
+
+    // Movable but not copyable.
+    Parser() = delete;
+    Parser(const Parser &) = delete;
+    Parser &operator=(const Parser &) = delete;
+    Parser(Parser &&) = default;
+    Parser &operator=(Parser &&) = default;
 };
 
 }  // namespace

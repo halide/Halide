@@ -51,7 +51,13 @@ public:
     }
 
     void Execute();
-};
+
+    // Movable but not copyable.
+    ModelInterpreter() = delete;
+    ModelInterpreter(const ModelInterpreter &) = delete;
+    ModelInterpreter &operator=(const ModelInterpreter &) = delete;
+    ModelInterpreter(ModelInterpreter &&) = default;
+    ModelInterpreter &operator=(ModelInterpreter &&) = default;};
 
 }  // namespace interpret_nn
 

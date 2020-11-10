@@ -21,7 +21,7 @@ using std::make_unique;
 
 namespace internal {
 
-struct FatalError {
+struct FatalError final {
     std::ostringstream msg;
 
     FatalError(const char *file, int line, const char *condition_string) {
@@ -50,15 +50,26 @@ struct FatalError {
     FatalError &ref() {
         return *this;
     }
+
+    FatalError() = delete;
+    FatalError(const FatalError &) = delete;
+    FatalError &operator=(const FatalError &) = delete;
+    FatalError(FatalError &&) = delete;
+    FatalError &operator=(FatalError &&) = delete;
 };
 
 // This uses operator precedence as a trick to avoid argument evaluation if
 // an assertion is true: it is intended to be used as part of the
 // _halide_internal_assertion macro, to coerce the result of the stream
 // expression to void (to match the condition-is-false case).
-class Voidifier {
+class Voidifier final {
 public:
     Voidifier() = default;
+    Voidifier(const Voidifier &) = delete;
+    Voidifier &operator=(const Voidifier &) = delete;
+    Voidifier(Voidifier &&) = delete;
+    Voidifier &operator=(Voidifier &&) = delete;
+
     // This has to be an operator with a precedence lower than << but
     // higher than ?:
     void operator&(FatalError &) {

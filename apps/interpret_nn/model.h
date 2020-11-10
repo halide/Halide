@@ -190,6 +190,13 @@ public:
     }
 
     void Dump(std::ostream &os) const;
+
+    // Movable but not copyable.
+    Tensor() = delete;
+    Tensor(const Tensor &) = delete;
+    Tensor &operator=(const Tensor &) = delete;
+    Tensor(Tensor &&) = default;
+    Tensor &operator=(Tensor &&) = default;
 };
 
 class Op {
@@ -261,6 +268,13 @@ public:
     Tensor *Output() {
         return Output(0);
     }
+
+    // Movable but not copyable.
+    Op() = delete;
+    Op(const Op &) = delete;
+    Op &operator=(const Op &) = delete;
+    Op(Op &&) = default;
+    Op &operator=(Op &&) = default;
 };
 
 struct Model {
@@ -268,6 +282,13 @@ struct Model {
     std::vector<std::unique_ptr<Op>> ops;
 
     void Dump(std::ostream &os);
+
+    // Movable but not copyable.
+    Model() = default;
+    Model(const Model &) = delete;
+    Model &operator=(const Model &) = delete;
+    Model(Model &&) = default;
+    Model &operator=(Model &&) = default;
 };
 
 }  // namespace interpret_nn
