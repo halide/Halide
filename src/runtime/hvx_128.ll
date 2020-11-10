@@ -63,7 +63,6 @@ define weak_odr <256 x i8> @halide.hexagon.deinterleave.vb(<256 x i8> %arg) noun
 declare <32 x i32> @llvm.hexagon.V6.lvsplatw.128B(i32)
 declare i32 @llvm.hexagon.S2.vsplatrb(i32)
 
-
 define weak_odr i16 @halide.hexagon.dup2.b(i8 %arg) nounwind uwtable readnone alwaysinline {
   %arg_i16 = zext i8 %arg to i16
   %arg_i16_s = shl i16 %arg_i16, 8
@@ -325,50 +324,6 @@ define weak_odr <128 x i8> @halide.hexagon.shr.vb.vb(<128 x i8> %a, <128 x i8> %
   ret <128 x i8> %r
 }
 
-declare <64 x i32> @llvm.hexagon.V6.vmpabus.128B(<64 x i32>, i32)
-declare <64 x i32> @llvm.hexagon.V6.vmpabus.acc.128B(<64 x i32>, <64 x i32>, i32)
-
-define weak_odr <128 x i16> @halide.hexagon.add_2mpy.vub.vub.b.b(<128 x i8> %low_v, <128 x i8> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
-  %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vmpabus.128B(<64 x i32> %dv, i32 %const)
-  %ret_val = bitcast <64 x i32> %res to <128 x i16>
-  ret <128 x i16> %ret_val
-}
-
-define weak_odr <128 x i16> @halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b(<128 x i16> %acc, <128 x i8> %low_v, <128 x i8> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
-  %dv0 = bitcast <128 x i16> %acc to <64 x i32>
-  %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv1 = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vmpabus.acc.128B(<64 x i32> %dv0, <64 x i32> %dv1, i32 %const)
-  %ret_val = bitcast <64 x i32> %res to <128 x i16>
-  ret <128 x i16> %ret_val
-}
-
-declare <64 x i32> @llvm.hexagon.V6.vmpahb.128B(<64 x i32>, i32)
-declare <64 x i32> @llvm.hexagon.V6.vmpahb.acc.128B(<64 x i32>, <64 x i32>, i32)
-
-define weak_odr <64 x i32> @halide.hexagon.add_2mpy.vh.vh.b.b(<64 x i16> %low_v, <64 x i16> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
-  %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
-  %low = bitcast <64 x i16> %low_v to <32 x i32>
-  %high = bitcast <64 x i16> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vmpahb.128B(<64 x i32> %dv, i32 %const)
-  ret <64 x i32> %res
-}
-
-define weak_odr <64 x i32> @halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b(<64 x i32> %acc, <64 x i16> %low_v, <64 x i16> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
-  %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
-  %low = bitcast <64 x i16> %low_v to <32 x i32>
-  %high = bitcast <64 x i16> %high_v to <32 x i32>
-  %dv1 = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vmpahb.acc.128B(<64 x i32> %acc, <64 x i32> %dv1, i32 %const)
-  ret <64 x i32> %res
-}
 
 ; Define a missing saturating narrow instruction in terms of a saturating narrowing shift.
 declare <32 x i32> @llvm.hexagon.V6.vasrwuhsat.128B(<32 x i32>, <32 x i32>, i32)
@@ -379,39 +334,6 @@ define weak_odr <64 x i16> @halide.hexagon.trunc_satuh.vw(<64 x i32> %arg) nounw
   %r_32 = call <32 x i32> @llvm.hexagon.V6.vasrwuhsat.128B(<32 x i32> %o, <32 x i32> %e, i32 0)
   %r = bitcast <32 x i32> %r_32 to <64 x i16>
   ret <64 x i16> %r
-}
-
-declare <64 x i32> @llvm.hexagon.V6.vtmpybus.128B(<64 x i32>, i32)
-declare <64 x i32> @llvm.hexagon.V6.vtmpyb.128B(<64 x i32>, i32)
-declare <64 x i32> @llvm.hexagon.V6.vtmpyhb.128B(<64 x i32>, i32)
-
-define weak_odr <128 x i16> @halide.hexagon.add_3mpy.vub.vub.h(<128 x i8> %low_v, <128 x i8> %high_v, i16 %c) nounwind uwtable readnone {
-  %const = call i32 @halide.hexagon.dup2.h(i16 %c)
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vtmpybus.128B(<64 x i32> %dv, i32 %const)
-  %ret_val = bitcast <64 x i32> %res to <128 x i16>
-  ret <128 x i16> %ret_val
-}
-
-define weak_odr <128 x i16> @halide.hexagon.add_3mpy.vb.vb.h(<128 x i8> %low_v, <128 x i8> %high_v, i16 %c) nounwind uwtable readnone {
-  %const = call i32 @halide.hexagon.dup2.h(i16 %c)
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vtmpyb.128B(<64 x i32> %dv, i32 %const)
-  %ret_val = bitcast <64 x i32> %res to <128 x i16>
-  ret <128 x i16> %ret_val
-}
-
-define weak_odr <64 x i32> @halide.hexagon.add_3mpy.vh.vh.h(<64 x i16> %low_v, <64 x i16> %high_v, i16 %c) nounwind uwtable readnone {
-  %const = call i32 @halide.hexagon.dup2.h(i16 %c)
-  %low = bitcast <64 x i16> %low_v to <32 x i32>
-  %high = bitcast <64 x i16> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vtmpyhb.128B(<64 x i32> %dv, i32 %const)
-  ret <64 x i32> %res
 }
 
 declare void @llvm.hexagon.V6.vgathermh.128B(i8*, i32, i32, <32 x i32>)
@@ -480,66 +402,50 @@ declare <64 x i32> @llvm.hexagon.V6.vrmpybusi.acc.128B(<64 x i32>, <64 x i32>, i
 declare <64 x i32> @llvm.hexagon.V6.vrmpyubi.128B(<64 x i32>, i32, i32)
 declare <64 x i32> @llvm.hexagon.V6.vrmpyubi.acc.128B(<64 x i32>, <64 x i32>, i32, i32)
 
-define weak_odr <64 x i32> @halide.hexagon.vrmpy_odd.vub.vub.w(<128 x i8> %low_v, <128 x i8> %high_v, i32 %const) nounwind uwtable readnone {
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vrmpybusi.128B(<64 x i32> %dv, i32 %const, i32 1)
+define weak_odr <64 x i32> @halide.hexagon.add_4mpy_odd.vub.b(<256 x i8> %dv, i32 %const) nounwind uwtable readnone {
+  %dv32 = bitcast <256 x i8> %dv to <64 x i32>
+  %res = call <64 x i32> @llvm.hexagon.V6.vrmpybusi.128B(<64 x i32> %dv32, i32 %const, i32 1)
   ret <64 x i32> %res
 }
 
-define weak_odr <64 x i32> @halide.hexagon.acc_vrmpy_odd.vw.vub.vub.w(<64 x i32> %acc, <128 x i8> %low_v, <128 x i8> %high_v, i32 %const) nounwind uwtable readnone {
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vrmpybusi.acc.128B(<64 x i32> %acc, <64 x i32> %dv, i32 %const, i32 1)
+define weak_odr <64 x i32> @halide.hexagon.acc_add_4mpy_odd.vw.vub.b(<64 x i32> %acc, <256 x i8> %dv, i32 %const) nounwind uwtable readnone {
+  %dv32 = bitcast <256 x i8> %dv to <64 x i32>
+  %res = call <64 x i32> @llvm.hexagon.V6.vrmpybusi.acc.128B(<64 x i32> %acc, <64 x i32> %dv32, i32 %const, i32 1)
   ret <64 x i32> %res
 }
 
-define weak_odr <64 x i32> @halide.hexagon.vrmpy_even.vub.vub.w(<128 x i8> %low_v, <128 x i8> %high_v, i32 %const) nounwind uwtable readnone {
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vrmpybusi.128B(<64 x i32> %dv, i32 %const, i32 0)
+define weak_odr <64 x i32> @halide.hexagon.add_4mpy_even.vub.b(<256 x i8> %dv, i32 %const) nounwind uwtable readnone {
+  %dv32 = bitcast <256 x i8> %dv to <64 x i32>
+  %res = call <64 x i32> @llvm.hexagon.V6.vrmpybusi.128B(<64 x i32> %dv32, i32 %const, i32 0)
   ret <64 x i32> %res
 }
 
-define weak_odr <64 x i32> @halide.hexagon.acc_vrmpy_even.vw.vub.vub.w(<64 x i32> %acc, <128 x i8> %low_v, <128 x i8> %high_v, i32 %const) nounwind uwtable readnone {
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vrmpybusi.acc.128B(<64 x i32> %acc, <64 x i32> %dv, i32 %const, i32 0)
+define weak_odr <64 x i32> @halide.hexagon.acc_add_4mpy_even.vw.vub.b(<64 x i32> %acc, <256 x i8> %dv, i32 %const) nounwind uwtable readnone {
+  %dv32 = bitcast <256 x i8> %dv to <64 x i32>
+  %res = call <64 x i32> @llvm.hexagon.V6.vrmpybusi.acc.128B(<64 x i32> %acc, <64 x i32> %dv32, i32 %const, i32 0)
   ret <64 x i32> %res
 }
 
-define weak_odr <64 x i32> @halide.hexagon.vrmpy_odd.vub.vub.uw(<128 x i8> %low_v, <128 x i8> %high_v, i32 %const) nounwind uwtable readnone {
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vrmpyubi.128B(<64 x i32> %dv, i32 %const, i32 1)
+define weak_odr <64 x i32> @halide.hexagon.add_4mpy_odd.vub.ub(<256 x i8> %dv, i32 %const) nounwind uwtable readnone {
+  %dv32 = bitcast <256 x i8> %dv to <64 x i32>
+  %res = call <64 x i32> @llvm.hexagon.V6.vrmpyubi.128B(<64 x i32> %dv32, i32 %const, i32 1)
   ret <64 x i32> %res
 }
 
-define weak_odr <64 x i32> @halide.hexagon.acc_vrmpy_odd.vw.vub.vub.uw(<64 x i32> %acc, <128 x i8> %low_v, <128 x i8> %high_v, i32 %const) nounwind uwtable readnone {
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vrmpyubi.acc.128B(<64 x i32> %acc, <64 x i32> %dv, i32 %const, i32 1)
+define weak_odr <64 x i32> @halide.hexagon.acc_add_4mpy_odd.vuw.vub.ub(<64 x i32> %acc, <256 x i8> %dv, i32 %const) nounwind uwtable readnone {
+  %dv32 = bitcast <256 x i8> %dv to <64 x i32>
+  %res = call <64 x i32> @llvm.hexagon.V6.vrmpyubi.acc.128B(<64 x i32> %acc, <64 x i32> %dv32, i32 %const, i32 1)
   ret <64 x i32> %res
 }
 
-define weak_odr <64 x i32> @halide.hexagon.vrmpy_even.vub.vub.uw(<128 x i8> %low_v, <128 x i8> %high_v, i32 %const) nounwind uwtable readnone {
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vrmpyubi.128B(<64 x i32> %dv, i32 %const, i32 0)
+define weak_odr <64 x i32> @halide.hexagon.add_4mpy_even.vub.ub(<256 x i8> %dv, i32 %const) nounwind uwtable readnone {
+  %dv32 = bitcast <256 x i8> %dv to <64 x i32>
+  %res = call <64 x i32> @llvm.hexagon.V6.vrmpyubi.128B(<64 x i32> %dv32, i32 %const, i32 0)
   ret <64 x i32> %res
 }
 
-define weak_odr <64 x i32> @halide.hexagon.acc_vrmpy_even.vw.vub.vub.uw(<64 x i32> %acc, <128 x i8> %low_v, <128 x i8> %high_v, i32 %const) nounwind uwtable readnone {
-  %low = bitcast <128 x i8> %low_v to <32 x i32>
-  %high = bitcast <128 x i8> %high_v to <32 x i32>
-  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
-  %res = call <64 x i32> @llvm.hexagon.V6.vrmpyubi.acc.128B(<64 x i32> %acc, <64 x i32> %dv, i32 %const, i32 0)
+define weak_odr <64 x i32> @halide.hexagon.acc_add_4mpy_even.vuw.vub.ub(<64 x i32> %acc, <256 x i8> %dv, i32 %const) nounwind uwtable readnone {
+  %dv32 = bitcast <256 x i8> %dv to <64 x i32>
+  %res = call <64 x i32> @llvm.hexagon.V6.vrmpyubi.acc.128B(<64 x i32> %acc, <64 x i32> %dv32, i32 %const, i32 0)
   ret <64 x i32> %res
 }
