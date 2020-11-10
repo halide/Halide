@@ -187,7 +187,9 @@ void ComputeModulusRemainder::visit(const Variable *op) {
 }
 
 int64_t gcd(int64_t a, int64_t b) {
-    if (a < b) std::swap(a, b);
+    if (a < b) {
+        std::swap(a, b);
+    }
     while (b != 0) {
         int64_t tmp = b;
         b = a % b;
@@ -354,9 +356,15 @@ ModulusRemainder ModulusRemainder::intersect(const ModulusRemainder &a, const Mo
     // theorem. In our case, the moduli will almost always be
     // powers of two, so we should just return the smaller of the two
     // sets (usually the one with the larger modulus).
-    if (a.modulus == 0) return a;
-    if (b.modulus == 0) return b;
-    if (a.modulus > b.modulus) return a;
+    if (a.modulus == 0) {
+        return a;
+    }
+    if (b.modulus == 0) {
+        return b;
+    }
+    if (a.modulus > b.modulus) {
+        return a;
+    }
     return b;
 }
 

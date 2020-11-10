@@ -25,7 +25,9 @@ class ExprDependsOnVar : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Variable *op) override {
-        if (op->name == var) result = true;
+        if (op->name == var) {
+            result = true;
+        }
     }
 
     void visit(const Let *op) override {

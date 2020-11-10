@@ -18,11 +18,11 @@
 
 extern "C" {
 
-WEAK void *halide_jit_module_argument = NULL;
-WEAK void (*halide_jit_module_adjust_ref_count)(void *arg, int32_t count) = NULL;
+WEAK void *halide_jit_module_argument = nullptr;
+WEAK void (*halide_jit_module_adjust_ref_count)(void *arg, int32_t count) = nullptr;
 
 WEAK void halide_use_jit_module() {
-    if (halide_jit_module_adjust_ref_count == NULL) {
+    if (halide_jit_module_adjust_ref_count == nullptr) {
         return;
     } else {
         (*halide_jit_module_adjust_ref_count)(halide_jit_module_argument, 1);
@@ -30,7 +30,7 @@ WEAK void halide_use_jit_module() {
 }
 
 WEAK void halide_release_jit_module() {
-    if (halide_jit_module_adjust_ref_count == NULL) {
+    if (halide_jit_module_adjust_ref_count == nullptr) {
         return;
     } else {
         (*halide_jit_module_adjust_ref_count)(halide_jit_module_argument, -1);

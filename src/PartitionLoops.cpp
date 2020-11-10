@@ -282,20 +282,21 @@ class FindSimplifications : public IRVisitor {
         bool likely_a = has_uncaptured_likely_tag(op->a);
         bool likely_b = has_uncaptured_likely_tag(op->b);
 
+        // If one side has an uncaptured likely, don't hunt for
+        // simplifications in the other side.
+        if (!likely_a) {
+            op->b.accept(this);
+        }
+        if (!likely_b) {
+            op->a.accept(this);
+        }
+
         // Prefer the side that has an uncaptured top-level likely
         // call. If neither does, prefer the side that contains any
         // likely call at all.
         if (!likely_a && !likely_b) {
             likely_a = has_likely_tag(op->a);
             likely_b = has_likely_tag(op->b);
-        }
-
-        // Don't hunt for simplifications in unlikely paths
-        if (!likely_a) {
-            op->b.accept(this);
-        }
-        if (!likely_b) {
-            op->a.accept(this);
         }
 
         if (likely_b && !likely_a) {
@@ -309,16 +310,16 @@ class FindSimplifications : public IRVisitor {
         bool likely_a = has_uncaptured_likely_tag(op->a);
         bool likely_b = has_uncaptured_likely_tag(op->b);
 
-        if (!likely_a && !likely_b) {
-            likely_a = has_likely_tag(op->a);
-            likely_b = has_likely_tag(op->b);
-        }
-
         if (!likely_a) {
             op->b.accept(this);
         }
         if (!likely_b) {
             op->a.accept(this);
+        }
+
+        if (!likely_a && !likely_b) {
+            likely_a = has_likely_tag(op->a);
+            likely_b = has_likely_tag(op->b);
         }
 
         if (likely_b && !likely_a) {
@@ -360,8 +361,7 @@ class FindSimplifications : public IRVisitor {
         // statement is marked as likely, treat it as likely true and
         // partition accordingly.
         IRVisitor::visit(op);
-        const Call *call = op->condition.as<Call>();
-        if (call && call->is_intrinsic(Call::likely)) {
+        if (has_uncaptured_likely_tag(op->condition)) {
             new_simplification(op->condition, op->condition, const_true(), const_false());
         }
     }
@@ -577,8 +577,8 @@ class PartitionLoops : public IRMutator {
         // we can prove the epilogue starts after the prologue ends,
         // we're OK.
         bool can_simplify_prologue = true;
-        for (Expr min_val : min_vals) {
-            for (Expr max_val : max_vals) {
+        for (const Expr &min_val : min_vals) {
+            for (const Expr &max_val : max_vals) {
                 Expr test = simplify(common_subexpression_elimination(min_val - 1 < max_val + 1));
                 if (!is_one(test)) {
                     can_simplify_prologue = false;
@@ -801,7 +801,7 @@ class RenormalizeGPULoops : public IRMutator {
 
         if (in_gpu_loop && !old_in_gpu_loop) {
             // This was the outermost GPU loop. Dump any lifted lets here.
-            while (lifted_lets.size()) {
+            while (!lifted_lets.empty()) {
                 stmt = LetStmt::make(lifted_lets.back().first,
                                      lifted_lets.back().second,
                                      stmt);

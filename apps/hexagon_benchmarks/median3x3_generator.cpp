@@ -39,8 +39,8 @@ public:
         output.dim(0).set_min(0);
         output.dim(1).set_min(0);
 
-        if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
-            const int vector_size = get_target().has_feature(Target::HVX_128) ? 128 : 64;
+        if (get_target().has_feature(Target::HVX)) {
+            const int vector_size = 128;
             Expr input_stride = input.dim(1).stride();
             input.dim(1).set_stride((input_stride / vector_size) * vector_size);
 

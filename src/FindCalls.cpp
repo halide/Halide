@@ -9,7 +9,6 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::pair;
 using std::string;
 
 namespace {
@@ -54,7 +53,7 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     FindCalls calls;
     f.accept(&calls);
     if (f.has_extern_definition()) {
-        for (ExternFuncArgument arg : f.extern_arguments()) {
+        for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
                 Function g(arg.func);
                 calls.calls[g.name()] = g;
@@ -63,7 +62,7 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     }
 
     if (include_wrappers) {
-        for (auto it : f.schedule().wrappers()) {
+        for (const auto &it : f.schedule().wrappers()) {
             Function g(it.second);
             calls.calls[g.name()] = g;
         }
@@ -74,7 +73,7 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     } else {
         env[f.name()] = f;
 
-        for (pair<string, Function> i : calls.calls) {
+        for (const auto &i : calls.calls) {
             populate_environment_helper(i.second, env, recursive, include_wrappers);
         }
     }

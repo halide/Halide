@@ -5,6 +5,7 @@
  * Methods for managing device allocations when jitting
  */
 
+#include "Expr.h"
 #include "Target.h"
 
 namespace Halide {
@@ -37,7 +38,7 @@ bool host_supports_target_device(const Target &t);
 
 namespace Internal {
 /** Get an Expr which evaluates to the device interface for the given device api at runtime. */
-Expr make_device_interface_call(DeviceAPI device_api);
+Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type = MemoryType::Auto);
 }  // namespace Internal
 
 }  // namespace Halide

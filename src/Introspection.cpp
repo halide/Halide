@@ -7,9 +7,9 @@
 #include "LLVM_Headers.h"
 #include "Util.h"
 
+#include <cstdio>
 #include <iostream>
 #include <sstream>
-#include <stdio.h>
 #include <string>
 
 // defines backtrace, which gets the call stack as instruction pointers
@@ -49,11 +49,7 @@ inline T load_misaligned(const T *p) {
     return result;
 }
 
-#if LLVM_VERSION >= 100
 typedef uint64_t llvm_offset_t;
-#else
-typedef uint32_t llvm_offset_t;
-#endif
 
 }  // namespace
 
@@ -62,21 +58,17 @@ class DebugSections {
     bool calibrated;
 
     struct FieldFormat {
-        uint64_t name, form;
-        FieldFormat()
-            : name(0), form(0) {
-        }
+        uint64_t name = 0, form = 0;
+        FieldFormat() = default;
         FieldFormat(uint64_t n, uint64_t f)
             : name(n), form(f) {
         }
     };
 
     struct EntryFormat {
-        uint64_t code, tag;
-        bool has_children;
-        EntryFormat()
-            : code(0), tag(0), has_children(false) {
-        }
+        uint64_t code = 0, tag = 0;
+        bool has_children = false;
+        EntryFormat() = default;
         vector<FieldFormat> fields;
     };
     vector<EntryFormat> entry_formats;
@@ -89,17 +81,12 @@ class DebugSections {
 
     struct GlobalVariable {
         std::string name;
-        TypeInfo *type;
-        uint64_t type_def_loc;
-        uint64_t def_loc, spec_loc;
-        uint64_t addr;
+        TypeInfo *type = nullptr;
+        uint64_t type_def_loc = 0;
+        uint64_t def_loc = 0, spec_loc = 0;
+        uint64_t addr = 0;
         GlobalVariable()
-            : name(""),
-              type(nullptr),
-              type_def_loc(0),
-              def_loc(0),
-              spec_loc(0),
-              addr(0) {
+            : name("") {
         }
         bool operator<(const GlobalVariable &other) const {
             return addr < other.addr;
@@ -124,30 +111,25 @@ class DebugSections {
 
     struct LocalVariable {
         std::string name;
-        TypeInfo *type;
-        int stack_offset;
-        uint64_t type_def_loc;
-        uint64_t def_loc, origin_loc;
+        TypeInfo *type = nullptr;
+        int stack_offset = 0;
+        uint64_t type_def_loc = 0;
+        uint64_t def_loc = 0, origin_loc = 0;
         // Some local vars are only alive for certain address ranges
         // (e.g. those inside a lexical block). If the ranges vector
         // is empty, the variables are alive for the entire containing
         // function.
         vector<LiveRange> live_ranges;
         LocalVariable()
-            : name(""),
-              type(nullptr),
-              stack_offset(0),
-              type_def_loc(0),
-              def_loc(0),
-              origin_loc(0) {
+            : name("") {
         }
     };
 
     struct FunctionInfo {
         std::string name;
-        uint64_t pc_begin, pc_end;
+        uint64_t pc_begin = 0, pc_end = 0;
         vector<LocalVariable> variables;
-        uint64_t def_loc, spec_loc;
+        uint64_t def_loc = 0, spec_loc = 0;
         // The stack variable offsets are w.r.t either:
         // gcc: the top of the stack frame (one below the return address to the caller)
         // clang with frame pointers: the bottom of the stack frame (one above the return address to this function)
@@ -157,7 +139,7 @@ class DebugSections {
                ClangFP,
                ClangNoFP } frame_base;
         FunctionInfo()
-            : name(""), pc_begin(0), pc_end(0), def_loc(0), spec_loc(0) {
+            : name("") {
         }
 
         bool operator<(const FunctionInfo &other) const {
@@ -179,8 +161,8 @@ class DebugSections {
 
     struct TypeInfo {
         std::string name;
-        uint64_t size;
-        uint64_t def_loc;
+        uint64_t size = 0;
+        uint64_t def_loc = 0;
         vector<LocalVariable> members;
 
         // TypeInfo can also be used to represent a pointer to
@@ -194,11 +176,9 @@ class DebugSections {
                Typedef,
                Const,
                Reference,
-               Array } type;
+               Array } type = Primitive;
 
-        TypeInfo()
-            : size(0), def_loc(0), type(Primitive) {
-        }
+        TypeInfo() = default;
     };
     vector<TypeInfo> types;
 
@@ -469,7 +449,9 @@ public:
             // addresses of their children-of-children might follow a
             // dangling pointer.
             if (parent.type->type == TypeInfo::Pointer ||
-                parent.type->type == TypeInfo::Reference) continue;
+                parent.type->type == TypeInfo::Reference) {
+                continue;
+            }
 
             for (size_t j = 0; j < parent.type->members.size(); j++) {
                 const LocalVariable &member_spec = parent.type->members[j];
@@ -550,7 +532,9 @@ public:
         for (size_t i = 0; i < obj.members.size(); i++) {
             TypeInfo *t = obj.members[i].type;
 
-            if (!t) continue;
+            if (!t) {
+                continue;
+            }
 
             debug(5) << "Comparing to member " << obj.members[i].name
                      << " at address " << std::hex << obj.members[i].addr << std::dec
@@ -695,7 +679,7 @@ public:
             debug(5) << "Var " << var.name << " is at offset " << var.stack_offset << "\n";
 
             // Reject it if we're not in its live ranges
-            if (var.live_ranges.size()) {
+            if (!var.live_ranges.empty()) {
                 bool in_live_range = false;
                 for (size_t i = 0; i < var.live_ranges.size(); i++) {
                     if (pc >= var.live_ranges[i].pc_begin &&
@@ -752,7 +736,7 @@ public:
     std::string get_source_location() {
         debug(5) << "Finding source location\n";
 
-        if (!source_lines.size()) {
+        if (source_lines.empty()) {
             debug(5) << "Bailing out because we have no source lines\n";
             return "";
         }
@@ -959,14 +943,9 @@ private:
 
         for (llvm::object::section_iterator iter = obj->section_begin();
              iter != obj->section_end(); ++iter) {
-#if LLVM_VERSION >= 100
             auto expected_name = iter->getName();
             internal_assert(expected_name);
             llvm::StringRef name = expected_name.get();
-#else
-            llvm::StringRef name;
-            iter->getName(name);
-#endif
             debug(2) << "Section: " << name.str() << "\n";
             // ignore errors, just leave strings empty
             auto e = iter->getContents();
@@ -1016,7 +995,9 @@ private:
         while (1) {
             EntryFormat fmt;
             fmt.code = e.getULEB128(&off);
-            if (!fmt.code) break;
+            if (!fmt.code) {
+                break;
+            }
             fmt.tag = e.getULEB128(&off);
             fmt.has_children = (e.getU8(&off) != 0);
             // Get the attributes
@@ -1028,7 +1009,9 @@ private:
             while (1) {
                 uint64_t name = e.getULEB128(&off);
                 uint64_t form = e.getULEB128(&off);
-                if (!name && !form) break;
+                if (!name && !form) {
+                    break;
+                }
                 //printf(" name = %lu, form = %lu\n", name, form);
 
                 FieldFormat f_fmt(name, form);
@@ -1133,23 +1116,23 @@ private:
 
                 // A null entry indicates we're popping the stack.
                 if (abbrev_code == 0) {
-                    if (func_stack.size() &&
+                    if (!func_stack.empty() &&
                         stack_depth == func_stack.back().second) {
                         const FunctionInfo &f = func_stack.back().first;
                         functions.push_back(f);
                         func_stack.pop_back();
                     }
-                    if (type_stack.size() &&
+                    if (!type_stack.empty() &&
                         stack_depth == type_stack.back().second) {
                         const TypeInfo &c = type_stack.back().first;
                         types.push_back(c);
                         type_stack.pop_back();
                     }
-                    if (namespace_stack.size() &&
+                    if (!namespace_stack.empty() &&
                         stack_depth == namespace_stack.back().second) {
                         namespace_stack.pop_back();
                     }
-                    if (live_range_stack.size() &&
+                    if (!live_range_stack.empty() &&
                         stack_depth == live_range_stack.back().second) {
                         live_range_stack.pop_back();
                     }
@@ -1173,7 +1156,7 @@ private:
                 std::string namespace_name;
 
                 std::string containing_namespace;
-                if (type_stack.size()) {
+                if (!type_stack.empty()) {
                     containing_namespace = type_stack.back().first.name + "::";
                 } else {
                     for (size_t i = 0; i < namespace_stack.size(); i++) {
@@ -1249,8 +1232,8 @@ private:
                     {
                         val = 0;
                         payload = (const uint8_t *)(debug_info.data() + off);
-                        while (e.getU8(&off))
-                            ;
+                        while (e.getU8(&off)) {
+                        }
                         break;
                     }
                     case 9:  // block (uleb128 length followed by payload)
@@ -1525,7 +1508,7 @@ private:
                     } else if (fmt.tag == tag_member) {
                         if (attr == attr_name) {
                             var.name = std::string((const char *)payload);
-                            if (type_stack.size()) {
+                            if (!type_stack.empty()) {
                                 gvar.name = type_stack.back().first.name + "::" + var.name;
                             } else {
                                 gvar.name = var.name;
@@ -1547,11 +1530,11 @@ private:
                     } else if (fmt.tag == tag_subrange_type) {
                         // Could be telling us the size of an array type
                         if (attr == attr_upper_bound &&
-                            type_stack.size() &&
+                            !type_stack.empty() &&
                             type_stack.back().first.type == TypeInfo::Array) {
                             type_stack.back().first.size = val + 1;
                         } else if (attr == attr_count &&
-                                   type_stack.size() &&
+                                   !type_stack.empty() &&
                                    type_stack.back().first.type == TypeInfo::Array) {
                             type_stack.back().first.size = val;
                         }
@@ -1560,7 +1543,7 @@ private:
                         if (attr == attr_low_pc) {
                             LiveRange r = {val, val};
                             live_ranges.push_back(r);
-                        } else if (attr == attr_high_pc && live_ranges.size()) {
+                        } else if (attr == attr_high_pc && !live_ranges.empty()) {
                             if (fmt.fields[i].form == 0x1) {
                                 // Literal address
                                 live_ranges.back().pc_end = val;
@@ -1592,8 +1575,8 @@ private:
                 }
 
                 if (fmt.tag == tag_variable) {
-                    if (func_stack.size() && !gvar.addr) {
-                        if (live_range_stack.size()) {
+                    if (!func_stack.empty() && !gvar.addr) {
+                        if (!live_range_stack.empty()) {
                             var.live_ranges = live_range_stack.back().first;
                         }
                         func_stack.back().first.variables.push_back(var);
@@ -1601,7 +1584,7 @@ private:
                         global_variables.push_back(gvar);
                     }
                 } else if (fmt.tag == tag_member &&
-                           type_stack.size()) {
+                           !type_stack.empty()) {
                     if (var.stack_offset == no_location) {
                         // A member with no stack offset location is probably the prototype for a static member
                         global_variables.push_back(gvar);
@@ -1637,7 +1620,7 @@ private:
                     namespace_stack.emplace_back(namespace_name, stack_depth);
                 } else if ((fmt.tag == tag_inlined_subroutine ||
                             fmt.tag == tag_lexical_block) &&
-                           live_ranges.size() && fmt.has_children) {
+                           !live_ranges.empty() && fmt.has_children) {
                     live_range_stack.emplace_back(live_ranges, stack_depth);
                 }
             }
@@ -1775,9 +1758,9 @@ private:
                 }
             }
 
-            if (t && suffix.size()) {
+            if (t && !suffix.empty()) {
                 types[i].name = t->name;
-                while (suffix.size()) {
+                while (!suffix.empty()) {
                     types[i].name += " " + suffix.back();
                     suffix.pop_back();
                 }
@@ -1818,8 +1801,8 @@ private:
                         // Correct the stack offsets and names
                         for (size_t k = 0; k < members; k++) {
                             new_vars[j + k + 1].stack_offset += new_vars[j].stack_offset;
-                            if (new_vars[j + k + 1].name.size() &&
-                                new_vars[j].name.size()) {
+                            if (!new_vars[j + k + 1].name.empty() &&
+                                !new_vars[j].name.empty()) {
                                 new_vars[j + k + 1].name = new_vars[j].name + "." + new_vars[j + k + 1].name;
                             }
                         }
@@ -1828,7 +1811,7 @@ private:
             }
             functions[i].variables.swap(new_vars);
 
-            if (functions[i].variables.size()) {
+            if (!functions[i].variables.empty()) {
                 debug(5) << "Function " << functions[i].name << ":\n";
                 for (size_t j = 0; j < functions[i].variables.size(); j++) {
                     if (functions[i].variables[j].type) {
@@ -2245,8 +2228,10 @@ bool dump_stack_frame() {
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
-    if (!debug_sections) return "";
-    if (!debug_sections->working) return "";
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return "";
+    }
     std::string name = debug_sections->get_stack_variable_name(var, expected_type);
     if (name.empty()) {
         // Maybe it's a member of a heap object.
@@ -2261,21 +2246,27 @@ std::string get_variable_name(const void *var, const std::string &expected_type)
 }
 
 std::string get_source_location() {
-    if (!debug_sections) return "";
-    if (!debug_sections->working) return "";
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return "";
+    }
     return debug_sections->get_source_location();
 }
 
 void register_heap_object(const void *obj, size_t size, const void *helper) {
-    if (!debug_sections) return;
-    if (!debug_sections->working) return;
-    if (!helper) return;
+    if (!debug_sections ||
+        !debug_sections->working ||
+        !helper) {
+        return;
+    }
     debug_sections->register_heap_object(obj, size, helper);
 }
 
 void deregister_heap_object(const void *obj, size_t size) {
-    if (!debug_sections) return;
-    if (!debug_sections->working) return;
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return;
+    }
     debug_sections->deregister_heap_object(obj, size);
 }
 

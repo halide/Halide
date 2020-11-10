@@ -72,8 +72,12 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
 
     // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
     // for our purposes here, treat anything non-const as no-bound.
-    if (!is_const(interval.min)) interval.min = Interval::neg_inf();
-    if (!is_const(interval.max)) interval.max = Interval::pos_inf();
+    if (!is_const(interval.min)) {
+        interval.min = Interval::neg_inf();
+    }
+    if (!is_const(interval.max)) {
+        interval.max = Interval::pos_inf();
+    }
 
     return interval;
 }
@@ -282,18 +286,18 @@ private:
                 // constants, they might fit regardless of types.
                 a.min = simplify(a.min);
                 a.max = simplify(a.max);
-                auto *umin = as_const_uint(a.min);
-                auto *umax = as_const_uint(a.max);
+                const auto *umin = as_const_uint(a.min);
+                const auto *umax = as_const_uint(a.max);
                 if (umin && umax && to.can_represent(*umin) && to.can_represent(*umax)) {
                     could_overflow = false;
                 } else {
-                    auto *imin = as_const_int(a.min);
-                    auto *imax = as_const_int(a.max);
+                    const auto *imin = as_const_int(a.min);
+                    const auto *imax = as_const_int(a.max);
                     if (imin && imax && to.can_represent(*imin) && to.can_represent(*imax)) {
                         could_overflow = false;
                     } else {
-                        auto *fmin = as_const_float(a.min);
-                        auto *fmax = as_const_float(a.max);
+                        const auto *fmin = as_const_float(a.min);
+                        const auto *fmax = as_const_float(a.max);
                         if (fmin && fmax && to.can_represent(*fmin) && to.can_represent(*fmax)) {
                             could_overflow = false;
                         }
@@ -306,11 +310,19 @@ private:
             // Start with the bounds of the narrow type.
             bounds_of_type(from);
             // If we have a better min or max for the arg use that.
-            if (a.has_lower_bound()) interval.min = a.min;
-            if (a.has_upper_bound()) interval.max = a.max;
+            if (a.has_lower_bound()) {
+                interval.min = a.min;
+            }
+            if (a.has_upper_bound()) {
+                interval.max = a.max;
+            }
             // Then cast those bounds to the wider type.
-            if (interval.has_lower_bound()) interval.min = Cast::make(to, interval.min);
-            if (interval.has_upper_bound()) interval.max = Cast::make(to, interval.max);
+            if (interval.has_lower_bound()) {
+                interval.min = Cast::make(to, interval.min);
+            }
+            if (interval.has_upper_bound()) {
+                interval.max = Cast::make(to, interval.max);
+            }
         } else {
             // This might overflow, so use the bounds of the destination type.
             bounds_of_type(to);
@@ -540,8 +552,9 @@ private:
                     interval.min = -cast(a.min.type(), abs(a.min));
                     interval.max = cast(a.min.type(), abs(a.max));
                 } else {
+                    // div by 0 is 0 and the magnitude cannot increase by integer division
                     interval.min = min(-a.max, a.min);
-                    interval.max = max(-a.max, a.min);
+                    interval.max = max(-a.min, a.max);
                 }
             } else {
                 interval = Interval::everything();
@@ -551,9 +564,11 @@ private:
         } else if (can_prove(b.min == b.max)) {
             Expr e1 = a.has_lower_bound() ? a.min / b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max / b.max : a.max;
-            if (is_positive_const(b.min) || op->type.is_uint()) {
+            // TODO: handle real numbers with can_prove(b.min > 0) and can_prove(b.min < 0) as well - treating floating point as
+            // reals can be error prone when dealing with division near 0, so for now we only consider integers in the can_prove() path
+            if (op->type.is_uint() || is_positive_const(b.min) || (op->type.is_int() && can_prove(b.min >= 0))) {
                 interval = Interval(e1, e2);
-            } else if (is_negative_const(b.min)) {
+            } else if (is_negative_const(b.min) || (op->type.is_int() && can_prove(b.min <= 0))) {
                 if (e1.same_as(Interval::neg_inf())) {
                     e1 = Interval::pos_inf();
                 }
@@ -633,9 +648,12 @@ private:
             }
         } else {
             // b is bounded
-            if (b.max.type().is_uint() || (b.max.type().is_int() && is_positive_const(b.min))) {
-                // If the RHS is a positive integer, the result is in [0, max_b-1]
-                interval.max = Max::make(interval.min, b.max - make_one(t));
+            if (b.max.type().is_int_or_uint() && is_positive_const(b.min)) {
+                // If the RHS is >= 1, the result is in [0, max_b-1]
+                interval.max = b.max - make_one(t);
+            } else if (b.max.type().is_uint()) {
+                // if b.max = 0 then result is [0, 0], else [0, b.max - 1]
+                interval.max = select(b.max == make_zero(t), make_zero(t), b.max - make_one(t));
             } else if (b.max.type().is_int()) {
                 // x % [4,10] -> [0,9]
                 // x % [-8,-3] -> [0,7]
@@ -779,10 +797,18 @@ private:
     }
 
     Expr make_and(Expr a, Expr b) {
-        if (is_one(a)) return b;
-        if (is_one(b)) return a;
-        if (is_zero(a)) return a;
-        if (is_zero(b)) return b;
+        if (is_one(a)) {
+            return b;
+        }
+        if (is_one(b)) {
+            return a;
+        }
+        if (is_zero(a)) {
+            return a;
+        }
+        if (is_zero(b)) {
+            return b;
+        }
         return a && b;
     }
 
@@ -806,10 +832,18 @@ private:
     }
 
     Expr make_or(Expr a, Expr b) {
-        if (is_one(a)) return a;
-        if (is_one(b)) return b;
-        if (is_zero(a)) return b;
-        if (is_zero(b)) return a;
+        if (is_one(a)) {
+            return a;
+        }
+        if (is_one(b)) {
+            return b;
+        }
+        if (is_zero(a)) {
+            return b;
+        }
+        if (is_zero(b)) {
+            return a;
+        }
         return a || b;
     }
 
@@ -833,8 +867,12 @@ private:
     }
 
     Expr make_not(const Expr &e) {
-        if (is_one(e)) return make_zero(e.type());
-        if (is_zero(e)) return make_one(e.type());
+        if (is_one(e)) {
+            return make_zero(e.type());
+        }
+        if (is_zero(e)) {
+            return make_one(e.type());
+        }
         return !e;
     }
 
@@ -1138,7 +1176,7 @@ private:
             if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
                 interval = Interval::single_point(op);
             } else if (a_interval.is_single_point() && b_interval.is_single_point()) {
-                interval = Interval::single_point(Call::make(op->type, op->name, {a_interval.min, b_interval.min}, op->call_type));
+                interval = Interval::single_point(Call::make(t, op->name, {a_interval.min, b_interval.min}, op->call_type));
             } else {
                 bounds_of_type(t);
                 // For some of these intrinsics applied to integer
@@ -1396,7 +1434,7 @@ private:
     void visit(const Shuffle *op) override {
         TRACK_BOUNDS_INTERVAL;
         Interval result = Interval::nothing();
-        for (Expr i : op->vectors) {
+        for (const Expr &i : op->vectors) {
             i.accept(this);
             result.include(interval);
         }
@@ -1892,7 +1930,7 @@ private:
 
             if (op->call_type == Call::Halide ||
                 op->call_type == Call::Image) {
-                for (Expr e : op->args) {
+                for (const Expr &e : op->args) {
                     e.accept(this);
                 }
                 if (op->name == func || func.empty()) {
@@ -1947,10 +1985,8 @@ private:
         }
 
     public:
-        int count;
-        CountVars()
-            : count(0) {
-        }
+        int count = 0;
+        CountVars() = default;
     };
 
     // We get better simplification if we directly substitute mins
@@ -2332,9 +2368,11 @@ private:
                 };
                 vector<RestrictedVar> to_pop;
                 auto vars = find_free_vars(op->condition);
-                for (auto v : vars) {
+                for (const auto *v : vars) {
                     auto result = solve_expression(c, v->name);
-                    if (!result.fully_solved) continue;
+                    if (!result.fully_solved) {
+                        continue;
+                    }
                     Expr solved = result.result;
 
                     // Trim the scope down to represent the fact that the

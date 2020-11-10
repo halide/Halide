@@ -107,7 +107,7 @@ struct fail {
 
 // Combine type-and-code into a single integer to avoid nested switches.
 // Must be constexpr to allow use in case clauses.
-inline static constexpr int halide_type_code(halide_type_code_t code, int bits) {
+inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
     return (((int)code) << 8) | bits;
 }
 
@@ -423,7 +423,7 @@ Funcs.
  --no-verbose: Disable additional informational messages to stderr.
      This is the default.
 
-))USAGE";
+)USAGE";
 }
 
 // Calculate the maximum 2d rendered size for a given Box and stride, assuming
@@ -567,13 +567,13 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
         if (fi.config.zoom > 100.f) {
             // Zooms this large are usually for things like input matrices.
             // Perhaps clamp at something smaller?
-            fi.config.zoom = floor(fi.config.zoom / 100.f) * 100.f;
+            fi.config.zoom = std::floor(fi.config.zoom / 100.f) * 100.f;
         } else if (fi.config.zoom > 10.f) {
-            fi.config.zoom = floor(fi.config.zoom / 10.f) * 10.f;
+            fi.config.zoom = std::floor(fi.config.zoom / 10.f) * 10.f;
         } else if (fi.config.zoom > 1.f) {
-            fi.config.zoom = floor(fi.config.zoom * 2.f) / 2.f;
+            fi.config.zoom = std::floor(fi.config.zoom * 2.f) / 2.f;
         } else if (fi.config.zoom < 1.f) {
-            fi.config.zoom = ceil(fi.config.zoom * 20.f) / 20.f;
+            fi.config.zoom = std::ceil(fi.config.zoom * 20.f) / 20.f;
         }
         info() << "zoom for " << func_name << " is " << zoom_x << " " << zoom_y << " -> " << fi.config.zoom << "\n";
     }
@@ -615,10 +615,10 @@ void do_auto_layout(VizState &state) {
 
 float calc_side_length(int min_cells, int width, int height) {
     const float aspect_ratio = (float)width / (float)height;
-    const float p = ceil(sqrt(min_cells * aspect_ratio));
+    const float p = std::ceil(std::sqrt(min_cells * aspect_ratio));
     const float par = p / aspect_ratio;
-    const float s = floor(par) * p < min_cells ?
-                        height / ceil(par) :
+    const float s = std::floor(par) * p < min_cells ?
+                        height / std::ceil(par) :
                         width / p;
     return s;
 }
@@ -885,7 +885,7 @@ struct Surface {
 
     // TODO this doesn't bounds-check against frame_size
     void do_draw_pixel(const float zoom, const int x, const int y, const uint32_t color, uint32_t *dst) {
-        const int izoom = (int)ceil(zoom);
+        const int izoom = (int)std::ceil(zoom);
         const int y_advance = frame_size.x - izoom;
         dst += frame_size.x * y + x;
         for (int dy = 0; dy < izoom; dy++) {
@@ -933,7 +933,7 @@ struct Surface {
         if (2 * current_dimension == p.dimensions) {
             const int x_min = x_off * fi.config.zoom + fi.config.pos.x;
             const int y_min = y_off * fi.config.zoom + fi.config.pos.y;
-            const int izoom = (int)ceil(fi.config.zoom);
+            const int izoom = (int)std::ceil(fi.config.zoom);
             fill_rect(x_min, y_min, izoom, izoom, color, dst);
         } else {
             const int *coords = p.coordinates();
@@ -999,7 +999,9 @@ public:
                     int px = pos.x + (((inconsolata_char_width * c + fx) * h_scale_numerator) >> 8);
                     int py = pos.y - inconsolata_char_height + fy + 1;
                     if (px < 0 || px >= frame_size.x ||
-                        py < 0 || py >= frame_size.y) continue;
+                        py < 0 || py >= frame_size.y) {
+                        continue;
+                    }
                     dst[py * frame_size.x + px] = (font_ptr[fy * inconsolata_char_width + fx] << 24) | color;
                 }
             }
@@ -1069,7 +1071,9 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
     std::unique_ptr<Surface> surface;
 
     const std::function<void()> finalize_state = [&]() -> void {
-        if (is_state_finalized) return;
+        if (is_state_finalized) {
+            return;
+        }
 
         is_state_finalized = true;
 
@@ -1094,7 +1098,9 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         if (state.globals.auto_layout_grid.x < 0 || state.globals.auto_layout_grid.y < 0) {
             int cells_needed = 0;
             for (const auto &p : state.funcs) {
-                if (p.second.type_and_dim_valid) cells_needed++;
+                if (p.second.type_and_dim_valid) {
+                    cells_needed++;
+                }
             }
             Point cell_size = best_cell_size(cells_needed, state.globals.frame_size.x, state.globals.frame_size.y);
             state.globals.auto_layout_grid.x = state.globals.frame_size.x / cell_size.x;
@@ -1153,7 +1159,9 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                     int frames_since_first_draw = (halide_clock - first_draw_clock) / state.globals.timestep;
                     if (frames_since_first_draw < label.fade_in_frames) {
                         uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
-                        if (color > 255) color = 255;
+                        if (color > 255) {
+                            color = 255;
+                        }
                         color *= 0x10101;
                         surface->draw_text(label.text, label.pos, color, label.h_scale);
                         ++it;
@@ -1266,7 +1274,9 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
 
         // Draw the event
         FuncInfo &fi = state.funcs[qualified_name];
-        if (!fi.config_valid) continue;
+        if (!fi.config_valid) {
+            continue;
+        }
 
         if (fi.stats.first_draw_time < 0) {
             fi.stats.first_draw_time = halide_clock;
@@ -1405,8 +1415,8 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
 
         // Print stats about the Func gleaned from the trace.
         std::vector<std::pair<std::string, FuncInfo>> funcs;
-        for (std::pair<std::string, FuncInfo> p : state.funcs) {
-            funcs.push_back(p);
+        for (const auto &p : state.funcs) {
+            funcs.emplace_back(p);
         }
         struct by_first_packet_idx {
             bool operator()(const std::pair<std::string, FuncInfo> &a,

@@ -273,7 +273,7 @@ void add_transitive_dependencies(vector<set<int>> &dependencies) {
                     for (const auto &idx : dependencies[j]) {
                         if (dependencies[i].count(idx) == 0) {
                             dependencies[i].insert(idx);
-                            change = false;
+                            change = true;
                         }
                     }
                 }

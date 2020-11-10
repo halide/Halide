@@ -166,7 +166,9 @@ private:
         internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) {
+            return stmt;
+        }
         Function f = iter->second;
         internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inlined());
 
@@ -224,7 +226,9 @@ private:
         internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) {
+            return stmt;
+        }
         Function f = iter->second;
         if (f.is_tracing_realizations() || trace_all_realizations) {
             add_trace_tags(op->name, f.get_trace_tags());
@@ -268,7 +272,9 @@ private:
         op = stmt.as<ProducerConsumer>();
         internal_assert(op);
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) {
+            return stmt;
+        }
         Function f = iter->second;
         if (f.is_tracing_realizations() || trace_all_realizations) {
             // Throw a tracing call around each pipeline event
@@ -306,7 +312,7 @@ class RemoveRealizeOverOutput : public IRMutator {
     const vector<Function> &outputs;
 
     Stmt visit(const Realize *op) override {
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             if (op->name == f.name()) {
                 return mutate(op->body);
             }
@@ -327,7 +333,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
     InjectTracing tracing(env, t);
 
     // Add a dummy realize block for the output buffers
-    for (Function output : outputs) {
+    for (const Function &output : outputs) {
         Region output_region;
         Parameter output_buf = output.output_buffers()[0];
         internal_assert(output_buf.is_buffer());

@@ -148,6 +148,7 @@ tests(GROUPS correctness
       gpu_specialize.cpp
       gpu_store_in_register_with_no_lanes_loop.cpp
       gpu_sum_scan.cpp
+      gpu_texture.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
       gpu_vectorized_shared_memory.cpp
@@ -241,6 +242,7 @@ tests(GROUPS correctness
       partial_realization.cpp
       partition_loops.cpp
       partition_loops_bug.cpp
+      partition_max_filter.cpp
       pipeline_set_jit_externs_func.cpp
       plain_c_includes.c
       popc_clz_ctz_bounds.cpp

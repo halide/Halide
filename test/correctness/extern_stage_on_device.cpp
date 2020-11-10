@@ -39,7 +39,7 @@ extern "C" DLLEXPORT int extern_stage(int extern_on_device,
         f(x, y) = x + y;
 
         if (extern_on_device > 0) {
-            f.gpu_tile(x, y, xi, yi, 32, 32);
+            f.gpu_tile(x, y, xi, yi, 16, 16);
         }
         f.realize(out);
     }
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
             source.compute_root();
             sink.compute_root();
             if (sink_on_device > 0) {
-                sink.gpu_tile(x, y, xi, yi, 32, 32);
+                sink.gpu_tile(x, y, xi, yi, 16, 16);
             }
 
             Buffer<int32_t> output = sink.realize(100, 100);

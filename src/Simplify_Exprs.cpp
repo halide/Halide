@@ -35,6 +35,15 @@ Expr Simplify::visit(const StringImm *op, ExprInfo *bounds) {
 
 Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
     Expr value = mutate(op->value, bounds);
+
+    const int lanes = op->lanes;
+
+    auto rewrite = IRMatcher::rewriter(IRMatcher::broadcast(value, lanes), op->type);
+    if (rewrite(broadcast(broadcast(x, c0), lanes), broadcast(x, c0 * lanes)) ||
+        false) {
+        return mutate(rewrite.result, bounds);
+    }
+
     if (value.same_as(op->value)) {
         return op;
     } else {
@@ -44,8 +53,15 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
 
 Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     Expr value = mutate(op->value, bounds);
+
+    const int lanes = op->type.lanes();
+    const int arg_lanes = op->value.type().lanes();
+    const int factor = arg_lanes / lanes;
+    if (factor == 1) {
+        return value;
+    }
+
     if (bounds && op->type.is_int()) {
-        int factor = op->value.type().lanes() / op->type.lanes();
         switch (op->op) {
         case VectorReduce::Add:
             // Alignment of result is the alignment of the arg. Bounds
@@ -97,25 +113,24 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     // - horizontal reduce of an shuffle_vectors may be simplifiable to the
     //   underlying op on different shuffle_vectors calls
 
-    const int lanes = op->type.lanes();
-    const int arg_lanes = op->value.type().lanes();
     switch (op->op) {
     case VectorReduce::Add: {
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
-        if (rewrite(h_add(x * broadcast(y)), h_add(x, lanes) * broadcast(y, lanes)) ||
-            rewrite(h_add(broadcast(x) * y), h_add(y, lanes) * broadcast(x, lanes))) {
+        if (rewrite(h_add(x * broadcast(y, arg_lanes), lanes), h_add(x, lanes) * broadcast(y, lanes)) ||
+            rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes))) {
             return mutate(rewrite.result, bounds);
         }
         break;
     }
     case VectorReduce::Min: {
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_min(value, lanes), op->type);
-        if (rewrite(h_min(min(x, broadcast(y))), min(h_min(x, lanes), broadcast(y, lanes))) ||
-            rewrite(h_min(min(broadcast(x), y)), min(h_min(y, lanes), broadcast(x, lanes))) ||
-            rewrite(h_min(max(x, broadcast(y))), max(h_min(x, lanes), broadcast(y, lanes))) ||
-            rewrite(h_min(max(broadcast(x), y)), max(h_min(y, lanes), broadcast(x, lanes))) ||
-            rewrite(h_min(broadcast(x)), broadcast(x, lanes)) ||
-            rewrite(h_min(ramp(x, y)), x + min(y * (arg_lanes - 1), 0)) ||
+        if (rewrite(h_min(min(x, broadcast(y, arg_lanes)), lanes), min(h_min(x, lanes), broadcast(y, lanes))) ||
+            rewrite(h_min(min(broadcast(x, arg_lanes), y), lanes), min(h_min(y, lanes), broadcast(x, lanes))) ||
+            rewrite(h_min(max(x, broadcast(y, arg_lanes)), lanes), max(h_min(x, lanes), broadcast(y, lanes))) ||
+            rewrite(h_min(max(broadcast(x, arg_lanes), y), lanes), max(h_min(y, lanes), broadcast(x, lanes))) ||
+            rewrite(h_min(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
+            rewrite(h_min(broadcast(x, c0), lanes), h_min(x, lanes), factor % c0 == 0) ||
+            rewrite(h_min(ramp(x, y, arg_lanes), lanes), x + min(y * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, bounds);
         }
@@ -123,12 +138,13 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     }
     case VectorReduce::Max: {
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_max(value, lanes), op->type);
-        if (rewrite(h_max(min(x, broadcast(y))), min(h_max(x, lanes), broadcast(y, lanes))) ||
-            rewrite(h_max(min(broadcast(x), y)), min(h_max(y, lanes), broadcast(x, lanes))) ||
-            rewrite(h_max(max(x, broadcast(y))), max(h_max(x, lanes), broadcast(y, lanes))) ||
-            rewrite(h_max(max(broadcast(x), y)), max(h_max(y, lanes), broadcast(x, lanes))) ||
-            rewrite(h_max(broadcast(x)), broadcast(x, lanes)) ||
-            rewrite(h_max(ramp(x, y)), x + max(y * (arg_lanes - 1), 0)) ||
+        if (rewrite(h_max(min(x, broadcast(y, arg_lanes)), lanes), min(h_max(x, lanes), broadcast(y, lanes))) ||
+            rewrite(h_max(min(broadcast(x, arg_lanes), y), lanes), min(h_max(y, lanes), broadcast(x, lanes))) ||
+            rewrite(h_max(max(x, broadcast(y, arg_lanes)), lanes), max(h_max(x, lanes), broadcast(y, lanes))) ||
+            rewrite(h_max(max(broadcast(x, arg_lanes), y), lanes), max(h_max(y, lanes), broadcast(x, lanes))) ||
+            rewrite(h_max(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
+            rewrite(h_max(broadcast(x, c0), lanes), h_max(x, lanes), factor % c0 == 0) ||
+            rewrite(h_max(ramp(x, y, arg_lanes), lanes), x + max(y * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, bounds);
         }
@@ -136,15 +152,20 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     }
     case VectorReduce::And: {
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_and(value, lanes), op->type);
-        if (rewrite(h_and(x || broadcast(y)), h_and(x, lanes) || broadcast(y, lanes)) ||
-            rewrite(h_and(broadcast(x) || y), h_and(y, lanes) || broadcast(x, lanes)) ||
-            rewrite(h_and(x && broadcast(y)), h_and(x, lanes) && broadcast(y, lanes)) ||
-            rewrite(h_and(broadcast(x) && y), h_and(y, lanes) && broadcast(x, lanes)) ||
-            rewrite(h_and(broadcast(x)), broadcast(x, lanes)) ||
-            rewrite(h_and(ramp(x, y) < broadcast(z)), x + max(y * (arg_lanes - 1), 0) < z) ||
-            rewrite(h_and(ramp(x, y) <= broadcast(z)), x + max(y * (arg_lanes - 1), 0) <= z) ||
-            rewrite(h_and(broadcast(x) < ramp(y, z)), x < y + min(z * (arg_lanes - 1), 0)) ||
-            rewrite(h_and(broadcast(x) < ramp(y, z)), x <= y + min(z * (arg_lanes - 1), 0)) ||
+        if (rewrite(h_and(x || broadcast(y, arg_lanes), lanes), h_and(x, lanes) || broadcast(y, lanes)) ||
+            rewrite(h_and(broadcast(x, arg_lanes) || y, lanes), h_and(y, lanes) || broadcast(x, lanes)) ||
+            rewrite(h_and(x && broadcast(y, arg_lanes), lanes), h_and(x, lanes) && broadcast(y, lanes)) ||
+            rewrite(h_and(broadcast(x, arg_lanes) && y, lanes), h_and(y, lanes) && broadcast(x, lanes)) ||
+            rewrite(h_and(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
+            rewrite(h_and(broadcast(x, c0), lanes), h_and(x, lanes), factor % c0 == 0) ||
+            rewrite(h_and(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), lanes),
+                    x + max(y * (arg_lanes - 1), 0) < z) ||
+            rewrite(h_and(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), lanes),
+                    x + max(y * (arg_lanes - 1), 0) <= z) ||
+            rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
+                    x < y + min(z * (arg_lanes - 1), 0)) ||
+            rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
+                    x <= y + min(z * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, bounds);
         }
@@ -152,15 +173,21 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     }
     case VectorReduce::Or: {
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_or(value, lanes), op->type);
-        if (rewrite(h_or(x || broadcast(y)), h_or(x, lanes) || broadcast(y, lanes)) ||
-            rewrite(h_or(broadcast(x) || y), h_or(y, lanes) || broadcast(x, lanes)) ||
-            rewrite(h_or(x && broadcast(y)), h_or(x, lanes) && broadcast(y, lanes)) ||
-            rewrite(h_or(broadcast(x) && y), h_or(y, lanes) && broadcast(x, lanes)) ||
-            rewrite(h_or(broadcast(x)), broadcast(x, lanes)) ||
-            rewrite(h_or(ramp(x, y) < broadcast(z)), x + min(y * (arg_lanes - 1), 0) < z) ||
-            rewrite(h_or(ramp(x, y) <= broadcast(z)), x + min(y * (arg_lanes - 1), 0) <= z) ||
-            rewrite(h_or(broadcast(x) < ramp(y, z)), x < y + max(z * (arg_lanes - 1), 0)) ||
-            rewrite(h_or(broadcast(x) < ramp(y, z)), x <= y + max(z * (arg_lanes - 1), 0)) ||
+        if (rewrite(h_or(x || broadcast(y, arg_lanes), lanes), h_or(x, lanes) || broadcast(y, lanes)) ||
+            rewrite(h_or(broadcast(x, arg_lanes) || y, lanes), h_or(y, lanes) || broadcast(x, lanes)) ||
+            rewrite(h_or(x && broadcast(y, arg_lanes), lanes), h_or(x, lanes) && broadcast(y, lanes)) ||
+            rewrite(h_or(broadcast(x, arg_lanes) && y, lanes), h_or(y, lanes) && broadcast(x, lanes)) ||
+            rewrite(h_or(broadcast(x, arg_lanes), lanes), broadcast(x, lanes)) ||
+            rewrite(h_or(broadcast(x, c0), lanes), h_or(x, lanes), factor % c0 == 0) ||
+            // type of arg_lanes is somewhat indeterminate
+            rewrite(h_or(ramp(x, y, arg_lanes) < broadcast(z, arg_lanes), lanes),
+                    x + min(y * (arg_lanes - 1), 0) < z) ||
+            rewrite(h_or(ramp(x, y, arg_lanes) <= broadcast(z, arg_lanes), lanes),
+                    x + min(y * (arg_lanes - 1), 0) <= z) ||
+            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
+                    x < y + max(z * (arg_lanes - 1), 0)) ||
+            rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
+                    x <= y + max(z * (arg_lanes - 1), 0)) ||
             false) {
             return mutate(rewrite.result, bounds);
         }
@@ -245,8 +272,13 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *bounds) {
     // but it helps to have as many rules as possible written as
     // formal rewrites, so that they can be formally verified,
     // etc.
-    auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride), op->type);
-    if (rewrite(ramp(x, 0), broadcast(x))) {
+    auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride, lanes), op->type);
+    if (rewrite(ramp(x, 0, lanes), broadcast(x, lanes)) ||
+        rewrite(ramp(ramp(x, c0, c2), broadcast(c1, c4), c3),
+                ramp(x, c0, c2 * c3),
+                c1 == c0 * fold(c2)) ||
+        false) {
+
         return rewrite.result;
     }
 
@@ -276,14 +308,30 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
     const Broadcast *b_index = index.as<Broadcast>();
-    const Broadcast *b_pred = predicate.as<Broadcast>();
+    const Shuffle *s_index = index.as<Shuffle>();
     if (is_zero(predicate)) {
         // Predicate is always false
         return undef(op->type);
-    } else if (b_index && b_pred) {
+    } else if (b_index && is_one(predicate)) {
         // Load of a broadcast should be broadcast of the load
-        Expr load = Load::make(op->type.element_of(), op->name, b_index->value, op->image, op->param, b_pred->value, align);
+        Expr new_index = b_index->value;
+        int new_lanes = new_index.type().lanes();
+        Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, b_index->value,
+                               op->image, op->param, const_true(new_lanes), align);
         return Broadcast::make(load, b_index->lanes);
+    } else if (s_index &&
+               is_one(predicate) &&
+               (s_index->is_concat() ||
+                s_index->is_interleave())) {
+        // Loads of concats/interleaves should be concats/interleaves of loads
+        std::vector<Expr> loaded_vecs;
+        for (const Expr &new_index : s_index->vectors) {
+            int new_lanes = new_index.type().lanes();
+            Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, new_index,
+                                   op->image, op->param, const_true(new_lanes), ModulusRemainder{});
+            loaded_vecs.emplace_back(std::move(load));
+        }
+        return Shuffle::make(loaded_vecs, s_index->indices);
     } else if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {

@@ -3,20 +3,21 @@
 ##
 
 include(CMakeDependentOption)
+include(BundleStatic)
 
 # Fallback configurations for weirdly built LLVMs
 set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release RelWithDebInfo "")
 set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "")
 set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
 
-find_package(LLVM ${HALIDE_REQUIRE_LLVM_VERSION} REQUIRED)
+find_package(LLVM ${Halide_REQUIRE_LLVM_VERSION} REQUIRED)
 find_package(Clang REQUIRED CONFIG HINTS "${LLVM_DIR}/../clang")
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-if (LLVM_PACKAGE_VERSION VERSION_LESS 9.0)
-    message(FATAL_ERROR "LLVM version must be 9.0 or newer")
+if (LLVM_PACKAGE_VERSION VERSION_LESS 10.0)
+    message(FATAL_ERROR "LLVM version must be 10.0 or newer")
 endif ()
 
 if (LLVM_PACKAGE_VERSION VERSION_GREATER 12.0)
@@ -24,6 +25,14 @@ if (LLVM_PACKAGE_VERSION VERSION_GREATER 12.0)
 endif ()
 
 set(Halide_LLVM_DEFS ${LLVM_DEFINITIONS} $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
+
+##
+# Options for which version of LLVM to use
+##
+
+option(Halide_SHARED_LLVM "Link against shared LLVM (ignores components)." OFF)
+cmake_dependent_option(Halide_BUNDLE_LLVM "When built as a static library, include LLVM's objects." OFF
+                       "NOT BUILD_SHARED_LIBS" OFF)
 
 ##
 # Promote LLVM/Clang executable targets
@@ -40,7 +49,7 @@ endif ()
 # Create options for including or excluding LLVM backends.
 ##
 
-set(LLVM_COMPONENTS mcjit bitwriter linker passes)
+set(active_components mcjit bitwriter linker passes)
 set(known_components AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
 
 # We don't support LLVM10 or below for wasm codegen.
@@ -54,48 +63,48 @@ foreach (comp IN LISTS known_components)
 
     cmake_dependent_option(${OPTION} "Include ${comp} target" ON
                            "${comp} IN_LIST LLVM_TARGETS_TO_BUILD" OFF)
-    if (${OPTION})
+    if (${OPTION} OR Halide_SHARED_LLVM)
         message(STATUS "Enabling ${comp} backend")
         list(APPEND Halide_LLVM_DEFS $<BUILD_INTERFACE:${DEFINE}>)
-        list(APPEND LLVM_COMPONENTS ${comp})
+        list(APPEND active_components ${comp})
     else ()
         message(STATUS "Disabling ${comp} backend")
     endif ()
 endforeach ()
+
+set(wasm_libs "")
+if (TARGET_WEBASSEMBLY)
+    find_package(LLD CONFIG REQUIRED HINTS "${LLVM_DIR}/../lld")
+    set(wasm_libs lldWasm)
+endif ()
 
 ##
 # Create Halide::LLVM library alias pointing to the correct LLVM
 # among shared, static, and bundled.
 ##
 
-option(Halide_BUNDLE_LLVM "When built as a static library, include LLVM's objects." OFF)
-option(Halide_SHARED_LLVM "Link against shared LLVM (disables components)." OFF)
+add_library(Halide_LLVM INTERFACE)
+add_library(Halide::LLVM ALIAS Halide_LLVM)
 
-llvm_map_components_to_libnames(LLVM_LIBNAMES ${LLVM_COMPONENTS})
-if (TARGET_WEBASSEMBLY)
-    find_package(LLD CONFIG REQUIRED HINTS "${LLVM_DIR}/../lld")
-    list(APPEND LLVM_LIBNAMES lldWasm)
-endif ()
-
-if (Halide_BUNDLE_LLVM AND NOT BUILD_SHARED_LIBS)
-    include(BundleStatic)
-    bundle_static(LIBRARIES ${LLVM_LIBNAMES} TARGET Halide_LLVM)
-else ()
-    add_library(Halide_LLVM INTERFACE)
-    if (Halide_SHARED_LLVM)
-        set(LLVM_LIBNAMES LLVM)
-        target_link_libraries(Halide_LLVM INTERFACE ${CMAKE_DL_LIBS})
-    endif ()
-    target_link_libraries(Halide_LLVM INTERFACE ${LLVM_LIBNAMES})
-    set_target_properties(${LLVM_LIBNAMES} PROPERTIES IMPORTED_GLOBAL TRUE)
-endif ()
-
-# Attach the include dirs and (patched) definitions to the target, where they belong.
 set_target_properties(Halide_LLVM PROPERTIES EXPORT_NAME LLVM)
 target_include_directories(Halide_LLVM INTERFACE $<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>)
 target_compile_definitions(Halide_LLVM INTERFACE ${Halide_LLVM_DEFS})
 
-add_library(Halide::LLVM ALIAS Halide_LLVM)
+# Link LLVM libraries to Halide_LLVM, depending on shared, static, or bundled selection.
+if (Halide_SHARED_LLVM)
+    # llvm_map_components_to_libnames is not safe to call if the LLVM static libraries
+    # aren't in the package. This happens on Gentoo Linux at least, but might also happen
+    # with custom LLVM build configurations.
+    target_link_libraries(Halide_LLVM INTERFACE LLVM ${wasm_libs} ${CMAKE_DL_LIBS})
+else ()
+    llvm_map_components_to_libnames(llvm_targets ${active_components})
+    list(APPEND llvm_targets ${wasm_libs})
+    if (Halide_BUNDLE_LLVM)
+        bundle_static(Halide_LLVM LIBRARIES ${llvm_targets})
+    else ()
+        target_link_libraries(Halide_LLVM INTERFACE ${llvm_targets})
+    endif ()
+endif ()
 
 ##
 # Language options interface library
@@ -118,7 +127,7 @@ else ()
     message(STATUS "Compiling Halide WITHOUT RTTI.")
     target_compile_options(Halide_LanguageOptions INTERFACE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
-                           $<$<COMPILE_LANG_AND_ID:CXX,GCC,Clang,AppleClang>:-fno-rtti>)
+                           $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-rtti>)
 endif ()
 
 option(Halide_ENABLE_EXCEPTIONS "Enable exceptions" ON)
@@ -129,7 +138,7 @@ else ()
     message(STATUS "Compiling Halide WITHOUT exceptions.")
     target_compile_options(Halide_LanguageOptions INTERFACE
                            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/EHs-c->
-                           $<$<COMPILE_LANG_AND_ID:CXX,GCC,Clang,AppleClang>:-fno-exceptions>)
+                           $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-exceptions>)
     target_compile_definitions(Halide_LanguageOptions INTERFACE
                                $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>)
 endif ()

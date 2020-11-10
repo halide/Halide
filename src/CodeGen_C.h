@@ -50,10 +50,16 @@ public:
 
     static void test();
 
-    /**  Add common macros to be shared across all backends */
-    void add_common_macros(std::ostream &dest);
-
 protected:
+    enum class IntegerSuffixStyle {
+        PlainC = 0,
+        OpenCL = 1,
+        HLSL = 2
+    };
+
+    /** How to emit 64-bit integer constants */
+    IntegerSuffixStyle integer_suffix_style = IntegerSuffixStyle::PlainC;
+
     /** Emit a declaration. */
     // @{
     virtual void compile(const LoweredFunc &func);
@@ -226,6 +232,7 @@ protected:
     void visit(const Atomic *) override;
 
     void visit_binop(Type t, const Expr &a, const Expr &b, const char *op);
+    void visit_relop(Type t, const Expr &a, const Expr &b, const char *scalar_op, const char *vector_op);
 
     template<typename T>
     static std::string with_sep(const std::vector<T> &v, const std::string &sep) {
@@ -250,6 +257,9 @@ protected:
 
     /** Emit atomic store instructions? */
     bool emit_atomic_stores;
+
+    /** true if add_vector_typedefs() has been called. */
+    bool using_vector_typedefs;
 };
 
 }  // namespace Internal

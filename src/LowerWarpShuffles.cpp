@@ -254,24 +254,24 @@ class DetermineAllocStride : public IRVisitor {
             << "(rounding down), becomes a multiple of the warp size (" << warp_size << ").\n";
         if (!stores.empty()) {
             message << alloc << " is stored to at the following indices by multiple lanes:\n";
-            for (Expr e : stores) {
+            for (const Expr &e : stores) {
                 message << "  " << e << "\n";
             }
         }
         if (!single_stores.empty()) {
             message << "And the following indicies by lane zero:\n";
-            for (Expr e : single_stores) {
+            for (const Expr &e : single_stores) {
                 message << "  " << e << "\n";
             }
         }
         if (!loads.empty()) {
             message << "And loaded from at the following indices:\n";
-            for (Expr e : loads) {
+            for (const Expr &e : loads) {
                 message << "  " << e << "\n";
             }
         }
         message << "The problematic indices are:\n";
-        for (Expr e : bad) {
+        for (const Expr &e : bad) {
             message << "  " << e << "\n";
         }
         user_error << message.str();
@@ -293,7 +293,7 @@ public:
         Expr stride;
         Expr var = Variable::make(Int(32), lane_var);
         vector<Expr> bad;
-        for (Expr e : stores) {
+        for (const Expr &e : stores) {
             Expr s = warp_stride(e);
             if (s.defined()) {
                 // Constant-fold
@@ -317,7 +317,7 @@ public:
             ok = ok && this_ok;
         }
 
-        for (Expr e : loads) {
+        for (const Expr &e : loads) {
             // We can handle any access pattern for loads, but it's
             // better if the stride matches up because then it's just
             // a register access, not a warp shuffle.
@@ -328,7 +328,7 @@ public:
         }
 
         if (stride.defined()) {
-            for (Expr e : single_stores) {
+            for (const Expr &e : single_stores) {
                 // If only thread zero was active for the store, that makes the proof simpler.
                 Expr simpler = substitute(lane_var, 0, e);
                 bool this_ok = can_prove(reduce_expr(simpler / stride, warp_size, bounds) == 0);
@@ -339,7 +339,9 @@ public:
             }
         }
 
-        if (!ok) fail(bad);
+        if (!ok) {
+            fail(bad);
+        }
 
         if (!stride.defined()) {
             // This allocation must only accessed via single-threaded stores.
@@ -398,7 +400,7 @@ class LowerWarpShuffles : public IRMutator {
 
             // Figure out the shrunken size of the hoisted allocations
             // and populate the scope.
-            for (Stmt s : allocations) {
+            for (const Stmt &s : allocations) {
                 const Allocate *alloc = s.as<Allocate>();
                 internal_assert(alloc && alloc->extents.size() == 1);
                 // The allocation has been moved into the lane loop,
@@ -425,7 +427,7 @@ class LowerWarpShuffles : public IRMutator {
 
             // Wrap the hoisted warp-level allocations, at their new
             // reduced size.
-            for (Stmt s : allocations) {
+            for (const Stmt &s : allocations) {
                 const Allocate *alloc = s.as<Allocate>();
                 internal_assert(alloc && alloc->extents.size() == 1);
                 int new_size = allocation_info.get(alloc->name).size;
@@ -444,7 +446,7 @@ class LowerWarpShuffles : public IRMutator {
             body = mutate(body);
 
             // Rewrap any hoisted allocations that weren't placed outside some inner loop
-            for (Stmt s : allocations) {
+            for (const Stmt &s : allocations) {
                 const Allocate *alloc = s.as<Allocate>();
                 body = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
                                       alloc->extents, alloc->condition,

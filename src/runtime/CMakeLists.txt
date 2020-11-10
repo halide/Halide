@@ -56,7 +56,6 @@ set(RUNTIME_CPP
     osx_host_cpu_count
     osx_opengl_context
     osx_yield
-    posix_abort
     posix_allocator
     posix_clock
     posix_error_handler
@@ -84,7 +83,6 @@ set(RUNTIME_CPP
     trace_helper
     tracing
     wasm_cpu_features
-    windows_abort
     windows_clock
     windows_cuda
     windows_d3d12compute_x86
@@ -104,7 +102,6 @@ set(RUNTIME_LL
     arm
     arm_no_neon
     hvx_128
-    hvx_64
     mips
     posix_math
     powerpc
@@ -114,6 +111,7 @@ set(RUNTIME_LL
     x86
     x86_avx
     x86_avx2
+    x86_avx512
     x86_sse41
     )
 
@@ -145,11 +143,27 @@ set(RUNTIME_HEADER_FILES
 # by add_custom_command, as is the case in this directory.
 add_library(Halide_initmod OBJECT)
 
-set(CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
-set(RUNTIME_CXX_FLAGS -O3
-    -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables
+# Note: ensure that these flags match the flags in the Makefile.
+# Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
+set(RUNTIME_CXX_FLAGS
+    -O3
+    -ffreestanding
+    -fno-blocks
+    -fno-exceptions
+    -fno-unwind-tables
+    -fno-vectorize
     # Note: we don't want static locals to get thread synchronization stuff.
-    -fno-threadsafe-statics)
+    -fno-threadsafe-statics
+    -Wall
+    -Wcast-qual
+    -Werror
+    -Wignored-qualifiers
+    -Wno-comment
+    -Wno-psabi
+    -Wno-unknown-warning-option
+    -Wno-unused-function
+    -Wsign-compare
+)
 
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
@@ -202,14 +216,23 @@ foreach (i IN LISTS RUNTIME_CPP)
                 set(dep_args "")
             endif ()
 
-            add_custom_command(OUTPUT "${LL}"
-                               COMMAND clang ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
-                               DEPENDS "${SOURCE}"
-                               # Note: IMPLICIT_DEPENDS only works for Makefile generators, ${dep_args} handles Ninja.
-                               IMPLICIT_DEPENDS CXX "${SOURCE}"
-                               WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-                               ${dep_args}
-                               VERBATIM)
+            if (Halide_CLANG_TIDY_BUILD)
+                # Create a 'fake' entry just so that clang-tidy will see a C++ compilation command
+                # that it can use for tidy-checking. (This branch should never be taken by 'normal'
+                # compilations.)
+                add_library(${basename} STATIC "${SOURCE}")
+                target_compile_options(${basename} PRIVATE ${RUNTIME_CXX_FLAGS} ${fpic} -m${j} -target ${TARGET})
+                target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
+            else()
+                add_custom_command(OUTPUT "${LL}"
+                                   COMMAND clang ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
+                                   DEPENDS "${SOURCE}"
+                                   # Note: IMPLICIT_DEPENDS only works for Makefile generators, ${dep_args} handles Ninja.
+                                   IMPLICIT_DEPENDS CXX "${SOURCE}"
+                                   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+                                   ${dep_args}
+                                   VERBATIM)
+            endif()
 
             add_custom_command(OUTPUT "${BC}"
                                COMMAND llvm-as "${LL}" -o "${BC}"

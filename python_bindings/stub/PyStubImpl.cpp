@@ -86,7 +86,7 @@ StubInput to_stub_input(const py::object &o) {
 
 void append_input(const py::object &value, std::vector<StubInput> &v) {
     if (is_real_sequence(value)) {
-        for (auto o : py::reinterpret_borrow<py::sequence>(value)) {
+        for (const auto &o : py::reinterpret_borrow<py::sequence>(value)) {
             v.push_back(to_stub_input(o));
         }
     } else {
@@ -173,7 +173,7 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, c
 
 void pystub_init(pybind11::module &m, FactoryFunc factory) {
     m.def(
-        "generate", [factory](const Halide::Target &target, py::args args, py::kwargs kwargs) -> py::object {
+        "generate", [factory](const Halide::Target &target, const py::args &args, const py::kwargs &kwargs) -> py::object {
             return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
         },
         py::arg("target"));

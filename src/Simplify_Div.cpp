@@ -93,8 +93,12 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
         // Code downstream can use min/max in calculated-but-unused arithmetic
         // that can lead to UB (and thus, flaky failures under ASAN/UBSAN)
         // if we leave them set to INT64_MAX/INT64_MIN; normalize to zero to avoid this.
-        if (!bounds->min_defined) bounds->min = 0;
-        if (!bounds->max_defined) bounds->max = 0;
+        if (!bounds->min_defined) {
+            bounds->min = 0;
+        }
+        if (!bounds->max_defined) {
+            bounds->max = 0;
+        }
         bounds->alignment = a_bounds.alignment / b_bounds.alignment;
         bounds->trim_bounds_using_alignment();
     }
@@ -124,7 +128,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(broadcast(x) / broadcast(y), broadcast(x / y), is_same_type(x, y)) ||
+            (rewrite(broadcast(x, c0) / broadcast(y, c0), broadcast(x / y, c0)) ||
              rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
              (!op->type.is_float() &&
               rewrite(x / x, select(x == 0, 0, 1))) ||
@@ -200,10 +204,9 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                (op->type.is_float() && rewrite(x/c0, x * fold(1/c0))))) ||
              (no_overflow_int(op->type) &&
               (
-               rewrite(ramp(x, c0) / broadcast(c1), ramp(x / c1, fold(c0 / c1)), is_same_type(x, c1) && (c0 % c1 == 0)) ||
-               rewrite(ramp(x, c0) / broadcast(c1), broadcast(x / c1, lanes),
+               rewrite(ramp(x, c0, lanes) / broadcast(c1, lanes), ramp(x / c1, fold(c0 / c1), lanes), (c0 % c1 == 0)) ||
+               rewrite(ramp(x, c0, lanes) / broadcast(c1, lanes), broadcast(x / c1, lanes),
                        // First and last lanes are the same when...
-                       is_scalar(x) && is_same_type(x, c1) &&
                        can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this))
                        )) ||
              (no_overflow_scalar_int(op->type) &&

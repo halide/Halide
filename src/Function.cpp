@@ -1,7 +1,7 @@
 #include <atomic>
+#include <cstdlib>
 #include <memory>
 #include <set>
-#include <stdlib.h>
 #include <utility>
 
 #include "CSE.h"
@@ -105,7 +105,7 @@ struct FunctionContents {
         }
 
         if (!extern_function_name.empty()) {
-            for (ExternFuncArgument i : extern_arguments) {
+            for (const ExternFuncArgument &i : extern_arguments) {
                 if (i.is_func()) {
                     user_assert(i.func.get() != this)
                         << "Extern Func has itself as an argument";
@@ -119,7 +119,7 @@ struct FunctionContents {
             }
         }
 
-        for (Parameter i : output_buffers) {
+        for (const Parameter &i : output_buffers) {
             for (size_t j = 0; j < args.size(); j++) {
                 if (i.min_constraint(j).defined()) {
                     i.min_constraint(j).accept(visitor);
@@ -216,14 +216,20 @@ struct CheckVars : public IRGraphVisitor {
 
     void visit(const Variable *var) override {
         // Is it a parameter?
-        if (var->param.defined()) return;
+        if (var->param.defined()) {
+            return;
+        }
 
         // Was it defined internally by a let expression?
-        if (defined_internally.contains(var->name)) return;
+        if (defined_internally.contains(var->name)) {
+            return;
+        }
 
         // Is it a pure argument?
         for (size_t i = 0; i < pure_args.size(); i++) {
-            if (var->name == pure_args[i]) return;
+            if (var->name == pure_args[i]) {
+                return;
+            }
         }
 
         // Is it in a reduction domain?
@@ -275,10 +281,7 @@ public:
 
 // A counter to use in tagging random variables
 namespace {
-static std::atomic<int> rand_counter{0};
-}
-
-Function::Function() {
+std::atomic<int> rand_counter{0};
 }
 
 Function::Function(const FunctionPtr &ptr)
@@ -527,7 +530,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         if (pure_type != values[i].type()) {
             std::ostringstream err;
             err << "In update definition " << update_idx << " of Func \"" << name() << "\":\n";
-            if (values.size()) {
+            if (!values.empty()) {
                 err << "Tuple element " << i << " of update definition has type ";
             } else {
                 err << "Update definition has type ";
