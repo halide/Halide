@@ -16,6 +16,9 @@ struct ScheduleOptions {
 
     // How much memory to try to fit the working set into.
     int target_working_set_size_bytes = 0;
+
+    // Whether to dump information during scheduling.
+    bool verbose = false;
 };
 
 class ModelInterpreter {

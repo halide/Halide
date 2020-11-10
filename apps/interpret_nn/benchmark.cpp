@@ -21,7 +21,9 @@ void RunBenchmark(const std::string &filename) {
         i->Allocate();
     }
 
-    ModelInterpreter interpreter(&model);
+    ScheduleOptions options;
+    options.verbose = true;
+    ModelInterpreter interpreter(&model, options);
 
     auto begin = std::chrono::high_resolution_clock::now();
     auto end = begin;

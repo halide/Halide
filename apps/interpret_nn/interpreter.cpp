@@ -111,10 +111,12 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
         schedule.push_back({i.get(), i->GetFullCrop()});
     }
 
-    std::cout << "Before: " << std::endl;
-    for (auto i : schedule) {
-        std::cout << i.crop[2].first << " " << i.crop[2].second << " ";
-        i.op->Dump(std::cout);
+    if (options.verbose) {
+        std::cout << "Before: " << std::endl;
+        for (auto i : schedule) {
+            std::cout << i.crop[2].first << " " << i.crop[2].second << " ";
+            i.op->Dump(std::cout);
+        }
     }
 
 #if 0
@@ -170,12 +172,14 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
         }
     }
 
-    std::cout << "After: " << std::endl;
-    for (auto i : schedule_) {
-        if (i.crop.size() >= 3) {
-            std::cout << i.crop[2].first << " " << i.crop[2].second << " ";
+    if (options.verbose) {
+        std::cout << "After: " << std::endl;
+        for (auto i : schedule_) {
+            if (i.crop.size() >= 3) {
+                std::cout << i.crop[2].first << " " << i.crop[2].second << " ";
+            }
+            i.op->Dump(std::cout);
         }
-        i.op->Dump(std::cout);
     }
 }
 
