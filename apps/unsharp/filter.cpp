@@ -16,7 +16,7 @@ using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     if (argc != 4) {
-        printf("Usage: %s in out\n", argv[0]);
+        printf("Usage: %s in out out_c\n", argv[0]);
         return 1;
     }
 
