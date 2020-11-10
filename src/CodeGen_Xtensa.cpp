@@ -464,13 +464,13 @@ public:
         native_vector[1] = src2;
     }
 
-   static int16x64_t load(const void *base, int32_t offset) {
+    static int16x64_t load(const void *base, int32_t offset) {
         int16x64_t r(empty);
         memcpy(&r.native_vector[0], ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
         return r;
     }
 
-   static int16x64_t concat(const int16x32_t& a, const int16x32_t& b) {
+    static int16x64_t concat(const int16x32_t& a, const int16x32_t& b) {
         return int16x64_t(from_native_vector, a, b);
     }
 
@@ -512,6 +512,10 @@ public:
 
     void store(void *base, int32_t offset) const {
         memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
+    }
+
+    static uint16x64_t concat(const uint16x32_t& a, const uint16x32_t& b) {
+        return uint16x64_t(from_native_vector, a, b);
     }
 };
 
@@ -1356,6 +1360,14 @@ HALIDE_ALWAYS_INLINE int32x32_t convert_to_int32x32_t_from_int16x32_t(const int1
     xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src);
     return int32x32_t(int32x32_t::from_native_vector,
                       IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
+}
+
+HALIDE_ALWAYS_INLINE int32x64_t convert_to_int32x64_t_from_int16x64_t(const int16x64_t& src) {
+    auto r0 = convert_to_int32x32_t_from_int16x32_t(src.native_vector[0]);
+    auto r1 = convert_to_int32x32_t_from_int16x32_t(src.native_vector[1]);
+
+    return int32x64_t(int32x64_t::from_native_vector, r0.native_vector[0], r0.native_vector[1],
+                                                      r1.native_vector[0], r1.native_vector[1]);
 }
 
 HALIDE_ALWAYS_INLINE int32x32_t convert_to_int32x32_t_from_uint16x32_t(const uint16x32_t& src) {
@@ -2341,13 +2353,7 @@ void CodeGen_Xtensa::visit(const Call *op) {
                       " integer overflow for int32 and int64 is undefined behavior in"
                       " Halide.\n";
     } else if (op->is_intrinsic(Call::prefetch)) {
-        user_assert((op->args.size() == 4) && is_one(op->args[2]))
-            << "Only prefetch of 1 cache line is supported in C backend.\n";
-        const Variable *base = op->args[0].as<Variable>();
-        internal_assert(base && base->type.is_handle());
-        rhs << "__builtin_prefetch("
-            << "((" << print_type(op->type) << " *)" << print_name(base->name)
-            << " + " << print_expr(op->args[1]) << "), 1)";
+        user_error << "Prefetch is not supported by Xtensa backend." << Expr(op) << "\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
     } else if (op->is_intrinsic(Call::strict_float)) {

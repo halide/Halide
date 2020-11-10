@@ -97,6 +97,7 @@ public:
         } else if (get_target().has_feature(Target::Xtensa)) {
             const int vector_size = 32;
             blur_y.split(y, y, yi, 8)
+                // NOTE(vksnk): parallel is not supported yet.
                 // .parallel(y)
                 .vectorize(x, vector_size);
             blur_x.store_at(blur_y, y).compute_at(blur_y, yi).vectorize(x, vector_size);

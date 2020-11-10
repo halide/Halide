@@ -164,7 +164,11 @@ public:
                 .reorder(c, x, y)
                 .unroll(c);
         } else {
-            int vec = 32;//get_target().natural_vector_size(UInt(16));
+            int vec = get_target().natural_vector_size(UInt(16));
+            if (get_target().has_feature(Target::Xtensa)) {
+                // Native vector size for 16-bit data.
+                vec = 32;
+            }
             bool use_hexagon = get_target().has_feature(Target::HVX);
 
             for (Func f : intermediates) {
@@ -213,7 +217,7 @@ public:
     // currently allow 8-bit computations
     GeneratorParam<Type> result_type{"result_type", UInt(8)};
 
-    Input<Buffer<int16_t>> input{"input", 2};
+    Input<Buffer<uint16_t>> input{"input", 2};
     Input<Buffer<float>> matrix_3200{"matrix_3200", 2};
     Input<Buffer<float>> matrix_7000{"matrix_7000", 2};
     Input<float> color_temp{"color_temp"};
@@ -356,8 +360,8 @@ Func CameraPipe::apply_curve(Func input) {
         Expr in = input(x, y, c);
         Expr u0 = in / lutResample;
         Expr u = in % lutResample;
-        Expr y0 = curve(clamp(u0, 0, 63));
-        Expr y1 = curve(clamp(u0 + 1, 0, 63));
+        Expr y0 = curve(clamp(u0, 0, 127));
+        Expr y1 = curve(clamp(u0 + 1, 0, 127));
         curved(x, y, c) = cast<uint8_t>((cast<uint16_t>(y0) * lutResample + (y1 - y0) * u) / lutResample);
     }
 
@@ -513,34 +517,44 @@ void CameraPipe::generate() {
         }
         strip_size = (strip_size / 2) * 2;
 
-        int vec = 32;//get_target().natural_vector_size(UInt(16));
+        int vec = get_target().natural_vector_size(UInt(16));
         if (get_target().has_feature(Target::HVX)) {
             vec = 64;
         }
+        if (get_target().has_feature(Target::Xtensa)) {
+            // Native vector size for 16-bit data.
+            vec = 32;
+        }
+
         processed
             .compute_root()
             .reorder(c, x, y)
             .split(y, yi, yii, 2, TailStrategy::RoundUp)
             .split(yi, yo, yi, strip_size / 2)
-            .vectorize(x, vec * 2, TailStrategy::RoundUp)
+            .vectorize(x, 2 * vec, TailStrategy::RoundUp)
             .unroll(c)
             .parallel(yo);
 
         denoised
             .compute_at(processed, yi)
             .store_at(processed, yo)
-            //.prefetch(input, y, 2)
             .fold_storage(y, 16)
             .tile(x, y, x, y, xi, yi, 2 * vec, 2)
             .vectorize(xi)
             .unroll(yi);
+
+        if (!get_target().has_feature(Target::Xtensa)) {
+            denoised.prefetch(input, y, 2);
+        }
+ 
+        int deinterleaved_vector_size = get_target().has_feature(Target::Xtensa) ? vec : vec * 2;
 
         deinterleaved
             .compute_at(processed, yi)
             .store_at(processed, yo)
             .fold_storage(y, 8)
             .reorder(c, x, y)
-            .vectorize(x, vec, TailStrategy::RoundUp)
+            .vectorize(x, deinterleaved_vector_size, TailStrategy::RoundUp)
             .unroll(c);
 
         curved
@@ -555,7 +569,7 @@ void CameraPipe::generate() {
         corrected
             .compute_at(curved, x)
             .reorder(c, x, y)
-            .vectorize(x, vec, TailStrategy::RoundUp)
+            .vectorize(x)
             .unroll(c);
 
         demosaiced->intermed_compute_at.set({processed, yi});
