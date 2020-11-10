@@ -102,9 +102,9 @@ public:
         output_.specialize(can_vectorize_across_depth)
             .vectorize(depth, vector_size_u8);
 
-        // Var yi("yi");
-        // constexpr int kSplitFactor = 4;
-        // output_.split(y, y, yi, kSplitFactor).parallel(y);
+        Var yi("yi");
+        constexpr int kSplitFactor = 4;
+        output_.split(y, y, yi, kSplitFactor).parallel(y);
 
         struct SpecialCase {
             int stride;

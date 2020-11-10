@@ -95,15 +95,15 @@ int main(int argc, char **argv) {
 #endif
 
     input_tensor.for_each_value([](uint8_t &x) {
-        x = (static_cast<uint8_t>(rand() % 256));
+        x = static_cast<uint8_t>(rand());
     });
 
     filter_tensor.for_each_value([](uint8_t &x) {
-        x = (static_cast<uint8_t>(rand()) % 256);
+        x = static_cast<uint8_t>(rand());
     });
 
     bias_tensor.for_each_value([](int32_t &x) {
-        x = static_cast<int32_t>(rand()) % 32;
+        x = static_cast<int32_t>(rand());
     });
 
 #ifdef HALIDE_RUNTIME_HEXAGON
@@ -169,7 +169,6 @@ int main(int argc, char **argv) {
             printf("Mismatch at %d %d: %d != %d\n", x, y, output, output_tensor(c, x, y, b));
             abort();
         }
-        // printf("Mismatch at %d %d: %d != %d\n", x, y, output, output_tensor(c, x, y, b));
     });
 
     printf("Success!\n");

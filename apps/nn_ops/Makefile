@@ -3,10 +3,6 @@ include ../support/Makefile.inc
 
 all: $(BIN)/$(HL_TARGET)/AveragePool $(BIN)/$(HL_TARGET)/Convolution $(BIN)/$(HL_TARGET)/DepthwiseConvolution $(BIN)/$(HL_TARGET)/Im2col $(BIN)/$(HL_TARGET)/MatrixMultiply $(BIN)/$(HL_TARGET)/MaxPool
 
-$(BIN)/%/runtime.a: $(GENERATOR_BIN)/DepthwiseConvolution.generator
-	@mkdir -p $(@D)
-	@$< -r runtime -o $(@D) target=$*
-
 $(GENERATOR_BIN)/AveragePool.generator: AveragePool_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
@@ -15,25 +11,13 @@ $(BIN)/%/AveragePool.o: $(GENERATOR_BIN)/AveragePool.generator
 	@mkdir -p $(@D)
 	$^ -g AveragePool -o $(@D) -e object,c_header -f AveragePool target=$*
 
-$(BIN)/%/AveragePool.halide_generated.cpp: $(GENERATOR_BIN)/AveragePool.generator
-	@mkdir -p $(@D)
-	$^ -g AveragePool -o $(@D) -f AveragePool -e c_source,c_header target=$*-xtensa
-
 $(BIN)/%/AveragePool: AveragePool.cpp $(BIN)/%/AveragePool.o
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall $^ -o $(@D)/AveragePool $(LDFLAGS-$*)
-
-$(BIN)/%/AveragePool_c: AveragePool.cpp $(BIN)/%/AveragePool.halide_generated.cpp
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall $^ -o $(@D)/AveragePool $(LDFLAGS-$*) -I${XTENSA_CSTUBS_ROOT} ${XTENSA_CSTUBS_ROOT}/libcstub.a
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall AveragePool.cpp $(BIN)/$*/AveragePool.o -o $(@D)/AveragePool $(LDFLAGS-$*)
 
 $(GENERATOR_BIN)/Convolution.generator: Convolution_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
-
-$(BIN)/%/Convolution.halide_generated.cpp: $(GENERATOR_BIN)/Convolution.generator
-	@mkdir -p $(@D)
-	$^ -g Convolution -o $(@D) -f Convolution -e c_source,c_header target=$*-xtensa
 
 $(BIN)/%/Convolution.o: $(GENERATOR_BIN)/Convolution.generator
 	@mkdir -p $(@D)
@@ -41,15 +25,15 @@ $(BIN)/%/Convolution.o: $(GENERATOR_BIN)/Convolution.generator
 
 $(BIN)/%/Convolution: Convolution.cpp common_reference.cpp $(BIN)/%/Convolution.o
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall $^ -o $(@D)/Convolution $(LDFLAGS-$*)
-
-$(BIN)/%/Convolution_c: Convolution.cpp common_reference.cpp $(BIN)/%/Convolution.halide_generated.cpp $(BIN)/%/runtime.a
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall $^ -o $(@D)/Convolution_c $(LDFLAGS-$*) -I${XTENSA_CSTUBS_ROOT} ${XTENSA_CSTUBS_ROOT}/libcstub.a
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall Convolution.cpp common_reference.cpp $(BIN)/$*/Convolution.o -o $(@D)/Convolution $(LDFLAGS-$*)
 
 $(GENERATOR_BIN)/DepthwiseConvolution.generator: DepthwiseConvolution_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+
+$(BIN)/%/runtime.a: $(GENERATOR_BIN)/DepthwiseConvolution.generator
+	@mkdir -p $(@D)
+	@$< -r runtime -o $(@D) target=$*
 
 $(BIN)/%/DepthwiseConvolution_1.o: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
@@ -114,18 +98,6 @@ run: $(BIN)/$(HL_TARGET)/AveragePool $(BIN)/$(HL_TARGET)/DepthwiseConvolution $(
 	./Im2col.sh $(BIN)/$(HL_TARGET)/Im2col
 	./MatrixMultiply.sh $(BIN)/$(HL_TARGET)/MatrixMultiply
 	./MaxPool.sh $(BIN)/$(HL_TARGET)/MaxPool
-
-average_pool: $(BIN)/$(HL_TARGET)/AveragePool
-	./AveragePool.sh $(BIN)/$(HL_TARGET)/AveragePool
-
-average_pool_c: $(BIN)/$(HL_TARGET)/AveragePool_c
-	./AveragePool.sh $(BIN)/$(HL_TARGET)/AveragePool_c
-
-convolution: $(BIN)/$(HL_TARGET)/Convolution
-	./Convolution.sh $(BIN)/$(HL_TARGET)/Convolution
-
-convolution_c: $(BIN)/$(HL_TARGET)/Convolution_c
-	./Convolution.sh $(BIN)/$(HL_TARGET)/Convolution_c
 
 test: run
 
