@@ -185,4 +185,30 @@ void ModelInterpreter::Execute() {
     }
 }
 
+Tensor *ModelInterpreter::GetTensor(const std::string &name) {
+    APP_CHECK(!model_->tensors.empty());
+
+    if (tensor_names_.empty()) {
+        size_t i = 0;
+        for (const auto &t : model_->tensors) {
+            tensor_names_[t->Name()] = i++;
+        }
+    }
+    auto it = tensor_names_.find(name);
+    if (it != tensor_names_.end()) {
+        return model_->tensors.at(it->second).get();
+    }
+    return nullptr;
+}
+
+std::vector<Tensor *> ModelInterpreter::Outputs() {
+    Op *final = schedule_.back().op;
+    std::vector<Tensor *> result;
+    for (int i = 0; i < final->OutputCount(); i++) {
+        result.emplace_back(final->Output(i));
+    }
+    return result;
+}
+
+
 }  // namespace interpret_nn

@@ -32,6 +32,13 @@ void RunBenchmark(const std::string &filename) {
         end = std::chrono::high_resolution_clock::now();
     } while (end - begin < std::chrono::seconds(1));
     std::cout << "Time: " << std::chrono::duration_cast<std::chrono::microseconds>((end - begin) / loops).count() << " us" << std::endl;
+
+    std::cout << "Outputs:\n";
+    std::vector<Tensor *> outputs = interpreter.Outputs();
+    for (Tensor *t : outputs) {
+        APP_CHECK(t);
+        std::cout << "  \"" << t->Name() << "\" : " << TensorTypeToString(t->Type()) << " x " << t->Shape() << "\n";
+    }
 }
 
 }  // namespace interpret_nn

@@ -21,6 +21,10 @@ struct ScheduleOptions {
 class ModelInterpreter {
     Model *model_;
 
+    // Maps tensor name -> index in model_->tensors.
+    // Lazily built when needed.
+    std::map<std::string, size_t> tensor_names_;
+
     // The schedule is a list of ops with crops to run the ops on.
     struct ScheduledOp {
         Op *op;
@@ -46,11 +50,15 @@ public:
         Schedule(options);
     }
 
-    Tensor *GetTensor(const std::string &name) {
-        return nullptr;
-    }
+    // Return the Tensor in the current Model with the given name.
+    // If none with that name, return null. Tensor is still owned by the Model.
+    Tensor *GetTensor(const std::string &name);
 
     void Execute();
+
+    // Return the Tensor(s) that are the final output(s) of the Model.
+    // Tensor(s) are still owned by the Model.
+    std::vector<Tensor *> Outputs();
 
     // Movable but not copyable.
     ModelInterpreter() = delete;
