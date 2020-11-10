@@ -80,6 +80,7 @@ set(HEADER_FILES
     HexagonOptimize.h
     ImageParam.h
     InferArguments.h
+    InjectDmaTransfer.h
     InjectHostDevBufferCopies.h
     InjectOpenGLIntrinsics.h
     Inline.h
@@ -240,6 +241,7 @@ set(SOURCE_FILES
     HexagonOptimize.cpp
     ImageParam.cpp
     InferArguments.cpp
+    InjectDmaTransfer.cpp
     InjectHostDevBufferCopies.cpp
     InjectOpenGLIntrinsics.cpp
     Inline.cpp
