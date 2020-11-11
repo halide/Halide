@@ -242,10 +242,7 @@ private:
 
     template<typename T2 = T, typename std::enable_if<std::is_pointer<T2>::value>::type * = nullptr>
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<intptr_t> dis;
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = reinterpret_cast<T2>(dis(rng));
-        });
+        APP_FATAL << "pointer types not supported";
     }
 };
 
@@ -269,7 +266,7 @@ Buffer<void> WrapTfLiteTensor(TfLiteTensor *t) {
 
 }  // namespace
 
-void RunBoth(const std::string &filename, int seed, int threads) {
+void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
     std::cout << "Comparing " << filename << std::endl;
 
     std::vector<char> buffer = app_util::ReadEntireFile(filename);
@@ -293,7 +290,9 @@ void RunBoth(const std::string &filename, int seed, int threads) {
     for (int i : tf_interpreter->inputs()) {
         TfLiteTensor *t = tf_interpreter->tensor(i);
         auto input_buf = WrapTfLiteTensor(t);
-        // std::cout << "Init TFLITE input " << t->name << " with seed = " << seed_here << " type " << input_buf.type() << " from " << TfLiteTypeGetName(t->type) << "\n";
+        if (verbose) {
+            std::cout << "Init TFLITE input " << t->name << " with seed = " << seed_here << " type " << input_buf.type() << " from " << TfLiteTypeGetName(t->type) << "\n";
+        }
         dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here++);
 
         // input_buf.as<uint8_t>().for_each_element([&](const int *pos) {
@@ -323,7 +322,9 @@ void RunBoth(const std::string &filename, int seed, int threads) {
 
     // ----- Run in Our Code
     Model model = ParseTfLiteModel(tf_model);
-    // model.Dump(std::cout);
+    if (verbose) {
+        model.Dump(std::cout);
+    }
 
     for (auto &i : model.tensors) {
         i->Allocate();
@@ -337,7 +338,9 @@ void RunBoth(const std::string &filename, int seed, int threads) {
     for (Tensor *t : interpreter.Inputs()) {
         APP_CHECK(t);
         auto input_buf = t->Data<void>();
-        // std::cout << "Init HALIDE input " << t->Name() << " with seed = " << seed_here << " type " << input_buf.type() << "\n";
+        if (verbose) {
+            std::cout << "Init HALIDE input " << t->Name() << " with seed = " << seed_here << " type " << input_buf.type() << "\n";
+        }
         dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here++);
     }
 
@@ -387,6 +390,7 @@ void RunBoth(const std::string &filename, int seed, int threads) {
 int main(int argc, char **argv) {
     int seed = time(nullptr);
     int threads = 1;  // interpret_nn::NumProcessorsOnline();
+    bool verbose = false;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--seed")) {
@@ -395,6 +399,10 @@ int main(int argc, char **argv) {
         }
         if (!strcmp(argv[i], "--threads")) {
             threads = atoi(argv[++i]);
+            continue;
+        }
+        if (!strcmp(argv[i], "--verbose")) {
+            verbose = true;
             continue;
         }
     }
@@ -406,7 +414,10 @@ int main(int argc, char **argv) {
             i++;
             continue;
         }
-        interpret_nn::RunBoth(argv[i], seed, threads);
+        if (!strcmp(argv[i], "--verbose")) {
+            continue;
+        }
+        interpret_nn::RunBoth(argv[i], seed, threads, verbose);
         std::cout << std::endl;
     }
 
