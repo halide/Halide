@@ -202,7 +202,7 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
 void CodeGen_PTX_Dev::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
         Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
-        internal_assert(is_zero(loop->min));
+        internal_assert(is_const_zero(loop->min));
         sym_push(loop->name, codegen(simt_idx));
         codegen(loop->body);
         sym_pop(loop->name);
@@ -259,7 +259,7 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
     // Do aligned 4-wide 32-bit loads as a single i128 load.
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
-    if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
+    if (is_const_one(op->predicate) && r && is_const_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
         ModulusRemainder align = op->alignment;
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
@@ -277,14 +277,14 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
 void CodeGen_PTX_Dev::visit(const Store *op) {
     // Issue atomic store if we are inside an Atomic node.
     if (emit_atomic_stores) {
-        user_assert(is_one(op->predicate)) << "Atomic update does not support predicated store.\n";
+        user_assert(is_const_one(op->predicate)) << "Atomic update does not support predicated store.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
     }
 
     // Do aligned 4-wide 32-bit stores as a single i128 store.
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
-    if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->value.type().bits() == 32) {
+    if (is_const_one(op->predicate) && r && is_const_one(r->stride) && r->lanes == 4 && op->value.type().bits() == 32) {
         ModulusRemainder align = op->alignment;
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
@@ -382,7 +382,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 const Load *load = e->as<Load>();
                 const Ramp *idx = load ? load->index.as<Ramp>() : nullptr;
                 if (idx &&
-                    is_one(idx->stride) &&
+                    is_const_one(idx->stride) &&
                     load->alignment.modulus % sub_lanes == 0 &&
                     load->alignment.remainder % sub_lanes == 0) {
                     Expr new_idx = simplify(idx->base / sub_lanes);
