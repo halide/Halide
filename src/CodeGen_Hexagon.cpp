@@ -95,7 +95,7 @@ bool is_dense_ramp(const Expr &x) {
         return false;
     }
 
-    return is_one(r->stride);
+    return is_const_one(r->stride);
 }
 
 // In Hexagon, we assume that we can read one vector past the end of
@@ -150,7 +150,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        if (is_one(op->predicate)) {
+        if (is_const_one(op->predicate)) {
             // These are handled fine
             return IRMutator::visit(op);
         }
@@ -207,7 +207,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        if (is_one(op->predicate)) {
+        if (is_const_one(op->predicate)) {
             return IRMutator::visit(op);
         }
 
@@ -2556,7 +2556,7 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(
 
     // For constant-sized allocations this check should simplify away.
     size_check = common_subexpression_elimination(simplify(size_check));
-    if (!is_one(size_check)) {
+    if (!is_const_one(size_check)) {
         create_assertion(
             codegen(size_check),
             Call::make(Int(32), "halide_error_buffer_allocation_too_large",
