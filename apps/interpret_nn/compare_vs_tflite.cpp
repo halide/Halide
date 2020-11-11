@@ -386,7 +386,7 @@ void RunBoth(const std::string &filename, int seed, int threads) {
 
 int main(int argc, char **argv) {
     int seed = time(nullptr);
-    int threads = interpret_nn::NumProcessorsOnline();
+    int threads = 1;  // interpret_nn::NumProcessorsOnline();
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--seed")) {
