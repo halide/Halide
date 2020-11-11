@@ -2,6 +2,9 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#ifndef _MSC_VER
+#include <unistd.h>
+#endif
 
 #include "app_util.h"
 #include "halide_benchmark.h"
@@ -17,6 +20,15 @@ namespace interpret_nn {
 using Halide::Runtime::Buffer;
 
 namespace {
+
+size_t NumProcessorsOnline() {
+#ifdef _WIN32
+    char *num_cores = getenv("NUMBER_OF_PROCESSORS");
+    return num_cores ? atoi(num_cores) : 8;
+#else
+    return sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+}
 
 inline std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
     if (type.code == halide_type_uint && type.bits == 1) {
@@ -132,20 +144,28 @@ public:
     void operator()(const Buffer<const void> &tflite_buf_dynamic, const Buffer<const void> &halide_buf_dynamic) {
         Buffer<const T> tflite_buf = tflite_buf_dynamic;
         Buffer<const T> halide_buf = halide_buf_dynamic;
+        uint64_t diffs = 0;
+        constexpr uint64_t max_diffs_to_show = 3;
         tflite_buf.for_each_element([&](const int *pos) {
             T tflite_buf_val = tflite_buf(pos);
             T halide_buf_val = halide_buf(pos);
+            // TODO: this is terrible, we must compare with some threshold instead of equality
             if (tflite_buf_val != halide_buf_val) {
-                // TODO: this is terrible, we must compare with some threshold instead of equality
+                diffs++;
+                if (diffs > max_diffs_to_show) {
+                    return;
+                }
                 std::cerr << "*** Mismatch at (";
                 for (int i = 0; i < tflite_buf.dimensions(); ++i) {
                     if (i > 0) std::cerr << ", ";
                     std::cerr << pos[i];
                 }
                 std::cerr << "): tflite " << 0 + tflite_buf_val << " halide " << 0 + halide_buf_val << "\n";
-                // exit(1);
             }
         });
+        if (diffs > max_diffs_to_show) {
+            std::cerr << "(" << (diffs - max_diffs_to_show) << " diffs suppressed)\n";
+        }
     }
 };
 
@@ -163,7 +183,10 @@ private:
     template<typename T2 = T,
              typename std::enable_if<std::is_integral<T2>::value && !std::is_same<T2, bool>::value && !std::is_same<T2, char>::value && !std::is_same<T2, signed char>::value && !std::is_same<T2, unsigned char>::value>::type * = nullptr>
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<T2> dis;
+        // TODO: filling in int32 buffers with the full range tends to produce
+        // uninteresting results in tflite pipelines. May need better heuristics.
+        // Using this for now.
+        std::uniform_int_distribution<T2> dis(-32767, 32767);
         b.for_each_value([&rng, &dis](T2 &value) {
             value = dis(rng);
         });
@@ -246,7 +269,7 @@ Buffer<void> WrapTfLiteTensor(TfLiteTensor *t) {
 
 }  // namespace
 
-void RunBoth(const std::string &filename, int seed) {
+void RunBoth(const std::string &filename, int seed, int threads) {
     std::cout << "Comparing " << filename << std::endl;
 
     std::vector<char> buffer = app_util::ReadEntireFile(filename);
@@ -262,6 +285,7 @@ void RunBoth(const std::string &filename, int seed) {
     TfLiteStatus status;
     APP_CHECK((status = builder(&tf_interpreter)) == kTfLiteOk) << status;
     APP_CHECK((status = tf_interpreter->AllocateTensors()) == kTfLiteOk) << status;
+    APP_CHECK((status = tf_interpreter->SetNumThreads(threads)) == kTfLiteOk) << status;
 
     // Fill in the inputs with random data (but with a predictable seed,
     // so we can do the same for the Halide inputs).
@@ -271,6 +295,15 @@ void RunBoth(const std::string &filename, int seed) {
         auto input_buf = WrapTfLiteTensor(t);
         // std::cout << "Init TFLITE input " << t->name << " with seed = " << seed_here << " type " << input_buf.type() << " from " << TfLiteTypeGetName(t->type) << "\n";
         dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here++);
+
+        // input_buf.as<uint8_t>().for_each_element([&](const int *pos) {
+        //     std::cout << "   Input at (";
+        //     for (int i = 0; i < input_buf.dimensions(); ++i) {
+        //         if (i > 0) std::cerr << ", ";
+        //         std::cout << pos[i];
+        //     }
+        //     std::cout << "): " << 0 + input_buf.as<uint8_t>()(pos) << "\n";
+        // });
     }
 
     // Execute once, to prime the pump
@@ -290,6 +323,7 @@ void RunBoth(const std::string &filename, int seed) {
 
     // ----- Run in Our Code
     Model model = ParseTfLiteModel(tf_model);
+    // model.Dump(std::cout);
 
     for (auto &i : model.tensors) {
         i->Allocate();
@@ -306,6 +340,8 @@ void RunBoth(const std::string &filename, int seed) {
         // std::cout << "Init HALIDE input " << t->Name() << " with seed = " << seed_here << " type " << input_buf.type() << "\n";
         dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here++);
     }
+
+    halide_set_num_threads(threads);
 
     // Execute once, to prime the pump
     interpreter.Execute();
@@ -350,20 +386,27 @@ void RunBoth(const std::string &filename, int seed) {
 
 int main(int argc, char **argv) {
     int seed = time(nullptr);
+    int threads = interpret_nn::NumProcessorsOnline();
+
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-seed")) {
-            seed = atoi(argv[i+1]);
-            break;
+            seed = atoi(argv[++i]);
+            continue;
+        }
+        if (!strcmp(argv[i], "-threads")) {
+            threads = atoi(argv[++i]);
+            continue;
         }
     }
     std::cout << "Using random seed: " << seed << "\n";
+    std::cout << "Using threads: " << threads << "\n";
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-seed")) {
             i++;
             continue;
         }
-        interpret_nn::RunBoth(argv[i], seed);
+        interpret_nn::RunBoth(argv[i], seed, threads);
         std::cout << std::endl;
     }
 
