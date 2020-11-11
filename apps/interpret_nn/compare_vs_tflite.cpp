@@ -269,11 +269,11 @@ void RunBoth(const std::string &filename, int seed) {
     // Execute once, to prime the pump
     APP_CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
     // Now benchmark it
-    auto duration = bench([&tf_interpreter]() {
+    auto tflite_time = bench([&tf_interpreter]() {
         TfLiteStatus status;
         APP_CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
     });
-    std::cout << "TFLITE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << " us" << std::endl;
+    std::cout << "TFLITE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(tflite_time).count() << " us" << std::endl;
 
     // Save the outputs
     for (int i : tf_interpreter->outputs()) {
@@ -304,10 +304,18 @@ void RunBoth(const std::string &filename, int seed) {
     interpreter.Execute();
 
     // Now benchmark it
-    duration = bench([&interpreter]() {
+    auto halide_time = bench([&interpreter]() {
         interpreter.Execute();
     });
-    std::cout << "HALIDE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << " us" << std::endl;
+    std::cout << "HALIDE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(halide_time).count() << " us" << std::endl;
+
+    double ratio = (halide_time / tflite_time);
+    std::cout << "HALIDE = " << ratio * 100.0 << "% of TFLITE";
+    if (ratio > 1.0) {
+        std::cout << "  *** HALIDE IS SLOWER";
+    }
+    std::cout << std::endl;
+
 
     // Save the outputs
     for (Tensor *t : interpreter.Outputs()) {
@@ -338,6 +346,7 @@ int main(int argc, char **argv) {
     int seed = 0;
     for (int i = 1; i < argc; i++) {
         interpret_nn::RunBoth(argv[i], seed);
+        std::cout << std::endl;
     }
 
     std::cout << "Done!\n";
