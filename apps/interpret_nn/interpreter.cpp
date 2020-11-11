@@ -206,7 +206,7 @@ Tensor *ModelInterpreter::GetTensor(const std::string &name) {
 }
 
 std::vector<Tensor *> ModelInterpreter::Inputs() {
-    Op *final = schedule_.back().op;
+    Op *final = schedule_.front().op;
     std::vector<Tensor *> result;
     for (int i = 0; i < final->InputCount(); i++) {
         result.emplace_back(final->Input(i));
