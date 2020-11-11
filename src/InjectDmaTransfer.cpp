@@ -33,9 +33,9 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     } else if (const Add *add = e.as<Add>()) {
         Expr la = is_linear(add->a, linear);
         Expr lb = is_linear(add->b, linear);
-        if (is_zero(lb)) {
+        if (is_const_zero(lb)) {
             return la;
-        } else if (is_zero(la)) {
+        } else if (is_const_zero(la)) {
             return lb;
         } else if (la.defined() && lb.defined()) {
             return la + lb;
@@ -45,7 +45,7 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     } else if (const Sub *sub = e.as<Sub>()) {
         Expr la = is_linear(sub->a, linear);
         Expr lb = is_linear(sub->b, linear);
-        if (is_zero(lb)) {
+        if (is_const_zero(lb)) {
             return la;
         } else if (la.defined() && lb.defined()) {
             return la - lb;
@@ -55,25 +55,25 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     } else if (const Mul *mul = e.as<Mul>()) {
         Expr la = is_linear(mul->a, linear);
         Expr lb = is_linear(mul->b, linear);
-        if (is_zero(la) && is_zero(lb)) {
+        if (is_const_zero(la) && is_const_zero(lb)) {
             return la;
-        } else if (is_zero(la) && lb.defined()) {
+        } else if (is_const_zero(la) && lb.defined()) {
             return mul->a * lb;
-        } else if (la.defined() && is_zero(lb)) {
+        } else if (la.defined() && is_const_zero(lb)) {
             return la * mul->b;
         } else {
             return Expr();
         }
     } else if (const Div *div = e.as<Div>()) {
         Expr la = is_linear(div->a, linear);
-        if (is_zero(la)) {
+        if (is_const_zero(la)) {
             return la;
         } else {
             return Expr();
         }
     } else if (const Mod *mod = e.as<Mod>()) {
         Expr la = is_linear(mod->a, linear);
-        if (is_zero(la)) {
+        if (is_const_zero(la)) {
             return la;
         } else {
             return Expr();
@@ -81,7 +81,7 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     } else if (const Ramp *r = e.as<Ramp>()) {
         Expr la = is_linear(r->base, linear);
         Expr lb = is_linear(r->stride, linear);
-        if (is_zero(lb)) {
+        if (is_const_zero(lb)) {
             return la;
         } else {
             return Expr();
@@ -175,8 +175,8 @@ class InjectDmaTransferIntoProducer : public IRMutator {
             Scope<Expr> local_scope;
             // local_scope.push(v.name, var);
             local_scope.push(v.name, 1);
-            debug(0) << "is_linear (stride) store: " << v.name << " " << is_linear(op_index, local_scope) << "\n";
-            debug(0) << "is_linear (stride) load: " << v.name << " " << is_linear(value_index, local_scope) << "\n";
+            // debug(0) << "is_linear (stride) store: " << v.name << " " << is_linear(op_index, local_scope) << "\n";
+            // debug(0) << "is_linear (stride) load: " << v.name << " " << is_linear(value_index, local_scope) << "\n";
             store_strides.push_back(is_linear(op_index, local_scope));
             value_strides.push_back(is_linear(value_index, local_scope));
             // user_assert(store_strides.back().defined());
@@ -185,10 +185,10 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         Expr store_stride = store_strides.back();
         Expr value_stride = value_strides.back();
 
-        // user_assert(is_one(store_stride));
-        // user_assert(is_one(value_stride));
-        debug(0) << "Went past is_one " << store_stride << " " << is_one(store_stride)
-                  << " " << value_stride << " " << is_one(value_stride) << "\n";
+        // user_assert(is_const_one(store_stride));
+        // user_assert(is_const_one(value_stride));
+        // debug(0) << "Went past is_const_one " << store_stride << " " << is_const_one(store_stride)
+        //           << " " << value_stride << " " << is_const_one(value_stride) << "\n";
         const auto& v = loop_vars.back();
         Expr var = Variable::make(op->index.type(), v.name);
         loops_to_be_removed.insert(v.name);

@@ -1861,7 +1861,7 @@ void CodeGen_Xtensa::visit(const Ramp *op) {
     Type vector_type = op->type.with_lanes(op->lanes);
     string id_base = print_expr(op->base);
     string id_stride = print_expr(op->stride);
-    if (is_one(op->stride)) {
+    if (is_const_one(op->stride)) {
         if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
             print_assignment(vector_type, "/* ramp */ int32x16_t(" + id_base + ") + IVP_SEQN_2X32()");
         } else {
@@ -1943,7 +1943,7 @@ void CodeGen_Xtensa::visit(const EQ *op) {
 }
 
 void CodeGen_Xtensa::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported by Xtensa backend." << Expr(op) << "\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported by Xtensa backend." << Expr(op) << "\n";
 
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
@@ -1996,7 +1996,7 @@ void CodeGen_Xtensa::visit(const Load *op) {
 }
 
 void CodeGen_Xtensa::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
 
     Type t = op->value.type();
 
@@ -2567,7 +2567,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         // If the allocation is on the stack, the only condition we can respect is
         // unconditional false (otherwise a non-constant-sized array declaration
         // will be generated).
-        if ((!on_stack && !in_global_static) || is_zero(op->condition)) {
+        if ((!on_stack && !in_global_static) || is_const_zero(op->condition)) {
             Expr conditional_size = Select::make(op->condition,
                                                  Variable::make(size_id_type, size_id),
                                                  make_const(size_id_type, 0));

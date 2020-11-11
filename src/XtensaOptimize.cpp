@@ -917,7 +917,7 @@ class OptimizeShuffles : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             // TODO(psuriana): We shouldn't mess with predicated load for now.
             return IRMutator::visit(op);
         }
