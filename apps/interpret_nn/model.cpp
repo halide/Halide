@@ -68,6 +68,36 @@ const char *TensorTypeToString(TensorType t) {
     }
 }
 
+halide_type_t TensorTypeToHalideType(TensorType t) {
+    switch (t) {
+    case TensorType::Bool:
+        return halide_type_t(halide_type_uint, 1);
+    case TensorType::Float16:
+        return halide_type_t(halide_type_float, 16);
+    case TensorType::Float32:
+        return halide_type_t(halide_type_float, 32);
+    case TensorType::Float64:
+        return halide_type_t(halide_type_float, 64);
+    case TensorType::Int16:
+        return halide_type_t(halide_type_int, 16);
+    case TensorType::Int32:
+        return halide_type_t(halide_type_int, 32);
+    case TensorType::Int64:
+        return halide_type_t(halide_type_int, 64);
+    case TensorType::Int8:
+        return halide_type_t(halide_type_int, 8);
+    case TensorType::UInt8:
+        return halide_type_t(halide_type_uint, 8);
+
+    case TensorType::Complex64:
+    case TensorType::Complex128:
+    case TensorType::String:
+    default:
+        APP_FATAL << "Unhandled type in TensorTypeToHalideType";
+        return halide_type_t();
+    }
+}
+
 void Model::Dump(std::ostream &os) {
     os << "Tensors: " << std::endl;
     for (const auto &i : tensors) {

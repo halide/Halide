@@ -51,6 +51,7 @@ enum class TensorType {
 size_t SizeOfTensorType(TensorType t);
 
 const char *TensorTypeToString(TensorType t);
+halide_type_t TensorTypeToHalideType(TensorType t);
 
 template<typename T>
 bool IsType(TensorType t) {
@@ -161,17 +162,32 @@ public:
 
     template<class T>
     HalideBuffer<T> Data() {
-        APP_CHECK(IsType<T>(type_));
-        return HalideBuffer<T>(
-            reinterpret_cast<T *>(data_.data()),
-            shape_.size(), shape_.data());
+        if (std::is_void<T>::value) {
+            return HalideBuffer<T>(
+                TensorTypeToHalideType(type_),
+                reinterpret_cast<T *>(data_.data()),
+                shape_.size(), shape_.data());
+        } else {
+            APP_CHECK(IsType<T>(type_));
+            return HalideBuffer<T>(
+                reinterpret_cast<T *>(data_.data()),
+                shape_.size(), shape_.data());
+        }
     }
 
     template<class T>
     HalideBuffer<const T> Data() const {
-        APP_CHECK(IsType<T>(type_));
-        return HalideBuffer<const T>(reinterpret_cast<const T *>(data_.data()),
-                                     shape_.size(), shape_.data());
+        if (std::is_void<T>::value) {
+            return HalideBuffer<const T>(
+                TensorTypeToHalideType(type_),
+                reinterpret_cast<const T *>(data_.data()),
+                shape_.size(), shape_.data());
+        } else {
+            APP_CHECK(IsType<T>(type_));
+            return HalideBuffer<const T>(
+                reinterpret_cast<const T *>(data_.data()),
+                shape_.size(), shape_.data());
+        }
     }
 
     template<class T>
