@@ -54,9 +54,16 @@ const char *TensorTypeToString(TensorType t);
 
 template<typename T>
 bool IsType(TensorType t) {
-    return IsType<typename std::remove_const<T>::type>(t);
+    if (std::is_const<T>::value) {
+        return IsType<typename std::remove_const<T>::type>(t);
+    }
+    return false;
 }
 
+template<>
+inline bool IsType<void>(TensorType t) {
+    return true;
+}
 template<>
 inline bool IsType<float>(TensorType t) {
     return t == TensorType::Float32;
