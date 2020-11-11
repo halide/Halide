@@ -73,7 +73,7 @@ private:
         bool min_varies = varies;
         op->extent.accept(this);
         bool should_pop = false;
-        if (!is_one(op->extent) || min_varies) {
+        if (!is_const_one(op->extent) || min_varies) {
             should_pop = true;
             varying.push(op->name);
         }
@@ -125,9 +125,9 @@ private:
 
     // Logical operators with eager constant folding
     Expr make_and(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) {
+        if (is_const_zero(a) || is_const_one(b)) {
             return a;
-        } else if (is_zero(b) || is_one(a)) {
+        } else if (is_const_zero(b) || is_const_one(a)) {
             return b;
         } else if (equal(a, b)) {
             return a;
@@ -137,9 +137,9 @@ private:
     }
 
     Expr make_or(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) {
+        if (is_const_zero(a) || is_const_one(b)) {
             return b;
-        } else if (is_zero(b) || is_one(a)) {
+        } else if (is_const_zero(b) || is_const_one(a)) {
             return a;
         } else if (equal(a, b)) {
             return a;
@@ -149,17 +149,17 @@ private:
     }
 
     Expr make_select(const Expr &a, Expr b, Expr c) {
-        if (is_one(a)) {
+        if (is_const_one(a)) {
             return b;
-        } else if (is_zero(a)) {
+        } else if (is_const_zero(a)) {
             return c;
-        } else if (is_one(b)) {
+        } else if (is_const_one(b)) {
             return make_or(a, c);
-        } else if (is_zero(b)) {
+        } else if (is_const_zero(b)) {
             return make_and(make_not(a), c);
-        } else if (is_one(c)) {
+        } else if (is_const_one(c)) {
             return make_or(make_not(a), b);
-        } else if (is_zero(c)) {
+        } else if (is_const_zero(c)) {
             return make_and(a, b);
         } else {
             return select(a, b, c);
@@ -167,9 +167,9 @@ private:
     }
 
     Expr make_not(const Expr &a) {
-        if (is_one(a)) {
+        if (is_const_one(a)) {
             return make_zero(a.type());
-        } else if (is_zero(a)) {
+        } else if (is_const_zero(a)) {
             return make_one(a.type());
         } else {
             return !a;
@@ -402,7 +402,7 @@ private:
                 compute_predicate = const_true();
             }
 
-            if (!is_one(compute_predicate)) {
+            if (!is_const_one(compute_predicate)) {
 
                 debug(3) << "Finding allocate predicate for " << op->name << "\n";
                 PredicateFinder find_alloc(op->name, false);

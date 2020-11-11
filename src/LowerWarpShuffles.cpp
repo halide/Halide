@@ -52,7 +52,7 @@ namespace {
 // aggressive about eliminating terms than using % and then
 // calling the simplifier.
 Expr reduce_expr_helper(Expr e, const Expr &modulus) {
-    if (is_one(modulus)) {
+    if (is_const_one(modulus)) {
         return make_zero(e.type());
     } else if (is_const(e)) {
         return simplify(e % modulus);
@@ -77,7 +77,7 @@ Expr reduce_expr_helper(Expr e, const Expr &modulus) {
 
 Expr reduce_expr(Expr e, const Expr &modulus, const Scope<Interval> &bounds) {
     e = reduce_expr_helper(simplify(e, true, bounds), modulus);
-    if (is_one(simplify(e >= 0 && e < modulus, true, bounds))) {
+    if (is_const_one(simplify(e >= 0 && e < modulus, true, bounds))) {
         return e;
     } else {
         return e % modulus;
@@ -166,7 +166,7 @@ class DetermineAllocStride : public IRVisitor {
             }
         } else if (const Mul *mul = e.as<Mul>()) {
             Expr sa = warp_stride(mul->a), sb = warp_stride(mul->b);
-            if (sa.defined() && sb.defined() && is_zero(sb)) {
+            if (sa.defined() && sb.defined() && is_const_zero(sb)) {
                 return sa * mul->b;
             }
         } else if (const Broadcast *b = e.as<Broadcast>()) {
@@ -174,7 +174,7 @@ class DetermineAllocStride : public IRVisitor {
         } else if (const Ramp *r = e.as<Ramp>()) {
             Expr sb = warp_stride(r->base);
             Expr ss = warp_stride(r->stride);
-            if (sb.defined() && ss.defined() && is_zero(ss)) {
+            if (sb.defined() && ss.defined() && is_const_zero(ss)) {
                 return sb;
             }
         } else if (const Let *let = e.as<Let>()) {
@@ -285,7 +285,7 @@ public:
 
     // A version of can_prove which exploits the constant bounds we've been tracking
     bool can_prove(const Expr &e) {
-        return is_one(simplify(e, true, bounds));
+        return is_const_one(simplify(e, true, bounds));
     }
 
     Expr get_stride() {
