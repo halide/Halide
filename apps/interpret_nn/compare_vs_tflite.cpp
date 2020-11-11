@@ -389,11 +389,11 @@ int main(int argc, char **argv) {
     int threads = interpret_nn::NumProcessorsOnline();
 
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-seed")) {
+        if (!strcmp(argv[i], "--seed")) {
             seed = atoi(argv[++i]);
             continue;
         }
-        if (!strcmp(argv[i], "-threads")) {
+        if (!strcmp(argv[i], "--threads")) {
             threads = atoi(argv[++i]);
             continue;
         }
@@ -402,7 +402,7 @@ int main(int argc, char **argv) {
     std::cout << "Using threads: " << threads << "\n";
 
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-seed")) {
+        if (!strcmp(argv[i], "--seed") || !strcmp(argv[i], "--threads")) {
             i++;
             continue;
         }
