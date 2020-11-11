@@ -23,7 +23,6 @@ clean:
 # 	- ./tensorflow/lite/tools/make/download_dependencies.sh
 # 	- make -j $(nproc) TARGET=native -C . -f ./tensorflow/lite/tools/make/Makefile
 # 	- library is at tensorflow/lite/tools/make/gen/native_x86_64/lib/libtensorflow-lite.a
-# 	- appears to include C API
 
 TENSORFLOW_BASE ?= ${HOME}/GitHub/tensorflow
 TFLITE_BASE ?= $(TENSORFLOW_BASE)/tensorflow/lite
