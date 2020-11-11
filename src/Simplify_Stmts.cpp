@@ -23,12 +23,12 @@ Stmt Simplify::visit(const IfThenElse *op) {
     }
 
     // If (true) ...
-    if (is_one(unwrapped_condition)) {
+    if (is_const_one(unwrapped_condition)) {
         return mutate(op->then_case);
     }
 
     // If (false) ...
-    if (is_zero(unwrapped_condition)) {
+    if (is_const_zero(unwrapped_condition)) {
         if (op->else_case.defined()) {
             return mutate(op->else_case);
         } else {
@@ -123,7 +123,7 @@ Stmt Simplify::visit(const AssertStmt *op) {
         message = mutate(op->message, nullptr);
     }
 
-    if (is_zero(cond)) {
+    if (is_const_zero(cond)) {
         // Usually, assert(const-false) should generate a warning;
         // in at least one case (specialize_fail()), we want to suppress
         // the warning, because the assertion is generated internally
@@ -135,7 +135,7 @@ Stmt Simplify::visit(const AssertStmt *op) {
             user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
                          << message << "\n";
         }
-    } else if (is_one(cond)) {
+    } else if (is_const_one(cond)) {
         return Evaluate::make(0);
     }
 
@@ -175,7 +175,7 @@ Stmt Simplify::visit(const For *op) {
     } else if (extent_bounds.max_defined &&
                extent_bounds.max <= 0) {
         return Evaluate::make(0);
-    } else if (is_one(new_extent) &&
+    } else if (is_const_one(new_extent) &&
                op->device_api == DeviceAPI::None) {
         Stmt s = LetStmt::make(op->name, new_min, new_body);
         return mutate(s);
@@ -253,10 +253,10 @@ Stmt Simplify::visit(const Store *op) {
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
-    if (is_zero(predicate)) {
+    if (is_const_zero(predicate)) {
         // Predicate is always false
         return Evaluate::make(0);
-    } else if (scalar_pred && !is_one(scalar_pred->value)) {
+    } else if (scalar_pred && !is_const_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
                                 Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), align));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
@@ -436,7 +436,7 @@ Stmt Simplify::visit(const Block *op) {
                !if_next->else_case.defined() &&
                is_pure(if_first->condition) &&
                is_pure(if_next->condition) &&
-               is_one(mutate((if_first->condition && if_next->condition) == if_next->condition, nullptr))) {
+               is_const_one(mutate((if_first->condition && if_next->condition) == if_next->condition, nullptr))) {
         // Two ifs where the second condition is tighter than
         // the first condition.  The second if can be nested
         // inside the first one, because if it's true the
@@ -478,7 +478,7 @@ Stmt Simplify::visit(const Prefetch *op) {
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition, nullptr);
 
-    if (is_zero(op->condition)) {
+    if (is_const_zero(op->condition)) {
         // Predicate is always false
         return body;
     }

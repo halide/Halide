@@ -46,7 +46,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     const int lanes = op->type.lanes();
 
     // If the delta is 0, then it's just x == x
-    if (is_zero(delta)) {
+    if (is_const_zero(delta)) {
         return const_true(lanes);
     }
 

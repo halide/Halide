@@ -1898,7 +1898,7 @@ class EliminateInterleaves : public IRMutator {
         if (buffers.contains(op->name)) {
             // When inspecting the stores to a buffer, update the state.
             BufferState &state = buffers.ref(op->name);
-            if (!is_one(predicate) || !op->value.type().is_vector()) {
+            if (!is_const_one(predicate) || !op->value.type().is_vector()) {
                 // TODO(psuriana): This store is predicated. Mark the buffer as
                 // not interleaved for now.
                 state = BufferState::NotInterleaved;
@@ -1928,7 +1928,7 @@ class EliminateInterleaves : public IRMutator {
         if (deinterleave_buffers.contains(op->name)) {
             // We're deinterleaving this buffer, remove the interleave
             // from the store.
-            internal_assert(is_one(predicate)) << "The store shouldn't have been predicated.\n";
+            internal_assert(is_const_one(predicate)) << "The store shouldn't have been predicated.\n";
             value = remove_interleave(value);
         }
 
@@ -2076,7 +2076,7 @@ class OptimizeShuffles : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             // TODO(psuriana): We shouldn't mess with predicated load for now.
             return IRMutator::visit(op);
         }
@@ -2456,7 +2456,7 @@ class ScatterGatherGenerator : public IRMutator {
         }
         // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
         // supported yet.
-        if (op->index.as<Ramp>() || !is_one(op->predicate) || !ty.is_vector() ||
+        if (op->index.as<Ramp>() || !is_const_one(op->predicate) || !ty.is_vector() ||
             ty.bits() == 8) {
             return Expr();
         }
@@ -2505,7 +2505,7 @@ class ScatterGatherGenerator : public IRMutator {
         // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
         // supported yet.
         Type ty = op->value.type();
-        if (!is_one(op->predicate) || !ty.is_vector() || ty.bits() == 8) {
+        if (!is_const_one(op->predicate) || !ty.is_vector() || ty.bits() == 8) {
             return IRMutator::visit(op);
         }
         // To use vgathers, the destination address must be VTCM memory.

@@ -35,7 +35,7 @@ private:
 
     // Rewrite a load to have a new index, updating the type if necessary.
     Expr make_load(const Load *load, const Expr &index, ModulusRemainder alignment) {
-        internal_assert(is_one(load->predicate)) << "Load should not be predicated.\n";
+        internal_assert(is_const_one(load->predicate)) << "Load should not be predicated.\n";
         return mutate(Load::make(load->type.with_lanes(index.type().lanes()), load->name,
                                  index, load->image, load->param,
                                  const_true(index.type().lanes()),
@@ -43,7 +43,7 @@ private:
     }
 
     Expr visit(const Load *op) override {
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             // TODO(psuriana): Do nothing to predicated loads for now.
             return IRMutator::visit(op);
         }

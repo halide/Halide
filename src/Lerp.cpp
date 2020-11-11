@@ -160,7 +160,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight) {
             }
         }
 
-        if (!is_zero(bias_value)) {
+        if (!is_const_zero(bias_value)) {
             result = Cast::make(result_type, result + bias_value);
         }
     }

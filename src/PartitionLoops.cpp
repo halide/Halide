@@ -580,7 +580,7 @@ class PartitionLoops : public IRMutator {
         for (const Expr &min_val : min_vals) {
             for (const Expr &max_val : max_vals) {
                 Expr test = simplify(common_subexpression_elimination(min_val - 1 < max_val + 1));
-                if (!is_one(test)) {
+                if (!is_const_one(test)) {
                     can_simplify_prologue = false;
                 }
             }
