@@ -47,6 +47,8 @@ halide_type_t TfLiteTypeToHalideType(TfLiteType t) {
     switch (t) {
     case kTfLiteBool:
         return halide_type_t(halide_type_uint, 1);
+    case kTfLiteFloat16:
+        return halide_type_t(halide_type_float, 16);
     case kTfLiteFloat32:
         return halide_type_t(halide_type_float, 32);
     case kTfLiteFloat64:
@@ -62,7 +64,6 @@ halide_type_t TfLiteTypeToHalideType(TfLiteType t) {
     case kTfLiteUInt8:
         return halide_type_t(halide_type_uint, 8);
 
-    case kTfLiteFloat16:
     case kTfLiteString:
     case kTfLiteNoType:
     case kTfLiteComplex64:
