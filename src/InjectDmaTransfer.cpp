@@ -110,7 +110,7 @@ class InjectDmaTransferIntoProducer : public IRMutator {
     std::map<string, Expr> containing_lets;
 
     Stmt visit(const For *op) override {
-      debug(0) << "InjectDmaTransfer::for " << op->name << "\n";
+      debug(3) << "InjectDmaTransfer::for " << op->name << "\n";
       loop_vars.push_back({op->name, op->min, op->extent});
       Stmt mutated = IRMutator::visit(op);
       loop_vars.pop_back();
@@ -145,18 +145,17 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         if (op->name != producer_name) {
           return IRMutator::visit(op);
         }
-        debug(0) << "InjectDmaTransfer::store " << op->name << "\n";
-        debug(0) << loop_vars.size() << "\n";
+        debug(3) << "InjectDmaTransfer::store " << op->name << "\n";
+        debug(3) << loop_vars.size() << "\n";
         // Only 1D, 2D and 3D DMA transfers are supported
-        // user_assert(!loop_vars.empty() && loop_vars.size() < 4);
-        debug(0) << "[begin] InjectDmaTransfer::store\n";
+        debug(3) << "[begin] InjectDmaTransfer::store\n";
         const Load* maybe_load = op->value.as<Load>();
         // Has to be direct load-to-store for now.
         user_assert(maybe_load);
 
-        debug(0) << "InjectDmaTransfer::" << op->name << " " <<  maybe_load->name << "\n";
-        debug(0) << op->index << "\n";
-        debug(0) << maybe_load->index << "\n";
+        debug(3) << "InjectDmaTransfer::" << op->name << " " <<  maybe_load->name << "\n";
+        debug(3) << op->index << "\n";
+        debug(3) << maybe_load->index << "\n";
         Expr op_index = op->index;
         // TODO: Is it a good idea? Maybe not.
         op_index = substitute_in_all_lets(op_index);
@@ -168,27 +167,20 @@ class InjectDmaTransferIntoProducer : public IRMutator {
 
         vector<Expr> store_strides;
         vector<Expr> value_strides;
-        debug(0) << op->index << "\n" << op_index << "\n";
-        debug(0) << maybe_load->index << "\n" << value_index << "\n";
+        debug(3) << op->index << "\n" << op_index << "\n";
+        debug(3) << maybe_load->index << "\n" << value_index << "\n";
 
         for (const auto& v: loop_vars) {
             Scope<Expr> local_scope;
-            // local_scope.push(v.name, var);
             local_scope.push(v.name, 1);
-            // debug(0) << "is_linear (stride) store: " << v.name << " " << is_linear(op_index, local_scope) << "\n";
-            // debug(0) << "is_linear (stride) load: " << v.name << " " << is_linear(value_index, local_scope) << "\n";
+            debug(3) << "is_linear (stride) store: " << v.name << " " << is_linear(op_index, local_scope) << "\n";
+            debug(3) << "is_linear (stride) load: " << v.name << " " << is_linear(value_index, local_scope) << "\n";
             store_strides.push_back(is_linear(op_index, local_scope));
             value_strides.push_back(is_linear(value_index, local_scope));
-            // user_assert(store_strides.back().defined());
-            // user_assert(value_strides.back().defined());
         }
         Expr store_stride = store_strides.back();
         Expr value_stride = value_strides.back();
 
-        // user_assert(is_const_one(store_stride));
-        // user_assert(is_const_one(value_stride));
-        // debug(0) << "Went past is_const_one " << store_stride << " " << is_const_one(store_stride)
-        //           << " " << value_stride << " " << is_const_one(value_stride) << "\n";
         const auto& v = loop_vars.back();
         Expr var = Variable::make(op->index.type(), v.name);
         loops_to_be_removed.insert(v.name);
@@ -197,14 +189,10 @@ class InjectDmaTransferIntoProducer : public IRMutator {
 
         store_base = simplify(store_base);
         value_base = simplify(value_base);
-        debug(0) << ">>> " << store_base << "\n>>> "
+        debug(3) << ">>> " << store_base << "\n>>> "
                   << value_base << "\n>>>" << v.extent << "\n";
 
         Expr copy_call = Call::make(Int(32), "halide_xtensa_copy_1d", {op->name, store_base, maybe_load->name, value_base, v.extent, op->value.type().bytes()}, Call::PureExtern);
-        // Expr var_copy = Variable::make(copy_call.type(), op->name + "copy_id");
-        // Stmt was_copy_scheduled = AssertStmt::make(var_copy > 0, -1);
-        // Stmt copy_let = LetStmt::make(op->name + "copy_id", copy_call, was_copy_scheduled);
-
         Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy", {copy_call}, Call::PureExtern);
         Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
 
