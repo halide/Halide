@@ -59,6 +59,10 @@ public:
 
     void Execute();
 
+    // Return the Tensor(s) that are the initial input(s) of the Model.
+    // Tensor(s) are still owned by the Model.
+    std::vector<Tensor *> Inputs();
+
     // Return the Tensor(s) that are the final output(s) of the Model.
     // Tensor(s) are still owned by the Model.
     std::vector<Tensor *> Outputs();
@@ -68,7 +72,8 @@ public:
     ModelInterpreter(const ModelInterpreter &) = delete;
     ModelInterpreter &operator=(const ModelInterpreter &) = delete;
     ModelInterpreter(ModelInterpreter &&) = default;
-    ModelInterpreter &operator=(ModelInterpreter &&) = default;};
+    ModelInterpreter &operator=(ModelInterpreter &&) = default;
+};
 
 }  // namespace interpret_nn
 

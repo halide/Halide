@@ -205,6 +205,15 @@ Tensor *ModelInterpreter::GetTensor(const std::string &name) {
     return nullptr;
 }
 
+std::vector<Tensor *> ModelInterpreter::Inputs() {
+    Op *final = schedule_.back().op;
+    std::vector<Tensor *> result;
+    for (int i = 0; i < final->InputCount(); i++) {
+        result.emplace_back(final->Input(i));
+    }
+    return result;
+}
+
 std::vector<Tensor *> ModelInterpreter::Outputs() {
     Op *final = schedule_.back().op;
     std::vector<Tensor *> result;
@@ -213,6 +222,5 @@ std::vector<Tensor *> ModelInterpreter::Outputs() {
     }
     return result;
 }
-
 
 }  // namespace interpret_nn
