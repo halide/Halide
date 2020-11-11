@@ -701,21 +701,24 @@ private:
         }
     }
 
+    // only used for LT and LE - GT and GE normalize to LT and LTE
     template<typename Cmp>
     void visit_compare(const Expr &a_expr, const Expr &b_expr) {
         a_expr.accept(this);
-        if (!interval.is_bounded()) {
+        if (!interval.has_upper_bound() && !interval.has_lower_bound()) {
             bounds_of_type(Bool());
             return;
         }
         Interval a = interval;
 
         b_expr.accept(this);
-        if (!interval.is_bounded()) {
+        if (!interval.has_upper_bound() && !interval.has_lower_bound()) {
             bounds_of_type(Bool());
             return;
         }
         Interval b = interval;
+
+        bounds_of_type(Bool());
 
         // The returned interval should have the property that min <=
         // val <= max. For integers it's clear what this means. For
@@ -724,8 +727,19 @@ private:
         // min implies val implies max.  So min should be a sufficient
         // condition, and max should be a necessary condition.
 
-        interval.min = Cmp::make(a.max, b.min);
-        interval.max = Cmp::make(a.min, b.max);
+        // a.max <(=) b.min implies a <(=) b, so a <(=) b is at least
+        // as true as a.max <(=) b.min. This does not depend on a's
+        // lower bound or b's upper bound.
+        if (a.has_upper_bound() && b.has_lower_bound()) {
+            interval.min = Cmp::make(a.max, b.min);
+        }
+
+        // a <(=) b implies a.min <(=) b.max, so a <(=) b is at most
+        // as true as a.min <(=) b.max. This does not depend on a's
+        // upper bound or b's lower bound.
+        if (a.has_lower_bound() && b.has_upper_bound()) {
+            interval.max = Cmp::make(a.min, b.max);
+        }
     }
 
     void visit(const LT *op) override {
@@ -768,6 +782,12 @@ private:
             // ranges overlap.
             if (a.is_bounded() && b.is_bounded()) {
                 interval.max = a.min <= b.max && b.min <= a.max;
+            } else if (a.has_upper_bound() && b.has_lower_bound()) {
+                // a.min <= b.max is implied if a.min = -inf or b.max = +inf.
+                interval.max = b.min <= a.max;
+            } else if (a.has_lower_bound() && b.has_upper_bound()) {
+                // b.min <= a.max is implied if a.max = +inf or b.min = -inf.
+                interval.max = a.min <= b.max;
             }
         }
     }
@@ -792,6 +812,16 @@ private:
             // a and b do not overlap, then they must be not equal.
             if (a.is_bounded() && b.is_bounded()) {
                 interval.min = a.min > b.max || b.min > a.max;
+            } else if (a.has_upper_bound() && b.has_lower_bound()) {
+                // a.min > b.max is false if a.min = -inf or b.max = +inf.
+                // a does not need a lower bound nor does b need
+                // an upper bound for this condition.
+                interval.min = b.min > a.max;
+            } else if (a.has_lower_bound() && b.has_upper_bound()) {
+                // b.min > a.max is false if a.max = +inf or b.min = -inf.
+                // a does not need an upper bound nor does b need
+                // a lower bound for this condition.
+                interval.min = a.min > b.max;
             }
         }
     }
@@ -3151,7 +3181,7 @@ void bounds_test() {
         check(scope, select(x == y * 2, y, y - 10),
               7, Interval::pos_inf());
         check(scope, select(x == y * 2, y - 10, y),
-              7, Interval::pos_inf());
+              select(x < 34, 17, 7), Interval::pos_inf());
     }
 
     vector<Expr> input_site_1 = {2 * x};
