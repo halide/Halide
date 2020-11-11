@@ -254,8 +254,8 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
         if (is_interleaved_ramp(div->a, scope, result) &&
             (b = as_const_int(div->b)) &&
             is_const_one(result->stride) &&
-            (result->inner_repetitions == 1 ||
-             result->inner_repetitions == 0) &&
+            (result->repetitions == 1 ||
+             result->repetitions == 0) &&
             can_prove((result->base % (int)(*b)) == 0)) {
             // TODO: Generalize this. Currently only matches
             // ramp(base*b, 1, lanes) / b
