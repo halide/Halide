@@ -349,9 +349,20 @@ void RunBoth(const std::string &filename, int seed) {
 }  // namespace interpret_nn
 
 int main(int argc, char **argv) {
-
-    int seed = 0;
+    int seed = time(nullptr);
     for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-seed")) {
+            seed = atoi(argv[i+1]);
+            break;
+        }
+    }
+    std::cout << "Using random seed: " << seed << "\n";
+
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-seed")) {
+            i++;
+            continue;
+        }
         interpret_nn::RunBoth(argv[i], seed);
         std::cout << std::endl;
     }
