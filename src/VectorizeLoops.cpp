@@ -253,9 +253,9 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
         const int64_t *b = nullptr;
         if (is_interleaved_ramp(div->a, scope, result) &&
             (b = as_const_int(div->b)) &&
-            is_one(result->stride) &&
-            (result->repetitions == 1 ||
-             result->repetitions == 0) &&
+            is_const_one(result->stride) &&
+            (result->inner_repetitions == 1 ||
+             result->inner_repetitions == 0) &&
             can_prove((result->base % (int)(*b)) == 0)) {
             // TODO: Generalize this. Currently only matches
             // ramp(base*b, 1, lanes) / b
@@ -1150,8 +1150,8 @@ class VectorSubs : public IRMutator {
                 !scope.contains(var_b->name) ||
                 !load_a ||
                 load_a->name != store->name ||
-                !is_one(load_a->predicate) ||
-                !is_one(store->predicate)) {
+                !is_const_one(load_a->predicate) ||
+                !is_const_one(store->predicate)) {
                 break;
             }
 
@@ -1177,9 +1177,9 @@ class VectorSubs : public IRMutator {
                 break;
             }
 
-            if (is_zero(test)) {
+            if (is_const_zero(test)) {
                 break;
-            } else if (!is_one(test)) {
+            } else if (!is_const_one(test)) {
                 // TODO: try harder by substituting in more things in scope
                 break;
             }

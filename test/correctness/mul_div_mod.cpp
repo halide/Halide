@@ -485,7 +485,7 @@ bool f_mod() {
             if (!Internal::equal(e, eout) && (ecount++) < 10) {
                 Expr diff = simplify(e - eout);
                 Expr smalldiff = simplify(diff < (float)(0.000001) && diff > (float)(-0.000001));
-                if (!Internal::is_one(smalldiff)) {
+                if (!Internal::is_const_one(smalldiff)) {
                     std::cerr << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
                     std::cerr << "          difference=" << diff << "\n";
                     success = false;

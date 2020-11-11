@@ -398,7 +398,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
                     probe = c->args[0];
                 }
             }
-            if (!is_one(probe)) {
+            if (!is_const_one(probe)) {
                 // Found a counter-example, or something that fails to fold
                 return false;
             }
@@ -414,7 +414,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
         return false;
     }
 
-    return is_one(e);
+    return is_const_one(e);
 }
 
 }  // namespace Internal

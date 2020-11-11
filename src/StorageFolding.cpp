@@ -71,7 +71,7 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func && op->call_type == Call::Halide) {
             vector<Expr> args = op->args;
             internal_assert(dim < (int)args.size());
-            args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
+            args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else if (op->name == Call::buffer_crop) {
@@ -145,7 +145,7 @@ class FoldStorageOfFunction : public IRMutator {
         internal_assert(op);
         if (op->name == func) {
             vector<Expr> args = op->args;
-            args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
+            args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
             stmt = Provide::make(op->name, op->values, args);
         }
         return stmt;
