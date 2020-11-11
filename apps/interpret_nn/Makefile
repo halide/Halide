@@ -5,13 +5,31 @@ include ../support/Makefile.inc
 # Note: this requires that you have flatbuffers installed locally.
 # e.g. brew install flatbuffers
 
-build: $(BIN)/$(HL_TARGET)/benchmark $(BIN)/$(HL_TARGET)/convolution_test $(BIN)/host/tflite_exploder
+build: $(BIN)/$(HL_TARGET)/benchmark \
+	$(BIN)/$(HL_TARGET)/convolution_test \
+	$(BIN)/$(HL_TARGET)/compare_vs_tflite \
+	$(BIN)/host/tflite_exploder \
+
 
 test: $(BIN)/$(HL_TARGET)/benchmark
 	$(BIN)/$(HL_TARGET)/benchmark
 
 clean:
 	rm -rf $(BIN)
+
+# Must clone and build locally for now:
+# 	- git clone https://github.com/tensorflow/tensorflow
+# 	- cd tensorflow
+# 	- ./tensorflow/lite/tools/make/download_dependencies.sh
+# 	- make -j $(nproc) TARGET=native -C . -f ./tensorflow/lite/tools/make/Makefile
+# 	- library is at tensorflow/lite/tools/make/gen/native_x86_64/lib/libtensorflow-lite.a
+# 	- appears to include C API
+
+TENSORFLOW_BASE ?= ${HOME}/GitHub/tensorflow
+TFLITE_BASE ?= $(TENSORFLOW_BASE)/tensorflow/lite
+TFLITE_STATIC_LIB ?= $(TFLITE_BASE)/tools/make/gen/native_x86_64/lib/libtensorflow-lite.a
+
+TENSORFLOW_INCLUDES ?= $(TENSORFLOW_BASE)
 
 CXXFLAGS += -Wno-unused-private-field
 
@@ -133,4 +151,9 @@ $(eval $(call DEFINE_RUNGEN,MaxPoolUint8,$(BIN)/%/runtime.a))
 $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/%/tflite_schema_direct_generated.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
+
+
+$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(BIN)/%/interpreter.o $(BIN)/%/model.o $(BIN)/%/tflite_parser.o $(BIN)/%/ops.o $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -I$(TENSORFLOW_INCLUDES) $(filter %.cpp %.o %.a,$^) $(TFLITE_STATIC_LIB) -o $@ $(LDFLAGS)
 
