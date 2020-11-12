@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         for (int z = 0; z < input.channels(); z++) {
             for (int y = 0; y < input.height(); y++) {
                 for (int x = 0; x < input.width(); x++) {
-                    input(x, y, z, c) = rand();
+                    input(x, y, z, c) = (rand() % 256) / 255.0f;
                 }
             }
         }
@@ -32,14 +32,14 @@ int main(int argc, char **argv) {
         for (int z = 0; z < filter.channels(); z++) {
             for (int y = 0; y < filter.height(); y++) {
                 for (int x = 0; x < filter.width(); x++) {
-                    filter(x, y, z, c) = rand();
+                    filter(x, y, z, c) = (rand() % 256) / 255.0f;
                 }
             }
         }
     }
 
     for (int x = 0; x < bias.width(); x++) {
-        bias(x) = rand();
+        bias(x) = (rand() % 256) / 255.0f;
     }
 
     Buffer<float> output(CO, W, H, N);
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
         for (int z = 0; z < output_c.channels(); z++) {
             for (int y = 0; y < output_c.height(); y++) {
                 for (int x = 0; x < output_c.width(); x++) {
-                    if (abs(output_c(x, y, z, c) - output_c(x, y, z, c)) > 0.0001) {
+                    if (abs(output(x, y, z, c) - output_c(x, y, z, c)) > 0.0001) {
                         mismatch_count++;
                     }
                 }

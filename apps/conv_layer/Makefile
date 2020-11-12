@@ -32,3 +32,5 @@ clean:
 	rm -rf $(BIN)
 
 test: run
+
+.SECONDARY: $(BIN)/%/conv_layer_c.halide_generated.cpp
