@@ -13,7 +13,7 @@ public:
     Output<Buffer<float>> relu{"relu", 4};
 
     void generate() {
-        const int N = 1, CI = 128, CO = 128, W = 25, H = 20;
+        const int N = 5, CI = 128, CO = 128, W = 100, H = 80;
 
         /* THE ALGORITHM */
 
