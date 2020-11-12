@@ -40,7 +40,7 @@ public:
         input_bounded(d, x, y, b) =
             select(in_bounds, input(d, clamped_x, clamped_y, b), 0.0f);
 
-        Expr channel_multiplier = 1;//depthwise_filter.dim(0).extent();
+        Expr channel_multiplier = depthwise_filter.dim(0).extent();
 
         // Convolve the image depthwise -- for each input channel,
         // generate channel_multiplier number of intermediate channels using convolution

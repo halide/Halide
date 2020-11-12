@@ -2,7 +2,6 @@
 
 #include "depthwise_separable_conv.h"
 #include "depthwise_separable_conv_auto_schedule.h"
-#include "depthwise_separable_conv_c.h"
 
 #include "HalideBuffer.h"
 #include "halide_benchmark.h"
@@ -73,25 +72,6 @@ int main(int argc, char **argv) {
         output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
-
-    printf("Running generated C++ code...\n");
-    Buffer<float> output_c(CO, W, H, N);
-    output_c.fill(0.0f);
-    depthwise_separable_conv_c(input, depthwise_filter, pointwise_filter, bias, output_c);
-
-    int mismatch_count = 0;
-    for (int c = 0; c < output_c.dim(3).extent(); c++) {
-        for (int z = 0; z < output_c.channels(); z++) {
-            for (int y = 0; y < output_c.height(); y++) {
-                for (int x = 0; x < output_c.width(); x++) {
-                    if (abs(output_c(x, y, z, c) - output_c(x, y, z, c)) > 0.00001) {
-                        mismatch_count++;
-                    }
-                }
-            }
-        }
-    }
-    printf("Mismtach count for generated C++ code: %d\n", mismatch_count);
 
     printf("Success!\n");
 
