@@ -69,28 +69,28 @@ public:
         Func filter_biased("filter_biased");
         Func input_biased("input_biased");
         filter_biased(c, x, y) = i16(filter_(c, x, y)) - i16(filter_offset_);
-        input_biased(c, x, y, b) =
-            i16(resampled_input(c, x, y, b)) - i16(input_offset_);
+        input_biased(c, x, y, b) = i16(resampled_input(c, x, y, b)) - i16(input_offset_);
 
         // Do the convolution in 32-bit.
-        Func convolved("convolved");
-        convolved(c, x, y, b) = bias_(c);
         filter_.dim(1).set_min(0);
         filter_.dim(2).set_min(0);
         Expr filter_width = filter_.dim(1).extent();
         Expr filter_height = filter_.dim(2).extent();
         RDom r(0, filter_width, 0, filter_height);
         Expr filter_drxy = filter_biased(c, r.x, r.y);
-        Expr input_drxyb = input_biased(c, x * stride_x_ + r.x * dilation_x_,
-                                        y * stride_y_ + r.y * dilation_y_, b);
+        Expr input_drxyb = input_biased(c,
+                                        x * stride_x_ + r.x * dilation_x_,
+                                        y * stride_y_ + r.y * dilation_y_,
+                                        b);
+        Func convolved("convolved");
+        convolved(c, x, y, b) = bias_(c);
         convolved(c, x, y, b) += i32(filter_drxy) * i32(input_drxyb);
 
         // Saturate and narrow the output.
-        Expr output =
-            MultiplyByQuantizedMultiplierSmallerThanOne(convolved(c, x, y, b),
-                                                        output_multiplier_,
-                                                        output_shift_) +
-            output_offset_;
+        Expr output = output_offset_ +
+                      MultiplyByQuantizedMultiplierSmallerThanOne(convolved(c, x, y, b),
+                                                                  output_multiplier_,
+                                                                  output_shift_);
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule.
