@@ -2,9 +2,9 @@
 #include <cstdio>
 
 #include "conv_layer.h"
+#ifndef SKIP_BENCHMARK
 #include "conv_layer_auto_schedule.h"
-#include "conv_layer_c.h"
-
+#endif
 #include "HalideBuffer.h"
 #include "halide_benchmark.h"
 
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         for (int z = 0; z < input.channels(); z++) {
             for (int y = 0; y < input.height(); y++) {
                 for (int x = 0; x < input.width(); x++) {
-                    input(x, y, z, c) = (rand() % 256) / 255.0f;
+                    input(x, y, z, c) = rand();
                 }
             }
         }
@@ -32,14 +32,14 @@ int main(int argc, char **argv) {
         for (int z = 0; z < filter.channels(); z++) {
             for (int y = 0; y < filter.height(); y++) {
                 for (int x = 0; x < filter.width(); x++) {
-                    filter(x, y, z, c) = (rand() % 256) / 255.0f;
+                    filter(x, y, z, c) = rand();
                 }
             }
         }
     }
 
     for (int x = 0; x < bias.width(); x++) {
-        bias(x) = (rand() % 256) / 255.0f;
+        bias(x) = rand();
     }
 
     Buffer<float> output(CO, W, H, N);
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     conv_layer(input, filter, bias, output);
 
     // Timing code
-
+#ifndef SKIP_BENCHMARK
     // Manually-tuned version
     double min_t_manual = benchmark(10, 10, [&]() {
         conv_layer(input, filter, bias, output);
@@ -70,24 +70,7 @@ int main(int argc, char **argv) {
         output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
-
-    printf("Running generated C++ code...\n");
-    Buffer<float> output_c(CO, W, H, N);
-    conv_layer_c(input, filter, bias, output_c);
-
-    int mismatch_count = 0;
-    for (int c = 0; c < output_c.dim(3).extent(); c++) {
-        for (int z = 0; z < output_c.channels(); z++) {
-            for (int y = 0; y < output_c.height(); y++) {
-                for (int x = 0; x < output_c.width(); x++) {
-                    if (abs(output(x, y, z, c) - output_c(x, y, z, c)) > 0.0001) {
-                        mismatch_count++;
-                    }
-                }
-            }
-        }
-    }
-    printf("Mismtach count for generated C++ code: %d\n", mismatch_count);
+#endif
     printf("Success!\n");
     return 0;
 }
