@@ -54,7 +54,7 @@ std::vector<CropShape> SplitCrop(const CropShape &crop, int dim, int factor,
 }
 
 struct QuantizedMulAndShift {
-    int quantized_multiplier, shift;
+    int multiplier, shift;
 };
 
 // Adapted from tflite
@@ -188,23 +188,72 @@ void AddOp::Execute(const CropShape &crop) {
         auto input2_buf = input2->Data<uint8_t>();
         auto output_buf = output->Data<uint8_t>(crop);
 
-        int left_shift = 0;
-        int input1_offset = 0;
-        int input1_multiplier = 0;
-        int input1_shift = 0;
-        int input2_offset = 0;
-        int input2_multiplier = 0;
-        int input2_shift = 0;
-        int output_offset = 0;
-        int output_multiplier = 0;
-        int output_shift = 0;
-        int output_min = 0;
-        int output_max = 0;
+        const int input1_offset = input1->Quantization().zero.at(0);
+        const int input2_offset = input2->Quantization().zero.at(0);
+        const int output_offset = output->Quantization().zero.at(0);
+        APP_CHECK(input1_offset >= 0 && input1_offset <= 255);
+        APP_CHECK(input2_offset >= 0 && input2_offset <= 255);
+        APP_CHECK(output_offset >= 0 && output_offset <= 255);
+
+        const float input1_scale = input1->Quantization().scale.at(0);
+        const float input2_scale = input2->Quantization().scale.at(0);
+        const float output_scale = output->Quantization().scale.at(0);
+
+        const int left_shift = 20;  // 20 for 8-bit, 15 for 16-bit
+        const double twice_max_input_scale = 2 * std::max(input1_scale, input2_scale);
+        const double real_input1_multiplier = input1_scale / twice_max_input_scale;
+        const double real_input2_multiplier = input2_scale / twice_max_input_scale;
+        const double real_output_multiplier = twice_max_input_scale / ((1 << left_shift) * output_scale);
+
+        const auto input1_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_input1_multiplier);
+        const auto input2_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_input2_multiplier);
+        const auto output_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_output_multiplier);
+        APP_CHECK(input1_mul_and_shift.shift <= 0);
+        APP_CHECK(input2_mul_and_shift.shift <= 0);
+        APP_CHECK(output_mul_and_shift.shift <= 0);
+
+        // TODO: for SubOp:
+        // mul_and_shift2.multiplier *= -1;
+
+        const auto output_range = GetQuantizedMinMax(activation_, output_offset, output_scale);
+        // TODO: handle unexpected out-of-range data more cleanly.
+        APP_CHECK(output_range.min >= 0 && output_range.min <= 255);
+        APP_CHECK(output_range.max >= 0 && output_range.max <= 255);
+        APP_CHECK(output_range.min <= output_range.max);
+
+        // TODO: remove when debugged.
+        // static bool dump = true;
+        // if (dump) {
+        //     std::cout << "\n";
+        //     std::cout << "    input1_scale " << input1_scale << "\n";
+        //     std::cout << "    input2_scale " << input2_scale << "\n";
+        //     std::cout << "    output_scale " << output_scale << "\n";
+        //     std::cout << "\n";
+        //     std::cout << "    twice_max_input_scale " << twice_max_input_scale << "\n";
+        //     std::cout << "    real_input1_multiplier " << real_input1_multiplier << "\n";
+        //     std::cout << "    real_input2_multiplier " << real_input2_multiplier << "\n";
+        //     std::cout << "    real_output_multiplier " << real_output_multiplier << "\n";
+        //     std::cout << "\n";
+        //     std::cout << "    left_shift " << left_shift << "\n";
+        //     std::cout << "    input1_offset " << input1_offset << "\n";
+        //     std::cout << "    input1_mul_and_shift.multiplier " << input1_mul_and_shift.multiplier << "\n";
+        //     std::cout << "    input1_mul_and_shift.shift " << input1_mul_and_shift.shift << "\n";
+        //     std::cout << "    input2_offset " << input2_offset << "\n";
+        //     std::cout << "    input2_mul_and_shift.multiplier " << input2_mul_and_shift.multiplier << "\n";
+        //     std::cout << "    input2_mul_and_shift.shift " << input2_mul_and_shift.shift << "\n";
+        //     std::cout << "    output_offset " << output_offset << "\n";
+        //     std::cout << "    output_mul_and_shift.multiplier " << output_mul_and_shift.multiplier << "\n";
+        //     std::cout << "    output_mul_and_shift.shift " << output_mul_and_shift.shift << "\n";
+        //     std::cout << "    output_range.min " << output_range.min << "\n";
+        //     std::cout << "    output_range.max " << output_range.max << "\n";
+        //     dump = false;
+        // }
+
         APP_CHECK(0 == AddUint8Uint8(left_shift, input1_buf, input2_buf,
-                                     input1_offset, input1_multiplier, input1_shift,
-                                     input2_offset, input2_multiplier, input2_shift,
-                                     output_offset, output_multiplier, output_shift,
-                                     output_min, output_max, output_buf));
+                                     -input1_offset, input1_mul_and_shift.multiplier, -input1_mul_and_shift.shift,
+                                     -input2_offset, input2_mul_and_shift.multiplier, -input2_mul_and_shift.shift,
+                                     output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
+                                     output_range.min, output_range.max, output_buf));
     }
 }
 
@@ -292,7 +341,7 @@ void Conv2DOp::Execute(const CropShape &crop) {
 
         const double real_multiplier = input_product_scale / output_scale;
         const auto mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_multiplier);
-        const int output_multiplier = mul_and_shift.quantized_multiplier;
+        const int output_multiplier = mul_and_shift.multiplier;
         // GetQuantizedMulAndShiftSmallerThanOne() returns a negative shift;
         // ConvolutionUint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
@@ -404,7 +453,7 @@ void DepthwiseConv2DOp::Execute(const CropShape &crop) {
 
         const double real_multiplier = input_product_scale / output_scale;
         const auto mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_multiplier);
-        const int output_multiplier = mul_and_shift.quantized_multiplier;
+        const int output_multiplier = mul_and_shift.multiplier;
         // GetQuantizedMulAndShiftSmallerThanOne() returns a negative shift;
         // DepthwiseConvolutionUint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
