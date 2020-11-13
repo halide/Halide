@@ -126,6 +126,7 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args)
     case halide_type_code(CODE, BITS): \
         return Functor<TYPE>()(std::forward<Args>(args)...);
     switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
+        // HANDLE_CASE(halide_type_float, 16, float)  // TODO
         HANDLE_CASE(halide_type_float, 32, float)
         HANDLE_CASE(halide_type_float, 64, double)
         HANDLE_CASE(halide_type_int, 8, int8_t)
@@ -138,7 +139,7 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args)
         HANDLE_CASE(halide_type_uint, 32, uint32_t)
         HANDLE_CASE(halide_type_uint, 64, uint64_t)
     default:
-        APP_FATAL << "Unsupported type\n";
+        APP_FATAL << "Unsupported type";
         using ReturnType = decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...));
         return ReturnType();
     }
@@ -177,83 +178,47 @@ public:
 };
 
 template<typename T>
+void FillWithRandomImpl(Buffer<T> &b, std::mt19937 &rng) {
+    std::uniform_int_distribution<T> dis(std::numeric_limits<T>::min(),
+                                         std::numeric_limits<T>::max());
+    b.for_each_value([&rng, &dis](T &value) {
+        value = dis(rng);
+    });
+}
+
+template<>
+void FillWithRandomImpl(Buffer<float> &b, std::mt19937 &rng) {
+    // Floating point. We arbitrarily choose to use the range [0.0, 1.0].
+    std::uniform_real_distribution<float> dis(0.0, 1.0);
+    b.for_each_value([&rng, &dis](float &value) {
+        value = dis(rng);
+    });
+}
+
+template<>
+void FillWithRandomImpl(Buffer<double> &b, std::mt19937 &rng) {
+    // Floating point. We arbitrarily choose to use the range [0.0, 1.0].
+    std::uniform_real_distribution<double> dis(0.0, 1.0);
+    b.for_each_value([&rng, &dis](double &value) {
+        value = dis(rng);
+    });
+}
+
+template<>
+void FillWithRandomImpl(Buffer<bool> &b, std::mt19937 &rng) {
+    std::uniform_int_distribution<int> dis(0, 1);
+    b.for_each_value([&rng, &dis](bool &value) {
+        value = static_cast<bool>(dis(rng));
+    });
+}
+
+template<typename T>
 struct FillWithRandom {
 public:
     void operator()(Buffer<> &b_dynamic, int seed) {
         Buffer<T> b = b_dynamic;
         std::mt19937 rng(seed);
-        fill(b, rng);
-    }
-
-private:
-    // Integral types that aren't bool.
-    template<typename T2 = T,
-             typename std::enable_if<std::is_integral<T2>::value && !std::is_same<T2, bool>::value && !std::is_same<T2, char>::value && !std::is_same<T2, signed char>::value && !std::is_same<T2, unsigned char>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        // TODO: filling in int32 buffers with the full range tends to produce
-        // uninteresting/bad results in tflite pipelines. (e.g., bias values
-        // are int32 but values that are 'too large' can lead to over/underflow.)
-        // May need better heuristics. Using this for now.
-        std::uniform_int_distribution<T2> dis(-32767, 32767);
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = dis(rng);
-        });
-    }
-
-    // Floating point. We arbitrarily choose to use the range [0.0, 1.0].
-    template<typename T2 = T, typename std::enable_if<std::is_floating_point<T2>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_real_distribution<T2> dis(0.0, 1.0);
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = dis(rng);
-        });
-    }
-
-    // Special case for bool.
-    template<typename T2 = T, typename std::enable_if<std::is_same<T2, bool>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<int> dis(0, 1);
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = static_cast<T2>(dis(rng));
-        });
-    }
-
-    // std::uniform_int_distribution<char> is UB in C++11,
-    // so special-case to avoid compiler variation
-    template<typename T2 = T, typename std::enable_if<std::is_same<T2, char>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        // Are there still evil compilers that treat 'char' as unsigned by default?
-        static_assert(std::numeric_limits<char>::min() == -128, "");
-        static_assert(std::numeric_limits<char>::max() == 127, "");
-        std::uniform_int_distribution<int> dis(-128, 127);
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = static_cast<T2>(dis(rng));
-        });
-    }
-
-    // std::uniform_int_distribution<signed char> is UB in C++11,
-    // so special-case to avoid compiler variation
-    template<typename T2 = T, typename std::enable_if<std::is_same<T2, signed char>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<int> dis(-128, 127);
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = static_cast<T2>(dis(rng));
-        });
-    }
-
-    // std::uniform_int_distribution<unsigned char> is UB in C++11,
-    // so special-case to avoid compiler variation
-    template<typename T2 = T, typename std::enable_if<std::is_same<T2, unsigned char>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<int> dis(0, 255);
-        b.for_each_value([&rng, &dis](T2 &value) {
-            value = static_cast<T2>(dis(rng));
-        });
-    }
-
-    template<typename T2 = T, typename std::enable_if<std::is_pointer<T2>::value>::type * = nullptr>
-    void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        APP_FATAL << "pointer types not supported";
+        FillWithRandomImpl<T>(b, rng);
     }
 };
 
