@@ -149,7 +149,7 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args)
 template<typename T>
 struct CompareBuffers {
 public:
-    void operator()(const Buffer<const void> &tflite_buf_dynamic, const Buffer<const void> &halide_buf_dynamic) {
+    uint64_t operator()(const Buffer<const void> &tflite_buf_dynamic, const Buffer<const void> &halide_buf_dynamic) {
         Buffer<const T> tflite_buf = tflite_buf_dynamic;
         Buffer<const T> halide_buf = halide_buf_dynamic;
         uint64_t diffs = 0;
@@ -174,6 +174,7 @@ public:
         if (diffs > max_diffs_to_show) {
             std::cerr << "(" << (diffs - max_diffs_to_show) << " diffs suppressed)\n";
         }
+        return diffs;
     }
 };
 
@@ -412,7 +413,13 @@ void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
             APP_CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
             APP_CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
         }
-        dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf);
+        uint64_t diffs = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf);
+        if (diffs == 0) {
+            if (verbose) {
+                std::cout << "MATCHING output " << i << " is:\n";
+                dynamic_type_dispatch<DumpBuffer>(halide_buf.type(), halide_buf);
+            }
+        }
     }
 }
 
