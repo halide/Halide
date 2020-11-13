@@ -144,7 +144,11 @@ void Model::Dump(std::ostream &os) {
 void Tensor::Allocate() {
     size_t shape_size = 1;
     for (halide_dimension_t &i : shape_) {
-        i.stride = shape_size;
+        if (i.stride != 0) {
+            APP_CHECK((size_t) i.stride == shape_size);
+        } else {
+            i.stride = shape_size;
+        }
         shape_size *= i.extent;
     }
     shape_size *= SizeOfTensorType(Type());

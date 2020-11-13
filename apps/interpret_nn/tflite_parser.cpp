@@ -96,11 +96,19 @@ public:
         }
 
         std::vector<halide_dimension_t> shape(t->shape()->size());
+        size_t shape_size = 1;
         for (int i = 0; i < (int)shape.size(); i++) {
             shape[i].min = 0;
             shape[i].extent = t->shape()->Get(shape.size() - 1 - i);
-            shape[i].stride = 0;
+            shape[i].stride = shape_size;
+            shape_size *= shape[i].extent;
         }
+
+        TensorType type = ParseType(t->type());
+        if (!data.empty()) {
+            APP_CHECK(data.size() == shape_size * SizeOfTensorType(type));
+        }
+
         QuantizationInfo quantization;
         if (t->quantization()) {
             quantization.dimension =
@@ -115,7 +123,7 @@ public:
             }
         }
         return make_unique<Tensor>(
-            t->name()->str(), ParseType(t->type()), std::move(shape),
+            t->name()->str(), type, std::move(shape),
             std::move(data), std::move(quantization));
     }
 
