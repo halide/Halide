@@ -103,12 +103,15 @@ int main(int argc, char **argv) {
         old_to_new_buffer_map[0] = 0;
         for (auto &m : old_to_new_tensor_map) {
             const tflite::Tensor *t = subgraph->tensors()->Get(m.first);
-            old_to_new_buffer_map[t->buffer()] = 0;
+            old_to_new_buffer_map[t->buffer()] = 0; // placeholder, will fill in below
         }
 
         std::vector<std::unique_ptr<tflite::BufferT>> new_buffers;
         new_buffers.emplace_back(model->buffers()->Get(0)->UnPack());
         for (auto &m : old_to_new_buffer_map) {
+            if (m.first == 0) {
+                continue;  // special case
+            }
             m.second = (int32_t)new_buffers.size();
             new_buffers.emplace_back(model->buffers()->Get(m.first)->UnPack());
         }
