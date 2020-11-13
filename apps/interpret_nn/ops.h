@@ -62,6 +62,12 @@ public:
         : ElementwiseOp({input1, input2}, output), activation_(activation) {
     }
 
+    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+        return make_unique<AddOp>(
+            Map(map, Input(0)), Map(map, Input(1)),
+            Map(map, Output()), activation_);
+    }
+
     void Execute(const CropShape &crop);
 
     void Dump(std::ostream &os) const {
@@ -76,6 +82,12 @@ public:
                   ActivationFunction activation)
         : PoolOp(input, output, std::move(stride),
                  std::move(filter_size), padding, activation) {
+    }
+
+    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+        return make_unique<AveragePoolOp>(
+            Map(map, Input()), Map(map, Output()), stride_,
+            filter_size_, padding_, activation_);
     }
 
     void Execute(const CropShape &crop);
@@ -100,6 +112,12 @@ public:
           dilation_(std::move(dilation)),
           padding_(padding),
           activation_(activation) {
+    }
+
+    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+        return make_unique<Conv2DOp>(
+            Map(map, Input()), Map(map, Filter()), Map(map, Bias()),
+            Map(map, Output()), stride_, dilation_, padding_, activation_);
     }
 
     const Tensor *Filter() const {
@@ -145,6 +163,12 @@ public:
           activation_(activation) {
     }
 
+    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+        return make_unique<DepthwiseConv2DOp>(
+            Map(map, Input()), Map(map, Filter()), Map(map, Bias()),
+            Map(map, Output()), depth_multiplier_, stride_, dilation_, padding_, activation_);
+    }
+
     const Tensor *Input() const {
         return Op::Input(0);
     }
@@ -183,6 +207,11 @@ public:
                  std::move(filter_size), padding, activation) {
     }
 
+    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+        return make_unique<MaxPoolOp>(
+            Map(map, Input()), Map(map, Output()), stride_, filter_size_, padding_, activation_);
+    }
+
     void Execute(const CropShape &crop);
 
     void Dump(std::ostream &os) const {
@@ -194,6 +223,11 @@ class PadOp : public Op {
 public:
     explicit PadOp(Tensor *input, Tensor *padding, Tensor *output)
         : Op({input, padding}, {output}) {
+    }
+
+    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+        return make_unique<PadOp>(
+            Map(map, Input(0)), Map(map, Input(1)), Map(map, Output()));
     }
 
     Bounds InferBounds(const CropShape &crop) const;
@@ -212,6 +246,10 @@ class ReshapeOp : public Op {
 public:
     ReshapeOp(Tensor *input, Tensor *output, std::vector<int> new_shape)
         : Op({input}, {output}), new_shape_(std::move(new_shape)) {
+    }
+
+    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+        return make_unique<ReshapeOp>(Map(map, Input()), Map(map, Output()), new_shape_);
     }
 
     Bounds InferBounds(const CropShape &crop) const;

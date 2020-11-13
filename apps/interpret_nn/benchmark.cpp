@@ -23,7 +23,7 @@ void RunBenchmark(const std::string &filename) {
 
     ScheduleOptions options;
     options.verbose = true;
-    ModelInterpreter interpreter(&model, options);
+    ModelInterpreter interpreter(std::move(model), options);
 
     auto begin = std::chrono::high_resolution_clock::now();
     auto end = begin;

@@ -98,6 +98,36 @@ halide_type_t TensorTypeToHalideType(TensorType t) {
     }
 }
 
+Tensor *Map(const TensorMap& map, const Tensor* t) {
+    auto i = map.find(t);
+    if (i != map.end()) {
+        return i->second;
+    }
+    // TODO: Try to do this without const_cast?
+    return const_cast<Tensor*>(t);
+}
+
+Model::Model(const Model& copy) {
+    // First, just copy all the tensors (shared pointers).
+    tensors = copy.tensors;
+
+    // Next, clone the non-allocated tensors. These might get intermediate state
+    // while being executed.
+    TensorMap map;
+    for (auto& i : tensors) {
+        if (!i->IsAllocated()) {
+            auto cloned = std::make_shared<Tensor>(*i);
+            map[i.get()] = cloned.get();
+            i = cloned;
+        }
+    }
+
+    // Now copy the ops, using the tensor map we made above.
+    for (const auto& i : copy.ops) {
+        ops.push_back(i->Clone(map));
+    }
+}
+
 void Model::Dump(std::ostream &os) {
     os << "Tensors: " << std::endl;
     for (const auto &i : tensors) {

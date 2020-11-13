@@ -22,7 +22,7 @@ struct ScheduleOptions {
 };
 
 class ModelInterpreter {
-    Model *model_;
+    Model model_;
 
     // Maps tensor name -> index in model_->tensors.
     // Lazily built when needed.
@@ -47,9 +47,9 @@ class ModelInterpreter {
     void Schedule(ScheduleOptions options);
 
 public:
-    explicit ModelInterpreter(Model *m,
+    explicit ModelInterpreter(Model m,
                               ScheduleOptions options = ScheduleOptions())
-        : model_(m) {
+        : model_(std::move(m)) {
         Schedule(options);
     }
 

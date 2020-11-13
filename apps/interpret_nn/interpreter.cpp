@@ -107,7 +107,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
     // First, generate a naive schedule that executes each op entirely before
     // moving on to the next.
     std::list<ScheduledOp> schedule;
-    for (auto &i : model_->ops) {
+    for (auto &i : model_.ops) {
         schedule.push_back({i.get(), i->GetFullCrop()});
     }
 
@@ -190,17 +190,17 @@ void ModelInterpreter::Execute() {
 }
 
 Tensor *ModelInterpreter::GetTensor(const std::string &name) {
-    APP_CHECK(!model_->tensors.empty());
+    APP_CHECK(!model_.tensors.empty());
 
     if (tensor_names_.empty()) {
         size_t i = 0;
-        for (const auto &t : model_->tensors) {
+        for (const auto &t : model_.tensors) {
             tensor_names_[t->Name()] = i++;
         }
     }
     auto it = tensor_names_.find(name);
     if (it != tensor_names_.end()) {
-        return model_->tensors.at(it->second).get();
+        return model_.tensors.at(it->second).get();
     }
     return nullptr;
 }

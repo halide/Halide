@@ -11,6 +11,11 @@
 
 namespace interpret_nn {
 
+template<class T, class... Args>
+std::unique_ptr<T> make_unique(Args &&... args) {
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
 inline std::ostream &operator<<(std::ostream &s,
                                 const halide_dimension_t &dim) {
     return s << "{" << dim.min << ", " << dim.extent << ", " << dim.stride << "}";
@@ -144,6 +149,8 @@ public:
           quantization_(std::move(quantization)) {
     }
 
+    Tensor(const Tensor& copy) = default;
+
     interpret_nn::TensorType Type() const {
         return type_;
     }
@@ -214,13 +221,18 @@ public:
 
     void Dump(std::ostream &os) const;
 
-    // Movable but not copyable.
     Tensor() = delete;
-    Tensor(const Tensor &) = delete;
     Tensor &operator=(const Tensor &) = delete;
     Tensor(Tensor &&) = default;
     Tensor &operator=(Tensor &&) = default;
 };
+
+// A mapping from old tensors to new tensors, when cloning an op.
+using TensorMap = std::map<const Tensor *, Tensor *>;
+
+// Apply a tensor map to a list of tensors. This is used to support
+// cloning ops referring to different tensors.
+Tensor *Map(const TensorMap& map, const Tensor* t);
 
 class Op {
 protected:
@@ -258,6 +270,8 @@ public:
     virtual std::vector<CropShape> Split(const CropShape &crop) const {
         return {crop};
     }
+
+    virtual std::unique_ptr<Op> Clone(const TensorMap& tensor_map) const = 0;
 
     virtual void Dump(std::ostream &os) const = 0;
 
@@ -301,14 +315,16 @@ public:
 };
 
 struct Model {
-    std::vector<std::unique_ptr<Tensor>> tensors;
+    std::vector<std::shared_ptr<Tensor>> tensors;
     std::vector<std::unique_ptr<Op>> ops;
 
     void Dump(std::ostream &os);
 
-    // Movable but not copyable.
+    // Models can be copied. Tensors that are allocated will be
+    // shared, tensors that are not allocated will be cloned.
+    Model(const Model &);
+
     Model() = default;
-    Model(const Model &) = delete;
     Model &operator=(const Model &) = delete;
     Model(Model &&) = default;
     Model &operator=(Model &&) = default;
