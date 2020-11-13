@@ -21,6 +21,13 @@ using Halide::Runtime::Buffer;
 
 namespace {
 
+struct TfLiteReporter : public tflite::ErrorReporter {
+    int Report(const char *format, va_list args) override {
+        vfprintf(stderr, format, args);
+        abort();
+    }
+};
+
 size_t NumProcessorsOnline() {
 #ifdef _WIN32
     char *num_cores = getenv("NUMBER_OF_PROCESSORS");
@@ -145,7 +152,7 @@ public:
         Buffer<const T> tflite_buf = tflite_buf_dynamic;
         Buffer<const T> halide_buf = halide_buf_dynamic;
         uint64_t diffs = 0;
-        constexpr uint64_t max_diffs_to_show = 3;
+        constexpr uint64_t max_diffs_to_show = 32;
         tflite_buf.for_each_element([&](const int *pos) {
             T tflite_buf_val = tflite_buf(pos);
             T halide_buf_val = halide_buf(pos);
@@ -184,8 +191,9 @@ private:
              typename std::enable_if<std::is_integral<T2>::value && !std::is_same<T2, bool>::value && !std::is_same<T2, char>::value && !std::is_same<T2, signed char>::value && !std::is_same<T2, unsigned char>::value>::type * = nullptr>
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         // TODO: filling in int32 buffers with the full range tends to produce
-        // uninteresting results in tflite pipelines. May need better heuristics.
-        // Using this for now.
+        // uninteresting/bad results in tflite pipelines. (e.g., bias values
+        // are int32 but values that are 'too large' can lead to over/underflow.)
+        // May need better heuristics. Using this for now.
         std::uniform_int_distribution<T2> dis(-32767, 32767);
         b.for_each_value([&rng, &dis](T2 &value) {
             value = dis(rng);
@@ -214,6 +222,9 @@ private:
     // so special-case to avoid compiler variation
     template<typename T2 = T, typename std::enable_if<std::is_same<T2, char>::value>::type * = nullptr>
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        // Are there still evil compilers that treat 'char' as unsigned by default?
+        static_assert(std::numeric_limits<char>::min() == -128, "");
+        static_assert(std::numeric_limits<char>::max() == 127, "");
         std::uniform_int_distribution<int> dis(-128, 127);
         b.for_each_value([&rng, &dis](T2 &value) {
             value = static_cast<T2>(dis(rng));
@@ -246,6 +257,23 @@ private:
     }
 };
 
+template<typename T>
+struct DumpBuffer {
+public:
+    void operator()(const Buffer<const void> &buf_dynamic) {
+        Buffer<const T> buf = buf_dynamic;
+        buf.for_each_element([&](const int *pos) {
+            T val = buf(pos);
+            std::cerr << "Value at (";
+            for (int i = 0; i < buf.dimensions(); ++i) {
+                if (i > 0) std::cerr << ", ";
+                std::cerr << pos[i];
+            }
+            std::cerr << "): " << 0 + val << "\n";
+        });
+    }
+};
+
 Buffer<void> WrapTfLiteTensor(TfLiteTensor *t) {
     APP_CHECK(t->dims);
     // Wrap a Halide buffer around it.
@@ -261,7 +289,9 @@ Buffer<void> WrapTfLiteTensor(TfLiteTensor *t) {
     APP_CHECK(buffer_data);
 
     halide_type_t type = TfLiteTypeToHalideType(t->type);
-    return Buffer<void>(type, buffer_data, shape.size(), shape.data());
+    Buffer<void> b(type, buffer_data, shape.size(), shape.data());
+    APP_CHECK(b.size_in_bytes() == t->bytes);
+    return b;
 }
 
 }  // namespace
@@ -270,15 +300,20 @@ void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
     std::cout << "Comparing " << filename << std::endl;
 
     std::vector<char> buffer = app_util::ReadEntireFile(filename);
+
+    flatbuffers::Verifier verifier((const uint8_t *)buffer.data(), buffer.size());
+    APP_CHECK(tflite::VerifyModelBuffer(verifier));
+
     const tflite::Model *tf_model = tflite::GetModel(buffer.data());
     APP_CHECK(tf_model);
 
     std::vector<Buffer<const void>> tflite_outputs, halide_outputs;
 
     // ----- Run in TFLite
+    TfLiteReporter tf_reporter;
     tflite::ops::builtin::BuiltinOpResolver tf_resolver;
     std::unique_ptr<tflite::Interpreter> tf_interpreter;
-    tflite::InterpreterBuilder builder(tf_model, tf_resolver);
+    tflite::InterpreterBuilder builder(tf_model, tf_resolver, &tf_reporter);
     TfLiteStatus status;
     APP_CHECK((status = builder(&tf_interpreter)) == kTfLiteOk) << status;
     APP_CHECK((status = tf_interpreter->AllocateTensors()) == kTfLiteOk) << status;
@@ -289,20 +324,26 @@ void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
     int seed_here = seed;
     for (int i : tf_interpreter->inputs()) {
         TfLiteTensor *t = tf_interpreter->tensor(i);
-        auto input_buf = WrapTfLiteTensor(t);
-        if (verbose) {
-            std::cout << "Init TFLITE input " << t->name << " with seed = " << seed_here << " type " << input_buf.type() << " from " << TfLiteTypeGetName(t->type) << "\n";
+        APP_CHECK(t);
+        seed_here++;
+        if (t->allocation_type == kTfLiteMmapRo) {
+            if (verbose) {
+                std::cout << "TFLITE input " << t->name << " is being used as-is\n";
+            }
+            continue;
         }
-        dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here++);
+        auto input_buf = WrapTfLiteTensor(t);
+        dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
+        if (verbose) {
+            std::cout << "TFLITE input " << t->name << " inited with seed = " << seed_here << " type " << input_buf.type() << " from " << TfLiteTypeGetName(t->type) << "\n";
+        }
+    }
 
-        // input_buf.as<uint8_t>().for_each_element([&](const int *pos) {
-        //     std::cout << "   Input at (";
-        //     for (int i = 0; i < input_buf.dimensions(); ++i) {
-        //         if (i > 0) std::cerr << ", ";
-        //         std::cout << pos[i];
-        //     }
-        //     std::cout << "): " << 0 + input_buf.as<uint8_t>()(pos) << "\n";
-        // });
+    // Fill the outputs with random garbage
+    for (int i : tf_interpreter->outputs()) {
+        TfLiteTensor *t = tf_interpreter->tensor(i);
+        auto output_buf = WrapTfLiteTensor(t);
+        dynamic_type_dispatch<FillWithRandom>(output_buf.type(), output_buf, 0);
     }
 
     // Execute once, to prime the pump
@@ -317,6 +358,9 @@ void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
     // Save the outputs
     for (int i : tf_interpreter->outputs()) {
         TfLiteTensor *t = tf_interpreter->tensor(i);
+        if (verbose) {
+            std::cout << "TFLITE output is " << t->name << " type " << TfLiteTypeGetName(t->type) << "\n";
+        }
         tflite_outputs.emplace_back(WrapTfLiteTensor(t));
     }
 
@@ -326,22 +370,43 @@ void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
         model.Dump(std::cout);
     }
 
-    for (auto &i : model.tensors) {
-        i->Allocate();
-    }
-
     ModelInterpreter interpreter(&model);
 
-    // Fill in the inputs with random data (but with a predictable seed,
-    // so we can do the same for the Halide inputs).
+    // Fill in the inputs with random data (but with the same seeds as above).
     seed_here = seed;
     for (Tensor *t : interpreter.Inputs()) {
         APP_CHECK(t);
-        auto input_buf = t->Data<void>();
-        if (verbose) {
-            std::cout << "Init HALIDE input " << t->Name() << " with seed = " << seed_here << " type " << input_buf.type() << "\n";
+        seed_here++;
+        if (t->IsAllocated()) {
+            // It has data from the Model -- leave it as-is
+            if (verbose) {
+                std::cout << "HALIDE input " << t->Name() << " is being used as-is\n";
+            }
+            continue;
         }
-        dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here++);
+        t->Allocate();
+        auto input_buf = t->Data<void>();
+        dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
+        if (verbose) {
+            std::cout << "HALIDE input " << t->Name() << " inited with seed = " << seed_here << " type " << input_buf.type() << "\n";
+        }
+    }
+
+    // Fill the outputs with random garbage
+    for (Tensor *t : interpreter.Outputs()) {
+        APP_CHECK(t);
+        // Outputs should never have data from the Model... should they?
+        APP_CHECK(!t->IsAllocated());
+        t->Allocate();
+        auto output_buf = t->Data<void>();
+        dynamic_type_dispatch<FillWithRandom>(output_buf.type(), output_buf, 0);
+    }
+
+    // Allocate all the intermediate Tensors now too
+    for (auto &t : model.tensors) {
+        if (!t->IsAllocated()) {
+            t->Allocate();
+        }
     }
 
     halide_set_num_threads(threads);
@@ -362,10 +427,12 @@ void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
     }
     std::cout << std::endl;
 
-
     // Save the outputs
     for (Tensor *t : interpreter.Outputs()) {
         APP_CHECK(t);
+        if (verbose) {
+            std::cout << "HALIDE output is " << t->Name() << " type " << TensorTypeToString(t->Type()) << "\n";
+        }
         halide_outputs.emplace_back(t->Data<const void>());
     }
 
