@@ -1292,7 +1292,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         IRGraphVisitor::visit(op);
 
         if (!processed.count(op->name)) {
-            if ((op->call_type == Call::Extern || op->call_type == Call::PureExtern) && op->name.find("halide_xtensa_") != 0) {
+            if ((op->call_type == Call::Extern || op->call_type == Call::PureExtern)) {
                 c_externs.insert({op->name, op});
             } else if (op->call_type == Call::ExternCPlusPlus) {
                 std::vector<std::string> namespaces;

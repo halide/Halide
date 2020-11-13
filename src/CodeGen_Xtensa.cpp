@@ -1556,8 +1556,8 @@ HALIDE_ALWAYS_INLINE uint32x16_t halide_xtensa_convert_i48_high_u32(const int48x
 HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_concat_from_native(const uint1x16_t& a, const uint1x16_t& b) {
         return IVP_JOINBN_2(b, a);
 }
-// NOTE(vksnk): this is disabled by default, because iDMA is not part of cstub
-// so we need to get git repo compiling with xt-tools first.
+// TODO(vksnk): this is disabled by default, because iDMA is not part of cstub
+// so we need to get git repo compiling with xt-tools first (b/173159625)
 #if 0
 #include <xtensa/idma.h>
 
@@ -1605,7 +1605,7 @@ HALIDE_ALWAYS_INLINE int32_t halide_xtensa_wait_for_copy(int32_t id) {
 #endif
 )INLINE_CODE";
 
-        // Band-aid fix: on at least one config (our arm32 buildbot running gcc 5.4),
+        // Fix: on at least one config (our arm32 buildbot running gcc 5.4),
         // emitting this long text string was regularly garbled in a predictable
         // pattern; flushing the stream before or after heals it. Since C++
         // codegen is rarely on a compilation critical path, we'll just band-aid
@@ -1616,6 +1616,8 @@ HALIDE_ALWAYS_INLINE int32_t halide_xtensa_wait_for_copy(int32_t id) {
     }
 }
 
+
+// TODO(vksnk): condense this code.
 bool CodeGen_Xtensa::is_native_vector_type(Type t) {
     if (t.is_int_or_uint() && (t.lanes() == 64) && (t.bits() == 8)) {
         return true;
