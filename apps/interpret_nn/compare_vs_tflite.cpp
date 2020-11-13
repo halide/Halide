@@ -156,7 +156,7 @@ public:
         tflite_buf.for_each_element([&](const int *pos) {
             T tflite_buf_val = tflite_buf(pos);
             T halide_buf_val = halide_buf(pos);
-            // TODO: this is terrible, we must compare with some threshold instead of equality
+            // TODO: this is terrible, we should compare with some threshold instead of equality
             if (tflite_buf_val != halide_buf_val) {
                 diffs++;
                 if (diffs > max_diffs_to_show) {
@@ -274,7 +274,7 @@ public:
     }
 };
 
-Buffer<void> WrapTfLiteTensor(TfLiteTensor *t) {
+Buffer<void> WrapTfLiteTensorWithHalideBuffer(TfLiteTensor *t) {
     APP_CHECK(t->dims);
     // Wrap a Halide buffer around it.
     std::vector<halide_dimension_t> shape(t->dims->size);
@@ -297,7 +297,7 @@ Buffer<void> WrapTfLiteTensor(TfLiteTensor *t) {
 }  // namespace
 
 void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
-    std::cout << "Comparing " << filename << std::endl;
+    std::cout << "Comparing " << filename << "\n";
 
     std::vector<char> buffer = app_util::ReadEntireFile(filename);
 
@@ -308,133 +308,132 @@ void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
     APP_CHECK(tf_model);
 
     std::vector<Buffer<const void>> tflite_outputs, halide_outputs;
+    std::chrono::duration<double> tflite_time, halide_time;
 
     // ----- Run in TFLite
-    TfLiteReporter tf_reporter;
-    tflite::ops::builtin::BuiltinOpResolver tf_resolver;
-    std::unique_ptr<tflite::Interpreter> tf_interpreter;
-    tflite::InterpreterBuilder builder(tf_model, tf_resolver, &tf_reporter);
-    TfLiteStatus status;
-    APP_CHECK((status = builder(&tf_interpreter)) == kTfLiteOk) << status;
-    APP_CHECK((status = tf_interpreter->AllocateTensors()) == kTfLiteOk) << status;
-    APP_CHECK((status = tf_interpreter->SetNumThreads(threads)) == kTfLiteOk) << status;
-
-    // Fill in the inputs with random data (but with a predictable seed,
-    // so we can do the same for the Halide inputs).
-    int seed_here = seed;
-    for (int i : tf_interpreter->inputs()) {
-        TfLiteTensor *t = tf_interpreter->tensor(i);
-        APP_CHECK(t);
-        seed_here++;
-        if (t->allocation_type == kTfLiteMmapRo) {
-            if (verbose) {
-                std::cout << "TFLITE input " << t->name << " is being used as-is\n";
-            }
-            continue;
-        }
-        auto input_buf = WrapTfLiteTensor(t);
-        dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
-        if (verbose) {
-            std::cout << "TFLITE input " << t->name << " inited with seed = " << seed_here << " type " << input_buf.type() << " from " << TfLiteTypeGetName(t->type) << "\n";
-        }
-    }
-
-    // Fill the outputs with random garbage
-    for (int i : tf_interpreter->outputs()) {
-        TfLiteTensor *t = tf_interpreter->tensor(i);
-        auto output_buf = WrapTfLiteTensor(t);
-        dynamic_type_dispatch<FillWithRandom>(output_buf.type(), output_buf, 0);
-    }
-
-    // Execute once, to prime the pump
-    APP_CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
-    // Now benchmark it
-    auto tflite_time = bench([&tf_interpreter]() {
+    {
+        TfLiteReporter tf_reporter;
+        tflite::ops::builtin::BuiltinOpResolver tf_resolver;
+        std::unique_ptr<tflite::Interpreter> tf_interpreter;
+        tflite::InterpreterBuilder builder(tf_model, tf_resolver, &tf_reporter);
         TfLiteStatus status;
-        APP_CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
-    });
-    std::cout << "TFLITE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(tflite_time).count() << " us" << std::endl;
+        APP_CHECK((status = builder(&tf_interpreter)) == kTfLiteOk) << status;
+        APP_CHECK((status = tf_interpreter->AllocateTensors()) == kTfLiteOk) << status;
+        APP_CHECK((status = tf_interpreter->SetNumThreads(threads)) == kTfLiteOk) << status;
 
-    // Save the outputs
-    for (int i : tf_interpreter->outputs()) {
-        TfLiteTensor *t = tf_interpreter->tensor(i);
-        if (verbose) {
-            std::cout << "TFLITE output is " << t->name << " type " << TfLiteTypeGetName(t->type) << "\n";
-        }
-        tflite_outputs.emplace_back(WrapTfLiteTensor(t));
-    }
-
-    // ----- Run in Our Code
-    Model model = ParseTfLiteModel(tf_model);
-    if (verbose) {
-        model.Dump(std::cout);
-    }
-
-    ModelInterpreter interpreter(&model);
-
-    // Fill in the inputs with random data (but with the same seeds as above).
-    seed_here = seed;
-    for (Tensor *t : interpreter.Inputs()) {
-        APP_CHECK(t);
-        seed_here++;
-        if (t->IsAllocated()) {
-            // It has data from the Model -- leave it as-is
-            if (verbose) {
-                std::cout << "HALIDE input " << t->Name() << " is being used as-is\n";
+        // Fill in the inputs with random data (but with a predictable seed,
+        // so we can do the same for the Halide inputs).
+        int seed_here = seed;
+        for (int i : tf_interpreter->inputs()) {
+            seed_here++;
+            TfLiteTensor *t = tf_interpreter->tensor(i);
+            if (t->allocation_type == kTfLiteMmapRo) {
+                // The Tensor references data from the flatbuffer and is read-only;
+                // presumably it is data we want to keep as-is
+                if (verbose) {
+                    std::cout << "TFLITE input " << t->name << " is being used as-is\n";
+                }
+                continue;
             }
-            continue;
+            auto input_buf = WrapTfLiteTensorWithHalideBuffer(t);
+            dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
+            if (verbose) {
+                std::cout << "TFLITE input " << t->name << " inited with seed = " << seed_here
+                          << " type " << input_buf.type() << " from " << TfLiteTypeGetName(t->type) << "\n";
+            }
         }
-        t->Allocate();
-        auto input_buf = t->Data<void>();
-        dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
+
+        // Execute once, to prime the pump
+        APP_CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
+
+        // Now benchmark it
+        tflite_time = bench([&tf_interpreter]() {
+            TfLiteStatus status;
+            APP_CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
+        });
+
+        // Save the outputs
+        for (int i : tf_interpreter->outputs()) {
+            TfLiteTensor *t = tf_interpreter->tensor(i);
+            if (verbose) {
+                std::cout << "TFLITE output is " << t->name << " type " << TfLiteTypeGetName(t->type) << "\n";
+            }
+            // Make a copy since the Buffer might reference memory owned by the tf_interpreter
+            tflite_outputs.emplace_back(WrapTfLiteTensorWithHalideBuffer(t).copy());
+        }
+    }
+
+    // ----- Run in Halide
+    {
+        Model model = ParseTfLiteModel(tf_model);
         if (verbose) {
-            std::cout << "HALIDE input " << t->Name() << " inited with seed = " << seed_here << " type " << input_buf.type() << "\n";
+            model.Dump(std::cout);
         }
-    }
 
-    // Fill the outputs with random garbage
-    for (Tensor *t : interpreter.Outputs()) {
-        APP_CHECK(t);
-        // Outputs should never have data from the Model... should they?
-        APP_CHECK(!t->IsAllocated());
-        t->Allocate();
-        auto output_buf = t->Data<void>();
-        dynamic_type_dispatch<FillWithRandom>(output_buf.type(), output_buf, 0);
-    }
-
-    // Allocate all the intermediate Tensors now too
-    for (auto &t : model.tensors) {
-        if (!t->IsAllocated()) {
-            t->Allocate();
+        // TODO: this is a little ugly. Maybe it would be better to have Tensor
+        // have a flag for whether it was pre-inited during parsing?
+        std::set<Tensor *> read_only_tensors;
+        for (auto &t : model.tensors) {
+            if (t->IsAllocated()) {
+                // It has data from the Model; keep track so we don't fill it with randomness
+                read_only_tensors.insert(t.get());
+            } else {
+                t->Allocate();
+            }
         }
-    }
 
-    halide_set_num_threads(threads);
+        ModelInterpreter interpreter(std::move(model));
 
-    // Execute once, to prime the pump
-    interpreter.Execute();
+        // Fill in the inputs with random data (but with the same seeds as above).
+        int seed_here = seed;
+        for (Tensor *t : interpreter.Inputs()) {
+            seed_here++;
+            if (read_only_tensors.count(t)) {
+                // It has data from the Model -- leave it as-is
+                if (verbose) {
+                    std::cout << "HALIDE input " << t->Name() << " is being used as-is\n";
+                }
+                continue;
+            }
+            auto input_buf = t->Data<void>();
+            dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
+            if (verbose) {
+                std::cout << "HALIDE input " << t->Name() << " inited with seed = " << seed_here << " type " << input_buf.type() << "\n";
+            }
+        }
 
-    // Now benchmark it
-    auto halide_time = bench([&interpreter]() {
+        halide_set_num_threads(threads);
+
+        // Execute once, to prime the pump
         interpreter.Execute();
-    });
-    std::cout << "HALIDE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(halide_time).count() << " us" << std::endl;
+
+        // Now benchmark it
+        halide_time = bench([&interpreter]() {
+            interpreter.Execute();
+        });
+
+        // Save the outputs
+        for (Tensor *t : interpreter.Outputs()) {
+            if (verbose) {
+                std::cout << "HALIDE output is " << t->Name() << " type " << TensorTypeToString(t->Type()) << "\n";
+            }
+            // Make a copy since the Buffer might reference memory owned by the interpreter
+            halide_outputs.emplace_back(t->Data<const void>().copy());
+        }
+    }
+
+    // ----- Log benchmark times
+    std::cout << "TFLITE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(tflite_time).count() << " us"
+              << "\n";
+    std::cout << "HALIDE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(halide_time).count() << " us"
+              << "\n";
 
     double ratio = (halide_time / tflite_time);
     std::cout << "HALIDE = " << ratio * 100.0 << "% of TFLITE";
     if (ratio > 1.0) {
         std::cout << "  *** HALIDE IS SLOWER";
     }
-    std::cout << std::endl;
-
-    // Save the outputs
-    for (Tensor *t : interpreter.Outputs()) {
-        APP_CHECK(t);
-        if (verbose) {
-            std::cout << "HALIDE output is " << t->Name() << " type " << TensorTypeToString(t->Type()) << "\n";
-        }
-        halide_outputs.emplace_back(t->Data<const void>());
-    }
+    std::cout << "\n";
 
     // ----- Now compare the outputs
     APP_CHECK(tflite_outputs.size() == halide_outputs.size());
@@ -456,7 +455,7 @@ void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
 
 int main(int argc, char **argv) {
     int seed = time(nullptr);
-    int threads = 1;  // interpret_nn::NumProcessorsOnline();
+    int threads = 1;
     bool verbose = false;
 
     for (int i = 1; i < argc; i++) {
@@ -473,6 +472,10 @@ int main(int argc, char **argv) {
             continue;
         }
     }
+    if (threads <= 0) {
+        threads = interpret_nn::NumProcessorsOnline();
+    }
+
     std::cout << "Using random seed: " << seed << "\n";
     std::cout << "Using threads: " << threads << "\n";
 
@@ -485,7 +488,7 @@ int main(int argc, char **argv) {
             continue;
         }
         interpret_nn::RunBoth(argv[i], seed, threads, verbose);
-        std::cout << std::endl;
+        std::cout << "\n";
     }
 
     std::cout << "Done!\n";
