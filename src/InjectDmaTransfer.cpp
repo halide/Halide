@@ -110,15 +110,15 @@ class InjectDmaTransferIntoProducer : public IRMutator {
     std::map<string, Expr> containing_lets;
 
     Stmt visit(const For *op) override {
-      debug(3) << "InjectDmaTransfer::for " << op->name << "\n";
-      loop_vars.push_back({op->name, op->min, op->extent});
-      Stmt mutated = IRMutator::visit(op);
-      loop_vars.pop_back();
-      if (loops_to_be_removed.count(op->name) > 0) {
-        loops_to_be_removed.erase(op->name);
-        return mutated.as<For>()->body;
-      }
-      return mutated;
+        debug(3) << "InjectDmaTransfer::for " << op->name << "\n";
+        loop_vars.push_back({op->name, op->min, op->extent});
+        Stmt mutated = IRMutator::visit(op);
+        loop_vars.pop_back();
+        if (loops_to_be_removed.count(op->name) > 0) {
+            loops_to_be_removed.erase(op->name);
+            return mutated.as<For>()->body;
+        }
+        return mutated;
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -143,17 +143,17 @@ class InjectDmaTransferIntoProducer : public IRMutator {
 
     Stmt visit(const Store *op) override {
         if (op->name != producer_name) {
-          return IRMutator::visit(op);
+            return IRMutator::visit(op);
         }
         debug(3) << "InjectDmaTransfer::store " << op->name << "\n";
         debug(3) << loop_vars.size() << "\n";
         // Only 1D, 2D and 3D DMA transfers are supported
         debug(3) << "[begin] InjectDmaTransfer::store\n";
-        const Load* maybe_load = op->value.as<Load>();
+        const Load *maybe_load = op->value.as<Load>();
         // Has to be direct load-to-store for now.
         user_assert(maybe_load);
 
-        debug(3) << "InjectDmaTransfer::" << op->name << " " <<  maybe_load->name << "\n";
+        debug(3) << "InjectDmaTransfer::" << op->name << " " << maybe_load->name << "\n";
         debug(3) << op->index << "\n";
         debug(3) << maybe_load->index << "\n";
         Expr op_index = op->index;
@@ -167,10 +167,12 @@ class InjectDmaTransferIntoProducer : public IRMutator {
 
         vector<Expr> store_strides;
         vector<Expr> value_strides;
-        debug(3) << op->index << "\n" << op_index << "\n";
-        debug(3) << maybe_load->index << "\n" << value_index << "\n";
+        debug(3) << op->index << "\n"
+                 << op_index << "\n";
+        debug(3) << maybe_load->index << "\n"
+                 << value_index << "\n";
 
-        for (const auto& v: loop_vars) {
+        for (const auto &v : loop_vars) {
             Scope<Expr> local_scope;
             local_scope.push(v.name, 1);
             debug(3) << "is_linear (stride) store: " << v.name << " " << is_linear(op_index, local_scope) << "\n";
@@ -181,7 +183,7 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         Expr store_stride = store_strides.back();
         Expr value_stride = value_strides.back();
 
-        const auto& v = loop_vars.back();
+        const auto &v = loop_vars.back();
         Expr var = Variable::make(op->index.type(), v.name);
         loops_to_be_removed.insert(v.name);
         Expr store_base = substitute(var, v.min, op_index);
@@ -190,7 +192,7 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         store_base = simplify(store_base);
         value_base = simplify(value_base);
         debug(3) << ">>> " << store_base << "\n>>> "
-                  << value_base << "\n>>>" << v.extent << "\n";
+                 << value_base << "\n>>>" << v.extent << "\n";
 
         Expr copy_call = Call::make(Int(32), "halide_xtensa_copy_1d", {op->name, store_base, maybe_load->name, value_base, v.extent, op->value.type().bytes()}, Call::PureExtern);
         Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy", {copy_call}, Call::PureExtern);
@@ -199,16 +201,17 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         return wait_is_done;
     }
 
- public:
-    InjectDmaTransferIntoProducer(const string& pn) : producer_name(pn) { }
+public:
+    InjectDmaTransferIntoProducer(const string &pn)
+        : producer_name(pn) {
+    }
 };
 
-// TODO(vksnk): move to separate file.
 class InjectDmaTransfer : public IRMutator {
     using IRMutator::visit;
     const std::map<std::string, Function> &env;
 
-    Stmt visit(const ProducerConsumer* op) override {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             auto it = env.find(op->name);
             if (it != env.end()) {
@@ -222,8 +225,11 @@ class InjectDmaTransfer : public IRMutator {
         }
         return IRMutator::visit(op);
     }
+
 public:
-    InjectDmaTransfer(const std::map<std::string, Function> &e) : env(e) { }
+    InjectDmaTransfer(const std::map<std::string, Function> &e)
+        : env(e) {
+    }
 };
 
 Stmt inject_dma_transfer(Stmt s, const std::map<std::string, Function> &env) {

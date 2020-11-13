@@ -19,45 +19,44 @@ using std::vector;
 
 // Stores information about allocations in TCM (tightly coupled memory).
 struct TcmAllocation {
-  string name;
-  Type type;
-  int32_t size;
+    string name;
+    Type type;
+    int32_t size;
 };
 
 class FindTcmAllocations : public IRVisitor {
-  using IRVisitor::visit;
+    using IRVisitor::visit;
 
-  int current_loop_level = 0;
+    int current_loop_level = 0;
 
-  void visit(const Allocate *op) override {
-    if (op->memory_type != MemoryType::VTCM) {
+    void visit(const Allocate *op) override {
+        if (op->memory_type != MemoryType::VTCM) {
+            IRVisitor::visit(op);
+            return;
+        }
+
+        user_assert(current_loop_level == 0);
+
+        TcmAllocation tcm_alloc;
+        tcm_alloc.name = op->name;
+        tcm_alloc.type = op->type;
+
+        user_assert(!op->new_expr.defined()) << "can't handle new expression";
+        tcm_alloc.size = op->constant_allocation_size();
+        user_assert(tcm_alloc.size > 0) << "tcm alloc size should be > 0 " << op->extents.size() << " " << op->extents[0];
+
+        tcm_allocations.push_back(tcm_alloc);
         IRVisitor::visit(op);
-        return ;
     }
 
+    void visit(const For *op) override {
+        current_loop_level++;
+        IRVisitor::visit(op);
+        current_loop_level--;
+    }
 
-    user_assert(current_loop_level == 0);
-
-    TcmAllocation tcm_alloc;
-    tcm_alloc.name = op->name;
-    tcm_alloc.type = op->type;
-
-    user_assert(!op->new_expr.defined()) << "can't handle new expression";
-    tcm_alloc.size = op->constant_allocation_size();
-    user_assert(tcm_alloc.size > 0) << "tcm alloc size should be > 0 " << op->extents.size() << " " << op->extents[0];
-
-    tcm_allocations.push_back(tcm_alloc);
-    IRVisitor::visit(op);
-  }
-
-  void visit(const For *op) override {
-    current_loop_level++;
-    IRVisitor::visit(op);
-    current_loop_level--;
-  }
-
- public:
-  std::vector<TcmAllocation> tcm_allocations;
+public:
+    std::vector<TcmAllocation> tcm_allocations;
 };
 
 void CodeGen_Xtensa::compile(const Module &module) {
@@ -109,7 +108,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f) {
 
     if (!is_header_or_extern_decl()) {
         stream << "namespace {\n";
-        for (const auto& alloc: find_tcm_allocs.tcm_allocations) {
+        for (const auto &alloc : find_tcm_allocs.tcm_allocations) {
             string op_name = print_name(alloc.name);
             string op_type = print_type(alloc.type, AppendSpace);
 
@@ -195,7 +194,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f) {
 
 void CodeGen_Xtensa::add_vector_typedefs(const std::set<Type> &vector_types) {
     if (!vector_types.empty()) {
-      const char *native_typedef_decl = R"INLINE_CODE(
+        const char *native_typedef_decl = R"INLINE_CODE(
 
 
 #if defined(__XTENSA__)
@@ -213,9 +212,9 @@ inline int GetCycleCount() {
 
 #define HALIDE_MAYBE_UNUSED __attribute__ ((unused))
 
-// NOTE(vksnk): we can use clang native vectors inplace of Xtensa
+// NOTE(vksnk): we can use clang native vectors in place of Xtensa
 // data types, and while they should be much more convinient, there is
-// a slight performance degradation, which needs to be investigation.
+// a slight performance degradation, which needs to be investigated.
 //typedef int16_t int16x32_t __attribute__((ext_vector_type(32)));
 //typedef uint16_t uint16x32_t __attribute__((ext_vector_type(32)));
 //typedef int32_t int32x16_t __attribute__((ext_vector_type(16)));
@@ -236,7 +235,7 @@ typedef vboolN uint1x32_t;
 typedef vbool2N uint1x64_t;
 typedef xb_vecN_2xf32 float16;
 
-// TODO(vksnk): classes below can be templatized.
+// TODO(vksnk): classes below can be templatized (b/173158037).
 class int32x32_t {
   typedef int32x32_t Vec;
   typedef int32_t ElementType;
@@ -799,7 +798,6 @@ HALIDE_ALWAYS_INLINE void store(const uint16x32_t& a, void *base, int32_t offset
 }
 
 HALIDE_ALWAYS_INLINE void aligned_store(const int16x64_t& a, void *base, int32_t offset) {
-   //a.aligned_store(base, offset);
    int16x32_t *ptr = (int16x32_t *)((int16_t*)base + offset);
    ptr[0] = a.native_vector[0];
    ptr[1] = a.native_vector[1];
@@ -1607,14 +1605,14 @@ HALIDE_ALWAYS_INLINE int32_t halide_xtensa_wait_for_copy(int32_t id) {
 #endif
 )INLINE_CODE";
 
-      // Band-aid fix: on at least one config (our arm32 buildbot running gcc 5.4),
-      // emitting this long text string was regularly garbled in a predictable
-      // pattern; flushing the stream before or after heals it. Since C++
-      // codegen is rarely on a compilation critical path, we'll just band-aid
-      // it in this way.
-      stream << std::flush;
-      stream << native_typedef_decl;
-      stream << std::flush;
+        // Band-aid fix: on at least one config (our arm32 buildbot running gcc 5.4),
+        // emitting this long text string was regularly garbled in a predictable
+        // pattern; flushing the stream before or after heals it. Since C++
+        // codegen is rarely on a compilation critical path, we'll just band-aid
+        // it in this way.
+        stream << std::flush;
+        stream << native_typedef_decl;
+        stream << std::flush;
     }
 }
 
@@ -1647,10 +1645,10 @@ bool CodeGen_Xtensa::is_native_vector_type(Type t) {
 }
 
 std::string CodeGen_Xtensa::print_type(Type t, AppendSpaceIfNeeded space_option) {
-  if (t.bits() == 1 && t.is_vector()) {
-      return "uint1x" + std::to_string(t.lanes()) + "_t" + (space_option == AppendSpace?" ":"");
-  }
-  return CodeGen_C::print_type(t, space_option);
+    if (t.bits() == 1 && t.is_vector()) {
+        return "uint1x" + std::to_string(t.lanes()) + "_t" + (space_option == AppendSpace ? " " : "");
+    }
+    return CodeGen_C::print_type(t, space_option);
 }
 
 void CodeGen_Xtensa::visit(const Mul *op) {
@@ -1703,15 +1701,15 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     }
 
     if (op->name == "halide_xtensa_copy_1d") {
-      args[0] = print_name(op->args[0].as<StringImm>()->value);
-      args[1] = print_expr(op->args[1]);
-      args[2] = print_name(op->args[2].as<StringImm>()->value);
+        args[0] = print_name(op->args[0].as<StringImm>()->value);
+        args[1] = print_expr(op->args[1]);
+        args[2] = print_name(op->args[2].as<StringImm>()->value);
 
-      for (size_t i = 3; i < op->args.size(); i++) {
-          args[i] = print_expr(op->args[i]);
-      }
-      rhs << op->name << "(" << with_commas(args) << ")";
-      return rhs.str();
+        for (size_t i = 3; i < op->args.size(); i++) {
+            args[i] = print_expr(op->args[i]);
+        }
+        rhs << op->name << "(" << with_commas(args) << ")";
+        return rhs.str();
     }
 
     string op_name = op->name;
@@ -1918,7 +1916,7 @@ void CodeGen_Xtensa::visit(const Or *op) {
     string sa = print_expr(op->a);
     string sb = print_expr(op->b);
 
-    if (op->a.type().is_bool() &&  (op->a.type().lanes() == 32)) {
+    if (op->a.type().is_bool() && (op->a.type().lanes() == 32)) {
         print_assignment(op->type, "IVP_ORBN(" + sa + ", " + sb + ")");
     } else {
         visit_binop(op->type, op->a, op->b, "||");
@@ -2384,8 +2382,8 @@ void CodeGen_Xtensa::visit(const Call *op) {
 }
 
 void CodeGen_Xtensa::visit(const Cast *op) {
-    const Type& t = op->type;
-    const Expr& e = op->value;
+    const Type &t = op->type;
+    const Expr &e = op->value;
     string value = print_expr(e);
     string type = print_type(t);
     if (t.is_int_or_uint() && e.type().is_int_or_uint() &&
@@ -2590,7 +2588,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         } else {
             stream << "*"
                    << "__attribute__((aligned(64))) "
-                //    << " __restrict "
+                   //    << " __restrict "
                    << op_name
                    << " = ("
                    << op_type

@@ -101,11 +101,11 @@ Expr bc(Expr x) {
 }
 
 Expr vector_reduce(VectorReduce::Operator op, Expr x) {
-  return VectorReduce::make(op, x, 0);
+    return VectorReduce::make(op, x, 0);
 }
 
-Expr call(const string& name, Expr return_type, vector<Expr> args) {
-  return Call::make(return_type.type(), name, move(args), Call::PureExtern);
+Expr call(const string &name, Expr return_type, vector<Expr> args) {
+    return Call::make(return_type.type(), name, move(args), Call::PureExtern);
 }
 
 // Check if the matches satisfy the given pattern flags, and mutate the matches
@@ -207,9 +207,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
                 x = cast(Type(Type::Int, 64, x.type().lanes()), x);
             }
             x = replace_pattern(x, matches, p);
-            if ((p.flags & Pattern::AccumulatorOutput24)
-                || (p.flags & Pattern::AccumulatorOutput48)
-                || (p.flags & Pattern::AccumulatorOutput64)) {
+            if ((p.flags & Pattern::AccumulatorOutput24) || (p.flags & Pattern::AccumulatorOutput48) || (p.flags & Pattern::AccumulatorOutput64)) {
                 x = cast(old_type, x);
             }
 
@@ -628,8 +626,8 @@ private:
             }
         } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_float() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
             return Call::make(op->type, "halide_xtensa_slice_f32",
-                                {mutate(op->vectors[0]), op->slice_begin()},
-                                Call::PureExtern);
+                              {mutate(op->vectors[0]), op->slice_begin()},
+                              Call::PureExtern);
         } else if (op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
             if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 64)) {
                 bool is_deinterleave_even = true;
@@ -640,12 +638,12 @@ private:
                 if (is_deinterleave_even) {
                     if (op->type.is_int()) {
                         return Call::make(op->type, "halide_xtensa_deinterleave_even_i16",
-                                        {mutate(op->vectors[0])},
-                                        Call::PureExtern);
+                                          {mutate(op->vectors[0])},
+                                          Call::PureExtern);
                     } else if (op->type.is_uint()) {
                         return Call::make(op->type, "halide_xtensa_deinterleave_even_u16",
-                                        {mutate(op->vectors[0])},
-                                        Call::PureExtern);
+                                          {mutate(op->vectors[0])},
+                                          Call::PureExtern);
                     }
                 }
                 bool is_deinterleave_odd = true;
@@ -656,16 +654,16 @@ private:
                 if (is_deinterleave_odd) {
                     if (op->type.is_int()) {
                         return Call::make(op->type, "halide_xtensa_deinterleave_odd_i16",
-                                        {mutate(op->vectors[0])},
-                                        Call::PureExtern);
+                                          {mutate(op->vectors[0])},
+                                          Call::PureExtern);
                     } else if (op->type.is_uint()) {
                         return Call::make(op->type, "halide_xtensa_deinterleave_odd_u16",
-                                        {mutate(op->vectors[0])},
-                                        Call::PureExtern);
+                                          {mutate(op->vectors[0])},
+                                          Call::PureExtern);
                     }
                 }
             }
-        // TODO(vksnk): That's actually an interleave op.
+            // TODO(vksnk): That's actually an interleave op.
         } else if (op->type.is_int_or_uint() && (op->type.bits() == 8) && (op->type.lanes() == 64)) {
             if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 128)) {
                 bool is_deinterleave_even = true;
@@ -676,12 +674,12 @@ private:
                 if (is_deinterleave_even) {
                     if (op->type.is_int()) {
                         return Call::make(op->type, "halide_xtensa_deinterleave_even_i8",
-                                        {mutate(op->vectors[0])},
-                                        Call::PureExtern);
+                                          {mutate(op->vectors[0])},
+                                          Call::PureExtern);
                     } else if (op->type.is_uint()) {
                         return Call::make(op->type, "halide_xtensa_deinterleave_even_u8",
-                                        {mutate(op->vectors[0])},
-                                        Call::PureExtern);
+                                          {mutate(op->vectors[0])},
+                                          Call::PureExtern);
                     }
                 }
                 bool is_deinterleave_odd = true;
@@ -692,12 +690,12 @@ private:
                 if (is_deinterleave_odd) {
                     if (op->type.is_int()) {
                         return Call::make(op->type, "halide_xtensa_deinterleave_odd_i8",
-                                        {mutate(op->vectors[0])},
-                                        Call::PureExtern);
+                                          {mutate(op->vectors[0])},
+                                          Call::PureExtern);
                     } else if (op->type.is_uint()) {
                         return Call::make(op->type, "halide_xtensa_deinterleave_odd_u8",
-                                        {mutate(op->vectors[0])},
-                                        Call::PureExtern);
+                                          {mutate(op->vectors[0])},
+                                          Call::PureExtern);
                     }
                 }
             } else if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 192)) {
@@ -709,16 +707,16 @@ private:
                 if (is_extract_off_0_3) {
                     Expr op_vector = mutate(op->vectors[0]);
                     vector<Expr> args = {op_vector};
-                    const Shuffle* maybe_shuffle = op_vector.as<Shuffle>();
+                    const Shuffle *maybe_shuffle = op_vector.as<Shuffle>();
                     if (maybe_shuffle && maybe_shuffle->is_concat()) {
                         args = maybe_shuffle->vectors;
                     }
                     if (op->type.is_int()) {
                         return Call::make(op->type, "halide_xtensa_extract_0_off_3_i8",
-                                        args, Call::PureExtern);
+                                          args, Call::PureExtern);
                     } else if (op->type.is_uint()) {
                         return Call::make(op->type, "halide_xtensa_extract_0_off_3_u8",
-                                        args, Call::PureExtern);
+                                          args, Call::PureExtern);
                     }
                 }
             }
@@ -809,7 +807,7 @@ private:
         return IRGraphMutator::visit(op);
     }
 
-    Expr visit(const VectorReduce* op) override {
+    Expr visit(const VectorReduce *op) override {
         // Full reduction.
         if (op->type.is_scalar()) {
             static const std::vector<Pattern> reduces = {
@@ -962,7 +960,7 @@ class OptimizeShuffles : public IRMutator {
                     // can safely cast the index to 16 bit, which
                     // dynamic_shuffle requires.
                     index = simplify(cast(Int(op->type.bits()).with_lanes(op->type.lanes()), index - base));
-                    return Call::make(op->type, "halide_xtensa_dynamic_shuffle", {lut, index/*, 0, const_extent - 1*/}, Call::PureExtern);
+                    return Call::make(op->type, "halide_xtensa_dynamic_shuffle", {lut, index /*, 0, const_extent - 1*/}, Call::PureExtern);
                 }
                 // Only the first iteration of this loop is aligned.
                 alignment = ModulusRemainder();
@@ -1253,16 +1251,11 @@ private:
             int slice_index = op->args[1].as<IntImm>()->value;
             int native_lanes = op->args[2].as<IntImm>()->value;
             int total_lanes = op->args[3].as<IntImm>()->value;
-            if (maybe_concat_call && (maybe_concat_call->name == "halide_xtensa_concat_from_native")
-                && (maybe_concat_call->type.lanes() == total_lanes) && ((int)maybe_concat_call->args.size() == total_lanes / native_lanes)) {
+            if (maybe_concat_call && (maybe_concat_call->name == "halide_xtensa_concat_from_native") && (maybe_concat_call->type.lanes() == total_lanes) && ((int)maybe_concat_call->args.size() == total_lanes / native_lanes)) {
                 return maybe_concat_call->args[slice_index];
             }
-            const Shuffle* maybe_concat_shuffle = first_arg.as<Shuffle>();
-            if (maybe_concat_shuffle
-                  && maybe_concat_shuffle->is_concat()
-                  && ((int)maybe_concat_shuffle->vectors.size() == total_lanes / native_lanes)
-                  && ((int)maybe_concat_shuffle->vectors[slice_index].type().lanes() == native_lanes)
-               ) {
+            const Shuffle *maybe_concat_shuffle = first_arg.as<Shuffle>();
+            if (maybe_concat_shuffle && maybe_concat_shuffle->is_concat() && ((int)maybe_concat_shuffle->vectors.size() == total_lanes / native_lanes) && ((int)maybe_concat_shuffle->vectors[slice_index].type().lanes() == native_lanes)) {
                 return maybe_concat_shuffle->vectors[slice_index];
             }
 
