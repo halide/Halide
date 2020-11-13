@@ -220,20 +220,20 @@ inline int GetCycleCount() {
 //typedef int32_t int32x16_t __attribute__((ext_vector_type(16)));
 //typedef uint32_t uint32x16_t __attribute__((ext_vector_type(16)));
 
-typedef xb_vec2Nx8 int8x64_t;
-typedef xb_vec2Nx8U uint8x64_t;
-typedef xb_vecNx16 int16x32_t;
-typedef xb_vecNx16U uint16x32_t;
-typedef xb_int24 int24_t;
-typedef xb_vec2Nx24 int24x64_t;
-typedef xb_vecN_2x32v int32x16_t;
-typedef xb_vecN_2x32Uv uint32x16_t;
-typedef xb_vecNx48 int48x32_t;
-typedef xb_vecN_2x64w int64x16_t;
-typedef vboolN_2 uint1x16_t;
-typedef vboolN uint1x32_t;
-typedef vbool2N uint1x64_t;
-typedef xb_vecN_2xf32 float16;
+using int8x64_t = xb_vec2Nx8;
+using uint8x64_t = xb_vec2Nx8U;
+using int16x32_t = xb_vecNx16;
+using uint16x32_t = xb_vecNx16U;
+using int24_t = xb_int24;
+using int24x64_t = xb_vec2Nx24;
+using int32x16_t = xb_vecN_2x32v;
+using uint32x16_t = xb_vecN_2x32Uv;
+using int48x32_t = xb_vecNx48;
+using int64x16_t = xb_vecN_2x64w;
+using uint1x16_t = vboolN_2;
+using uint1x32_t = vboolN;
+using uint1x64_t = vbool2N;
+using float16 = xb_vecN_2xf32;
 
 // TODO(vksnk): classes below can be templatized (b/173158037).
 class int32x32_t {
