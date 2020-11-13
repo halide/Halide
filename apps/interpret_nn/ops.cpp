@@ -263,6 +263,7 @@ void Conv2DOp::Execute(const CropShape &crop) {
     if (input->Type() == TensorType::UInt8 &&
         filter->Type() == TensorType::UInt8 &&
         output->Type() == TensorType::UInt8) {
+        // TODO: reduce code duplication between here and DepthwiseConv2D
         auto input_buf = input->Data<uint8_t>();
         auto filter_buf = filter->Data<uint8_t>();
         auto bias_buf = bias->Data<int32_t>();
@@ -370,6 +371,7 @@ void DepthwiseConv2DOp::Execute(const CropShape &crop) {
     if (input->Type() == TensorType::UInt8 &&
         filter->Type() == TensorType::UInt8 &&
         output->Type() == TensorType::UInt8) {
+        // TODO: reduce code duplication between here and Conv2D
         auto input_buf = input->Data<uint8_t>();
         auto filter_buf = filter->Data<uint8_t>().sliced(3, 0);
         auto bias_buf = bias->Data<int32_t>();
