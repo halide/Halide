@@ -445,7 +445,7 @@ struct halide_type_t {
     HALIDE_ATTRIBUTE_ALIGN(2)
     uint16_t lanes;
 
-#ifdef __cplusplus
+#if __cplusplus >= 201103L
     /** Construct a runtime representation of a Halide type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
@@ -547,7 +547,7 @@ struct halide_trace_event_t {
     /** The length of the coordinates array */
     int32_t dimensions;
 
-#ifdef __cplusplus
+#if __cplusplus >= 201103L
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
     HALIDE_ALWAYS_INLINE halide_trace_event_t() = default;
@@ -616,7 +616,7 @@ struct halide_trace_packet_t {
     int32_t dimensions;
     // @}
 
-#ifdef __cplusplus
+#if __cplusplus >= 201103L
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
     HALIDE_ALWAYS_INLINE halide_trace_packet_t() = default;
@@ -1368,7 +1368,7 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
 extern int halide_default_can_use_target_features(int count, const uint64_t *features);
 
 typedef struct halide_dimension_t {
-#ifdef __cplusplus
+#if __cplusplus >= 201103L
     int32_t min = 0, extent = 0, stride = 0;
 
     // Per-dimension flags. None are defined yet (This is reserved for future use).
@@ -1437,7 +1437,7 @@ typedef struct halide_buffer_t {
     /** Pads the buffer up to a multiple of 8 bytes */
     void *padding;
 
-#ifdef __cplusplus
+#if __cplusplus >= 201103L
     /** Convenience methods for accessing the flags */
     // @{
     HALIDE_ALWAYS_INLINE bool get_flag(halide_buffer_flags flag) const {
@@ -1888,7 +1888,7 @@ extern void halide_register_device_allocation_pool(struct halide_device_allocati
 }  // End extern "C"
 #endif
 
-#ifdef __cplusplus
+#if __cplusplus >= 201103L
 
 namespace {
 template<typename T>
@@ -1962,6 +1962,6 @@ HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int64_t>() {
     return halide_type_t(halide_type_int, 64);
 }
 
-#endif
+#endif  // __cplusplus >= 201103L
 
 #endif  // HALIDE_HALIDERUNTIME_H
