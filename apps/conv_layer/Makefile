@@ -32,6 +32,10 @@ $(BIN)/%/process_xt_cstub: process.cpp $(BIN)/%/conv_layer.halide_generated.cpp 
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -DSKIP_BENCHMARK -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -I${XTENSA_CSTUBS_ROOT} ${XTENSA_CSTUBS_ROOT}/libcstub.a
 
+$(BIN)/%/process_xt: process.cpp $(BIN)/%/conv_layer.halide_generated.cpp
+	@mkdir -p $(@D)
+	XTENSA_CORE=Aurora_vp2 xt-clang++ -DSKIP_BENCHMARK $(CXXFLAGS) -I$(BIN)/$* -Wall $^ $(HALIDE_DISTRIB_PATH)/lib/libHalideRuntime-xtensa.a -o $@ 
+
 run: $(BIN)/$(HL_TARGET)/process
 	@mkdir -p $(@D)
 	$^
@@ -39,6 +43,10 @@ run: $(BIN)/$(HL_TARGET)/process
 run_xt_cstub: $(BIN)/$(HL_TARGET)/process_xt_cstub
 	@mkdir -p $(@D)
 	$^
+
+run_xt: $(BIN)/$(HL_TARGET)/process_xt
+	@mkdir -p $(@D)
+	XTENSA_CORE=Aurora_vp2 xt-run $^
 
 clean:
 	rm -rf $(BIN)

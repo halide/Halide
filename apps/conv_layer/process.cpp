@@ -12,7 +12,7 @@ using namespace Halide::Tools;
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    const int N = 5, CI = 128, CO = 128, W = 100, H = 80;
+    const int N = 1, CI = 128, CO = 128, W = 25, H = 20;
 
     Buffer<float> input(CI, W + 2, H + 2, N);
     Buffer<float> filter(CO, 3, 3, CI);
@@ -44,6 +44,7 @@ int main(int argc, char **argv) {
 
     Buffer<float> output(CO, W, H, N);
 
+#ifndef SKIP_BENCHMARK
 // This is necessary to get the PTX compiler to do a good
 // job. TODO: This should be a scheduling directive or a runtime
 // function.
@@ -52,11 +53,12 @@ int main(int argc, char **argv) {
 #else
     setenv("HL_CUDA_JIT_MAX_REGISTERS", "256", 1);
 #endif
+#endif
 
     conv_layer(input, filter, bias, output);
 
-    // Timing code
 #ifndef SKIP_BENCHMARK
+    // Timing code
     // Manually-tuned version
     double min_t_manual = benchmark(10, 10, [&]() {
         conv_layer(input, filter, bias, output);
