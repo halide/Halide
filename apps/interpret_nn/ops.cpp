@@ -134,6 +134,21 @@ MinMax GetQuantizedMinMax(ActivationFunction activation, int zero_point, double 
     return {output_activation_min, output_activation_max};
 }
 
+MinMax GetOutputRange(ActivationFunction activation, Tensor *output) {
+    const int output_offset = output->Quantization().zero.at(0);
+    APP_CHECK(output_offset >= 0 && output_offset <= 255);
+
+    const float output_scale = output->Quantization().scale.at(0);
+
+    const auto output_range = GetQuantizedMinMax(activation, output_offset, output_scale);
+    // TODO: handle unexpected out-of-range data more cleanly.
+    APP_CHECK(output_range.min >= 0 && output_range.min <= 255);
+    APP_CHECK(output_range.max >= 0 && output_range.max <= 255);
+    APP_CHECK(output_range.min <= output_range.max);
+
+    return output_range;
+}
+
 }  // namespace
 
 Op::Bounds ElementwiseOp::InferBounds(const CropShape &crop) const {
@@ -215,11 +230,7 @@ void AddOp::Execute(const CropShape &crop) {
         // TODO: for SubOp:
         // mul_and_shift2.multiplier *= -1;
 
-        const auto output_range = GetQuantizedMinMax(activation_, output_offset, output_scale);
-        // TODO: handle unexpected out-of-range data more cleanly.
-        APP_CHECK(output_range.min >= 0 && output_range.min <= 255);
-        APP_CHECK(output_range.max >= 0 && output_range.max <= 255);
-        APP_CHECK(output_range.min <= output_range.max);
+        const auto output_range = GetOutputRange(activation_, output);
 
         // TODO: remove when debugged.
         // static bool dump = true;
@@ -266,13 +277,12 @@ void AveragePoolOp::Execute(const CropShape &crop) {
         auto input_buf = input->Data<uint8_t>();
         auto output_buf = output->Data<uint8_t>(crop);
 
-        int output_min = 0;
-        int output_max = 0;
+        const auto output_range = GetOutputRange(activation_, output);
 
         APP_CHECK(
             0 == AveragePoolUint8(input_buf, stride_[0], stride_[1],
                                   filter_size_[0], filter_size_[1],
-                                  output_min, output_max, output_buf));
+                                  output_range.min, output_range.max, output_buf));
     }
 }
 
@@ -346,13 +356,7 @@ void Conv2DOp::Execute(const CropShape &crop) {
         // ConvolutionUint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
-        const auto min_max = GetQuantizedMinMax(activation_, output_offset, output_scale);
-        const int output_min = min_max.min;
-        const int output_max = min_max.max;
-        // TODO: handle unexpected out-of-range data more cleanly.
-        APP_CHECK(output_min >= 0 && output_min <= 255);
-        APP_CHECK(output_max >= 0 && output_max <= 255);
-        APP_CHECK(output_min <= output_max);
+        const auto output_range = GetOutputRange(activation_, output);
 
         if (padding_ == Padding::Same) {
             const int input_width = input_buf.dim(1).extent();
@@ -378,7 +382,7 @@ void Conv2DOp::Execute(const CropShape &crop) {
                                   (uint8_t)filter_offset, stride_[0], stride_[1],
                                   dilation_[0], dilation_[1], output_multiplier,
                                   output_shift, (uint8_t)output_offset,
-                                  output_min, output_max, output_buf));
+                                  output_range.min, output_range.max, output_buf));
     }
 }
 
@@ -458,13 +462,7 @@ void DepthwiseConv2DOp::Execute(const CropShape &crop) {
         // DepthwiseConvolutionUint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
-        const auto min_max = GetQuantizedMinMax(activation_, output_offset, output_scale);
-        const int output_min = min_max.min;
-        const int output_max = min_max.max;
-        // TODO: handle unexpected out-of-range data more cleanly.
-        APP_CHECK(output_min >= 0 && output_min <= 255);
-        APP_CHECK(output_max >= 0 && output_max <= 255);
-        APP_CHECK(output_min <= output_max);
+        const auto output_range = GetOutputRange(activation_, output);
 
         // batches must match
         APP_CHECK(input_buf.dim(3).extent() == output_buf.dim(3).extent());
@@ -496,7 +494,7 @@ void DepthwiseConv2DOp::Execute(const CropShape &crop) {
                      input_buf, filter_buf, bias_buf, depth_multiplier,
                      (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
                      dilation_[0], dilation_[1], output_multiplier, output_shift,
-                     (uint8_t)output_offset, (uint8_t)output_min, (uint8_t)output_max, output_buf));
+                     (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
     }
 }
 
@@ -509,13 +507,12 @@ void MaxPoolOp::Execute(const CropShape &crop) {
         auto input_buf = input->Data<uint8_t>();
         auto output_buf = output->Data<uint8_t>(crop);
 
-        int output_min = 0;
-        int output_max = 0;
+        const auto output_range = GetOutputRange(activation_, output);
 
         APP_CHECK(
             0 == MaxPoolUint8(input_buf, stride_[0], stride_[1],
                               filter_size_[0], filter_size_[1],
-                              output_min, output_max, output_buf));
+                              output_range.min, output_range.max, output_buf));
     }
 }
 
