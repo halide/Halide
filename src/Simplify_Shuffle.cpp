@@ -54,7 +54,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
             if (load && load->name == first_load->name) {
                 load_predicates.push_back(load->predicate);
                 load_indices.push_back(load->index);
-                unpredicated = unpredicated && is_one(load->predicate);
+                unpredicated = unpredicated && is_const_one(load->predicate);
             } else {
                 break;
             }
@@ -98,7 +98,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
             if (const Broadcast *b2 = new_vectors[i].as<Broadcast>()) {
                 Expr check = mutate(b1->value - b2->value, nullptr);
-                can_collapse &= is_zero(check);
+                can_collapse &= is_const_zero(check);
             } else {
                 can_collapse = false;
             }
@@ -130,7 +130,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 const Broadcast *b = diff.as<Broadcast>();
                 if (b) {
                     Expr check = mutate(b->value * terms - r->stride, nullptr);
-                    can_collapse &= is_zero(check);
+                    can_collapse &= is_const_zero(check);
                 } else {
                     can_collapse = false;
                 }
@@ -194,7 +194,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 const Broadcast *b = diff.as<Broadcast>();
                 if (b) {
                     Expr check = mutate(b->value - r->stride * new_vectors[i - 1].type().lanes(), nullptr);
-                    can_collapse &= is_zero(check);
+                    can_collapse &= is_const_zero(check);
                 } else {
                     can_collapse = false;
                 }
@@ -215,7 +215,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 }
 
                 Expr check = mutate(new_vectors[i] - new_vectors[i - 1] - stride, nullptr);
-                if (!is_zero(check)) {
+                if (!is_const_zero(check)) {
                     can_collapse = false;
                 }
             }

@@ -38,15 +38,15 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             << "An explicit tail strategy should exist at this point\n";
 
         if ((iter != dim_extent_alignment.end()) &&
-            is_zero(simplify(iter->second % split.factor))) {
+            is_const_zero(simplify(iter->second % split.factor))) {
             // We have proved that the split factor divides the
             // old extent. No need to adjust the base or add an if
             // statement.
             dim_extent_alignment[split.outer] = iter->second / split.factor;
-        } else if (is_negative_const(split.factor) || is_zero(split.factor)) {
+        } else if (is_negative_const(split.factor) || is_const_zero(split.factor)) {
             user_error << "Can't split " << split.old_var << " by " << split.factor
                        << ". Split factors must be strictly positive\n";
-        } else if (is_one(split.factor)) {
+        } else if (is_const_one(split.factor)) {
             // The split factor trivially divides the old extent,
             // but we know nothing new about the outer dimension.
         } else if (tail == TailStrategy::GuardWithIf) {
