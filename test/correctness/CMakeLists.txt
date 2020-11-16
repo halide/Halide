@@ -51,6 +51,8 @@ tests(GROUPS correctness
       compile_to_bitcode.cpp
       compile_to_lowered_stmt.cpp
       compile_to_multitarget.cpp
+      complexfunc.cpp
+      complexfunc_tuple.cpp
       compute_at_reordered_update_stage.cpp
       compute_at_split_rvar.cpp
       compute_inside_guard.cpp
@@ -386,4 +388,3 @@ set_target_properties(correctness_async
                       correctness_sliding_window
                       correctness_storage_folding
                       PROPERTIES ENABLE_EXPORTS TRUE)
-

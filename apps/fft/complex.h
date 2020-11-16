@@ -106,6 +106,9 @@ inline ComplexExpr operator/(ComplexExpr a, Halide::Expr b) {
     return ComplexExpr(re(a) / b, im(a) / b);
 }
 
+inline ComplexExpr exp(const ComplexExpr &z) {
+    return ComplexExpr(Halide::exp(re(z)) * Halide::cos(im(z)), Halide::exp(re(z)) * Halide::sin(im(z)));
+}
 // Compute exp(j*x)
 inline ComplexExpr expj(Halide::Expr x) {
     return ComplexExpr(Halide::cos(x), Halide::sin(x));
