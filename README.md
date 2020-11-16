@@ -542,9 +542,7 @@ LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib
 
 To build the example for Android, first ensure that you have Android NDK r19b or
 later installed, and the ANDROID_NDK_ROOT environment variable points to it.
-(We no longer support older versions, and it's no longer necessary to use
-the make-standalone-toolchain tool.) Note that Qualcomm Hexagon SDK v3.5.2
-includes Android NDK r19c, which is fine.
+(Note that Qualcomm Hexagon SDK v3.5.2 includes Android NDK r19c, which is fine.)
 
 Now build and run the blur example using the script to run it on device:
 
