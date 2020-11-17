@@ -176,8 +176,8 @@ Op::Bounds PoolOp::InferBounds(const CropShape &crop) const {
         input_crop[dim].second *= stride_[dim - 1];
     }
 
-    input_crop[1].second += filter_size_[1];
-    input_crop[2].second += filter_size_[2];
+    input_crop[1].second += filter_size_[0];
+    input_crop[2].second += filter_size_[1];
     input_crop = Intersect(input_crop, WithoutStrides(Input()->Shape()));
 
     Bounds result;
@@ -296,15 +296,38 @@ Op::Bounds Conv2DOp::InferBounds(const CropShape &crop) const {
     }
 
     input_crop[0] = filter_shape[3];
-    input_crop[1].second += dilation_[0] * filter_shape[1].second;
-    input_crop[2].second += dilation_[1] * filter_shape[2].second;
+    input_crop[1].second += dilation_[0] * (filter_shape[1].second - 1);
+    input_crop[2].second += dilation_[1] * (filter_shape[2].second - 1);
     input_crop = Intersect(input_crop, WithoutStrides(Input()->Shape()));
+
+    if (padding_ == Padding::Same) {
+        const int input_width = Input()->Dim(1).extent;
+        const int input_height = Input()->Dim(2).extent;
+        const int filter_width = Filter()->Dim(1).extent;
+        const int filter_height = Filter()->Dim(2).extent;
+        const int output_width = Output()->Dim(1).extent;
+        const int output_height = Output()->Dim(2).extent;
+
+        const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
+        const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
+
+        const int pad_width = std::max(0,
+                                       ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
+        const int pad_height = std::max(0,
+                                        ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
+
+        input_crop[1].first += pad_width;
+        input_crop[2].first += pad_height;
+    }
+
+    std::cout << stride_[0] << ", " << stride_[1] << ", " << dilation_[0] << ", " << dilation_[1] << ", " << filter_shape << ": " << crop << " -> " << input_crop << std::endl;
 
     Bounds result;
     result.inputs.emplace_back(input_crop);
     result.inputs.emplace_back(std::move(filter_shape));
     result.inputs.emplace_back(WithoutStrides(Bias()->Shape()));
     result.outputs = {crop};
+
     return result;
 }
 
@@ -398,9 +421,29 @@ Op::Bounds DepthwiseConv2DOp::InferBounds(const CropShape &crop) const {
         input_crop[dim].second *= stride_[dim - 1];
     }
 
-    input_crop[1].second += dilation_[0] * filter_shape[1].second;
-    input_crop[2].second += dilation_[1] * filter_shape[2].second;
+    input_crop[1].second += dilation_[0] * (filter_shape[1].second - 1);
+    input_crop[2].second += dilation_[1] * (filter_shape[2].second - 1);
     input_crop = Intersect(input_crop, WithoutStrides(Input()->Shape()));
+
+    if (padding_ == Padding::Same) {
+        const int input_width = Input()->Dim(1).extent;
+        const int input_height = Input()->Dim(2).extent;
+        const int filter_width = Filter()->Dim(1).extent;
+        const int filter_height = Filter()->Dim(2).extent;
+        const int output_width = Output()->Dim(1).extent;
+        const int output_height = Output()->Dim(2).extent;
+
+        const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
+        const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
+
+        const int pad_width = std::max(0,
+                                       ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
+        const int pad_height = std::max(0,
+                                        ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
+
+        input_crop[1].first += pad_width;
+        input_crop[2].first += pad_height;
+    }
 
     Bounds result;
     result.inputs.emplace_back(input_crop);
