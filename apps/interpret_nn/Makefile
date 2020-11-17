@@ -2,8 +2,19 @@ include ../support/Makefile.inc
 
 .PHONY: build clean test
 
-# Note: this requires that you have flatbuffers installed locally.
-# e.g. brew install flatbuffers
+# Note: this requires that you have the flatbuffers `flatc` tool available on
+# the host system; this is usually easy to install via e.g. brew install flatbuffers
+FLATC ?= flatc
+
+# It also requires the flatbuffers include files be in the C++ include path,
+# but -- notably -- does NOT require libflatbuffers.a to be compiled for the
+# target, so you don't need to crosscompile for (e.g.) Android. The includes
+# will generally be installed by the same thing that installs flatc, but may
+# not be in the default include path for the crosscompiler, so we need to
+# explicitly point it correctly below:
+#
+# This is the location that brew installs on my Mac.
+FLATBUFFERS_INCLUDE_PATH ?= /usr/local/Cellar/flatbuffers/1.12.0/include
 
 build: $(BIN)/$(HL_TARGET)/benchmark \
 	$(BIN)/$(HL_TARGET)/convolution_test \
@@ -78,19 +89,19 @@ OPS_HALIDE = \
 
 $(BIN)/%/interpreter.o: interpreter.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -c $< -o $@
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
 
 $(BIN)/%/model.o: model.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -c $< -o $@
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
 
 $(BIN)/%/ops.o: ops.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -c $< -o $@
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
 
 $(BIN)/%/tflite_parser.o: tflite_parser.cpp $(BIN)/%/tflite_schema_generated.h
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -c $< -o $@
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(FLATBUFFERS_INCLUDE_PATH) -I$(BIN)/$* -c $< -o $@
 
 TFLITE_TAG ?= master
 
@@ -103,12 +114,12 @@ $(BIN)/%/tflite_schema.fbs:
 # which is all tflite_parser needs.
 $(BIN)/%/tflite_schema_generated.h: $(BIN)/%/tflite_schema.fbs
 	@mkdir -p $(@D)
-	flatc --cpp --no-includes -o $(BIN)/$* $<
+	$(FLATC) --cpp --no-includes -o $(BIN)/$* $<
 
 # This include extra API needed only by utilities that do flatbuffer surgery (eg tflite_exploder)
 $(BIN)/%/tflite_schema_direct_generated.h: $(BIN)/%/tflite_schema.fbs
 	@mkdir -p $(@D)
-	flatc --cpp --no-includes --gen-object-api --filename-suffix _direct_generated -o $(BIN)/$* $<
+	$(FLATC) --cpp --no-includes --gen-object-api --filename-suffix _direct_generated -o $(BIN)/$* $<
 
 INTERPRETER_DEPS = \
 	$(BIN)/%/interpreter.o \
@@ -119,15 +130,15 @@ INTERPRETER_DEPS = \
 
 $(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 $(BIN)/%/common_reference.o: halide/common_reference.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -c $< -o $@
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
 
 $(BIN)/%/convolution_test: halide/convolution_test.cpp $(BIN)/%/common_reference.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 test_convolution: $(BIN)/$(HL_TARGET)/convolution_test
 	$<
@@ -148,5 +159,5 @@ $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/%/tflite_schema_direct_gene
 
 $(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(BIN)/%/interpreter.o $(BIN)/%/model.o $(BIN)/%/tflite_parser.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -I$(TENSORFLOW_INCLUDES) $(filter %.cpp %.o %.a,$^) $(TFLITE_STATIC_LIB) -o $@ $(LDFLAGS)
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -I$(TENSORFLOW_INCLUDES) $(filter %.cpp %.o %.a,$^) $(TFLITE_STATIC_LIB) -o $@ $(LDFLAGS-$*)
 
