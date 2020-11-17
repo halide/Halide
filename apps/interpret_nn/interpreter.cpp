@@ -20,6 +20,50 @@ bool IsEmpty(const CropShape& a) {
     return false;
 }
 
+bool IsUnionExact(const CropShape& a, const CropShape& b) {
+    APP_CHECK(a.size() == b.size()) << a.size() << " " << b.size();
+    int different_dims = 0;
+    int dim = -1;
+    for (int i = 0; i < (int)a.size(); i++) {
+        if (a[i] != b[i]) {
+            different_dims++;
+            dim = i;
+        }
+    }
+    if (different_dims == 0) {
+        // The shapes are the same, the union is trivial.
+        return true;
+    } else if (different_dims == 1) {
+        // One dim is different. We might be able to produce an exact union.
+        int min_a = a[dim].first;
+        int min_b = b[dim].first;
+        int max_a = min_a + a[dim].second - 1;
+        int max_b = min_b + b[dim].second - 1;
+        return !(min_a > max_b + 1 || min_b > max_a + 1);
+    } else {
+        // More than one dim is different, the union is not a rectangle.
+        return false;
+    }
+}
+
+std::pair<int, int> Union(const std::pair<int, int>& a, const std::pair<int, int>& b) {
+    std::pair<int, int> result;
+    result.first = std::min(a.first, b.first);
+    int max = std::max(a.first + a.second, b.first + b.second) - 1;
+    result.second = max - result.first + 1;
+    return result;
+}
+
+CropShape Union(const CropShape& a, const CropShape& b) {
+    APP_CHECK(a.size() == b.size()) << a.size() << " " << b.size();
+    CropShape result;
+    result.resize(a.size());
+    for (int i = 0; i < (int)a.size(); i++) {
+        result[i] = Union(a[i], b[i]);
+    }
+    return result;
+}
+
 using ScheduledOpList = std::list<ScheduledOp>;
 using ScheduledOpVector = std::vector<ScheduledOp>;
 
@@ -135,8 +179,12 @@ bool CanExecute(const ScheduledOpVector &done, const ScheduledOp &op) {
 
 void GreedySchedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOpList::iterator op) {
     APP_CHECK(!todo.empty());
-    // Pick an op to start with.
-    done.emplace_back(std::move(*op));
+    if (done.empty() || done.back().op != op->op || !IsUnionExact(done.back().crop, op->crop)) {
+        done.emplace_back(std::move(*op));
+    } else {
+        // The last op and the current op are the same and can be merged.
+        done.back().crop = Union(done.back().crop, op->crop);
+    }
     todo.erase(op);
 
     const ScheduledOp &did = done.back();
