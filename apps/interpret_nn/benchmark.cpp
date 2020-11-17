@@ -19,9 +19,6 @@ void RunBenchmark(const std::string &filename, bool verbose) {
     if (verbose) {
         model.Dump(std::cout);
     }
-    for (auto &i : model.tensors) {
-        i->Allocate();
-    }
 
     ScheduleOptions options;
     options.verbose = verbose;

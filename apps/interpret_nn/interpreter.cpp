@@ -8,98 +8,197 @@ namespace interpret_nn {
 
 namespace {
 
-const std::pair<int, int> FindEdge(const Op *from, const Op *to) {
-    for (int i = 0; i < from->OutputCount(); i++) {
-        const Tensor *output_i = from->Output(i);
-        for (int j = 0; j < to->InputCount(); j++) {
-            if (output_i == to->Input(j)) {
-                return {i, j};
-            }
+bool IsEmpty(const CropShape& a) {
+    if (a.empty()) {
+        return true;
+    }
+    for (const auto& i : a) {
+        if (i.second <= 0) {
+            return true;
         }
     }
-    return {-1, -1};
+    return false;
 }
 
-int64_t TotalExtent(const CropShape &s) {
-    int64_t result = 1;
-    for (auto i : s) {
-        result *= i.second;
+using ScheduledOpList = std::list<ScheduledOp>;
+using ScheduledOpVector = std::vector<ScheduledOp>;
+
+int Produces(const Op *op, const Tensor *t) {
+    for (int i = 0; i < op->OutputCount(); i++) {
+        if (op->Output(i) == t) {
+            return i;
+        }
     }
-    return result;
+    return -1;
 }
 
-float ShapeDistance(const CropShape &a, const CropShape &b) {
-    APP_CHECK(a.size() == b.size());
-    float size_cost = std::log(TotalExtent(a) + TotalExtent(b));
-    float max_distance = 0.0f;
-    for (int d = 0; d < (int)a.size(); d++) {
-        // TODO: This could be more precise, and also maybe should consider strides.
-        int a_center = a[d].first + a[d].second / 2;
-        int b_center = b[d].first + b[d].second / 2;
-        max_distance = std::max<float>(max_distance, std::abs(a_center - b_center));
+int Consumes(const Op *op, const Tensor *t) {
+    for (int i = 0; i < op->InputCount(); i++) {
+        if (op->Input(i) == t) {
+            return i;
+        }
     }
-
-    return max_distance * size_cost;
+    return -1;
 }
 
-bool IsIntersectionEmpty(std::pair<int, int> a, std::pair<int, int> b) {
-    int max_a = a.first + a.second - 1;
-    int max_b = b.first + b.second - 1;
-    int min = std::max(a.first, b.first);
-    int max = std::min(max_a, max_b);
-    return max <= min;
-}
-
-bool IsIntersectionEmpty(const CropShape &a, const CropShape &b) {
-    bool result = true;
+// Subtract a from b if possible.
+bool Subtract(CropShape& a, const CropShape& b) {
+    APP_CHECK(a.size() == b.size()) << a.size() << " " << b.size();
+    int different_dims = 0;
+    int dim = -1;
     for (int i = 0; i < (int)a.size(); i++) {
-        result = result && IsIntersectionEmpty(a[i], b[i]);
+        if (a[i] != b[i]) {
+            different_dims++;
+            dim = i;
+        }
     }
-    return result;
+    if (different_dims == 0) {
+        // The shapes are the same. We can just clear a and return.
+        a.clear();
+        return true;
+    } else if (different_dims == 1) {
+        // One dim is different. We might be able to subtract b from a.
+        int min_a = a[dim].first;
+        int min_b = b[dim].first;
+        int max_a = min_a + a[dim].second - 1;
+        int max_b = min_b + b[dim].second - 1;
+        //std::cout << "a: [" << min_a << " " << max_a << "]" << std::endl;
+        //std::cout << "b: [" << min_b << " " << max_b << "]" << std::endl;
+        if (min_a <= min_b) {
+            // b doesn't remove the min of a.
+            if (max_b >= max_a) {
+                if (min_b - 1 >= max_a)
+                    return false;
+                // But it does remove the max of a.
+                max_a = std::min(max_a, min_b - 1);
+            } else {
+                // b doesn't remove the min of a, or the max of a, so we can't subtract anything.
+                return false;
+            }
+        } else {
+            // b does remove the min of a.
+            if (max_b <= max_a) {
+                if (max_b + 1 <= min_a)
+                    return false;
+                min_a = std::max(min_a, max_b + 1);
+            } else {
+                if (min_a - 1 >= max_a)
+                    return false;
+                // b removes both the min and max. The result is empty.
+                max_a = std::min(max_a, min_a - 1);
+            }
+        }
+        a[dim].first = min_a;
+        a[dim].second = max_a - min_a + 1;
+        return true;
+    } else {
+        // More than one dim is different, the result is not a rectangle.
+        return false;
+    }
+}
+
+bool SubtractDone(CropShape& shape, const Tensor *t, const ScheduledOpVector &done) {
+    bool trimmed = false;
+    for (ScheduledOpVector::const_iterator i = done.begin(); i != done.end() && !IsEmpty(shape); i++) {
+        int o = Produces(i->op, t);
+        if (o >= 0) {
+            Op::Bounds bounds = i->op->InferBounds(i->crop);
+            const CropShape& produced = bounds.outputs[o];
+            trimmed = trimmed || Subtract(shape, produced);
+        }
+    }
+    return trimmed;
+}
+
+bool CanExecute(const ScheduledOpVector &done, const ScheduledOp &op) {
+    // Check if all of the producers needed by op are produced.
+    Op::Bounds bounds = op.op->InferBounds(op.crop);
+    // We need all of the input rectangles to be covered in the done list.
+    for (int i = 0; i < op.op->InputCount(); i++) {
+        const Tensor *input = op.op->Input(i);
+        if (input->IsAllocated())
+            continue;
+        CropShape required = bounds.inputs[i];
+
+        while (!IsEmpty(required)) {
+            if (!SubtractDone(required, input, done))
+                break;
+        }
+
+        if (!IsEmpty(required)) {
+            // We needed more of this shape.
+            return false;
+        }
+    }
+    return true;
+}
+
+void GreedySchedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOpList::iterator op) {
+    APP_CHECK(!todo.empty());
+    // Pick an op to start with.
+    done.emplace_back(std::move(*op));
+    todo.erase(op);
+
+    const ScheduledOp &did = done.back();
+
+    bool scheduled = false;
+    // Try to execute all possible consumers first.
+    for (int i = 0; i < did.op->OutputCount(); i++) {
+        const Tensor *next = did.op->Output(i);
+
+        // Try to schedule each output.
+        ScheduledOpList exec;
+        for (ScheduledOpList::iterator j = todo.begin(); j != todo.end();) {
+            if (Consumes(j->op, next) >= 0 && CanExecute(done, *j)) {
+                // This next op is executable. Move it to the front of the list.
+                exec.emplace_back(std::move(*j));
+                j = todo.erase(j);
+                scheduled = true;
+            } else {
+                ++j;
+            }
+        }
+        todo.insert(todo.begin(), exec.begin(), exec.end());
+    }
+
+    if (scheduled) {
+        return;
+    }
+
+    // If failed, try to schedule producers.
+    for (int i = 0; i < did.op->InputCount(); i++) {
+        const Tensor *next = did.op->Input(i);
+
+        // Try to schedule each input.
+        ScheduledOpList exec;
+        for (ScheduledOpList::iterator j = todo.begin(); j != todo.end();) {
+            if (Produces(j->op, next) >= 0 && CanExecute(done, *j)) {
+                // This next op is executable. Move it to the front of the list.
+                exec.emplace_front(std::move(*j));
+                j = todo.erase(j);
+                scheduled = true;
+            } else {
+                ++j;
+            }
+        }
+        todo.insert(todo.begin(), exec.begin(), exec.end());
+    }
+
+    if (scheduled) {
+        return;
+    }
+
+    // If failed, try to schedule *one* sibling!
+    for (ScheduledOpList::iterator i = todo.begin(); i != todo.end(); ++i) {
+        if (i->op == did.op && CanExecute(done, *i)) {
+            todo.emplace_front(std::move(*i));
+            todo.erase(i);
+            return;
+        }
+    }
 }
 
 }  // namespace
-
-bool ModelInterpreter::CanReorder(const ModelInterpreter::ScheduledOp &a,
-                                  const ModelInterpreter::ScheduledOp &b) {
-    int output_index, input_index;
-    std::tie(output_index, input_index) = FindEdge(a.op, b.op);
-    if (output_index < 0) {
-        // The ops aren't connected.
-        return true;
-    }
-
-    // The ops are connected, we need to make sure that the bounds of b don't
-    // depend on a.
-    Op::Bounds from_bounds = a.op->InferBounds(a.crop);
-    Op::Bounds to_bounds = b.op->InferBounds(b.crop);
-
-    const CropShape &from_shape = from_bounds.outputs[output_index];
-    const CropShape &to_shape = to_bounds.inputs[input_index];
-    return IsIntersectionEmpty(from_shape, to_shape);
-}
-
-float ModelInterpreter::Distance(const ModelInterpreter::ScheduledOp &from,
-                                 const ModelInterpreter::ScheduledOp &to) {
-    if (from.op == to.op) {
-        //return ShapeDistance(from.crop, to.crop);
-        return std::numeric_limits<float>::infinity();
-    } else {
-        int output_index, input_index;
-        std::tie(output_index, input_index) = FindEdge(from.op, to.op);
-        if (output_index < 0) {
-            return std::numeric_limits<float>::infinity();
-        }
-
-        Op::Bounds from_bounds = from.op->InferBounds(from.crop);
-        Op::Bounds to_bounds = to.op->InferBounds(to.crop);
-
-        const CropShape &from_shape = from_bounds.outputs[output_index];
-        const CropShape &to_shape = to_bounds.inputs[input_index];
-
-        return ShapeDistance(from_shape, to_shape);
-    }
-}
 
 void ModelInterpreter::Schedule(ScheduleOptions options) {
     schedule_.clear();
@@ -113,8 +212,10 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
 
     if (options.verbose) {
         std::cout << "Before: " << std::endl;
-        for (auto i : schedule) {
-            std::cout << i.crop[2].first << " " << i.crop[2].second << " ";
+        for (const auto& i : schedule) {
+            if (i.crop.size() >= 3) {
+                std::cout << i.crop[2].first << " " << i.crop[2].second << " ";
+            }
             i.op->Dump(std::cout);
         }
     }
@@ -143,43 +244,25 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
 
     schedule_.reserve(schedule.size());
     while (!schedule.empty()) {
-        // Pick an op to start with.
-        schedule_.emplace_back(std::move(schedule.front()));
-        schedule.pop_front();
-
-        // TODO: Actually try to schedule.
-        continue;
-
-        // Sort the remainder of the ops by the distance from the previously
-        // scheduled op.
-    resort:
-        const ScheduledOp &previous = schedule_.back();
-        schedule.sort([&](const ScheduledOp &a, const ScheduledOp &b) {
-            // TODO: Tabulate the distances first to avoid recomputing them.
-            return Distance(previous, a) < Distance(previous, b);
-        });
-
-        // Find the first op that is scheduleable after previous.
-        for (std::list<ScheduledOp>::iterator i = schedule.begin();
-             i != schedule.end(); i++) {
-            if (std::all_of(schedule.begin(), i, [&](const ScheduledOp &op) {
-                    return CanReorder(op, *i);
-                })) {
-                schedule_.emplace_back(std::move(*i));
-                schedule.erase(i);
-                goto resort;
-            }
-        }
+        auto i = schedule.begin();
+        GreedySchedule(schedule_, schedule, i);
     }
 
     if (options.verbose) {
         std::cout << "After: " << std::endl;
-        for (auto i : schedule_) {
+        for (const auto& i : schedule_) {
             if (i.crop.size() >= 3) {
                 std::cout << i.crop[2].first << " " << i.crop[2].second << " ";
             }
             i.op->Dump(std::cout);
         }
+    }
+
+    // Allocate the needed buffers for the tensors.
+    // TODO: Identify the lifetimes and fold storage.
+    // TODO: Maybe do this during execute to reduce idle memory?
+    for (auto &i : model_.tensors) {
+        i->Allocate();
     }
 }
 

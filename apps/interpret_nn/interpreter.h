@@ -21,6 +21,12 @@ struct ScheduleOptions {
     bool verbose = false;
 };
 
+// The schedule is a list of ops with crops to run the ops on.
+struct ScheduledOp {
+    Op *op;
+    CropShape crop;
+};
+
 class ModelInterpreter {
     Model model_;
 
@@ -28,20 +34,7 @@ class ModelInterpreter {
     // Lazily built when needed.
     std::map<std::string, size_t> tensor_names_;
 
-    // The schedule is a list of ops with crops to run the ops on.
-    struct ScheduledOp {
-        Op *op;
-        CropShape crop;
-    };
     std::vector<ScheduledOp> schedule_;
-
-    // Can ops a and b be reordered with respect to each other?
-    static bool CanReorder(const ScheduledOp &a, const ScheduledOp &b);
-
-    // Compute the cost of the memory accesses between a producer from and
-    // a consumer to. The cost is related to the size of the memory accessed,
-    // and the distance between the regions of memory accessed.
-    static float Distance(const ScheduledOp &from, const ScheduledOp &to);
 
     void ScheduleNaive();
     void Schedule(ScheduleOptions options);
