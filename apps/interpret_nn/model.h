@@ -21,6 +21,11 @@ inline std::ostream &operator<<(std::ostream &s,
     return s << "{" << dim.min << ", " << dim.extent << ", " << dim.stride << "}";
 }
 
+inline std::ostream &operator<<(std::ostream &s,
+                                const std::pair<int, int> &dim) {
+    return s << "{" << dim.first << ", " << dim.second << "}";
+}
+
 template<typename T>
 inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {
     s << "{";
@@ -159,6 +164,9 @@ public:
     }
     const std::vector<halide_dimension_t> &Shape() const {
         return shape_;
+    }
+    const halide_dimension_t &Dim(int i) const {
+        return shape_[i];
     }
     int Rank() const {
         return shape_.size();
