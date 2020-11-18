@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "app_util.h"
+#include "halide_benchmark.h"
 #include "interpreter.h"
 #include "tflite_parser.h"
 
@@ -22,15 +23,8 @@ void RunBenchmark(const std::string &filename, const ScheduleOptions &options) {
 
     ModelInterpreter interpreter(std::move(model), options);
 
-    auto begin = std::chrono::high_resolution_clock::now();
-    auto end = begin;
-    int loops = 0;
-    do {
-        interpreter.execute();
-        loops++;
-        end = std::chrono::high_resolution_clock::now();
-    } while (end - begin < std::chrono::seconds(1));
-    std::cout << "Time: " << std::chrono::duration_cast<std::chrono::microseconds>((end - begin) / loops).count() << " us" << std::endl;
+    auto result = Halide::Tools::benchmark([&]() { interpreter.execute(); });
+    std::cout << "Time: " << result.wall_time * 1e6 << " us" << std::endl;
 
     if (options.verbose) {
         std::cout << "Outputs:\n";
