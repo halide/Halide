@@ -158,6 +158,19 @@ public:
             input, output, stride, filter_size, padding, activation);
     }
 
+    std::unique_ptr<Op> ParseConcatenation(const tflite::Operator *op) {
+        const tflite::ConcatenationOptions *options =
+            op->builtin_options_as_ConcatenationOptions();
+        ActivationFunction activation =
+            ParseActivationFunction(options->fused_activation_function());
+        std::vector<Tensor *> inputs;
+        for (auto i = op->inputs()->cbegin(); i != op->inputs()->cend(); ++i) {
+            inputs.push_back(result_.tensors[*i].get());
+        }
+        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        return make_unique<ConcatenationOp>(inputs, output, options->axis(), activation);
+    }
+
     std::unique_ptr<Op> ParseConv2D(const tflite::Operator *op) {
         const tflite::Conv2DOptions *options =
             op->builtin_options_as_Conv2DOptions();
@@ -234,6 +247,8 @@ public:
             return ParseAdd(op);
         case tflite::BuiltinOperator_AVERAGE_POOL_2D:
             return ParseAveragePool2D(op);
+        case tflite::BuiltinOperator_CONCATENATION:
+            return ParseConcatenation(op);
         case tflite::BuiltinOperator_CONV_2D:
             return ParseConv2D(op);
         case tflite::BuiltinOperator_DEPTHWISE_CONV_2D:

@@ -97,6 +97,34 @@ public:
     }
 };
 
+class ConcatenationOp : public Op {
+    int axis_;
+    ActivationFunction activation_;
+
+public:
+    ConcatenationOp(std::vector<Tensor *> inputs, Tensor *output,
+                    int axis, ActivationFunction activation)
+        : Op(std::move(inputs), {output}), axis_(axis), activation_(activation) {}
+
+    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+        std::vector<Tensor *> inputs;
+        for (int i = 0; i < InputCount(); i++) {
+            inputs.push_back(Map(map, Input(i)));
+        }
+        return make_unique<ConcatenationOp>(
+            inputs, Map(map, Output()), axis_, activation_);
+    }
+
+    Bounds InferBounds(const Box &crop) const;
+    std::vector<Box> Split(const Box &crop) const;
+
+    void Execute(const Box &crop);
+
+    void Dump(std::ostream &os) const {
+        os << "  Concatenation " << Output()->Name() << std::endl;
+    }
+};
+
 class Conv2DOp : public Op {
     std::vector<int> stride_;
     std::vector<int> dilation_;

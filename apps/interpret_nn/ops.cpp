@@ -243,6 +243,47 @@ void AveragePoolOp::Execute(const Box &crop) {
     }
 }
 
+Op::Bounds ConcatenationOp::InferBounds(const Box &crop) const {
+    // We need everything from the concatenated dimension, everything else
+    // is the same as the crop.
+    // TODO: It's possible that if the concatenated dimension is cropped
+    // from the output, we could reduce the bounds required of some of the
+    // inputs.
+    Bounds result;
+    for (int i = 0; i < InputCount(); i++) {
+        result.inputs.emplace_back(crop);
+        result.inputs.back()[axis_] = Input(i)->Dim(axis_);
+    }
+    result.outputs.emplace_back(crop);
+    result.outputs.back()[axis_] = Output()->Dim(axis_);
+    return result;
+}
+
+std::vector<Box> ConcatenationOp::Split(const Box &crop) const {
+    assert(axis_ != 2);
+    // Split this into individual lines, so it can get re-fused with any
+    // alignment.
+    const int kSplit = 1;
+    return SplitCrop(crop, 2, kSplit);
+}
+
+void ConcatenationOp::Execute(const Box &crop) {
+    Tensor *output = Output();
+
+    auto output_buf = output->Data<void>(crop);
+
+    int output_i = output_buf.dim(axis_).min();
+    for (int i = 0; i < InputCount(); i++) {
+        HalideBuffer<void> input_buf = Input(i)->Data<void>(crop);
+        for (int j = input_buf.dim(axis_).min(); j <= input_buf.dim(axis_).max(); j++) {
+            // TODO: Maybe we could just copy whole buffers?
+            HalideBuffer<void> input_j = input_buf.sliced(axis_, j);
+            HalideBuffer<void> output_j = output_buf.sliced(axis_, output_i++);
+            output_j.copy_from(input_j);
+        }
+    }
+}
+
 Op::Bounds Conv2DOp::InferBounds(const Box &crop) const {
     Box input_crop = crop;
     Box filter_shape = WithoutStrides(Filter()->Shape());
@@ -484,7 +525,7 @@ void DepthwiseConv2DOp::Execute(const Box &crop) {
             input_buf.translate({0, pad_width, pad_height, 0});
         }
 
-        if (depth_multiplier_ >= input_buf.dim(0).extent()) {
+        if (depth_multiplier_ >= output_buf.dim(0).extent()) {
             APP_CHECK(
                 0 == DepthwiseConvolutionUint8Broadcast(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
