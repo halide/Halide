@@ -38,7 +38,7 @@ int GetRecommendedAccumulators(const Target &target) {
         return 24;
     } else {
         // 16 registers total.
-        return 16;
+        return 8;
     }
 }
 
