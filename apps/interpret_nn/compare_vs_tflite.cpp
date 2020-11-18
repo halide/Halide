@@ -171,7 +171,7 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
 
     // ----- Run in Halide
     {
-        Model model = ParseTfLiteModel(tf_model);
+        Model model = parse_tflite_model(tf_model);
         if (verbose) {
             model.dump(std::cout);
         }
