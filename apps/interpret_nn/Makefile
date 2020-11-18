@@ -71,6 +71,10 @@ $(BIN)/%/DepthwiseConvolutionUint8.a: $(GENERATOR_BIN)/depthwise_convolution.gen
 	@mkdir -p $(@D)
 	$< -g DepthwiseConvolution -f interpret_nn::DepthwiseConvolutionUint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
 
+$(BIN)/%/DepthwiseConvolutionUint8Broadcast.a: $(GENERATOR_BIN)/depthwise_convolution.generator
+	@mkdir -p $(@D)
+	$< -g DepthwiseConvolution broadcast_channels=true -f interpret_nn::DepthwiseConvolutionUint8Broadcast -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+
 $(BIN)/%/MaxPoolUint8.a: $(GENERATOR_BIN)/max_pool.generator
 	@mkdir -p $(@D)
 	$< -g MaxPool -f interpret_nn::MaxPoolUint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
@@ -84,6 +88,7 @@ OPS_HALIDE = \
 	$(BIN)/%/AveragePoolUint8.a \
 	$(BIN)/%/ConvolutionUint8.a \
 	$(BIN)/%/DepthwiseConvolutionUint8.a \
+	$(BIN)/%/DepthwiseConvolutionUint8Broadcast.a \
 	$(BIN)/%/MaxPoolUint8.a \
 	$(BIN)/%/runtime.a
 

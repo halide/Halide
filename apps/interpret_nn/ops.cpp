@@ -8,6 +8,7 @@
 #include "AveragePoolUint8.h"
 #include "ConvolutionUint8.h"
 #include "DepthwiseConvolutionUint8.h"
+#include "DepthwiseConvolutionUint8Broadcast.h"
 #include "MaxPoolUint8.h"
 
 namespace interpret_nn {
@@ -483,12 +484,21 @@ void DepthwiseConv2DOp::Execute(const Box &crop) {
             input_buf.translate({0, pad_width, pad_height, 0});
         }
 
-        APP_CHECK(
-            0 == DepthwiseConvolutionUint8(
-                     input_buf, filter_buf, bias_buf, depth_multiplier,
-                     (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
-                     dilation_[0], dilation_[1], output_multiplier, output_shift,
-                     (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+        if (depth_multiplier_ >= input_buf.dim(0).extent()) {
+            APP_CHECK(
+                0 == DepthwiseConvolutionUint8Broadcast(
+                         input_buf, filter_buf, bias_buf, depth_multiplier,
+                         (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
+                         dilation_[0], dilation_[1], output_multiplier, output_shift,
+                         (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+        } else {
+            APP_CHECK(
+                0 == DepthwiseConvolutionUint8(
+                         input_buf, filter_buf, bias_buf, depth_multiplier,
+                         (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
+                         dilation_[0], dilation_[1], output_multiplier, output_shift,
+                         (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+        }
     }
 }
 
