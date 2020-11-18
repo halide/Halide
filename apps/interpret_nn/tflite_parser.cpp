@@ -73,6 +73,8 @@ public:
             return TensorType::Float64;
         case tflite::TensorType_COMPLEX128:
             return TensorType::Complex128;
+        case tflite::TensorType_UINT64:
+            return TensorType::UInt64;
         }
     }
 
