@@ -6,7 +6,7 @@
 
 namespace interpret_nn {
 
-size_t SizeOfTensorType(TensorType t) {
+size_t sizeof_tensor_type(TensorType t) {
     switch (t) {
     case TensorType::Float32:
         return 4;
@@ -36,7 +36,7 @@ size_t SizeOfTensorType(TensorType t) {
     }
 }
 
-const char *TensorTypeToString(TensorType t) {
+const char *to_string(TensorType t) {
     switch (t) {
     case TensorType::Float32:
         return "float32";
@@ -70,7 +70,7 @@ const char *TensorTypeToString(TensorType t) {
     }
 }
 
-halide_type_t TensorTypeToHalideType(TensorType t) {
+halide_type_t to_halide_type(TensorType t) {
     switch (t) {
     case TensorType::Bool:
         return halide_type_t(halide_type_uint, 1);
@@ -97,12 +97,12 @@ halide_type_t TensorTypeToHalideType(TensorType t) {
     case TensorType::Complex128:
     case TensorType::String:
     default:
-        APP_FATAL << "Unhandled type in TensorTypeToHalideType";
+        APP_FATAL << "Unhandled type in to_halide_type";
         return halide_type_t();
     }
 }
 
-Tensor *Map(const TensorMap& map, const Tensor* t) {
+Tensor *apply(const TensorMap& map, const Tensor* t) {
     auto i = map.find(t);
     if (i != map.end()) {
         return i->second;
@@ -155,7 +155,7 @@ void Tensor::Allocate() {
         }
         shape_size *= i.extent;
     }
-    shape_size *= SizeOfTensorType(Type());
+    shape_size *= sizeof_tensor_type(Type());
     if (data_.empty()) {
         data_.resize(shape_size);
     } else {
@@ -164,7 +164,7 @@ void Tensor::Allocate() {
 }
 
 void Tensor::Dump(std::ostream &os) const {
-    os << "  " << TensorTypeToString(Type()) << " x " << Shape()
+    os << "  " << to_string(Type()) << " x " << Shape()
        << (IsAllocated() ? " allocated " : " ") << Name() << std::endl;
 }
 

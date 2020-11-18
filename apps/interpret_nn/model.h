@@ -41,65 +41,64 @@ enum class TensorType {
     UInt64 = 12,
 };
 
-size_t SizeOfTensorType(TensorType t);
-
-const char *TensorTypeToString(TensorType t);
-halide_type_t TensorTypeToHalideType(TensorType t);
+size_t sizeof_tensor_type(TensorType t);
+const char *to_string(TensorType t);
+halide_type_t to_halide_type(TensorType t);
 
 template<typename T>
-bool IsType(TensorType t) {
+bool is_type(TensorType t) {
     if (std::is_const<T>::value) {
-        return IsType<typename std::remove_const<T>::type>(t);
+        return is_type<typename std::remove_const<T>::type>(t);
     }
     return false;
 }
 
 template<>
-inline bool IsType<void>(TensorType t) {
+inline bool is_type<void>(TensorType t) {
     return true;
 }
 template<>
-inline bool IsType<float>(TensorType t) {
+inline bool is_type<float>(TensorType t) {
     return t == TensorType::Float32;
 }
 template<>
-inline bool IsType<int32_t>(TensorType t) {
+inline bool is_type<int32_t>(TensorType t) {
     return t == TensorType::Int32;
 }
 template<>
-inline bool IsType<uint8_t>(TensorType t) {
+inline bool is_type<uint8_t>(TensorType t) {
     return t == TensorType::UInt8;
 }
 template<>
-inline bool IsType<uint64_t>(TensorType t) {
+inline bool is_type<uint64_t>(TensorType t) {
     return t == TensorType::UInt64;
 }
 template<>
-inline bool IsType<int64_t>(TensorType t) {
+inline bool is_type<int64_t>(TensorType t) {
     return t == TensorType::Int64;
 }
 template<>
-inline bool IsType<std::string>(TensorType t) {
+inline bool is_type<std::string>(TensorType t) {
     return t == TensorType::String;
 }
 template<>
-inline bool IsType<bool>(TensorType t) {
+inline bool is_type<bool>(TensorType t) {
     return t == TensorType::Bool;
 }
 template<>
-inline bool IsType<int16_t>(TensorType t) {
+inline bool is_type<int16_t>(TensorType t) {
     return t == TensorType::Int16;
 }
 template<>
-inline bool IsType<int8_t>(TensorType t) {
+inline bool is_type<int8_t>(TensorType t) {
     return t == TensorType::Int8;
 }
 template<>
-inline bool IsType<double>(TensorType t) {
+inline bool is_type<double>(TensorType t) {
     return t == TensorType::Float64;
 }
 // TODO
-//template<> inline bool IsType<float16>(TensorType t) { return t == TensorType::Float16; }
+//template<> inline bool is_type<float16>(TensorType t) { return t == TensorType::Float16; }
 
 struct QuantizationInfo {
     std::vector<float> scale;
@@ -107,12 +106,11 @@ struct QuantizationInfo {
     int32_t dimension;
 };
 
-inline std::ostream &operator<<(std::ostream &s,
-                                const QuantizationInfo &q) {
+inline std::ostream &operator<<(std::ostream &s, const QuantizationInfo &q) {
     return s << "{" << q.scale << ", " << q.zero << ", " << q.dimension << "}";
 }
 
-inline Box WithoutStrides(const std::vector<halide_dimension_t> &shape) {
+inline Box without_strides(const std::vector<halide_dimension_t> &shape) {
     Box result;
     result.reserve(shape.size());
     for (const halide_dimension_t &i : shape) {
@@ -164,11 +162,11 @@ public:
     HalideBuffer<T> Data() {
         if (std::is_void<T>::value) {
             return HalideBuffer<T>(
-                TensorTypeToHalideType(type_),
+                to_halide_type(type_),
                 reinterpret_cast<T *>(data_.data()),
                 shape_.size(), shape_.data());
         } else {
-            APP_CHECK(IsType<T>(type_));
+            APP_CHECK(is_type<T>(type_));
             return HalideBuffer<T>(
                 reinterpret_cast<T *>(data_.data()),
                 shape_.size(), shape_.data());
@@ -179,11 +177,11 @@ public:
     HalideBuffer<const T> Data() const {
         if (std::is_void<T>::value) {
             return HalideBuffer<const T>(
-                TensorTypeToHalideType(type_),
+                to_halide_type(type_),
                 reinterpret_cast<const T *>(data_.data()),
                 shape_.size(), shape_.data());
         } else {
-            APP_CHECK(IsType<T>(type_));
+            APP_CHECK(is_type<T>(type_));
             return HalideBuffer<const T>(
                 reinterpret_cast<const T *>(data_.data()),
                 shape_.size(), shape_.data());
@@ -229,7 +227,7 @@ using TensorMap = std::map<const Tensor *, Tensor *>;
 
 // Apply a tensor map to a list of tensors. This is used to support
 // cloning ops referring to different tensors.
-Tensor *Map(const TensorMap& map, const Tensor* t);
+Tensor *apply(const TensorMap& map, const Tensor* t);
 
 class Op {
 protected:
@@ -246,7 +244,7 @@ public:
     // Get the shape of the complete output of this op.
     virtual Box GetFullCrop() {
         if (OutputCount() == 1) {
-            return WithoutStrides(Output(0)->Shape());
+            return without_strides(Output(0)->Shape());
         } else {
             APP_FATAL << "More than one output requires GetFullCrop override.";
             return Box();

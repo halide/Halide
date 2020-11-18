@@ -15,7 +15,7 @@ namespace interpret_nn {
 
 namespace {
 
-std::vector<Box> SplitCrop(const Box &crop, int dim, int factor, bool shift_inwards = false) {
+std::vector<Box> split_crop(const Box &crop, int dim, int factor, bool shift_inwards = false) {
     std::vector<Box> splits;
     int x_min = crop[dim].min;
     int x_extent = crop[dim].extent();
@@ -150,7 +150,7 @@ Op::Bounds ElementwiseOp::InferBounds(const Box &crop) const {
 
 std::vector<Box> ElementwiseOp::Split(const Box &crop) const {
     const int kSplit = 2;
-    return SplitCrop(crop, 2, kSplit);
+    return split_crop(crop, 2, kSplit);
 }
 
 Op::Bounds PoolOp::InferBounds(const Box &crop) const {
@@ -163,7 +163,7 @@ Op::Bounds PoolOp::InferBounds(const Box &crop) const {
 
     input_crop[1].max += filter_size_[0] - 1;
     input_crop[2].max += filter_size_[1] - 1;
-    input_crop = intersect(input_crop, WithoutStrides(Input()->Shape()));
+    input_crop = intersect(input_crop, without_strides(Input()->Shape()));
 
     Bounds result;
     result.inputs.emplace_back(input_crop);
@@ -173,7 +173,7 @@ Op::Bounds PoolOp::InferBounds(const Box &crop) const {
 
 std::vector<Box> PoolOp::Split(const Box &crop) const {
     const int kSplit = 2;
-    return SplitCrop(crop, 2, kSplit);
+    return split_crop(crop, 2, kSplit);
 }
 
 void AddOp::Execute(const Box &crop) {
@@ -264,7 +264,7 @@ std::vector<Box> ConcatenationOp::Split(const Box &crop) const {
     // Split this into individual lines, so it can get re-fused with any
     // alignment.
     const int kSplit = 1;
-    return SplitCrop(crop, 2, kSplit);
+    return split_crop(crop, 2, kSplit);
 }
 
 void ConcatenationOp::Execute(const Box &crop) {
@@ -286,7 +286,7 @@ void ConcatenationOp::Execute(const Box &crop) {
 
 Op::Bounds Conv2DOp::InferBounds(const Box &crop) const {
     Box input_crop = crop;
-    Box filter_shape = WithoutStrides(Filter()->Shape());
+    Box filter_shape = without_strides(Filter()->Shape());
 
     for (int dim = 1; dim <= 2; dim++) {
         input_crop[dim] *= stride_[dim - 1];
@@ -295,7 +295,7 @@ Op::Bounds Conv2DOp::InferBounds(const Box &crop) const {
     input_crop[0] = filter_shape[3];
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
-    input_crop = intersect(input_crop, WithoutStrides(Input()->Shape()));
+    input_crop = intersect(input_crop, without_strides(Input()->Shape()));
 
     if (padding_ == Padding::Same) {
         const int input_width = Input()->Dim(1).extent;
@@ -320,7 +320,7 @@ Op::Bounds Conv2DOp::InferBounds(const Box &crop) const {
     Bounds result;
     result.inputs.emplace_back(input_crop);
     result.inputs.emplace_back(std::move(filter_shape));
-    result.inputs.emplace_back(WithoutStrides(Bias()->Shape()));
+    result.inputs.emplace_back(without_strides(Bias()->Shape()));
     result.outputs = {crop};
 
     return result;
@@ -328,7 +328,7 @@ Op::Bounds Conv2DOp::InferBounds(const Box &crop) const {
 
 std::vector<Box> Conv2DOp::Split(const Box &crop) const {
     const int kSplit = 2;
-    return SplitCrop(crop, 2, kSplit);
+    return split_crop(crop, 2, kSplit);
 }
 
 void Conv2DOp::Execute(const Box &crop) {
@@ -406,7 +406,7 @@ void Conv2DOp::Execute(const Box &crop) {
 
 Op::Bounds DepthwiseConv2DOp::InferBounds(const Box &crop) const {
     Box input_crop = crop;
-    Box filter_shape = WithoutStrides(Filter()->Shape());
+    Box filter_shape = without_strides(Filter()->Shape());
 
     input_crop[0] = crop[0];
     input_crop[0] /= depth_multiplier_;
@@ -416,7 +416,7 @@ Op::Bounds DepthwiseConv2DOp::InferBounds(const Box &crop) const {
 
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
-    input_crop = intersect(input_crop, WithoutStrides(Input()->Shape()));
+    input_crop = intersect(input_crop, without_strides(Input()->Shape()));
 
     if (padding_ == Padding::Same) {
         const int input_width = Input()->Dim(1).extent;
@@ -441,14 +441,14 @@ Op::Bounds DepthwiseConv2DOp::InferBounds(const Box &crop) const {
     Bounds result;
     result.inputs.emplace_back(input_crop);
     result.inputs.emplace_back(std::move(filter_shape));
-    result.inputs.emplace_back(WithoutStrides(Bias()->Shape()));
+    result.inputs.emplace_back(without_strides(Bias()->Shape()));
     result.outputs = {crop};
     return result;
 }
 
 std::vector<Box> DepthwiseConv2DOp::Split(const Box &crop) const {
     const int kSplit = 2;
-    return SplitCrop(crop, 2, kSplit, true);
+    return split_crop(crop, 2, kSplit, true);
 }
 
 void DepthwiseConv2DOp::Execute(const Box &crop) {
@@ -572,15 +572,15 @@ Op::Bounds PadOp::InferBounds(const Box &crop) const {
     }
 
     result.inputs.emplace_back(
-        intersect(padded_crop, WithoutStrides(Input(0)->Shape())));
-    result.inputs.emplace_back(WithoutStrides(Input(1)->Shape()));
+        intersect(padded_crop, without_strides(Input(0)->Shape())));
+    result.inputs.emplace_back(without_strides(Input(1)->Shape()));
     result.outputs.emplace_back(crop);
     return result;
 }
 
 std::vector<Box> PadOp::Split(const Box &crop) const {
     const int kSplit = 2;
-    return SplitCrop(crop, 2, kSplit);
+    return split_crop(crop, 2, kSplit);
 }
 
 void PadOp::Execute(const Box &crop) {
@@ -588,7 +588,7 @@ void PadOp::Execute(const Box &crop) {
     auto padding = Input(1)->Data<const int32_t>();
     Tensor *output = Output();
 
-    if (SizeOfTensorType(output->Type()) == 1) {
+    if (sizeof_tensor_type(output->Type()) == 1) {
         auto input_buf = input->Data<uint8_t>();
         auto output_buf = output->Data<uint8_t>(crop);
 
@@ -613,7 +613,7 @@ void PadOp::Execute(const Box &crop) {
 // TODO: Maybe this is only a reshape in some dimensions, in which case we might be able to split it.
 Op::Bounds ReshapeOp::InferBounds(const Box &crop) const {
     Bounds result;
-    result.inputs = {WithoutStrides(Input()->Shape())};
+    result.inputs = {without_strides(Input()->Shape())};
     result.outputs = {crop};
     return result;
 }

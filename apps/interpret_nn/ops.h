@@ -64,8 +64,8 @@ public:
 
     std::unique_ptr<Op> Clone(const TensorMap &map) const {
         return make_unique<AddOp>(
-            Map(map, Input(0)), Map(map, Input(1)),
-            Map(map, Output()), activation_);
+            apply(map, Input(0)), apply(map, Input(1)),
+            apply(map, Output()), activation_);
     }
 
     void Execute(const Box &crop);
@@ -86,7 +86,7 @@ public:
 
     std::unique_ptr<Op> Clone(const TensorMap &map) const {
         return make_unique<AveragePoolOp>(
-            Map(map, Input()), Map(map, Output()), stride_,
+            apply(map, Input()), apply(map, Output()), stride_,
             filter_size_, padding_, activation_);
     }
 
@@ -109,10 +109,10 @@ public:
     std::unique_ptr<Op> Clone(const TensorMap &map) const {
         std::vector<Tensor *> inputs;
         for (int i = 0; i < InputCount(); i++) {
-            inputs.push_back(Map(map, Input(i)));
+            inputs.push_back(apply(map, Input(i)));
         }
         return make_unique<ConcatenationOp>(
-            inputs, Map(map, Output()), axis_, activation_);
+            inputs, apply(map, Output()), axis_, activation_);
     }
 
     Bounds InferBounds(const Box &crop) const;
@@ -144,8 +144,8 @@ public:
 
     std::unique_ptr<Op> Clone(const TensorMap &map) const {
         return make_unique<Conv2DOp>(
-            Map(map, Input()), Map(map, Filter()), Map(map, Bias()),
-            Map(map, Output()), stride_, dilation_, padding_, activation_);
+            apply(map, Input()), apply(map, Filter()), apply(map, Bias()),
+            apply(map, Output()), stride_, dilation_, padding_, activation_);
     }
 
     const Tensor *Filter() const {
@@ -193,8 +193,8 @@ public:
 
     std::unique_ptr<Op> Clone(const TensorMap &map) const {
         return make_unique<DepthwiseConv2DOp>(
-            Map(map, Input()), Map(map, Filter()), Map(map, Bias()),
-            Map(map, Output()), depth_multiplier_, stride_, dilation_, padding_, activation_);
+            apply(map, Input()), apply(map, Filter()), apply(map, Bias()),
+            apply(map, Output()), depth_multiplier_, stride_, dilation_, padding_, activation_);
     }
 
     const Tensor *Input() const {
@@ -237,7 +237,7 @@ public:
 
     std::unique_ptr<Op> Clone(const TensorMap &map) const {
         return make_unique<MaxPoolOp>(
-            Map(map, Input()), Map(map, Output()), stride_, filter_size_, padding_, activation_);
+            apply(map, Input()), apply(map, Output()), stride_, filter_size_, padding_, activation_);
     }
 
     void Execute(const Box &crop);
@@ -255,7 +255,7 @@ public:
 
     std::unique_ptr<Op> Clone(const TensorMap &map) const {
         return make_unique<PadOp>(
-            Map(map, Input(0)), Map(map, Input(1)), Map(map, Output()));
+            apply(map, Input(0)), apply(map, Input(1)), apply(map, Output()));
     }
 
     Bounds InferBounds(const Box &crop) const;
@@ -277,7 +277,7 @@ public:
     }
 
     std::unique_ptr<Op> Clone(const TensorMap &map) const {
-        return make_unique<ReshapeOp>(Map(map, Input()), Map(map, Output()), new_shape_);
+        return make_unique<ReshapeOp>(apply(map, Input()), apply(map, Output()), new_shape_);
     }
 
     Bounds InferBounds(const Box &crop) const;

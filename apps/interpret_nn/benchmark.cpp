@@ -37,7 +37,7 @@ void RunBenchmark(const std::string &filename, const ScheduleOptions &options) {
         std::vector<Tensor *> outputs = interpreter.Outputs();
         for (Tensor *t : outputs) {
             APP_CHECK(t);
-            std::cout << "  \"" << t->Name() << "\" : " << TensorTypeToString(t->Type()) << " x " << t->Shape() << "\n";
+            std::cout << "  \"" << t->Name() << "\" : " << to_string(t->Type()) << " x " << t->Shape() << "\n";
         }
     }
 }
