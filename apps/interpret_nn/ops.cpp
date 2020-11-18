@@ -367,8 +367,7 @@ Op::Bounds DepthwiseConv2DOp::InferBounds(const Box &crop) const {
     Box filter_shape = WithoutStrides(Filter()->Shape());
 
     input_crop[0] = crop[0];
-    input_crop[0].min /= depth_multiplier_;
-    input_crop[0].max /= depth_multiplier_;
+    input_crop[0] /= depth_multiplier_;
     for (int dim = 1; dim <= 2; dim++) {
         input_crop[dim] *= stride_[dim - 1];
     }

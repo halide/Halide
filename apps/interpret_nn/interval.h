@@ -26,6 +26,13 @@ struct Interval {
         return *this;
     }
 
+    Interval &operator/=(int scale) {
+        assert(min >= 0 && max >= 0);
+        min /= scale;
+        max /= scale;
+        return *this;
+    }
+
     Interval &operator+=(int offset) {
         min += offset;
         max += offset;
@@ -41,6 +48,12 @@ struct Interval {
     Interval operator*(int scale) const {
         Interval result(*this);
         result *= scale;
+        return result;
+    }
+
+    Interval operator/(int scale) const {
+        Interval result(*this);
+        result /= scale;
         return result;
     }
 
