@@ -114,20 +114,6 @@ inline std::vector<char> ReadEntireFile(const std::string &filename) {
     return result;
 }
 
-inline void WriteEntireFile(const std::string &filename, const void *source, size_t source_len) {
-    std::ofstream f(filename, std::ios::out | std::ios::binary);
-    APP_CHECK(f.is_open()) << "Unable to open file: " << filename;
-
-    f.write(reinterpret_cast<const char *>(source), source_len);
-    f.flush();
-    APP_CHECK(f.good()) << "Unable to write file: " << filename;
-    f.close();
-}
-
-inline void WriteEntireFile(const std::string &filename, const std::vector<char> &source) {
-    WriteEntireFile(filename, source.data(), source.size());
-}
-
 }  // namespace app_util
 
 #endif  // APP_UTIL_H_

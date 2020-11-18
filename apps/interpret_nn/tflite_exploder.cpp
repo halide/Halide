@@ -40,8 +40,7 @@
 #include "tflite_schema_direct_generated.h"
 
 using app_util::make_unique;
-using app_util::ReadEntireFile;
-using app_util::WriteEntireFile;
+using app_util::write_entire_file;
 
 namespace {
 
@@ -51,6 +50,20 @@ tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
     return std::max(
         op_code->builtin_code(),
         static_cast<tflite::BuiltinOperator>(op_code->deprecated_builtin_code()));
+}
+
+void write_entire_file(const std::string &filename, const void *source, size_t source_len) {
+    std::ofstream f(filename, std::ios::out | std::ios::binary);
+    APP_CHECK(f.is_open()) << "Unable to open file: " << filename;
+
+    f.write(reinterpret_cast<const char *>(source), source_len);
+    f.flush();
+    APP_CHECK(f.good()) << "Unable to write file: " << filename;
+    f.close();
+}
+
+void write_entire_file(const std::string &filename, const std::vector<char> &source) {
+    write_entire_file(filename, source.data(), source.size());
 }
 
 }  // namespace
@@ -168,7 +181,7 @@ int main(int argc, char **argv) {
 
         std::string outpath = output_dir + "/" + std::to_string(op_index) + "." + op_name + ".tflite";
         std::cerr << "Writing to " << outpath << "\n";
-        WriteEntireFile(outpath, fbb.GetBufferPointer(), fbb.GetSize());
+        write_entire_file(outpath, fbb.GetBufferPointer(), fbb.GetSize());
     }
 
     return 0;
