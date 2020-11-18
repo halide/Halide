@@ -29,7 +29,7 @@ public:
         : model_(model) {
     }
 
-    static ActivationFunction ParseActivationFunction(
+    static ActivationFunction parse_activation_function(
         tflite::ActivationFunctionType f) {
         switch (f) {
         case tflite::ActivationFunctionType_NONE:
@@ -47,7 +47,7 @@ public:
         }
     }
 
-    static TensorType ParseType(tflite::TensorType t) {
+    static TensorType parse_type(tflite::TensorType t) {
         switch (t) {
         case tflite::TensorType_FLOAT32:
             return TensorType::Float32;
@@ -78,7 +78,7 @@ public:
         }
     }
 
-    static Padding ParsePadding(tflite::Padding p) {
+    static Padding parse_padding(tflite::Padding p) {
         switch (p) {
         case tflite::Padding_SAME:
             return Padding::Same;
@@ -87,7 +87,7 @@ public:
         }
     }
 
-    std::unique_ptr<Tensor> ParseTensor(const tflite::Tensor *t) {
+    std::unique_ptr<Tensor> parse_tensor(const tflite::Tensor *t) {
         const auto *buffers = model_->buffers();
         std::vector<uint8_t> data;
         if (t->buffer() != 0) {
@@ -106,7 +106,7 @@ public:
             shape_size *= shape[i].extent;
         }
 
-        TensorType type = ParseType(t->type());
+        TensorType type = parse_type(t->type());
         if (!data.empty()) {
             APP_CHECK(data.size() == shape_size * sizeof_tensor_type(type));
         }
@@ -129,19 +129,19 @@ public:
             std::move(data), std::move(quantization));
     }
 
-    std::unique_ptr<Op> ParseAdd(const tflite::Operator *op) {
+    std::unique_ptr<Op> parse_add(const tflite::Operator *op) {
         const auto options = op->builtin_options_as_AddOptions();
         Tensor *input1 = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *input2 = result_.tensors[op->inputs()->Get(1)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
         return make_unique<AddOp>(
             input1, input2, output,
-            ParseActivationFunction(options->fused_activation_function()));
+            parse_activation_function(options->fused_activation_function()));
     }
 
-    std::unique_ptr<Op> ParseAveragePool2D(const tflite::Operator *op) {
+    std::unique_ptr<Op> parse_average_pool2D(const tflite::Operator *op) {
         const auto options = op->builtin_options_as_Pool2DOptions();
-        Padding padding = ParsePadding(options->padding());
+        Padding padding = parse_padding(options->padding());
         std::vector<int> stride = {
             options->stride_w(),
             options->stride_h(),
@@ -151,18 +151,18 @@ public:
             options->filter_height(),
         };
         ActivationFunction activation =
-            ParseActivationFunction(options->fused_activation_function());
+            parse_activation_function(options->fused_activation_function());
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
         return make_unique<AveragePoolOp>(
             input, output, stride, filter_size, padding, activation);
     }
 
-    std::unique_ptr<Op> ParseConcatenation(const tflite::Operator *op) {
+    std::unique_ptr<Op> parse_concatenation(const tflite::Operator *op) {
         const tflite::ConcatenationOptions *options =
             op->builtin_options_as_ConcatenationOptions();
         ActivationFunction activation =
-            ParseActivationFunction(options->fused_activation_function());
+            parse_activation_function(options->fused_activation_function());
         std::vector<Tensor *> inputs;
         for (auto i = op->inputs()->cbegin(); i != op->inputs()->cend(); ++i) {
             inputs.push_back(result_.tensors[*i].get());
@@ -171,7 +171,7 @@ public:
         return make_unique<ConcatenationOp>(inputs, output, options->axis(), activation);
     }
 
-    std::unique_ptr<Op> ParseConv2D(const tflite::Operator *op) {
+    std::unique_ptr<Op> parse_conv2D(const tflite::Operator *op) {
         const tflite::Conv2DOptions *options =
             op->builtin_options_as_Conv2DOptions();
         std::vector<int> dilation_factor = {
@@ -179,8 +179,8 @@ public:
             options->dilation_h_factor(),
         };
         ActivationFunction activation =
-            ParseActivationFunction(options->fused_activation_function());
-        Padding padding = ParsePadding(options->padding());
+            parse_activation_function(options->fused_activation_function());
+        Padding padding = parse_padding(options->padding());
         std::vector<int> stride = {
             options->stride_w(),
             options->stride_h(),
@@ -193,7 +193,7 @@ public:
                                      dilation_factor, padding, activation);
     }
 
-    std::unique_ptr<Op> ParseDepthwiseConv2D(const tflite::Operator *op) {
+    std::unique_ptr<Op> parse_depthwise_conv2D(const tflite::Operator *op) {
         const tflite::DepthwiseConv2DOptions *options =
             op->builtin_options_as_DepthwiseConv2DOptions();
         std::vector<int> dilation_factor = {
@@ -202,8 +202,8 @@ public:
         };
         int depth_multiplier = options->depth_multiplier();
         ActivationFunction activation =
-            ParseActivationFunction(options->fused_activation_function());
-        Padding padding = ParsePadding(options->padding());
+            parse_activation_function(options->fused_activation_function());
+        Padding padding = parse_padding(options->padding());
         std::vector<int> stride = {
             options->stride_w(),
             options->stride_h(),
@@ -217,14 +217,14 @@ public:
             padding, activation);
     }
 
-    std::unique_ptr<Op> ParsePad(const tflite::Operator *op) {
+    std::unique_ptr<Op> parse_pad(const tflite::Operator *op) {
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *padding = result_.tensors[op->inputs()->Get(1)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
         return make_unique<PadOp>(input, padding, output);
     }
 
-    std::unique_ptr<Op> ParseReshape(const tflite::Operator *op) {
+    std::unique_ptr<Op> parse_reshape(const tflite::Operator *op) {
         const tflite::ReshapeOptions *options =
             op->builtin_options_as_ReshapeOptions();
         std::vector<int> new_shape(options->new_shape()->cbegin(),
@@ -234,7 +234,7 @@ public:
         return make_unique<ReshapeOp>(input, output, new_shape);
     }
 
-    std::unique_ptr<Op> ParseOp(const tflite::Operator *op) {
+    std::unique_ptr<Op> parse_op(const tflite::Operator *op) {
         const auto *opcodes = model_->operator_codes();
 
         int opcode_index = op->opcode_index();
@@ -244,36 +244,36 @@ public:
         APP_CHECK(builtin_code != tflite::BuiltinOperator_CUSTOM);
         switch (builtin_code) {
         case tflite::BuiltinOperator_ADD:
-            return ParseAdd(op);
+            return parse_add(op);
         case tflite::BuiltinOperator_AVERAGE_POOL_2D:
-            return ParseAveragePool2D(op);
+            return parse_average_pool2D(op);
         case tflite::BuiltinOperator_CONCATENATION:
-            return ParseConcatenation(op);
+            return parse_concatenation(op);
         case tflite::BuiltinOperator_CONV_2D:
-            return ParseConv2D(op);
+            return parse_conv2D(op);
         case tflite::BuiltinOperator_DEPTHWISE_CONV_2D:
-            return ParseDepthwiseConv2D(op);
+            return parse_depthwise_conv2D(op);
         case tflite::BuiltinOperator_PAD:
-            return ParsePad(op);
+            return parse_pad(op);
         case tflite::BuiltinOperator_RESHAPE:
-            return ParseReshape(op);
+            return parse_reshape(op);
         default:
             APP_FATAL << "Unsupported op "
                       << tflite::EnumNameBuiltinOperator(builtin_code);
         }
     }
 
-    Model Parse() {
+    Model parse() {
         const auto &subgraphs = *model_->subgraphs();
         APP_CHECK(subgraphs.size() == 1) << "Only 1 subgraph is currently supported.";
         const tflite::SubGraph &subgraph = *subgraphs[0];
 
         for (const tflite::Tensor *t : *subgraph.tensors()) {
-            result_.tensors.emplace_back(ParseTensor(t));
+            result_.tensors.emplace_back(parse_tensor(t));
         }
 
         for (const tflite::Operator *i : *subgraph.operators()) {
-            result_.ops.emplace_back(ParseOp(i));
+            result_.ops.emplace_back(parse_op(i));
         }
 
         return std::move(result_);
@@ -289,12 +289,12 @@ public:
 
 }  // namespace
 
-Model ParseTfLiteModel(const tflite::Model *model) {
-    return Parser(model).Parse();
+Model parse_tflite_model(const tflite::Model *model) {
+    return Parser(model).parse();
 }
 
-Model ParseTfLiteModelFromBuffer(const void *buffer) {
-    return ParseTfLiteModel(tflite::GetModel(buffer));
+Model parse_tflite_model_from_buffer(const void *buffer) {
+    return parse_tflite_model(tflite::GetModel(buffer));
 }
 
 }  // namespace interpret_nn
