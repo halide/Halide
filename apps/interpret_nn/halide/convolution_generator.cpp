@@ -31,7 +31,7 @@ int GetVectorReduction(const Target &target, Type t) {
     return 2;
 }
 
-int GetRecommendedAccumulators(const Target &target) {
+int get_recommended_accumulators(const Target &target) {
     if (target.has_feature(Target::AVX512_Skylake) ||
         (target.arch == Target::ARM && target.bits == 64)) {
         // 32 registers total.
@@ -94,7 +94,7 @@ public:
         Var x("x"), y("y"), c("c"), b("b");
 
         // Add a "zero" boundary condition to x and y dimensions of the input.
-        Func input_bounded = ConstantExteriorTensor(input_, input_offset_);
+        Func input_bounded = constant_exterior_tensor(input_, input_offset_);
         // And to c of the filter. This lets us align the inner reduction loop
         // however we want.
         Func filter_bounded =
@@ -124,8 +124,8 @@ public:
         RDom r(0, filter_width, 0, filter_height, 0, filter_depth);
         Expr filter_rdxyc =
             filter_tiled(r.z % vector_reduction, r.z / vector_reduction, r.x, r.y, c);
-        Expr input_rdxyc = input_bounded(r.z, x * stride_x_ + r.x * dilation_x_,
-                                         y * stride_y_ + r.y * dilation_y_, b);
+        Expr input_rdxyc =
+            input_bounded(r.z, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
 
         // We want to compute the reduction:
         // convolved(c, x, y, b) = bias_(c)
@@ -165,24 +165,21 @@ public:
 
         // Saturate and narrow the output.
         Expr output =
-            MultiplyByQuantizedMultiplierSmallerThanOne(convolved(c, x, y, b),
-                                                        output_multiplier_,
-                                                        output_shift_) +
-            output_offset_;
+            multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_) + output_offset_;
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule
-        InterpretAsTensor(input_);
-        InterpretAsTensor(filter_);
-        InterpretAsTensor(bias_);
-        InterpretAsTensor(output_);
+        interpret_as_tensor(input_);
+        interpret_as_tensor(filter_);
+        interpret_as_tensor(bias_);
+        interpret_as_tensor(output_);
 
         output_.compute_root();
 
         // Figure out how big the tiles we should optimize for should be by getting
         // the total number of accumulators best for this target and figuring out
         // tile sizes.
-        const int accumulators = GetRecommendedAccumulators(get_target());
+        const int accumulators = get_recommended_accumulators(get_target());
         const int tile_x = 4;
         std::vector<std::pair<int, int>> tile_sizes;
         for (int tile_c = accumulators / tile_x; tile_c >= 1;
@@ -203,10 +200,8 @@ public:
             int tile_c = i.first;
             int tile_x = i.second;
             output_
-                .specialize(output_channels >= tile_c * vector_size &&
-                            output_width >= tile_x)
-                .tile(c, x, co, xo, c, x, tile_c * vector_size, tile_x,
-                      TailStrategy::ShiftInwards)
+                .specialize(output_channels >= tile_c * vector_size && output_width >= tile_x)
+                .tile(c, x, co, xo, c, x, tile_c * vector_size, tile_x, TailStrategy::ShiftInwards)
                 .reorder(c, x, co, xo, y, b)
                 .vectorize(c, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf)
                 .unroll(c);

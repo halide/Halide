@@ -52,22 +52,18 @@ public:
 
         Func scaled1("scaled1");
         scaled1(c, x, y, b) =
-            MultiplyByQuantizedMultiplierSmallerThanOne(shifted_input1_with_offset(c, x, y, b),
-                                                        input1_multiplier_, input1_shift_);
+            multiply_quantized(shifted_input1_with_offset(c, x, y, b), input1_multiplier_, input1_shift_);
 
         Func scaled2("scaled2");
         scaled2(c, x, y, b) =
-            MultiplyByQuantizedMultiplierSmallerThanOne(shifted_input2_with_offset(c, x, y, b),
-                                                        input2_multiplier_, input2_shift_);
+            multiply_quantized(shifted_input2_with_offset(c, x, y, b), input2_multiplier_, input2_shift_);
 
         Func sum("sum");
         sum(c, x, y, b) = scaled1(c, x, y, b) + scaled2(c, x, y, b);
 
         Func scaled_sum("scaled_sum");
         scaled_sum(c, x, y, b) =
-            MultiplyByQuantizedMultiplierSmallerThanOne(sum(c, x, y, b), output_multiplier_,
-                                                        output_shift_) +
-            output_offset_;
+            multiply_quantized(sum(c, x, y, b), output_multiplier_, output_shift_) + output_offset_;
 
         output_(c, x, y, b) =
             clamp(u8_sat(scaled_sum(c, x, y, b)), output_min_, output_max_);
@@ -77,20 +73,18 @@ public:
 
         // Require that the operands are tensors, and that C and X have the same
         // extents.
-        InterpretAsTensor(output_);
-        InterpretAsTensor(input1_);
-        InterpretAsTensor(input2_);
-        RequireSameExtentCX(output_, input1_);
-        RequireSameExtentCX(output_, input2_);
+        interpret_as_tensor(output_);
+        interpret_as_tensor(input1_);
+        interpret_as_tensor(input2_);
+        require_same_extent_cx(output_, input1_);
+        require_same_extent_cx(output_, input2_);
 
         // Fuse C and X if we can. If there is no broadcasting, we can usually do
         // this. This means we don't need to worry about the vector size dividing
         // the number of channels.
-        Expr can_fuse_cx =
-            CanFuseCX(output_) && CanFuseCX(input1_) && CanFuseCX(input2_);
         Var cx("cx");
         output_
-            .specialize(can_fuse_cx)
+            .specialize(can_fuse_cx(output_) && can_fuse_cx(input1_) && can_fuse_cx(input2_))
             .fuse(c, x, cx)
             .vectorize(cx, vector_size, TailStrategy::ShiftInwards);
 

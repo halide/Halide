@@ -50,15 +50,15 @@ public:
     // If none with that name, return null. Tensor is still owned by the Model.
     Tensor *GetTensor(const std::string &name);
 
-    void Execute();
+    void execute();
 
     // Return the Tensor(s) that are the initial input(s) of the Model.
     // Tensor(s) are still owned by the Model.
-    std::vector<Tensor *> Inputs();
+    std::vector<Tensor *> inputs();
 
     // Return the Tensor(s) that are the final output(s) of the Model.
     // Tensor(s) are still owned by the Model.
-    std::vector<Tensor *> Outputs();
+    std::vector<Tensor *> outputs();
 
     // Movable but not copyable.
     ModelInterpreter() = delete;

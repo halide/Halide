@@ -12,13 +12,13 @@ namespace interpret_nn {
 
 // A tensor has the same requirements as a buffer in Halide by default, except
 // the min of the innermost dimension must also be 0.
-inline void InterpretAsTensor(Halide::OutputImageParam p) {
+inline void interpret_as_tensor(Halide::OutputImageParam p) {
     p.dim(0).set_stride(1).set_min(0);
 }
 
 // Require that the first two dimensions of two buffers have the same bounds.
-inline void RequireSameExtentCX(Halide::OutputImageParam first,
-                                Halide::OutputImageParam second) {
+inline void require_same_extent_cx(Halide::OutputImageParam first,
+                                   Halide::OutputImageParam second) {
     for (int d = 0; d < 2; d++) {
         second.dim(d).set_min(first.dim(d).min());
         second.dim(d).set_extent(first.dim(d).extent());
@@ -26,14 +26,12 @@ inline void RequireSameExtentCX(Halide::OutputImageParam first,
 }
 
 // Check if the first two dimensions of a buffer can be fused cleanly.
-inline Halide::Expr CanFuseCX(Halide::OutputImageParam p) {
-    return p.dim(0).min() == 0 && p.dim(1).stride() > 0 &&
-           p.dim(1).stride() == p.dim(0).extent();
+inline Halide::Expr can_fuse_cx(Halide::OutputImageParam p) {
+    return p.dim(0).min() == 0 && p.dim(1).stride() > 0 && p.dim(1).stride() == p.dim(0).extent();
 }
 
 // A boundary condition, without likelies that cause loop partitioning.
-inline Halide::Func ConstantExteriorTensor(
-    Halide::Func t, Halide::Expr exterior,
+inline Halide::Func constant_exterior_tensor(Halide::Func t, Halide::Expr exterior,
     Halide::Expr min_c, Halide::Expr extent_c,
     Halide::Expr min_x, Halide::Expr extent_x,
     Halide::Expr min_y, Halide::Expr extent_y,
@@ -56,9 +54,9 @@ inline Halide::Func ConstantExteriorTensor(
     return tensor_bounded;
 }
 
-inline Halide::Func ConstantExteriorTensor(Halide::ImageParam p,
-                                           Halide::Expr exterior) {
-    return ConstantExteriorTensor(p, exterior,
+inline Halide::Func constant_exterior_tensor(Halide::ImageParam p,
+                                             Halide::Expr exterior) {
+    return constant_exterior_tensor(p, exterior,
                                   p.dim(0).min(), p.dim(0).extent(),
                                   p.dim(1).min(), p.dim(1).extent(),
                                   p.dim(2).min(), p.dim(2).extent(),
@@ -67,20 +65,17 @@ inline Halide::Func ConstantExteriorTensor(Halide::ImageParam p,
 
 // This function implements the same computation as the ARMv7 NEON VQRDMULH
 // instruction.
-Halide::Expr SaturatingRoundingDoublingHighMultiply(const Halide::Expr &a,
-                                                    const Halide::Expr &b);
+Halide::Expr multiply_2x_high(const Halide::Expr &a, const Halide::Expr &b);
 
 // Correctly-rounded-to-nearest division by a power-of-two. Also known as
 // rounding arithmetic right shift.
-Halide::Expr RoundingDivideByPOT(const Halide::Expr &x,
-                                 const Halide::Expr &shift);
+Halide::Expr round_shift_right(const Halide::Expr &x, const Halide::Expr &shift);
 
 // Performs right shift and multiply by a multiplier. Aims to be very close to
 // tflite's reference implementation. However, tflite is standardizing on left
 // (exponent-like) shifts.
-Halide::Expr MultiplyByQuantizedMultiplierSmallerThanOne(
-    const Halide::Expr &x, const Halide::Expr &quantized_multiplier,
-    const Halide::Expr &shift);
+Halide::Expr multiply_quantized(
+    const Halide::Expr &x, const Halide::Expr &quantized_multiplier, const Halide::Expr &shift);
 
 }  // namespace interpret_nn
 

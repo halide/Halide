@@ -83,8 +83,7 @@ inline std::ostream &operator<<(std::ostream &s, const Interval &i) {
     return s << "{" << i.min << ", " << i.max << "}";
 }
 
-inline std::ostream &operator<<(std::ostream &s,
-                                const halide_dimension_t &dim) {
+inline std::ostream &operator<<(std::ostream &s, const halide_dimension_t &dim) {
     return s << "{" << dim.min << ", " << dim.extent << ", " << dim.stride << "}";
 }
 
@@ -102,8 +101,8 @@ inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {
 
 using Box = std::vector<Interval>;
 
+// Check if the union of a and b can be computed exactly.
 bool is_union_exact(const Interval &a, const Interval &b);
-
 bool is_union_exact(const Box &a, const Box &b);
 
 Interval Union(const Interval &a, const Interval &b);
@@ -113,7 +112,6 @@ Box intersect(Box a, const Box &b);
 
 // Try to remove the values of b from a. This can fail if the result is not a single interval.
 bool subtract(Interval &a, const Interval &b);
-// Subtract a from b if possible.
 bool subtract(Box &a, const Box &b);
 
 bool is_empty(const Box &a);

@@ -119,7 +119,7 @@ Model::Model(const Model& copy) {
     // while being executed.
     TensorMap map;
     for (auto& i : tensors) {
-        if (!i->IsAllocated()) {
+        if (!i->is_allocated()) {
             auto cloned = std::make_shared<Tensor>(*i);
             map[i.get()] = cloned.get();
             i = cloned;
@@ -128,24 +128,24 @@ Model::Model(const Model& copy) {
 
     // Now copy the ops, using the tensor map we made above.
     for (const auto& i : copy.ops) {
-        ops.push_back(i->Clone(map));
+        ops.push_back(i->clone(map));
     }
 }
 
-void Model::Dump(std::ostream &os) {
+void Model::dump(std::ostream &os) {
     os << "Tensors: " << std::endl;
     for (const auto &i : tensors) {
-        i->Dump(os);
+        i->dump(os);
     }
 
     os << "Ops: " << std::endl;
     for (const auto &i : ops) {
-        i->Dump(os);
+        i->dump(os);
     }
     os << std::endl;
 }
 
-void Tensor::Allocate() {
+void Tensor::allocate() {
     size_t shape_size = 1;
     for (halide_dimension_t &i : shape_) {
         if (i.stride != 0) {
@@ -155,7 +155,7 @@ void Tensor::Allocate() {
         }
         shape_size *= i.extent;
     }
-    shape_size *= sizeof_tensor_type(Type());
+    shape_size *= sizeof_tensor_type(type());
     if (data_.empty()) {
         data_.resize(shape_size);
     } else {
@@ -163,9 +163,9 @@ void Tensor::Allocate() {
     }
 }
 
-void Tensor::Dump(std::ostream &os) const {
-    os << "  " << to_string(Type()) << " x " << Shape()
-       << (IsAllocated() ? " allocated " : " ") << Name() << std::endl;
+void Tensor::dump(std::ostream &os) const {
+    os << "  " << to_string(type()) << " x " << shape()
+       << (is_allocated() ? " allocated " : " ") << name() << std::endl;
 }
 
 }  // namespace interpret_nn

@@ -26,8 +26,8 @@ public:
         : Op(std::move(inputs), {output}) {
     }
 
-    Bounds InferBounds(const Box &crop) const;
-    std::vector<Box> Split(const Box &crop) const;
+    Bounds infer_bounds(const Box &crop) const;
+    std::vector<Box> split(const Box &crop) const;
 };
 
 // This is an abstract helper op for pooling operations.
@@ -49,8 +49,8 @@ public:
           activation_(activation) {
     }
 
-    Bounds InferBounds(const Box &crop) const;
-    std::vector<Box> Split(const Box &crop) const;
+    Bounds infer_bounds(const Box &crop) const;
+    std::vector<Box> split(const Box &crop) const;
 };
 
 class AddOp : public ElementwiseOp {
@@ -62,16 +62,16 @@ public:
         : ElementwiseOp({input1, input2}, output), activation_(activation) {
     }
 
-    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
         return make_unique<AddOp>(
-            apply(map, Input(0)), apply(map, Input(1)),
-            apply(map, Output()), activation_);
+            apply(map, input(0)), apply(map, input(1)),
+            apply(map, output()), activation_);
     }
 
-    void Execute(const Box &crop);
+    void execute(const Box &crop);
 
-    void Dump(std::ostream &os) const {
-        os << "  Add " << Output()->Name() << std::endl;
+    void dump(std::ostream &os) const {
+        os << "  Add " << output()->name() << std::endl;
     }
 };
 
@@ -84,16 +84,16 @@ public:
                  std::move(filter_size), padding, activation) {
     }
 
-    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
         return make_unique<AveragePoolOp>(
-            apply(map, Input()), apply(map, Output()), stride_,
+            apply(map, input()), apply(map, output()), stride_,
             filter_size_, padding_, activation_);
     }
 
-    void Execute(const Box &crop);
+    void execute(const Box &crop);
 
-    void Dump(std::ostream &os) const {
-        os << "  AveragePool " << Output()->Name() << std::endl;
+    void dump(std::ostream &os) const {
+        os << "  AveragePool " << output()->name() << std::endl;
     }
 };
 
@@ -106,22 +106,22 @@ public:
                     int axis, ActivationFunction activation)
         : Op(std::move(inputs), {output}), axis_(axis), activation_(activation) {}
 
-    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
         std::vector<Tensor *> inputs;
-        for (int i = 0; i < InputCount(); i++) {
-            inputs.push_back(apply(map, Input(i)));
+        for (int i = 0; i < input_count(); i++) {
+            inputs.push_back(apply(map, input(i)));
         }
         return make_unique<ConcatenationOp>(
-            inputs, apply(map, Output()), axis_, activation_);
+            inputs, apply(map, output()), axis_, activation_);
     }
 
-    Bounds InferBounds(const Box &crop) const;
-    std::vector<Box> Split(const Box &crop) const;
+    Bounds infer_bounds(const Box &crop) const;
+    std::vector<Box> split(const Box &crop) const;
 
-    void Execute(const Box &crop);
+    void execute(const Box &crop);
 
-    void Dump(std::ostream &os) const {
-        os << "  Concatenation " << Output()->Name() << std::endl;
+    void dump(std::ostream &os) const {
+        os << "  Concatenation " << output()->name() << std::endl;
     }
 };
 
@@ -142,32 +142,32 @@ public:
           activation_(activation) {
     }
 
-    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
         return make_unique<Conv2DOp>(
-            apply(map, Input()), apply(map, Filter()), apply(map, Bias()),
-            apply(map, Output()), stride_, dilation_, padding_, activation_);
+            apply(map, input()), apply(map, filter()), apply(map, bias()),
+            apply(map, output()), stride_, dilation_, padding_, activation_);
     }
 
-    const Tensor *Filter() const {
-        return Op::Input(1);
+    const Tensor *filter() const {
+        return Op::input(1);
     }
-    const Tensor *Bias() const {
-        return Op::Input(2);
+    const Tensor *bias() const {
+        return Op::input(2);
     }
-    Tensor *Filter() {
-        return Op::Input(1);
+    Tensor *filter() {
+        return Op::input(1);
     }
-    Tensor *Bias() {
-        return Op::Input(2);
+    Tensor *bias() {
+        return Op::input(2);
     }
 
-    Bounds InferBounds(const Box &crop) const;
-    std::vector<Box> Split(const Box &crop) const;
+    Bounds infer_bounds(const Box &crop) const;
+    std::vector<Box> split(const Box &crop) const;
 
-    void Execute(const Box &crop);
+    void execute(const Box &crop);
 
-    void Dump(std::ostream &os) const {
-        os << "  Conv2D " << Output()->Name() << std::endl;
+    void dump(std::ostream &os) const {
+        os << "  Conv2D " << output()->name() << std::endl;
     }
 };
 
@@ -191,38 +191,38 @@ public:
           activation_(activation) {
     }
 
-    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
         return make_unique<DepthwiseConv2DOp>(
-            apply(map, Input()), apply(map, Filter()), apply(map, Bias()),
-            apply(map, Output()), depth_multiplier_, stride_, dilation_, padding_, activation_);
+            apply(map, input()), apply(map, filter()), apply(map, bias()),
+            apply(map, output()), depth_multiplier_, stride_, dilation_, padding_, activation_);
     }
 
-    const Tensor *Input() const {
-        return Op::Input(0);
+    const Tensor *input() const {
+        return Op::input(0);
     }
-    const Tensor *Filter() const {
-        return Op::Input(1);
+    const Tensor *filter() const {
+        return Op::input(1);
     }
-    const Tensor *Bias() const {
-        return Op::Input(2);
+    const Tensor *bias() const {
+        return Op::input(2);
     }
-    Tensor *Input() {
-        return Op::Input(0);
+    Tensor *input() {
+        return Op::input(0);
     }
-    Tensor *Filter() {
-        return Op::Input(1);
+    Tensor *filter() {
+        return Op::input(1);
     }
-    Tensor *Bias() {
-        return Op::Input(2);
+    Tensor *bias() {
+        return Op::input(2);
     }
 
-    Bounds InferBounds(const Box &crop) const;
-    std::vector<Box> Split(const Box &crop) const;
+    Bounds infer_bounds(const Box &crop) const;
+    std::vector<Box> split(const Box &crop) const;
 
-    void Execute(const Box &crop);
+    void execute(const Box &crop);
 
-    void Dump(std::ostream &os) const {
-        os << "  DepthwiseConv2D " << Output()->Name() << std::endl;
+    void dump(std::ostream &os) const {
+        os << "  DepthwiseConv2D " << output()->name() << std::endl;
     }
 };
 
@@ -235,15 +235,15 @@ public:
                  std::move(filter_size), padding, activation) {
     }
 
-    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
         return make_unique<MaxPoolOp>(
-            apply(map, Input()), apply(map, Output()), stride_, filter_size_, padding_, activation_);
+            apply(map, input()), apply(map, output()), stride_, filter_size_, padding_, activation_);
     }
 
-    void Execute(const Box &crop);
+    void execute(const Box &crop);
 
-    void Dump(std::ostream &os) const {
-        os << "  MaxPool " << Output()->Name() << std::endl;
+    void dump(std::ostream &os) const {
+        os << "  MaxPool " << output()->name() << std::endl;
     }
 };
 
@@ -253,18 +253,18 @@ public:
         : Op({input, padding}, {output}) {
     }
 
-    std::unique_ptr<Op> Clone(const TensorMap &map) const {
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
         return make_unique<PadOp>(
-            apply(map, Input(0)), apply(map, Input(1)), apply(map, Output()));
+            apply(map, input(0)), apply(map, input(1)), apply(map, output()));
     }
 
-    Bounds InferBounds(const Box &crop) const;
-    std::vector<Box> Split(const Box &crop) const;
+    Bounds infer_bounds(const Box &crop) const;
+    std::vector<Box> split(const Box &crop) const;
 
-    void Execute(const Box &crop);
+    void execute(const Box &crop);
 
-    void Dump(std::ostream &os) const {
-        os << "  Pad " << Output()->Name() << std::endl;
+    void dump(std::ostream &os) const {
+        os << "  Pad " << output()->name() << std::endl;
     }
 };
 
@@ -276,17 +276,17 @@ public:
         : Op({input}, {output}), new_shape_(std::move(new_shape)) {
     }
 
-    std::unique_ptr<Op> Clone(const TensorMap &map) const {
-        return make_unique<ReshapeOp>(apply(map, Input()), apply(map, Output()), new_shape_);
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
+        return make_unique<ReshapeOp>(apply(map, input()), apply(map, output()), new_shape_);
     }
 
-    Bounds InferBounds(const Box &crop) const;
-    std::vector<Box> Split(const Box &crop) const;
+    Bounds infer_bounds(const Box &crop) const;
+    std::vector<Box> split(const Box &crop) const;
 
-    void Execute(const Box &crop);
+    void execute(const Box &crop);
 
-    void Dump(std::ostream &os) const {
-        os << "  Reshape " << Output()->Name() << std::endl;
+    void dump(std::ostream &os) const {
+        os << "  Reshape " << output()->name() << std::endl;
     }
 };
 

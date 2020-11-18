@@ -20,7 +20,7 @@ std::unique_ptr<T> make_unique(Args &&... args) {
 template<typename T>
 using HalideBuffer = Halide::Runtime::Buffer<T>;
 
-// TODO: renamed to "TensorType" to avoid some warnings between this and the Type()
+// TODO: renamed to "TensorType" to avoid some warnings between this and the type()
 // method and to avoid confusion with Halide::Type. Yuck. Need a better name.
 enum class TensorType {
     // Note that these are deliberately ordered and valued to match tflite's
@@ -139,27 +139,27 @@ public:
 
     Tensor(const Tensor& copy) = default;
 
-    interpret_nn::TensorType Type() const {
+    interpret_nn::TensorType type() const {
         return type_;
     }
-    const std::string &Name() const {
+    const std::string &name() const {
         return name_;
     }
-    const std::vector<halide_dimension_t> &Shape() const {
+    const std::vector<halide_dimension_t> &shape() const {
         return shape_;
     }
-    const halide_dimension_t &Dim(int i) const {
+    const halide_dimension_t &dim(int i) const {
         return shape_[i];
     }
-    int Rank() const {
+    int rank() const {
         return shape_.size();
     }
-    const QuantizationInfo &Quantization() const {
+    const QuantizationInfo &quantization() const {
         return quantization_;
     }
 
     template<class T>
-    HalideBuffer<T> Data() {
+    HalideBuffer<T> data() {
         if (std::is_void<T>::value) {
             return HalideBuffer<T>(
                 to_halide_type(type_),
@@ -174,7 +174,7 @@ public:
     }
 
     template<class T>
-    HalideBuffer<const T> Data() const {
+    HalideBuffer<const T> data() const {
         if (std::is_void<T>::value) {
             return HalideBuffer<const T>(
                 to_halide_type(type_),
@@ -189,8 +189,8 @@ public:
     }
 
     template<class T>
-    HalideBuffer<T> Data(const Box &crop) {
-        HalideBuffer<T> buf = Data<T>();
+    HalideBuffer<T> data(const Box &crop) {
+        HalideBuffer<T> buf = data<T>();
         for (int i = 0; i < (int)crop.size(); i++) {
             buf.crop(i, crop[i].min, crop[i].extent());
         }
@@ -198,23 +198,23 @@ public:
     }
 
     template<class T>
-    HalideBuffer<const T> Data(const Box &crop) const {
-        HalideBuffer<const T> buf = Data<T>();
+    HalideBuffer<const T> data(const Box &crop) const {
+        HalideBuffer<const T> buf = data<T>();
         for (int i = 0; i < (int)crop.size(); i++) {
             buf.crop(i, crop[i].min, crop[i].extent());
         }
         return buf;
     }
 
-    bool IsAllocated() const {
+    bool is_allocated() const {
         return !data_.empty();
     }
-    void Allocate();
-    void Free() {
+    void allocate();
+    void free() {
         data_.resize(0);
     }
 
-    void Dump(std::ostream &os) const;
+    void dump(std::ostream &os) const;
 
     Tensor() = delete;
     Tensor &operator=(const Tensor &) = delete;
@@ -242,11 +242,11 @@ public:
     virtual ~Op() = default;
 
     // Get the shape of the complete output of this op.
-    virtual Box GetFullCrop() {
-        if (OutputCount() == 1) {
-            return without_strides(Output(0)->Shape());
+    virtual Box get_full_crop() {
+        if (output_count() == 1) {
+            return without_strides(output(0)->shape());
         } else {
-            APP_FATAL << "More than one output requires GetFullCrop override.";
+            APP_FATAL << "More than one output requires get_full_crop override.";
             return Box();
         }
     }
@@ -256,49 +256,50 @@ public:
         std::vector<Box> inputs;
         std::vector<Box> outputs;
     };
-    virtual Bounds InferBounds(const Box &crop) const = 0;
+    virtual Bounds infer_bounds(const Box &crop) const = 0;
 
     // Execute the op on a given crop.
-    virtual void Execute(const Box &crop) = 0;
+    virtual void execute(const Box &crop) = 0;
 
     // Given a crop, split the crop into smaller crops appropriate for this op.
-    virtual std::vector<Box> Split(const Box &crop) const {
+    virtual std::vector<Box> split(const Box &crop) const {
         return {crop};
     }
 
-    virtual std::unique_ptr<Op> Clone(const TensorMap& tensor_map) const = 0;
+    // Clone this op, replacing tensors using the mapping in tensor_map.
+    virtual std::unique_ptr<Op> clone(const TensorMap& tensor_map) const = 0;
 
-    virtual void Dump(std::ostream &os) const = 0;
+    virtual void dump(std::ostream &os) const = 0;
 
-    int InputCount() const {
+    int input_count() const {
         return inputs_.size();
     }
-    int OutputCount() const {
+    int output_count() const {
         return outputs_.size();
     }
-    const Tensor *Input(int idx) const {
+    const Tensor *input(int idx) const {
         return inputs_[idx];
     }
-    const Tensor *Output(int idx) const {
+    const Tensor *output(int idx) const {
         return outputs_[idx];
     }
-    const Tensor *Input() const {
-        return Input(0);
+    const Tensor *input() const {
+        return input(0);
     }
-    const Tensor *Output() const {
-        return Output(0);
+    const Tensor *output() const {
+        return output(0);
     }
-    Tensor *Input(int idx) {
+    Tensor *input(int idx) {
         return inputs_[idx];
     }
-    Tensor *Output(int idx) {
+    Tensor *output(int idx) {
         return outputs_[idx];
     }
-    Tensor *Input() {
-        return Input(0);
+    Tensor *input() {
+        return input(0);
     }
-    Tensor *Output() {
-        return Output(0);
+    Tensor *output() {
+        return output(0);
     }
 
     // Movable but not copyable.
@@ -313,16 +314,16 @@ struct Model {
     std::vector<std::shared_ptr<Tensor>> tensors;
     std::vector<std::unique_ptr<Op>> ops;
 
-    void Dump(std::ostream &os);
+    void dump(std::ostream &os);
 
     // Models can be copied. Tensors that are allocated will be
     // shared, tensors that are not allocated will be cloned.
     Model(const Model &);
-
     Model() = default;
-    Model &operator=(const Model &) = delete;
     Model(Model &&) = default;
     Model &operator=(Model &&) = default;
+
+    Model &operator=(const Model &) = delete;
 };
 
 }  // namespace interpret_nn

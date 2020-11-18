@@ -17,7 +17,7 @@ void RunBenchmark(const std::string &filename, const ScheduleOptions &options) {
     Model model = ParseTfLiteModelFromBuffer(buffer.data());
 
     if (options.verbose) {
-        model.Dump(std::cout);
+        model.dump(std::cout);
     }
 
     ModelInterpreter interpreter(std::move(model), options);
@@ -26,7 +26,7 @@ void RunBenchmark(const std::string &filename, const ScheduleOptions &options) {
     auto end = begin;
     int loops = 0;
     do {
-        interpreter.Execute();
+        interpreter.execute();
         loops++;
         end = std::chrono::high_resolution_clock::now();
     } while (end - begin < std::chrono::seconds(1));
@@ -34,10 +34,10 @@ void RunBenchmark(const std::string &filename, const ScheduleOptions &options) {
 
     if (options.verbose) {
         std::cout << "Outputs:\n";
-        std::vector<Tensor *> outputs = interpreter.Outputs();
+        std::vector<Tensor *> outputs = interpreter.outputs();
         for (Tensor *t : outputs) {
             APP_CHECK(t);
-            std::cout << "  \"" << t->Name() << "\" : " << to_string(t->Type()) << " x " << t->Shape() << "\n";
+            std::cout << "  \"" << t->name() << "\" : " << to_string(t->type()) << " x " << t->shape() << "\n";
         }
     }
 }

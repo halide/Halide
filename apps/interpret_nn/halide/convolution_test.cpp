@@ -10,7 +10,7 @@
 #include "common_reference.h"
 #include "halide_benchmark.h"
 
-using interpret_nn::MultiplyByQuantizedMultiplierSmallerThanOneReference;
+using interpret_nn::multiply_quantized;
 
 namespace {
 
@@ -170,7 +170,7 @@ void ValidateOutput(ConvolutionArgs &a, const TestParams &p) {
             }
         }
 
-        output = MultiplyByQuantizedMultiplierSmallerThanOneReference(output, a.output_multiplier, a.output_shift);
+        output = multiply_quantized(output, a.output_multiplier, a.output_shift);
         output += a.output_offset;
         output = std::max(output, (int32_t)a.output_min);
         output = std::min(output, (int32_t)a.output_max);

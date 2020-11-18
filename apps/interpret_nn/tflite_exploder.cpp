@@ -45,7 +45,7 @@ using app_util::WriteEntireFile;
 
 namespace {
 
-tflite::BuiltinOperator GetBuiltinCode(const tflite::OperatorCode *op_code) {
+tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
     APP_CHECK(op_code != nullptr);
 
     return std::max(
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         op_index++;
 
         const auto *opcode = opcodes->Get(op->opcode_index());
-        std::string op_name = tflite::EnumNameBuiltinOperator(GetBuiltinCode(opcode));
+        std::string op_name = tflite::EnumNameBuiltinOperator(get_builtin_code(opcode));
 
         std::map<int32_t, int32_t> old_to_new_tensor_map;
         APP_CHECK(op->inputs() != nullptr);

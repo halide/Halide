@@ -120,11 +120,11 @@ MinMax GetQuantizedMinMax(ActivationFunction activation, int zero_point, double 
     return {output_activation_min, output_activation_max};
 }
 
-MinMax GetOutputRange(ActivationFunction activation, Tensor *output) {
-    const int output_offset = output->Quantization().zero.at(0);
+MinMax GetoutRange(ActivationFunction activation, Tensor *out) {
+    const int output_offset = out->quantization().zero.at(0);
     APP_CHECK(output_offset >= 0 && output_offset <= 255);
 
-    const float output_scale = output->Quantization().scale.at(0);
+    const float output_scale = out->quantization().scale.at(0);
 
     const auto output_range = GetQuantizedMinMax(activation, output_offset, output_scale);
     // TODO: handle unexpected out-of-range data more cleanly.
@@ -137,23 +137,23 @@ MinMax GetOutputRange(ActivationFunction activation, Tensor *output) {
 
 }  // namespace
 
-Op::Bounds ElementwiseOp::InferBounds(const Box &crop) const {
+Op::Bounds ElementwiseOp::infer_bounds(const Box &crop) const {
     Bounds result;
-    for (int i = 0; i < InputCount(); i++) {
+    for (int i = 0; i < input_count(); i++) {
         result.inputs.emplace_back(crop);
     }
-    for (int i = 0; i < OutputCount(); i++) {
+    for (int i = 0; i < output_count(); i++) {
         result.outputs.emplace_back(crop);
     }
     return result;
 }
 
-std::vector<Box> ElementwiseOp::Split(const Box &crop) const {
-    const int kSplit = 2;
-    return split_crop(crop, 2, kSplit);
+std::vector<Box> ElementwiseOp::split(const Box &crop) const {
+    const int ksplit = 2;
+    return split_crop(crop, 2, ksplit);
 }
 
-Op::Bounds PoolOp::InferBounds(const Box &crop) const {
+Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
     Box input_crop = crop;
 
     input_crop[0] = crop[0];
@@ -163,7 +163,7 @@ Op::Bounds PoolOp::InferBounds(const Box &crop) const {
 
     input_crop[1].max += filter_size_[0] - 1;
     input_crop[2].max += filter_size_[1] - 1;
-    input_crop = intersect(input_crop, without_strides(Input()->Shape()));
+    input_crop = intersect(input_crop, without_strides(input()->shape()));
 
     Bounds result;
     result.inputs.emplace_back(input_crop);
@@ -171,70 +171,70 @@ Op::Bounds PoolOp::InferBounds(const Box &crop) const {
     return result;
 }
 
-std::vector<Box> PoolOp::Split(const Box &crop) const {
-    const int kSplit = 2;
-    return split_crop(crop, 2, kSplit);
+std::vector<Box> PoolOp::split(const Box &crop) const {
+    const int ksplit = 2;
+    return split_crop(crop, 2, ksplit);
 }
 
-void AddOp::Execute(const Box &crop) {
-    const Tensor *input1 = Input(0);
-    const Tensor *input2 = Input(1);
-    Tensor *output = Output();
+void AddOp::execute(const Box &crop) {
+    const Tensor *in1 = input(0);
+    const Tensor *in2 = input(1);
+    Tensor *out = output();
 
-    if (input1->Type() == TensorType::UInt8 &&
-        input2->Type() == TensorType::UInt8 &&
-        output->Type() == TensorType::UInt8) {
-        auto input1_buf = input1->Data<uint8_t>();
-        auto input2_buf = input2->Data<uint8_t>();
-        auto output_buf = output->Data<uint8_t>(crop);
+    if (in1->type() == TensorType::UInt8 &&
+        in2->type() == TensorType::UInt8 &&
+        out->type() == TensorType::UInt8) {
+        auto in1_buf = in1->data<uint8_t>();
+        auto in2_buf = in2->data<uint8_t>();
+        auto output_buf = out->data<uint8_t>(crop);
 
-        const int input1_offset = input1->Quantization().zero.at(0);
-        const int input2_offset = input2->Quantization().zero.at(0);
-        const int output_offset = output->Quantization().zero.at(0);
-        APP_CHECK(input1_offset >= 0 && input1_offset <= 255);
-        APP_CHECK(input2_offset >= 0 && input2_offset <= 255);
+        const int in1_offset = in1->quantization().zero.at(0);
+        const int in2_offset = in2->quantization().zero.at(0);
+        const int output_offset = out->quantization().zero.at(0);
+        APP_CHECK(in1_offset >= 0 && in1_offset <= 255);
+        APP_CHECK(in2_offset >= 0 && in2_offset <= 255);
         APP_CHECK(output_offset >= 0 && output_offset <= 255);
 
-        const float input1_scale = input1->Quantization().scale.at(0);
-        const float input2_scale = input2->Quantization().scale.at(0);
-        const float output_scale = output->Quantization().scale.at(0);
+        const float in1_scale = in1->quantization().scale.at(0);
+        const float in2_scale = in2->quantization().scale.at(0);
+        const float output_scale = out->quantization().scale.at(0);
 
         const int left_shift = 20;  // 20 for 8-bit, 15 for 16-bit
-        const double twice_max_input_scale = 2 * std::max(input1_scale, input2_scale);
-        const double real_input1_multiplier = input1_scale / twice_max_input_scale;
-        const double real_input2_multiplier = input2_scale / twice_max_input_scale;
+        const double twice_max_input_scale = 2 * std::max(in1_scale, in2_scale);
+        const double real_in1_multiplier = in1_scale / twice_max_input_scale;
+        const double real_in2_multiplier = in2_scale / twice_max_input_scale;
         const double real_output_multiplier = twice_max_input_scale / ((1 << left_shift) * output_scale);
 
-        const auto input1_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_input1_multiplier);
-        const auto input2_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_input2_multiplier);
+        const auto in1_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_in1_multiplier);
+        const auto in2_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_in2_multiplier);
         const auto output_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_output_multiplier);
-        APP_CHECK(input1_mul_and_shift.shift <= 0);
-        APP_CHECK(input2_mul_and_shift.shift <= 0);
+        APP_CHECK(in1_mul_and_shift.shift <= 0);
+        APP_CHECK(in2_mul_and_shift.shift <= 0);
         APP_CHECK(output_mul_and_shift.shift <= 0);
 
         // TODO: for SubOp:
         // mul_and_shift2.multiplier *= -1;
 
-        const auto output_range = GetOutputRange(activation_, output);
+        const auto output_range = GetoutRange(activation_, out);
 
-        APP_CHECK(0 == AddUint8Uint8(left_shift, input1_buf, input2_buf,
-                                     -input1_offset, input1_mul_and_shift.multiplier, -input1_mul_and_shift.shift,
-                                     -input2_offset, input2_mul_and_shift.multiplier, -input2_mul_and_shift.shift,
+        APP_CHECK(0 == AddUint8Uint8(left_shift, in1_buf, in2_buf,
+                                     -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
+                                     -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
                                      output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                      output_range.min, output_range.max, output_buf));
     }
 }
 
-void AveragePoolOp::Execute(const Box &crop) {
-    const Tensor *input = Input();
-    Tensor *output = Output();
+void AveragePoolOp::execute(const Box &crop) {
+    const Tensor *in = input();
+    Tensor *out = output();
 
-    if (input->Type() == TensorType::UInt8 &&
-        output->Type() == TensorType::UInt8) {
-        auto input_buf = input->Data<uint8_t>();
-        auto output_buf = output->Data<uint8_t>(crop);
+    if (in->type() == TensorType::UInt8 &&
+        out->type() == TensorType::UInt8) {
+        auto input_buf = in->data<uint8_t>();
+        auto output_buf = out->data<uint8_t>(crop);
 
-        const auto output_range = GetOutputRange(activation_, output);
+        const auto output_range = GetoutRange(activation_, out);
 
         APP_CHECK(
             0 == AveragePoolUint8(input_buf, stride_[0], stride_[1],
@@ -243,38 +243,38 @@ void AveragePoolOp::Execute(const Box &crop) {
     }
 }
 
-Op::Bounds ConcatenationOp::InferBounds(const Box &crop) const {
+Op::Bounds ConcatenationOp::infer_bounds(const Box &crop) const {
     // We need everything from the concatenated dimension, everything else
     // is the same as the crop.
     // TODO: It's possible that if the concatenated dimension is cropped
-    // from the output, we could reduce the bounds required of some of the
-    // inputs.
+    // from the out, we could reduce the bounds required of some of the
+    // ins.
     Bounds result;
-    for (int i = 0; i < InputCount(); i++) {
+    for (int i = 0; i < input_count(); i++) {
         result.inputs.emplace_back(crop);
-        result.inputs.back()[axis_] = Input(i)->Dim(axis_);
+        result.inputs.back()[axis_] = input(i)->dim(axis_);
     }
     result.outputs.emplace_back(crop);
-    result.outputs.back()[axis_] = Output()->Dim(axis_);
+    result.outputs.back()[axis_] = output()->dim(axis_);
     return result;
 }
 
-std::vector<Box> ConcatenationOp::Split(const Box &crop) const {
+std::vector<Box> ConcatenationOp::split(const Box &crop) const {
     assert(axis_ != 2);
-    // Split this into individual lines, so it can get re-fused with any
+    // split this into individual lines, so it can get re-fused with any
     // alignment.
-    const int kSplit = 1;
-    return split_crop(crop, 2, kSplit);
+    const int ksplit = 1;
+    return split_crop(crop, 2, ksplit);
 }
 
-void ConcatenationOp::Execute(const Box &crop) {
-    Tensor *output = Output();
+void ConcatenationOp::execute(const Box &crop) {
+    Tensor *out = output();
 
-    auto output_buf = output->Data<void>(crop);
+    auto output_buf = out->data<void>(crop);
 
     int output_i = output_buf.dim(axis_).min();
-    for (int i = 0; i < InputCount(); i++) {
-        HalideBuffer<void> input_buf = Input(i)->Data<void>(crop);
+    for (int i = 0; i < input_count(); i++) {
+        HalideBuffer<void> input_buf = input(i)->data<void>(crop);
         for (int j = input_buf.dim(axis_).min(); j <= input_buf.dim(axis_).max(); j++) {
             // TODO: Maybe we could just copy whole buffers?
             HalideBuffer<void> input_j = input_buf.sliced(axis_, j);
@@ -284,9 +284,9 @@ void ConcatenationOp::Execute(const Box &crop) {
     }
 }
 
-Op::Bounds Conv2DOp::InferBounds(const Box &crop) const {
+Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
     Box input_crop = crop;
-    Box filter_shape = without_strides(Filter()->Shape());
+    Box filter_shape = without_strides(filter()->shape());
 
     for (int dim = 1; dim <= 2; dim++) {
         input_crop[dim] *= stride_[dim - 1];
@@ -295,15 +295,15 @@ Op::Bounds Conv2DOp::InferBounds(const Box &crop) const {
     input_crop[0] = filter_shape[3];
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
-    input_crop = intersect(input_crop, without_strides(Input()->Shape()));
+    input_crop = intersect(input_crop, without_strides(input()->shape()));
 
     if (padding_ == Padding::Same) {
-        const int input_width = Input()->Dim(1).extent;
-        const int input_height = Input()->Dim(2).extent;
-        const int filter_width = Filter()->Dim(1).extent;
-        const int filter_height = Filter()->Dim(2).extent;
-        const int output_width = Output()->Dim(1).extent;
-        const int output_height = Output()->Dim(2).extent;
+        const int input_width = input()->dim(1).extent;
+        const int input_height = input()->dim(2).extent;
+        const int filter_width = filter()->dim(1).extent;
+        const int filter_height = filter()->dim(2).extent;
+        const int output_width = output()->dim(1).extent;
+        const int output_height = output()->dim(2).extent;
 
         const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
         const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
@@ -320,36 +320,35 @@ Op::Bounds Conv2DOp::InferBounds(const Box &crop) const {
     Bounds result;
     result.inputs.emplace_back(input_crop);
     result.inputs.emplace_back(std::move(filter_shape));
-    result.inputs.emplace_back(without_strides(Bias()->Shape()));
+    result.inputs.emplace_back(without_strides(bias()->shape()));
     result.outputs = {crop};
 
     return result;
 }
 
-std::vector<Box> Conv2DOp::Split(const Box &crop) const {
-    const int kSplit = 2;
-    return split_crop(crop, 2, kSplit);
+std::vector<Box> Conv2DOp::split(const Box &crop) const {
+    const int ksplit = 2;
+    return split_crop(crop, 2, ksplit);
 }
 
-void Conv2DOp::Execute(const Box &crop) {
-    const Tensor *input = Input();
-    const Tensor *filter = Filter();
-    const Tensor *bias = Bias();
-    Tensor *output = Output();
+void Conv2DOp::execute(const Box &crop) {
+    const Tensor *in = input();
+    const Tensor *filt = filter();
+    Tensor *out = output();
 
-    if (input->Type() == TensorType::UInt8 &&
-        filter->Type() == TensorType::UInt8 &&
-        output->Type() == TensorType::UInt8) {
+    if (in->type() == TensorType::UInt8 &&
+        filt->type() == TensorType::UInt8 &&
+        out->type() == TensorType::UInt8) {
         // TODO: reduce code duplication between here and DepthwiseConv2D
-        auto input_buf = input->Data<uint8_t>();
-        auto filter_buf = filter->Data<uint8_t>();
-        auto bias_buf = bias->Data<int32_t>();
-        auto output_buf = output->Data<uint8_t>(crop);
+        auto input_buf = in->data<uint8_t>();
+        auto filter_buf = filt->data<uint8_t>();
+        auto bias_buf = bias()->data<int32_t>();
+        auto output_buf = out->data<uint8_t>(crop);
 
-        const int input_offset = input->Quantization().zero.at(0);
-        const int filter_offset = filter->Quantization().zero.at(0);
-        const int bias_offset = bias->Quantization().zero.at(0);
-        const int output_offset = output->Quantization().zero.at(0);
+        const int input_offset = in->quantization().zero.at(0);
+        const int filter_offset = filt->quantization().zero.at(0);
+        const int bias_offset = bias()->quantization().zero.at(0);
+        const int output_offset = out->quantization().zero.at(0);
 
         // TODO: handle unexpected out-of-range data more cleanly.
         APP_CHECK(input_offset >= 0 && input_offset <= 255);
@@ -357,10 +356,10 @@ void Conv2DOp::Execute(const Box &crop) {
         APP_CHECK(bias_offset == 0);
         APP_CHECK(output_offset >= 0 && output_offset <= 255);
 
-        const float input_scale = input->Quantization().scale.at(0);
-        const float filter_scale = filter->Quantization().scale.at(0);
-        const float bias_scale = bias->Quantization().scale.at(0);
-        const float output_scale = output->Quantization().scale.at(0);
+        const float input_scale = in->quantization().scale.at(0);
+        const float filter_scale = filt->quantization().scale.at(0);
+        const float bias_scale = bias()->quantization().scale.at(0);
+        const float output_scale = out->quantization().scale.at(0);
 
         const double input_product_scale = input_scale * filter_scale;
         // TODO: handle unexpected out-of-range data more cleanly.
@@ -374,7 +373,7 @@ void Conv2DOp::Execute(const Box &crop) {
         // ConvolutionUint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
-        const auto output_range = GetOutputRange(activation_, output);
+        const auto output_range = GetoutRange(activation_, out);
 
         if (padding_ == Padding::Same) {
             const int input_width = input_buf.dim(1).extent();
@@ -404,9 +403,9 @@ void Conv2DOp::Execute(const Box &crop) {
     }
 }
 
-Op::Bounds DepthwiseConv2DOp::InferBounds(const Box &crop) const {
+Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
     Box input_crop = crop;
-    Box filter_shape = without_strides(Filter()->Shape());
+    Box filter_shape = without_strides(filter()->shape());
 
     input_crop[0] = crop[0];
     input_crop[0] /= depth_multiplier_;
@@ -416,15 +415,15 @@ Op::Bounds DepthwiseConv2DOp::InferBounds(const Box &crop) const {
 
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
-    input_crop = intersect(input_crop, without_strides(Input()->Shape()));
+    input_crop = intersect(input_crop, without_strides(input()->shape()));
 
     if (padding_ == Padding::Same) {
-        const int input_width = Input()->Dim(1).extent;
-        const int input_height = Input()->Dim(2).extent;
-        const int filter_width = Filter()->Dim(1).extent;
-        const int filter_height = Filter()->Dim(2).extent;
-        const int output_width = Output()->Dim(1).extent;
-        const int output_height = Output()->Dim(2).extent;
+        const int input_width = input()->dim(1).extent;
+        const int input_height = input()->dim(2).extent;
+        const int filter_width = filter()->dim(1).extent;
+        const int filter_height = filter()->dim(2).extent;
+        const int output_width = output()->dim(1).extent;
+        const int output_height = output()->dim(2).extent;
 
         const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
         const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
@@ -441,39 +440,38 @@ Op::Bounds DepthwiseConv2DOp::InferBounds(const Box &crop) const {
     Bounds result;
     result.inputs.emplace_back(input_crop);
     result.inputs.emplace_back(std::move(filter_shape));
-    result.inputs.emplace_back(without_strides(Bias()->Shape()));
+    result.inputs.emplace_back(without_strides(bias()->shape()));
     result.outputs = {crop};
     return result;
 }
 
-std::vector<Box> DepthwiseConv2DOp::Split(const Box &crop) const {
-    const int kSplit = 2;
-    return split_crop(crop, 2, kSplit, true);
+std::vector<Box> DepthwiseConv2DOp::split(const Box &crop) const {
+    const int ksplit = 2;
+    return split_crop(crop, 2, ksplit, true);
 }
 
-void DepthwiseConv2DOp::Execute(const Box &crop) {
-    const Tensor *input = Input();
-    const Tensor *filter = Filter();
-    const Tensor *bias = Bias();
-    Tensor *output = Output();
+void DepthwiseConv2DOp::execute(const Box &crop) {
+    const Tensor *in = input();
+    const Tensor *filt = filter();
+    Tensor *out = output();
 
-    if (input->Type() == TensorType::UInt8 &&
-        filter->Type() == TensorType::UInt8 &&
-        output->Type() == TensorType::UInt8) {
+    if (in->type() == TensorType::UInt8 &&
+        filt->type() == TensorType::UInt8 &&
+        out->type() == TensorType::UInt8) {
         // TODO: reduce code duplication between here and Conv2D
-        auto input_buf = input->Data<uint8_t>();
-        auto filter_buf = filter->Data<uint8_t>().sliced(3, 0);
-        auto bias_buf = bias->Data<int32_t>();
-        auto output_buf = output->Data<uint8_t>(crop);
+        auto input_buf = in->data<uint8_t>();
+        auto filter_buf = filt->data<uint8_t>().sliced(3, 0);
+        auto bias_buf = bias()->data<int32_t>();
+        auto output_buf = out->data<uint8_t>(crop);
 
         int depth_multiplier = output_buf.dim(0).extent() / input_buf.dim(0).extent();
         // TODO: handle unexpected out-of-range data more cleanly.
         APP_CHECK(depth_multiplier * input_buf.dim(0).extent() == output_buf.dim(0).extent());
 
-        const int input_offset = input->Quantization().zero.at(0);
-        const int filter_offset = filter->Quantization().zero.at(0);
-        const int bias_offset = bias->Quantization().zero.at(0);
-        const int output_offset = output->Quantization().zero.at(0);
+        const int input_offset = in->quantization().zero.at(0);
+        const int filter_offset = filt->quantization().zero.at(0);
+        const int bias_offset = bias()->quantization().zero.at(0);
+        const int output_offset = out->quantization().zero.at(0);
 
         // TODO: handle unexpected out-of-range data more cleanly.
         APP_CHECK(input_offset >= 0 && input_offset <= 255);
@@ -481,10 +479,10 @@ void DepthwiseConv2DOp::Execute(const Box &crop) {
         APP_CHECK(bias_offset == 0);
         APP_CHECK(output_offset >= 0 && output_offset <= 255);
 
-        const float input_scale = input->Quantization().scale.at(0);
-        const float filter_scale = filter->Quantization().scale.at(0);
-        const float bias_scale = bias->Quantization().scale.at(0);
-        const float output_scale = output->Quantization().scale.at(0);
+        const float input_scale = in->quantization().scale.at(0);
+        const float filter_scale = filt->quantization().scale.at(0);
+        const float bias_scale = bias()->quantization().scale.at(0);
+        const float output_scale = out->quantization().scale.at(0);
 
         const double input_product_scale = input_scale * filter_scale;
         // TODO: handle unexpected out-of-range data more cleanly.
@@ -498,7 +496,7 @@ void DepthwiseConv2DOp::Execute(const Box &crop) {
         // DepthwiseConvolutionUint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
-        const auto output_range = GetOutputRange(activation_, output);
+        const auto output_range = GetoutRange(activation_, out);
 
         // batches must match
         APP_CHECK(input_buf.dim(3).extent() == output_buf.dim(3).extent());
@@ -543,16 +541,16 @@ void DepthwiseConv2DOp::Execute(const Box &crop) {
     }
 }
 
-void MaxPoolOp::Execute(const Box &crop) {
-    const Tensor *input = Input();
-    Tensor *output = Output();
+void MaxPoolOp::execute(const Box &crop) {
+    const Tensor *in = input();
+    Tensor *out = output();
 
-    if (input->Type() == TensorType::UInt8 &&
-        output->Type() == TensorType::UInt8) {
-        auto input_buf = input->Data<uint8_t>();
-        auto output_buf = output->Data<uint8_t>(crop);
+    if (in->type() == TensorType::UInt8 &&
+        out->type() == TensorType::UInt8) {
+        auto input_buf = in->data<uint8_t>();
+        auto output_buf = out->data<uint8_t>(crop);
 
-        const auto output_range = GetOutputRange(activation_, output);
+        const auto output_range = GetoutRange(activation_, out);
 
         APP_CHECK(
             0 == MaxPoolUint8(input_buf, stride_[0], stride_[1],
@@ -561,8 +559,8 @@ void MaxPoolOp::Execute(const Box &crop) {
     }
 }
 
-Op::Bounds PadOp::InferBounds(const Box &crop) const {
-    auto padding = Input(1)->Data<const int32_t>();
+Op::Bounds PadOp::infer_bounds(const Box &crop) const {
+    auto padding = input(1)->data<const int32_t>();
 
     Bounds result;
 
@@ -572,25 +570,25 @@ Op::Bounds PadOp::InferBounds(const Box &crop) const {
     }
 
     result.inputs.emplace_back(
-        intersect(padded_crop, without_strides(Input(0)->Shape())));
-    result.inputs.emplace_back(without_strides(Input(1)->Shape()));
+        intersect(padded_crop, without_strides(input(0)->shape())));
+    result.inputs.emplace_back(without_strides(input(1)->shape()));
     result.outputs.emplace_back(crop);
     return result;
 }
 
-std::vector<Box> PadOp::Split(const Box &crop) const {
-    const int kSplit = 2;
-    return split_crop(crop, 2, kSplit);
+std::vector<Box> PadOp::split(const Box &crop) const {
+    const int ksplit = 2;
+    return split_crop(crop, 2, ksplit);
 }
 
-void PadOp::Execute(const Box &crop) {
-    const Tensor *input = Input(0);
-    auto padding = Input(1)->Data<const int32_t>();
-    Tensor *output = Output();
+void PadOp::execute(const Box &crop) {
+    const Tensor *in = input(0);
+    auto padding = input(1)->data<const int32_t>();
+    Tensor *out = output();
 
-    if (sizeof_tensor_type(output->Type()) == 1) {
-        auto input_buf = input->Data<uint8_t>();
-        auto output_buf = output->Data<uint8_t>(crop);
+    if (sizeof_tensor_type(out->type()) == 1) {
+        auto input_buf = in->data<uint8_t>();
+        auto output_buf = out->data<uint8_t>(crop);
 
         uint8_t pad_value = 0;
 
@@ -611,30 +609,30 @@ void PadOp::Execute(const Box &crop) {
 }
 
 // TODO: Maybe this is only a reshape in some dimensions, in which case we might be able to split it.
-Op::Bounds ReshapeOp::InferBounds(const Box &crop) const {
+Op::Bounds ReshapeOp::infer_bounds(const Box &crop) const {
     Bounds result;
-    result.inputs = {without_strides(Input()->Shape())};
+    result.inputs = {without_strides(input()->shape())};
     result.outputs = {crop};
     return result;
 }
 
-std::vector<Box> ReshapeOp::Split(const Box &crop) const {
+std::vector<Box> ReshapeOp::split(const Box &crop) const {
     return {crop};
 }
 
-void ReshapeOp::Execute(const Box &crop) {
-    const Tensor *input = Input();
-    Tensor *output = Output();
+void ReshapeOp::execute(const Box &crop) {
+    const Tensor *in = input();
+    Tensor *out = output();
 
-    if (input->Type() == TensorType::UInt8 &&
-        output->Type() == TensorType::UInt8) {
-        auto input_buf = input->Data<uint8_t>();
-        auto output_buf = output->Data<uint8_t>(crop);
+    if (in->type() == TensorType::UInt8 &&
+        out->type() == TensorType::UInt8) {
+        auto input_buf = in->data<uint8_t>();
+        auto output_buf = out->data<uint8_t>(crop);
 
         // TODO: This should probably just be implemented by aliasing two of the tensors.
         APP_CHECK(input_buf.number_of_elements() == output_buf.number_of_elements());
-        APP_CHECK(input->IsAllocated());
-        APP_CHECK(output->IsAllocated());
+        APP_CHECK(in->is_allocated());
+        APP_CHECK(out->is_allocated());
         // TODO: This should also check the strides are dense.
         memcpy(output_buf.data(), input_buf.data(), input_buf.number_of_elements());
     }

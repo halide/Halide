@@ -50,8 +50,8 @@ public:
         output_(c, x, y, b) = clamp(average(c, x, y, b), output_min_, output_max_);
 
         // Schedule.
-        InterpretAsTensor(input_);
-        InterpretAsTensor(output_);
+        interpret_as_tensor(input_);
+        interpret_as_tensor(output_);
 
         // TODO: Optimize more.
         Expr output_channels = output_.dim(0).extent();

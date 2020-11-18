@@ -60,7 +60,7 @@ public:
 
         // Pad x and y with the value that produces zero after the input offset is
         // subtracted.
-        Func input_bounded = ConstantExteriorTensor(input_, input_offset_);
+        Func input_bounded = constant_exterior_tensor(input_, input_offset_);
 
         Func bias_bounded = repeat_edge(bias_);
 
@@ -81,26 +81,22 @@ public:
         Expr filter_height = filter_.dim(2).extent();
         RDom r(0, filter_width, 0, filter_height);
         Expr filter_drxy = filter_biased(c, r.x, r.y);
-        Expr input_drxyb = input_biased(c,
-                                        x * stride_x_ + r.x * dilation_x_,
-                                        y * stride_y_ + r.y * dilation_y_,
-                                        b);
+        Expr input_drxyb =
+            input_biased(c, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
         Func convolved("convolved");
         convolved(c, x, y, b) = bias_bounded(c);
         convolved(c, x, y, b) += i32(filter_drxy) * i32(input_drxyb);
 
         // Saturate and narrow the output.
-        Expr output = output_offset_ +
-                      MultiplyByQuantizedMultiplierSmallerThanOne(convolved(c, x, y, b),
-                                                                  output_multiplier_,
-                                                                  output_shift_);
+        Expr output =
+            multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_) + output_offset_;
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule.
-        InterpretAsTensor(input_);
-        InterpretAsTensor(filter_);
-        InterpretAsTensor(bias_);
-        InterpretAsTensor(output_);
+        interpret_as_tensor(input_);
+        interpret_as_tensor(filter_);
+        interpret_as_tensor(bias_);
+        interpret_as_tensor(output_);
 
         if (broadcast_channels_) {
             // When we're broadcasting input channels, require that the input has only

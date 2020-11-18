@@ -12,8 +12,8 @@ using ScheduledOpList = std::list<ScheduledOp>;
 using ScheduledOpVector = std::vector<ScheduledOp>;
 
 int index_of_output(const Op *op, const Tensor *t) {
-    for (int i = 0; i < op->OutputCount(); i++) {
-        if (op->Output(i) == t) {
+    for (int i = 0; i < op->output_count(); i++) {
+        if (op->output(i) == t) {
             return i;
         }
     }
@@ -21,8 +21,8 @@ int index_of_output(const Op *op, const Tensor *t) {
 }
 
 int index_of_input(const Op *op, const Tensor *t) {
-    for (int i = 0; i < op->InputCount(); i++) {
-        if (op->Input(i) == t) {
+    for (int i = 0; i < op->input_count(); i++) {
+        if (op->input(i) == t) {
             return i;
         }
     }
@@ -39,7 +39,7 @@ Box subtract_done(Box shape, const Tensor *t, const ScheduledOpVector &done) {
         for (ScheduledOpVector::const_iterator i = done.begin(); i != done.end() && !is_empty(shape); i++) {
             int o = index_of_output(i->op, t);
             if (o >= 0) {
-                Op::Bounds bounds = i->op->InferBounds(i->crop);
+                Op::Bounds bounds = i->op->infer_bounds(i->crop);
                 const Box& produced = bounds.outputs[o];
                 trimmed = trimmed || subtract(shape, produced);
             }
@@ -55,11 +55,11 @@ Box subtract_done(Box shape, const Tensor *t, const ScheduledOpVector &done) {
 // Returns true if op can be executed (all of its producers are done).
 bool can_execute(const ScheduledOpVector &done, const ScheduledOp &op) {
     // Check if all of the producers needed by op are produced.
-    Op::Bounds bounds = op.op->InferBounds(op.crop);
+    Op::Bounds bounds = op.op->infer_bounds(op.crop);
     // We need all of the input rectangles to be covered in the done list.
-    for (int i = 0; i < op.op->InputCount(); i++) {
-        const Tensor *input = op.op->Input(i);
-        if (input->IsAllocated())
+    for (int i = 0; i < op.op->input_count(); i++) {
+        const Tensor *input = op.op->input(i);
+        if (input->is_allocated())
             continue;
         Box required = bounds.inputs[i];
         Box remaining = subtract_done(required, input, done);
@@ -76,7 +76,7 @@ bool can_execute(const ScheduledOpVector &done, const ScheduledOp &op) {
 // - Schedule all possible consumers
 // - If not possible, schedule all possible producers.
 // - If not possible, schedule one sibling.
-// TODO: This algorithm is horrifically unoptimized. It calls InferBounds repeatedly
+// TODO: This algorithm is horrifically unoptimized. It calls infer_bounds repeatedly
 // on the same op/crop, and it iterates over all ops repeatedly. It can both be
 // optimized significantly by caching results of operations like this, and by
 // changing the overall structure.
@@ -94,8 +94,8 @@ void greedy_schedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOp
 
     bool scheduled = false;
     // Try to execute all possible consumers first.
-    for (int i = 0; i < did.op->OutputCount(); i++) {
-        const Tensor *next = did.op->Output(i);
+    for (int i = 0; i < did.op->output_count(); i++) {
+        const Tensor *next = did.op->output(i);
 
         // Try to schedule each output.
         ScheduledOpList exec;
@@ -117,8 +117,8 @@ void greedy_schedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOp
     }
 
     // If failed, try to schedule producers.
-    for (int i = 0; i < did.op->InputCount(); i++) {
-        const Tensor *next = did.op->Input(i);
+    for (int i = 0; i < did.op->input_count(); i++) {
+        const Tensor *next = did.op->input(i);
 
         // Try to schedule each input.
         ScheduledOpList exec;
@@ -158,7 +158,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
     // moving on to the next.
     std::list<ScheduledOp> schedule;
     for (auto &i : model_.ops) {
-        schedule.push_back({i.get(), i->GetFullCrop()});
+        schedule.push_back({i.get(), i->get_full_crop()});
     }
 
     if (options.verbose) {
@@ -167,14 +167,14 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
             if (i.crop.size() >= 3) {
                 std::cout << i.crop[2].min << " " << i.crop[2].max << " ";
             }
-            i.op->Dump(std::cout);
+            i.op->dump(std::cout);
         }
     }
 
     if (options.target_working_set_size_bytes > 0) {
         for (std::list<ScheduledOp>::iterator i = schedule.begin(); i != schedule.end();) {
             // Split the op the way the op wants it done.
-            std::vector<Box> splits = i->op->Split(i->crop);
+            std::vector<Box> splits = i->op->split(i->crop);
 
             // Make a vector of scheduled ops.
             std::vector<ScheduledOp> split_ops;
@@ -204,23 +204,23 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
             if (i.crop.size() >= 3) {
                 std::cout << i.crop[2].min << " " << i.crop[2].max << " ";
             }
-            i.op->Dump(std::cout);
+            i.op->dump(std::cout);
         }
     }
 
-    // Allocate the needed buffers for the tensors.
+    // allocate the needed buffers for the tensors.
     // TODO: Identify the lifetimes and fold storage.
     // TODO: Maybe do this during execute to reduce idle memory?
     // Maybe we should have an allocate/free "op" that we can insert
     // in the schedule to manage lifetime more precisely.
     for (auto &i : model_.tensors) {
-        i->Allocate();
+        i->allocate();
     }
 }
 
-void ModelInterpreter::Execute() {
+void ModelInterpreter::execute() {
     for (ScheduledOp &i : schedule_) {
-        i.op->Execute(i.crop);
+        i.op->execute(i.crop);
     }
 }
 
@@ -230,7 +230,7 @@ Tensor *ModelInterpreter::GetTensor(const std::string &name) {
     if (tensor_names_.empty()) {
         size_t i = 0;
         for (const auto &t : model_.tensors) {
-            tensor_names_[t->Name()] = i++;
+            tensor_names_[t->name()] = i++;
         }
     }
     auto it = tensor_names_.find(name);
@@ -240,24 +240,24 @@ Tensor *ModelInterpreter::GetTensor(const std::string &name) {
     return nullptr;
 }
 
-std::vector<Tensor *> ModelInterpreter::Inputs() {
+std::vector<Tensor *> ModelInterpreter::inputs() {
     // TODO: This is wrong, it needs to find all tensors that are only
     // consumed and not produced, and are not constant.
     Op *first = schedule_.front().op;
     std::vector<Tensor *> result;
-    for (int i = 0; i < first->InputCount(); i++) {
-        result.emplace_back(first->Input(i));
+    for (int i = 0; i < first->input_count(); i++) {
+        result.emplace_back(first->input(i));
     }
     return result;
 }
 
-std::vector<Tensor *> ModelInterpreter::Outputs() {
+std::vector<Tensor *> ModelInterpreter::outputs() {
     // TODO: This is wrong, it needs to find all tensors that are only
     // produced and not consumed.
     Op *final = schedule_.back().op;
     std::vector<Tensor *> result;
-    for (int i = 0; i < final->OutputCount(); i++) {
-        result.emplace_back(final->Output(i));
+    for (int i = 0; i < final->output_count(); i++) {
+        result.emplace_back(final->output(i));
     }
     return result;
 }

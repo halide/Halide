@@ -36,14 +36,13 @@ public:
         maximum(c, x, y, b) = output_min_;
         maximum(c, x, y, b) =
             max(maximum(c, x, y, b),
-                input_bounded(c, x * stride_x_ + filter_dom.x,
-                              y * stride_y_ + filter_dom.y, b));
+                input_bounded(c, x * stride_x_ + filter_dom.x, y * stride_y_ + filter_dom.y, b));
 
         output_(c, x, y, b) = min(maximum(c, x, y, b), output_max_);
 
         // Schedule.
-        InterpretAsTensor(input_);
-        InterpretAsTensor(output_);
+        interpret_as_tensor(input_);
+        interpret_as_tensor(output_);
 
         // TODO: Optimize more.
         Expr output_channels = output_.dim(0).extent();
