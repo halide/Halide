@@ -221,7 +221,7 @@ void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
         // Save the outputs
         for (Tensor *t : interpreter.Outputs()) {
             if (verbose) {
-                std::cout << "HALIDE output is " << t->Name() << " type " << TensorTypeToString(t->Type()) << "\n";
+                std::cout << "HALIDE output is " << t->Name() << " type " << to_string(t->Type()) << "\n";
             }
             // Make a copy since the Buffer might reference memory owned by the interpreter
             halide_outputs.emplace_back(t->Data<const void>().copy());

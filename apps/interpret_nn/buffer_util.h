@@ -65,26 +65,27 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args)
 // TODO: assert-fails if type mismatch, but doesn't check shape.
 template<typename T>
 struct CompareBuffers {
-    uint64_t operator()(const Halide::Runtime::Buffer<const void> &tflite_buf_dynamic, const Halide::Runtime::Buffer<const void> &halide_buf_dynamic) {
-        Halide::Runtime::Buffer<const T> tflite_buf = tflite_buf_dynamic;
-        Halide::Runtime::Buffer<const T> halide_buf = halide_buf_dynamic;
+    uint64_t operator()(const Halide::Runtime::Buffer<const void> &expected_buf_dynamic,
+                        const Halide::Runtime::Buffer<const void> &actual_buf_dynamic) {
+        Halide::Runtime::Buffer<const T> expected_buf = expected_buf_dynamic;
+        Halide::Runtime::Buffer<const T> actual_buf = actual_buf_dynamic;
         uint64_t diffs = 0;
         constexpr uint64_t max_diffs_to_show = 32;
-        tflite_buf.for_each_element([&](const int *pos) {
-            T tflite_buf_val = tflite_buf(pos);
-            T halide_buf_val = halide_buf(pos);
+        expected_buf.for_each_element([&](const int *pos) {
+            T expected_buf_val = expected_buf(pos);
+            T actual_buf_val = actual_buf(pos);
             // TODO: this is terrible, we should compare with some threshold instead of equality
-            if (tflite_buf_val != halide_buf_val) {
+            if (expected_buf_val != actual_buf_val) {
                 diffs++;
                 if (diffs > max_diffs_to_show) {
                     return;
                 }
                 std::cerr << "*** Mismatch at (";
-                for (int i = 0; i < tflite_buf.dimensions(); ++i) {
+                for (int i = 0; i < expected_buf.dimensions(); ++i) {
                     if (i > 0) std::cerr << ", ";
                     std::cerr << pos[i];
                 }
-                std::cerr << "): tflite " << 0 + tflite_buf_val << " halide " << 0 + halide_buf_val << "\n";
+                std::cerr << "): expected " << 0 + expected_buf_val << " actual " << 0 + actual_buf_val << "\n";
             }
         });
         if (diffs > max_diffs_to_show) {
