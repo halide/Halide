@@ -116,7 +116,7 @@ inline Box WithoutStrides(const std::vector<halide_dimension_t> &shape) {
     Box result;
     result.reserve(shape.size());
     for (const halide_dimension_t &i : shape) {
-        result.emplace_back(i.min, i.min + i.extent - 1);
+        result.emplace_back(i);
     }
     return result;
 }
