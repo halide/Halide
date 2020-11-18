@@ -112,10 +112,8 @@ inline std::ostream &operator<<(std::ostream &s,
     return s << "{" << q.scale << ", " << q.zero << ", " << q.dimension << "}";
 }
 
-using CropShape = Box;
-
-inline CropShape WithoutStrides(const std::vector<halide_dimension_t> &shape) {
-    CropShape result;
+inline Box WithoutStrides(const std::vector<halide_dimension_t> &shape) {
+    Box result;
     result.reserve(shape.size());
     for (const halide_dimension_t &i : shape) {
         result.emplace_back(i.min, i.min + i.extent - 1);
@@ -193,7 +191,7 @@ public:
     }
 
     template<class T>
-    HalideBuffer<T> Data(const CropShape &crop) {
+    HalideBuffer<T> Data(const Box &crop) {
         HalideBuffer<T> buf = Data<T>();
         for (int i = 0; i < (int)crop.size(); i++) {
             buf.crop(i, crop[i].min, crop[i].extent());
@@ -202,7 +200,7 @@ public:
     }
 
     template<class T>
-    HalideBuffer<const T> Data(const CropShape &crop) const {
+    HalideBuffer<const T> Data(const Box &crop) const {
         HalideBuffer<const T> buf = Data<T>();
         for (int i = 0; i < (int)crop.size(); i++) {
             buf.crop(i, crop[i].min, crop[i].extent());
@@ -246,27 +244,27 @@ public:
     virtual ~Op() = default;
 
     // Get the shape of the complete output of this op.
-    virtual CropShape GetFullCrop() {
+    virtual Box GetFullCrop() {
         if (OutputCount() == 1) {
             return WithoutStrides(Output(0)->Shape());
         } else {
             APP_FATAL << "More than one output requires GetFullCrop override.";
-            return CropShape();
+            return Box();
         }
     }
 
     // Get the bounds required of all inputs and outputs given a crop.
     struct Bounds {
-        std::vector<CropShape> inputs;
-        std::vector<CropShape> outputs;
+        std::vector<Box> inputs;
+        std::vector<Box> outputs;
     };
-    virtual Bounds InferBounds(const CropShape &crop) const = 0;
+    virtual Bounds InferBounds(const Box &crop) const = 0;
 
     // Execute the op on a given crop.
-    virtual void Execute(const CropShape &crop) = 0;
+    virtual void Execute(const Box &crop) = 0;
 
     // Given a crop, split the crop into smaller crops appropriate for this op.
-    virtual std::vector<CropShape> Split(const CropShape &crop) const {
+    virtual std::vector<Box> Split(const Box &crop) const {
         return {crop};
     }
 

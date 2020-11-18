@@ -26,8 +26,8 @@ public:
         : Op(std::move(inputs), {output}) {
     }
 
-    Bounds InferBounds(const CropShape &crop) const;
-    std::vector<CropShape> Split(const CropShape &crop) const;
+    Bounds InferBounds(const Box &crop) const;
+    std::vector<Box> Split(const Box &crop) const;
 };
 
 // This is an abstract helper op for pooling operations.
@@ -49,8 +49,8 @@ public:
           activation_(activation) {
     }
 
-    Bounds InferBounds(const CropShape &crop) const;
-    std::vector<CropShape> Split(const CropShape &crop) const;
+    Bounds InferBounds(const Box &crop) const;
+    std::vector<Box> Split(const Box &crop) const;
 };
 
 class AddOp : public ElementwiseOp {
@@ -68,7 +68,7 @@ public:
             Map(map, Output()), activation_);
     }
 
-    void Execute(const CropShape &crop);
+    void Execute(const Box &crop);
 
     void Dump(std::ostream &os) const {
         os << "  Add " << Output()->Name() << std::endl;
@@ -90,7 +90,7 @@ public:
             filter_size_, padding_, activation_);
     }
 
-    void Execute(const CropShape &crop);
+    void Execute(const Box &crop);
 
     void Dump(std::ostream &os) const {
         os << "  AveragePool " << Output()->Name() << std::endl;
@@ -133,10 +133,10 @@ public:
         return Op::Input(2);
     }
 
-    Bounds InferBounds(const CropShape &crop) const;
-    std::vector<CropShape> Split(const CropShape &crop) const;
+    Bounds InferBounds(const Box &crop) const;
+    std::vector<Box> Split(const Box &crop) const;
 
-    void Execute(const CropShape &crop);
+    void Execute(const Box &crop);
 
     void Dump(std::ostream &os) const {
         os << "  Conv2D " << Output()->Name() << std::endl;
@@ -188,10 +188,10 @@ public:
         return Op::Input(2);
     }
 
-    Bounds InferBounds(const CropShape &crop) const;
-    std::vector<CropShape> Split(const CropShape &crop) const;
+    Bounds InferBounds(const Box &crop) const;
+    std::vector<Box> Split(const Box &crop) const;
 
-    void Execute(const CropShape &crop);
+    void Execute(const Box &crop);
 
     void Dump(std::ostream &os) const {
         os << "  DepthwiseConv2D " << Output()->Name() << std::endl;
@@ -212,7 +212,7 @@ public:
             Map(map, Input()), Map(map, Output()), stride_, filter_size_, padding_, activation_);
     }
 
-    void Execute(const CropShape &crop);
+    void Execute(const Box &crop);
 
     void Dump(std::ostream &os) const {
         os << "  MaxPool " << Output()->Name() << std::endl;
@@ -230,10 +230,10 @@ public:
             Map(map, Input(0)), Map(map, Input(1)), Map(map, Output()));
     }
 
-    Bounds InferBounds(const CropShape &crop) const;
-    std::vector<CropShape> Split(const CropShape &crop) const;
+    Bounds InferBounds(const Box &crop) const;
+    std::vector<Box> Split(const Box &crop) const;
 
-    void Execute(const CropShape &crop);
+    void Execute(const Box &crop);
 
     void Dump(std::ostream &os) const {
         os << "  Pad " << Output()->Name() << std::endl;
@@ -252,10 +252,10 @@ public:
         return make_unique<ReshapeOp>(Map(map, Input()), Map(map, Output()), new_shape_);
     }
 
-    Bounds InferBounds(const CropShape &crop) const;
-    std::vector<CropShape> Split(const CropShape &crop) const;
+    Bounds InferBounds(const Box &crop) const;
+    std::vector<Box> Split(const Box &crop) const;
 
-    void Execute(const CropShape &crop);
+    void Execute(const Box &crop);
 
     void Dump(std::ostream &os) const {
         os << "  Reshape " << Output()->Name() << std::endl;

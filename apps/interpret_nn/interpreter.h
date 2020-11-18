@@ -24,7 +24,7 @@ struct ScheduleOptions {
 // The schedule is a list of ops with crops to run the ops on.
 struct ScheduledOp {
     Op *op;
-    CropShape crop;
+    Box crop;
 };
 
 class ModelInterpreter {

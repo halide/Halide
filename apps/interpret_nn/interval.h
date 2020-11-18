@@ -8,6 +8,7 @@
 
 namespace interpret_nn {
 
+// This type (and Box below) mirrors Halide::Interval, but is not symbolic.
 struct Interval {
     int min, max;
 

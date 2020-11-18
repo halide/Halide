@@ -29,13 +29,13 @@ int Consumes(const Op *op, const Tensor *t) {
     return -1;
 }
 
-bool SubtractDone(CropShape& shape, const Tensor *t, const ScheduledOpVector &done) {
+bool SubtractDone(Box& shape, const Tensor *t, const ScheduledOpVector &done) {
     bool trimmed = false;
     for (ScheduledOpVector::const_iterator i = done.begin(); i != done.end() && !is_empty(shape); i++) {
         int o = Produces(i->op, t);
         if (o >= 0) {
             Op::Bounds bounds = i->op->InferBounds(i->crop);
-            const CropShape& produced = bounds.outputs[o];
+            const Box& produced = bounds.outputs[o];
             trimmed = trimmed || subtract(shape, produced);
         }
     }
@@ -50,7 +50,7 @@ bool CanExecute(const ScheduledOpVector &done, const ScheduledOp &op) {
         const Tensor *input = op.op->Input(i);
         if (input->IsAllocated())
             continue;
-        CropShape required = bounds.inputs[i];
+        Box required = bounds.inputs[i];
 
         while (!is_empty(required)) {
             if (!SubtractDone(required, input, done))
@@ -160,7 +160,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
   for (std::list<ScheduledOp>::iterator i = schedule.begin();
        i != schedule.end();) {
     // Split the op the way the op wants it done.
-    std::vector<CropShape> splits = i->op->Split(i->crop);
+    std::vector<Box> splits = i->op->Split(i->crop);
 
     // Make a vector of scheduled ops.
     std::vector<ScheduledOp> split_ops;

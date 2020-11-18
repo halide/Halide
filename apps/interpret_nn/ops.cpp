@@ -14,14 +14,13 @@ namespace interpret_nn {
 
 namespace {
 
-std::vector<CropShape> SplitCrop(const CropShape &crop, int dim, int factor,
-                                 bool shift_inwards = false) {
-    std::vector<CropShape> splits;
+std::vector<Box> SplitCrop(const Box &crop, int dim, int factor, bool shift_inwards = false) {
+    std::vector<Box> splits;
     int x_min = crop[dim].min;
     int x_extent = crop[dim].extent();
     int x_max = x_min + x_extent - 1;
     splits.reserve((x_extent + factor - 1) / factor);
-    CropShape split_x = crop;
+    Box split_x = crop;
     split_x[dim].set_extent(factor);
     for (int x = 0; x <= x_max; x += factor, split_x[dim] += factor) {
         if (shift_inwards) {
@@ -137,7 +136,7 @@ MinMax GetOutputRange(ActivationFunction activation, Tensor *output) {
 
 }  // namespace
 
-Op::Bounds ElementwiseOp::InferBounds(const CropShape &crop) const {
+Op::Bounds ElementwiseOp::InferBounds(const Box &crop) const {
     Bounds result;
     for (int i = 0; i < InputCount(); i++) {
         result.inputs.emplace_back(crop);
@@ -148,13 +147,13 @@ Op::Bounds ElementwiseOp::InferBounds(const CropShape &crop) const {
     return result;
 }
 
-std::vector<CropShape> ElementwiseOp::Split(const CropShape &crop) const {
+std::vector<Box> ElementwiseOp::Split(const Box &crop) const {
     const int kSplit = 2;
     return SplitCrop(crop, 2, kSplit);
 }
 
-Op::Bounds PoolOp::InferBounds(const CropShape &crop) const {
-    CropShape input_crop = crop;
+Op::Bounds PoolOp::InferBounds(const Box &crop) const {
+    Box input_crop = crop;
 
     input_crop[0] = crop[0];
     for (int dim = 1; dim <= 2; dim++) {
@@ -171,12 +170,12 @@ Op::Bounds PoolOp::InferBounds(const CropShape &crop) const {
     return result;
 }
 
-std::vector<CropShape> PoolOp::Split(const CropShape &crop) const {
+std::vector<Box> PoolOp::Split(const Box &crop) const {
     const int kSplit = 2;
     return SplitCrop(crop, 2, kSplit);
 }
 
-void AddOp::Execute(const CropShape &crop) {
+void AddOp::Execute(const Box &crop) {
     const Tensor *input1 = Input(0);
     const Tensor *input2 = Input(1);
     Tensor *output = Output();
@@ -225,7 +224,7 @@ void AddOp::Execute(const CropShape &crop) {
     }
 }
 
-void AveragePoolOp::Execute(const CropShape &crop) {
+void AveragePoolOp::Execute(const Box &crop) {
     const Tensor *input = Input();
     Tensor *output = Output();
 
@@ -243,9 +242,9 @@ void AveragePoolOp::Execute(const CropShape &crop) {
     }
 }
 
-Op::Bounds Conv2DOp::InferBounds(const CropShape &crop) const {
-    CropShape input_crop = crop;
-    CropShape filter_shape = WithoutStrides(Filter()->Shape());
+Op::Bounds Conv2DOp::InferBounds(const Box &crop) const {
+    Box input_crop = crop;
+    Box filter_shape = WithoutStrides(Filter()->Shape());
 
     for (int dim = 1; dim <= 2; dim++) {
         input_crop[dim] *= stride_[dim - 1];
@@ -285,12 +284,12 @@ Op::Bounds Conv2DOp::InferBounds(const CropShape &crop) const {
     return result;
 }
 
-std::vector<CropShape> Conv2DOp::Split(const CropShape &crop) const {
+std::vector<Box> Conv2DOp::Split(const Box &crop) const {
     const int kSplit = 2;
     return SplitCrop(crop, 2, kSplit);
 }
 
-void Conv2DOp::Execute(const CropShape &crop) {
+void Conv2DOp::Execute(const Box &crop) {
     const Tensor *input = Input();
     const Tensor *filter = Filter();
     const Tensor *bias = Bias();
@@ -363,9 +362,9 @@ void Conv2DOp::Execute(const CropShape &crop) {
     }
 }
 
-Op::Bounds DepthwiseConv2DOp::InferBounds(const CropShape &crop) const {
-    CropShape input_crop = crop;
-    CropShape filter_shape = WithoutStrides(Filter()->Shape());
+Op::Bounds DepthwiseConv2DOp::InferBounds(const Box &crop) const {
+    Box input_crop = crop;
+    Box filter_shape = WithoutStrides(Filter()->Shape());
 
     input_crop[0] = crop[0];
     input_crop[0].min /= depth_multiplier_;
@@ -406,12 +405,12 @@ Op::Bounds DepthwiseConv2DOp::InferBounds(const CropShape &crop) const {
     return result;
 }
 
-std::vector<CropShape> DepthwiseConv2DOp::Split(const CropShape &crop) const {
+std::vector<Box> DepthwiseConv2DOp::Split(const Box &crop) const {
     const int kSplit = 2;
     return SplitCrop(crop, 2, kSplit, true);
 }
 
-void DepthwiseConv2DOp::Execute(const CropShape &crop) {
+void DepthwiseConv2DOp::Execute(const Box &crop) {
     const Tensor *input = Input();
     const Tensor *filter = Filter();
     const Tensor *bias = Bias();
@@ -494,7 +493,7 @@ void DepthwiseConv2DOp::Execute(const CropShape &crop) {
     }
 }
 
-void MaxPoolOp::Execute(const CropShape &crop) {
+void MaxPoolOp::Execute(const Box &crop) {
     const Tensor *input = Input();
     Tensor *output = Output();
 
@@ -512,12 +511,12 @@ void MaxPoolOp::Execute(const CropShape &crop) {
     }
 }
 
-Op::Bounds PadOp::InferBounds(const CropShape &crop) const {
+Op::Bounds PadOp::InferBounds(const Box &crop) const {
     auto padding = Input(1)->Data<const int32_t>();
 
     Bounds result;
 
-    CropShape padded_crop = crop;
+    Box padded_crop = crop;
     for (int d = 0; d < 4; d++) {
         padded_crop[d] += padding(d);
     }
@@ -529,12 +528,12 @@ Op::Bounds PadOp::InferBounds(const CropShape &crop) const {
     return result;
 }
 
-std::vector<CropShape> PadOp::Split(const CropShape &crop) const {
+std::vector<Box> PadOp::Split(const Box &crop) const {
     const int kSplit = 2;
     return SplitCrop(crop, 2, kSplit);
 }
 
-void PadOp::Execute(const CropShape &crop) {
+void PadOp::Execute(const Box &crop) {
     const Tensor *input = Input(0);
     auto padding = Input(1)->Data<const int32_t>();
     Tensor *output = Output();
@@ -562,18 +561,18 @@ void PadOp::Execute(const CropShape &crop) {
 }
 
 // TODO: Maybe this is only a reshape in some dimensions, in which case we might be able to split it.
-Op::Bounds ReshapeOp::InferBounds(const CropShape &crop) const {
+Op::Bounds ReshapeOp::InferBounds(const Box &crop) const {
     Bounds result;
     result.inputs = {WithoutStrides(Input()->Shape())};
     result.outputs = {crop};
     return result;
 }
 
-std::vector<CropShape> ReshapeOp::Split(const CropShape &crop) const {
+std::vector<Box> ReshapeOp::Split(const Box &crop) const {
     return {crop};
 }
 
-void ReshapeOp::Execute(const CropShape &crop) {
+void ReshapeOp::Execute(const Box &crop) {
     const Tensor *input = Input();
     Tensor *output = Output();
 
