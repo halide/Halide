@@ -42,11 +42,11 @@ public:
 
         Func shifted_input1_with_offset("shifted_input1_with_offset");
         shifted_input1_with_offset(c, x, y, b) =
-            i32(input1_(c, x, y, b) + input1_offset_) * (1 << u32(left_shift_));
+            i32(input1_(c, x, y, b) + input1_offset_) << u32(left_shift_);
 
         Func shifted_input2_with_offset("shifted_input2_with_offset");
         shifted_input2_with_offset(c, x, y, b) =
-            i32(input2_(c, x, y, b) + input2_offset_) * (1 << u32(left_shift_));
+            i32(input2_(c, x, y, b) + input2_offset_) << u32(left_shift_);
 
         Func scaled1("scaled1");
         scaled1(c, x, y, b) =
