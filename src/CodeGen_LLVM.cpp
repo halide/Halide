@@ -1466,10 +1466,28 @@ void CodeGen_LLVM::codegen(const Stmt &s) {
     value = nullptr;
     s.accept(this);
 }
+namespace {
+
+bool is_power_of_two(int x) {
+    return (x & (x - 1)) == 0;
+}
+
+int next_power_of_two(int x) {
+    for (int p2 = 1;; p2 *= 2) {
+        if (p2 >= x) {
+            return p2;
+        }
+    }
+    // unreachable.
+}
+
+}
 
 Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
     if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
         return Float(32, t.lanes());
+    } else if (t.is_int_or_uint() && !is_power_of_two(t.bits())) {
+        return t.with_bits(next_power_of_two(t.bits()));
     } else {
         return t;
     }
@@ -1490,6 +1508,8 @@ Type CodeGen_LLVM::upgrade_type_for_storage(const Type &t) const {
         return t.with_bits(8);
     } else if (t.is_handle()) {
         return UInt(64, t.lanes());
+    } else if (t.is_int_or_uint() && !is_power_of_two(t.bits())) {
+        return t.with_bits(next_power_of_two(t.bits()));
     } else {
         return t;
     }
@@ -1960,17 +1980,6 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
 
     return builder->CreateInBoundsGEP(base_address, index);
 }
-
-namespace {
-int next_power_of_two(int x) {
-    for (int p2 = 1;; p2 *= 2) {
-        if (p2 >= x) {
-            return p2;
-        }
-    }
-    // unreachable.
-}
-}  // namespace
 
 void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, const Expr &index) {
 
