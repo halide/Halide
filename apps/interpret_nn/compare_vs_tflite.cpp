@@ -48,7 +48,7 @@ std::chrono::duration<double> bench(std::function<void()> f) {
     return std::chrono::duration<double>(result.wall_time);
 }
 
-halide_type_t TfLiteTypeToHalideType(TfLiteType t) {
+halide_type_t tf_lite_type_to_halide_type(TfLiteType t) {
     switch (t) {
     case kTfLiteBool:
         return halide_type_t(halide_type_uint, 1);
@@ -80,7 +80,7 @@ halide_type_t TfLiteTypeToHalideType(TfLiteType t) {
     }
 }
 
-Buffer<void> WrapTfLiteTensorWithHalideBuffer(TfLiteTensor *t) {
+Buffer<void> wrap_tf_lite_tensor_with_halide_buffer(TfLiteTensor *t) {
     APP_CHECK(t->dims);
     // Wrap a Halide buffer around it.
     std::vector<halide_dimension_t> shape(t->dims->size);
@@ -94,7 +94,7 @@ Buffer<void> WrapTfLiteTensorWithHalideBuffer(TfLiteTensor *t) {
     void *buffer_data = t->data.data;
     APP_CHECK(buffer_data);
 
-    halide_type_t type = TfLiteTypeToHalideType(t->type);
+    halide_type_t type = tf_lite_type_to_halide_type(t->type);
     Buffer<void> b(type, buffer_data, shape.size(), shape.data());
     APP_CHECK(b.size_in_bytes() == t->bytes);
     return b;
@@ -102,7 +102,7 @@ Buffer<void> WrapTfLiteTensorWithHalideBuffer(TfLiteTensor *t) {
 
 }  // namespace
 
-void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
+void run_both(const std::string &filename, int seed, int threads, bool verbose) {
     std::cout << "Comparing " << filename << "\n";
 
     std::vector<char> buffer = app_util::ReadEntireFile(filename);
@@ -141,7 +141,7 @@ void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
                 }
                 continue;
             }
-            auto input_buf = WrapTfLiteTensorWithHalideBuffer(t);
+            auto input_buf = wrap_tf_lite_tensor_with_halide_buffer(t);
             dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
             if (verbose) {
                 std::cout << "TFLITE input " << t->name << " inited with seed = " << seed_here
@@ -165,7 +165,7 @@ void RunBoth(const std::string &filename, int seed, int threads, bool verbose) {
                 std::cout << "TFLITE output is " << t->name << " type " << TfLiteTypeGetName(t->type) << "\n";
             }
             // Make a copy since the Buffer might reference memory owned by the tf_interpreter
-            tflite_outputs.emplace_back(WrapTfLiteTensorWithHalideBuffer(t).copy());
+            tflite_outputs.emplace_back(wrap_tf_lite_tensor_with_halide_buffer(t).copy());
         }
     }
 
@@ -304,7 +304,7 @@ int main(int argc, char **argv) {
         if (!strcmp(argv[i], "--verbose")) {
             continue;
         }
-        interpret_nn::RunBoth(argv[i], seed, threads, verbose);
+        interpret_nn::run_both(argv[i], seed, threads, verbose);
         std::cout << "\n";
     }
 
