@@ -30,25 +30,19 @@ struct ScheduledOp {
 class ModelInterpreter {
     Model model_;
 
-    // Maps tensor name -> index in model_->tensors.
-    // Lazily built when needed.
-    std::map<std::string, size_t> tensor_names_;
-
     std::vector<ScheduledOp> schedule_;
 
-    void ScheduleNaive();
     void Schedule(ScheduleOptions options);
 
 public:
-    explicit ModelInterpreter(Model m,
-                              ScheduleOptions options = ScheduleOptions())
+    explicit ModelInterpreter(Model m, ScheduleOptions options = ScheduleOptions())
         : model_(std::move(m)) {
         Schedule(options);
     }
 
     // Return the Tensor in the current Model with the given name.
     // If none with that name, return null. Tensor is still owned by the Model.
-    Tensor *GetTensor(const std::string &name);
+    Tensor *get_tensor(const std::string &name);
 
     void execute();
 

@@ -224,18 +224,13 @@ void ModelInterpreter::execute() {
     }
 }
 
-Tensor *ModelInterpreter::GetTensor(const std::string &name) {
+Tensor *ModelInterpreter::get_tensor(const std::string &name) {
     APP_CHECK(!model_.tensors.empty());
 
-    if (tensor_names_.empty()) {
-        size_t i = 0;
-        for (const auto &t : model_.tensors) {
-            tensor_names_[t->name()] = i++;
+    for (const auto &t : model_.tensors) {
+        if (t->name() == name) {
+            return t.get();
         }
-    }
-    auto it = tensor_names_.find(name);
-    if (it != tensor_names_.end()) {
-        return model_.tensors.at(it->second).get();
     }
     return nullptr;
 }
