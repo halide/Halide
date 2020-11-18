@@ -6,14 +6,14 @@
 #include <string>
 #include <vector>
 
-#include "interval.h"
 #include "HalideBuffer.h"
 #include "app_util.h"
+#include "interval.h"
 
 namespace interpret_nn {
 
 template<class T, class... Args>
-std::unique_ptr<T> make_unique(Args &&... args) {
+std::unique_ptr<T> make_unique(Args &&...args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
 
@@ -47,59 +47,61 @@ const char *TensorTypeToString(TensorType t);
 halide_type_t TensorTypeToHalideType(TensorType t);
 
 template<typename T>
-bool IsType(TensorType t) {
+TensorType ToTensorType() {
     if (std::is_const<T>::value) {
-        return IsType<typename std::remove_const<T>::type>(t);
+        return ToTensorType<typename std::remove_const<T>::type>();
     }
-    return false;
+    APP_FATAL << "Type is not convertible to TensorType";
+    // unreachable
 }
 
 template<>
-inline bool IsType<void>(TensorType t) {
-    return true;
+inline TensorType ToTensorType<float>() {
+    return TensorType::Float32;
 }
 template<>
-inline bool IsType<float>(TensorType t) {
-    return t == TensorType::Float32;
+inline TensorType ToTensorType<int32_t>() {
+    return TensorType::Int32;
 }
 template<>
-inline bool IsType<int32_t>(TensorType t) {
-    return t == TensorType::Int32;
+inline TensorType ToTensorType<uint8_t>() {
+    return TensorType::UInt8;
 }
 template<>
-inline bool IsType<uint8_t>(TensorType t) {
-    return t == TensorType::UInt8;
+inline TensorType ToTensorType<uint64_t>() {
+    return TensorType::UInt64;
 }
 template<>
-inline bool IsType<uint64_t>(TensorType t) {
-    return t == TensorType::UInt64;
+inline TensorType ToTensorType<int64_t>() {
+    return TensorType::Int64;
 }
 template<>
-inline bool IsType<int64_t>(TensorType t) {
-    return t == TensorType::Int64;
+inline TensorType ToTensorType<std::string>() {
+    return TensorType::String;
 }
 template<>
-inline bool IsType<std::string>(TensorType t) {
-    return t == TensorType::String;
+inline TensorType ToTensorType<bool>() {
+    return TensorType::Bool;
 }
 template<>
-inline bool IsType<bool>(TensorType t) {
-    return t == TensorType::Bool;
+inline TensorType ToTensorType<int16_t>() {
+    return TensorType::Int16;
 }
 template<>
-inline bool IsType<int16_t>(TensorType t) {
-    return t == TensorType::Int16;
+inline TensorType ToTensorType<int8_t>() {
+    return TensorType::Int8;
 }
 template<>
-inline bool IsType<int8_t>(TensorType t) {
-    return t == TensorType::Int8;
-}
-template<>
-inline bool IsType<double>(TensorType t) {
-    return t == TensorType::Float64;
+inline TensorType ToTensorType<double>() {
+    return TensorType::Float64;
 }
 // TODO
-//template<> inline bool IsType<float16>(TensorType t) { return t == TensorType::Float16; }
+//template<> inline TensorType ToTensorType<float16>() { return TensorType::Float16; }
+
+template<typename T>
+inline bool IsType(TensorType t) {
+    return t == ToTensorType<T>();
+}
 
 struct QuantizationInfo {
     std::vector<float> scale;
@@ -139,7 +141,7 @@ public:
           quantization_(std::move(quantization)) {
     }
 
-    Tensor(const Tensor& copy) = default;
+    Tensor(const Tensor &copy) = default;
 
     interpret_nn::TensorType Type() const {
         return type_;
@@ -229,7 +231,7 @@ using TensorMap = std::map<const Tensor *, Tensor *>;
 
 // Apply a tensor map to a list of tensors. This is used to support
 // cloning ops referring to different tensors.
-Tensor *Map(const TensorMap& map, const Tensor* t);
+Tensor *Map(const TensorMap &map, const Tensor *t);
 
 class Op {
 protected:
@@ -268,7 +270,7 @@ public:
         return {crop};
     }
 
-    virtual std::unique_ptr<Op> Clone(const TensorMap& tensor_map) const = 0;
+    virtual std::unique_ptr<Op> Clone(const TensorMap &tensor_map) const = 0;
 
     virtual void Dump(std::ostream &os) const = 0;
 
