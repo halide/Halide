@@ -23,19 +23,22 @@ using HalideBuffer = Halide::Runtime::Buffer<T>;
 // TODO: renamed to "TensorType" to avoid some warnings between this and the Type()
 // method and to avoid confusion with Halide::Type. Yuck. Need a better name.
 enum class TensorType {
-    Bool,
-    Complex128,
-    Complex64,
-    Float16,
-    Float32,
-    Float64,
-    Int16,
-    Int32,
-    Int64,
-    Int8,
-    String,
-    UInt8,
-    UInt64,
+    // Note that these are deliberately ordered and valued to match tflite's
+    // similar enum; there is no reason these types *must* have the same values,
+    // but as the values arbitrary otherwise, we might as well match.
+    Float32 = 0,
+    Float16 = 1,
+    Int32 = 2,
+    UInt8 = 3,
+    Int64 = 4,
+    String = 5,
+    Bool = 6,
+    Int16 = 7,
+    Complex64 = 8,
+    Int8 = 9,
+    Float64 = 10,
+    Complex128 = 11,
+    UInt64 = 12,
 };
 
 size_t SizeOfTensorType(TensorType t);
@@ -66,6 +69,10 @@ inline bool IsType<int32_t>(TensorType t) {
 template<>
 inline bool IsType<uint8_t>(TensorType t) {
     return t == TensorType::UInt8;
+}
+template<>
+inline bool IsType<uint64_t>(TensorType t) {
+    return t == TensorType::UInt64;
 }
 template<>
 inline bool IsType<int64_t>(TensorType t) {

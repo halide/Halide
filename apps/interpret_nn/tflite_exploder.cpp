@@ -146,7 +146,6 @@ int main(int argc, char **argv) {
             new_subgraph->outputs.emplace_back(old_to_new_tensor_map[i]);
         }
         new_subgraph->operators.emplace_back(std::move(new_op));
-        new_subgraph->name = subgraph->name()->str() + "/" + std::to_string(op_index);
 
         std::unique_ptr<tflite::ModelT> new_model = tflite::UnPackModel(buffer.data());
         new_model->subgraphs.resize(1);
