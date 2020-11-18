@@ -162,7 +162,7 @@ $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/%/tflite_schema_direct_gene
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
 
 
-$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(BIN)/%/interpreter.o $(BIN)/%/model.o $(BIN)/%/tflite_parser.o $(BIN)/%/ops.o $(OPS_HALIDE)
+$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -I$(TENSORFLOW_INCLUDES) $(filter %.cpp %.o %.a,$^) $(TFLITE_STATIC_LIB) -o $@ $(LDFLAGS-$*)
 

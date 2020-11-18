@@ -88,6 +88,8 @@ halide_type_t TfLiteTypeToHalideType(TfLiteType t) {
         return halide_type_t(halide_type_int, 8);
     case kTfLiteUInt8:
         return halide_type_t(halide_type_uint, 8);
+    case kTfLiteUInt64:
+        return halide_type_t(halide_type_uint, 64);
 
     case kTfLiteString:
     case kTfLiteNoType:
