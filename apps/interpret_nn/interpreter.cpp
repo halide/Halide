@@ -156,27 +156,26 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
         }
     }
 
-#if 0
-  for (std::list<ScheduledOp>::iterator i = schedule.begin();
-       i != schedule.end();) {
-    // Split the op the way the op wants it done.
-    std::vector<Box> splits = i->op->Split(i->crop);
+    if (options.target_working_set_size_bytes > 0) {
+        for (std::list<ScheduledOp>::iterator i = schedule.begin(); i != schedule.end();) {
+            // Split the op the way the op wants it done.
+            std::vector<Box> splits = i->op->Split(i->crop);
 
-    // Make a vector of scheduled ops.
-    std::vector<ScheduledOp> split_ops;
-    split_ops.reserve(splits.size() - 1);
-    for (int j = 0; j + 1 < (int) splits.size(); j++) {
-      split_ops.push_back({i->op, splits[j]});
+            // Make a vector of scheduled ops.
+            std::vector<ScheduledOp> split_ops;
+            split_ops.reserve(splits.size() - 1);
+            for (int j = 0; j + 1 < (int) splits.size(); j++) {
+                split_ops.push_back({i->op, splits[j]});
+            }
+
+            // Replace i with the last split.
+            i->crop = splits.back();
+
+            // Insert the new ops before i.
+            std::list<ScheduledOp>::iterator insert_at = i++;
+            schedule.insert(insert_at, split_ops.begin(), split_ops.end());
+        }
     }
-
-    // Replace i with the last split.
-    i->crop = splits.back();
-
-    // Insert the new ops before i.
-    std::list<ScheduledOp>::iterator insert_at = i++;
-    schedule.insert(insert_at, split_ops.begin(), split_ops.end());
-  }
-#endif
 
     schedule_.reserve(schedule.size());
     while (!schedule.empty()) {
