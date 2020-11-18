@@ -2211,7 +2211,7 @@ void CodeGen_C::visit(const Call *op) {
                       " integer overflow for int32 and int64 is undefined behavior in"
                       " Halide.\n";
     } else if (op->is_intrinsic(Call::prefetch)) {
-        user_assert((op->args.size() == 4) && is_one(op->args[2]))
+        user_assert((op->args.size() == 4) && is_const_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
         const Variable *base = op->args[0].as<Variable>();
         internal_assert(base && base->type.is_handle());
@@ -2282,7 +2282,7 @@ string CodeGen_C::print_extern_call(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported by C backend.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported by C backend.\n";
 
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
@@ -2318,7 +2318,7 @@ void CodeGen_C::visit(const Load *op) {
 }
 
 void CodeGen_C::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
 
     Type t = op->value.type();
 
@@ -2632,7 +2632,7 @@ void CodeGen_C::visit(const Allocate *op) {
         // If the allocation is on the stack, the only condition we can respect is
         // unconditional false (otherwise a non-constant-sized array declaration
         // will be generated).
-        if (!on_stack || is_zero(op->condition)) {
+        if (!on_stack || is_const_zero(op->condition)) {
             Expr conditional_size = Select::make(op->condition,
                                                  Variable::make(size_id_type, size_id),
                                                  make_const(size_id_type, 0));
