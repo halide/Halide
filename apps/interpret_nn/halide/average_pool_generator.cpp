@@ -36,8 +36,7 @@ public:
         Func sum("sum");
         RDom filter_dom(0, filter_width_, 0, filter_height_);
         sum(c, x, y, b) += u16(
-            input_bounded(c, x * stride_x_ + filter_dom.x,
-                          y * stride_y_ + filter_dom.y, b));
+            input_bounded(c, x * stride_x_ + filter_dom.x, y * stride_y_ + filter_dom.y, b));
 
         Func average("average");
         Expr x_start = max(x * stride_x_, input_.dim(1).min());
