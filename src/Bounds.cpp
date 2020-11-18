@@ -115,7 +115,6 @@ public:
         // Find any points that are single_points but fail is_single_point due to
         // pointer equality checks and replace with single_points.
         for (auto item = s->cbegin(); item != s->cend(); ++item) {
-            // Updates to Scope<T> do not invalidate iterators.
             const Interval &item_interval = item.value();
             if (!item_interval.is_single_point() && item_interval.is_bounded() && can_prove(item_interval.min == item_interval.max)) {
                 scope.push(item.name(), Interval::single_point(item_interval.min));
