@@ -8,6 +8,7 @@ using Halide::ConciseCasts::i16;
 using Halide::ConciseCasts::i16_sat;
 using Halide::ConciseCasts::i32;
 using Halide::ConciseCasts::u8_sat;
+using Halide::BoundaryConditions::repeat_edge;
 
 class DepthwiseConvolution : public Generator<DepthwiseConvolution> {
 public:
@@ -61,6 +62,8 @@ public:
         // subtracted.
         Func input_bounded = ConstantExteriorTensor(input_, input_offset_);
 
+        Func bias_bounded = repeat_edge(bias_);
+
         // Apply the c multiplier.
         Func resampled_input("resampled_input");
         Expr c_resampled = broadcast_channels_ ? 0 : c / depth_multiplier_;
@@ -83,7 +86,7 @@ public:
                                         y * stride_y_ + r.y * dilation_y_,
                                         b);
         Func convolved("convolved");
-        convolved(c, x, y, b) = bias_(c);
+        convolved(c, x, y, b) = bias_bounded(c);
         convolved(c, x, y, b) += i32(filter_drxy) * i32(input_drxyb);
 
         // Saturate and narrow the output.
@@ -142,6 +145,8 @@ public:
         convolved.update()
             .specialize(filter_width == 3 && filter_height == 3)
             .unroll(r.x);
+
+        bias_bounded.compute_root();
 
         // TODO: This gets recomputed often when the op is split up into small
         // pieces.
