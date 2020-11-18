@@ -12,7 +12,7 @@ namespace interpret_nn {
 
 namespace {
 
-tflite::BuiltinOperator GetBuiltinCode(const tflite::OperatorCode *op_code) {
+tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
     APP_CHECK(op_code != nullptr);
 
     return std::max(
@@ -108,7 +108,7 @@ public:
 
         TensorType type = ParseType(t->type());
         if (!data.empty()) {
-            APP_CHECK(data.size() == shape_size * SizeOfTensorType(type));
+            APP_CHECK(data.size() == shape_size * sizeof_tensor_type(type));
         }
 
         QuantizationInfo quantization;
@@ -156,6 +156,19 @@ public:
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
         return make_unique<AveragePoolOp>(
             input, output, stride, filter_size, padding, activation);
+    }
+
+    std::unique_ptr<Op> ParseConcatenation(const tflite::Operator *op) {
+        const tflite::ConcatenationOptions *options =
+            op->builtin_options_as_ConcatenationOptions();
+        ActivationFunction activation =
+            ParseActivationFunction(options->fused_activation_function());
+        std::vector<Tensor *> inputs;
+        for (auto i = op->inputs()->cbegin(); i != op->inputs()->cend(); ++i) {
+            inputs.push_back(result_.tensors[*i].get());
+        }
+        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        return make_unique<ConcatenationOp>(inputs, output, options->axis(), activation);
     }
 
     std::unique_ptr<Op> ParseConv2D(const tflite::Operator *op) {
@@ -227,13 +240,15 @@ public:
         int opcode_index = op->opcode_index();
         const auto *opcode = opcodes->Get(opcode_index);
 
-        auto builtin_code = GetBuiltinCode(opcode);
+        auto builtin_code = get_builtin_code(opcode);
         APP_CHECK(builtin_code != tflite::BuiltinOperator_CUSTOM);
         switch (builtin_code) {
         case tflite::BuiltinOperator_ADD:
             return ParseAdd(op);
         case tflite::BuiltinOperator_AVERAGE_POOL_2D:
             return ParseAveragePool2D(op);
+        case tflite::BuiltinOperator_CONCATENATION:
+            return ParseConcatenation(op);
         case tflite::BuiltinOperator_CONV_2D:
             return ParseConv2D(op);
         case tflite::BuiltinOperator_DEPTHWISE_CONV_2D:

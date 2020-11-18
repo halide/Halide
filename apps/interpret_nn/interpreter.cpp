@@ -11,7 +11,7 @@ namespace {
 using ScheduledOpList = std::list<ScheduledOp>;
 using ScheduledOpVector = std::vector<ScheduledOp>;
 
-int Produces(const Op *op, const Tensor *t) {
+int index_of_output(const Op *op, const Tensor *t) {
     for (int i = 0; i < op->OutputCount(); i++) {
         if (op->Output(i) == t) {
             return i;
@@ -20,7 +20,7 @@ int Produces(const Op *op, const Tensor *t) {
     return -1;
 }
 
-int Consumes(const Op *op, const Tensor *t) {
+int index_of_input(const Op *op, const Tensor *t) {
     for (int i = 0; i < op->InputCount(); i++) {
         if (op->Input(i) == t) {
             return i;
@@ -29,20 +29,31 @@ int Consumes(const Op *op, const Tensor *t) {
     return -1;
 }
 
-bool SubtractDone(Box& shape, const Tensor *t, const ScheduledOpVector &done) {
-    bool trimmed = false;
-    for (ScheduledOpVector::const_iterator i = done.begin(); i != done.end() && !is_empty(shape); i++) {
-        int o = Produces(i->op, t);
-        if (o >= 0) {
-            Op::Bounds bounds = i->op->InferBounds(i->crop);
-            const Box& produced = bounds.outputs[o];
-            trimmed = trimmed || subtract(shape, produced);
+// Subtract the computed parts of t from shape.
+Box subtract_done(Box shape, const Tensor *t, const ScheduledOpVector &done) {
+    // Subtraction can fail if the result is not a single box. But, another
+    // subtraction later could change that. So we iterate, until no done ops
+    // succeed in any subtraction.
+    while (!is_empty(shape)) {
+        bool trimmed = false;
+        for (ScheduledOpVector::const_iterator i = done.begin(); i != done.end() && !is_empty(shape); i++) {
+            int o = index_of_output(i->op, t);
+            if (o >= 0) {
+                Op::Bounds bounds = i->op->InferBounds(i->crop);
+                const Box& produced = bounds.outputs[o];
+                trimmed = trimmed || subtract(shape, produced);
+            }
+        }
+        if (!trimmed) {
+            // We didn't do anything to the shape, trying again won't help.
+            break;
         }
     }
-    return trimmed;
+    return shape;
 }
 
-bool CanExecute(const ScheduledOpVector &done, const ScheduledOp &op) {
+// Returns true if op can be executed (all of its producers are done).
+bool can_execute(const ScheduledOpVector &done, const ScheduledOp &op) {
     // Check if all of the producers needed by op are produced.
     Op::Bounds bounds = op.op->InferBounds(op.crop);
     // We need all of the input rectangles to be covered in the done list.
@@ -51,13 +62,8 @@ bool CanExecute(const ScheduledOpVector &done, const ScheduledOp &op) {
         if (input->IsAllocated())
             continue;
         Box required = bounds.inputs[i];
-
-        while (!is_empty(required)) {
-            if (!SubtractDone(required, input, done))
-                break;
-        }
-
-        if (!is_empty(required)) {
+        Box remaining = subtract_done(required, input, done);
+        if (!is_empty(remaining)) {
             // We needed more of this shape.
             return false;
         }
@@ -65,7 +71,16 @@ bool CanExecute(const ScheduledOpVector &done, const ScheduledOp &op) {
     return true;
 }
 
-void GreedySchedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOpList::iterator op) {
+// Schedule op 'greedily':
+// - Moving it to the back of the done vector and remove it from todo.
+// - Schedule all possible consumers
+// - If not possible, schedule all possible producers.
+// - If not possible, schedule one sibling.
+// TODO: This algorithm is horrifically unoptimized. It calls InferBounds repeatedly
+// on the same op/crop, and it iterates over all ops repeatedly. It can both be
+// optimized significantly by caching results of operations like this, and by
+// changing the overall structure.
+void greedy_schedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOpList::iterator op) {
     APP_CHECK(!todo.empty());
     if (done.empty() || done.back().op != op->op || !is_union_exact(done.back().crop, op->crop)) {
         done.emplace_back(std::move(*op));
@@ -85,7 +100,7 @@ void GreedySchedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOpL
         // Try to schedule each output.
         ScheduledOpList exec;
         for (ScheduledOpList::iterator j = todo.begin(); j != todo.end();) {
-            if (Consumes(j->op, next) >= 0 && CanExecute(done, *j)) {
+            if (index_of_input(j->op, next) >= 0 && can_execute(done, *j)) {
                 // This next op is executable. Move it to the front of the list.
                 exec.emplace_back(std::move(*j));
                 j = todo.erase(j);
@@ -108,7 +123,7 @@ void GreedySchedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOpL
         // Try to schedule each input.
         ScheduledOpList exec;
         for (ScheduledOpList::iterator j = todo.begin(); j != todo.end();) {
-            if (Produces(j->op, next) >= 0 && CanExecute(done, *j)) {
+            if (index_of_output(j->op, next) >= 0 && can_execute(done, *j)) {
                 // This next op is executable. Move it to the front of the list.
                 exec.emplace_front(std::move(*j));
                 j = todo.erase(j);
@@ -124,9 +139,9 @@ void GreedySchedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOpL
         return;
     }
 
-    // If failed, try to schedule *one* sibling!
+    // If failed, try to schedule *one* sibling.
     for (ScheduledOpList::iterator i = todo.begin(); i != todo.end(); ++i) {
-        if (i->op == did.op && CanExecute(done, *i)) {
+        if (i->op == did.op && can_execute(done, *i)) {
             todo.emplace_front(std::move(*i));
             todo.erase(i);
             return;
@@ -180,7 +195,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
     schedule_.reserve(schedule.size());
     while (!schedule.empty()) {
         auto i = schedule.begin();
-        GreedySchedule(schedule_, schedule, i);
+        greedy_schedule(schedule_, schedule, i);
     }
 
     if (options.verbose) {
@@ -196,6 +211,8 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
     // Allocate the needed buffers for the tensors.
     // TODO: Identify the lifetimes and fold storage.
     // TODO: Maybe do this during execute to reduce idle memory?
+    // Maybe we should have an allocate/free "op" that we can insert
+    // in the schedule to manage lifetime more precisely.
     for (auto &i : model_.tensors) {
         i->Allocate();
     }
@@ -224,6 +241,8 @@ Tensor *ModelInterpreter::GetTensor(const std::string &name) {
 }
 
 std::vector<Tensor *> ModelInterpreter::Inputs() {
+    // TODO: This is wrong, it needs to find all tensors that are only
+    // consumed and not produced, and are not constant.
     Op *first = schedule_.front().op;
     std::vector<Tensor *> result;
     for (int i = 0; i < first->InputCount(); i++) {
@@ -233,6 +252,8 @@ std::vector<Tensor *> ModelInterpreter::Inputs() {
 }
 
 std::vector<Tensor *> ModelInterpreter::Outputs() {
+    // TODO: This is wrong, it needs to find all tensors that are only
+    // produced and not consumed.
     Op *final = schedule_.back().op;
     std::vector<Tensor *> result;
     for (int i = 0; i < final->OutputCount(); i++) {
