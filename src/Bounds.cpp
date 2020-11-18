@@ -116,7 +116,8 @@ public:
         // pointer equality checks and replace with single_points.
         for (auto item = s->cbegin(); item != s->cend(); ++item) {
             const Interval &item_interval = item.value();
-            if (!item_interval.is_single_point() && item_interval.is_bounded() && can_prove(item_interval.min == item_interval.max)) {
+            if (!item_interval.is_single_point() && item_interval.is_bounded() &&
+                can_prove(item_interval.min == item_interval.max)) {
                 scope.push(item.name(), Interval::single_point(item_interval.min));
             }
         }
