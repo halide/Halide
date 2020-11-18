@@ -173,18 +173,18 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
     {
         Model model = ParseTfLiteModel(tf_model);
         if (verbose) {
-            model.Dump(std::cout);
+            model.dump(std::cout);
         }
 
         // TODO: this is a little ugly. Maybe it would be better to have Tensor
         // have a flag for whether it was pre-inited during parsing?
         std::set<Tensor *> read_only_tensors;
         for (auto &t : model.tensors) {
-            if (t->IsAllocated()) {
+            if (t->is_allocated()) {
                 // It has data from the Model; keep track so we don't fill it with randomness
                 read_only_tensors.insert(t.get());
             } else {
-                t->Allocate();
+                t->allocate();
             }
         }
 
@@ -192,39 +192,39 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
 
         // Fill in the inputs with random data (but with the same seeds as above).
         int seed_here = seed;
-        for (Tensor *t : interpreter.Inputs()) {
+        for (Tensor *t : interpreter.inputs()) {
             seed_here++;
             if (read_only_tensors.count(t)) {
                 // It has data from the Model -- leave it as-is
                 if (verbose) {
-                    std::cout << "HALIDE input " << t->Name() << " is being used as-is\n";
+                    std::cout << "HALIDE input " << t->name() << " is being used as-is\n";
                 }
                 continue;
             }
-            auto input_buf = t->Data<void>();
+            auto input_buf = t->data<void>();
             dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
             if (verbose) {
-                std::cout << "HALIDE input " << t->Name() << " inited with seed = " << seed_here << " type " << input_buf.type() << "\n";
+                std::cout << "HALIDE input " << t->name() << " inited with seed = " << seed_here << " type " << input_buf.type() << "\n";
             }
         }
 
         halide_set_num_threads(threads);
 
         // Execute once, to prime the pump
-        interpreter.Execute();
+        interpreter.execute();
 
         // Now benchmark it
         halide_time = bench([&interpreter]() {
-            interpreter.Execute();
+            interpreter.execute();
         });
 
         // Save the outputs
-        for (Tensor *t : interpreter.Outputs()) {
+        for (Tensor *t : interpreter.outputs()) {
             if (verbose) {
-                std::cout << "HALIDE output is " << t->Name() << " type " << to_string(t->Type()) << "\n";
+                std::cout << "HALIDE output is " << t->name() << " type " << to_string(t->type()) << "\n";
             }
             // Make a copy since the Buffer might reference memory owned by the interpreter
-            halide_outputs.emplace_back(t->Data<const void>().copy());
+            halide_outputs.emplace_back(t->data<const void>().copy());
         }
     }
 
