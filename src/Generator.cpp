@@ -886,7 +886,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     // (usually for temporary debugging purposes) and just tack it on to the -e contents.
     std::string extra_outputs = get_env_variable("HL_EXTRA_OUTPUTS");
     if (!extra_outputs.empty()) {
-        if (!emit_flags_string.empty()){
+        if (!emit_flags_string.empty()) {
             emit_flags_string += ",";
         }
         emit_flags_string += extra_outputs;
