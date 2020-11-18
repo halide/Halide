@@ -28,19 +28,6 @@ test: $(BIN)/$(HL_TARGET)/benchmark
 clean:
 	rm -rf $(BIN)
 
-# Must clone and build locally for now:
-# 	- git clone https://github.com/tensorflow/tensorflow
-# 	- cd tensorflow
-# 	- ./tensorflow/lite/tools/make/download_dependencies.sh
-# 	- make -j $(nproc) TARGET=native -C . -f ./tensorflow/lite/tools/make/Makefile
-# 	- library is at tensorflow/lite/tools/make/gen/native_x86_64/lib/libtensorflow-lite.a
-
-TENSORFLOW_BASE ?= ${HOME}/GitHub/tensorflow
-TFLITE_BASE ?= $(TENSORFLOW_BASE)/tensorflow/lite
-TFLITE_STATIC_LIB ?= $(TFLITE_BASE)/tools/make/gen/native_x86_64/lib/libtensorflow-lite.a
-
-TENSORFLOW_INCLUDES ?= $(TENSORFLOW_BASE)
-
 CXXFLAGS += -Wno-unused-private-field
 
 # .SECONDARY with no prerequisites causes all targets to be treated as secondary
@@ -166,6 +153,22 @@ $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/%/tflite_schema_direct_gene
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
 
+
+# compare_vs_tflite requires the tflite includes and static library.
+#
+# For now, you must clone and build tflite locally if you want to build compare_vs_tflite:
+#
+# 	- git clone https://github.com/tensorflow/tensorflow
+# 	- cd tensorflow
+# 	- ./tensorflow/lite/tools/make/download_dependencies.sh
+# 	- make -j $(nproc) TARGET=native -C . -f ./tensorflow/lite/tools/make/Makefile
+# 	- library is at tensorflow/lite/tools/make/gen/native_x86_64/lib/libtensorflow-lite.a
+
+TENSORFLOW_BASE ?= ${HOME}/GitHub/tensorflow
+TFLITE_BASE ?= $(TENSORFLOW_BASE)/tensorflow/lite
+TFLITE_STATIC_LIB ?= $(TFLITE_BASE)/tools/make/gen/native_x86_64/lib/libtensorflow-lite.a
+
+TENSORFLOW_INCLUDES ?= $(TENSORFLOW_BASE)
 
 $(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS)
 	@mkdir -p $(@D)
