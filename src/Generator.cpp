@@ -880,8 +880,20 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
 
+    std::string emit_flags_string = flags_info["-e"];
+
+    // If HL_EXTRA_OUTPUTS is defined, assume it's extra outputs we want to generate
+    // (usually for temporary debugging purposes) and just tack it on to the -e contents.
+    std::string extra_outputs = get_env_variable("HL_EXTRA_OUTPUTS");
+    if (!extra_outputs.empty()) {
+        if (!emit_flags_string.empty()){
+            emit_flags_string += ",";
+        }
+        emit_flags_string += extra_outputs;
+    }
+
     // It's ok to omit "target=" if we are generating *only* a cpp_stub
-    const std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
+    const std::vector<std::string> emit_flags = split_string(emit_flags_string, ",");
     const bool stub_only = (emit_flags.size() == 1 && emit_flags[0] == "cpp_stub");
     if (!stub_only) {
         if (generator_args.find("target") == generator_args.end()) {
