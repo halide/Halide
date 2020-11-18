@@ -1481,7 +1481,7 @@ int next_power_of_two(int x) {
     // unreachable.
 }
 
-}
+}  // namespace
 
 Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
     if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
