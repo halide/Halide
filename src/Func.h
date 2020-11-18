@@ -718,7 +718,7 @@ public:
 
     /** Evaluate this function over some rectangular domain and return
      * the resulting buffer or buffers. Performs compilation if the
-     * Func has not previously been realized and jit_compile has not
+     * Func has not previously been realized and compile_jit has not
      * been called. If the final stage of the pipeline is on the GPU,
      * data is copied back to the host before being returned. The
      * returned Realization should probably be instantly converted to
