@@ -99,6 +99,10 @@ $(BIN)/%/ops.o: ops.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
 
+$(BIN)/%/interval.o: interval.cpp $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
+
 $(BIN)/%/tflite_parser.o: tflite_parser.cpp $(BIN)/%/tflite_schema_generated.h
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(FLATBUFFERS_INCLUDE_PATH) -I$(BIN)/$* -c $< -o $@
@@ -123,6 +127,7 @@ $(BIN)/%/tflite_schema_direct_generated.h: $(BIN)/%/tflite_schema.fbs
 
 INTERPRETER_DEPS = \
 	$(BIN)/%/interpreter.o \
+	$(BIN)/%/interval.o \
 	$(BIN)/%/model.o \
 	$(BIN)/%/tflite_parser.o \
 	$(BIN)/%/ops.o \

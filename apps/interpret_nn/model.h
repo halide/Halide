@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "interval.h"
 #include "HalideBuffer.h"
 #include "app_util.h"
 
@@ -14,28 +15,6 @@ namespace interpret_nn {
 template<class T, class... Args>
 std::unique_ptr<T> make_unique(Args &&... args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-}
-
-inline std::ostream &operator<<(std::ostream &s,
-                                const halide_dimension_t &dim) {
-    return s << "{" << dim.min << ", " << dim.extent << ", " << dim.stride << "}";
-}
-
-inline std::ostream &operator<<(std::ostream &s,
-                                const std::pair<int, int> &dim) {
-    return s << "{" << dim.first << ", " << dim.second << "}";
-}
-
-template<typename T>
-inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {
-    s << "{";
-    for (size_t i = 0; i < v.size(); ++i) {
-        if (i > 0) {
-            s << ", ";
-        }
-        s << v[i];
-    }
-    return s << "}";
 }
 
 template<typename T>
@@ -56,6 +35,7 @@ enum class TensorType {
     Int8,
     String,
     UInt8,
+    UInt64,
 };
 
 size_t SizeOfTensorType(TensorType t);
@@ -125,13 +105,13 @@ inline std::ostream &operator<<(std::ostream &s,
     return s << "{" << q.scale << ", " << q.zero << ", " << q.dimension << "}";
 }
 
-using CropShape = std::vector<std::pair<int, int>>;
+using CropShape = Box;
 
 inline CropShape WithoutStrides(const std::vector<halide_dimension_t> &shape) {
     CropShape result;
     result.reserve(shape.size());
     for (const halide_dimension_t &i : shape) {
-        result.emplace_back(i.min, i.extent);
+        result.emplace_back(i.min, i.min + i.extent - 1);
     }
     return result;
 }
@@ -208,14 +188,18 @@ public:
     template<class T>
     HalideBuffer<T> Data(const CropShape &crop) {
         HalideBuffer<T> buf = Data<T>();
-        buf.crop(crop);
+        for (int i = 0; i < (int)crop.size(); i++) {
+            buf.crop(i, crop[i].min, crop[i].extent());
+        }
         return buf;
     }
 
     template<class T>
     HalideBuffer<const T> Data(const CropShape &crop) const {
         HalideBuffer<const T> buf = Data<T>();
-        buf.crop(crop);
+        for (int i = 0; i < (int)crop.size(); i++) {
+            buf.crop(i, crop[i].min, crop[i].extent());
+        }
         return buf;
     }
 

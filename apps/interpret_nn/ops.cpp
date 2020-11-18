@@ -14,40 +14,26 @@ namespace interpret_nn {
 
 namespace {
 
-std::pair<int, int> Intersect(std::pair<int, int> a, std::pair<int, int> b) {
-    int max_a = a.first + a.second - 1;
-    int max_b = b.first + b.second - 1;
-    int min = std::max(a.first, b.first);
-    int max = std::min(max_a, max_b);
-    return {min, max - min + 1};
-}
-
-CropShape Intersect(CropShape a, const CropShape &b) {
-    APP_CHECK(a.size() == b.size());
-    for (int i = 0; i < (int)a.size(); i++) {
-        a[i] = Intersect(a[i], b[i]);
-    }
-    return a;
-}
-
 std::vector<CropShape> SplitCrop(const CropShape &crop, int dim, int factor,
                                  bool shift_inwards = false) {
     std::vector<CropShape> splits;
-    int x_min = crop[dim].first;
-    int x_extent = crop[dim].second;
+    int x_min = crop[dim].min;
+    int x_extent = crop[dim].extent();
     int x_max = x_min + x_extent - 1;
     splits.reserve((x_extent + factor - 1) / factor);
-    for (int x = 0; x <= x_max; x += factor) {
-        CropShape split_x = crop;
-        split_x[dim].first = x;
+    CropShape split_x = crop;
+    split_x[dim].set_extent(factor);
+    for (int x = 0; x <= x_max; x += factor, split_x[dim] += factor) {
         if (shift_inwards) {
-            split_x[dim].second = factor;
-            if (split_x[dim].first + split_x[dim].second > x_extent) {
-                split_x[dim].first -= x_extent - split_x[dim].second;
+            if (split_x[dim].max >= crop[dim].max) {
+                split_x[dim] -= split_x[dim].max - crop[dim].max;
             }
+            APP_CHECK(split_x[dim].min >= crop[dim].min);
+            APP_CHECK(split_x[dim].max <= crop[dim].max);
         } else {
-            split_x[dim].second = std::min(x + factor - 1, x_max) - x + 1;
+            split_x[dim].max = std::min(split_x[dim].max, crop[dim].max);
         }
+        APP_CHECK(split_x[dim].extent() > 0);
         splits.push_back(split_x);
     }
     return splits;
@@ -172,13 +158,12 @@ Op::Bounds PoolOp::InferBounds(const CropShape &crop) const {
 
     input_crop[0] = crop[0];
     for (int dim = 1; dim <= 2; dim++) {
-        input_crop[dim].first *= stride_[dim - 1];
-        input_crop[dim].second *= stride_[dim - 1];
+        input_crop[dim] *= stride_[dim - 1];
     }
 
-    input_crop[1].second += filter_size_[0];
-    input_crop[2].second += filter_size_[1];
-    input_crop = Intersect(input_crop, WithoutStrides(Input()->Shape()));
+    input_crop[1].max += filter_size_[0] - 1;
+    input_crop[2].max += filter_size_[1] - 1;
+    input_crop = intersect(input_crop, WithoutStrides(Input()->Shape()));
 
     Bounds result;
     result.inputs.emplace_back(input_crop);
@@ -232,34 +217,6 @@ void AddOp::Execute(const CropShape &crop) {
 
         const auto output_range = GetOutputRange(activation_, output);
 
-        // TODO: remove when debugged.
-        // static bool dump = true;
-        // if (dump) {
-        //     std::cout << "\n";
-        //     std::cout << "    input1_scale " << input1_scale << "\n";
-        //     std::cout << "    input2_scale " << input2_scale << "\n";
-        //     std::cout << "    output_scale " << output_scale << "\n";
-        //     std::cout << "\n";
-        //     std::cout << "    twice_max_input_scale " << twice_max_input_scale << "\n";
-        //     std::cout << "    real_input1_multiplier " << real_input1_multiplier << "\n";
-        //     std::cout << "    real_input2_multiplier " << real_input2_multiplier << "\n";
-        //     std::cout << "    real_output_multiplier " << real_output_multiplier << "\n";
-        //     std::cout << "\n";
-        //     std::cout << "    left_shift " << left_shift << "\n";
-        //     std::cout << "    input1_offset " << input1_offset << "\n";
-        //     std::cout << "    input1_mul_and_shift.multiplier " << input1_mul_and_shift.multiplier << "\n";
-        //     std::cout << "    input1_mul_and_shift.shift " << input1_mul_and_shift.shift << "\n";
-        //     std::cout << "    input2_offset " << input2_offset << "\n";
-        //     std::cout << "    input2_mul_and_shift.multiplier " << input2_mul_and_shift.multiplier << "\n";
-        //     std::cout << "    input2_mul_and_shift.shift " << input2_mul_and_shift.shift << "\n";
-        //     std::cout << "    output_offset " << output_offset << "\n";
-        //     std::cout << "    output_mul_and_shift.multiplier " << output_mul_and_shift.multiplier << "\n";
-        //     std::cout << "    output_mul_and_shift.shift " << output_mul_and_shift.shift << "\n";
-        //     std::cout << "    output_range.min " << output_range.min << "\n";
-        //     std::cout << "    output_range.max " << output_range.max << "\n";
-        //     dump = false;
-        // }
-
         APP_CHECK(0 == AddUint8Uint8(left_shift, input1_buf, input2_buf,
                                      -input1_offset, input1_mul_and_shift.multiplier, -input1_mul_and_shift.shift,
                                      -input2_offset, input2_mul_and_shift.multiplier, -input2_mul_and_shift.shift,
@@ -291,14 +248,13 @@ Op::Bounds Conv2DOp::InferBounds(const CropShape &crop) const {
     CropShape filter_shape = WithoutStrides(Filter()->Shape());
 
     for (int dim = 1; dim <= 2; dim++) {
-        input_crop[dim].first *= stride_[dim - 1];
-        input_crop[dim].second *= stride_[dim - 1];
+        input_crop[dim] *= stride_[dim - 1];
     }
 
     input_crop[0] = filter_shape[3];
-    input_crop[1].second += dilation_[0] * (filter_shape[1].second - 1);
-    input_crop[2].second += dilation_[1] * (filter_shape[2].second - 1);
-    input_crop = Intersect(input_crop, WithoutStrides(Input()->Shape()));
+    input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
+    input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
+    input_crop = intersect(input_crop, WithoutStrides(Input()->Shape()));
 
     if (padding_ == Padding::Same) {
         const int input_width = Input()->Dim(1).extent;
@@ -316,11 +272,9 @@ Op::Bounds Conv2DOp::InferBounds(const CropShape &crop) const {
         const int pad_height = std::max(0,
                                         ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
 
-        input_crop[1].first += pad_width;
-        input_crop[2].first += pad_height;
+        input_crop[1] += pad_width;
+        input_crop[2] += pad_height;
     }
-
-    std::cout << stride_[0] << ", " << stride_[1] << ", " << dilation_[0] << ", " << dilation_[1] << ", " << filter_shape << ": " << crop << " -> " << input_crop << std::endl;
 
     Bounds result;
     result.inputs.emplace_back(input_crop);
@@ -414,16 +368,15 @@ Op::Bounds DepthwiseConv2DOp::InferBounds(const CropShape &crop) const {
     CropShape filter_shape = WithoutStrides(Filter()->Shape());
 
     input_crop[0] = crop[0];
-    input_crop[0].first /= depth_multiplier_;
-    input_crop[0].second /= depth_multiplier_;
+    input_crop[0].min /= depth_multiplier_;
+    input_crop[0].max /= depth_multiplier_;
     for (int dim = 1; dim <= 2; dim++) {
-        input_crop[dim].first *= stride_[dim - 1];
-        input_crop[dim].second *= stride_[dim - 1];
+        input_crop[dim] *= stride_[dim - 1];
     }
 
-    input_crop[1].second += dilation_[0] * (filter_shape[1].second - 1);
-    input_crop[2].second += dilation_[1] * (filter_shape[2].second - 1);
-    input_crop = Intersect(input_crop, WithoutStrides(Input()->Shape()));
+    input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
+    input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
+    input_crop = intersect(input_crop, WithoutStrides(Input()->Shape()));
 
     if (padding_ == Padding::Same) {
         const int input_width = Input()->Dim(1).extent;
@@ -441,8 +394,8 @@ Op::Bounds DepthwiseConv2DOp::InferBounds(const CropShape &crop) const {
         const int pad_height = std::max(0,
                                         ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
 
-        input_crop[1].first += pad_width;
-        input_crop[2].first += pad_height;
+        input_crop[1] += pad_width;
+        input_crop[2] += pad_height;
     }
 
     Bounds result;
@@ -566,11 +519,11 @@ Op::Bounds PadOp::InferBounds(const CropShape &crop) const {
 
     CropShape padded_crop = crop;
     for (int d = 0; d < 4; d++) {
-        padded_crop[d].first += padding(d);
+        padded_crop[d] += padding(d);
     }
 
     result.inputs.emplace_back(
-        Intersect(padded_crop, WithoutStrides(Input(0)->Shape())));
+        intersect(padded_crop, WithoutStrides(Input(0)->Shape())));
     result.inputs.emplace_back(WithoutStrides(Input(1)->Shape()));
     result.outputs.emplace_back(crop);
     return result;

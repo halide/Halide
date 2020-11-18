@@ -8,62 +8,6 @@ namespace interpret_nn {
 
 namespace {
 
-bool IsEmpty(const CropShape& a) {
-    if (a.empty()) {
-        return true;
-    }
-    for (const auto& i : a) {
-        if (i.second <= 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool IsUnionExact(const CropShape& a, const CropShape& b) {
-    APP_CHECK(a.size() == b.size()) << a.size() << " " << b.size();
-    int different_dims = 0;
-    int dim = -1;
-    for (int i = 0; i < (int)a.size(); i++) {
-        if (a[i] != b[i]) {
-            different_dims++;
-            dim = i;
-        }
-    }
-    if (different_dims == 0) {
-        // The shapes are the same, the union is trivial.
-        return true;
-    } else if (different_dims == 1) {
-        // One dim is different. We might be able to produce an exact union.
-        int min_a = a[dim].first;
-        int min_b = b[dim].first;
-        int max_a = min_a + a[dim].second - 1;
-        int max_b = min_b + b[dim].second - 1;
-        return !(min_a > max_b + 1 || min_b > max_a + 1);
-    } else {
-        // More than one dim is different, the union is not a rectangle.
-        return false;
-    }
-}
-
-std::pair<int, int> Union(const std::pair<int, int>& a, const std::pair<int, int>& b) {
-    std::pair<int, int> result;
-    result.first = std::min(a.first, b.first);
-    int max = std::max(a.first + a.second, b.first + b.second) - 1;
-    result.second = max - result.first + 1;
-    return result;
-}
-
-CropShape Union(const CropShape& a, const CropShape& b) {
-    APP_CHECK(a.size() == b.size()) << a.size() << " " << b.size();
-    CropShape result;
-    result.resize(a.size());
-    for (int i = 0; i < (int)a.size(); i++) {
-        result[i] = Union(a[i], b[i]);
-    }
-    return result;
-}
-
 using ScheduledOpList = std::list<ScheduledOp>;
 using ScheduledOpVector = std::vector<ScheduledOp>;
 
@@ -85,70 +29,14 @@ int Consumes(const Op *op, const Tensor *t) {
     return -1;
 }
 
-// Subtract a from b if possible.
-bool Subtract(CropShape& a, const CropShape& b) {
-    APP_CHECK(a.size() == b.size()) << a.size() << " " << b.size();
-    int different_dims = 0;
-    int dim = -1;
-    for (int i = 0; i < (int)a.size(); i++) {
-        if (a[i] != b[i]) {
-            different_dims++;
-            dim = i;
-        }
-    }
-    if (different_dims == 0) {
-        // The shapes are the same. We can just clear a and return.
-        a.clear();
-        return true;
-    } else if (different_dims == 1) {
-        // One dim is different. We might be able to subtract b from a.
-        int min_a = a[dim].first;
-        int min_b = b[dim].first;
-        int max_a = min_a + a[dim].second - 1;
-        int max_b = min_b + b[dim].second - 1;
-        //std::cout << "a: [" << min_a << " " << max_a << "]" << std::endl;
-        //std::cout << "b: [" << min_b << " " << max_b << "]" << std::endl;
-        if (min_a <= min_b) {
-            // b doesn't remove the min of a.
-            if (max_b >= max_a) {
-                if (min_b - 1 >= max_a)
-                    return false;
-                // But it does remove the max of a.
-                max_a = std::min(max_a, min_b - 1);
-            } else {
-                // b doesn't remove the min of a, or the max of a, so we can't subtract anything.
-                return false;
-            }
-        } else {
-            // b does remove the min of a.
-            if (max_b <= max_a) {
-                if (max_b + 1 <= min_a)
-                    return false;
-                min_a = std::max(min_a, max_b + 1);
-            } else {
-                if (min_a - 1 >= max_a)
-                    return false;
-                // b removes both the min and max. The result is empty.
-                max_a = std::min(max_a, min_a - 1);
-            }
-        }
-        a[dim].first = min_a;
-        a[dim].second = max_a - min_a + 1;
-        return true;
-    } else {
-        // More than one dim is different, the result is not a rectangle.
-        return false;
-    }
-}
-
 bool SubtractDone(CropShape& shape, const Tensor *t, const ScheduledOpVector &done) {
     bool trimmed = false;
-    for (ScheduledOpVector::const_iterator i = done.begin(); i != done.end() && !IsEmpty(shape); i++) {
+    for (ScheduledOpVector::const_iterator i = done.begin(); i != done.end() && !is_empty(shape); i++) {
         int o = Produces(i->op, t);
         if (o >= 0) {
             Op::Bounds bounds = i->op->InferBounds(i->crop);
             const CropShape& produced = bounds.outputs[o];
-            trimmed = trimmed || Subtract(shape, produced);
+            trimmed = trimmed || subtract(shape, produced);
         }
     }
     return trimmed;
@@ -164,12 +52,12 @@ bool CanExecute(const ScheduledOpVector &done, const ScheduledOp &op) {
             continue;
         CropShape required = bounds.inputs[i];
 
-        while (!IsEmpty(required)) {
+        while (!is_empty(required)) {
             if (!SubtractDone(required, input, done))
                 break;
         }
 
-        if (!IsEmpty(required)) {
+        if (!is_empty(required)) {
             // We needed more of this shape.
             return false;
         }
@@ -179,7 +67,7 @@ bool CanExecute(const ScheduledOpVector &done, const ScheduledOp &op) {
 
 void GreedySchedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOpList::iterator op) {
     APP_CHECK(!todo.empty());
-    if (done.empty() || done.back().op != op->op || !IsUnionExact(done.back().crop, op->crop)) {
+    if (done.empty() || done.back().op != op->op || !is_union_exact(done.back().crop, op->crop)) {
         done.emplace_back(std::move(*op));
     } else {
         // The last op and the current op are the same and can be merged.
@@ -262,7 +150,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
         std::cout << "Before: " << std::endl;
         for (const auto& i : schedule) {
             if (i.crop.size() >= 3) {
-                std::cout << i.crop[2].first << " " << i.crop[2].second << " ";
+                std::cout << i.crop[2].min << " " << i.crop[2].max << " ";
             }
             i.op->Dump(std::cout);
         }
@@ -300,7 +188,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
         std::cout << "After: " << std::endl;
         for (const auto& i : schedule_) {
             if (i.crop.size() >= 3) {
-                std::cout << i.crop[2].first << " " << i.crop[2].second << " ";
+                std::cout << i.crop[2].min << " " << i.crop[2].max << " ";
             }
             i.op->Dump(std::cout);
         }
