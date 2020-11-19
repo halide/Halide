@@ -42,6 +42,8 @@ public:
             return ActivationFunction::Tanh;
         case tflite::ActivationFunctionType_SIGN_BIT:
             return ActivationFunction::SignBit;
+        default:
+            APP_FATAL << "Unknown tflite::ActivationFunctionType";
         }
     }
 
@@ -73,6 +75,8 @@ public:
             return TensorType::Complex128;
         case tflite::TensorType_UINT64:
             return TensorType::UInt64;
+        default:
+            APP_FATAL << "Unknown tflite::TensorType";
         }
     }
 
@@ -82,6 +86,8 @@ public:
             return Padding::Same;
         case tflite::Padding_VALID:
             return Padding::Valid;
+        default:
+            APP_FATAL << "Unknown tflite::Padding";
         }
     }
 
