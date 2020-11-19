@@ -126,7 +126,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
 
-        if (is_zero(b)) {
+        if (is_const_zero(b)) {
             return a;
         }
 
@@ -411,7 +411,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 Expr extent_1 = args[j];
                 Expr stride_1 = args[j + 1];
 
-                if (is_one(mutate(extent_0 * stride_0 == stride_1, nullptr))) {
+                if (is_const_one(mutate(extent_0 * stride_0 == stride_1, nullptr))) {
                     Expr new_extent = mutate(extent_0 * extent_1, nullptr);
                     args.erase(args.begin() + j, args.begin() + j + 2);
                     args[i] = new_extent;
@@ -441,7 +441,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
         }
 
-        if (is_zero(cond)) {
+        if (is_const_zero(cond)) {
             // (We could simplify this to avoid evaluating the provably-false
             // expression, but since this is a degenerate condition, don't bother.)
             user_warning << "This pipeline is guaranteed to fail a require() expression at runtime: \n"
@@ -455,7 +455,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             result = mutate(op->args[1], bounds);
         }
 
-        if (is_one(cond)) {
+        if (is_const_one(cond)) {
             return result;
         }
 
@@ -522,9 +522,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
         }
 
-        if (is_one(cond)) {
+        if (is_const_one(cond)) {
             return mutate(op->args[1], bounds);
-        } else if (is_zero(cond)) {
+        } else if (is_const_zero(cond)) {
             return mutate(op->args[2], bounds);
         } else {
             Expr true_value = mutate(op->args[1], nullptr);

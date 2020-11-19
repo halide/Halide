@@ -12,7 +12,7 @@ message(STATUS "Directing pybind11 to Python3 executable ${Python3_EXECUTABLE}")
 set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
 
 # Keep the version in sync with requirements.txt and the Ubuntu 20.04 LTS package (python3-pybind11)
-set(PYBIND11_VER 2.4.3)
+set(PYBIND11_VER 2.5.0)
 find_package(pybind11 ${PYBIND11_VER} QUIET)
 if (NOT pybind11_FOUND)
     include(FetchContent)

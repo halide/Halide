@@ -67,30 +67,30 @@ class IsNoOp : public IRVisitor {
     using IRVisitor::visit;
 
     Expr make_and(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) {
+        if (is_const_zero(a) || is_const_one(b)) {
             return a;
         }
-        if (is_zero(b) || is_one(a)) {
+        if (is_const_zero(b) || is_const_one(a)) {
             return b;
         }
         return a && b;
     }
 
     Expr make_or(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) {
+        if (is_const_zero(a) || is_const_one(b)) {
             return b;
         }
-        if (is_zero(b) || is_one(a)) {
+        if (is_const_zero(b) || is_const_one(a)) {
             return a;
         }
         return a || b;
     }
 
     void visit(const Store *op) override {
-        if (op->value.type().is_handle() || is_zero(op->predicate)) {
+        if (op->value.type().is_handle() || is_const_zero(op->predicate)) {
             condition = const_false();
         } else {
-            if (is_zero(condition)) {
+            if (is_const_zero(condition)) {
                 return;
             }
             // If the value being stored is the same as the value loaded,
@@ -120,7 +120,7 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const For *op) override {
-        if (is_zero(condition)) {
+        if (is_const_zero(condition)) {
             return;
         }
         Expr old_condition = condition;
@@ -136,7 +136,7 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const IfThenElse *op) override {
-        if (is_zero(condition)) {
+        if (is_const_zero(condition)) {
             return;
         }
         Expr total_condition = condition;
@@ -237,7 +237,7 @@ class SimplifyUsingBounds : public IRMutator {
             test = simplify(test);
             debug(3) << " -> " << test << "\n";
         }
-        return is_one(test);
+        return is_const_one(test);
     }
 
     Expr visit(const Min *op) override {
@@ -369,10 +369,10 @@ class TrimNoOps : public IRMutator {
 
         debug(3) << "Simplified condition is " << is_no_op.condition << "\n";
 
-        if (is_one(is_no_op.condition)) {
+        if (is_const_one(is_no_op.condition)) {
             // This loop is definitely useless
             return Evaluate::make(0);
-        } else if (is_zero(is_no_op.condition)) {
+        } else if (is_const_zero(is_no_op.condition)) {
             // This loop is definitely needed
             return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
         }

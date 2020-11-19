@@ -305,7 +305,7 @@ bool is_undef(const Expr &e) {
     return false;
 }
 
-bool is_zero(const Expr &e) {
+bool is_const_zero(const Expr &e) {
     if (const IntImm *int_imm = e.as<IntImm>()) {
         return int_imm->value == 0;
     }
@@ -316,19 +316,19 @@ bool is_zero(const Expr &e) {
         return float_imm->value == 0.0;
     }
     if (const Cast *c = e.as<Cast>()) {
-        return is_zero(c->value);
+        return is_const_zero(c->value);
     }
     if (const Broadcast *b = e.as<Broadcast>()) {
-        return is_zero(b->value);
+        return is_const_zero(b->value);
     }
     if (const Call *c = e.as<Call>()) {
         return (c->is_intrinsic(Call::bool_to_mask) || c->is_intrinsic(Call::cast_mask)) &&
-               is_zero(c->args[0]);
+               is_const_zero(c->args[0]);
     }
     return false;
 }
 
-bool is_one(const Expr &e) {
+bool is_const_one(const Expr &e) {
     if (const IntImm *int_imm = e.as<IntImm>()) {
         return int_imm->value == 1;
     }
@@ -339,36 +339,14 @@ bool is_one(const Expr &e) {
         return float_imm->value == 1.0;
     }
     if (const Cast *c = e.as<Cast>()) {
-        return is_one(c->value);
+        return is_const_one(c->value);
     }
     if (const Broadcast *b = e.as<Broadcast>()) {
-        return is_one(b->value);
+        return is_const_one(b->value);
     }
     if (const Call *c = e.as<Call>()) {
         return (c->is_intrinsic(Call::bool_to_mask) || c->is_intrinsic(Call::cast_mask)) &&
-               is_one(c->args[0]);
-    }
-    return false;
-}
-
-bool is_two(const Expr &e) {
-    if (e.type().bits() < 2) {
-        return false;
-    }
-    if (const IntImm *int_imm = e.as<IntImm>()) {
-        return int_imm->value == 2;
-    }
-    if (const UIntImm *uint_imm = e.as<UIntImm>()) {
-        return uint_imm->value == 2;
-    }
-    if (const FloatImm *float_imm = e.as<FloatImm>()) {
-        return float_imm->value == 2.0;
-    }
-    if (const Cast *c = e.as<Cast>()) {
-        return is_two(c->value);
-    }
-    if (const Broadcast *b = e.as<Broadcast>()) {
-        return is_two(b->value);
+               is_const_one(c->args[0]);
     }
     return false;
 }
@@ -886,7 +864,7 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result) {
     if (const And *a = cond.as<And>()) {
         split_into_ands(a->a, result);
         split_into_ands(a->b, result);
-    } else if (!is_one(cond)) {
+    } else if (!is_const_one(cond)) {
         result.push_back(cond);
     }
 }

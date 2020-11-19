@@ -452,7 +452,7 @@ void CodeGen_ARM::visit(const Mul *op) {
 
 void CodeGen_ARM::visit(const Div *op) {
     if (!neon_intrinsics_disabled() &&
-        op->type.is_vector() && is_two(op->b) &&
+        op->type.is_vector() && is_const(op->b, 2) &&
         (op->a.as<Add>() || op->a.as<Sub>())) {
         vector<Expr> matches;
         for (size_t i = 0; i < averagings.size(); i++) {
@@ -483,7 +483,7 @@ void CodeGen_ARM::visit(const Sub *op) {
     // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
     if (op->type.is_float() &&
         op->type.bits() >= 32 &&
-        is_zero(op->a)) {
+        is_const_zero(op->a)) {
         Constant *a;
         if (op->type.bits() == 32) {
             a = ConstantFP::getNegativeZero(f32_t);
@@ -656,7 +656,7 @@ void CodeGen_ARM::visit(const Max *op) {
 
 void CodeGen_ARM::visit(const Store *op) {
     // Predicated store
-    if (!is_one(op->predicate)) {
+    if (!is_const_one(op->predicate)) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -705,7 +705,7 @@ void CodeGen_ARM::visit(const Store *op) {
         }
     }
 
-    if (is_one(ramp->stride) &&
+    if (is_const_one(ramp->stride) &&
         shuffle && shuffle->is_interleave() &&
         type_ok_for_vst &&
         2 <= shuffle->vectors.size() && shuffle->vectors.size() <= 4) {
@@ -832,7 +832,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
 void CodeGen_ARM::visit(const Load *op) {
     // Predicated load
-    if (!is_one(op->predicate)) {
+    if (!is_const_one(op->predicate)) {
         CodeGen_Posix::visit(op);
         return;
     }
