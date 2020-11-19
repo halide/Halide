@@ -149,11 +149,11 @@ int main(int argc, char **argv) {
         // Inputs and Outputs to the op are also the inputs and outputs to the subgraph.
         auto new_subgraph = make_unique<tflite::SubGraphT>();
         new_subgraph->tensors = std::move(new_tensors);
-        for (int32_t i : *op->inputs()) {
-            new_subgraph->inputs.emplace_back(old_to_new_tensor_map[i]);
+        for (int32_t i : new_op->inputs) {
+            new_subgraph->inputs.emplace_back(i);
         }
-        for (int32_t i : *op->outputs()) {
-            new_subgraph->outputs.emplace_back(old_to_new_tensor_map[i]);
+        for (int32_t i : new_op->outputs) {
+            new_subgraph->outputs.emplace_back(i);
         }
         new_subgraph->operators.emplace_back(std::move(new_op));
 
