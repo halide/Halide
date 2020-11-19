@@ -135,7 +135,7 @@ public:
 
             int tile_w = 1;
             int tile_h = 1;
-            const int vec = natural_vector_size<float>();
+            const int vec = get_target().has_feature(Target::Xtensa)?16:natural_vector_size<float>();
 
             if (get_target().has_feature(Target::AVX512_Skylake) ||
                 (get_target().arch == Target::ARM &&
