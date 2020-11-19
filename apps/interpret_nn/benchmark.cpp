@@ -12,7 +12,10 @@ using app_util::read_entire_file;
 namespace interpret_nn {
 
 void RunBenchmark(const std::string &filename, const ScheduleOptions &options) {
-    std::cout << "Benchmarking " << filename << std::endl;
+    if (!options.trace) {
+        // In trace mode, don't send *anything* to stdout
+        std::cout << "Benchmarking " << filename << std::endl;
+    }
 
     std::vector<char> buffer = read_entire_file(filename);
     Model model = parse_tflite_model_from_buffer(buffer.data());
@@ -59,6 +62,11 @@ int main(int argc, char **argv) {
             options.target_working_set_size_bytes = 1024 * 512;
             continue;
         }
+    }
+
+    if (options.verbose && options.trace) {
+        std::cerr << "You cannot specify --trace and --verbose at the same time.\n";
+        exit(-1);
     }
 
     for (int i = 1; i < argc; i++) {
