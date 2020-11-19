@@ -390,24 +390,36 @@ Tensor *ModelInterpreter::get_tensor(const std::string &name) {
 }
 
 std::vector<Tensor *> ModelInterpreter::inputs() {
-    // TODO: This is wrong, it needs to find all tensors that are only
-    // consumed and not produced, and are not constant.
-    Op *first = schedule_.front().op;
     std::vector<Tensor *> result;
-    for (int i = 0; i < first->input_count(); i++) {
-        result.emplace_back(first->input(i));
+    result.reserve(model_.tensors.size());
+    for (auto &i : model_.tensors) {
+        result.push_back(i.get());
     }
+
+    for (const auto &i : model_.ops) {
+        for (int j = 0; j < i->output_count(); j++) {
+            const Tensor *out = i->output(j);
+            result.erase(std::remove(result.begin(), result.end(), out), result.end());
+        }
+    }
+
     return result;
 }
 
 std::vector<Tensor *> ModelInterpreter::outputs() {
-    // TODO: This is wrong, it needs to find all tensors that are only
-    // produced and not consumed.
-    Op *final = schedule_.back().op;
     std::vector<Tensor *> result;
-    for (int i = 0; i < final->output_count(); i++) {
-        result.emplace_back(final->output(i));
+    result.reserve(model_.tensors.size());
+    for (auto &i : model_.tensors) {
+        result.push_back(i.get());
     }
+
+    for (const auto &i : model_.ops) {
+        for (int j = 0; j < i->input_count(); j++) {
+            const Tensor *in = i->input(j);
+            result.erase(std::remove(result.begin(), result.end(), in), result.end());
+        }
+    }
+
     return result;
 }
 
