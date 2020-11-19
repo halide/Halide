@@ -133,16 +133,25 @@ $(BIN)/%/common_reference.o: halide/common_reference.cpp
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
 
-$(BIN)/%/ops_test: ops_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
 $(BIN)/%/convolution_test: halide/convolution_test.cpp $(BIN)/%/common_reference.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 test_convolution: $(BIN)/$(HL_TARGET)/convolution_test
 	$<
+
+# unit tests for each op (not yet complete)
+$(BIN)/%/add_test: test/add_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+
+$(BIN)/%/average_pool_test: test/average_pool_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+
+test_ops: $(BIN)/$(HL_TARGET)/add_test $(BIN)/$(HL_TARGET)/average_pool_test
+	$(BIN)/$(HL_TARGET)/add_test
+	$(BIN)/$(HL_TARGET)/average_pool_test
 
 # Experimental glue code to define RunGen rules for all of these (from Makefile.inc)
 # Not sure if useful or not, gonna leave in and see.
@@ -152,7 +161,7 @@ $(eval $(call DEFINE_RUNGEN,convolution_uint8,$(BIN)/%/runtime.a))
 $(eval $(call DEFINE_RUNGEN,depthwise_convolution_uint8,$(BIN)/%/runtime.a))
 $(eval $(call DEFINE_RUNGEN,max_pool_uint8,$(BIN)/%/runtime.a))
 
-
+# Utility to explode a tflite pipeline into individual ops for testing.
 $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/%/tflite_schema_direct_generated.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)

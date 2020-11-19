@@ -1,5 +1,7 @@
+#ifndef OP_TEST_HELPER_H
+#define OP_TEST_HELPER_H
+
 #include <chrono>
-#include <fstream>
 #include <iostream>
 #include <random>
 
@@ -9,11 +11,9 @@
 #include "ops.h"
 
 namespace interpret_nn {
-namespace {
+namespace op_test {
 
-using Halide::Runtime::Buffer;
-
-std::chrono::duration<double> bench(std::function<void()> f) {
+inline std::chrono::duration<double> bench(std::function<void()> f) {
     auto result = Halide::Tools::benchmark(f);
     return std::chrono::duration<double>(result.wall_time);
 }
@@ -68,6 +68,7 @@ struct ReferenceOp {
     std::vector<std::shared_ptr<Tensor>> outputs;
     std::vector<int> stride;
     std::vector<int> dilation;
+    std::vector<int> filter_size;
     Padding padding = Padding::Same;
     ActivationFunction activation = ActivationFunction::None;
     int depth_multiplier = 0;
@@ -96,7 +97,7 @@ struct TensorData {
     int zero_point;
 };
 
-std::vector<std::shared_ptr<Tensor>> build_tensors(const std::vector<TensorData> &tds) {
+inline std::vector<std::shared_ptr<Tensor>> build_tensors(const std::vector<TensorData> &tds) {
     std::vector<std::shared_ptr<Tensor>> v;
     for (const auto &td : tds) {
         std::vector<halide_dimension_t> shape(td.shape.size());
@@ -124,113 +125,13 @@ std::vector<std::shared_ptr<Tensor>> build_tensors(const std::vector<TensorData>
 
 // ----------------------
 
-template<typename T>
-struct Add_ReferenceOp : public ReferenceOp {
-    Add_ReferenceOp() = default;
-
-    void execute() override {
-        const Tensor *in1 = inputs.at(0).get();
-        const Tensor *in2 = inputs.at(1).get();
-        Tensor *out = outputs.at(0).get();
-
-        APP_CHECK(
-            in1->type() == to_tensor_type<T>() &&
-            in2->type() == to_tensor_type<T>() &&
-            out->type() == to_tensor_type<T>());
-
-        auto in1_buf = in1->data<T>();
-        auto in2_buf = in2->data<T>();
-        auto out_buf = out->data<T>();
-
-        const int in1_offset = in1->quantization().zero.at(0);
-        const int in2_offset = in2->quantization().zero.at(0);
-        const int out_offset = out->quantization().zero.at(0);
-
-        const float in1_scale = in1->quantization().scale.at(0);
-        const float in2_scale = in2->quantization().scale.at(0);
-        const float out_scale = out->quantization().scale.at(0);
-
-        const double twice_max_input_scale = 2 * std::max(in1_scale, in2_scale);
-        const double in1_multiplier = in1_scale / twice_max_input_scale;
-        const double in2_multiplier = in2_scale / twice_max_input_scale;
-        const double out_multiplier = twice_max_input_scale / out_scale;
-
-        const auto out_range = get_output_range<T>(activation, out);
-        out_buf.for_each_element([&](int c, int x, int y, int b) {
-            const double in1_val = in1_buf(c, x, y, b);
-            const double in2_val = in2_buf(c, x, y, b);
-            const double raw_sum = (in1_val - in1_offset) * in1_multiplier + (in2_val - in2_offset) * in2_multiplier;
-            double raw_out = raw_sum * out_multiplier + out_offset;
-            if (std::is_integral<T>::value) {
-                raw_out = std::round(raw_out);
-            }
-            const double clamped_out = std::min((double)out_range.max, std::max((double)out_range.min, raw_out));
-            out_buf(c, x, y, b) = (T)(clamped_out);
-        });
-    }
-};
-
-struct AddOpTestFactory {
-    std::vector<std::shared_ptr<Tensor>> tensors = build_tensors({
-        {"MobilenetV2/expanded_conv_2/project/add_fold", TensorType::UInt8, {1, 56, 56, 24}, 0.401493, 136},
-        {"MobilenetV2/expanded_conv_1/project/add_fold", TensorType::UInt8, {1, 56, 56, 24}, 0.275834, 119},
-        {"MobilenetV2/expanded_conv_2/add", TensorType::UInt8, {1, 56, 56, 24}, 0.432169, 133},
-    });
-
-    struct AddOpTestTemplate {
-        int in1, in2, out;
-        ActivationFunction activation;
-    };
-    std::vector<AddOpTestTemplate> test_templates = {
-        // First case is taken from Mobilenet.
-        {0, 1, 2, ActivationFunction::None},
-        // The rest are just permutations to test the test harness...
-        {0, 2, 1, ActivationFunction::None},
-        {1, 0, 2, ActivationFunction::None},
-        {1, 2, 0, ActivationFunction::None},
-        {2, 0, 1, ActivationFunction::None},
-        {2, 1, 0, ActivationFunction::None},
-    };
-    size_t test_index = 0;
-
-    std::unique_ptr<TestCase> operator()() {
-        if (test_index >= test_templates.size()) {
-            return nullptr;
-        }
-        const auto &test_template = test_templates[test_index++];
-
-        auto in1 = tensors[test_template.in1];
-        auto in2 = tensors[test_template.in2];
-        auto out = tensors[test_template.out];
-
-        auto r = make_unique<Add_ReferenceOp<uint8_t>>();
-        r->inputs.push_back(in1);
-        r->inputs.push_back(in2);
-        r->outputs.push_back(out);
-        r->activation = test_template.activation;
-
-        auto test = make_unique<TestCase>();
-        test->name = "AddOp<uint8>/" + std::to_string(test_index - 1);
-        test->actual_op = make_unique<AddOp>(
-            in1.get(),
-            in2.get(),
-            out.get(),
-            test_template.activation);
-        test->reference_op = std::move(r);
-
-        return test;
-    }
-};
-
-// ----------------------
-
-bool run_test(TestCaseFactory &factory, int seed) {
+inline bool run_next_test(TestCaseFactory &factory, int seed) {
     auto test = factory();
     if (!test) {
         return false;  // we're done
     }
 
-    std::vector<Buffer<const void>> reference_outputs, actual_outputs;
+    std::vector<Halide::Runtime::Buffer<const void>> reference_outputs, actual_outputs;
 
     const auto fill_with_random = [&test](int seed) {
         for (auto &t : test->reference_op->inputs) {
@@ -245,7 +146,7 @@ bool run_test(TestCaseFactory &factory, int seed) {
         }
     };
 
-    const auto save_outputs = [&test](std::vector<Buffer<const void>> &outputs) {
+    const auto save_outputs = [&test](std::vector<Halide::Runtime::Buffer<const void>> &outputs) {
         for (auto &t : test->reference_op->outputs) {
             outputs.emplace_back(t->data<const void>().copy());
         }
@@ -284,8 +185,8 @@ bool run_test(TestCaseFactory &factory, int seed) {
     // ----- Now compare the outputs
     APP_CHECK(reference_outputs.size() == actual_outputs.size());
     for (size_t i = 0; i < reference_outputs.size(); ++i) {
-        const Buffer<const void> &tflite_buf = reference_outputs[i];
-        const Buffer<const void> &halide_buf = actual_outputs[i];
+        const Halide::Runtime::Buffer<const void> &tflite_buf = reference_outputs[i];
+        const Halide::Runtime::Buffer<const void> &halide_buf = actual_outputs[i];
         APP_CHECK(tflite_buf.type() == halide_buf.type());
         APP_CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
         for (int d = 0; d < tflite_buf.dimensions(); d++) {
@@ -299,16 +200,13 @@ bool run_test(TestCaseFactory &factory, int seed) {
     return true;
 }
 
-void run_all_tests(TestCaseFactory factory, int seed) {
-    while (interpret_nn::run_test(factory, seed)) {
+inline void run_all_tests(TestCaseFactory factory, int seed) {
+    while (run_next_test(factory, seed)) {
         // nothing
     }
 }
 
-}  // namespace
-}  // namespace interpret_nn
-
-int main(int argc, char **argv) {
+int op_test_main(int argc, char **argv, TestCaseFactory factory) {
     int seed = time(nullptr);
 
     for (int i = 1; i < argc; i++) {
@@ -322,8 +220,13 @@ int main(int argc, char **argv) {
 
     std::cout << "Using random seed: " << seed << "\n";
 
-    interpret_nn::run_all_tests(interpret_nn::AddOpTestFactory(), seed);
+    interpret_nn::op_test::run_all_tests(std::move(factory), seed);
 
     std::cout << "Done!\n";
     return 0;
 }
+
+}  // namespace op_test
+}  // namespace interpret_nn
+
+#endif  // OP_TEST_HELPER_H

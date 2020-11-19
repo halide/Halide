@@ -120,7 +120,7 @@ MinMax GetQuantizedMinMax(ActivationFunction activation, int zero_point, double 
     return {output_activation_min, output_activation_max};
 }
 
-MinMax GetoutRange(ActivationFunction activation, Tensor *out) {
+MinMax get_output_range(ActivationFunction activation, Tensor *out) {
     const int output_offset = out->quantization().zero.at(0);
     APP_CHECK(output_offset >= 0 && output_offset <= 255);
 
@@ -215,7 +215,7 @@ void AddOp::execute(const Box &crop) {
         // TODO: for SubOp:
         // mul_and_shift2.multiplier *= -1;
 
-        const auto output_range = GetoutRange(activation_, out);
+        const auto output_range = get_output_range(activation_, out);
 
         APP_CHECK(0 == add_uint8_uint8(left_shift, in1_buf, in2_buf,
                                      -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
@@ -234,7 +234,10 @@ void AveragePoolOp::execute(const Box &crop) {
         auto input_buf = in->data<uint8_t>();
         auto output_buf = out->data<uint8_t>(crop);
 
-        const auto output_range = GetoutRange(activation_, out);
+        const auto output_range = get_output_range(activation_, out);
+
+        // TODO: does this need to handle Padding::Same?
+        APP_CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
 
         APP_CHECK(
             0 == average_pool_uint8(input_buf, stride_[0], stride_[1],
@@ -373,7 +376,7 @@ void Conv2DOp::execute(const Box &crop) {
         // convolution_uint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
-        const auto output_range = GetoutRange(activation_, out);
+        const auto output_range = get_output_range(activation_, out);
 
         if (padding_ == Padding::Same) {
             const int input_width = input_buf.dim(1).extent();
@@ -496,7 +499,7 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         // depthwise_convolution_uint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
-        const auto output_range = GetoutRange(activation_, out);
+        const auto output_range = get_output_range(activation_, out);
 
         // batches must match
         APP_CHECK(input_buf.dim(3).extent() == output_buf.dim(3).extent());
@@ -550,7 +553,10 @@ void MaxPoolOp::execute(const Box &crop) {
         auto input_buf = in->data<uint8_t>();
         auto output_buf = out->data<uint8_t>(crop);
 
-        const auto output_range = GetoutRange(activation_, out);
+        // TODO: does this need to handle Padding::Same?
+        APP_CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
+
+        const auto output_range = get_output_range(activation_, out);
 
         APP_CHECK(
             0 == max_pool_uint8(input_buf, stride_[0], stride_[1],
