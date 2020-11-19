@@ -19,6 +19,9 @@ struct ScheduleOptions {
 
     // Whether to dump information during scheduling.
     bool verbose = false;
+
+    // Whether to enable tracing.
+    bool trace = false;
 };
 
 // The schedule is a list of ops with crops to run the ops on.
@@ -29,6 +32,7 @@ struct ScheduledOp {
 
 class ModelInterpreter {
     Model model_;
+    bool trace_;
 
     std::vector<ScheduledOp> schedule_;
 
@@ -36,7 +40,7 @@ class ModelInterpreter {
 
 public:
     explicit ModelInterpreter(Model m, ScheduleOptions options = ScheduleOptions())
-        : model_(std::move(m)) {
+        : model_(std::move(m)), trace_(options.trace) {
         Schedule(options);
     }
 

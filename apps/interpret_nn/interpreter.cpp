@@ -149,6 +149,147 @@ void greedy_schedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOp
     }
 }
 
+void trace_loads_stores(Box box, halide_trace_event_t &event) {
+    if (box.size() == 1) {
+        event.coordinates[0] = box.front().min;
+        halide_trace(nullptr, &event);
+    } else {
+        int min = box.back().min;
+        int max = box.back().max;
+        box.pop_back();
+        for (int i = min; i <= max; i++) {
+            event.coordinates[box.size()] = i;
+            trace_loads_stores(box, event);
+        }
+    }
+}
+
+void trace_loads(int32_t parent_id, const Tensor *t, const Box &box) {
+    halide_trace_event_t event = {0,};
+    event.func = t->name().c_str();
+
+    event.event = halide_trace_consume;
+    event.parent_id = parent_id;
+    event.parent_id = halide_trace(nullptr, &event);
+
+    event.event = halide_trace_load;
+
+    event.type.code = halide_type_int;
+    event.type.bits = 8;
+    event.type.lanes = box.front().extent();
+
+    std::vector<int32_t> coords(box.size(), 0);
+    event.coordinates = coords.data();
+    event.dimensions = box.size();
+
+    std::vector<uint8_t> value(event.type.lanes, 0);
+    event.value = value.data();
+    trace_loads_stores(box, event);
+
+    event.event = halide_trace_end_consume;
+    halide_trace(nullptr, &event);
+}
+
+void trace_stores(int32_t parent_id, const Tensor *t, const Box &box) {
+    halide_trace_event_t event = {0,};
+    event.func = t->name().c_str();
+    event.parent_id = parent_id;
+
+    event.event = halide_trace_produce;
+    event.parent_id = halide_trace(nullptr, &event);
+
+    event.event = halide_trace_store;
+
+    event.type.code = halide_type_int;
+    event.type.bits = 8;
+    event.type.lanes = box.front().extent();
+
+    std::vector<int32_t> coords(box.size(), 0);
+    event.coordinates = coords.data();
+    event.dimensions = box.size();
+
+    std::vector<uint8_t> value(event.type.lanes, 0);
+    event.value = value.data();
+    trace_loads_stores(box, event);
+
+    event.event = halide_trace_end_produce;
+    halide_trace(nullptr, &event);
+}
+
+void begin_tracing(const Model &m, std::vector<int32_t> &parent_ids) {
+    halide_trace_event_t trace = {0,};
+    trace.func = "model";
+    trace.event = halide_trace_begin_pipeline;
+    parent_ids.push_back(halide_trace(nullptr, &trace));
+
+    trace.event = halide_trace_tag;
+    for (int i = 0; i < (int)m.tensors.size(); i++) {
+        const Tensor *t = m.tensors[i].get();
+        if (t->is_constant())
+            continue;
+        std::stringstream tag;
+        tag << "func_type_and_dim: ";
+        halide_type_t type = to_halide_type(t->type());
+        tag << 1 << " " << (int)type.code << " " << type.bits << " " << type.lanes << " ";
+        tag << t->rank();
+        for (int d = 0; d < t->rank(); d++) {
+            tag << t->dim(d).min << " " << t->dim(d).extent << " ";
+        }
+        std::string tag_str = tag.str();
+        trace.trace_tag = tag_str.c_str();
+        trace.func = t->name().c_str();
+        trace.parent_id = parent_ids.back();
+        halide_trace(nullptr, &trace);
+        trace.trace_tag = nullptr;
+    }
+
+
+    trace.event = halide_trace_begin_realization;
+    for (int i = 0; i < (int)m.tensors.size(); i++) {
+        const Tensor *t = m.tensors[i].get();
+        if (t->is_constant())
+            continue;
+        trace.func = t->name().c_str();
+        trace.parent_id = parent_ids.back();
+        parent_ids.push_back(halide_trace(nullptr, &trace));
+    }
+}
+
+void trace_op(const ScheduledOp &op, int parent_id) {
+    Op::Bounds bounds = op.op->infer_bounds(op.crop);
+
+    for (int i = 0; i < op.op->input_count(); i++) {
+        const Tensor *in = op.op->input(i);
+        if (in->is_constant()) {
+            continue;
+        }
+        trace_loads(parent_id, in, bounds.inputs[i]);
+    }
+    for (int i = 0; i < op.op->output_count(); i++) {
+        const Tensor *out = op.op->output(i);
+        trace_stores(parent_id, out, bounds.outputs[i]);
+    }
+}
+
+void end_tracing(const Model &m, std::vector<int32_t> &parent_ids) {
+    halide_trace_event_t trace = {0,};
+    trace.event = halide_trace_end_realization;
+    for (int i = (int)m.tensors.size() - 1; i >= 0; i--) {
+        const Tensor *t = m.tensors[i].get();
+        if (t->is_constant())
+            continue;
+        trace.func = t->name().c_str();
+        trace.parent_id = parent_ids.back();
+        parent_ids.pop_back();
+        halide_trace(nullptr, &trace);
+    }
+
+    trace.func = "model";
+    trace.event = halide_trace_end_pipeline;
+    trace.parent_id = parent_ids.back();
+    halide_trace(nullptr, &trace);
+}
+
 }  // namespace
 
 void ModelInterpreter::Schedule(ScheduleOptions options) {
@@ -219,8 +360,21 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
 }
 
 void ModelInterpreter::execute() {
+    std::vector<int32_t> parent_ids;
+    if (trace_) {
+        begin_tracing(model_, parent_ids);
+    }
+
     for (ScheduledOp &i : schedule_) {
         i.op->execute(i.crop);
+
+        if (trace_) {
+            trace_op(i, parent_ids.back());
+        }
+    }
+
+    if (trace_) {
+        end_tracing(model_, parent_ids);
     }
 }
 

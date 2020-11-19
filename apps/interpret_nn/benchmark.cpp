@@ -23,8 +23,12 @@ void RunBenchmark(const std::string &filename, const ScheduleOptions &options) {
 
     ModelInterpreter interpreter(std::move(model), options);
 
-    auto result = Halide::Tools::benchmark([&]() { interpreter.execute(); });
-    std::cout << "Time: " << result.wall_time * 1e6 << " us" << std::endl;
+    if (!options.trace) {
+        auto result = Halide::Tools::benchmark([&]() { interpreter.execute(); });
+        std::cout << "Time: " << result.wall_time * 1e6 << " us" << std::endl;
+    } else {
+        interpreter.execute();
+    }
 
     if (options.verbose) {
         std::cout << "Outputs:\n";
@@ -44,6 +48,10 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--verbose")) {
             options.verbose = true;
+            continue;
+        }
+        if (!strcmp(argv[i], "--trace")) {
+            options.trace = true;
             continue;
         }
         // TODO: Make this a numeric parameter.

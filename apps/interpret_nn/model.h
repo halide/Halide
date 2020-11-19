@@ -127,6 +127,7 @@ class Tensor {
     std::vector<halide_dimension_t> shape_;
     std::vector<uint8_t> data_;
     QuantizationInfo quantization_;
+    bool is_constant_;
 
 public:
     explicit Tensor(std::string name, TensorType type,
@@ -137,6 +138,7 @@ public:
           shape_(std::move(shape)),
           data_(std::move(data)),
           quantization_(std::move(quantization)) {
+        is_constant_ = data_.size() != 0;
     }
 
     Tensor(const Tensor &copy) = default;
@@ -158,6 +160,9 @@ public:
     }
     const QuantizationInfo &quantization() const {
         return quantization_;
+    }
+    bool is_constant() const {
+        return is_constant_;
     }
 
     template<class T>
