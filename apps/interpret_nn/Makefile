@@ -3,7 +3,11 @@ include ../support/Makefile.inc
 .PHONY: build clean test
 
 # Note: this requires that you have the flatbuffers `flatc` tool available on
-# the host system; this is usually easy to install via e.g. brew install flatbuffers
+# the host system; this is usually easy to install via e.g.
+#
+#     apt-get install libflatbuffers-dev
+#     brew install flatbuffers
+#
 FLATC ?= flatc
 
 # It also requires the flatbuffers include files be in the C++ include path,
