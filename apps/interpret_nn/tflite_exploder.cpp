@@ -40,7 +40,6 @@
 #include "tflite_schema_direct_generated.h"
 
 using app_util::make_unique;
-using app_util::write_entire_file;
 
 namespace {
 
@@ -77,7 +76,7 @@ int main(int argc, char **argv) {
     std::string input_file = argv[1];
     std::string output_dir = argv[2];
 
-    std::vector<char> buffer = ReadEntireFile(input_file);
+    std::vector<char> buffer = app_util::read_entire_file(input_file);
 
     const tflite::Model *model = tflite::GetModel(buffer.data());
 
