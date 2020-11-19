@@ -140,10 +140,12 @@ $(BIN)/%/convolution_test: halide/convolution_test.cpp $(BIN)/%/common_reference
 test_convolution: $(BIN)/$(HL_TARGET)/convolution_test
 	$<
 
+MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
+
 # unit tests for each op (not yet complete)
 $(BIN)/%/add_test: test/add_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(MAKEFILE_DIR) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 $(BIN)/%/average_pool_test: test/average_pool_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
