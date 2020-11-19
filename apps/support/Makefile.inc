@@ -97,6 +97,7 @@ ANDROID_NDK_HOST_PLATFORM ?= $(shell echo `uname` | tr '[:upper:]' '[:lower:]')
 ANDROID_API_VERSION ?= 26
 
 CXX-host ?= $(CXX)
+CXX-host-profile ?= $(CXX)
 CXX-host-opencl ?= $(CXX)
 CXX-host-opengl ?= $(CXX)
 CXX-host-cuda ?= $(CXX)
@@ -110,6 +111,7 @@ CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
 CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
 
 CXXFLAGS-host ?= $(CXXFLAGS)
+CXXFLAGS-host-profile ?= $(CXXFLAGS)
 CXXFLAGS-host-opencl ?= $(CXXFLAGS)
 CXXFLAGS-host-opengl ?= $(CXXFLAGS)
 CXXFLAGS-host-cuda ?= $(CXXFLAGS)
@@ -120,6 +122,7 @@ CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
 LDFLAGS-host ?= $(LDFLAGS)
+LDFLAGS-host-profile ?= $(LDFLAGS)
 LDFLAGS-host-opencl ?= $(LDFLAGS)
 LDFLAGS-host-opengl ?= $(LDFLAGS)
 LDFLAGS-host-cuda ?= $(LDFLAGS)
