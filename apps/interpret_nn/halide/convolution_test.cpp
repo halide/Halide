@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "ConvolutionUint8.h"
+#include "convolution_uint8.h"
 #include "HalideBuffer.h"
 #include "common_reference.h"
 #include "halide_benchmark.h"
@@ -134,11 +134,11 @@ struct ConvolutionArgs {
 
 void RunBenchmark(ConvolutionArgs &a) {
     double time = Halide::Tools::benchmark([&]() {
-        int result = interpret_nn::ConvolutionUint8(a.input_tensor, a.filter_tensor, a.bias_tensor,
-                                                    a.input_offset, a.filter_offset, a.stride_x,
-                                                    a.stride_y, a.dilation_x, a.dilation_y,
-                                                    a.output_multiplier, a.output_shift, a.output_offset,
-                                                    a.output_min, a.output_max, a.output_tensor);
+        int result = interpret_nn::convolution_uint8(a.input_tensor, a.filter_tensor, a.bias_tensor,
+                                                     a.input_offset, a.filter_offset, a.stride_x,
+                                                     a.stride_y, a.dilation_x, a.dilation_y,
+                                                     a.output_multiplier, a.output_shift, a.output_offset,
+                                                     a.output_min, a.output_max, a.output_tensor);
         if (result != 0) {
             fprintf(stderr, "pipeline failed! %d\n", result);
         }
