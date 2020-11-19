@@ -932,7 +932,7 @@ private:
 
             ForType for_type = op->for_type;
             DeviceAPI device_api = op->device_api;
-            if (is_one(extent_val)) {
+            if (is_const_one(extent_val)) {
                 // This is the child loop of a fused group. The real loop of the
                 // fused group is the loop of the parent function of the fused
                 // group. This child loop is just a scheduling point, and should
@@ -2262,7 +2262,7 @@ class RemoveLoopsOverOutermost : public IRMutator {
 
     Stmt visit(const For *op) override {
         if (ends_with(op->name, ".__outermost") &&
-            is_one(simplify(op->extent)) &&
+            is_const_one(simplify(op->extent)) &&
             op->device_api == DeviceAPI::None) {
             return mutate(substitute(op->name, op->min, op->body));
         } else {

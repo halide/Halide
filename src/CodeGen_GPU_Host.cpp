@@ -51,7 +51,7 @@ private:
 
     void visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            internal_assert(is_zero(op->min));
+            internal_assert(is_const_zero(op->min));
         }
 
         if (ends_with(op->name, ".__thread_id_x")) {
@@ -488,7 +488,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
-        internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]))
+        internal_assert(is_const_one(bounds.num_threads[3]) && is_const_one(bounds.num_blocks[3]))
             << bounds.num_threads[3] << ", " << bounds.num_blocks[3] << "\n";
         debug(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
         debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";

@@ -107,7 +107,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))
             << "kernel loop must be either gpu block or gpu thread\n";
-        internal_assert(is_zero(loop->min));
+        internal_assert(is_const_zero(loop->min));
 
         debug(4) << "loop extent is " << loop->extent << "\n";
         //
@@ -166,7 +166,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
+    user_assert(is_const_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
     // TODO: support vectors
     // https://github.com/halide/Halide/issues/4975
     internal_assert(op->type.is_scalar());
@@ -182,7 +182,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
+    user_assert(is_const_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
     // TODO: support vectors
     // https://github.com/halide/Halide/issues/4975
     internal_assert(op->value.type().is_scalar());

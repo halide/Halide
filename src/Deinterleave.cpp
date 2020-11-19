@@ -551,7 +551,7 @@ class Interleaver : public IRMutator {
         bool should_deinterleave_predicate = should_deinterleave;
 
         Expr expr;
-        if (should_deinterleave_idx && (should_deinterleave_predicate || is_one(predicate))) {
+        if (should_deinterleave_idx && (should_deinterleave_predicate || is_const_one(predicate))) {
             // If we want to deinterleave both the index and predicate
             // (or the predicate is one), then deinterleave the
             // resulting load.
@@ -705,7 +705,7 @@ class Interleaver : public IRMutator {
                     return Stmt();
                 }
                 // TODO(psuriana): Predicated load is not currently handled.
-                if (!is_one(load->predicate)) {
+                if (!is_const_one(load->predicate)) {
                     return Stmt();
                 }
 

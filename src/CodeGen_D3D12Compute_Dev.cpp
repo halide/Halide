@@ -218,7 +218,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
     internal_assert((loop->for_type == ForType::GPUBlock) ||
                     (loop->for_type == ForType::GPUThread))
         << "kernel loop must be either gpu block or gpu thread\n";
-    internal_assert(is_zero(loop->min));
+    internal_assert(is_const_zero(loop->min));
 
     stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
            << " = " << simt_intrinsic(loop->name) << ";\n";
@@ -301,7 +301,7 @@ Expr is_ramp_one(const Expr &e) {
         return Expr();
     }
 
-    if (is_one(r->stride)) {
+    if (is_const_one(r->stride)) {
         return r->base;
     }
 
@@ -447,7 +447,7 @@ struct StoragePackUnpack {
 };
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
     // elements in a threadgroup shared buffer are always 32bits:
     // must reinterpret (and maybe unpack) bits.
@@ -567,7 +567,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
 
     Type value_type = op->value.type();
 
@@ -1061,7 +1061,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             if (loop->for_type != ForType::GPUThread) {
                 return loop->body.accept(this);
             }
-            internal_assert(is_zero(loop->min));
+            internal_assert(is_const_zero(loop->min));
             int index = thread_loop_workgroup_index(loop->name);
             user_assert(index >= 0) << "Invalid 'numthreads' index for loop variable '" << loop->name << "'.\n";
             // if 'numthreads' for a given dimension can't be determined at code
