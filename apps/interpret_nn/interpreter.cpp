@@ -230,7 +230,7 @@ void begin_tracing(const Model &m, std::vector<int32_t> &parent_ids) {
         std::stringstream tag;
         tag << "func_type_and_dim: ";
         halide_type_t type = to_halide_type(t->type());
-        tag << 1 << " " << (int)type.code << " " << type.bits << " " << type.lanes;
+        tag << 1 << " " << (int)type.code << " " << (int)type.bits << " " << (int)type.lanes;
         tag << " " << t->rank();
         for (int d = 0; d < t->rank(); d++) {
             tag << " " << t->dim(d).min << " " << t->dim(d).extent;
