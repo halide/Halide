@@ -39,6 +39,8 @@ public:
             input_bounded(c, x * stride_x_ + filter_dom.x, y * stride_y_ + filter_dom.y, b));
 
         Func average("average");
+        // TODO: We should probably specialize/optimize for the case
+        // where filter_count = filter_width * filter_height.
         Expr x_start = max(x * stride_x_, input_.dim(1).min());
         Expr x_end = min(x * stride_x_ + filter_width_, input_.dim(1).max() + 1);
         Expr y_start = max(y * stride_y_, input_.dim(2).min());
