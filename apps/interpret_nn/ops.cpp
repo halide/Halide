@@ -236,6 +236,9 @@ void AveragePoolOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out);
 
+        // TODO: does this need to handle Padding::Same?
+        APP_CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
+
         APP_CHECK(
             0 == average_pool_uint8(input_buf, stride_[0], stride_[1],
                                   filter_size_[0], filter_size_[1],
@@ -549,6 +552,9 @@ void MaxPoolOp::execute(const Box &crop) {
         out->type() == TensorType::UInt8) {
         auto input_buf = in->data<uint8_t>();
         auto output_buf = out->data<uint8_t>(crop);
+
+        // TODO: does this need to handle Padding::Same?
+        APP_CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
 
         const auto output_range = get_output_range(activation_, out);
 
