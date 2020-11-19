@@ -225,8 +225,10 @@ public:
     std::unique_ptr<Op> parse_reshape(const tflite::Operator *op) {
         const tflite::ReshapeOptions *options =
             op->builtin_options_as_ReshapeOptions();
-        std::vector<int> new_shape(options->new_shape()->cbegin(),
-                                   options->new_shape()->cend());
+        std::vector<int> new_shape;
+        if (options) {
+            new_shape.assign(options->new_shape()->cbegin(), options->new_shape()->cend());
+        }
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
         return make_unique<ReshapeOp>(input, output, new_shape);
