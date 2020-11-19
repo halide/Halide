@@ -603,14 +603,8 @@ void PadOp::execute(const Box &crop) {
         }
 
         // TODO: This is pretty hard to beat, but surely it's possible.
-        for (int y = output_buf.dim(2).min(); y <= output_buf.dim(2).max(); y++) {
-            auto output_y = output_buf.sliced(2, y);
-            output_y.fill(pad_value);
-            if (input_buf.dim(2).min() <= y && y <= input_buf.dim(2).max()) {
-                auto input_y = input_buf.sliced(2, y);
-                output_y.copy_from(input_y);
-            }
-        }
+        output_buf.fill(pad_value);
+        output_buf.copy_from(input_buf);
     }
 }
 
