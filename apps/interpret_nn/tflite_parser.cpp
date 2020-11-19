@@ -13,8 +13,6 @@ namespace interpret_nn {
 namespace {
 
 tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
-    APP_CHECK(op_code != nullptr);
-
     return std::max(
         op_code->builtin_code(),
         static_cast<tflite::BuiltinOperator>(op_code->deprecated_builtin_code()));
@@ -227,8 +225,10 @@ public:
     std::unique_ptr<Op> parse_reshape(const tflite::Operator *op) {
         const tflite::ReshapeOptions *options =
             op->builtin_options_as_ReshapeOptions();
-        std::vector<int> new_shape(options->new_shape()->cbegin(),
-                                   options->new_shape()->cend());
+        std::vector<int> new_shape;
+        if (options) {
+            new_shape.assign(options->new_shape()->cbegin(), options->new_shape()->cend());
+        }
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
         return make_unique<ReshapeOp>(input, output, new_shape);
@@ -241,7 +241,6 @@ public:
         const auto *opcode = opcodes->Get(opcode_index);
 
         auto builtin_code = get_builtin_code(opcode);
-        APP_CHECK(builtin_code != tflite::BuiltinOperator_CUSTOM);
         switch (builtin_code) {
         case tflite::BuiltinOperator_ADD:
             return parse_add(op);
