@@ -255,16 +255,6 @@ private:
         return call;
     }
 
-    static Expr halide_xtensa_narrow_with_shift_i16(Expr v0, Expr v1) {
-        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_narrow_with_shift_i16", {std::move(v0), std::move(v1)}, Call::PureExtern);
-        return call;
-    }
-
-    static Expr halide_xtensa_narrow_with_shift_u16(Expr v0, Expr v1) {
-        Expr call = Call::make(wild_u16x.type(), "halide_xtensa_narrow_with_shift_u16", {std::move(v0), std::move(v1)}, Call::PureExtern);
-        return call;
-    }
-
     static Expr halide_xtensa_narrow_clz_i16(Expr v0) {
         Expr call = Call::make(wild_i16x.type(), "halide_xtensa_narrow_clz_i16", {std::move(v0)}, Call::PureExtern);
         return call;
@@ -537,6 +527,12 @@ private:
             // {"halide_xtensa_sat_mul_with_shift_i32", i32(wild_i64x * wild_i64x / wild_i64), Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::ExactLog2Op2},
 
             // Narrowing with shifting.
+            {"halide_xtensa_narrow_i48_with_shift_i16", i16(i32(wild_i48x) >> wild_i32)},
+            {"halide_xtensa_narrow_i48_with_shift_i16", i16(i32(wild_i48x) / wild_i32), Pattern::ExactLog2Op1},
+
+            {"halide_xtensa_narrow_i48_with_shift_u16", u16(u32(wild_i48x) >> wild_u32)},
+            {"halide_xtensa_narrow_i48_with_shift_u16", u16(u32(wild_i48x) / wild_u32), Pattern::ExactLog2Op1},
+
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
 
@@ -752,9 +748,6 @@ private:
         }
 
         static const std::vector<Pattern> calls = {
-            // Narrowing with shifting.
-            {"halide_xtensa_narrow_i48x_with_shift_i16", halide_xtensa_narrow_with_shift_i16(i32(wild_i48x), wild_i32)},
-            {"halide_xtensa_narrow_i48x_with_shift_u16", halide_xtensa_narrow_with_shift_u16(i32(wild_i48x), wild_i32)},
             // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
@@ -1286,7 +1279,8 @@ Stmt match_xtensa_patterns(Stmt s) {
     // NOTE(vksnk): loop_carry seems to be a little finicky right now
     // but looks like something we'd definitely want to have, so
     // need to figure out where it goes wrong.
-    // s = loop_carry(s, 16);
+    s = loop_carry(s, 16);
+    s = simplify(s);
     for (int ix = 0; ix < 10; ix++) {
         s = MatchXtensaPatterns().mutate(s);
     }

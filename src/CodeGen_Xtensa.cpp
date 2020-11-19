@@ -773,13 +773,11 @@ HALIDE_ALWAYS_INLINE void aligned_store(const int16x32_t& a, void *base, int32_t
 }
 
 HALIDE_ALWAYS_INLINE void store(const int16x32_t& a, void *base, int32_t offset) {
-    //memcpy(((int16_t*)base + offset), &a, sizeof(int16_t) * 32);
-    //TODO(vksnk): this seems to be right based on their doc, but double-check
     valign align;
     xb_vecNx16* ptr = (xb_vecNx16*)((const int16_t*)base + offset);
     IVP_SANX16_IP(a, align, ptr);
     // Flush alignment register.
-    IVP_SAPOS_FP(align, (xb_vec2Nx8*)ptr);
+    IVP_SAPOSNX16_FP(align, ptr);
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x32_t uint16x32_t_load(const void *base, int32_t offset) {
@@ -794,7 +792,10 @@ HALIDE_ALWAYS_INLINE void aligned_store(const uint16x32_t& a, void *base, int32_
 }
 
 HALIDE_ALWAYS_INLINE void store(const uint16x32_t& a, void *base, int32_t offset) {
-    memcpy(((uint16_t*)base + offset), &a, sizeof(uint16_t) * 32);
+	valign align;
+	xb_vecNx16U* ptr = (xb_vecNx16U*)((const uint16_t*)base + offset);
+	IVP_SANX16U_IP(a, align, ptr);
+	IVP_SAPOSNX16U_FP(align, ptr);
 }
 
 HALIDE_ALWAYS_INLINE void aligned_store(const int16x64_t& a, void *base, int32_t offset) {
@@ -1204,11 +1205,11 @@ HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_sat_narrow_i24x_with_shift_u8(cons
   return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKVRNR2NX24(a, shift));
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_i48x_with_shift_i16(const int48x32_t& a, int shift) {
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_i48_with_shift_i16(const int48x32_t& a, int shift) {
   return IVP_PACKVRNRNX48(a, shift);
 }
 
-HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_narrow_i48x_with_shift_u16(const int48x32_t& a, int shift) {
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_narrow_i48_with_shift_u16(const int48x32_t& a, int shift) {
   return xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKVRNRNX48(a, shift));
 }
 
@@ -1691,7 +1692,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     if (op->name == "halide_xtensa_absd_i16") {
         rhs << "xb_vecNx16_rtor_xb_vecNx16U(IVP_ABSSUBNX16(" << args[0] + ", " + args[1] + "))";
         return rhs.str();
-    } else if (op->name == "halide_xtensa_narrow_i48x_with_shift_u16") {
+    } else if (op->name == "halide_xtensa_narrow_i48_with_shift_u16") {
         rhs << "xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKVRNRNX48(" << args[0] + ", " + args[1] + "))";
         return rhs.str();
     } else if (op->name == "halide_xtensa_convert_i48_low_u32") {
@@ -1744,6 +1745,8 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         op_name = "IVP_RADDNX16";
     } else if (op->name == "halide_xtensa_convert_to_int32x16_t_from_uint1x16_t") {
         op_name = "convert_to_int32x16_t_from_uint1x16_t";
+    } else if (op->name == "halide_xtensa_narrow_i48_with_shift_i16") {
+        op_name = "IVP_PACKVRNRNX48";
     }
 
     rhs << op_name << "(" << with_commas(args) << ")";
@@ -2418,11 +2421,11 @@ void CodeGen_Xtensa::visit(const For *op) {
     }
 
     // NOTE(vksnk): poor man's profiling below.
-    // if (loop_level == 1) {
+    // if (current_loop_level == 1) {
     //   stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
     //   stream << get_indent() << "cycles_start = GetCycleCount();\n";
     // }
-    // if (loop_level == 2) {
+    // if (current_loop_level == 1) {
     //   stream << get_indent() << "cycles_start = GetCycleCount();\n";
     // }
 
@@ -2442,7 +2445,7 @@ void CodeGen_Xtensa::visit(const For *op) {
 
     close_scope("for " + print_name(op->name));
     // NOTE(vksnk): Second part of the poor man's profiling below.
-    // if (loop_level == 2) {
+    // if (current_loop_level == 1) {
     //   stream << get_indent() << "cycles_stop = GetCycleCount();\n";
     //   stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
     //   stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
