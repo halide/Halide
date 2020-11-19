@@ -227,8 +227,7 @@ void AveragePoolOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    if (in->type() == TensorType::UInt8 &&
-        out->type() == TensorType::UInt8) {
+    if (in->type() == TensorType::UInt8 && out->type() == TensorType::UInt8) {
         auto input_buf = in->data<uint8_t>();
         auto output_buf = out->data<uint8_t>(crop);
 
@@ -539,8 +538,7 @@ void MaxPoolOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    if (in->type() == TensorType::UInt8 &&
-        out->type() == TensorType::UInt8) {
+    if (in->type() == TensorType::UInt8 && out->type() == TensorType::UInt8) {
         auto input_buf = in->data<uint8_t>();
         auto output_buf = out->data<uint8_t>(crop);
 
@@ -615,8 +613,7 @@ void ReshapeOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    if (in->type() == TensorType::UInt8 &&
-        out->type() == TensorType::UInt8) {
+    if (in->type() == TensorType::UInt8 && out->type() == TensorType::UInt8) {
         auto input_buf = in->data<uint8_t>();
         auto output_buf = out->data<uint8_t>(crop);
 
