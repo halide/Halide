@@ -460,6 +460,13 @@ void lossless_cast_test() {
     Type i16 = Int(16);
     Type i32 = Int(32);
     Type u8x = UInt(8, 4);
+    Type u16x = UInt(16, 4);
+    Type u32x = UInt(32, 4);
+    Expr var_i8 = Variable::make(i8, "x");
+    Expr var_i16 = Variable::make(i16, "x");
+    Expr var_u8 = Variable::make(u8, "x");
+    Expr var_u16 = Variable::make(u16, "x");
+    Expr var_u8x = Variable::make(u8x, "x");
 
     Expr e = Ramp::make(0, 1, 4);
     check(u8x, e, cast(u8x, e));
@@ -471,16 +478,16 @@ void lossless_cast_test() {
     e = x % 4;
     check(UInt(8), e, cast(UInt(8), e));
 
-    e = Variable::make(i8, "x") % make_const(i8, -128);
+    e = var_i8 % make_const(i8, -128);
     check(UInt(8), e, cast(UInt(8), e));
 
-    e = Variable::make(i16, "x") % make_const(i16, -256);
+    e = var_i16 % make_const(i16, -256);
     check(UInt(8), e, cast(UInt(8), e));
 
-    e = Variable::make(u16, "x") % make_const(u16, 256);
+    e = var_u16 % make_const(u16, 256);
     check(UInt(8), e, cast(UInt(8), e));
 
-    e = Variable::make(u8, "x") % Variable::make(u8, "y");
+    e = var_u8 % Variable::make(u8, "y");
     check(UInt(8), e, cast(UInt(8), e));
 
     e = cast(u8, x);
@@ -489,14 +496,20 @@ void lossless_cast_test() {
     e = cast(u8, x);
     check(i32, e, cast(i32, e));
 
-    e = cast(i8, Variable::make(u16, "x"));
+    e = cast(i8, var_u16);
     check(u16, e, Expr());
 
-    e = cast(i16, Variable::make(u16, "x"));
+    e = cast(i16, var_u16);
     check(u16, e, Expr());
 
-    e = cast(u32, Variable::make(u8, "x"));
-    check(u16, e, cast(u16, Variable::make(u8, "x")));
+    e = cast(u32, var_u8);
+    check(u16, e, cast(u16, var_u8));
+
+    e = VectorReduce::make(VectorReduce::Add, cast(u16x, var_u8x), 1);
+    check(u16, e, cast(u16, e));
+
+    e = VectorReduce::make(VectorReduce::Add, cast(u32x, var_u8x), 1);
+    check(u16, e, VectorReduce::make(VectorReduce::Add, cast(u16x, var_u8x), 1));
 
     debug(0) << "lossless_cast test passed\n";
 }
