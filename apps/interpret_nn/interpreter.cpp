@@ -391,15 +391,9 @@ Tensor *ModelInterpreter::get_tensor(const std::string &name) {
 
 std::vector<Tensor *> ModelInterpreter::inputs() {
     std::vector<Tensor *> result;
-    result.reserve(model_.tensors.size());
     for (auto &i : model_.tensors) {
-        result.push_back(i.get());
-    }
-
-    for (const auto &i : model_.ops) {
-        for (int j = 0; j < i->output_count(); j++) {
-            const Tensor *out = i->output(j);
-            result.erase(std::remove(result.begin(), result.end(), out), result.end());
+        if (i->is_input()) {
+            result.push_back(i.get());
         }
     }
 
@@ -408,15 +402,9 @@ std::vector<Tensor *> ModelInterpreter::inputs() {
 
 std::vector<Tensor *> ModelInterpreter::outputs() {
     std::vector<Tensor *> result;
-    result.reserve(model_.tensors.size());
     for (auto &i : model_.tensors) {
-        result.push_back(i.get());
-    }
-
-    for (const auto &i : model_.ops) {
-        for (int j = 0; j < i->input_count(); j++) {
-            const Tensor *in = i->input(j);
-            result.erase(std::remove(result.begin(), result.end(), in), result.end());
+        if (i->is_output()) {
+            result.push_back(i.get());
         }
     }
 

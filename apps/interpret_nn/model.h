@@ -127,7 +127,9 @@ class Tensor {
     std::vector<halide_dimension_t> shape_;
     std::vector<uint8_t> data_;
     QuantizationInfo quantization_;
-    bool is_constant_;
+    bool is_constant_ = false;
+    bool is_input_ = false;
+    bool is_output_ = false;
 
 public:
     explicit Tensor(std::string name, TensorType type,
@@ -163,6 +165,20 @@ public:
     }
     bool is_constant() const {
         return is_constant_;
+    }
+
+    bool is_input() const {
+        return is_input_;
+    }
+    bool is_output() const {
+        return is_output_;
+    }
+
+    void set_input(bool is_input) {
+        is_input_ = is_input;
+    }
+    void set_output(bool is_output) {
+        is_output_ = is_output;
     }
 
     template<class T>

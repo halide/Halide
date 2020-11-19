@@ -276,6 +276,13 @@ public:
             result_.ops.emplace_back(parse_op(i));
         }
 
+        for (int i : *subgraph.inputs()) {
+            result_.tensors[i]->set_input(true);
+        }
+        for (int i : *subgraph.outputs()) {
+            result_.tensors[i]->set_output(true);
+        }
+
         return std::move(result_);
     }
 
