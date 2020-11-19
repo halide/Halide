@@ -105,7 +105,7 @@ Buffer<void> wrap_tf_lite_tensor_with_halide_buffer(TfLiteTensor *t) {
 void run_both(const std::string &filename, int seed, int threads, bool verbose) {
     std::cout << "Comparing " << filename << "\n";
 
-    std::vector<char> buffer = app_util::ReadEntireFile(filename);
+    std::vector<char> buffer = app_util::read_entire_file(filename);
 
     flatbuffers::Verifier verifier((const uint8_t *)buffer.data(), buffer.size());
     APP_CHECK(tflite::VerifyModelBuffer(verifier));
@@ -171,7 +171,7 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
 
     // ----- Run in Halide
     {
-        Model model = ParseTfLiteModel(tf_model);
+        Model model = parse_tflite_model(tf_model);
         if (verbose) {
             model.dump(std::cout);
         }

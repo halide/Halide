@@ -42,41 +42,41 @@ $(GENERATOR_BIN)/%.generator: halide/%_generator.cpp $(GENERATOR_BIN)/common_hal
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter %.cpp %.o,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-$(BIN)/%/AddUint8Uint8.a: $(GENERATOR_BIN)/add.generator
+$(BIN)/%/add_uint8_uint8.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
-	$< -g Add -f interpret_nn::AddUint8Uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g Add -f interpret_nn::add_uint8_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
 
-$(BIN)/%/AveragePoolUint8.a: $(GENERATOR_BIN)/average_pool.generator
+$(BIN)/%/average_pool_uint8.a: $(GENERATOR_BIN)/average_pool.generator
 	@mkdir -p $(@D)
-	$< -g AveragePool -f interpret_nn::AveragePoolUint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g AveragePool -f interpret_nn::average_pool_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
 
-$(BIN)/%/ConvolutionUint8.a: $(GENERATOR_BIN)/convolution.generator
+$(BIN)/%/convolution_uint8.a: $(GENERATOR_BIN)/convolution.generator
 	@mkdir -p $(@D)
-	$< -g Convolution -f interpret_nn::ConvolutionUint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g Convolution -f interpret_nn::convolution_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
 
-$(BIN)/%/DepthwiseConvolutionUint8.a: $(GENERATOR_BIN)/depthwise_convolution.generator
+$(BIN)/%/depthwise_convolution_uint8.a: $(GENERATOR_BIN)/depthwise_convolution.generator
 	@mkdir -p $(@D)
-	$< -g DepthwiseConvolution -f interpret_nn::DepthwiseConvolutionUint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g DepthwiseConvolution -f interpret_nn::depthwise_convolution_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
 
-$(BIN)/%/DepthwiseConvolutionUint8Broadcast.a: $(GENERATOR_BIN)/depthwise_convolution.generator
+$(BIN)/%/depthwise_convolution_uint8_broadcast.a: $(GENERATOR_BIN)/depthwise_convolution.generator
 	@mkdir -p $(@D)
-	$< -g DepthwiseConvolution broadcast_channels=true -f interpret_nn::DepthwiseConvolutionUint8Broadcast -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g DepthwiseConvolution broadcast_channels=true -f interpret_nn::depthwise_convolution_uint8_broadcast -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
 
-$(BIN)/%/MaxPoolUint8.a: $(GENERATOR_BIN)/max_pool.generator
+$(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/max_pool.generator
 	@mkdir -p $(@D)
-	$< -g MaxPool -f interpret_nn::MaxPoolUint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g MaxPool -f interpret_nn::max_pool_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$* target=$*
 
 OPS_HALIDE = \
-	$(BIN)/%/AddUint8Uint8.a \
-	$(BIN)/%/AveragePoolUint8.a \
-	$(BIN)/%/ConvolutionUint8.a \
-	$(BIN)/%/DepthwiseConvolutionUint8.a \
-	$(BIN)/%/DepthwiseConvolutionUint8Broadcast.a \
-	$(BIN)/%/MaxPoolUint8.a \
+	$(BIN)/%/add_uint8_uint8.a \
+	$(BIN)/%/average_pool_uint8.a \
+	$(BIN)/%/convolution_uint8.a \
+	$(BIN)/%/depthwise_convolution_uint8.a \
+	$(BIN)/%/depthwise_convolution_uint8_broadcast.a \
+	$(BIN)/%/max_pool_uint8.a \
 	$(BIN)/%/runtime.a
 
 $(BIN)/%/interpreter.o: interpreter.cpp
@@ -146,11 +146,11 @@ test_convolution: $(BIN)/$(HL_TARGET)/convolution_test
 
 # Experimental glue code to define RunGen rules for all of these (from Makefile.inc)
 # Not sure if useful or not, gonna leave in and see.
-$(eval $(call DEFINE_RUNGEN,AddUint8Uint8,$(BIN)/%/runtime.a))
-$(eval $(call DEFINE_RUNGEN,AveragePoolUint8,$(BIN)/%/runtime.a))
-$(eval $(call DEFINE_RUNGEN,ConvolutionUint8,$(BIN)/%/runtime.a))
-$(eval $(call DEFINE_RUNGEN,DepthwiseConvolutionUint8,$(BIN)/%/runtime.a))
-$(eval $(call DEFINE_RUNGEN,MaxPoolUint8,$(BIN)/%/runtime.a))
+$(eval $(call DEFINE_RUNGEN,add_uint8_uint8,$(BIN)/%/runtime.a))
+$(eval $(call DEFINE_RUNGEN,average_pool_uint8,$(BIN)/%/runtime.a))
+$(eval $(call DEFINE_RUNGEN,convolution_uint8,$(BIN)/%/runtime.a))
+$(eval $(call DEFINE_RUNGEN,depthwise_convolution_uint8,$(BIN)/%/runtime.a))
+$(eval $(call DEFINE_RUNGEN,max_pool_uint8,$(BIN)/%/runtime.a))
 
 
 $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/%/tflite_schema_direct_generated.h

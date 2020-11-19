@@ -197,17 +197,11 @@ public:
             apply(map, output()), depth_multiplier_, stride_, dilation_, padding_, activation_);
     }
 
-    const Tensor *input() const {
-        return Op::input(0);
-    }
     const Tensor *filter() const {
         return Op::input(1);
     }
     const Tensor *bias() const {
         return Op::input(2);
-    }
-    Tensor *input() {
-        return Op::input(0);
     }
     Tensor *filter() {
         return Op::input(1);

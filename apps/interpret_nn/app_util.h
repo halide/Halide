@@ -98,7 +98,7 @@ public:
 #define APP_CHECK(condition) \
     (condition) ? (void)0 : ::app_util::internal::Voidifier() & ::app_util::internal::FatalError(__FILE__, __LINE__, #condition).ref()
 
-inline std::vector<char> ReadEntireFile(const std::string &filename) {
+inline std::vector<char> read_entire_file(const std::string &filename) {
     std::ifstream f(filename, std::ios::in | std::ios::binary);
     APP_CHECK(f.is_open()) << "Unable to open file: " << filename;
 

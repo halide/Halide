@@ -14,11 +14,11 @@ struct Model;
 namespace interpret_nn {
 
 // Translate from a tflite::Model to our own model representation.
-Model ParseTfLiteModel(const tflite::Model *model);
+Model parse_tflite_model(const tflite::Model *model);
 
-// Call tflite::GetModel() and then call ParseTfLiteModel() on the result --
+// Call tflite::GetModel() and then call parse_tflite_model() on the result --
 // avoids the need for client to include any tflite-specific files.
-Model ParseTfLiteModelFromBuffer(const void *model);
+Model parse_tflite_model_from_buffer(const void *model);
 
 }  // namespace interpret_nn
 

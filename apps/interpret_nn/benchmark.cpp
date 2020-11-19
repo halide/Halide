@@ -7,15 +7,15 @@
 #include "interpreter.h"
 #include "tflite_parser.h"
 
-using app_util::ReadEntireFile;
+using app_util::read_entire_file;
 
 namespace interpret_nn {
 
 void RunBenchmark(const std::string &filename, const ScheduleOptions &options) {
     std::cout << "Benchmarking " << filename << std::endl;
 
-    std::vector<char> buffer = ReadEntireFile(filename);
-    Model model = ParseTfLiteModelFromBuffer(buffer.data());
+    std::vector<char> buffer = read_entire_file(filename);
+    Model model = parse_tflite_model_from_buffer(buffer.data());
 
     if (options.verbose) {
         model.dump(std::cout);

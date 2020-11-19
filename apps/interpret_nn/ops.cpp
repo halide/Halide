@@ -4,12 +4,12 @@
 #include <cmath>
 #include <iostream>
 
-#include "AddUint8Uint8.h"
-#include "AveragePoolUint8.h"
-#include "ConvolutionUint8.h"
-#include "DepthwiseConvolutionUint8.h"
-#include "DepthwiseConvolutionUint8Broadcast.h"
-#include "MaxPoolUint8.h"
+#include "add_uint8_uint8.h"
+#include "average_pool_uint8.h"
+#include "convolution_uint8.h"
+#include "depthwise_convolution_uint8.h"
+#include "depthwise_convolution_uint8_broadcast.h"
+#include "max_pool_uint8.h"
 
 namespace interpret_nn {
 
@@ -217,7 +217,7 @@ void AddOp::execute(const Box &crop) {
 
         const auto output_range = GetoutRange(activation_, out);
 
-        APP_CHECK(0 == AddUint8Uint8(left_shift, in1_buf, in2_buf,
+        APP_CHECK(0 == add_uint8_uint8(left_shift, in1_buf, in2_buf,
                                      -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
                                      -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
                                      output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
@@ -237,7 +237,7 @@ void AveragePoolOp::execute(const Box &crop) {
         const auto output_range = GetoutRange(activation_, out);
 
         APP_CHECK(
-            0 == AveragePoolUint8(input_buf, stride_[0], stride_[1],
+            0 == average_pool_uint8(input_buf, stride_[0], stride_[1],
                                   filter_size_[0], filter_size_[1],
                                   output_range.min, output_range.max, output_buf));
     }
@@ -370,7 +370,7 @@ void Conv2DOp::execute(const Box &crop) {
         const auto mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_multiplier);
         const int output_multiplier = mul_and_shift.multiplier;
         // GetQuantizedMulAndShiftSmallerThanOne() returns a negative shift;
-        // ConvolutionUint8() expects a positive shift.
+        // convolution_uint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
         const auto output_range = GetoutRange(activation_, out);
@@ -395,7 +395,7 @@ void Conv2DOp::execute(const Box &crop) {
         }
 
         APP_CHECK(
-            0 == ConvolutionUint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
+            0 == convolution_uint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
                                   (uint8_t)filter_offset, stride_[0], stride_[1],
                                   dilation_[0], dilation_[1], output_multiplier,
                                   output_shift, (uint8_t)output_offset,
@@ -493,7 +493,7 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         const auto mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_multiplier);
         const int output_multiplier = mul_and_shift.multiplier;
         // GetQuantizedMulAndShiftSmallerThanOne() returns a negative shift;
-        // DepthwiseConvolutionUint8() expects a positive shift.
+        // depthwise_convolution_uint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
         const auto output_range = GetoutRange(activation_, out);
@@ -525,14 +525,14 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
 
         if (depth_multiplier_ >= output_buf.dim(0).extent()) {
             APP_CHECK(
-                0 == DepthwiseConvolutionUint8Broadcast(
+                0 == depthwise_convolution_uint8_broadcast(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
                          (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
                          dilation_[0], dilation_[1], output_multiplier, output_shift,
                          (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         } else {
             APP_CHECK(
-                0 == DepthwiseConvolutionUint8(
+                0 == depthwise_convolution_uint8(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
                          (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
                          dilation_[0], dilation_[1], output_multiplier, output_shift,
@@ -553,7 +553,7 @@ void MaxPoolOp::execute(const Box &crop) {
         const auto output_range = GetoutRange(activation_, out);
 
         APP_CHECK(
-            0 == MaxPoolUint8(input_buf, stride_[0], stride_[1],
+            0 == max_pool_uint8(input_buf, stride_[0], stride_[1],
                               filter_size_[0], filter_size_[1],
                               output_range.min, output_range.max, output_buf));
     }
