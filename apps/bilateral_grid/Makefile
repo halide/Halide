@@ -4,6 +4,8 @@ include ../support/Makefile.inc
 
 build: $(BIN)/$(HL_TARGET)/filter
 
+.SECONDARY:
+
 $(GENERATOR_BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
