@@ -11,7 +11,7 @@ bool is_union_exact(const Interval &a, const Interval &b) {
 }
 
 bool is_union_exact(const Box &a, const Box &b) {
-    APP_CHECK(a.size() == b.size()) << a.size() << " " << b.size();
+    assert(a.size() == b.size());
     int different_dims = 0;
     int dim = -1;
     for (int i = 0; i < (int)a.size(); i++) {
@@ -37,7 +37,7 @@ Interval Union(const Interval &a, const Interval &b) {
 }
 
 Box Union(const Box &a, const Box &b) {
-    APP_CHECK(a.size() == b.size());
+    assert(a.size() == b.size());
     Box result;
     result.resize(a.size());
     for (int i = 0; i < (int)a.size(); i++) {
@@ -51,7 +51,7 @@ Interval intersect(const Interval &a, const Interval &b) {
 }
 
 Box intersect(Box a, const Box &b) {
-    APP_CHECK(a.size() == b.size());
+    assert(a.size() == b.size());
     for (int i = 0; i < (int)a.size(); i++) {
         a[i] = intersect(a[i], b[i]);
     }
@@ -82,7 +82,7 @@ bool subtract(Interval &a, const Interval &b) {
 
 // Subtract b from a if possible.
 bool subtract(Box &a, const Box &b) {
-    APP_CHECK(a.size() == b.size()) << a.size() << " " << b.size();
+    assert(a.size() == b.size());
     int different_dims = 0;
     int dim = -1;
     for (int i = 0; i < (int)a.size(); i++) {

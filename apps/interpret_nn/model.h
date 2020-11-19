@@ -189,7 +189,7 @@ public:
                 reinterpret_cast<T *>(data_.data()),
                 shape_.size(), shape_.data());
         } else {
-            APP_CHECK(is_type<T>(type_));
+            assert(is_type<T>(type_));
             return HalideBuffer<T>(
                 reinterpret_cast<T *>(data_.data()),
                 shape_.size(), shape_.data());
@@ -204,7 +204,7 @@ public:
                 reinterpret_cast<const T *>(data_.data()),
                 shape_.size(), shape_.data());
         } else {
-            APP_CHECK(is_type<T>(type_));
+            assert(is_type<T>(type_));
             return HalideBuffer<const T>(
                 reinterpret_cast<const T *>(data_.data()),
                 shape_.size(), shape_.data());

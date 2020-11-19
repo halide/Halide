@@ -28,12 +28,12 @@ std::vector<Box> split_crop(const Box &crop, int dim, int factor, bool shift_inw
             if (split_x[dim].max >= crop[dim].max) {
                 split_x[dim] -= split_x[dim].max - crop[dim].max;
             }
-            APP_CHECK(split_x[dim].min >= crop[dim].min);
-            APP_CHECK(split_x[dim].max <= crop[dim].max);
+            assert(split_x[dim].min >= crop[dim].min);
+            assert(split_x[dim].max <= crop[dim].max);
         } else {
             split_x[dim].max = std::min(split_x[dim].max, crop[dim].max);
         }
-        APP_CHECK(split_x[dim].extent() > 0);
+        assert(split_x[dim].extent() > 0);
         splits.push_back(split_x);
     }
     return splits;
@@ -49,17 +49,16 @@ QuantizedMulAndShift GetQuantizedMulAndShift(double double_multiplier) {
         return {0, 0};
     }
 
-    // TODO: consider adding a path here to avoid floating-point operations (eg for Hexagon)
     int shift = 0;
     const double q = std::frexp(double_multiplier, &shift);
     int64_t q_fixed = (int64_t)std::round(q * (1LL << 31));
-    APP_CHECK(q_fixed <= (1LL << 31));
+    assert(q_fixed <= (1LL << 31));
 
     if (q_fixed == (1LL << 31)) {
         q_fixed /= 2;
         ++shift;
     }
-    APP_CHECK(q_fixed <= std::numeric_limits<int32_t>::max());
+    assert(q_fixed <= std::numeric_limits<int32_t>::max());
 
     if (shift < -31) {
         shift = 0;
@@ -70,9 +69,9 @@ QuantizedMulAndShift GetQuantizedMulAndShift(double double_multiplier) {
 
 // Adapted from tflite
 QuantizedMulAndShift GetQuantizedMulAndShiftSmallerThanOne(double double_multiplier) {
-    APP_CHECK(double_multiplier > 0.0 && double_multiplier < 1.0);
+    assert(double_multiplier > 0.0 && double_multiplier < 1.0);
     auto result = GetQuantizedMulAndShift(double_multiplier);
-    APP_CHECK(result.shift <= 0);
+    assert(result.shift <= 0);
     return result;
 }
 
@@ -122,15 +121,14 @@ MinMax GetQuantizedMinMax(ActivationFunction activation, int zero_point, double 
 
 MinMax get_output_range(ActivationFunction activation, Tensor *out) {
     const int output_offset = out->quantization().zero.at(0);
-    APP_CHECK(output_offset >= 0 && output_offset <= 255);
+    assert(output_offset >= 0 && output_offset <= 255);
 
     const float output_scale = out->quantization().scale.at(0);
 
     const auto output_range = GetQuantizedMinMax(activation, output_offset, output_scale);
-    // TODO: handle unexpected out-of-range data more cleanly.
-    APP_CHECK(output_range.min >= 0 && output_range.min <= 255);
-    APP_CHECK(output_range.max >= 0 && output_range.max <= 255);
-    APP_CHECK(output_range.min <= output_range.max);
+    assert(output_range.min >= 0 && output_range.min <= 255);
+    assert(output_range.max >= 0 && output_range.max <= 255);
+    assert(output_range.min <= output_range.max);
 
     return output_range;
 }
@@ -191,9 +189,9 @@ void AddOp::execute(const Box &crop) {
         const int in1_offset = in1->quantization().zero.at(0);
         const int in2_offset = in2->quantization().zero.at(0);
         const int output_offset = out->quantization().zero.at(0);
-        APP_CHECK(in1_offset >= 0 && in1_offset <= 255);
-        APP_CHECK(in2_offset >= 0 && in2_offset <= 255);
-        APP_CHECK(output_offset >= 0 && output_offset <= 255);
+        assert(in1_offset >= 0 && in1_offset <= 255);
+        assert(in2_offset >= 0 && in2_offset <= 255);
+        assert(output_offset >= 0 && output_offset <= 255);
 
         const float in1_scale = in1->quantization().scale.at(0);
         const float in2_scale = in2->quantization().scale.at(0);
@@ -208,9 +206,9 @@ void AddOp::execute(const Box &crop) {
         const auto in1_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_in1_multiplier);
         const auto in2_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_in2_multiplier);
         const auto output_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_output_multiplier);
-        APP_CHECK(in1_mul_and_shift.shift <= 0);
-        APP_CHECK(in2_mul_and_shift.shift <= 0);
-        APP_CHECK(output_mul_and_shift.shift <= 0);
+        assert(in1_mul_and_shift.shift <= 0);
+        assert(in2_mul_and_shift.shift <= 0);
+        assert(output_mul_and_shift.shift <= 0);
 
         // TODO: for SubOp:
         // mul_and_shift2.multiplier *= -1;
@@ -311,10 +309,10 @@ Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
         const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
         const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
 
-        const int pad_width = std::max(0,
-                                       ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
-        const int pad_height = std::max(0,
-                                        ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
+        const int pad_width =
+            std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
+        const int pad_height =
+            std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
 
         input_crop[1] += pad_width;
         input_crop[2] += pad_height;
@@ -352,12 +350,10 @@ void Conv2DOp::execute(const Box &crop) {
         const int filter_offset = filt->quantization().zero.at(0);
         const int bias_offset = bias()->quantization().zero.at(0);
         const int output_offset = out->quantization().zero.at(0);
-
-        // TODO: handle unexpected out-of-range data more cleanly.
-        APP_CHECK(input_offset >= 0 && input_offset <= 255);
-        APP_CHECK(filter_offset >= 0 && filter_offset <= 255);
-        APP_CHECK(bias_offset == 0);
-        APP_CHECK(output_offset >= 0 && output_offset <= 255);
+        assert(input_offset >= 0 && input_offset <= 255);
+        assert(filter_offset >= 0 && filter_offset <= 255);
+        assert(bias_offset == 0);
+        assert(output_offset >= 0 && output_offset <= 255);
 
         const float input_scale = in->quantization().scale.at(0);
         const float filter_scale = filt->quantization().scale.at(0);
@@ -365,9 +361,8 @@ void Conv2DOp::execute(const Box &crop) {
         const float output_scale = out->quantization().scale.at(0);
 
         const double input_product_scale = input_scale * filter_scale;
-        // TODO: handle unexpected out-of-range data more cleanly.
-        APP_CHECK(std::abs(input_product_scale - bias_scale) <=
-                  std::min(input_product_scale, (double)bias_scale) * 1e-6);
+        assert(std::abs(input_product_scale - bias_scale) <=
+               std::min(input_product_scale, (double)bias_scale) * 1e-6);
 
         const double real_multiplier = input_product_scale / output_scale;
         const auto mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_multiplier);
@@ -389,10 +384,10 @@ void Conv2DOp::execute(const Box &crop) {
             const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
             const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
 
-            const int pad_width = std::max(0,
-                                           ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
-            const int pad_height = std::max(0,
-                                            ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
+            const int pad_width =
+                std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
+            const int pad_height =
+                std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
 
             input_buf.translate({0, pad_width, pad_height, 0});
         }
@@ -431,10 +426,10 @@ Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
         const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
         const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
 
-        const int pad_width = std::max(0,
-                                       ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
-        const int pad_height = std::max(0,
-                                        ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
+        const int pad_width =
+            std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
+        const int pad_height =
+            std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
 
         input_crop[1] += pad_width;
         input_crop[2] += pad_height;
@@ -468,19 +463,16 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         auto output_buf = out->data<uint8_t>(crop);
 
         int depth_multiplier = output_buf.dim(0).extent() / input_buf.dim(0).extent();
-        // TODO: handle unexpected out-of-range data more cleanly.
-        APP_CHECK(depth_multiplier * input_buf.dim(0).extent() == output_buf.dim(0).extent());
+        assert(depth_multiplier * input_buf.dim(0).extent() == output_buf.dim(0).extent());
 
         const int input_offset = in->quantization().zero.at(0);
         const int filter_offset = filt->quantization().zero.at(0);
         const int bias_offset = bias()->quantization().zero.at(0);
         const int output_offset = out->quantization().zero.at(0);
-
-        // TODO: handle unexpected out-of-range data more cleanly.
-        APP_CHECK(input_offset >= 0 && input_offset <= 255);
-        APP_CHECK(filter_offset >= 0 && filter_offset <= 255);
-        APP_CHECK(bias_offset == 0);
-        APP_CHECK(output_offset >= 0 && output_offset <= 255);
+        assert(input_offset >= 0 && input_offset <= 255);
+        assert(filter_offset >= 0 && filter_offset <= 255);
+        assert(bias_offset == 0);
+        assert(output_offset >= 0 && output_offset <= 255);
 
         const float input_scale = in->quantization().scale.at(0);
         const float filter_scale = filt->quantization().scale.at(0);
@@ -488,9 +480,8 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         const float output_scale = out->quantization().scale.at(0);
 
         const double input_product_scale = input_scale * filter_scale;
-        // TODO: handle unexpected out-of-range data more cleanly.
-        APP_CHECK(std::abs(input_product_scale - bias_scale) <=
-                  std::min(input_product_scale, (double)bias_scale) * 1e-6);
+        assert(std::abs(input_product_scale - bias_scale) <=
+               std::min(input_product_scale, (double)bias_scale) * 1e-6);
 
         const double real_multiplier = input_product_scale / output_scale;
         const auto mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_multiplier);
@@ -502,10 +493,10 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         const auto output_range = get_output_range(activation_, out);
 
         // batches must match
-        APP_CHECK(input_buf.dim(3).extent() == output_buf.dim(3).extent());
+        assert(input_buf.dim(3).extent() == output_buf.dim(3).extent());
 
         // output_depth must match
-        APP_CHECK(filter_buf.dim(0).extent() == output_buf.dim(0).extent());
+        assert(filter_buf.dim(0).extent() == output_buf.dim(0).extent());
 
         if (padding_ == Padding::Same) {
             const int input_width = input_buf.dim(1).extent();
@@ -518,10 +509,10 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
             const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
             const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
 
-            const int pad_width = std::max(0,
-                                           ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
-            const int pad_height = std::max(0,
-                                            ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
+            const int pad_width =
+                std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
+            const int pad_height =
+                std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
 
             input_buf.translate({0, pad_width, pad_height, 0});
         }
@@ -630,9 +621,7 @@ void ReshapeOp::execute(const Box &crop) {
         auto output_buf = out->data<uint8_t>(crop);
 
         // TODO: This should probably just be implemented by aliasing two of the tensors.
-        APP_CHECK(input_buf.number_of_elements() == output_buf.number_of_elements());
-        APP_CHECK(in->is_allocated());
-        APP_CHECK(out->is_allocated());
+        assert(input_buf.number_of_elements() == output_buf.number_of_elements());
         // TODO: This should also check the strides are dense.
         memcpy(output_buf.data(), input_buf.data(), input_buf.number_of_elements());
     }

@@ -349,7 +349,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
         }
     }
 
-    // allocate the needed buffers for the tensors.
+    // Allocate the needed buffers for the tensors.
     // TODO: Identify the lifetimes and fold storage.
     // TODO: Maybe do this during execute to reduce idle memory?
     // Maybe we should have an allocate/free "op" that we can insert

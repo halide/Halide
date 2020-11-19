@@ -13,8 +13,6 @@ namespace interpret_nn {
 namespace {
 
 tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
-    APP_CHECK(op_code != nullptr);
-
     return std::max(
         op_code->builtin_code(),
         static_cast<tflite::BuiltinOperator>(op_code->deprecated_builtin_code()));
@@ -241,7 +239,6 @@ public:
         const auto *opcode = opcodes->Get(opcode_index);
 
         auto builtin_code = get_builtin_code(opcode);
-        APP_CHECK(builtin_code != tflite::BuiltinOperator_CUSTOM);
         switch (builtin_code) {
         case tflite::BuiltinOperator_ADD:
             return parse_add(op);

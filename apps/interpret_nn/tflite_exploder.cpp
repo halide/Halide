@@ -44,8 +44,6 @@ using app_util::make_unique;
 namespace {
 
 tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
-    APP_CHECK(op_code != nullptr);
-
     return std::max(
         op_code->builtin_code(),
         static_cast<tflite::BuiltinOperator>(op_code->deprecated_builtin_code()));
