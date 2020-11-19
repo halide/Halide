@@ -36,7 +36,6 @@ struct GPUCompilationCache {
     }
 
     bool insert(ContextT context, uint32_t id, ModuleStateT module_state) {
-        debug(nullptr) << "In insert with log2_compilations_size == " << log2_compilations_size << " .\n";
         if (log2_compilations_size == 0) {
             if (!resize_table(kInitialTableBits)) {
                 return false;
@@ -47,11 +46,9 @@ struct GPUCompilationCache {
                 return false;
             }
         }
-        debug(nullptr) << "In insert(2) with log2_compilations_size == " << log2_compilations_size << " .\n";
         uintptr_t index = kernel_hash(context, id, log2_compilations_size);
         for (int i = 0; i < (1 << log2_compilations_size); i++) {
             uintptr_t effective_index = (index + i) & ((1 << log2_compilations_size) - 1);
-            debug(nullptr) << "In insert i is " << i << " effective_index is " << effective_index << ".\n";
             if (compilations[effective_index].kernel_id <= kDeletedId) {
                 compilations[effective_index].context = context;
                 compilations[effective_index].module_state = module_state;
@@ -66,7 +63,6 @@ struct GPUCompilationCache {
     }
 
     bool find_internal(ContextT context, uint32_t id, ModuleStateT *&module_state) {
-        debug(nullptr) << "In find with log2_compilations_size == " << log2_compilations_size << " .\n";
         if (log2_compilations_size == 0) {
             return false;
         }
@@ -79,7 +75,6 @@ struct GPUCompilationCache {
                 return true;
             }
         }
-        debug(nullptr) << "Exiting find find.\n";
         return false;
     }
 
@@ -108,10 +103,12 @@ struct GPUCompilationCache {
             compilations = new_table;
             log2_compilations_size = size_bits;
  
-            for (int32_t i = 0; i < old_size; i++) {
-                if (compilations[i].kernel_id != kInvalidId &&
-                    compilations[i].kernel_id != kDeletedId) {
-                    insert(compilations[i].context, compilations[i].kernel_id, compilations[i].module_state);
+            if (count > 0) { // MAinly to catch empty initial table case
+                for (int32_t i = 0; i < old_size; i++) {
+                    if (old_table[i].kernel_id != kInvalidId &&
+                        old_table[i].kernel_id != kDeletedId) {
+                        insert(old_table[i].context, old_table[i].kernel_id, old_table[i].module_state);
+                    }
                 }
             }
             free(old_table);
@@ -120,12 +117,14 @@ struct GPUCompilationCache {
     }
 
     template <typename FreeModuleT>
-    void delete_context(void *user_context, ContextT context, FreeModuleT &f) {
-        ScopedMutexLock lock_guard(&mutex);
+    void release_context(void *user_context, bool all, ContextT context, FreeModuleT &f) {
+        if (count == 0) {
+            return;
+        }
 
         for (int i = 0; i < (1 << log2_compilations_size); i++) {
             if (compilations[i].kernel_id > kInvalidId &&
-                compilations[i].context == context) {
+                (all || compilations[i].context == context)) {
                 debug(user_context) << "Releasing cached compilation: " << compilations[i].module_state << "\n";
                 f(compilations[i].module_state);
                 compilations[i].module_state = nullptr;
@@ -133,6 +132,23 @@ struct GPUCompilationCache {
                 count--;
             }
         }
+    }
+
+    template <typename FreeModuleT>
+    void delete_context(void *user_context, ContextT context, FreeModuleT &f) {
+        ScopedMutexLock lock_guard(&mutex);
+
+        release_context(user_context, false, context, f);
+    }
+
+    template <typename FreeModuleT>
+    void release_all(void *user_context, FreeModuleT &f) {
+        ScopedMutexLock lock_guard(&mutex);
+
+        release_context(user_context, true, nullptr, f);
+        free(compilations);
+        compilations = nullptr;
+        log2_compilations_size = 0;
     }
 
     template <typename CompileModuleT, typename... Args>
@@ -167,13 +183,5 @@ struct GPUCompilationCache {
     }
 
 };
-
-
-// A call that takes the state pointer and looks for the module
-//     does it create the list?
-
-// A call to take the newly compiled module and add it
-
-// A call to remove everything for a context
 
 } }
