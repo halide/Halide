@@ -439,7 +439,7 @@ Expr const_false(int w) {
     return make_zero(UInt(1, w));
 }
 
-void check(Type t, const Expr &in, const Expr &correct) {
+void check(const Type &t, const Expr &in, const Expr &correct) {
     Expr result = lossless_cast(t, in);
     internal_assert(equal(result, correct))
         << "Incorrect lossless_cast result:\nlossless_cast("
@@ -457,7 +457,7 @@ void lossless_cast_test() {
     Type u16 = UInt(16);
     Type u32 = UInt(32);
     Type i8 = Int(8);
-    Type i16 = Int(8);
+    Type i16 = Int(16);
     Type i32 = Int(32);
     Type u8x = UInt(8, 4);
 
@@ -469,6 +469,18 @@ void lossless_cast_test() {
     check(u8, e, Expr());
 
     e = x % 4;
+    check(UInt(8), e, cast(UInt(8), e));
+
+    e = Variable::make(i8, "x") % make_const(i8, -128);
+    check(UInt(8), e, cast(UInt(8), e));
+
+    e = Variable::make(i16, "x") % make_const(i16, -256);
+    check(UInt(8), e, cast(UInt(8), e));
+
+    e = Variable::make(u16, "x") % make_const(u16, 256);
+    check(UInt(8), e, cast(UInt(8), e));
+
+    e = Variable::make(u8, "x") % Variable::make(u8, "y");
     check(UInt(8), e, cast(UInt(8), e));
 
     e = cast(u8, x);
@@ -619,7 +631,17 @@ Expr lossless_cast(Type t, Expr e) {
     }
 
     if (const Mod *mod = e.as<Mod>()) {
-        if (lossless_cast(t, mod->b).defined()) {
+        Expr val;
+        if (e.type().is_uint()) {
+            val = simplify(mod->b + make_const(e.type(), -1));
+        } else if (e.type().is_int()) {
+            // 0 <= a%b < |b|
+            Type wide_ty = e.type().with_bits(e.type().bits() * 2);
+            Expr b = cast(wide_ty, mod->b);
+            Expr minus_one = make_const(wide_ty, -1);
+            val = simplify(Max::make(b, minus_one * b) + minus_one);
+        }
+        if (lossless_cast(t, val).defined()) {
             return cast(t, e);
         } else {
             return Expr();
