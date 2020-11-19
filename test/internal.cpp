@@ -12,6 +12,7 @@
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMatch.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
 #include "Interval.h"
 #include "ModulusRemainder.h"
@@ -42,6 +43,7 @@ int main(int argc, const char **argv) {
     generator_test();
     propagate_estimate_test();
     uniquify_variable_names_test();
+    lossless_cast_test();
 
     printf("Success!\n");
     return 0;

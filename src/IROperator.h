@@ -154,6 +154,8 @@ Expr const_false(int lanes = 1);
  * Expr. */
 Expr lossless_cast(Type t, Expr e);
 
+void lossless_cast_test();
+
 /** Coerce the two expressions to have the same type, using C-style
  * casting rules. For the purposes of casting, a boolean type is
  * UInt(1). We use the following procedure:
