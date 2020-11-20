@@ -1,21 +1,11 @@
 #include "Halide.h"
 #include "common_halide.h"
 
-namespace interpret_nn {
+using namespace Halide;
+using namespace Halide::BoundaryConditions;
+using namespace Halide::ConciseCasts;
 
-using Halide::_0;
-using Halide::_1;
-using Halide::_2;
-using Halide::_3;
-using Halide::Generator;
-using Halide::Target;
-using Halide::Type;
-using Halide::BoundaryConditions::constant_exterior;
-using Halide::ConciseCasts::i16;
-using Halide::ConciseCasts::i16_sat;
-using Halide::ConciseCasts::i32;
-using Halide::ConciseCasts::u32;
-using Halide::ConciseCasts::u8_sat;
+namespace interpret_nn {
 
 int GetVectorReduction(const Target &target, Type t) {
     if (target.has_feature(Target::ARMDotProd)) {

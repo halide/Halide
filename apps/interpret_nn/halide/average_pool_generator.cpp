@@ -1,12 +1,11 @@
 #include "Halide.h"
 #include "common_halide.h"
 
-namespace interpret_nn {
+using namespace Halide;
+using namespace Halide::BoundaryConditions;
+using namespace Halide::ConciseCasts;
 
-using Halide::Generator;
-using Halide::BoundaryConditions::constant_exterior;
-using Halide::ConciseCasts::u16;
-using Halide::ConciseCasts::u8_sat;
+namespace interpret_nn {
 
 class AveragePool : public Generator<AveragePool> {
 public:
