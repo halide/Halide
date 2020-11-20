@@ -204,17 +204,29 @@ void trace_stores(int32_t parent_id, const Tensor *t, const Box &box) {
     return trace_loads_stores(parent_id, t, box, false);
 }
 
+std::vector<const Tensor *> get_traced_realizations(const Model &m) {
+    std::vector<const Tensor *> result;
+    for (const auto &i : m.ops) {
+        for (int j = 0; j < i->output_count(); j++) {
+            if (std::find(result.begin(), result.end(), i->output(j)) == result.end()) {
+                result.push_back(i->output(j));
+            }
+        }
+    }
+    return result;
+}
+
 void begin_tracing(const Model &m, std::vector<int32_t> &parent_ids) {
     halide_trace_event_t trace = {0,};
     trace.func = "model";
     trace.event = halide_trace_begin_pipeline;
     parent_ids.push_back(halide_trace(nullptr, &trace));
 
+    std::vector<const Tensor *> tensors = get_traced_realizations(m);
+
     trace.event = halide_trace_tag;
-    for (int i = 0; i < (int)m.tensors.size(); i++) {
-        const Tensor *t = m.tensors[i].get();
-        if (t->is_constant())
-            continue;
+    for (int i = 0; i < (int)tensors.size(); i++) {
+        const Tensor *t = tensors[i];
         std::stringstream tag;
         tag << "func_type_and_dim: ";
         halide_type_t type = to_halide_type(t->type());
@@ -233,10 +245,8 @@ void begin_tracing(const Model &m, std::vector<int32_t> &parent_ids) {
 
 
     trace.event = halide_trace_begin_realization;
-    for (int i = 0; i < (int)m.tensors.size(); i++) {
-        const Tensor *t = m.tensors[i].get();
-        if (t->is_constant())
-            continue;
+    for (int i = 0; i < (int)tensors.size(); i++) {
+        const Tensor *t = tensors[i];
         trace.func = t->name().c_str();
         trace.parent_id = parent_ids.back();
         const auto &shape = t->shape();
@@ -268,13 +278,12 @@ void trace_op(const ScheduledOp &op, int parent_id) {
 }
 
 void end_tracing(const Model &m, std::vector<int32_t> &parent_ids) {
+    std::vector<const Tensor *> tensors = get_traced_realizations(m);
+
     halide_trace_event_t trace = {0,};
     trace.event = halide_trace_end_realization;
-    for (int i = (int)m.tensors.size() - 1; i >= 0; i--) {
-        const Tensor *t = m.tensors[i].get();
-        if (t->is_constant())
-            continue;
-        trace.func = t->name().c_str();
+    for (int i = (int)tensors.size() - 1; i >= 0; i--) {
+        trace.func = tensors[i]->name().c_str();
         trace.parent_id = parent_ids.back();
         parent_ids.pop_back();
         halide_trace(nullptr, &trace);
