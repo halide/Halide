@@ -297,7 +297,6 @@ Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
     input_crop[0] = filter_shape[3];
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
-    input_crop = intersect(input_crop, without_strides(input()->shape()));
 
     if (padding_ == Padding::Same) {
         const int input_width = input()->dim(1).extent;
@@ -318,6 +317,7 @@ Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
         input_crop[1] += pad_width;
         input_crop[2] += pad_height;
     }
+    input_crop = intersect(input_crop, without_strides(input()->shape()));
 
     Bounds result;
     result.inputs.emplace_back(input_crop);
@@ -414,7 +414,6 @@ Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
 
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
-    input_crop = intersect(input_crop, without_strides(input()->shape()));
 
     if (padding_ == Padding::Same) {
         const int input_width = input()->dim(1).extent;
@@ -435,6 +434,8 @@ Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
         input_crop[1] += pad_width;
         input_crop[2] += pad_height;
     }
+
+    input_crop = intersect(input_crop, without_strides(input()->shape()));
 
     Bounds result;
     result.inputs.emplace_back(input_crop);
