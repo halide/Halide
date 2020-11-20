@@ -2,11 +2,27 @@
 
 namespace interpret_nn {
 
+bool is_subset_of(const Interval &a, const Interval &b) {
+    return a.min >= b.min && a.max <= b.max;
+}
+bool is_subset_of(const Box &a, const Box &b) {
+    assert(a.size() == b.size());
+    for (int i = 0; i < (int)a.size(); i++) {
+        if (!is_subset_of(a[i], b[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool is_union_exact(const Interval &a, const Interval &b) {
     return !(a.min > b.max + 1 || b.min > a.max + 1);
 }
 
 bool is_union_exact(const Box &a, const Box &b) {
+    if (is_subset_of(a, b) || is_subset_of(b, a)) {
+        return true;
+    }
     assert(a.size() == b.size());
     int different_dims = 0;
     int dim = -1;
@@ -82,7 +98,7 @@ bool subtract(Box &a, const Box &b) {
     int different_dims = 0;
     int dim = -1;
     for (int i = 0; i < (int)a.size(); i++) {
-        if (a[i] != b[i]) {
+        if (!is_subset_of(a[i], b[i])) {
             different_dims++;
             dim = i;
         }

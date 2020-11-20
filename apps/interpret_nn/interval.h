@@ -101,6 +101,10 @@ inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {
 
 using Box = std::vector<Interval>;
 
+// Check if b fully contains a.
+bool is_subset_of(const Interval &a, const Interval &b);
+bool is_subset_of(const Box &a, const Box &b);
+
 // Check if the union of a and b can be computed exactly.
 bool is_union_exact(const Interval &a, const Interval &b);
 bool is_union_exact(const Box &a, const Box &b);
