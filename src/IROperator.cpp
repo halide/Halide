@@ -439,80 +439,6 @@ Expr const_false(int w) {
     return make_zero(UInt(1, w));
 }
 
-void check(const Type &t, const Expr &in, const Expr &correct) {
-    Expr result = lossless_cast(t, in);
-    internal_assert(equal(result, correct))
-        << "Incorrect lossless_cast result:\nlossless_cast("
-        << t << ", "
-        << in
-        << ") gave: "
-        << result
-        << " but expected was: "
-        << correct << "\n";
-}
-
-void lossless_cast_test() {
-    Expr x = Variable::make(Int(32), "x");
-    Type u8 = UInt(8);
-    Type u16 = UInt(16);
-    Type u32 = UInt(32);
-    Type i8 = Int(8);
-    Type i16 = Int(16);
-    Type i32 = Int(32);
-    Type u8x = UInt(8, 4);
-    Type u16x = UInt(16, 4);
-    Type u32x = UInt(32, 4);
-    Expr var_i8 = Variable::make(i8, "x");
-    Expr var_i16 = Variable::make(i16, "x");
-    Expr var_u8 = Variable::make(u8, "x");
-    Expr var_u16 = Variable::make(u16, "x");
-    Expr var_u8x = Variable::make(u8x, "x");
-
-    Expr e = Ramp::make(0, 1, 4);
-    check(u8x, e, cast(u8x, e));
-
-    // Overflowing ramp
-    e = Ramp::make(make_const(u16, 5), make_const(u16, 32800), 3);
-    check(u8, e, Expr());
-
-    e = x % 4;
-    check(UInt(8), e, cast(UInt(8), e));
-
-    e = var_i8 % make_const(i8, -128);
-    check(UInt(8), e, cast(UInt(8), e));
-
-    e = var_i16 % make_const(i16, -256);
-    check(UInt(8), e, cast(UInt(8), e));
-
-    e = var_u16 % make_const(u16, 256);
-    check(UInt(8), e, cast(UInt(8), e));
-
-    e = var_u8 % Variable::make(u8, "y");
-    check(UInt(8), e, cast(UInt(8), e));
-
-    e = cast(u8, x);
-    check(i32, e, cast(i32, e));
-
-    e = cast(u8, x);
-    check(i32, e, cast(i32, e));
-
-    e = cast(i8, var_u16);
-    check(u16, e, Expr());
-
-    e = cast(i16, var_u16);
-    check(u16, e, Expr());
-
-    e = cast(u32, var_u8);
-    check(u16, e, cast(u16, var_u8));
-
-    e = VectorReduce::make(VectorReduce::Add, cast(u16x, var_u8x), 1);
-    check(u16, e, cast(u16, e));
-
-    e = VectorReduce::make(VectorReduce::Add, cast(u32x, var_u8x), 1);
-    check(u16, e, VectorReduce::make(VectorReduce::Add, cast(u16x, var_u8x), 1));
-
-    debug(0) << "lossless_cast test passed\n";
-}
 Expr lossless_cast(Type t, Expr e) {
     if (!e.defined() || t == e.type()) {
         return e;
@@ -2477,5 +2403,84 @@ Expr undef(Type t) {
                                 std::vector<Expr>(),
                                 Internal::Call::PureIntrinsic);
 }
+
+namespace Internal {
+
+void check_lossless_cast(const Type &t, const Expr &in, const Expr &correct) {
+    Expr result = lossless_cast(t, in);
+    internal_assert(equal(result, correct))
+        << "Incorrect lossless_cast result:\nlossless_cast("
+        << t << ", "
+        << in
+        << ") gave: "
+        << result
+        << " but expected was: "
+        << correct << "\n";
+}
+
+void lossless_cast_test() {
+    Expr x = Variable::make(Int(32), "x");
+    Type u8 = UInt(8);
+    Type u16 = UInt(16);
+    Type u32 = UInt(32);
+    Type i8 = Int(8);
+    Type i16 = Int(16);
+    Type i32 = Int(32);
+    Type u8x = UInt(8, 4);
+    Type u16x = UInt(16, 4);
+    Type u32x = UInt(32, 4);
+    Expr var_i8 = Variable::make(i8, "x");
+    Expr var_i16 = Variable::make(i16, "x");
+    Expr var_u8 = Variable::make(u8, "x");
+    Expr var_u16 = Variable::make(u16, "x");
+    Expr var_u8x = Variable::make(u8x, "x");
+
+    Expr e = Ramp::make(0, 1, 4);
+    check_lossless_cast(u8x, e, cast(u8x, e));
+
+    // Overflowing ramp
+    e = Ramp::make(make_const(u16, 5), make_const(u16, 32800), 3);
+    check_lossless_cast(u8, e, Expr());
+
+    e = x % 4;
+    check_lossless_cast(UInt(8), e, cast(UInt(8), e));
+
+    e = var_i8 % make_const(i8, -128);
+    check_lossless_cast(UInt(8), e, cast(UInt(8), e));
+
+    e = var_i16 % make_const(i16, -256);
+    check_lossless_cast(UInt(8), e, cast(UInt(8), e));
+
+    e = var_u16 % make_const(u16, 256);
+    check_lossless_cast(UInt(8), e, cast(UInt(8), e));
+
+    e = var_u8 % Variable::make(u8, "y");
+    check_lossless_cast(UInt(8), e, cast(UInt(8), e));
+
+    e = cast(u8, x);
+    check_lossless_cast(i32, e, cast(i32, e));
+
+    e = cast(u8, x);
+    check_lossless_cast(i32, e, cast(i32, e));
+
+    e = cast(i8, var_u16);
+    check_lossless_cast(u16, e, Expr());
+
+    e = cast(i16, var_u16);
+    check_lossless_cast(u16, e, Expr());
+
+    e = cast(u32, var_u8);
+    check_lossless_cast(u16, e, cast(u16, var_u8));
+
+    e = VectorReduce::make(VectorReduce::Add, cast(u16x, var_u8x), 1);
+    check_lossless_cast(u16, e, cast(u16, e));
+
+    e = VectorReduce::make(VectorReduce::Add, cast(u32x, var_u8x), 1);
+    check_lossless_cast(u16, e, VectorReduce::make(VectorReduce::Add, cast(u16x, var_u8x), 1));
+
+    debug(0) << "lossless_cast test passed\n";
+}
+
+} // namespace Internal
 
 }  // namespace Halide
