@@ -239,6 +239,14 @@ void begin_tracing(const Model &m, std::vector<int32_t> &parent_ids) {
             continue;
         trace.func = t->name().c_str();
         trace.parent_id = parent_ids.back();
+        const auto &shape = t->shape();
+        std::vector<int32_t> coords(shape.size() * 2);
+        for (size_t i = 0; i < shape.size(); i++) {
+            coords[i * 2 + 0] = shape[i].min;
+            coords[i * 2 + 1] = shape[i].extent;
+        }
+        trace.coordinates = coords.data();
+        trace.dimensions = coords.size();
         parent_ids.push_back(halide_trace(nullptr, &trace));
     }
 }
