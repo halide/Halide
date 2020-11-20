@@ -8,131 +8,8 @@ namespace interpret_nn {
 
 namespace {
 
-using ScheduledOpList = std::list<ScheduledOp>;
-using ScheduledOpVector = std::vector<ScheduledOp>;
-
-int index_of_output(const Op *op, const Tensor *t) {
-    for (int i = 0; i < op->output_count(); i++) {
-        if (op->output(i) == t) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-int index_of_input(const Op *op, const Tensor *t) {
-    for (int i = 0; i < op->input_count(); i++) {
-        if (op->input(i) == t) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-// Subtract the computed parts of t from shape.
-Box subtract_done(Box shape, const Tensor *t, const ScheduledOpVector &done) {
-    // Subtraction can fail if the result is not a single box. But, another
-    // subtraction later could change that. So we iterate, until no done ops
-    // succeed in any subtraction.
-    while (!is_empty(shape)) {
-        bool trimmed = false;
-        for (ScheduledOpVector::const_iterator i = done.begin(); i != done.end() && !is_empty(shape); i++) {
-            int o = index_of_output(i->op, t);
-            if (o >= 0) {
-                Op::Bounds bounds = i->op->infer_bounds(i->crop);
-                const Box& produced = bounds.outputs[o];
-                trimmed = trimmed || subtract(shape, produced);
-            }
-        }
-        if (!trimmed) {
-            // We didn't do anything to the shape, trying again won't help.
-            break;
-        }
-    }
-    return shape;
-}
-
-// Returns true if op can be executed (all of its producers are done).
-bool can_execute(const ScheduledOpVector &done, const ScheduledOp &op) {
-    // Check if all of the producers needed by op are produced.
-    Op::Bounds bounds = op.op->infer_bounds(op.crop);
-    // We need all of the input rectangles to be covered in the done list.
-    for (int i = 0; i < op.op->input_count(); i++) {
-        const Tensor *input = op.op->input(i);
-        if (input->is_constant())
-            continue;
-        Box required = bounds.inputs[i];
-        Box remaining = subtract_done(required, input, done);
-        if (!is_empty(remaining)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// Schedule op 'greedily':
-// - Moving it to the back of the done vector and remove it from todo.
-// - Schedule all possible consumers
-// - If not possible, schedule all possible producers.
-// - If not possible, schedule one sibling.
-// TODO: This algorithm is horrifically unoptimized. It calls infer_bounds repeatedly
-// on the same op/crop, and it iterates over all ops repeatedly. It can both be
-// optimized significantly by caching results of operations like this, and by
-// changing the overall structure.
-void greedy_schedule(ScheduledOpVector& done, ScheduledOpList& todo, const ScheduledOp &from, int parallelism) {
-    ScheduledOpList exec;
-
-    // Try to execute all possible consumers first.
-    for (int i = 0; i < from.op->output_count(); i++) {
-        const Tensor *next = from.op->output(i);
-
-        // Try to schedule each output.
-        for (ScheduledOpList::iterator j = todo.begin(); j != todo.end() && (int)exec.size() < parallelism;) {
-            if (index_of_input(j->op, next) >= 0 && can_execute(done, *j)) {
-                // This next op is executable. Move it to the front of the list.
-                exec.emplace_back(std::move(*j));
-                j = todo.erase(j);
-            } else {
-                ++j;
-            }
-        }
-    }
-
-    // If failed, try to schedule producers.
-    for (int i = 0; i < from.op->input_count(); i++) {
-        const Tensor *next = from.op->input(i);
-
-        // Try to schedule each input.
-        for (ScheduledOpList::iterator j = todo.begin(); j != todo.end() && (int)exec.size() < parallelism;) {
-            if (index_of_output(j->op, next) >= 0 && can_execute(done, *j)) {
-                // This next op is executable. Move it to the front of the list.
-                exec.emplace_back(std::move(*j));
-                j = todo.erase(j);
-            } else {
-                ++j;
-            }
-        }
-    }
-
-    // If failed, try to schedule some siblings.
-    for (ScheduledOpList::iterator i = todo.begin(); i != todo.end() && (int)exec.size() < parallelism;) {
-        if (i->op == from.op && can_execute(done, *i)) {
-            exec.emplace_back(std::move(*i));
-            i = todo.erase(i);
-        } else {
-            ++i;
-        }
-    }
-
-    // Do these in separate loops, so we maintain the parallelism between ops.
-    for (auto &i : exec) {
-        done.emplace_back(i);
-    }
-    for (auto &i : exec) {
-        greedy_schedule(done, todo, i, parallelism);
-    }
-}
-
+// These functions emulate Halide tracing as if ModelInterpreter::execute were a Halide pipeline.
+// This enables HalideTraceViz to be used to debug interpreter schedules.
 void trace_loads_stores(HalideBuffer<const void> buf, halide_trace_event_t &event) {
     if (buf.dimensions() == 0) {
         memcpy(event.value, buf.data(), buf.type().bits / 8);
@@ -270,6 +147,132 @@ void end_trace_execute(const Model &m, std::vector<int32_t> &parent_ids) {
     trace.event = halide_trace_end_pipeline;
     trace.parent_id = parent_ids.back();
     halide_trace(nullptr, &trace);
+}
+
+using ScheduledOpList = std::list<ScheduledOp>;
+using ScheduledOpVector = std::vector<ScheduledOp>;
+
+int index_of_output(const Op *op, const Tensor *t) {
+    for (int i = 0; i < op->output_count(); i++) {
+        if (op->output(i) == t) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int index_of_input(const Op *op, const Tensor *t) {
+    for (int i = 0; i < op->input_count(); i++) {
+        if (op->input(i) == t) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Subtract the computed parts of t from shape.
+Box subtract_done(Box shape, const Tensor *t, const ScheduledOpVector &done) {
+    // Subtraction can fail if the result is not a single box. But, another
+    // subtraction later could change that. So we iterate, until no done ops
+    // succeed in any subtraction.
+    while (!is_empty(shape)) {
+        bool trimmed = false;
+        for (ScheduledOpVector::const_iterator i = done.begin(); i != done.end() && !is_empty(shape); i++) {
+            int o = index_of_output(i->op, t);
+            if (o >= 0) {
+                Op::Bounds bounds = i->op->infer_bounds(i->crop);
+                const Box& produced = bounds.outputs[o];
+                trimmed = trimmed || subtract(shape, produced);
+            }
+        }
+        if (!trimmed) {
+            // We didn't do anything to the shape, trying again won't help.
+            break;
+        }
+    }
+    return shape;
+}
+
+// Returns true if op can be executed (all of its producers are done).
+bool can_execute(const ScheduledOpVector &done, const ScheduledOp &op) {
+    // Check if all of the producers needed by op are produced.
+    Op::Bounds bounds = op.op->infer_bounds(op.crop);
+    // We need all of the input rectangles to be covered in the done list.
+    for (int i = 0; i < op.op->input_count(); i++) {
+        const Tensor *input = op.op->input(i);
+        if (input->is_constant())
+            continue;
+        Box required = bounds.inputs[i];
+        Box remaining = subtract_done(required, input, done);
+        if (!is_empty(remaining)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Schedule ops 'greedily' assuming 'from' was just executed. Execute up to 'parallelism' ops
+// using the following priority:
+// - Schedule possible consumers
+// - Schedule possible producers
+// - Schedule possible siblings
+// TODO: This algorithm is horrifically unoptimized. It calls infer_bounds repeatedly
+// on the same op/crop, and it iterates over all ops repeatedly. It can both be
+// optimized significantly by caching results of operations like this, and by
+// maybe restructuring things (e.g. don't split ops into slices all up front, do it
+// progressively instead.)
+void greedy_schedule(ScheduledOpVector& done, ScheduledOpList& todo, const ScheduledOp &from, int parallelism) {
+    ScheduledOpList exec;
+
+    // Try to execute all possible consumers first.
+    for (int i = 0; i < from.op->output_count(); i++) {
+        const Tensor *next = from.op->output(i);
+
+        // Try to schedule each output.
+        for (ScheduledOpList::iterator j = todo.begin(); j != todo.end() && (int)exec.size() < parallelism;) {
+            if (index_of_input(j->op, next) >= 0 && can_execute(done, *j)) {
+                // This next op is executable. Move it to the front of the list.
+                exec.emplace_back(std::move(*j));
+                j = todo.erase(j);
+            } else {
+                ++j;
+            }
+        }
+    }
+
+    // If failed, try to schedule producers.
+    for (int i = 0; i < from.op->input_count(); i++) {
+        const Tensor *next = from.op->input(i);
+
+        // Try to schedule each input.
+        for (ScheduledOpList::iterator j = todo.begin(); j != todo.end() && (int)exec.size() < parallelism;) {
+            if (index_of_output(j->op, next) >= 0 && can_execute(done, *j)) {
+                // This next op is executable. Move it to the front of the list.
+                exec.emplace_back(std::move(*j));
+                j = todo.erase(j);
+            } else {
+                ++j;
+            }
+        }
+    }
+
+    // If failed, try to schedule some siblings.
+    for (ScheduledOpList::iterator i = todo.begin(); i != todo.end() && (int)exec.size() < parallelism;) {
+        if (i->op == from.op && can_execute(done, *i)) {
+            exec.emplace_back(std::move(*i));
+            i = todo.erase(i);
+        } else {
+            ++i;
+        }
+    }
+
+    // Do these in separate loops, so we maintain the parallelism between ops.
+    for (auto &i : exec) {
+        done.emplace_back(i);
+    }
+    for (auto &i : exec) {
+        greedy_schedule(done, todo, i, parallelism);
+    }
 }
 
 }  // namespace
