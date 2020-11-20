@@ -149,22 +149,22 @@ void greedy_schedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOp
     }
 }
 
-void trace_loads_stores(Box box, halide_trace_event_t &event) {
-    if (box.size() == 0) {
+void trace_loads_stores(HalideBuffer<const void> buf, halide_trace_event_t &event) {
+    if (buf.dimensions() == 0) {
+        memcpy(event.value, buf.data(), buf.type().bits / 8);
         halide_trace(nullptr, &event);
     } else {
-        int min = box.back().min;
-        int max = box.back().max;
-        box.pop_back();
+        int min = buf.dim(buf.dimensions() - 1).min();
+        int max = buf.dim(buf.dimensions() - 1).max();
         for (int i = min; i <= max; i++) {
-            event.coordinates[box.size()] = i;
-            trace_loads_stores(box, event);
+            HalideBuffer<const void> buf_i = buf.sliced(buf.dimensions() - 1, i);
+            event.coordinates[buf.dimensions() - 1] = i;
+            trace_loads_stores(buf_i, event);
         }
     }
 }
 
-void trace_loads_stores(int32_t parent_id, const Tensor *t, Box box,
-                        bool load) {
+void trace_loads_stores(int32_t parent_id, const Tensor *t, Box box, bool load) {
     halide_trace_event_t event = {0,};
     event.func = t->name().c_str();
 
@@ -174,21 +174,19 @@ void trace_loads_stores(int32_t parent_id, const Tensor *t, Box box,
 
     event.event = load ? halide_trace_load : halide_trace_store;
 
-    // TODO: Reduce volume of traces by enabling this.
-    //int vector_dim = 0;
+    box = intersect(box, without_strides(t->shape()));
+    HalideBuffer<const void> buf = t->data<void>(box);
 
-    event.type.code = halide_type_int;
-    event.type.bits = 8;
-    event.type.lanes = 1; //box[vector_dim].extent();
-    //box.erase(box.begin() + vector_dim);
+    event.type = buf.type();
 
     std::vector<int32_t> coords(box.size(), 0);
     event.coordinates = coords.data();
     event.dimensions = box.size();
 
-    std::vector<uint8_t> value(event.type.lanes, 255);
-    event.value = value.data();
-    trace_loads_stores(box, event);
+    assert(event.type.bits <= 64);
+    uint8_t value[8] = 0;
+    event.value = &value[0];
+    trace_loads_stores(buf, event);
 
     event.coordinates = 0;
     event.dimensions = 0;
