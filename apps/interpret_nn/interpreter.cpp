@@ -59,12 +59,11 @@ bool can_execute(const ScheduledOpVector &done, const ScheduledOp &op) {
     // We need all of the input rectangles to be covered in the done list.
     for (int i = 0; i < op.op->input_count(); i++) {
         const Tensor *input = op.op->input(i);
-        if (input->is_allocated())
+        if (input->is_constant())
             continue;
         Box required = bounds.inputs[i];
         Box remaining = subtract_done(required, input, done);
         if (!is_empty(remaining)) {
-            // We needed more of this shape.
             return false;
         }
     }
@@ -80,72 +79,57 @@ bool can_execute(const ScheduledOpVector &done, const ScheduledOp &op) {
 // on the same op/crop, and it iterates over all ops repeatedly. It can both be
 // optimized significantly by caching results of operations like this, and by
 // changing the overall structure.
-void greedy_schedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOpList::iterator op) {
-    APP_CHECK(!todo.empty());
-    if (done.empty() || done.back().op != op->op || !is_union_exact(done.back().crop, op->crop)) {
-        done.emplace_back(std::move(*op));
-    } else {
-        // The last op and the current op are the same and can be merged.
-        done.back().crop = Union(done.back().crop, op->crop);
-    }
-    todo.erase(op);
+void greedy_schedule(ScheduledOpVector& done, ScheduledOpList& todo, const ScheduledOp &from, int parallelism) {
+    ScheduledOpList exec;
 
-    const ScheduledOp &did = done.back();
-
-    bool scheduled = false;
     // Try to execute all possible consumers first.
-    for (int i = 0; i < did.op->output_count(); i++) {
-        const Tensor *next = did.op->output(i);
+    for (int i = 0; i < from.op->output_count(); i++) {
+        const Tensor *next = from.op->output(i);
 
         // Try to schedule each output.
-        ScheduledOpList exec;
-        for (ScheduledOpList::iterator j = todo.begin(); j != todo.end();) {
+        for (ScheduledOpList::iterator j = todo.begin(); j != todo.end() && (int)exec.size() < parallelism;) {
             if (index_of_input(j->op, next) >= 0 && can_execute(done, *j)) {
                 // This next op is executable. Move it to the front of the list.
                 exec.emplace_back(std::move(*j));
                 j = todo.erase(j);
-                scheduled = true;
             } else {
                 ++j;
             }
         }
-        todo.insert(todo.begin(), exec.begin(), exec.end());
-    }
-
-    if (scheduled) {
-        return;
     }
 
     // If failed, try to schedule producers.
-    for (int i = 0; i < did.op->input_count(); i++) {
-        const Tensor *next = did.op->input(i);
+    for (int i = 0; i < from.op->input_count(); i++) {
+        const Tensor *next = from.op->input(i);
 
         // Try to schedule each input.
-        ScheduledOpList exec;
-        for (ScheduledOpList::iterator j = todo.begin(); j != todo.end();) {
+        for (ScheduledOpList::iterator j = todo.begin(); j != todo.end() && (int)exec.size() < parallelism;) {
             if (index_of_output(j->op, next) >= 0 && can_execute(done, *j)) {
                 // This next op is executable. Move it to the front of the list.
-                exec.emplace_front(std::move(*j));
+                exec.emplace_back(std::move(*j));
                 j = todo.erase(j);
-                scheduled = true;
             } else {
                 ++j;
             }
         }
-        todo.insert(todo.begin(), exec.begin(), exec.end());
     }
 
-    if (scheduled) {
-        return;
-    }
-
-    // If failed, try to schedule *one* sibling.
-    for (ScheduledOpList::iterator i = todo.begin(); i != todo.end(); ++i) {
-        if (i->op == did.op && can_execute(done, *i)) {
-            todo.emplace_front(std::move(*i));
-            todo.erase(i);
-            return;
+    // If failed, try to schedule some siblings.
+    for (ScheduledOpList::iterator i = todo.begin(); i != todo.end() && (int)exec.size() < parallelism;) {
+        if (i->op == from.op && can_execute(done, *i)) {
+            exec.emplace_back(std::move(*i));
+            i = todo.erase(i);
+        } else {
+            ++i;
         }
+    }
+
+    // Do these in separate loops, so we maintain the parallelism between ops.
+    for (auto &i : exec) {
+        done.emplace_back(i);
+    }
+    for (auto &i : exec) {
+        greedy_schedule(done, todo, i, parallelism);
     }
 }
 
@@ -333,8 +317,9 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
 
     schedule_.reserve(schedule.size());
     while (!schedule.empty()) {
-        auto i = schedule.begin();
-        greedy_schedule(schedule_, schedule, i);
+        schedule_.emplace_back(std::move(schedule.front()));
+        schedule.pop_front();
+        greedy_schedule(schedule_, schedule, schedule_.back(), options.parallelism);
     }
 
     if (options.verbose) {

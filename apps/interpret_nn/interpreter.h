@@ -12,7 +12,7 @@ namespace interpret_nn {
 
 struct ScheduleOptions {
     // How much parallelism to enable.
-    int parallelism = 0;
+    int parallelism = 4;
 
     // How much memory to try to fit the working set into.
     int target_working_set_size_bytes = 0;
