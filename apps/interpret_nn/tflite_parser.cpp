@@ -111,9 +111,7 @@ public:
         }
 
         TensorType type = parse_type(t->type());
-        if (!data.empty()) {
-            APP_CHECK(data.size() == shape_size * sizeof_tensor_type(type));
-        }
+        assert(data.empty() || data.size() == shape_size * sizeof_tensor_type(type));
 
         QuantizationInfo quantization;
         if (t->quantization()) {

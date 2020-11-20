@@ -1,23 +1,13 @@
 #include "Halide.h"
 #include "common_halide.h"
 
+using namespace Halide;
+using namespace Halide::BoundaryConditions;
+using namespace Halide::ConciseCasts;
+
 namespace interpret_nn {
 
-using Halide::_0;
-using Halide::_1;
-using Halide::_2;
-using Halide::_3;
-using Halide::Generator;
-using Halide::Target;
-using Halide::Type;
-using Halide::BoundaryConditions::constant_exterior;
-using Halide::ConciseCasts::i16;
-using Halide::ConciseCasts::i16_sat;
-using Halide::ConciseCasts::i32;
-using Halide::ConciseCasts::u32;
-using Halide::ConciseCasts::u8_sat;
-
-int GetVectorReduction(const Target &target, Type t) {
+int get_vector_reduction_factor(const Target &target, Type t) {
     if (target.has_feature(Target::ARMDotProd)) {
         // ARM dot products can do 4-way reductions.
         return 4;
@@ -42,7 +32,7 @@ int get_recommended_accumulators(const Target &target) {
     }
 }
 
-int SmallerPowerOfTwo(int x) {
+int smaller_power_of_two(int x) {
     int log2_next = std::lround(std::ceil(std::log2(x) - 1.0f));
     if (log2_next >= 0) {
         return 1 << log2_next;
@@ -102,7 +92,7 @@ public:
                               {{filter_.dim(0).min(), filter_.dim(0).extent()}});
 
         // Align the reduction loop of filter.
-        int vector_reduction = GetVectorReduction(get_target(), UInt(8));
+        int vector_reduction = get_vector_reduction_factor(get_target(), UInt(8));
 
         // Create a wrapper of the filter that we can reorder the storage of to be
         // more convenient for the inner loop.
@@ -183,7 +173,7 @@ public:
         const int tile_x = 4;
         std::vector<std::pair<int, int>> tile_sizes;
         for (int tile_c = accumulators / tile_x; tile_c >= 1;
-             tile_c = SmallerPowerOfTwo(tile_c)) {
+             tile_c = smaller_power_of_two(tile_c)) {
             tile_sizes.emplace_back(tile_c, tile_x);
         }
         tile_sizes.emplace_back(4, 1);

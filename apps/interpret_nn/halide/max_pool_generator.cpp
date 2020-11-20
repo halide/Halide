@@ -1,10 +1,11 @@
 #include "Halide.h"
 #include "common_halide.h"
 
-namespace interpret_nn {
+using namespace Halide;
+using namespace Halide::BoundaryConditions;
+using namespace Halide::ConciseCasts;
 
-using Halide::Generator;
-using Halide::BoundaryConditions::constant_exterior;
+namespace interpret_nn {
 
 class MaxPool : public Generator<MaxPool> {
 public:

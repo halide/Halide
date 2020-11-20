@@ -1,14 +1,11 @@
 #include "Halide.h"
 #include "common_halide.h"
 
-namespace interpret_nn {
+using namespace Halide;
+using namespace Halide::BoundaryConditions;
+using namespace Halide::ConciseCasts;
 
-using Halide::Generator;
-using Halide::ConciseCasts::i16;
-using Halide::ConciseCasts::i16_sat;
-using Halide::ConciseCasts::i32;
-using Halide::ConciseCasts::u8_sat;
-using Halide::BoundaryConditions::repeat_edge;
+namespace interpret_nn {
 
 class DepthwiseConvolution : public Generator<DepthwiseConvolution> {
 public:

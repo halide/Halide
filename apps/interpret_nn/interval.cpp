@@ -1,8 +1,4 @@
-#ifndef MODEL_H
-#define MODEL_H
-
 #include "interval.h"
-#include "app_util.h"
 
 namespace interpret_nn {
 
@@ -118,4 +114,3 @@ bool is_empty(const Box &a) {
 
 }  // namespace interpret_nn
 
-#endif  // MODEL_H

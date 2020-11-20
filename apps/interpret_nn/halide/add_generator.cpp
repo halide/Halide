@@ -1,13 +1,11 @@
 #include "Halide.h"
 #include "common_halide.h"
 
-using Halide::Generator;
+using namespace Halide;
+using namespace Halide::BoundaryConditions;
+using namespace Halide::ConciseCasts;
 
 namespace interpret_nn {
-
-using Halide::ConciseCasts::i32;
-using Halide::ConciseCasts::u32;
-using Halide::ConciseCasts::u8_sat;
 
 class Add : public Generator<Add> {
 public:

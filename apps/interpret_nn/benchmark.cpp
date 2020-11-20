@@ -37,7 +37,6 @@ void RunBenchmark(const std::string &filename, const ScheduleOptions &options) {
         std::cout << "Outputs:\n";
         std::vector<Tensor *> outputs = interpreter.outputs();
         for (Tensor *t : outputs) {
-            APP_CHECK(t);
             std::cout << "  \"" << t->name() << "\" : " << to_string(t->type()) << " x " << t->shape() << "\n";
         }
     }

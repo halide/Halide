@@ -81,7 +81,6 @@ halide_type_t tf_lite_type_to_halide_type(TfLiteType t) {
 }
 
 Buffer<void> wrap_tf_lite_tensor_with_halide_buffer(TfLiteTensor *t) {
-    APP_CHECK(t->dims);
     // Wrap a Halide buffer around it.
     std::vector<halide_dimension_t> shape(t->dims->size);
     size_t shape_size = 1;
@@ -92,11 +91,10 @@ Buffer<void> wrap_tf_lite_tensor_with_halide_buffer(TfLiteTensor *t) {
         shape_size *= shape[i].extent;
     }
     void *buffer_data = t->data.data;
-    APP_CHECK(buffer_data);
 
     halide_type_t type = tf_lite_type_to_halide_type(t->type);
     Buffer<void> b(type, buffer_data, shape.size(), shape.data());
-    APP_CHECK(b.size_in_bytes() == t->bytes);
+    assert(b.size_in_bytes() == t->bytes);
     return b;
 }
 
