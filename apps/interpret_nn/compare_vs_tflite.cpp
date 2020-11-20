@@ -115,6 +115,7 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
 
     std::vector<Buffer<const void>> tflite_outputs, halide_outputs;
     std::chrono::duration<double> tflite_time, halide_time;
+    std::map<std::string, int> seeds;
 
     // ----- Run in TFLite
     {
@@ -127,11 +128,9 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
         APP_CHECK((status = tf_interpreter->AllocateTensors()) == kTfLiteOk) << status;
         APP_CHECK((status = tf_interpreter->SetNumThreads(threads)) == kTfLiteOk) << status;
 
-        // Fill in the inputs with random data (but with a predictable seed,
-        // so we can do the same for the Halide inputs).
-        int seed_here = seed;
+        // Fill in the inputs with random data, remembering the seeds so we can do the
+        // same for the Halide inputs.
         for (int i : tf_interpreter->inputs()) {
-            seed_here++;
             TfLiteTensor *t = tf_interpreter->tensor(i);
             if (t->allocation_type == kTfLiteMmapRo) {
                 // The Tensor references data from the flatbuffer and is read-only;
@@ -141,6 +140,8 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
                 }
                 continue;
             }
+            int seed_here = seed++;
+            seeds[t->name] = seed_here;
             auto input_buf = wrap_tf_lite_tensor_with_halide_buffer(t);
             dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
             if (verbose) {
@@ -179,9 +180,14 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
         ModelInterpreter interpreter(std::move(model));
 
         // Fill in the inputs with random data (but with the same seeds as above).
-        int seed_here = seed;
         for (Tensor *t : interpreter.inputs()) {
-            seed_here++;
+            if (t->is_constant()) {
+                // Skip constant buffers, just like TFlite above.
+                continue;
+            }
+            auto seed_i = seeds.find(t->name());
+            assert(seed_i != seeds.end());
+            int seed_here = seed_i->second;
             auto input_buf = t->data<void>();
             dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
             if (verbose) {
