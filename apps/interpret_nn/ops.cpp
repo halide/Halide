@@ -591,7 +591,7 @@ void PadOp::execute(const Box &crop) {
             input_buf.translate(d, padding(0, d));
         }
 
-        uint8_t pad_value = 0;
+        uint8_t pad_value = in->quantization().zero.at(0);
 
         // TODO: TFlite's padding is ~2x faster than this.
         output_buf.fill(pad_value);
