@@ -2481,6 +2481,6 @@ void lossless_cast_test() {
     debug(0) << "lossless_cast test passed\n";
 }
 
-} // namespace Internal
+}  // namespace Internal
 
 }  // namespace Halide
