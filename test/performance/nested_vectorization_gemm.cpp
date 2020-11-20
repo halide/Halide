@@ -219,6 +219,88 @@ int main(int argc, char **argv) {
         }
     }
 
+    // 16-bit blur into 32-bit accumulator, with reduction over
+    // adjacent vector lanes at the same time as reduction over slices
+    // of the vector. This is only a win on platforms with a pmaddwd-like instruction.
+    if (target.arch == Target::X86) {
+
+        double times[2];
+
+        for (int use_nested_vectorization = 0; use_nested_vectorization < 2; use_nested_vectorization++) {
+            Var x, y;
+
+            ImageParam f(Int(16), 1), g(Int(16), 1);
+
+            RDom r(0, 128);
+            Func prod;
+            prod(x) += cast<int32_t>(f(x + r)) * g(r);
+
+            Func result;
+            result(x) = cast<int16_t>(prod(x) >> 16);
+
+            RVar ro, ri, rio, rii;
+
+            result
+                .vectorize(x, 16, TailStrategy::RoundUp);
+
+            if (use_nested_vectorization) {
+                f.in().compute_at(prod, ro).vectorize(_0).bound_extent(_0, 32);
+
+                // It's faster to compute this at rio and unroll rio,
+                // but that's not what we're testing.
+                g.in().compute_at(prod, ro).vectorize(_0);
+
+                prod.compute_at(result, x)
+                    .vectorize(x)
+                    .update()
+                    .split(r, ro, ri, 4)
+                    .split(ri, rio, rii, 2)
+                    .reorder(rii, x, rio, ro)
+                    .vectorize(x)
+                    .atomic()
+                    .vectorize(rio)
+                    .vectorize(rii);
+            } else {
+                prod.compute_at(result, x)
+                    .vectorize(x)
+                    .update()
+                    .split(r, ro, ri, 4)
+                    .reorder(ri, x, ro)
+                    .vectorize(x)
+                    .unroll(ri);
+            }
+
+            Buffer<int16_t> f_buf(1024 * 1024);
+            f_buf.fill(100);
+            Buffer<int16_t> g_buf(128);
+            f_buf.fill(100);
+            f.set(f_buf);
+            g.set(g_buf);
+            Buffer<int16_t> out(f_buf.width() - g_buf.width() - 128);
+
+            // Uncomment to check the asm
+            // result.compile_to_assembly("/dev/stdout", {f, g}, target);
+
+            times[use_nested_vectorization] =
+                Tools::benchmark(10, 10, [&]() {
+                    result.realize(out);
+                    out.device_sync();
+                });
+        }
+
+        double speed_up = times[0] / times[1];
+        printf("16-bit blur with reduction dimension outermost vector dim\n"
+               "Time with nested vectorization: %0.2f ms \n"
+               "Time without: %0.2f ms \n"
+               "Speed-up: %0.2fx\n",
+               times[1] * 1000,
+               times[0] * 1000,
+               speed_up);
+        if (speed_up < 0.5) {
+            printf("The nested vectorization schedule was supposed to be faster!\n");
+            return -1;
+        }
+    }
     printf("Success!\n");
 
     return 0;
