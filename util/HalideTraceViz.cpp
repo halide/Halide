@@ -537,6 +537,7 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
                 }
             }
         } else if (dims.size() == 4) {
+            // 4D, maybe a Tensor? Treat as grayscale with x = dim(1), y = dim(2)
             fi.config.strides = {{0, 0}, {1, 0}, {0, 1}, {0, 0}};
         }
     }
