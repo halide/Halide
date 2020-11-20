@@ -150,8 +150,7 @@ void greedy_schedule(ScheduledOpVector& done, ScheduledOpList& todo, ScheduledOp
 }
 
 void trace_loads_stores(Box box, halide_trace_event_t &event) {
-    if (box.size() == 1) {
-        event.coordinates[0] = box.front().min;
+    if (box.size() == 0) {
         halide_trace(nullptr, &event);
     } else {
         int min = box.back().min;
@@ -164,56 +163,45 @@ void trace_loads_stores(Box box, halide_trace_event_t &event) {
     }
 }
 
-void trace_loads(int32_t parent_id, const Tensor *t, const Box &box) {
+void trace_loads_stores(int32_t parent_id, const Tensor *t, Box box,
+                        bool load) {
     halide_trace_event_t event = {0,};
     event.func = t->name().c_str();
 
-    event.event = halide_trace_consume;
+    event.event = load ? halide_trace_consume : halide_trace_produce;
     event.parent_id = parent_id;
     event.parent_id = halide_trace(nullptr, &event);
 
-    event.event = halide_trace_load;
+    event.event = load ? halide_trace_load : halide_trace_store;
+
+    // TODO: Reduce volume of traces by enabling this.
+    //int vector_dim = 0;
 
     event.type.code = halide_type_int;
     event.type.bits = 8;
-    event.type.lanes = box.front().extent();
+    event.type.lanes = 1; //box[vector_dim].extent();
+    //box.erase(box.begin() + vector_dim);
 
     std::vector<int32_t> coords(box.size(), 0);
     event.coordinates = coords.data();
     event.dimensions = box.size();
 
-    std::vector<uint8_t> value(event.type.lanes, 0);
+    std::vector<uint8_t> value(event.type.lanes, 255);
     event.value = value.data();
     trace_loads_stores(box, event);
 
-    event.event = halide_trace_end_consume;
+    event.coordinates = 0;
+    event.dimensions = 0;
+    event.event = load ? halide_trace_end_consume : halide_trace_end_produce;
     halide_trace(nullptr, &event);
 }
 
+void trace_loads(int32_t parent_id, const Tensor *t, const Box &box) {
+    return trace_loads_stores(parent_id, t, box, true);
+}
+
 void trace_stores(int32_t parent_id, const Tensor *t, const Box &box) {
-    halide_trace_event_t event = {0,};
-    event.func = t->name().c_str();
-    event.parent_id = parent_id;
-
-    event.event = halide_trace_produce;
-    event.parent_id = halide_trace(nullptr, &event);
-
-    event.event = halide_trace_store;
-
-    event.type.code = halide_type_int;
-    event.type.bits = 8;
-    event.type.lanes = box.front().extent();
-
-    std::vector<int32_t> coords(box.size(), 0);
-    event.coordinates = coords.data();
-    event.dimensions = box.size();
-
-    std::vector<uint8_t> value(event.type.lanes, 0);
-    event.value = value.data();
-    trace_loads_stores(box, event);
-
-    event.event = halide_trace_end_produce;
-    halide_trace(nullptr, &event);
+    return trace_loads_stores(parent_id, t, box, false);
 }
 
 void begin_tracing(const Model &m, std::vector<int32_t> &parent_ids) {
