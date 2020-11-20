@@ -560,8 +560,8 @@ Op::Bounds PadOp::infer_bounds(const Box &crop) const {
     Bounds result;
 
     Box padded_crop = crop;
-    for (int d = 0; d < 4; d++) {
-        padded_crop[d] += padding(d);
+    for (int d = 0; d < output()->rank(); d++) {
+        padded_crop[d] += padding(0, d);
     }
 
     result.inputs.emplace_back(
@@ -585,13 +585,13 @@ void PadOp::execute(const Box &crop) {
         auto input_buf = in->data<uint8_t>();
         auto output_buf = out->data<uint8_t>(crop);
 
-        uint8_t pad_value = 0;
-
-        for (int i = 0; i < 4; i++) {
-            input_buf.translate(i, padding(i));
+        for (int d = 0; d < output_buf.dimensions(); d++) {
+            input_buf.translate(d, padding(0, d));
         }
 
-        // TODO: This is pretty hard to beat, but surely it's possible.
+        uint8_t pad_value = 0;
+
+        // TODO: TFlite's padding is ~2x faster than this.
         output_buf.fill(pad_value);
         output_buf.copy_from(input_buf);
     }
