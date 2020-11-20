@@ -3,65 +3,28 @@
 #ifndef COMMON_HALIDE_H_
 #define COMMON_HALIDE_H_
 
-#include <array>
-#include <utility>
-
 #include "Halide.h"
 
 namespace interpret_nn {
 
 // A tensor has the same requirements as a buffer in Halide by default, except
 // the min of the innermost dimension must also be 0.
-inline void interpret_as_tensor(Halide::OutputImageParam p) {
-    p.dim(0).set_stride(1).set_min(0);
-}
+void interpret_as_tensor(Halide::OutputImageParam p);
 
 // Require that the first two dimensions of two buffers have the same bounds.
-inline void require_same_extent_cx(Halide::OutputImageParam first,
-                                   Halide::OutputImageParam second) {
-    for (int d = 0; d < 2; d++) {
-        second.dim(d).set_min(first.dim(d).min());
-        second.dim(d).set_extent(first.dim(d).extent());
-    }
-}
+void require_same_extent_cx(Halide::OutputImageParam first, Halide::OutputImageParam second);
 
 // Check if the first two dimensions of a buffer can be fused cleanly.
-inline Halide::Expr can_fuse_cx(Halide::OutputImageParam p) {
-    return p.dim(0).min() == 0 && p.dim(1).stride() > 0 && p.dim(1).stride() == p.dim(0).extent();
-}
+Halide::Expr can_fuse_cx(Halide::OutputImageParam p);
 
 // A boundary condition, without likelies that cause loop partitioning.
-inline Halide::Func constant_exterior_tensor(Halide::Func t, Halide::Expr exterior,
+Halide::Func constant_exterior_tensor(
+    Halide::Func t, Halide::Expr exterior,
     Halide::Expr min_c, Halide::Expr extent_c,
     Halide::Expr min_x, Halide::Expr extent_x,
     Halide::Expr min_y, Halide::Expr extent_y,
-    Halide::Expr min_b, Halide::Expr extent_b) {
-    Halide::Var c("c"), x("x"), y("y"), b("b");
-    // We usually don't care about what comes after the boundary in the c
-    // or b dimensions, so just skip those for the select.
-    Halide::Expr in_bounds =
-        min_x <= x && x < min_x + extent_x &&
-        min_y <= y && y < min_y + extent_y;
-    Halide::Expr bounded("bounded");
-    bounded = t(clamp(c, min_c, min_c + extent_c - 1),
-                clamp(x, min_x, min_x + extent_x - 1),
-                clamp(y, min_y, min_y + extent_y - 1),
-                clamp(b, min_b, min_b + extent_b - 1));
-
-    Halide::Func tensor_bounded("tensor_bounded");
-    tensor_bounded(c, x, y, b) = select(in_bounds, bounded, exterior);
-
-    return tensor_bounded;
-}
-
-inline Halide::Func constant_exterior_tensor(Halide::ImageParam p,
-                                             Halide::Expr exterior) {
-    return constant_exterior_tensor(p, exterior,
-                                  p.dim(0).min(), p.dim(0).extent(),
-                                  p.dim(1).min(), p.dim(1).extent(),
-                                  p.dim(2).min(), p.dim(2).extent(),
-                                  p.dim(3).min(), p.dim(3).extent());
-}
+    Halide::Expr min_b, Halide::Expr extent_b);
+Halide::Func constant_exterior_tensor(Halide::ImageParam p, Halide::Expr exterior);
 
 // This function implements the same computation as the ARMv7 NEON VQRDMULH
 // instruction.
