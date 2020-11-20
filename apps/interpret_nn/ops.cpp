@@ -15,6 +15,8 @@ namespace interpret_nn {
 
 namespace {
 
+// Split a crop in a particular dimension. This is very similar to a split in a Halide
+// schedule. If shift_inwards is false, the tail strategy is to shrink the last iteration.
 std::vector<Box> split_crop(const Box &crop, int dim, int factor, bool shift_inwards = false) {
     std::vector<Box> splits;
     int x_min = crop[dim].min;
@@ -147,8 +149,8 @@ Op::Bounds ElementwiseOp::infer_bounds(const Box &crop) const {
 }
 
 std::vector<Box> ElementwiseOp::split(const Box &crop) const {
-    const int ksplit = 2;
-    return split_crop(crop, 2, ksplit);
+    const int factor = 2;
+    return split_crop(crop, 2, factor);
 }
 
 Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
@@ -170,8 +172,8 @@ Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
 }
 
 std::vector<Box> PoolOp::split(const Box &crop) const {
-    const int ksplit = 2;
-    return split_crop(crop, 2, ksplit);
+    const int factor = 2;
+    return split_crop(crop, 2, factor);
 }
 
 void AddOp::execute(const Box &crop) {
@@ -263,8 +265,8 @@ std::vector<Box> ConcatenationOp::split(const Box &crop) const {
     assert(axis_ != 2);
     // split this into individual lines, so it can get re-fused with any
     // alignment.
-    const int ksplit = 1;
-    return split_crop(crop, 2, ksplit);
+    const int factor = 1;
+    return split_crop(crop, 2, factor);
 }
 
 void ConcatenationOp::execute(const Box &crop) {
@@ -327,8 +329,8 @@ Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
 }
 
 std::vector<Box> Conv2DOp::split(const Box &crop) const {
-    const int ksplit = 2;
-    return split_crop(crop, 2, ksplit);
+    const int factor = 2;
+    return split_crop(crop, 2, factor);
 }
 
 void Conv2DOp::execute(const Box &crop) {
@@ -443,8 +445,8 @@ Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
 }
 
 std::vector<Box> DepthwiseConv2DOp::split(const Box &crop) const {
-    const int ksplit = 2;
-    return split_crop(crop, 2, ksplit, true);
+    const int factor = 2;
+    return split_crop(crop, 2, factor, true);
 }
 
 void DepthwiseConv2DOp::execute(const Box &crop) {
@@ -572,8 +574,8 @@ Op::Bounds PadOp::infer_bounds(const Box &crop) const {
 }
 
 std::vector<Box> PadOp::split(const Box &crop) const {
-    const int ksplit = 2;
-    return split_crop(crop, 2, ksplit);
+    const int factor = 2;
+    return split_crop(crop, 2, factor);
 }
 
 void PadOp::execute(const Box &crop) {
