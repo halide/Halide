@@ -3,11 +3,10 @@
 #include <iostream>
 
 #include "app_util.h"
+#include "file_util.h"
 #include "halide_benchmark.h"
 #include "interpreter.h"
 #include "tflite_parser.h"
-
-using app_util::read_entire_file;
 
 namespace interpret_nn {
 

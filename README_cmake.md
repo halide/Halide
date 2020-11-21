@@ -540,11 +540,11 @@ but we require it when authoring new code in the Halide repo.
 
 Finally, we use [`find_package`][find_package] to locate Halide on your system.
 If Halide is not globally installed, you will need to add the root of the Halide
-installation directory to [`CMAKE_MODULE_PATH`][cmake_module_path] at the CMake
+installation directory to [`CMAKE_PREFIX_PATH`][cmake_prefix_path] at the CMake
 command line.
 
 ```
-dev@ubuntu:~/myproj$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MODULE_PATH="/path/to/Halide-install" -S . -B build
+dev@ubuntu:~/myproj$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/path/to/Halide-install" -S . -B build
 ```
 
 ## JIT mode
@@ -1142,8 +1142,8 @@ guidelines you should follow when writing a new app.
   https://cmake.org/cmake/help/latest/variable/CMAKE_MAKE_PROGRAM.html
 [cmake_minimum_required]:
   https://cmake.org/cmake/help/latest/command/cmake_minimum_required.html
-[cmake_module_path]:
-  https://cmake.org/cmake/help/latest/variable/CMAKE_MODULE_PATH.html
+[cmake_prefix_path]:
+  https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html
 [cmake_sizeof_void_p]:
   https://cmake.org/cmake/help/latest/variable/CMAKE_SIZEOF_VOID_P.html
 [cmake_source_dir]:

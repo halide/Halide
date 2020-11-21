@@ -7,9 +7,9 @@
 
     Usage is basically something like:
 
-    $ mkdir -p local_testdata/some_big_pipeline
-    $ bin/host/tflite_exploder some_big_pipeline.tflite local_testdata/some_big_pipeline
-    $ ls -l local_testdata/some_big_pipeline
+    $ mkdir -p ~/local_testdata/some_big_pipeline
+    $ bin/host/tflite_exploder some_big_pipeline.tflite ~/local_testdata/some_big_pipeline
+    $ ls -l ~/local_testdata/some_big_pipeline
         total 7320
         -rw-r--r--  1 srj  primarygroup     2016 Oct 22 17:14 0.tflite
         -rw-r--r--  1 srj  primarygroup     1536 Oct 22 17:14 1.tflite
@@ -20,10 +20,7 @@
 
     Then you may want to run them all thru the benchmark, eg
 
-    $ for f in local_testdata/some_big_pipeline/*; do bin/host/benchmark $f; done
-
-    (Note that `local_testdata` is in the .gitignore file for this app,
-    so it's a good place to dump all your local experiments.)
+    $ for f in ~/local_testdata/some_big_pipeline/*; do bin/host/benchmark $f; done
 
     TODO: consider adding an option to strip out the data in the tensors (ie the buffers)?
     TODO: consider adding a filter to only extract ops of a certain type (eg Conv2D)?
@@ -36,31 +33,28 @@
 #include <vector>
 
 #include "app_util.h"
+#include "file_util.h"
 #include "flatbuffers/flatbuffers.h"
 #include "tflite_schema_direct_generated.h"
 
-using app_util::make_unique;
+using interpret_nn::read_entire_file;
+using interpret_nn::write_entire_file;
 
 namespace {
+
+#if (__cplusplus == 201103L || _MSVC_LANG == 201103L)
+template<class T, class... Args>
+std::unique_ptr<T> make_unique(Args &&... args) {
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+#else
+using std::make_unique;
+#endif
 
 tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
     return std::max(
         op_code->builtin_code(),
         static_cast<tflite::BuiltinOperator>(op_code->deprecated_builtin_code()));
-}
-
-void write_entire_file(const std::string &filename, const void *source, size_t source_len) {
-    std::ofstream f(filename, std::ios::out | std::ios::binary);
-    APP_CHECK(f.is_open()) << "Unable to open file: " << filename;
-
-    f.write(reinterpret_cast<const char *>(source), source_len);
-    f.flush();
-    APP_CHECK(f.good()) << "Unable to write file: " << filename;
-    f.close();
-}
-
-void write_entire_file(const std::string &filename, const std::vector<char> &source) {
-    write_entire_file(filename, source.data(), source.size());
 }
 
 }  // namespace
@@ -74,7 +68,7 @@ int main(int argc, char **argv) {
     std::string input_file = argv[1];
     std::string output_dir = argv[2];
 
-    std::vector<char> buffer = app_util::read_entire_file(input_file);
+    std::vector<char> buffer = read_entire_file(input_file);
 
     const tflite::Model *model = tflite::GetModel(buffer.data());
 
