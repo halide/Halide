@@ -343,6 +343,10 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
     for (auto &i : model_.tensors) {
         i->allocate();
     }
+
+    // TODO: We should be able to control the lifetime of memoized
+    // funcs more precisely.
+    halide_memoization_cache_set_size(1024 * 1024 * 64);
 }
 
 void ModelInterpreter::execute() {

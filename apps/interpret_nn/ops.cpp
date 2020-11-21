@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <atomic>
 
 #include "add_uint8_uint8.h"
 #include "average_pool_uint8.h"
@@ -136,6 +137,12 @@ MinMax get_output_range(ActivationFunction activation, Tensor *out) {
 }
 
 }  // namespace
+
+std::atomic<int> next_guid(0);
+
+int get_guid() {
+    return next_guid++;
+}
 
 Op::Bounds ElementwiseOp::infer_bounds(const Box &crop) const {
     Bounds result;
@@ -398,7 +405,7 @@ void Conv2DOp::execute(const Box &crop) {
                                   (uint8_t)filter_offset, stride_[0], stride_[1],
                                   dilation_[0], dilation_[1], output_multiplier,
                                   output_shift, (uint8_t)output_offset,
-                                  output_range.min, output_range.max, output_buf));
+                                  output_range.min, output_range.max, guid_, output_buf));
     }
 }
 

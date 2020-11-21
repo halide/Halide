@@ -75,6 +75,8 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
+    Input<int> guid_{"guid"};
+
     Output<Buffer<uint8_t>> output_{"output", 4};
 
     void generate() {
@@ -99,7 +101,7 @@ public:
         Var ci("ci"), co("co");
         Func filter_tiled("filter_tiled");
         filter_tiled(ci, co, x, y, c) =
-            filter_bounded(co * vector_reduction + ci, x, y, c);
+            memoize_tag(filter_bounded(co * vector_reduction + ci, x, y, c), guid_);
 
         // Set up the reduction loop and inputs.
         filter_.dim(0).set_min(0);
@@ -256,7 +258,7 @@ public:
         // Pretranspose the filter, so we don't need to do it in the inner loop.
         // TODO: This gets recomputed often when the op is split up into small
         // pieces.
-        filter_tiled.compute_root()
+        filter_tiled.compute_root().memoize()
             .reorder_storage(ci, c, co, x, y)
             .reorder(ci, c, x, y, co)
             .bound(ci, 0, vector_reduction)

@@ -19,6 +19,8 @@ enum class Padding {
     Valid,
 };
 
+int get_guid();
+
 // This is an abstract helper op for elementwise operations.
 class ElementwiseOp : public Op {
 public:
@@ -130,6 +132,7 @@ class Conv2DOp : public Op {
     std::vector<int> dilation_;
     Padding padding_;
     ActivationFunction activation_;
+    int guid_;
 
 public:
     Conv2DOp(Tensor *input, Tensor *filter, Tensor *bias, Tensor *output,
@@ -140,6 +143,7 @@ public:
           dilation_(std::move(dilation)),
           padding_(padding),
           activation_(activation) {
+        guid_ = get_guid();
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
