@@ -225,6 +225,43 @@ public:
     }
 };
 
+class FullyConnectedOp : public Op {
+    ActivationFunction activation_;
+
+public:
+    FullyConnectedOp(Tensor *input, Tensor *filter, Tensor *bias, Tensor *output, ActivationFunction activation)
+        : Op({input, filter, bias}, {output}), activation_(activation) {
+    }
+
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
+        return make_unique<FullyConnectedOp>(
+            apply(map, input()), apply(map, filter()), apply(map, bias()),
+            apply(map, output()), activation_);
+    }
+
+    const Tensor *filter() const {
+        return Op::input(1);
+    }
+    const Tensor *bias() const {
+        return Op::input(2);
+    }
+    Tensor *filter() {
+        return Op::input(1);
+    }
+    Tensor *bias() {
+        return Op::input(2);
+    }
+
+    Bounds infer_bounds(const Box &crop) const;
+    std::vector<Box> split(const Box &crop) const;
+
+    void execute(const Box &crop);
+
+    void dump(std::ostream &os) const {
+        os << "  FullyConnected " << output()->name() << std::endl;
+    }
+};
+
 class MaxPoolOp : public PoolOp {
 public:
     MaxPoolOp(Tensor *input, Tensor *output, std::vector<int> stride,

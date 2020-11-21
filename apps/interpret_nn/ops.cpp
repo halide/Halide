@@ -10,6 +10,7 @@
 #include "convolution_uint8.h"
 #include "depthwise_convolution_uint8.h"
 #include "depthwise_convolution_uint8_broadcast.h"
+#include "fully_connected_uint8.h"
 #include "max_pool_uint8.h"
 
 namespace interpret_nn {
@@ -551,6 +552,67 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
                          dilation_[0], dilation_[1], output_multiplier, output_shift,
                          (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         }
+    } else {
+        CHECK(false);
+    }
+}
+
+Op::Bounds FullyConnectedOp::infer_bounds(const Box &crop) const {
+    Bounds result;
+    result.inputs.emplace_back(without_strides(input()->shape()));
+    result.inputs.emplace_back(without_strides(filter()->shape()));
+    result.inputs.emplace_back(without_strides(bias()->shape()));
+    result.outputs.emplace_back(without_strides(output()->shape()));
+    return result;
+}
+
+std::vector<Box> FullyConnectedOp::split(const Box &crop) const {
+    return {crop};
+}
+
+void FullyConnectedOp::execute(const Box &crop) {
+    const Tensor *in = input();
+    const Tensor *filt = filter();
+    Tensor *out = output();
+
+    if (in->type() == TensorType::UInt8 &&
+        filt->type() == TensorType::UInt8 &&
+        out->type() == TensorType::UInt8) {
+        auto input_buf = in->data<uint8_t>();
+        auto filter_buf = filt->data<uint8_t>();
+        auto bias_buf = bias()->data<int32_t>();
+        auto output_buf = out->data<uint8_t>(crop);
+
+        const int input_offset = in->quantization().zero.at(0);
+        const int filter_offset = filt->quantization().zero.at(0);
+        const int bias_offset = bias()->quantization().zero.at(0);
+        const int output_offset = out->quantization().zero.at(0);
+        assert(input_offset >= 0 && input_offset <= 255);
+        assert(filter_offset >= 0 && filter_offset <= 255);
+        assert(bias_offset == 0);
+        assert(output_offset >= 0 && output_offset <= 255);
+
+        const float input_scale = in->quantization().scale.at(0);
+        const float filter_scale = filt->quantization().scale.at(0);
+        const float bias_scale = bias()->quantization().scale.at(0);
+        const float output_scale = out->quantization().scale.at(0);
+
+        const double input_product_scale = input_scale * filter_scale;
+        assert(std::abs(input_product_scale - bias_scale) <=
+               std::min(input_product_scale, (double)bias_scale) * 1e-6);
+
+        const double real_multiplier = input_product_scale / output_scale;
+        const auto mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_multiplier);
+        const int output_multiplier = mul_and_shift.multiplier;
+        const int output_shift = -mul_and_shift.shift;
+
+        const auto output_range = get_output_range(activation_, out);
+
+        CHECK(
+            0 == fully_connected_uint8(
+                     input_buf, filter_buf, bias_buf,
+                     (uint8_t)input_offset, (uint8_t)filter_offset, output_multiplier, output_shift,
+                     (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
     } else {
         CHECK(false);
     }

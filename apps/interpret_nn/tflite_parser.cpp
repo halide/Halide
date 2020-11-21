@@ -236,6 +236,18 @@ public:
             padding, activation);
     }
 
+    std::unique_ptr<Op> parse_fully_connected(const tflite::Operator *op) {
+        const tflite::FullyConnectedOptions *options =
+            op->builtin_options_as_FullyConnectedOptions();
+        ActivationFunction activation =
+            parse_activation_function(options->fused_activation_function());
+        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
+        Tensor *filter = result_.tensors[op->inputs()->Get(1)].get();
+        Tensor *bias = result_.tensors[op->inputs()->Get(2)].get();
+        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        return make_unique<FullyConnectedOp>(input, filter, bias, output, activation);
+    }
+
     std::unique_ptr<Op> parse_pad(const tflite::Operator *op) {
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *padding = result_.tensors[op->inputs()->Get(1)].get();
@@ -285,6 +297,8 @@ public:
             return parse_reshape(op);
         case tflite::BuiltinOperator_QUANTIZE:
             return parse_quantize(op);
+        case tflite::BuiltinOperator_FULLY_CONNECTED:
+            return parse_fully_connected(op);
         default:
             LOG_FATAL << "Unsupported op "
                       << tflite::EnumNameBuiltinOperator(builtin_code);
