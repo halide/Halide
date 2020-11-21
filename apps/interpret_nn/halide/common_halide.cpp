@@ -8,16 +8,20 @@ void interpret_as_tensor(OutputImageParam p) {
     p.dim(0).set_stride(1).set_min(0);
 }
 
-void require_same_extent_cx(OutputImageParam first, OutputImageParam second) {
-    for (int d = 0; d < 2; d++) {
-        second.dim(d).set_min(first.dim(d).min());
-        second.dim(d).set_extent(first.dim(d).extent());
-    }
+void require_same_min_extent(int first_dim, OutputImageParam first, int second_dim, OutputImageParam second) {
+    second.dim(second_dim).set_min(first.dim(first_dim).min());
+    second.dim(second_dim).set_extent(first.dim(first_dim).extent());
 }
 
-void require_same_extent_b(OutputImageParam first, OutputImageParam second) {
-    second.dim(3).set_min(first.dim(3).min());
-    second.dim(3).set_extent(first.dim(3).extent());
+void require_same_min_extent(int d, OutputImageParam first, OutputImageParam second) {
+    second.dim(d).set_min(first.dim(d).min());
+    second.dim(d).set_extent(first.dim(d).extent());
+}
+
+void require_same_extent_cx(OutputImageParam first, OutputImageParam second) {
+    for (int d = 0; d < 2; d++) {
+        require_same_min_extent(d, first, second);
+    }
 }
 
 Expr can_fuse_cx(OutputImageParam p) {

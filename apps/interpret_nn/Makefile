@@ -66,6 +66,10 @@ $(BIN)/%/depthwise_convolution_uint8_broadcast.a: $(GENERATOR_BIN)/depthwise_con
 	@mkdir -p $(@D)
 	$< -g DepthwiseConvolution broadcast_channels=true -f interpret_nn::depthwise_convolution_uint8_broadcast -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
 
+$(BIN)/%/fully_connected_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
+	@mkdir -p $(@D)
+	$< -g FullyConnected -f interpret_nn::fully_connected_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+
 $(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/max_pool.generator
 	@mkdir -p $(@D)
 	$< -g MaxPool -f interpret_nn::max_pool_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
@@ -80,6 +84,7 @@ OPS_HALIDE = \
 	$(BIN)/%/convolution_uint8.a \
 	$(BIN)/%/depthwise_convolution_uint8.a \
 	$(BIN)/%/depthwise_convolution_uint8_broadcast.a \
+	$(BIN)/%/fully_connected_uint8.a \
 	$(BIN)/%/max_pool_uint8.a \
 	$(BIN)/%/runtime.a
 

@@ -11,9 +11,12 @@ namespace interpret_nn {
 // the min of the innermost dimension must also be 0.
 void interpret_as_tensor(Halide::OutputImageParam p);
 
+// Require dimension dim have the same min and extent.
+void require_same_min_extent(int dim, Halide::OutputImageParam first, Halide::OutputImageParam second);
+void require_same_min_extent(int first_dim, Halide::OutputImageParam first, int second_dim, Halide::OutputImageParam second);
+
 // Require that the first two dimensions of two buffers have the same bounds.
 void require_same_extent_cx(Halide::OutputImageParam first, Halide::OutputImageParam second);
-void require_same_extent_b(Halide::OutputImageParam first, Halide::OutputImageParam second);
 
 // Check if the first two dimensions of a buffer can be fused cleanly.
 Halide::Expr can_fuse_cx(Halide::OutputImageParam p);

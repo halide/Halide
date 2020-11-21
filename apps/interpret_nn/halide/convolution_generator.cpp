@@ -165,7 +165,7 @@ public:
         interpret_as_tensor(filter_);
         interpret_as_tensor(bias_);
         interpret_as_tensor(output_);
-        require_same_extent_b(input_, output_);
+        require_same_min_extent(3, input_, output_);
 
         output_.compute_root();
 
