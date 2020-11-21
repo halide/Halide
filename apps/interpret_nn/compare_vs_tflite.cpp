@@ -8,6 +8,7 @@
 
 #include "app_util.h"
 #include "buffer_util.h"
+#include "file_util.h"
 #include "halide_benchmark.h"
 #include "interpreter.h"
 #include "tflite_parser.h"
@@ -103,7 +104,7 @@ Buffer<void> wrap_tf_lite_tensor_with_halide_buffer(TfLiteTensor *t) {
 void run_both(const std::string &filename, int seed, int threads, bool verbose) {
     std::cout << "Comparing " << filename << "\n";
 
-    std::vector<char> buffer = app_util::read_entire_file(filename);
+    std::vector<char> buffer = read_entire_file(filename);
 
     flatbuffers::Verifier verifier((const uint8_t *)buffer.data(), buffer.size());
     APP_CHECK(tflite::VerifyModelBuffer(verifier));

@@ -1,13 +1,10 @@
 #ifndef APP_UTIL_H_
 #define APP_UTIL_H_
 
-#include <fstream>
 #include <iostream>
-#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
-#include <vector>
 
 namespace app_util {
 
@@ -98,22 +95,6 @@ public:
  */
 #define APP_CHECK(condition) \
     (condition) ? (void)0 : ::app_util::internal::Voidifier() & ::app_util::internal::FatalError(__FILE__, __LINE__, #condition).ref()
-
-inline std::vector<char> read_entire_file(const std::string &filename) {
-    std::ifstream f(filename, std::ios::in | std::ios::binary);
-    APP_CHECK(f.is_open()) << "Unable to open file: " << filename;
-
-    std::vector<char> result;
-
-    f.seekg(0, std::ifstream::end);
-    size_t size = f.tellg();
-    result.resize(size);
-    f.seekg(0, std::ifstream::beg);
-    f.read(result.data(), result.size());
-    APP_CHECK(f.good()) << "Unable to read file: " << filename;
-    f.close();
-    return result;
-}
 
 }  // namespace app_util
 
