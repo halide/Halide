@@ -57,7 +57,7 @@ public:
 
         // Pad x and y with the value that produces zero after the input offset is
         // subtracted.
-        Func input_bounded = constant_exterior_tensor(input_, input_offset_);
+        Func input_bounded = constant_exterior(input_, input_offset_);
 
         Func bias_bounded = repeat_edge(bias_);
 
@@ -66,10 +66,10 @@ public:
         Expr c_resampled = broadcast_channels_ ? 0 : c / depth_multiplier_;
         resampled_input(c, x, y, b) = input_bounded(c_resampled, x, y, b);
 
-        Func filter_biased("filter_biased");
-        Func input_biased("input_biased");
-        filter_biased(c, x, y) = i16(filter_(c, x, y)) - i16(filter_offset_);
-        input_biased(c, x, y, b) = i16(resampled_input(c, x, y, b)) - i16(input_offset_);
+        Func filter_zeroed("filter_zeroed");
+        Func input_zeroed("input_zeroed");
+        filter_zeroed(c, x, y) = i16(filter_(c, x, y)) - i16(filter_offset_);
+        input_zeroed(c, x, y, b) = i16(resampled_input(c, x, y, b)) - i16(input_offset_);
 
         // Do the convolution in 32-bit.
         filter_.dim(1).set_min(0);
@@ -77,9 +77,9 @@ public:
         Expr filter_width = filter_.dim(1).extent();
         Expr filter_height = filter_.dim(2).extent();
         RDom r(0, filter_width, 0, filter_height);
-        Expr filter_drxy = filter_biased(c, r.x, r.y);
+        Expr filter_drxy = filter_zeroed(c, r.x, r.y);
         Expr input_drxyb =
-            input_biased(c, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
+            input_zeroed(c, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
         Func convolved("convolved");
         convolved(c, x, y, b) = bias_bounded(c);
         convolved(c, x, y, b) += i32(filter_drxy) * i32(input_drxyb);
@@ -94,6 +94,9 @@ public:
         interpret_as_tensor(filter_);
         interpret_as_tensor(bias_);
         interpret_as_tensor(output_);
+        require_same_min_extent(3, input_, output_);
+        output_.dim(0).set_min(input_.dim(0).min() * depth_multiplier_);
+        output_.dim(0).set_extent(input_.dim(0).extent() * depth_multiplier_);
 
         if (broadcast_channels_) {
             // When we're broadcasting input channels, require that the input has only
@@ -142,7 +145,7 @@ public:
 
         // TODO: This gets recomputed often when the op is split up into small
         // pieces.
-        filter_biased.compute_root();
+        filter_zeroed.compute_root();
 
         // The reason broadcast_channels_ is a GeneratorParam and not a
         // specialization is that we can't specialize the (lack of) compute_at here.
@@ -155,6 +158,7 @@ public:
             for (int dm : {1, 3}) {
                 resampled_input.specialize(depth_multiplier_ == dm);
             }
+            resampled_input.specialize(depth_multiplier_ % vector_size == 0);
         }
     }
 };
