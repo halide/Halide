@@ -10,7 +10,7 @@
 
 namespace interpret_nn {
 
-void RunBenchmark(const std::string &filename, const ScheduleOptions &options) {
+void run_benchmark(const std::string &filename, const ScheduleOptions &options) {
     if (!options.trace) {
         // In trace mode, don't send *anything* to stdout
         std::cout << "Benchmarking " << filename << std::endl;
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
         if (!strncmp(argv[i], "--", 2)) {
             continue;
         }
-        interpret_nn::RunBenchmark(argv[i], options);
+        interpret_nn::run_benchmark(argv[i], options);
         std::cout << std::endl;
     }
 
