@@ -229,6 +229,8 @@ void AddOp::execute(const Box &crop) {
                                    -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
                                    output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                    output_range.min, output_range.max, output_buf));
+    } else {
+        CHECK(false);
     }
 }
 
@@ -406,6 +408,8 @@ void Conv2DOp::execute(const Box &crop) {
                                   dilation_[0], dilation_[1], output_multiplier,
                                   output_shift, (uint8_t)output_offset,
                                   output_range.min, output_range.max, guid_, output_buf));
+    } else {
+        CHECK(false);
     }
 }
 
@@ -541,6 +545,8 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
                          dilation_[0], dilation_[1], output_multiplier, output_shift,
                          (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         }
+    } else {
+        CHECK(false);
     }
 }
 
@@ -561,6 +567,8 @@ void MaxPoolOp::execute(const Box &crop) {
             0 == max_pool_uint8(input_buf, stride_[0], stride_[1],
                                 filter_size_[0], filter_size_[1],
                                 output_range.min, output_range.max, output_buf));
+    } else {
+        CHECK(false);
     }
 }
 
@@ -604,6 +612,8 @@ void PadOp::execute(const Box &crop) {
         // TODO: TFlite's padding is ~2x faster than this.
         output_buf.fill(pad_value);
         output_buf.copy_from(input_buf);
+    } else {
+        CHECK(false);
     }
 }
 
@@ -623,15 +633,14 @@ void ReshapeOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    if (in->type() == TensorType::UInt8 && out->type() == TensorType::UInt8) {
-        auto input_buf = in->data<uint8_t>();
-        auto output_buf = out->data<uint8_t>(crop);
+    auto input_buf = in->data<void>();
+    auto output_buf = out->data<void>(crop);
 
-        // TODO: This should probably just be implemented by aliasing two of the tensors.
-        assert(input_buf.number_of_elements() == output_buf.number_of_elements());
-        // TODO: This should also check the strides are dense.
-        memcpy(output_buf.data(), input_buf.data(), input_buf.number_of_elements());
-    }
+    // TODO: This should probably just be implemented by aliasing two of the tensors.
+    assert(input_buf.number_of_elements() == output_buf.number_of_elements());
+    // TODO: This should also check the strides are dense.
+    size_t output_size = output_buf.number_of_elements() * sizeof_tensor_type(out->type());
+    memcpy(output_buf.data(), input_buf.data(), output_size);
 }
 
 void QuantizeOp::execute(const Box &crop) {
@@ -672,11 +681,13 @@ void QuantizeOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(ActivationFunction::None, out);
 
-        CHECK(1 == add_uint8_uint8(left_shift, in_buf, in_buf,
+        CHECK(0 == add_uint8_uint8(left_shift, in_buf, in_buf,
                                    -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
                                    -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
                                    output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                    output_range.min, output_range.max, output_buf));
+    } else {
+        CHECK(false);
     }
 }
 
