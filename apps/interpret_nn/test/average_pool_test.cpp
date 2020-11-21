@@ -11,7 +11,7 @@ struct AveragePool_ReferenceOp : public op_test::ReferenceOp {
         const Tensor *in = inputs.at(0).get();
         Tensor *out = outputs.at(0).get();
 
-        APP_CHECK(
+        CHECK(
             in->type() == to_tensor_type<T>() &&
             out->type() == to_tensor_type<T>());
 
@@ -19,7 +19,7 @@ struct AveragePool_ReferenceOp : public op_test::ReferenceOp {
         auto out_buf = out->data<T>();
 
         // TODO: does this need to handle Padding::Same?
-        APP_CHECK(padding == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
+        CHECK(padding == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
 
         const int pad_width = 0;
         const int pad_height = 0;

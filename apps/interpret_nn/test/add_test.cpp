@@ -12,7 +12,7 @@ struct Add_ReferenceOp : public op_test::ReferenceOp {
         const Tensor *in2 = inputs.at(1).get();
         Tensor *out = outputs.at(0).get();
 
-        APP_CHECK(
+        CHECK(
             in1->type() == to_tensor_type<T>() &&
             in2->type() == to_tensor_type<T>() &&
             out->type() == to_tensor_type<T>());

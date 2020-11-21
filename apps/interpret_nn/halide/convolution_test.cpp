@@ -5,9 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "convolution_uint8.h"
 #include "HalideBuffer.h"
 #include "common_reference.h"
+#include "convolution_uint8.h"
 #include "halide_benchmark.h"
 
 using interpret_nn::multiply_quantized;
@@ -132,7 +132,7 @@ struct ConvolutionArgs {
     }
 };
 
-void RunBenchmark(ConvolutionArgs &a) {
+void run_benchmark(ConvolutionArgs &a) {
     double time = Halide::Tools::benchmark([&]() {
         int result = interpret_nn::convolution_uint8(a.input_tensor, a.filter_tensor, a.bias_tensor,
                                                      a.input_offset, a.filter_offset, a.stride_x,
@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
         printf("Benchmarking %dx%dx%dx%d\n", p.input_depth, p.input_width, p.input_height, p.input_batches);
 
         ConvolutionArgs a(p);
-        RunBenchmark(a);
+        run_benchmark(a);
 
         halide_profiler_report(nullptr);
         halide_profiler_reset();

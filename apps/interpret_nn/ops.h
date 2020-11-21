@@ -106,7 +106,8 @@ class ConcatenationOp : public Op {
 public:
     ConcatenationOp(std::vector<Tensor *> inputs, Tensor *output,
                     int axis, ActivationFunction activation)
-        : Op(std::move(inputs), {output}), axis_(axis), activation_(activation) {}
+        : Op(std::move(inputs), {output}), axis_(axis), activation_(activation) {
+    }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
         std::vector<Tensor *> inputs;

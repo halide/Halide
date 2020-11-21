@@ -7,13 +7,13 @@
 #include <vector>
 
 #include "HalideBuffer.h"
-#include "app_util.h"
+#include "error_util.h"
 #include "interval.h"
 
 namespace interpret_nn {
 
 template<class T, class... Args>
-std::unique_ptr<T> make_unique(Args &&...args) {
+std::unique_ptr<T> make_unique(Args &&... args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
 
@@ -50,7 +50,7 @@ inline TensorType to_tensor_type() {
     if (std::is_const<T>::value) {
         return to_tensor_type<typename std::remove_const<T>::type>();
     }
-    APP_FATAL << "Type is not convertible to TensorType";
+    LOG_FATAL << "Type is not convertible to TensorType";
     // unreachable
 }
 
@@ -269,7 +269,7 @@ public:
         if (output_count() == 1) {
             return without_strides(output(0)->shape());
         } else {
-            APP_FATAL << "More than one output requires get_full_crop override.";
+            LOG_FATAL << "More than one output requires get_full_crop override.";
             return Box();
         }
     }

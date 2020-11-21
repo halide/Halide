@@ -5,8 +5,8 @@
 #include <iostream>
 #include <random>
 
-#include "app_util.h"
 #include "buffer_util.h"
+#include "error_util.h"
 #include "halide_benchmark.h"
 #include "ops.h"
 
@@ -47,7 +47,7 @@ MinMax<T> get_activation_min_max(ActivationFunction activation, int zero_point, 
     if (has_max) {
         t_max = std::min(t_max, (T)(zero_point + std::round(a_max / scale)));
     }
-    APP_CHECK(t_min <= t_max);
+    CHECK(t_min <= t_max);
 
     return MinMax<T>{t_min, t_max};
 }
@@ -183,16 +183,16 @@ inline bool run_next_test(TestCaseFactory &factory, int seed) {
     }
 
     // ----- Now compare the outputs
-    APP_CHECK(reference_outputs.size() == actual_outputs.size());
+    CHECK(reference_outputs.size() == actual_outputs.size());
     for (size_t i = 0; i < reference_outputs.size(); ++i) {
         const Halide::Runtime::Buffer<const void> &tflite_buf = reference_outputs[i];
         const Halide::Runtime::Buffer<const void> &halide_buf = actual_outputs[i];
-        APP_CHECK(tflite_buf.type() == halide_buf.type());
-        APP_CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
+        CHECK(tflite_buf.type() == halide_buf.type());
+        CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
         for (int d = 0; d < tflite_buf.dimensions(); d++) {
-            APP_CHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
-            APP_CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
-            APP_CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
+            CHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
+            CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
+            CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
         }
         dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf);
     }

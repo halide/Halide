@@ -1,5 +1,5 @@
 #include "ops.h"
-#include "app_util.h"
+#include "error_util.h"
 
 #include <cmath>
 #include <iostream>
@@ -104,7 +104,7 @@ MinMax GetQuantizedMinMax(ActivationFunction activation, int zero_point, double 
         real_activation_max = 1.0;
         has_activation_max = true;
     } else {
-        APP_CHECK(false) << "Unsupported quantized activation function type.";
+        CHECK(false) << "Unsupported quantized activation function type.";
     }
     int output_activation_min = 0;
     int output_activation_max = 255;
@@ -224,11 +224,11 @@ void AddOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out);
 
-        APP_CHECK(0 == add_uint8_uint8(left_shift, in1_buf, in2_buf,
-                                     -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
-                                     -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
-                                     output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
-                                     output_range.min, output_range.max, output_buf));
+        CHECK(0 == add_uint8_uint8(left_shift, in1_buf, in2_buf,
+                                   -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
+                                   -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
+                                   output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
+                                   output_range.min, output_range.max, output_buf));
     }
 }
 
@@ -243,12 +243,12 @@ void AveragePoolOp::execute(const Box &crop) {
         const auto output_range = get_output_range(activation_, out);
 
         // TODO: does this need to handle Padding::Same?
-        APP_CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
+        CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
 
-        APP_CHECK(
+        CHECK(
             0 == average_pool_uint8(input_buf, stride_[0], stride_[1],
-                                  filter_size_[0], filter_size_[1],
-                                  output_range.min, output_range.max, output_buf));
+                                    filter_size_[0], filter_size_[1],
+                                    output_range.min, output_range.max, output_buf));
     }
 }
 
@@ -400,7 +400,7 @@ void Conv2DOp::execute(const Box &crop) {
             input_buf.translate({0, pad_width, pad_height, 0});
         }
 
-        APP_CHECK(
+        CHECK(
             0 == convolution_uint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
                                   (uint8_t)filter_offset, stride_[0], stride_[1],
                                   dilation_[0], dilation_[1], output_multiplier,
@@ -527,14 +527,14 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         }
 
         if (depth_multiplier_ >= output_buf.dim(0).extent()) {
-            APP_CHECK(
+            CHECK(
                 0 == depthwise_convolution_uint8_broadcast(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
                          (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
                          dilation_[0], dilation_[1], output_multiplier, output_shift,
                          (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         } else {
-            APP_CHECK(
+            CHECK(
                 0 == depthwise_convolution_uint8(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
                          (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
@@ -553,14 +553,14 @@ void MaxPoolOp::execute(const Box &crop) {
         auto output_buf = out->data<uint8_t>(crop);
 
         // TODO: does this need to handle Padding::Same?
-        APP_CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
+        CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
 
         const auto output_range = get_output_range(activation_, out);
 
-        APP_CHECK(
+        CHECK(
             0 == max_pool_uint8(input_buf, stride_[0], stride_[1],
-                              filter_size_[0], filter_size_[1],
-                              output_range.min, output_range.max, output_buf));
+                                filter_size_[0], filter_size_[1],
+                                output_range.min, output_range.max, output_buf));
     }
 }
 
@@ -672,11 +672,11 @@ void QuantizeOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(ActivationFunction::None, out);
 
-        APP_CHECK(1 == add_uint8_uint8(left_shift, in_buf, in_buf,
-                                     -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
-                                     -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
-                                     output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
-                                     output_range.min, output_range.max, output_buf));
+        CHECK(1 == add_uint8_uint8(left_shift, in_buf, in_buf,
+                                   -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
+                                   -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
+                                   output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
+                                   output_range.min, output_range.max, output_buf));
     }
 }
 
