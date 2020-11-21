@@ -665,11 +665,11 @@ void QuantizeOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(ActivationFunction::None, out);
 
-        APP_CHECK(1 == add_uint8_uint8(left_shift, in_buf, in_buf,
-                                     -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
-                                     -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
-                                     output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
-                                     output_range.min, output_range.max, output_buf));
+        CHECK(1 == add_uint8_uint8(left_shift, in_buf, in_buf,
+                                   -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
+                                   -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
+                                   output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
+                                   output_range.min, output_range.max, output_buf));
     }
 }
 
