@@ -47,7 +47,7 @@ struct QuantizedMulAndShift {
 };
 
 // Adapted from tflite
-QuantizedMulAndShift GetQuantizedMulAndShift(double double_multiplier) {
+QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier) {
     if (double_multiplier == 0.) {
         return {0, 0};
     }
@@ -71,9 +71,9 @@ QuantizedMulAndShift GetQuantizedMulAndShift(double double_multiplier) {
 }
 
 // Adapted from tflite
-QuantizedMulAndShift GetQuantizedMulAndShiftSmallerThanOne(double double_multiplier) {
+QuantizedMulAndShift get_quantized_mul_and_shift_smaller_than_one(double double_multiplier) {
     assert(double_multiplier > 0.0 && double_multiplier < 1.0);
-    auto result = GetQuantizedMulAndShift(double_multiplier);
+    auto result = get_quantized_mul_and_shift(double_multiplier);
     assert(result.shift <= 0);
     return result;
 }
@@ -83,7 +83,7 @@ struct MinMax {
 };
 
 // Adapted from tfmini
-MinMax GetQuantizedMinMax(ActivationFunction activation, int zero_point, double scale) {
+MinMax get_quantized_min_max(ActivationFunction activation, int zero_point, double scale) {
     double real_activation_min = 0.0;
     double real_activation_max = 0.0;
     bool has_activation_min = false;
@@ -128,7 +128,7 @@ MinMax get_output_range(ActivationFunction activation, Tensor *out) {
 
     const float output_scale = out->quantization().scale.at(0);
 
-    const auto output_range = GetQuantizedMinMax(activation, output_offset, output_scale);
+    const auto output_range = get_quantized_min_max(activation, output_offset, output_scale);
     assert(output_range.min >= 0 && output_range.min <= 255);
     assert(output_range.max >= 0 && output_range.max <= 255);
     assert(output_range.min <= output_range.max);
@@ -212,9 +212,9 @@ void AddOp::execute(const Box &crop) {
         const double real_in2_multiplier = in2_scale / twice_max_input_scale;
         const double real_output_multiplier = twice_max_input_scale / ((1 << left_shift) * output_scale);
 
-        const auto in1_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_in1_multiplier);
-        const auto in2_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_in2_multiplier);
-        const auto output_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_output_multiplier);
+        const auto in1_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in1_multiplier);
+        const auto in2_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in2_multiplier);
+        const auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_output_multiplier);
         assert(in1_mul_and_shift.shift <= 0);
         assert(in2_mul_and_shift.shift <= 0);
         assert(output_mul_and_shift.shift <= 0);
@@ -375,9 +375,9 @@ void Conv2DOp::execute(const Box &crop) {
                std::min(input_product_scale, (double)bias_scale) * 1e-6);
 
         const double real_multiplier = input_product_scale / output_scale;
-        const auto mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_multiplier);
+        const auto mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_multiplier);
         const int output_multiplier = mul_and_shift.multiplier;
-        // GetQuantizedMulAndShiftSmallerThanOne() returns a negative shift;
+        // get_quantized_mul_and_shift_smaller_than_one() returns a negative shift;
         // convolution_uint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
@@ -497,9 +497,9 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
                std::min(input_product_scale, (double)bias_scale) * 1e-6);
 
         const double real_multiplier = input_product_scale / output_scale;
-        const auto mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_multiplier);
+        const auto mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_multiplier);
         const int output_multiplier = mul_and_shift.multiplier;
-        // GetQuantizedMulAndShiftSmallerThanOne() returns a negative shift;
+        // get_quantized_mul_and_shift_smaller_than_one() returns a negative shift;
         // depthwise_convolution_uint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
@@ -672,9 +672,9 @@ void QuantizeOp::execute(const Box &crop) {
         const double real_in2_multiplier = in2_scale / twice_max_input_scale;
         const double real_output_multiplier = twice_max_input_scale / ((1 << left_shift) * output_scale);
 
-        const auto in1_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_in1_multiplier);
-        const auto in2_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_in2_multiplier);
-        const auto output_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_output_multiplier);
+        const auto in1_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in1_multiplier);
+        const auto in2_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in2_multiplier);
+        const auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_output_multiplier);
         assert(in1_mul_and_shift.shift <= 0);
         assert(in2_mul_and_shift.shift <= 0);
         assert(output_mul_and_shift.shift <= 0);
