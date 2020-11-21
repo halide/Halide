@@ -72,7 +72,7 @@ QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier) {
 
 // Adapted from tflite
 QuantizedMulAndShift get_quantized_mul_and_shift_smaller_than_one(double double_multiplier) {
-    assert(double_multiplier > 0.0 && double_multiplier < 1.0);
+    assert(double_multiplier >= 0.0 && double_multiplier < 1.0);
     auto result = get_quantized_mul_and_shift(double_multiplier);
     assert(result.shift <= 0);
     return result;
@@ -223,6 +223,12 @@ void AddOp::execute(const Box &crop) {
         // mul_and_shift2.multiplier *= -1;
 
         const auto output_range = get_output_range(activation_, out);
+
+        while (output_buf.dimensions() < 4) {
+            in1_buf.embed(output_buf.dimensions());
+            in2_buf.embed(output_buf.dimensions());
+            output_buf.embed(output_buf.dimensions());
+        }
 
         CHECK(0 == add_uint8_uint8(left_shift, in1_buf, in2_buf,
                                    -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
@@ -647,11 +653,9 @@ void QuantizeOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    std::cout << to_string(in->type()) << " " << to_string(out->type()) << std::endl;
-
     if (in->type() == TensorType::UInt8 && out->type() == TensorType::UInt8) {
         // We're going to implement this by just doing an Add with itself, but with
-        // the quantization parameters to produce 0.
+        // the quantization parameters to produce 0 for the other op.
         auto in_buf = in->data<uint8_t>();
         auto output_buf = out->data<uint8_t>(crop);
 
@@ -680,6 +684,11 @@ void QuantizeOp::execute(const Box &crop) {
         assert(output_mul_and_shift.shift <= 0);
 
         const auto output_range = get_output_range(ActivationFunction::None, out);
+
+        while (output_buf.dimensions() < 4) {
+            in_buf.embed(output_buf.dimensions());
+            output_buf.embed(output_buf.dimensions());
+        }
 
         CHECK(0 == add_uint8_uint8(left_shift, in_buf, in_buf,
                                    -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
