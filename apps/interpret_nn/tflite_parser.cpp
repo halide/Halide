@@ -238,6 +238,12 @@ public:
         return make_unique<ReshapeOp>(input, output, new_shape);
     }
 
+    std::unique_ptr<Op> parse_quantize(const tflite::Operator *op) {
+        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
+        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        return make_unique<QuantizeOp>(input, output);
+    }
+
     std::unique_ptr<Op> parse_op(const tflite::Operator *op) {
         const auto *opcodes = model_->operator_codes();
 
@@ -260,6 +266,8 @@ public:
             return parse_pad(op);
         case tflite::BuiltinOperator_RESHAPE:
             return parse_reshape(op);
+        case tflite::BuiltinOperator_QUANTIZE:
+            return parse_quantize(op);
         default:
             LOG_FATAL << "Unsupported op "
                       << tflite::EnumNameBuiltinOperator(builtin_code);

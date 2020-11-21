@@ -627,4 +627,50 @@ void ReshapeOp::execute(const Box &crop) {
     }
 }
 
+void QuantizeOp::execute(const Box &crop) {
+    const Tensor *in = input();
+    Tensor *out = output();
+
+    std::cout << to_string(in->type()) << " " << to_string(out->type()) << std::endl;
+
+    if (in->type() == TensorType::UInt8 && out->type() == TensorType::UInt8) {
+        // We're going to implement this by just doing an Add with itself, but with
+        // the quantization parameters to produce 0.
+        auto in_buf = in->data<uint8_t>();
+        auto output_buf = out->data<uint8_t>(crop);
+
+        const int in1_offset = in->quantization().zero.at(0);
+        const int in2_offset = 0;
+        const int output_offset = out->quantization().zero.at(0);
+        assert(in1_offset >= 0 && in1_offset <= 255);
+        assert(in2_offset >= 0 && in2_offset <= 255);
+        assert(output_offset >= 0 && output_offset <= 255);
+
+        const float in1_scale = in->quantization().scale.at(0);
+        const float in2_scale = 0.0f;
+        const float output_scale = out->quantization().scale.at(0);
+
+        const int left_shift = 20;  // 20 for 8-bit, 15 for 16-bit
+        const double twice_max_input_scale = 2 * std::max(in1_scale, in2_scale);
+        const double real_in1_multiplier = in1_scale / twice_max_input_scale;
+        const double real_in2_multiplier = in2_scale / twice_max_input_scale;
+        const double real_output_multiplier = twice_max_input_scale / ((1 << left_shift) * output_scale);
+
+        const auto in1_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_in1_multiplier);
+        const auto in2_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_in2_multiplier);
+        const auto output_mul_and_shift = GetQuantizedMulAndShiftSmallerThanOne(real_output_multiplier);
+        assert(in1_mul_and_shift.shift <= 0);
+        assert(in2_mul_and_shift.shift <= 0);
+        assert(output_mul_and_shift.shift <= 0);
+
+        const auto output_range = get_output_range(ActivationFunction::None, out);
+
+        APP_CHECK(1 == add_uint8_uint8(left_shift, in_buf, in_buf,
+                                     -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
+                                     -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
+                                     output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
+                                     output_range.min, output_range.max, output_buf));
+    }
+}
+
 }  // namespace interpret_nn
