@@ -37,11 +37,19 @@
 #include "flatbuffers/flatbuffers.h"
 #include "tflite_schema_direct_generated.h"
 
-using app_util::make_unique;
 using interpret_nn::read_entire_file;
 using interpret_nn::write_entire_file;
 
 namespace {
+
+#if (__cplusplus == 201103L || _MSVC_LANG == 201103L)
+template<class T, class... Args>
+std::unique_ptr<T> make_unique(Args &&... args) {
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+#else
+using std::make_unique;
+#endif
 
 tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
     return std::max(
