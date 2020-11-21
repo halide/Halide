@@ -5,13 +5,13 @@
 #include <memory>
 #include <vector>
 
-#include "app_util.h"
+#include "error_util.h"
 
 namespace interpret_nn {
 
 inline std::vector<char> read_entire_file(const std::string &filename) {
     std::ifstream f(filename, std::ios::in | std::ios::binary);
-    APP_CHECK(f.is_open()) << "Unable to open file: " << filename;
+    CHECK(f.is_open()) << "Unable to open file: " << filename;
 
     std::vector<char> result;
 
@@ -20,18 +20,18 @@ inline std::vector<char> read_entire_file(const std::string &filename) {
     result.resize(size);
     f.seekg(0, std::ifstream::beg);
     f.read(result.data(), result.size());
-    APP_CHECK(f.good()) << "Unable to read file: " << filename;
+    CHECK(f.good()) << "Unable to read file: " << filename;
     f.close();
     return result;
 }
 
 inline void write_entire_file(const std::string &filename, const void *source, size_t source_len) {
     std::ofstream f(filename, std::ios::out | std::ios::binary);
-    APP_CHECK(f.is_open()) << "Unable to open file: " << filename;
+    CHECK(f.is_open()) << "Unable to open file: " << filename;
 
     f.write(reinterpret_cast<const char *>(source), source_len);
     f.flush();
-    APP_CHECK(f.good()) << "Unable to write file: " << filename;
+    CHECK(f.good()) << "Unable to write file: " << filename;
     f.close();
 }
 

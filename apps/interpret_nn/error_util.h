@@ -1,12 +1,12 @@
-#ifndef APP_UTIL_H_
-#define APP_UTIL_H_
+#ifndef ERROR_UTIL_H_
+#define ERROR_UTIL_H_
 
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
 
-namespace app_util {
+namespace interpret_nn {
 
 namespace internal {
 
@@ -67,11 +67,11 @@ public:
 
 }  // namespace internal
 
-#define APP_FATAL \
-    ::app_util::internal::FatalError(__FILE__, __LINE__, nullptr)
+#define LOG_FATAL \
+    ::interpret_nn::internal::FatalError(__FILE__, __LINE__, nullptr)
 
 /**
- * APP_CHECK() is used to implement our assertion macros
+ * CHECK() is used to implement our assertion macros
  * in such a way that the messages output for the assertion are only
  * evaluated if the assertion's value is false.
  *
@@ -84,9 +84,9 @@ public:
  * effect that all assertion parameters are totally skipped (not ever evaluated)
  * when the assertion is true.
  */
-#define APP_CHECK(condition) \
-    (condition) ? (void)0 : ::app_util::internal::Voidifier() & ::app_util::internal::FatalError(__FILE__, __LINE__, #condition).ref()
+#define CHECK(condition) \
+    (condition) ? (void)0 : ::interpret_nn::internal::Voidifier() & ::interpret_nn::internal::FatalError(__FILE__, __LINE__, #condition).ref()
 
-}  // namespace app_util
+}  // namespace interpret_nn
 
-#endif  // APP_UTIL_H_
+#endif  // ERROR_UTIL_H_

@@ -2,7 +2,7 @@
 #include <fstream>
 #include <iostream>
 
-#include "app_util.h"
+#include "error_util.h"
 #include "file_util.h"
 #include "halide_benchmark.h"
 #include "interpreter.h"

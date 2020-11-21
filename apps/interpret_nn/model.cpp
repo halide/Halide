@@ -1,5 +1,5 @@
 #include "model.h"
-#include "app_util.h"
+#include "error_util.h"
 
 #include <cmath>
 #include <list>
@@ -31,7 +31,7 @@ size_t sizeof_tensor_type(TensorType t) {
     // case TensorType::String:  fallthru
     // case TensorType::Bool:    fallthru
     default:
-        APP_FATAL << "Unknown size of type";
+        LOG_FATAL << "Unknown size of type";
         return 0;
     }
 }
@@ -65,7 +65,7 @@ const char *to_string(TensorType t) {
     case TensorType::Bool:
         return "bool";
     default:
-        APP_FATAL << "Unhandled interpret_nn::TensorType";
+        LOG_FATAL << "Unhandled interpret_nn::TensorType";
         return "";
     }
 }
@@ -97,28 +97,28 @@ halide_type_t to_halide_type(TensorType t) {
     case TensorType::Complex128:
     case TensorType::String:
     default:
-        APP_FATAL << "Unhandled type in to_halide_type";
+        LOG_FATAL << "Unhandled type in to_halide_type";
         return halide_type_t();
     }
 }
 
-Tensor *apply(const TensorMap& map, const Tensor* t) {
+Tensor *apply(const TensorMap &map, const Tensor *t) {
     auto i = map.find(t);
     if (i != map.end()) {
         return i->second;
     }
     // TODO: Try to do this without const_cast?
-    return const_cast<Tensor*>(t);
+    return const_cast<Tensor *>(t);
 }
 
-Model::Model(const Model& copy) {
+Model::Model(const Model &copy) {
     // First, just copy all the tensors (shared pointers).
     tensors = copy.tensors;
 
     // Next, clone the non-allocated tensors. These might get intermediate state
     // while being executed.
     TensorMap map;
-    for (auto& i : tensors) {
+    for (auto &i : tensors) {
         if (!i->is_allocated()) {
             auto cloned = std::make_shared<Tensor>(*i);
             map[i.get()] = cloned.get();
@@ -127,7 +127,7 @@ Model::Model(const Model& copy) {
     }
 
     // Now copy the ops, using the tensor map we made above.
-    for (const auto& i : copy.ops) {
+    for (const auto &i : copy.ops) {
         ops.push_back(i->clone(map));
     }
 }
@@ -149,7 +149,7 @@ void Tensor::allocate() {
     size_t shape_size = 1;
     for (halide_dimension_t &i : shape_) {
         if (i.stride != 0) {
-            APP_CHECK((size_t) i.stride == shape_size);
+            CHECK((size_t)i.stride == shape_size);
         } else {
             i.stride = shape_size;
         }
@@ -159,7 +159,7 @@ void Tensor::allocate() {
     if (data_.empty()) {
         data_.resize(shape_size);
     } else {
-        APP_CHECK(data_.size() == shape_size);
+        CHECK(data_.size() == shape_size);
     }
 }
 

@@ -129,4 +129,3 @@ bool is_empty(const Box &a) {
 }
 
 }  // namespace interpret_nn
-

@@ -12,14 +12,28 @@ namespace interpret_nn {
 struct Interval {
     int min, max;
 
-    Interval() : min(0), max(0) {}
-    Interval(int point) : min(point), max(1) {}
-    Interval(int min, int max) : min(min), max(max) {}
-    Interval(halide_dimension_t dim) : min(dim.min), max(dim.min + dim.extent - 1) {}
+    Interval()
+        : min(0), max(0) {
+    }
+    Interval(int point)
+        : min(point), max(1) {
+    }
+    Interval(int min, int max)
+        : min(min), max(max) {
+    }
+    Interval(halide_dimension_t dim)
+        : min(dim.min), max(dim.min + dim.extent - 1) {
+    }
 
-    bool empty() const { return max < min; }
-    int extent() const { return max - min + 1; }
-    void set_extent(int extent) { max = min + extent - 1; }
+    bool empty() const {
+        return max < min;
+    }
+    int extent() const {
+        return max - min + 1;
+    }
+    void set_extent(int extent) {
+        max = min + extent - 1;
+    }
 
     Interval &operator*=(int scale) {
         min *= scale;
@@ -76,7 +90,6 @@ struct Interval {
     bool operator!=(const Interval &i) const {
         return min != i.min || max != i.max;
     }
-
 };
 
 inline std::ostream &operator<<(std::ostream &s, const Interval &i) {

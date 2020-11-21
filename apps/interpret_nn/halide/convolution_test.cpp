@@ -5,9 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "convolution_uint8.h"
 #include "HalideBuffer.h"
 #include "common_reference.h"
+#include "convolution_uint8.h"
 #include "halide_benchmark.h"
 
 using interpret_nn::multiply_quantized;

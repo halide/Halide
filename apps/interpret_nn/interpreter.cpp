@@ -1,5 +1,5 @@
 #include "interpreter.h"
-#include "app_util.h"
+#include "error_util.h"
 
 #include <cmath>
 #include <list>
@@ -26,7 +26,9 @@ void trace_loads_stores(HalideBuffer<const void> buf, halide_trace_event_t &even
 }
 
 void trace_loads_stores(int32_t parent_id, const Tensor *t, Box box, bool load) {
-    halide_trace_event_t event = {0,};
+    halide_trace_event_t event = {
+        0,
+    };
     event.func = t->name().c_str();
 
     event.event = load ? halide_trace_consume : halide_trace_produce;
@@ -45,7 +47,9 @@ void trace_loads_stores(int32_t parent_id, const Tensor *t, Box box, bool load) 
     event.dimensions = box.size();
 
     assert(event.type.bits <= 64);
-    uint8_t value[8] = {0,};
+    uint8_t value[8] = {
+        0,
+    };
     event.value = &value[0];
     trace_loads_stores(buf, event);
 
@@ -64,7 +68,9 @@ void trace_stores(int32_t parent_id, const Tensor *t, const Box &box) {
 }
 
 void begin_trace_execute(const Model &m, std::vector<int32_t> &parent_ids) {
-    halide_trace_event_t trace = {0,};
+    halide_trace_event_t trace = {
+        0,
+    };
     trace.func = "model";
     trace.event = halide_trace_begin_pipeline;
     parent_ids.push_back(halide_trace(nullptr, &trace));
@@ -103,7 +109,9 @@ void begin_trace_execute(const Model &m, std::vector<int32_t> &parent_ids) {
 void trace_op(const ScheduledOp &op, std::vector<int32_t> &parent_ids) {
     Op::Bounds bounds = op.op->infer_bounds(op.crop);
 
-    halide_trace_event_t trace = {0,};
+    halide_trace_event_t trace = {
+        0,
+    };
     trace.event = halide_trace_begin_realization;
     for (int i = 0; i < op.op->output_count(); i++) {
         const Tensor *t = op.op->output(i);
@@ -142,7 +150,9 @@ void trace_op(const ScheduledOp &op, std::vector<int32_t> &parent_ids) {
 }
 
 void end_trace_execute(const Model &m, std::vector<int32_t> &parent_ids) {
-    halide_trace_event_t trace = {0,};
+    halide_trace_event_t trace = {
+        0,
+    };
     trace.func = "model";
     trace.event = halide_trace_end_pipeline;
     trace.parent_id = parent_ids.back();
@@ -181,7 +191,7 @@ Box subtract_done(Box shape, const Tensor *t, const ScheduledOpVector &done) {
             int o = index_of_output(i->op, t);
             if (o >= 0) {
                 Op::Bounds bounds = i->op->infer_bounds(i->crop);
-                const Box& produced = bounds.outputs[o];
+                const Box &produced = bounds.outputs[o];
                 trimmed = trimmed || subtract(shape, produced);
             }
         }
@@ -221,7 +231,7 @@ bool can_execute(const ScheduledOpVector &done, const ScheduledOp &op) {
 // optimized significantly by caching results of operations like this, and by
 // maybe restructuring things (e.g. don't split ops into slices all up front, do it
 // progressively instead.)
-void greedy_schedule(ScheduledOpVector& done, ScheduledOpList& todo, const ScheduledOp &from, int parallelism) {
+void greedy_schedule(ScheduledOpVector &done, ScheduledOpList &todo, const ScheduledOp &from, int parallelism) {
     ScheduledOpList exec;
 
     // Try to execute all possible consumers first.
@@ -289,7 +299,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
 
     if (options.verbose) {
         std::cout << "Before: " << std::endl;
-        for (const auto& i : schedule) {
+        for (const auto &i : schedule) {
             if (i.crop.size() >= 3) {
                 std::cout << i.crop[2].min << " " << i.crop[2].max << " ";
             }
@@ -305,7 +315,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
             // Make a vector of scheduled ops.
             std::vector<ScheduledOp> split_ops;
             split_ops.reserve(splits.size() - 1);
-            for (int j = 0; j + 1 < (int) splits.size(); j++) {
+            for (int j = 0; j + 1 < (int)splits.size(); j++) {
                 split_ops.push_back({i->op, splits[j]});
             }
 
@@ -327,7 +337,7 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
 
     if (options.verbose) {
         std::cout << "After: " << std::endl;
-        for (const auto& i : schedule_) {
+        for (const auto &i : schedule_) {
             if (i.crop.size() >= 3) {
                 std::cout << i.crop[2].min << " " << i.crop[2].max << " ";
             }
@@ -365,7 +375,7 @@ void ModelInterpreter::execute() {
 }
 
 Tensor *ModelInterpreter::get_tensor(const std::string &name) {
-    APP_CHECK(!model_.tensors.empty());
+    CHECK(!model_.tensors.empty());
 
     for (const auto &t : model_.tensors) {
         if (t->name() == name) {

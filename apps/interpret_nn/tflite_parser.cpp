@@ -4,7 +4,7 @@
 #include <iostream>
 #include <memory>
 
-#include "app_util.h"
+#include "error_util.h"
 #include "ops.h"
 #include "tflite_schema_generated.h"
 
@@ -43,7 +43,7 @@ public:
         case tflite::ActivationFunctionType_SIGN_BIT:
             return ActivationFunction::SignBit;
         default:
-            APP_FATAL << "Unknown tflite::ActivationFunctionType";
+            LOG_FATAL << "Unknown tflite::ActivationFunctionType";
         }
     }
 
@@ -76,7 +76,7 @@ public:
         case tflite::TensorType_UINT64:
             return TensorType::UInt64;
         default:
-            APP_FATAL << "Unknown tflite::TensorType";
+            LOG_FATAL << "Unknown tflite::TensorType";
         }
     }
 
@@ -87,7 +87,7 @@ public:
         case tflite::Padding_VALID:
             return Padding::Valid;
         default:
-            APP_FATAL << "Unknown tflite::Padding";
+            LOG_FATAL << "Unknown tflite::Padding";
         }
     }
 
@@ -261,14 +261,14 @@ public:
         case tflite::BuiltinOperator_RESHAPE:
             return parse_reshape(op);
         default:
-            APP_FATAL << "Unsupported op "
+            LOG_FATAL << "Unsupported op "
                       << tflite::EnumNameBuiltinOperator(builtin_code);
         }
     }
 
     Model parse() {
         const auto &subgraphs = *model_->subgraphs();
-        APP_CHECK(subgraphs.size() == 1) << "Only 1 subgraph is currently supported.";
+        CHECK(subgraphs.size() == 1) << "Only 1 subgraph is currently supported.";
         const tflite::SubGraph &subgraph = *subgraphs[0];
 
         for (const tflite::Tensor *t : *subgraph.tensors()) {

@@ -6,8 +6,8 @@
 #include <unistd.h>
 #endif
 
-#include "app_util.h"
 #include "buffer_util.h"
+#include "error_util.h"
 #include "file_util.h"
 #include "halide_benchmark.h"
 #include "interpreter.h"
@@ -76,7 +76,7 @@ halide_type_t tf_lite_type_to_halide_type(TfLiteType t) {
     case kTfLiteNoType:
     case kTfLiteComplex64:
     case kTfLiteComplex128:
-        APP_FATAL << "Unsupported TfLiteType: " << TfLiteTypeGetName(t);
+        LOG_FATAL << "Unsupported TfLiteType: " << TfLiteTypeGetName(t);
         return halide_type_t();
     }
 }
@@ -107,10 +107,10 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
     std::vector<char> buffer = read_entire_file(filename);
 
     flatbuffers::Verifier verifier((const uint8_t *)buffer.data(), buffer.size());
-    APP_CHECK(tflite::VerifyModelBuffer(verifier));
+    CHECK(tflite::VerifyModelBuffer(verifier));
 
     const tflite::Model *tf_model = tflite::GetModel(buffer.data());
-    APP_CHECK(tf_model);
+    CHECK(tf_model);
 
     std::vector<Buffer<const void>> tflite_outputs, halide_outputs;
     std::chrono::duration<double> tflite_time, halide_time;
@@ -123,9 +123,9 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
         std::unique_ptr<tflite::Interpreter> tf_interpreter;
         tflite::InterpreterBuilder builder(tf_model, tf_resolver, &tf_reporter);
         TfLiteStatus status;
-        APP_CHECK((status = builder(&tf_interpreter)) == kTfLiteOk) << status;
-        APP_CHECK((status = tf_interpreter->AllocateTensors()) == kTfLiteOk) << status;
-        APP_CHECK((status = tf_interpreter->SetNumThreads(threads)) == kTfLiteOk) << status;
+        CHECK((status = builder(&tf_interpreter)) == kTfLiteOk) << status;
+        CHECK((status = tf_interpreter->AllocateTensors()) == kTfLiteOk) << status;
+        CHECK((status = tf_interpreter->SetNumThreads(threads)) == kTfLiteOk) << status;
 
         // Fill in the inputs with random data, remembering the seeds so we can do the
         // same for the Halide inputs.
@@ -150,12 +150,12 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
         }
 
         // Execute once, to prime the pump
-        APP_CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
+        CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
 
         // Now benchmark it
         tflite_time = bench([&tf_interpreter]() {
             TfLiteStatus status;
-            APP_CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
+            CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
         });
 
         // Save the outputs
@@ -228,16 +228,16 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
     std::cout << "\n";
 
     // ----- Now compare the outputs
-    APP_CHECK(tflite_outputs.size() == halide_outputs.size());
+    CHECK(tflite_outputs.size() == halide_outputs.size());
     for (size_t i = 0; i < tflite_outputs.size(); ++i) {
         const Buffer<const void> &tflite_buf = tflite_outputs[i];
         const Buffer<const void> &halide_buf = halide_outputs[i];
-        APP_CHECK(tflite_buf.type() == halide_buf.type());
-        APP_CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
+        CHECK(tflite_buf.type() == halide_buf.type());
+        CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
         for (int d = 0; d < tflite_buf.dimensions(); d++) {
-            APP_CHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
-            APP_CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
-            APP_CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
+            CHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
+            CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
+            CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
         }
         uint64_t diffs = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf);
         if (diffs == 0) {

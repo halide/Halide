@@ -32,7 +32,7 @@
 #include <string>
 #include <vector>
 
-#include "app_util.h"
+#include "error_util.h"
 #include "file_util.h"
 #include "flatbuffers/flatbuffers.h"
 #include "tflite_schema_direct_generated.h"
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     const auto *opcodes = model->operator_codes();
 
     const auto *subgraphs = model->subgraphs();
-    APP_CHECK(subgraphs->size() == 1) << "Only 1 subgraph is currently supported.";
+    CHECK(subgraphs->size() == 1) << "Only 1 subgraph is currently supported.";
     const tflite::SubGraph *subgraph = subgraphs->Get(0);
 
     int op_index = -1;
@@ -86,11 +86,11 @@ int main(int argc, char **argv) {
         std::string op_name = tflite::EnumNameBuiltinOperator(get_builtin_code(opcode));
 
         std::map<int32_t, int32_t> old_to_new_tensor_map;
-        APP_CHECK(op->inputs() != nullptr);
+        CHECK(op->inputs() != nullptr);
         for (int32_t i : *op->inputs()) {
             old_to_new_tensor_map[i] = 0;
         }
-        APP_CHECK(op->outputs() != nullptr);
+        CHECK(op->outputs() != nullptr);
         for (int32_t i : *op->outputs()) {
             old_to_new_tensor_map[i] = 0;
         }
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
         old_to_new_buffer_map[0] = 0;
         for (auto &m : old_to_new_tensor_map) {
             const tflite::Tensor *t = subgraph->tensors()->Get(m.first);
-            old_to_new_buffer_map[t->buffer()] = 0; // placeholder, will fill in below
+            old_to_new_buffer_map[t->buffer()] = 0;  // placeholder, will fill in below
         }
 
         std::vector<std::unique_ptr<tflite::BufferT>> new_buffers;
