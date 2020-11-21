@@ -4,13 +4,10 @@ using namespace Halide;
 
 namespace interpret_nn {
 
-// A tensor has the same requirements as a buffer in Halide by default, except
-// the min of the innermost dimension must also be 0.
 void interpret_as_tensor(OutputImageParam p) {
     p.dim(0).set_stride(1).set_min(0);
 }
 
-// Require that the first two dimensions of two buffers have the same bounds.
 void require_same_extent_cx(OutputImageParam first, OutputImageParam second) {
     for (int d = 0; d < 2; d++) {
         second.dim(d).set_min(first.dim(d).min());
@@ -18,12 +15,15 @@ void require_same_extent_cx(OutputImageParam first, OutputImageParam second) {
     }
 }
 
-// Check if the first two dimensions of a buffer can be fused cleanly.
+void require_same_extent_b(OutputImageParam first, OutputImageParam second) {
+    second.dim(3).set_min(first.dim(3).min());
+    second.dim(3).set_extent(first.dim(3).extent());
+}
+
 Expr can_fuse_cx(OutputImageParam p) {
     return p.dim(0).min() == 0 && p.dim(1).stride() > 0 && p.dim(1).stride() == p.dim(0).extent();
 }
 
-// A boundary condition, without likelies that cause loop partitioning.
 Func constant_exterior_tensor(
     Func t, Expr exterior,
     Expr min_c, Expr extent_c,
@@ -82,7 +82,6 @@ Expr round_shift_right(const Expr &x, const Expr &exponent) {
     return (x >> uexponent) + (remainder > threshold);
 }
 
-// The tflite function of the same name performs a left shift.
 Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
     return round_shift_right(multiply_2x_high(x, q), shift);
 }

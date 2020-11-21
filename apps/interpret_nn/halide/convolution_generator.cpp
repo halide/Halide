@@ -85,13 +85,13 @@ public:
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), c("c"), b("b");
 
-        // Add a "zero" boundary condition to x and y dimensions of the input.
-        Func input_bounded = constant_exterior_tensor(input_, input_offset_);
+        // Add a "zero" boundary condition to the input.
+        Func input_bounded("input_bounded");
+        input_bounded(c, x, y, b) = constant_exterior(input_, input_offset_)(c, x, y, b);
         // And to c of the filter. This lets us align the inner reduction loop
         // however we want.
         Func filter_bounded =
-            constant_exterior(filter_, filter_offset_,
-                              {{filter_.dim(0).min(), filter_.dim(0).extent()}});
+            constant_exterior(filter_, filter_offset_, {{filter_.dim(0).min(), filter_.dim(0).extent()}});
 
         // Align the reduction loop of filter.
         int vector_reduction = get_vector_reduction_factor(get_target(), UInt(8));
@@ -165,6 +165,7 @@ public:
         interpret_as_tensor(filter_);
         interpret_as_tensor(bias_);
         interpret_as_tensor(output_);
+        require_same_extent_b(input_, output_);
 
         output_.compute_root();
 
@@ -195,7 +196,8 @@ public:
                 .specialize(output_channels >= tile_c * vector_size && output_width >= tile_x)
                 .tile(c, x, co, xo, c, x, tile_c * vector_size, tile_x, TailStrategy::ShiftInwards)
                 .reorder(c, x, co, xo, y, b)
-                .vectorize(c, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf)
+                .vectorize(c, natural_vector_size<uint8_t>() / 2, TailStrategy::GuardWithIf)
+                .unroll(x)
                 .unroll(c);
         }
 
