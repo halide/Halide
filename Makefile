@@ -1904,6 +1904,7 @@ TEST_APPS=\
 	fft \
 	hist \
 	interpolate \
+	interpret_nn \
 	lens_blur \
 	linear_algebra \
 	local_laplacian \
