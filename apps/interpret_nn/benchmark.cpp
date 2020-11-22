@@ -2,6 +2,8 @@
 #include <fstream>
 #include <iostream>
 
+#include "HalideRuntime.h"
+
 #include "error_util.h"
 #include "file_util.h"
 #include "halide_benchmark.h"
@@ -28,6 +30,9 @@ void run_benchmark(const std::string &filename, const ScheduleOptions &options) 
     if (!options.trace) {
         auto result = Halide::Tools::benchmark([&]() { interpreter.execute(); });
         std::cout << "Time: " << result.wall_time * 1e6 << " us" << std::endl;
+
+        halide_profiler_report(nullptr);
+        halide_profiler_reset();
     } else {
         interpreter.execute();
     }
