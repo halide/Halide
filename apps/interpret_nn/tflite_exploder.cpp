@@ -28,6 +28,8 @@
 
 #include <fstream>
 #include <iostream>
+#include <sstream>
+#include <iomanip>
 #include <map>
 #include <string>
 #include <vector>
@@ -170,9 +172,10 @@ int main(int argc, char **argv) {
 
         fbb.Finish(model_offset, tflite::ModelIdentifier());
 
-        std::string outpath = output_dir + "/" + std::to_string(op_index) + "." + op_name + ".tflite";
-        std::cerr << "Writing to " << outpath << "\n";
-        write_entire_file(outpath, fbb.GetBufferPointer(), fbb.GetSize());
+        std::stringstream outpath;
+        outpath << output_dir << "/" << std::setfill('0') << std::setw(3) << op_index << "." << op_name << ".tflite";
+        std::cerr << "Writing to " << outpath.str() << "\n";
+        write_entire_file(outpath.str(), fbb.GetBufferPointer(), fbb.GetSize());
     }
 
     return 0;
