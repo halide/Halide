@@ -166,6 +166,8 @@ public:
         interpret_as_tensor(bias_);
         interpret_as_tensor(output_);
         require_same_min_extent(3, input_, output_);
+        require_same_min_extent(0, filter_, input_);
+        require_same_min_extent(3, filter_, 0, output_);
 
         output_.compute_root();
 
@@ -255,7 +257,7 @@ public:
         input_bounded.compute_at(output_, y)
             .store_in(MemoryType::Stack)
             .reorder(x, y, b, c)
-            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
+            .vectorize(c, vector_size * vector_reduction / 2, TailStrategy::GuardWithIf);
 
         // Pretranspose the filter, so we don't need to do it in the inner loop.
         // TODO: This gets recomputed often when the op is split up into small
