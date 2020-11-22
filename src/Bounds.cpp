@@ -1225,9 +1225,9 @@ private:
                                        !b_interval.min.type().is_uint() &&
                                        can_prove(b_interval.min < 0 &&
                                                  b_interval.min > -t.bits())) {
-                                // Left shift by a possibly negative value can only
+                                // Left shift by a possibly negative value can
                                 // decrease magnitude.
-                                if (can_prove(a_interval.min >= 0)) {
+                                if (a_interval.min.type().is_uint() || can_prove(a_interval.min >= 0)) {
                                     interval.min = a_interval.min >> abs(b_interval.min);
                                 } else if (can_prove(a_interval.min < 0)) {
                                     // Left shift of a negative number by 0 is possible.
