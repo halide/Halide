@@ -157,7 +157,9 @@ public:
 
         // Saturate and narrow the output.
         Expr output =
-            multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_) + output_offset_;
+            multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_);
+        // TODO: It might be wrong to narrow to 16 bits prior to adding the offset.
+        output = i16_sat(output) + output_offset_;
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule
