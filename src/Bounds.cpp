@@ -1225,7 +1225,14 @@ private:
                                        !b_interval.min.type().is_uint() &&
                                        can_prove(b_interval.min < 0 &&
                                                  b_interval.min > -t.bits())) {
-                                interval.min = a_interval.min >> abs(b_interval.min);
+                                // Left shift by a possibly negative value can only
+                                // decrease magnitude.
+                                if (can_prove(a_interval.min >= 0)) {
+                                    interval.min = a_interval.min >> abs(b_interval.min);
+                                } else {
+                                    // Left shift of a negative number by 0 is possible.
+                                    interval.min = a_interval.min;
+                                }
                             }
                             if (a_interval.has_upper_bound() &&
                                 b_interval.has_upper_bound() &&
@@ -3123,6 +3130,13 @@ void bounds_test() {
     check(scope, x & 4095, 0, 10);          // LHS known to be positive
     check(scope, x & 123, 0, 10);           // Doesn't have to be a precise bitmask
     check(scope, (x - 1) & 4095, 0, 4095);  // LHS could be -1
+
+    // Regression tests on shifts (produced by z3).
+    scope.push("x", Interval(-123, Interval::pos_inf()));
+    scope.push("y", Interval(-6, Interval::pos_inf()));
+    check(scope, x << y, -123, Interval::pos_inf()); // -123 << 0 = -123
+    scope.pop("y");
+    scope.pop("x");
 
     // If we clamp something unbounded as one type, the bounds should
     // propagate through casts whenever the cast can be proved to not
