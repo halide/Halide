@@ -44,6 +44,8 @@ public:
         // Schedule.
         interpret_as_tensor(input_);
         interpret_as_tensor(output_);
+        require_same_min_extent(0, input_, output_);
+        require_same_min_extent(3, input_, output_);
 
         // TODO: Optimize more.
         Expr output_channels = output_.dim(0).extent();

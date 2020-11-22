@@ -170,6 +170,7 @@ public:
         require_same_min_extent(3, input_, output_);
         require_same_min_extent(0, filter_, input_);
         require_same_min_extent(3, filter_, 0, output_);
+        require_same_min_extent(0, bias_, output_);
 
         output_.compute_root();
 

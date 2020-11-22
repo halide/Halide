@@ -97,6 +97,8 @@ public:
         interpret_as_tensor(bias_);
         interpret_as_tensor(output_);
         require_same_min_extent(3, input_, output_);
+        require_same_min_extent(0, bias_, output_);
+        require_same_min_extent(0, filter_, output_);
         output_.dim(0).set_min(input_.dim(0).min() * depth_multiplier_);
         output_.dim(0).set_extent(input_.dim(0).extent() * depth_multiplier_);
 
