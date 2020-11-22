@@ -1229,10 +1229,11 @@ private:
                                 // decrease magnitude.
                                 if (can_prove(a_interval.min >= 0)) {
                                     interval.min = a_interval.min >> abs(b_interval.min);
-                                } else {
+                                } else if (can_prove(a_interval.min < 0)) {
                                     // Left shift of a negative number by 0 is possible.
                                     interval.min = a_interval.min;
                                 }
+                                // TODO: Are there any other cases we can handle here?
                             }
                             if (a_interval.has_upper_bound() &&
                                 b_interval.has_upper_bound() &&
