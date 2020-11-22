@@ -768,6 +768,7 @@ signature follows:
 add_halide_library(<target> FROM <generator-target>
                    [GENERATOR generator-name]
                    [FUNCTION_NAME function-name]
+                   [NAMESPACE cpp-namespace]
                    [USE_RUNTIME hl-target]
                    [PARAMS param1 [param2 ...]]
                    [TARGETS target1 [target2 ...]]
@@ -790,6 +791,11 @@ one time, using command line arguments derived from the other parameters.
 
 The arguments `GENERATOR` and `FUNCTION_NAME` default to `<target>`. They
 correspond to the `-g` and `-f` command line flags, respectively.
+
+`NAMESPACE` is syntactic sugar to specify the C++ namespace (if any) of the
+generated function; you can also specify the C++ namespace (if any) directly
+in the `FUNCTION_NAME` argument, but for repeated declarations or very long
+namespaces, specifying this separately can provide more readable build files.
 
 If `USE_RUNTIME` is not specified, this function will create another target
 called `<target>.runtime` which corresponds to running the generator with `-r`
