@@ -199,8 +199,9 @@ public:
             output_
                 .specialize(output_channels >= tile_c * vector_size && output_width >= tile_x)
                 .tile(c, x, co, xo, c, x, tile_c * vector_size, tile_x, TailStrategy::ShiftInwards)
-                .reorder(c, x, co, xo, y, b)
-                .vectorize(c, natural_vector_size<uint8_t>() / 2, TailStrategy::GuardWithIf)
+                .split(c, c, ci, natural_vector_size<int16_t>())
+                .reorder(ci, x, c, co, xo, y, b)
+                .vectorize(ci)
                 .unroll(x)
                 .unroll(c);
         }
@@ -251,15 +252,17 @@ public:
         sum_input.update()
             .reorder(x, r.z, r.x, r.y, y, b)
             .atomic()
-            .vectorize(r.z, vector_size * vector_reduction, TailStrategy::GuardWithIf)
-            .unroll(x);
+            .vectorize(r.z, vector_reduction)
+            .vectorize(x);
 
         // TODO: We only need this (and the boundary condition on c) when
         // filter.dim(0).extent() % 4 != 0 :(
+        // TODO: Specializing for 3 channels is lame.
         input_bounded.compute_at(output_, y)
             .store_in(MemoryType::Stack)
             .reorder(x, y, b, c)
-            .vectorize(c, vector_size * vector_reduction / 2, TailStrategy::GuardWithIf);
+            .vectorize(c, vector_size * vector_reduction / 2, TailStrategy::GuardWithIf)
+            .specialize(input_.dim(0).extent() == 3);
 
         // Pretranspose the filter, so we don't need to do it in the inner loop.
         // TODO: This gets recomputed often when the op is split up into small
