@@ -48,35 +48,35 @@ $(GENERATOR_BIN)/%.generator: halide/%_generator.cpp $(GENERATOR_BIN)/common_hal
 
 $(BIN)/%/add_uint8_uint8.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
-	$< -g Add -f interpret_nn::add_uint8_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g Add -f interpret_nn::add_uint8_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling
 
 $(BIN)/%/average_pool_uint8.a: $(GENERATOR_BIN)/average_pool.generator
 	@mkdir -p $(@D)
-	$< -g AveragePool -f interpret_nn::average_pool_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g AveragePool -f interpret_nn::average_pool_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling
 
 $(BIN)/%/convolution_uint8.a: $(GENERATOR_BIN)/convolution.generator
 	@mkdir -p $(@D)
-	$< -g Convolution -f interpret_nn::convolution_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g Convolution -f interpret_nn::convolution_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling
 
 $(BIN)/%/depthwise_convolution_uint8.a: $(GENERATOR_BIN)/depthwise_convolution.generator
 	@mkdir -p $(@D)
-	$< -g DepthwiseConvolution -f interpret_nn::depthwise_convolution_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g DepthwiseConvolution -f interpret_nn::depthwise_convolution_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling
 
 $(BIN)/%/depthwise_convolution_uint8_broadcast.a: $(GENERATOR_BIN)/depthwise_convolution.generator
 	@mkdir -p $(@D)
-	$< -g DepthwiseConvolution broadcast_channels=true -f interpret_nn::depthwise_convolution_uint8_broadcast -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g DepthwiseConvolution broadcast_channels=true -f interpret_nn::depthwise_convolution_uint8_broadcast -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling
 
 $(BIN)/%/fully_connected_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
 	@mkdir -p $(@D)
-	$< -g FullyConnected -f interpret_nn::fully_connected_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g FullyConnected -f interpret_nn::fully_connected_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling
 
 $(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/max_pool.generator
 	@mkdir -p $(@D)
-	$< -g MaxPool -f interpret_nn::max_pool_uint8 -o $(BIN)/$* target=$*-no_runtime-c_plus_plus_name_mangling
+	$< -g MaxPool -f interpret_nn::max_pool_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
-	$< -r runtime -o $(BIN)/$* target=$*
+	$< -r runtime -o $(BIN)/$* target=$(HL_TARGET)
 
 OPS_HALIDE = \
 	$(BIN)/%/add_uint8_uint8.a \
