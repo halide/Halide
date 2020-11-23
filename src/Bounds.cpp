@@ -3140,18 +3140,17 @@ void bounds_test() {
     check(scope, (x - 1) & 4095, 0, 4095);  // LHS could be -1
 
     // Regression tests on shifts (produced by z3).
-    scope.push("x", Interval(-123, Interval::pos_inf()));
-    scope.push("y", Interval(-6, Interval::pos_inf()));
-    check(scope, x << y, -123, Interval::pos_inf()); // -123 << 0 = -123
-    scope.pop("y");
-    scope.pop("x");
-    scope.push("x", Interval(64, 255));
-    check(scope, cast<uint8_t>(x), u8(64), u8(255));
-    scope.push("y", Interval(-124, 4));
-    // 128 >> -2 = 0 (unsigned overflow is allowed)
-    check(scope, cast<uint8_t>(x) >> cast<int8_t>(y), u8(0), u8(255));
-    scope.pop("y");
-    scope.pop("x");
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, Interval::pos_inf()));
+        check(scope, x << y, -123, Interval::pos_inf()); // -123 << 0 = -123
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(64, 255));
+        ScopedBinding<Interval> yb(scope, "y", Interval(-124, 4));
+        // 128 >> -2 = 0 (unsigned overflow is allowed)
+        check(scope, cast<uint8_t>(x) >> cast<int8_t>(y), u8(0), u8(255));
+    }
 
     // If we clamp something unbounded as one type, the bounds should
     // propagate through casts whenever the cast can be proved to not
