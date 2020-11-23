@@ -599,13 +599,14 @@ private:
                                   {mutate(op->vectors[0]), mutate(op->vectors[1])},
                                   Call::PureExtern);
             }
-        } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
+        } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
+            string suffix = op->type.is_int()?"_i16":"_u16";
             if (op->slice_begin() < 5) {
-                return Call::make(op->type, "halide_xtensa_slice_start_" + std::to_string(op->slice_begin()) + "_i16",
+                return Call::make(op->type, "halide_xtensa_slice_start_" + std::to_string(op->slice_begin()) + suffix,
                                   {mutate(op->vectors[0])},
                                   Call::PureExtern);
             } else {
-                return Call::make(op->type, "halide_xtensa_slice_i16",
+                return Call::make(op->type, "halide_xtensa_slice" + suffix,
                                   {mutate(op->vectors[0]), op->slice_begin()},
                                   Call::PureExtern);
             }
@@ -1272,6 +1273,7 @@ public:
 Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
     s = align_loads(s, 64);
+    debug(0) << s << "\n";
     // NOTE(vksnk): CSE seemed to break loop carry
     // s = common_subexpression_elimination(s);
 

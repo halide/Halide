@@ -709,6 +709,10 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t int16x32_t_aligned_load(cons
     return *((const int16x32_t *)((int16_t*)base + offset));
 }
 
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x64_t uint16x64_t_aligned_load(const void *base, int32_t offset) {
+    return *((const uint16x64_t *)((uint16_t*)base + offset));
+}
+
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_load(const void *base, int32_t offset) {
     uint8x64_t r;
     xb_vec2Nx8U* ptr = (xb_vec2Nx8U*)((const uint8_t*)base + offset);
@@ -966,6 +970,27 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_4_i16(const int16x64_t
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_i16(const int16x64_t& a, int start) {
   return IVP_SELNX16(a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
 }
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_1_u16(const uint16x64_t& a) {
+  return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_1);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_2_u16(const uint16x64_t& a) {
+  return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_2);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_3_u16(const uint16x64_t& a) {
+  return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_3);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_4_u16(const uint16x64_t& a) {
+  return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_4);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_u16(const uint16x64_t& a, int start) {
+  return IVP_SELNX16U(a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
+}
+
 /*
 HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_deinterleave_even_i8(const int8x128_t& a) {
   return  IVP_SEL2NX8I(a.native_vector[1], a.native_vector[0], IVP_SELI_8B_EXTRACT_1_OF_2_OFF_0);
@@ -2421,10 +2446,10 @@ void CodeGen_Xtensa::visit(const For *op) {
     }
 
     // NOTE(vksnk): poor man's profiling below.
-    // if (current_loop_level == 1) {
-    //   stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
-    //   stream << get_indent() << "cycles_start = GetCycleCount();\n";
-    // }
+    if (current_loop_level == 1) {
+      stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
+      stream << get_indent() << "cycles_start = GetCycleCount();\n";
+    }
     // if (current_loop_level == 1) {
     //   stream << get_indent() << "cycles_start = GetCycleCount();\n";
     // }
@@ -2445,11 +2470,11 @@ void CodeGen_Xtensa::visit(const For *op) {
 
     close_scope("for " + print_name(op->name));
     // NOTE(vksnk): Second part of the poor man's profiling below.
-    // if (current_loop_level == 1) {
-    //   stream << get_indent() << "cycles_stop = GetCycleCount();\n";
-    //   stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
-    //   stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
-    // }
+    if (current_loop_level == 1) {
+      stream << get_indent() << "cycles_stop = GetCycleCount();\n";
+      stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
+      stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
+    }
     current_loop_level--;
 }
 
