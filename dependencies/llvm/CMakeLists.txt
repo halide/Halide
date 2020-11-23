@@ -75,6 +75,13 @@ endforeach ()
 set(wasm_libs "")
 if (TARGET_WEBASSEMBLY)
     find_package(LLD CONFIG REQUIRED HINTS "${LLVM_DIR}/../lld")
+
+    if (LLVM_LINK_LLVM_DYLIB AND NOT Halide_SHARED_LLVM)
+        message(FATAL_ERROR "LLVM was built with LLVM_LINK_LLVM_DYLIB. "
+                "Re-configure with Halide_SHARED_LLVM to enable WebAssembly, "
+                "or disable WebAssembly with TARGET_WEBASSEMBLY=OFF.")
+    endif ()
+
     set(wasm_libs lldWasm)
 endif ()
 
