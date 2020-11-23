@@ -1268,7 +1268,7 @@ private:
                                 can_prove(b_interval.max < 0 && b_interval.max > -t.bits());
                             if (a_interval.has_lower_bound()) {
                                 if (can_prove(a_interval.min >= 0) && b_max_ok_positive) {
-                                    if (a_interval.min.type().is_int() && t.bits() >= 32) {
+                                    if (a_interval.min.type().is_int() && t.bits() > 16) {
                                         // Overflow is UB.
                                         interval.min = a_interval.min >> b_interval.max;
                                     } else if (a_interval.min.type().is_int_or_uint()) {
