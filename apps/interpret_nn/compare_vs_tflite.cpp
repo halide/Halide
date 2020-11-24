@@ -239,8 +239,8 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
             CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
             CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
         }
-        uint64_t diffs = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf);
-        if (diffs == 0) {
+        CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, CompareBuffersOptions());
+        if (r.ok) {
             if (verbose) {
                 std::cout << "MATCHING output " << i << " is:\n";
                 dynamic_type_dispatch<DumpBuffer>(halide_buf.type(), halide_buf);

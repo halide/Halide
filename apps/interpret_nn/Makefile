@@ -157,7 +157,7 @@ $(BIN)/%/depthwise_conv2d_test: test/depthwise_conv2d_test.cpp $(BIN)/%/model.o 
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-build_test_ops: $(BIN)/$(HL_TARGET)/add_test $(BIN)/$(HL_TARGET)/average_pool_test $(BIN)/$(HL_TARGET)/depthwise_conv2d_test
+build_test_ops: $(BIN)/$(HL_TARGET)/add_test $(BIN)/$(HL_TARGET)/average_pool_test $(BIN)/$(HL_TARGET)/conv2d_test $(BIN)/$(HL_TARGET)/depthwise_conv2d_test
 
 test_ops: build_test_ops
 	$(BIN)/$(HL_TARGET)/add_test

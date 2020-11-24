@@ -1,47 +1,7 @@
 #include "op_test_helper.h"
 
-#include "common_reference.h"
-
 namespace interpret_nn {
 namespace {
-
-using interpret_nn::multiply_quantized;
-
-struct QuantizedMulAndShift {
-    int multiplier, shift;
-};
-
-// Adapted from tflite
-QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier) {
-    if (double_multiplier == 0.) {
-        return {0, 0};
-    }
-
-    int shift = 0;
-    const double q = std::frexp(double_multiplier, &shift);
-    int64_t q_fixed = (int64_t)std::round(q * (1LL << 31));
-    assert(q_fixed <= (1LL << 31));
-
-    if (q_fixed == (1LL << 31)) {
-        q_fixed /= 2;
-        ++shift;
-    }
-    assert(q_fixed <= std::numeric_limits<int32_t>::max());
-
-    if (shift < -31) {
-        shift = 0;
-        q_fixed = 0;
-    }
-    return {(int)q_fixed, shift};
-}
-
-// Adapted from tflite
-QuantizedMulAndShift get_quantized_mul_and_shift_smaller_than_one(double double_multiplier) {
-    assert(double_multiplier >= 0.0 && double_multiplier < 1.0);
-    auto result = get_quantized_mul_and_shift(double_multiplier);
-    assert(result.shift <= 0);
-    return result;
-}
 
 template<typename T>
 struct Conv2D_ReferenceOp : public op_test::ReferenceOp {
@@ -79,7 +39,7 @@ struct Conv2D_ReferenceOp : public op_test::ReferenceOp {
                std::min(input_product_scale, (double)bias_scale) * 1e-6);
 
         const double output_multiplier = input_product_scale / output_scale;
-        const auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(output_multiplier);
+        // const auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(output_multiplier);
 
         const int input_depth = input_buf.dim(0).extent();
         const int input_width = input_buf.dim(1).extent();
@@ -105,7 +65,7 @@ struct Conv2D_ReferenceOp : public op_test::ReferenceOp {
 
         const auto out_range = op_test::get_output_range<T>(activation, out);
         output_buf.for_each_element([&](int output_c, int x, int y, int b) {
-            int32_t output_value = bias_buf(output_c);
+            double output_value = bias_buf(output_c);
 
             for (int filter_y = 0; filter_y < filter_height; filter_y++) {
                 for (int filter_x = 0; filter_x < filter_width; filter_x++) {
@@ -113,20 +73,20 @@ struct Conv2D_ReferenceOp : public op_test::ReferenceOp {
                         const int x_offset = x * stride[0] + filter_x * dilation[0];
                         const int y_offset = y * stride[1] + filter_y * dilation[1];
                         const bool is_inside = ((x_offset >= 0) && (x_offset < input_width) && (y_offset >= 0) && (y_offset < input_height));
-                        const int32_t input_value = is_inside ? (int32_t)input_buf(input_c, x_offset, y_offset, b) - input_offset : 0;
-                        const int32_t filter_value = (int32_t)filter_buf(input_c, filter_x, filter_y, output_c) - filter_offset;
+                        const double input_value = is_inside ? (double)input_buf(input_c, x_offset, y_offset, b) - input_offset : 0;
+                        const double filter_value = (double)filter_buf(input_c, filter_x, filter_y, output_c) - filter_offset;
                         output_value += input_value * filter_value;
+                        // TODO: do we need to use std::round here too?
                     }
                 }
             }
 
-            // It's tricky to get the rounding to match precisely if we use FP math to implement
-            // an integer version of Conv2D; for now, we just replicate the shift-and-add behavior
-            // in our reference. This will need attention when we add more variants of this op.
-            // output_value *= output_multiplier;
-            output_value = multiply_quantized(output_value, output_mul_and_shift.multiplier, -output_mul_and_shift.shift);
+            output_value *= output_multiplier;
             output_value += output_offset;
-            const int32_t clamped_output = std::min((int32_t)out_range.max, std::max((int32_t)out_range.min, output_value));
+            if (std::is_integral<T>::value) {
+                output_value = std::round(output_value);
+            }
+            const double clamped_output = std::min((double)out_range.max, std::max((double)out_range.min, output_value));
             output_buf(output_c, x, y, b) = (T)(clamped_output);
         });
     }

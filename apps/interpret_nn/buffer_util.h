@@ -61,38 +61,106 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args)
 #undef HANDLE_CASE
 }
 
+struct CompareBuffersOptions {
+    // Threshold at which values are an 'exact' match.
+    // For integral types this should always be 0.0.
+    // For FP types it should be a small epsilon.
+    double exact_thresh = 0.0;
+    // Threshold at which values are 'close enough' to be considered ok
+    // some part of the time.
+    // For integral types this should always be 1.0.
+    // For FP types it should be an epsilon.
+    double close_thresh = 1.0;
+    // What percentage (0..1) of elements in the result can be off by
+    // more than exact_thresh (but <= close_thresh) and still have the
+    // result be considered correct.
+    double max_close_percent = 0.001; // 0.1% by default. TODO: tweak as needed
+    // If true, log info about failures to stderr.
+    // If false, log nothing, stay silent.
+    bool verbose = true;
+};
+
+struct CompareBuffersResult {
+    uint64_t num_close = 0;
+    uint64_t num_wrong = 0;
+    bool ok = true;
+};
+
 // Functor for use with dynamic_type_dispatch() to compare two buffers.
-// Assumes that the buffers have the same type and same shape.
-// TODO: assert-fails if type mismatch, but doesn't check shape.
+// Requires that the buffers have the same type and same shape (ignoring strides);
+// type/shape mismatch will check-fail immediately.
 template<typename T>
 struct CompareBuffers {
-    uint64_t operator()(const Halide::Runtime::Buffer<const void> &expected_buf_dynamic,
-                        const Halide::Runtime::Buffer<const void> &actual_buf_dynamic) {
+    CompareBuffersResult operator()(const Halide::Runtime::Buffer<const void> &expected_buf_dynamic,
+                                    const Halide::Runtime::Buffer<const void> &actual_buf_dynamic,
+                                    const CompareBuffersOptions &opts) {
         Halide::Runtime::Buffer<const T> expected_buf = expected_buf_dynamic;
         Halide::Runtime::Buffer<const T> actual_buf = actual_buf_dynamic;
-        uint64_t diffs = 0;
-        constexpr uint64_t max_diffs_to_show = 32;
-        expected_buf.for_each_element([&](const int *pos) {
-            T expected_buf_val = expected_buf(pos);
-            T actual_buf_val = actual_buf(pos);
-            // TODO: this is terrible, we should compare with some threshold instead of equality
-            if (expected_buf_val != actual_buf_val) {
-                diffs++;
-                if (diffs > max_diffs_to_show) {
-                    return;
-                }
-                std::cerr << "*** Mismatch at (";
-                for (int i = 0; i < expected_buf.dimensions(); ++i) {
-                    if (i > 0) std::cerr << ", ";
-                    std::cerr << pos[i];
-                }
-                std::cerr << "): expected " << 0 + expected_buf_val << " actual " << 0 + actual_buf_val << "\n";
-            }
-        });
-        if (diffs > max_diffs_to_show) {
-            std::cerr << "(" << (diffs - max_diffs_to_show) << " diffs suppressed)\n";
+        CHECK(expected_buf.dimensions() == actual_buf.dimensions());
+        for (int d = 0; d < expected_buf.dimensions(); d++) {
+            CHECK(expected_buf.dim(d).min() == actual_buf.dim(d).min());
+            CHECK(expected_buf.dim(d).extent() == actual_buf.dim(d).extent());
         }
-        return diffs;
+
+        assert(opts.exact_thresh >= 0.0);
+        assert(opts.close_thresh >= opts.exact_thresh);
+        assert(opts.max_close_percent >= 0.0 && opts.max_close_percent <= 1.0);
+        const T exact_thresh = (T)opts.exact_thresh;
+        const T close_thresh = (T)opts.close_thresh;
+
+        const uint64_t max_close = std::ceil(expected_buf.number_of_elements() * opts.max_close_percent);
+        constexpr uint64_t kMaxToLog = 32;  // somewhat arbitrary
+
+        const auto do_compare = [&](bool verbose) -> CompareBuffersResult {
+            CompareBuffersResult r;
+            expected_buf.for_each_element([&](const int *pos) {
+                T expected = expected_buf(pos);
+                T actual = actual_buf(pos);
+                T diff = (expected > actual) ? (expected - actual) : (actual - expected);
+                if (diff > close_thresh) {
+                    bool do_log = verbose;
+                    const char *msg;
+                    if (diff > exact_thresh) {
+                        r.num_wrong++;
+                        do_log &= (r.num_wrong < kMaxToLog);
+                        msg = "WRONG";
+                    } else {
+                        r.num_close++;
+                        do_log &= (r.num_close < kMaxToLog);
+                        msg = "Inexact";
+                    }
+                    if (do_log) {
+                        std::cerr << "*** " << msg << " at (";
+                        for (int i = 0; i < expected_buf.dimensions(); ++i) {
+                            if (i > 0) std::cerr << ", ";
+                            std::cerr << pos[i];
+                        }
+                        std::cerr << "): expected " << 0 + expected << " actual " << 0 + actual << " diff " << 0 + diff << "\n";
+                    }
+                }
+            });
+            return r;
+        };
+
+        CompareBuffersResult r = do_compare(false);
+        if (r.num_wrong > 0 || r.num_close >= max_close) {
+            r.ok = false;
+        }
+        if (opts.verbose) {
+            if (r.num_wrong > 0 || r.num_close > max_close) {
+                // Run again just to log the diffs
+                std::cerr << "*** TOO MANY WRONG/INEXACT ELEMENTS (wrong " << r.num_wrong
+                          << ", close " << r.num_close << " vs " << max_close << "):\n";
+                (void)do_compare(true);
+            }
+            if (r.num_wrong > kMaxToLog) {
+                std::cerr << "(" << (r.num_wrong - kMaxToLog) << " wrong values omitted)\n";
+            }
+            if (r.num_close > kMaxToLog) {
+                std::cerr << "(" << (r.num_close - kMaxToLog) << " inexact values omitted)\n";
+            }
+        }
+        return r;
     }
 };
 

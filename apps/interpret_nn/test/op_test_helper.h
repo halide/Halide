@@ -89,12 +89,14 @@ struct TestCase {
     std::unique_ptr<ReferenceOp> reference_op;
     std::unique_ptr<Op> actual_op;
     std::function<void()> reset_tensors_fn;
+    CompareBuffersOptions compare_opts;
 };
 
 struct TestCaseFactory {
 protected:
     std::vector<std::shared_ptr<Tensor>> tensors;
     std::vector<TensorInitFn> tensor_init_fns;
+    int num_failures = 0;
 
     static void fill_tensor_with_random(Tensor &t, int seed) {
         auto buf = t.data<void>();
@@ -209,23 +211,26 @@ protected:
                 CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
                 CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
             }
-            uint64_t diffs = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf);
-            if (diffs == 0) {
+            CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, test->compare_opts);
+            if (r.ok) {
                 if (verbose) {
                     std::cout << "MATCHING output " << i << " is:\n";
                     dynamic_type_dispatch<DumpBuffer>(halide_buf.type(), halide_buf);
                 }
+            } else {
+                num_failures++;
             }
         }
 
-        return true;
+        return true;  // keep going
     }
 
 public:
-    void run_all_tests(int seed, bool verbose = false) {
+    int run_all_tests(int seed, bool verbose = false) {
         while (run_next_test(seed, verbose)) {
             // nothing
         }
+        return num_failures;
     }
 
     virtual std::unique_ptr<op_test::TestCase> get_next_test() = 0;
@@ -251,10 +256,7 @@ int op_test_main(int argc, char **argv, TestCaseFactory &factory) {
 
     std::cout << "Using random seed: " << seed << "\n";
 
-    factory.run_all_tests(seed, verbose);
-
-    std::cout << "Done!\n";
-    return 0;
+    return factory.run_all_tests(seed, verbose);
 }
 
 }  // namespace op_test
