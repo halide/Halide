@@ -7,7 +7,7 @@
 // Accepted values for subroutine are:
 //    L1: scal, copy, axpy, dot, nrm2
 //    L2: gemv_notrans, gemv_trans
-//    L3: gemm_notrans, gemm_trans_A, gemm_trans_B, gemm_trans_AB
+//    L3: gemm_notrans, gemm_transA, gemm_transB, gemm_transAB
 //
 
 #include "cblas.h"

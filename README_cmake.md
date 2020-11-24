@@ -540,11 +540,11 @@ but we require it when authoring new code in the Halide repo.
 
 Finally, we use [`find_package`][find_package] to locate Halide on your system.
 If Halide is not globally installed, you will need to add the root of the Halide
-installation directory to [`CMAKE_MODULE_PATH`][cmake_module_path] at the CMake
+installation directory to [`CMAKE_PREFIX_PATH`][cmake_prefix_path] at the CMake
 command line.
 
 ```
-dev@ubuntu:~/myproj$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MODULE_PATH="/path/to/Halide-install" -S . -B build
+dev@ubuntu:~/myproj$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/path/to/Halide-install" -S . -B build
 ```
 
 ## JIT mode
@@ -768,6 +768,7 @@ signature follows:
 add_halide_library(<target> FROM <generator-target>
                    [GENERATOR generator-name]
                    [FUNCTION_NAME function-name]
+                   [NAMESPACE cpp-namespace]
                    [USE_RUNTIME hl-target]
                    [PARAMS param1 [param2 ...]]
                    [TARGETS target1 [target2 ...]]
@@ -790,6 +791,11 @@ one time, using command line arguments derived from the other parameters.
 
 The arguments `GENERATOR` and `FUNCTION_NAME` default to `<target>`. They
 correspond to the `-g` and `-f` command line flags, respectively.
+
+`NAMESPACE` is syntactic sugar to specify the C++ namespace (if any) of the
+generated function; you can also specify the C++ namespace (if any) directly
+in the `FUNCTION_NAME` argument, but for repeated declarations or very long
+namespaces, specifying this separately can provide more readable build files.
 
 If `USE_RUNTIME` is not specified, this function will create another target
 called `<target>.runtime` which corresponds to running the generator with `-r`
@@ -1142,8 +1148,8 @@ guidelines you should follow when writing a new app.
   https://cmake.org/cmake/help/latest/variable/CMAKE_MAKE_PROGRAM.html
 [cmake_minimum_required]:
   https://cmake.org/cmake/help/latest/command/cmake_minimum_required.html
-[cmake_module_path]:
-  https://cmake.org/cmake/help/latest/variable/CMAKE_MODULE_PATH.html
+[cmake_prefix_path]:
+  https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html
 [cmake_sizeof_void_p]:
   https://cmake.org/cmake/help/latest/variable/CMAKE_SIZEOF_VOID_P.html
 [cmake_source_dir]:
