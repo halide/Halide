@@ -80,16 +80,26 @@ Expr lift_elementwise_broadcasts(Type type, const std::string &name, std::vector
     if (type.lanes() == 1) {
         return Expr();
     }
+    int lanes = 0;
     for (Expr &i : args) {
-        const Broadcast *b = i.as<Broadcast>();
-        if (b) {
+        if (const Broadcast *b = i.as<Broadcast>()) {
             i = b->value;
+            if (lanes == 0) {
+                lanes = i.type().lanes();
+            } else if (lanes != i.type().lanes()) {
+                // This is a broadcast of another vector, and does not match another vector argument.
+                return Expr();
+            }
         } else if (!i.type().is_scalar()) {
             // This is not a scalar or broadcasted scalar, we can't lift broadcasts.
             return Expr();
         }
     }
-    return Broadcast::make(Call::make(type.with_lanes(1), name, args, call_type), type.lanes());
+    if (lanes != type.lanes()) {
+        return Broadcast::make(Call::make(type.with_lanes(lanes), name, args, call_type), type.lanes() / lanes);
+    } else {
+        return Expr();
+    }
 }
 
 }  // namespace
@@ -113,9 +123,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                op->is_intrinsic(Call::count_trailing_zeros)) {
         Expr a = mutate(op->args[0], nullptr);
 
-        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
-        if (scalar.defined()) {
-            return mutate(scalar, bounds);
+        Expr unbroadcasted = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (unbroadcasted.defined()) {
+            return mutate(unbroadcasted, bounds);
         }
 
         uint64_t ua = 0;
@@ -153,9 +163,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return a;
         }
 
-        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
-        if (scalar.defined()) {
-            return mutate(scalar, bounds);
+        Expr unbroadcasted = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcasted.defined()) {
+            return mutate(unbroadcasted, bounds);
         }
 
         const Type t = op->type;
@@ -212,9 +222,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
 
-        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
-        if (scalar.defined()) {
-            return mutate(scalar, bounds);
+        Expr unbroadcasted = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcasted.defined()) {
+            return mutate(unbroadcasted, bounds);
         }
 
         int64_t ia, ib = 0;
@@ -246,9 +256,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
 
-        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
-        if (scalar.defined()) {
-            return mutate(scalar, bounds);
+        Expr unbroadcasted = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcasted.defined()) {
+            return mutate(unbroadcasted, bounds);
         }
 
         int64_t ia, ib;
@@ -267,9 +277,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         Expr a = mutate(op->args[0], nullptr);
 
-        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
-        if (scalar.defined()) {
-            return mutate(scalar, bounds);
+        Expr unbroadcasted = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (unbroadcasted.defined()) {
+            return mutate(unbroadcasted, bounds);
         }
 
         int64_t ia;
@@ -287,9 +297,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
 
-        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
-        if (scalar.defined()) {
-            return mutate(scalar, bounds);
+        Expr unbroadcasted = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcasted.defined()) {
+            return mutate(unbroadcasted, bounds);
         }
 
         int64_t ia, ib;
@@ -329,9 +339,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         ExprInfo a_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
 
-        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
-        if (scalar.defined()) {
-            return mutate(scalar, bounds);
+        Expr unbroadcasted = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (unbroadcasted.defined()) {
+            return mutate(unbroadcasted, bounds);
         }
 
         Type ta = a.type();
@@ -365,9 +375,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr a = mutate(op->args[0], &a_bounds);
         Expr b = mutate(op->args[1], &b_bounds);
 
-        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
-        if (scalar.defined()) {
-            return mutate(scalar, bounds);
+        Expr unbroadcasted = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcasted.defined()) {
+            return mutate(unbroadcasted, bounds);
         }
 
         Type ta = a.type();
