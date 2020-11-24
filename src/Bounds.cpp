@@ -111,6 +111,16 @@ public:
     Bounds(const Scope<Interval> *s, const FuncValueBounds &fb, bool const_bound)
         : func_bounds(fb), const_bound(const_bound) {
         scope.set_containing_scope(s);
+
+        // Find any points that are single_points but fail is_single_point due to
+        // pointer equality checks and replace with single_points.
+        for (auto item = s->cbegin(); item != s->cend(); ++item) {
+            const Interval &item_interval = item.value();
+            if (!item_interval.is_single_point() && item_interval.is_bounded() &&
+                can_prove(item_interval.min == item_interval.max)) {
+                scope.push(item.name(), Interval::single_point(item_interval.min));
+            }
+        }
     }
 
 private:
@@ -379,7 +389,7 @@ private:
         } else if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min + b.min);
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
             if (a.has_lower_bound() && b.has_lower_bound()) {
                 interval.min = a.min + b.min;
             }
@@ -419,7 +429,7 @@ private:
         } else if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min - b.min);
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
             if (a.has_lower_bound() && b.has_upper_bound()) {
                 interval.min = a.min - b.max;
             }
@@ -493,7 +503,7 @@ private:
                 Expr cmp = b.min >= make_zero(b.min.type().element_of());
                 interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
             } else {
-                interval = Interval::everything();
+                bounds_of_type(op->type);
             }
         } else if (a.is_bounded() && b.is_bounded()) {
             interval = Interval::nothing();
@@ -502,7 +512,7 @@ private:
             interval.include(a.max * b.min);
             interval.include(a.max * b.max);
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
         }
 
         // Assume no overflow for float, int32, and int64
@@ -557,7 +567,7 @@ private:
                     interval.max = max(-a.min, a.max);
                 }
             } else {
-                interval = Interval::everything();
+                bounds_of_type(op->type);
             }
         } else if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -581,7 +591,7 @@ private:
                 Expr cmp = b.min > make_zero(b.min.type().element_of());
                 interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
             } else {
-                interval = Interval::everything();
+                bounds_of_type(op->type);
             }
         } else if (a.is_bounded()) {
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
@@ -618,7 +628,7 @@ private:
                 interval.include(a.max / b.max);
             }
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
         }
     }
 
@@ -1506,16 +1516,13 @@ private:
             // power. However it's extremely unlikely that a mul
             // reduce will ever make it into a bounds expression, so
             // for now we bail.
-            interval = Interval::everything();
+            bounds_of_type(op->value.type());
             break;
         case VectorReduce::Min:
         case VectorReduce::Max:
-            // The bounds of a single lane are sufficient
-            break;
         case VectorReduce::And:
         case VectorReduce::Or:
-            // Don't try for now
-            interval = Interval::everything();
+            // The bounds of a single lane are sufficient
             break;
         }
     }
