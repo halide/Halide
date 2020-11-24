@@ -101,33 +101,6 @@ void CodeGen_X86::visit(const Sub *op) {
     }
 }
 
-void CodeGen_X86::visit(const Mul *op) {
-
-#if LLVM_VERSION < 110
-    // Widening integer multiply of non-power-of-two vector sizes is
-    // broken in older llvms for older x86:
-    // https://bugs.llvm.org/show_bug.cgi?id=44976
-    const int lanes = op->type.lanes();
-    if (!target.has_feature(Target::SSE41) &&
-        (lanes & (lanes - 1)) &&
-        (op->type.bits() >= 32) &&
-        !op->type.is_float()) {
-        // Any fancy shuffles to pad or slice into smaller vectors
-        // just gets undone by LLVM and retriggers the bug. Just
-        // scalarize.
-        vector<Expr> result;
-        for (int i = 0; i < lanes; i++) {
-            result.emplace_back(Shuffle::make_extract_element(op->a, i) *
-                                Shuffle::make_extract_element(op->b, i));
-        }
-        codegen(Shuffle::make_concat(result));
-        return;
-    }
-#endif
-
-    return CodeGen_Posix::visit(op);
-}
-
 void CodeGen_X86::visit(const GT *op) {
     Type t = op->a.type();
 
@@ -291,13 +264,13 @@ void CodeGen_X86::visit(const Cast *op) {
          i16(rounding_shift_right(widening_multiply(wild_i16x_, wild_i16x_), 15))},
         // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
         {Target::AVX2, 32, 17, "pavgbx32",
-         u8(rounding_shift_right(widening_add(wild_u8x_, wild_u8x_), 1))},
+         rounding_halving_add(wild_u8x_, wild_u8x_)},
         {Target::FeatureEnd, 16, 0, "pavgbx16",
-         u8((widening_add(wild_u8x_, wild_u8x_) + 1) >> 1)},
+         rounding_halving_add(wild_u8x_, wild_u8x_)},
         {Target::AVX2, 16, 9, "pavgwx16",
-         u16((widening_add(wild_u16x_, wild_u16x_) + 1) >> 1)},
+         rounding_halving_add(wild_u16x_, wild_u16x_)},
         {Target::FeatureEnd, 8, 0, "pavgwx8",
-         u16((widening_add(wild_u16x_, wild_u16x_) + 1) >> 1)},
+         rounding_halving_add(wild_u16x_, wild_u16x_)},
         {Target::AVX2, 16, 9, "packssdwx16",
          i16_sat(wild_i32x_)},
         {Target::FeatureEnd, 8, 0, "packssdwx8",
@@ -370,6 +343,28 @@ void CodeGen_X86::visit(const Call *op) {
         }
         value = codegen(p);
         return;
+#if LLVM_VERSION < 110
+    } else if (op->is_intrinsic(Call::widening_multiply) && (op->type.is_int() || op->type.is_uint())) {
+        // Widening integer multiply of non-power-of-two vector sizes is
+        // broken in older llvms for older x86:
+        // https://bugs.llvm.org/show_bug.cgi?id=44976
+        const int lanes = op->type.lanes();
+        if (!target.has_feature(Target::SSE41) &&
+            (lanes & (lanes - 1)) &&
+            (op->type.bits() >= 32) &&
+            !op->type.is_float()) {
+            // Any fancy shuffles to pad or slice into smaller vectors
+            // just gets undone by LLVM and retriggers the bug. Just
+            // scalarize.
+            vector<Expr> result;
+            for (int i = 0; i < lanes; i++) {
+                result.emplace_back(Shuffle::make_extract_element(op->args[0], i) *
+                                    Shuffle::make_extract_element(op->args[1], i));
+            }
+            codegen(Shuffle::make_concat(result));
+            return;
+        }
+#endif
     }
 
     CodeGen_Posix::visit(op);

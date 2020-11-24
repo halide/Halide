@@ -1023,19 +1023,6 @@ Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) 
                                 args, Internal::Call::PureIntrinsic);
 }
 
-Expr widen(Expr a) {
-    return Cast::make(a.type().with_bits(a.type().bits() * 2), std::move(a));
-}
-
-Expr narrow(Expr a) {
-    return Cast::make(a.type().with_bits(a.type().bits() / 2), std::move(a));
-}
-
-Expr saturating_narrow(Expr a) {
-    Type narrow = a.type().with_bits(a.type().bits() / 2);
-    return Cast::make(narrow, max(min(std::move(a), narrow.max()), narrow.min()));
-}
-
 Expr widening_add(Expr a, Expr b) {
     match_lanes(a, b);
     internal_assert(a.type() == b.type());
@@ -1054,8 +1041,10 @@ Expr widening_subtract(Expr a, Expr b) {
     match_lanes(a, b);
     internal_assert(a.type() == b.type());
     Type wide_type = a.type().with_bits(a.type().bits() * 2);
-    // widening_subtract always produces signed result.
-    wide_type = wide_type.with_code(halide_type_int);
+    if (wide_type.is_uint()) {
+        // widening_subtract always produces signed result.
+        wide_type = wide_type.with_code(halide_type_int);
+    }
     return Call::make(wide_type, Call::widening_subtract, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
@@ -1079,10 +1068,6 @@ Expr saturating_subtract(Expr a, Expr b) {
     match_lanes(a, b);
     internal_assert(a.type() == b.type());
     return Call::make(a.type(), Call::saturating_subtract, {std::move(a), std::move(b)}, Call::PureIntrinsic);
-}
-
-Expr saturating_cast(Type t, Expr a) {
-    return Call::make(t, Call::saturating_cast, {std::move(a)}, Call::PureIntrinsic);
 }
 
 Expr halving_add(Expr a, Expr b) {

@@ -633,7 +633,6 @@ const char *const intrinsic_op_names[] = {
     "rounding_shift_left",
     "rounding_shift_right",
     "saturating_add",
-    "saturating_cast",
     "saturating_subtract",
     "select_mask",
     "shift_left",
