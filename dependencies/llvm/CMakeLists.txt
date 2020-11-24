@@ -76,10 +76,14 @@ set(wasm_libs "")
 if (TARGET_WEBASSEMBLY)
     find_package(LLD CONFIG REQUIRED HINTS "${LLVM_DIR}/../lld")
 
+    # LLVM has a mis-feature that allows it to build and export both static and shared libraries at the same
+    # time, while inconsistently linking its own static libraries (for lldWasm and others) to the shared library.
+    # Ignoring this causes Halide to link to both the static AND the shared LLVM libs and it breaks at runtime.
+    # From issue: https://github.com/halide/Halide/issues/5471
     if (LLVM_LINK_LLVM_DYLIB AND NOT Halide_SHARED_LLVM)
-        message(FATAL_ERROR "LLVM was built with LLVM_LINK_LLVM_DYLIB. "
-                "Re-configure with Halide_SHARED_LLVM to enable WebAssembly, "
-                "or disable WebAssembly with TARGET_WEBASSEMBLY=OFF.")
+        message(FATAL_ERROR "LLD was linked to shared LLVM (see: LLVM_LINK_LLVM_DYLIB), "
+                "but static LLVM was requested. Re-configure with Halide_SHARED_LLVM=YES "
+                "to enable WebAssembly, or disable WebAssembly with TARGET_WEBASSEMBLY=OFF.")
     endif ()
 
     set(wasm_libs lldWasm)
