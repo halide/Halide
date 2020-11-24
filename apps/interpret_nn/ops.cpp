@@ -1,9 +1,9 @@
 #include "ops.h"
 #include "error_util.h"
 
+#include <atomic>
 #include <cmath>
 #include <iostream>
-#include <atomic>
 
 #include "add_uint8_uint8.h"
 #include "average_pool_uint8.h"
@@ -411,10 +411,10 @@ void Conv2DOp::execute(const Box &crop) {
 
         CHECK(
             0 == convolution_uint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
-                                  (uint8_t)filter_offset, stride_[0], stride_[1],
-                                  dilation_[0], dilation_[1], output_multiplier,
-                                  output_shift, (uint8_t)output_offset,
-                                  output_range.min, output_range.max, guid_, output_buf));
+                                   (uint8_t)filter_offset, stride_[0], stride_[1],
+                                   dilation_[0], dilation_[1], output_multiplier,
+                                   output_shift, (uint8_t)output_offset,
+                                   output_range.min, output_range.max, guid_, output_buf));
     } else {
         CHECK(false);
     }

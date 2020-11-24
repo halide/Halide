@@ -268,7 +268,9 @@ public:
         // Pretranspose the filter, so we don't need to do it in the inner loop.
         // TODO: This gets recomputed often when the op is split up into small
         // pieces.
-        filter_tiled.compute_root().memoize()
+        filter_tiled
+            .compute_root()
+            .memoize()
             .reorder_storage(ci, c, co, x, y)
             .reorder(ci, c, x, y, co)
             .bound(ci, 0, vector_reduction)
