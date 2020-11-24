@@ -30,21 +30,32 @@ Expr saturating_narrow(Expr a) {
 struct Pattern {
     Expr pattern;
     Call::IntrinsicOp replacement;
-    bool enabled;
-
-    Pattern(Expr pattern, Call::IntrinsicOp replacement, bool enabled)
-        : pattern(pattern), replacement(replacement), enabled(enabled) {}
-    Pattern(Expr pattern, Call::IntrinsicOp replacement) : Pattern(pattern, replacement, true) {}
 };
 
 Expr apply_patterns(Type type, Expr x, const std::vector<Pattern> &patterns) {
     std::vector<Expr> matches;
     for (const Pattern &i : patterns) {
-        if (i.enabled && expr_match(i.pattern, x, matches)) {
+        if (expr_match(i.pattern, x, matches)) {
             return Call::make(type, i.replacement, matches, Call::PureIntrinsic);
         }
     }
     return Expr();
+}
+
+Expr find_and_subtract(const Expr &e, const Expr &term) {
+    if (const Add *add = e.as<Add>()) {
+        Expr a = find_and_subtract(add->a, term);
+        if (!a.same_as(add->a)) {
+            return Add::make(a, add->b);
+        }
+        Expr b = find_and_subtract(add->b, term);
+        if (!b.same_as(add->b)) {
+            return Add::make(add->a, b);
+        }
+    } else if (can_prove(e == term)) {
+        return make_zero(e.type());
+    }
+    return e;
 }
 
 // Perform peephole optimizations on the IR, adding appropriate
@@ -52,6 +63,19 @@ Expr apply_patterns(Type type, Expr x, const std::vector<Pattern> &patterns) {
 class PatternMatchIntrinsics : public IRMutator {
 protected:
     using IRMutator::visit;
+
+    IRMatcher::Wild<0> x;
+    IRMatcher::Wild<1> y;
+    IRMatcher::Wild<2> z;
+    IRMatcher::Wild<3> w;
+    IRMatcher::Wild<4> u;
+    IRMatcher::Wild<5> v;
+    IRMatcher::WildConst<0> c0;
+    IRMatcher::WildConst<1> c1;
+    IRMatcher::WildConst<2> c2;
+    IRMatcher::WildConst<3> c3;
+    IRMatcher::WildConst<4> c4;
+    IRMatcher::WildConst<5> c5;
 
     Expr visit(const Add *op) override {
         Expr a = mutate(op->a);
@@ -144,31 +168,53 @@ protected:
         if ((op->type.is_int() || op->type.is_uint()) && op->type.bits() > 1 && op->type.bits() <= 32) {
             Expr lower = op->type.min();
             Expr upper = op->type.max();
+/*
+            auto rewrite = IRMatcher::rewriter(IRMatcher::cast(op->type, value), op->type);
+            using IRMatcher::intrin;
+            if (rewrite(max(min(intrin(Call::widening_add, x, y), c1), c0), intrin(Call::saturating_add, x, y)) ||
+                rewrite(min(max(intrin(Call::widening_add, x, y), c0), c1), intrin(Call::saturating_add, x, y)) ||
+                rewrite(max(min(intrin(Call::widening_subtract, x, y), c1), c0), intrin(Call::saturating_subtract, x, y)) ||
+                rewrite(min(max(intrin(Call::widening_subtract, x, y), c0), c1), intrin(Call::saturating_subtract, x, y)) ||
+                // These are only correct for unsigned types.
+                rewrite(min(intrin(Call::widening_add, x, y), c1), intrin(Call::saturating_add, x, y), c1 == upper) ||
+                rewrite(max(intrin(Call::widening_subtract, x, y), c0), intrin(Call::saturating_subtract, x, y), c0 == lower) ||
 
+                // Averaging/halving add/subtract.
+                //rewrite(intrin(Call::widening_add, x, y) >> 1, intrin(Call::halving_add, x, y)) ||
+                //rewrite(intrin(Call::widening_subtract, x, y) >> 1, intrin(Call::halving_subtract, x, y)) ||
+                //{ widening_subtract(w, w) >> 1, Call::halving_subtract },
+                //{ rounding_shift_right(widening_add(w, w), 1), Call::rounding_halving_add },
+                // This is only correct for signed types.
+                //{ rounding_shift_right(widening_subtract(sw, sw), 1), Call::rounding_halving_subtract },
+                false) {
+                return rewrite.result;
+            }
+*/
             Expr w(Variable::make(op->type, "*"));
             Expr sw(Variable::make(op->type.with_code(halide_type_int), "*"));
             Expr uw(Variable::make(op->type.with_code(halide_type_uint), "*"));
 
             std::vector<Pattern> patterns = {
                 // Saturating add/subtract
-                { max(min(widening_add(w, w), upper), lower), Call::saturating_add },
-                { min(max(widening_add(w, w), lower), upper), Call::saturating_add },
-                { max(min(widening_subtract(w, w), upper), lower), Call::saturating_subtract },
-                { min(max(widening_subtract(w, w), lower), upper), Call::saturating_subtract },
+                Pattern{max(min(widening_add(w, w), upper), lower), Call::saturating_add},
+                Pattern{min(max(widening_add(w, w), lower), upper), Call::saturating_add},
+                Pattern{max(min(widening_subtract(w, w), upper), lower), Call::saturating_subtract},
+                Pattern{min(max(widening_subtract(w, w), lower), upper), Call::saturating_subtract},
                 // These are only correct for unsigned types.
-                { min(widening_add(uw, uw), upper), Call::saturating_add },
-                { max(widening_subtract(uw, uw), lower), Call::saturating_subtract },
+                Pattern{min(widening_add(uw, uw), upper), Call::saturating_add},
+                Pattern{max(widening_subtract(uw, uw), lower), Call::saturating_subtract},
 
                 // Averaging/halving add/subtract.
-                { widening_add(w, w) >> 1, Call::halving_add },
-                { widening_subtract(w, w) >> 1, Call::halving_subtract },
-                { rounding_shift_right(widening_add(w, w), 1), Call::rounding_halving_add },
+                Pattern{widening_add(w, w) >> 1, Call::halving_add},
+                Pattern{widening_subtract(w, w) >> 1, Call::halving_subtract},
+                Pattern{rounding_shift_right(widening_add(w, w), 1), Call::rounding_halving_add},
                 // This is only correct for signed types.
-                { rounding_shift_right(widening_subtract(sw, sw), 1), Call::rounding_halving_subtract },
+                Pattern{rounding_shift_right(widening_subtract(sw, sw), 1), Call::rounding_halving_subtract},
             };
 
             Expr result = apply_patterns(op->type, value, patterns);
             if (result.defined()) {
+                //internal_error << "expr_match worked but IRMatcher did not!\n" << Expr(op) << "\n" << result << "\n";
                 return result;
             }
         }
@@ -195,40 +241,13 @@ protected:
             }
             round = simplify(round);
 
-            Expr w(Variable::make(op->type, "*"));
-            Expr sw(Variable::make(op->type.with_code(halide_type_int), "*"));
-            Expr uw(Variable::make(op->type.with_code(halide_type_uint), "*"));
-
-            auto rounding_shift = [&](Expr a, Expr b) {
+            Expr a_less_round = find_and_subtract(a, round);
+            if (!a_less_round.same_as(a)) {
+                a_less_round = simplify(a_less_round);
                 if (op->is_intrinsic(Call::shift_right)) {
-                    return mutate(rounding_shift_right(a, b));
+                    return mutate(rounding_shift_right(a_less_round, b));
                 } else {
-                    return mutate(rounding_shift_left(b, b));
-                }
-            };
-
-            std::vector<Pattern> patterns = {
-                { widen(w) + round, rounding_shift(w, b) },
-                { w + round, rounding_shift(w, b) },
-            };
-
-            Expr result = apply_patterns(op->type, value, patterns);
-            if (result.defined()) {
-                return result;
-            }
-
-            if (const Add *add = a.as<Add>()) {
-                Expr add_a = add->a;
-                Expr add_b = add->b;
-                if (can_prove(add_a == round)) {
-                    std::swap(add_a, add_b);
-                }
-                if (can_prove(add_b == round)) {
-                    if (op->is_intrinsic(Call::shift_right)) {
-                        return mutate(rounding_shift_right(add_a, b));
-                    } else {
-                        return mutate(rounding_shift_left(add_a, b));
-                    }
+                    return mutate(rounding_shift_left(a_less_round, b));
                 }
             }
 
@@ -381,6 +400,7 @@ Expr lower_intrinsic(const Call *op) {
                                     Select::make(a_var < b_var, b_var - a_var, a_var - b_var)));
     } else {
         internal_error << "Unknown intrinsic " << op->name;
+        return Expr();
     }
 }
 
