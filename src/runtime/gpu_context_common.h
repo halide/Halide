@@ -146,7 +146,7 @@ struct GPUCompilationCache {
         release_context(user_context, false, context, f);
     }
 
-    template <typename FreeModuleT>
+    template<typename FreeModuleT>
     void release_all(void *user_context, FreeModuleT &f) {
         ScopedMutexLock lock_guard(&mutex);
 

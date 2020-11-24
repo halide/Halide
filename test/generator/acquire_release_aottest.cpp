@@ -142,7 +142,7 @@ bool run_test() {
 
 int main(int argc, char **argv) {
     if (!run_test()) {
-      return -1;
+        return -1;
     }
 
     if (!run_test()) {

@@ -3566,4 +3566,3 @@ WEAK halide_device_interface_t d3d12compute_device_interface = {
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
-
