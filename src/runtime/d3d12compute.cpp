@@ -2834,7 +2834,7 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
         }
 
         compilation_cache.delete_context(user_context, device, release_object<d3d12_library>);
-        
+
         // Release the device itself, if we created it.
         if (acquired_device == device) {
             release_object(&upload);

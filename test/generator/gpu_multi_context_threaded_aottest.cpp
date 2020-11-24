@@ -19,9 +19,10 @@ int main(int argc, char **argv) {
 #include <string.h>
 #include <thread>
 
+#include "gpu_context.h"
+
 #include "gpu_multi_add.h"
 #include "gpu_multi_mul.h"
-#include "gpu_context.h"
 
 using namespace Halide::Runtime;
 
@@ -145,7 +146,7 @@ void run_kernels_on_thread(gpu_context context1, bool destroy_when_done) {
         halide_device_release(&context2, device_interface);
         destroy_context(context2);
     }
- 
+
     // About to destroy context, so ensure allocations are freed first.
     buf1_in.device_free(&context1);
     buf1_result.device_free(&context1);
@@ -179,4 +180,4 @@ int main(int argc, char **argv) {
     printf("Success!\n");
     return 0;
 }
-#endif // !WIN32
+#endif  // !WIN32

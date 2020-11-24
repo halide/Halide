@@ -1,7 +1,7 @@
 #include "HalideRuntimeCuda.h"
-#include "gpu_context_common.h"
 #include "device_buffer_utils.h"
 #include "device_interface.h"
+#include "gpu_context_common.h"
 #include "mini_cuda.h"
 #include "printer.h"
 #include "scoped_mutex_lock.h"
@@ -471,7 +471,7 @@ WEAK bool validate_device_pointer(void *user_context, halide_buffer_t *buf, size
 }
 
 WEAK CUmodule compile_kernel(void *user_context, const char *ptx_src, int size) {
-   debug(user_context) << "CUDA: compile_kernel cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
+    debug(user_context) << "CUDA: compile_kernel cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
 
     CUjit_option options[] = {CU_JIT_MAX_REGISTERS};
     unsigned int max_regs_per_thread = 64;
@@ -496,7 +496,7 @@ WEAK CUmodule compile_kernel(void *user_context, const char *ptx_src, int size) 
     }
     return loaded_module;
 }
-  
+
 }  // namespace Cuda
 }  // namespace Internal
 }  // namespace Runtime

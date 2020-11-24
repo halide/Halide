@@ -549,7 +549,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     return err;
 }
 
-WEAK cl_program compile_kernel(void *user_context, ClContext ctx, const char*src, int size) {
+WEAK cl_program compile_kernel(void *user_context, ClContext ctx, const char *src, int size) {
     cl_int err = 0;
     cl_device_id dev;
 
@@ -752,7 +752,7 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         return halide_error_code_generic_error;
     }
     halide_assert(user_context, program != nullptr);
-    
+
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
@@ -1339,7 +1339,7 @@ WEAK const struct halide_device_interface_t *halide_opencl_device_interface() {
 
 namespace {
 WEAK __attribute__((destructor)) void halide_opencl_cleanup() {
-  compilation_cache.release_all(nullptr, clReleaseProgram);
+    compilation_cache.release_all(nullptr, clReleaseProgram);
     halide_opencl_device_release(nullptr);
 }
 }  // namespace

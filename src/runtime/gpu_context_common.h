@@ -1,9 +1,10 @@
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
-namespace Halide { namespace Internal {
-  
-template <typename ContextT, typename ModuleStateT>
+namespace Halide {
+namespace Internal {
+
+template<typename ContextT, typename ModuleStateT>
 struct GPUCompilationCache {
     struct CachedCompilation {
         ContextT context;
@@ -15,15 +16,15 @@ struct GPUCompilationCache {
 
     static constexpr float kLoadFactor = .5f;
     static constexpr int kInitialTableBits = 7;
-    int log2_compilations_size{0}; // number of bits in index into compilations table.
+    int log2_compilations_size{0};  // number of bits in index into compilations table.
     CachedCompilation *compilations{nullptr};
     int count{0};
 
     static constexpr uint32_t kInvalidId{0};
     static constexpr uint32_t kDeletedId{1};
 
-    uint32_t unique_id{2}; // zero is an invalid id
-  
+    uint32_t unique_id{2};  // zero is an invalid id
+
     static ALWAYS_INLINE uintptr_t kernel_hash(ContextT context, uint32_t id, uint32_t bits) {
         uintptr_t addr = (uintptr_t)context + id;
         // Fibonacci hashing. The golden ratio is 1.9E3779B97F4A7C15F39...
@@ -93,7 +94,7 @@ struct GPUCompilationCache {
         }
         return false;
     }
- 
+
     bool resize_table(int size_bits) {
         if (size_bits != log2_compilations_size) {
             int new_size = (1 << size_bits);
@@ -107,8 +108,8 @@ struct GPUCompilationCache {
             CachedCompilation *old_table = compilations;
             compilations = new_table;
             log2_compilations_size = size_bits;
- 
-            if (count > 0) { // Mainly to catch empty initial table case
+
+            if (count > 0) {  // Mainly to catch empty initial table case
                 for (int32_t i = 0; i < old_size; i++) {
                     if (old_table[i].kernel_id != kInvalidId &&
                         old_table[i].kernel_id != kDeletedId) {
@@ -121,7 +122,7 @@ struct GPUCompilationCache {
         return true;
     }
 
-    template <typename FreeModuleT>
+    template<typename FreeModuleT>
     void release_context(void *user_context, bool all, ContextT context, FreeModuleT &f) {
         if (count == 0) {
             return;
@@ -138,7 +139,7 @@ struct GPUCompilationCache {
         }
     }
 
-    template <typename FreeModuleT>
+    template<typename FreeModuleT>
     void delete_context(void *user_context, ContextT context, FreeModuleT &f) {
         ScopedMutexLock lock_guard(&mutex);
 
@@ -155,8 +156,8 @@ struct GPUCompilationCache {
         log2_compilations_size = 0;
     }
 
-    template <typename CompileModuleT, typename... Args>
-    bool kernel_state_setup(void * user_context, void **state_ptr,
+    template<typename CompileModuleT, typename... Args>
+    bool kernel_state_setup(void *user_context, void **state_ptr,
                             ContextT context, ModuleStateT &result,
                             CompileModuleT f,
                             Args... args) {
@@ -182,10 +183,10 @@ struct GPUCompilationCache {
 
         insert(context, *id_ptr, compiled_module);
         result = compiled_module;
-        
+
         return true;
     }
-
 };
 
-} }
+}  // namespace Internal
+}  // namespace Halide
