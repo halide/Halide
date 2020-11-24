@@ -74,6 +74,24 @@ int ctz64(uint64_t x) {
 #endif
 }
 
+// Rewrite name(broadcast(args)) to broadcast(name(args)).
+// Assumes that scalars are implicitly broadcasted.
+Expr lift_elementwise_broadcasts(Type type, const std::string &name, std::vector<Expr> args, Call::CallType call_type) {
+    if (type.lanes() == 1) {
+        return Expr();
+    }
+    for (Expr &i : args) {
+        const Broadcast *b = i.as<Broadcast>();
+        if (b) {
+            i = b->value;
+        } else if (!i.type().is_scalar()) {
+            // This is not a scalar or broadcasted scalar, we can't lift broadcasts.
+            return Expr();
+        }
+    }
+    return Broadcast::make(Call::make(type.with_lanes(1), name, args, call_type), type.lanes());
+}
+
 }  // namespace
 
 Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
@@ -94,6 +112,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                op->is_intrinsic(Call::count_leading_zeros) ||
                op->is_intrinsic(Call::count_trailing_zeros)) {
         Expr a = mutate(op->args[0], nullptr);
+
+        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (scalar.defined()) {
+            return mutate(scalar, bounds);
+        }
 
         uint64_t ua = 0;
         if (const_int(a, (int64_t *)(&ua)) || const_uint(a, &ua)) {
@@ -128,6 +151,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
         if (is_const_zero(b)) {
             return a;
+        }
+
+        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (scalar.defined()) {
+            return mutate(scalar, bounds);
         }
 
         const Type t = op->type;
@@ -184,6 +212,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
 
+        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (scalar.defined()) {
+            return mutate(scalar, bounds);
+        }
+
         int64_t ia, ib = 0;
         uint64_t ua, ub = 0;
         int bits;
@@ -213,6 +246,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
 
+        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (scalar.defined()) {
+            return mutate(scalar, bounds);
+        }
+
         int64_t ia, ib;
         uint64_t ua, ub;
         if (const_int(a, &ia) &&
@@ -229,6 +267,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         Expr a = mutate(op->args[0], nullptr);
 
+        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (scalar.defined()) {
+            return mutate(scalar, bounds);
+        }
+
         int64_t ia;
         uint64_t ua;
         if (const_int(a, &ia)) {
@@ -243,6 +286,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::bitwise_xor)) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
+
+        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (scalar.defined()) {
+            return mutate(scalar, bounds);
+        }
 
         int64_t ia, ib;
         uint64_t ua, ub;
@@ -281,6 +329,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         ExprInfo a_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
 
+        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (scalar.defined()) {
+            return mutate(scalar, bounds);
+        }
+
         Type ta = a.type();
         int64_t ia = 0;
         double fa = 0;
@@ -311,6 +364,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         ExprInfo a_bounds, b_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
         Expr b = mutate(op->args[1], &b_bounds);
+
+        Expr scalar = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (scalar.defined()) {
+            return mutate(scalar, bounds);
+        }
 
         Type ta = a.type();
         // absd() should enforce identical types for a and b when the node is created
