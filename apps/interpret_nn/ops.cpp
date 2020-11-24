@@ -608,6 +608,8 @@ void FullyConnectedOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out);
 
+        CHECK(false) << "FullyConnectedOp isn't complete yet and probably isn't correct.";
+
         CHECK(
             0 == fully_connected_uint8(
                      input_buf, filter_buf, bias_buf,
