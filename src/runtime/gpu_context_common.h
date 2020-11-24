@@ -41,11 +41,12 @@ struct GPUCompilationCache {
                 return false;
             }
         }
-        if (count++ > (1 << log2_compilations_size) * kLoadFactor) {
+        if ((count + 1) > (1 << log2_compilations_size) * kLoadFactor) {
             if (!resize_table(log2_compilations_size + 1)) {
                 return false;
             }
         }
+        count += 1;
         uintptr_t index = kernel_hash(context, id, log2_compilations_size);
         for (int i = 0; i < (1 << log2_compilations_size); i++) {
             uintptr_t effective_index = (index + i) & ((1 << log2_compilations_size) - 1);
@@ -69,6 +70,10 @@ struct GPUCompilationCache {
         uintptr_t index = kernel_hash(context, id, log2_compilations_size);
         for (int i = 0; i < (1 << log2_compilations_size); i++) {
             uintptr_t effective_index = (index + i) & ((1 << log2_compilations_size) - 1);
+
+            if (compilations[effective_index].kernel_id == kInvalidId) {
+                return false;
+            }
             if (compilations[effective_index].context == context &&
                 compilations[effective_index].kernel_id == id) {
                 module_state = &compilations[effective_index].module_state;
@@ -98,12 +103,12 @@ struct GPUCompilationCache {
                 // signal error.
                 return false;
             }
-            memset(new_table, 0, (1 << size_bits) * sizeof(CachedCompilation));
+            memset(new_table, 0, new_size * sizeof(CachedCompilation));
             CachedCompilation *old_table = compilations;
             compilations = new_table;
             log2_compilations_size = size_bits;
  
-            if (count > 0) { // MAinly to catch empty initial table case
+            if (count > 0) { // Mainly to catch empty initial table case
                 for (int32_t i = 0; i < old_size; i++) {
                     if (old_table[i].kernel_id != kInvalidId &&
                         old_table[i].kernel_id != kDeletedId) {
@@ -124,11 +129,10 @@ struct GPUCompilationCache {
 
         for (int i = 0; i < (1 << log2_compilations_size); i++) {
             if (compilations[i].kernel_id > kInvalidId &&
-                (all || compilations[i].context == context)) {
-                debug(user_context) << "Releasing cached compilation: " << compilations[i].module_state << "\n";
+                (all || (compilations[i].context == context))) {
                 f(compilations[i].module_state);
                 compilations[i].module_state = nullptr;
-                compilations[i].kernel_id = kInvalidId;
+                compilations[i].kernel_id = kDeletedId;
                 count--;
             }
         }
@@ -171,7 +175,7 @@ struct GPUCompilationCache {
 
         // TODO(zvookin): figure out the calling signature here...
         ModuleStateT compiled_module = f(args...);
-        debug(user_context) << "Caching compiled kernel: " << compiled_module << "\n";
+        debug(user_context) << "Caching compiled kernel: " << compiled_module << " id " << *id_ptr << " context " << context << "\n";
         if (compiled_module == nullptr) {
             return false;
         }

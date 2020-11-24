@@ -519,7 +519,7 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
 #endif
 
     CUmodule loaded_module;
-    if (!compilation_cache.kernel_state_setup(user_context, state_ptr, context, loaded_module,
+    if (!compilation_cache.kernel_state_setup(user_context, state_ptr, ctx.context, loaded_module,
                                               compile_kernel, user_context, ptx_src, size)) {
         return halide_error_code_generic_error;
     }
@@ -654,7 +654,7 @@ WEAK int halide_cuda_device_release(void *user_context) {
         << "CUDA: halide_cuda_device_release (user_context: " << user_context << ")\n";
 
     // If we haven't even loaded libcuda, don't load it just to quit.
-    if (!lib_cuda) {
+    if (!cuInit) {
         return 0;
     }
 
@@ -678,7 +678,7 @@ WEAK int halide_cuda_device_release(void *user_context) {
         // Dump the contents of the free list, ignoring errors.
         halide_cuda_release_unused_device_allocations(user_context);
 
-        compilation_cache.delete_context(user_context, context, cuModuleUnload);
+        compilation_cache.delete_context(user_context, ctx, cuModuleUnload);
 
         CUcontext old_ctx;
         cuCtxPopCurrent(&old_ctx);
@@ -842,12 +842,15 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
                             << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
         if (!from_host && to_host) {
             debug(user_context) << "cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+            copy_name = "cuMemcpyDtoH";
             err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (from_host && !to_host) {
             debug(user_context) << "cuMemcpyHtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+            copy_name = "cuMemcpyHtoD";
             err = cuMemcpyHtoD((CUdeviceptr)dst, (void *)src, c.chunk_size);
         } else if (!from_host && !to_host) {
             debug(user_context) << "cuMemcpyDtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+            copy_name = "cuMemcpyDtoD";
             err = cuMemcpyDtoD((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (dst != src) {
             debug(user_context) << "memcpy(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
@@ -1187,7 +1190,7 @@ WEAK const halide_device_interface_t *halide_cuda_device_interface() {
 }
 
 WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *minor) {
-    if (!lib_cuda) {
+    if (!lib_cuda && !cuInit) {
         // If cuda can't be found, we want to return 0, 0 and it's not
         // considered an error. So we should be very careful about
         // looking for libcuda without tripping any errors in the rest
