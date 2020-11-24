@@ -117,6 +117,7 @@ set(HEADER_FILES
     Parameter.h
     ParamMap.h
     PartitionLoops.h
+    PatternMatchIntrinsics.h
     Pipeline.h
     Prefetch.h
     Profiling.h
@@ -273,6 +274,7 @@ set(SOURCE_FILES
     Parameter.cpp
     ParamMap.cpp
     PartitionLoops.cpp
+    PatternMatchIntrinsics.cpp
     Pipeline.cpp
     Prefetch.cpp
     PrintLoopNest.cpp

@@ -61,6 +61,7 @@
 #include "StorageFolding.h"
 #include "StrictifyFloat.h"
 #include "Substitute.h"
+#include "PatternMatchIntrinsics.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
 #include "UnifyDuplicateLets.h"
@@ -443,6 +444,11 @@ Module lower(const vector<Function> &output_funcs,
     s = simplify(s);
     s = hoist_loop_invariant_values(s);
     debug(2) << "Lowering after removing dead allocations and hoisting loop invariant values:\n"
+             << s << "\n\n";
+
+    debug(1) << "Pattern matching intrinsics...\n";
+    s = pattern_match_intrinsics(s);
+    debug(2) << "Lowering after pattern matching intrinsics:\n"
              << s << "\n\n";
 
     debug(1) << "Lowering after final simplification:\n"

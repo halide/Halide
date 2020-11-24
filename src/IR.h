@@ -513,6 +513,8 @@ struct Call : public ExprNode<Call> {
         glsl_texture_store,
         glsl_varying,
         gpu_thread_barrier,
+        halving_add,
+        halving_subtract,
         hvx_gather,
         hvx_scatter,
         hvx_scatter_acc,
@@ -538,6 +540,13 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
+        rounding_halving_add,
+        rounding_halving_subtract,
+        rounding_shift_left,
+        rounding_shift_right,
+        saturating_add,
+        saturating_cast,
+        saturating_subtract,
         select_mask,
         shift_left,
         shift_right,
@@ -548,6 +557,9 @@ struct Call : public ExprNode<Call> {
         stringify,
         undef,
         unsafe_promise_clamped,
+        widening_add,
+        widening_multiply,
+        widening_subtract,
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
@@ -640,6 +652,15 @@ struct Call : public ExprNode<Call> {
         return (call_type == Extern ||
                 call_type == ExternCPlusPlus ||
                 call_type == PureExtern);
+    }
+
+    static const Call *as_intrinsic(const Expr &e, Call::IntrinsicOp intrinsic) {
+        if (const Call *c = e.as<Call>()) {
+            if (c->is_intrinsic(intrinsic)) {
+                return c;
+            }
+        }
+        return nullptr;
     }
 
     static const IRNodeType _node_type = IRNodeType::Call;

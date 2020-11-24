@@ -562,6 +562,17 @@ void check_representable(Type dst, int64_t x) {
     }
 }
 
+void match_lanes(Expr &a, Expr &b) {
+    // Broadcast scalar to match vector
+    if (a.type().is_scalar() && b.type().is_vector()) {
+        a = Broadcast::make(std::move(a), b.type().lanes());
+    } else if (a.type().is_vector() && b.type().is_scalar()) {
+        b = Broadcast::make(std::move(b), a.type().lanes());
+    } else {
+        internal_assert(a.type().lanes() == b.type().lanes()) << "Can't match types of differing widths";
+    }
+}
+
 void match_types(Expr &a, Expr &b) {
     if (a.type() == b.type()) {
         return;
@@ -571,14 +582,7 @@ void match_types(Expr &a, Expr &b) {
         << "Can't do arithmetic on opaque pointer types: "
         << a << ", " << b << "\n";
 
-    // Broadcast scalar to match vector
-    if (a.type().is_scalar() && b.type().is_vector()) {
-        a = Broadcast::make(std::move(a), b.type().lanes());
-    } else if (a.type().is_vector() && b.type().is_scalar()) {
-        b = Broadcast::make(std::move(b), a.type().lanes());
-    } else {
-        internal_assert(a.type().lanes() == b.type().lanes()) << "Can't match types of differing widths";
-    }
+    match_lanes(a, b);
 
     Type ta = a.type(), tb = b.type();
 
@@ -1017,6 +1021,92 @@ Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) 
     args.insert(args.end(), cache_key_values.begin(), cache_key_values.end());
     return Internal::Call::make(t, Internal::Call::memoize_expr,
                                 args, Internal::Call::PureIntrinsic);
+}
+
+Expr widen(Expr a) {
+    return Cast::make(a.type().with_bits(a.type().bits() * 2), std::move(a));
+}
+
+Expr narrow(Expr a) {
+    return Cast::make(a.type().with_bits(a.type().bits() / 2), std::move(a));
+}
+
+Expr saturating_narrow(Expr a) {
+    Type narrow = a.type().with_bits(a.type().bits() / 2);
+    return Cast::make(narrow, max(min(std::move(a), narrow.max()), narrow.min()));
+}
+
+Expr widening_add(Expr a, Expr b) {
+    match_lanes(a, b);
+    internal_assert(a.type() == b.type());
+    Type wide_type = a.type().with_bits(a.type().bits() * 2);
+    return Call::make(wide_type, Call::widening_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widening_multiply(Expr a, Expr b) {
+    match_lanes(a, b);
+    internal_assert(a.type() == b.type());
+    Type wide_type = a.type().with_bits(a.type().bits() * 2);
+    return Call::make(wide_type, Call::widening_multiply, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widening_subtract(Expr a, Expr b) {
+    match_lanes(a, b);
+    internal_assert(a.type() == b.type());
+    Type wide_type = a.type().with_bits(a.type().bits() * 2);
+    // widening_subtract always produces signed result.
+    wide_type = wide_type.with_code(halide_type_int);
+    return Call::make(wide_type, Call::widening_subtract, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_shift_right(Expr a, Expr b) {
+    match_lanes(a, b);
+    return Call::make(a.type(), Call::rounding_shift_right, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_shift_left(Expr a, Expr b) {
+    match_lanes(a, b);
+    return Call::make(a.type(), Call::rounding_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr saturating_add(Expr a, Expr b) {
+    match_lanes(a, b);
+    internal_assert(a.type() == b.type());
+    return Call::make(a.type(), Call::saturating_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr saturating_subtract(Expr a, Expr b) {
+    match_lanes(a, b);
+    internal_assert(a.type() == b.type());
+    return Call::make(a.type(), Call::saturating_subtract, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr saturating_cast(Type t, Expr a) {
+    return Call::make(t, Call::saturating_cast, {std::move(a)}, Call::PureIntrinsic);
+}
+
+Expr halving_add(Expr a, Expr b) {
+    match_lanes(a, b);
+    internal_assert(a.type() == b.type());
+    return Call::make(a.type(), Call::halving_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_halving_add(Expr a, Expr b) {
+    match_lanes(a, b);
+    internal_assert(a.type() == b.type());
+    return Call::make(a.type(), Call::rounding_halving_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr halving_subtract(Expr a, Expr b) {
+    match_lanes(a, b);
+    internal_assert(a.type() == b.type());
+    return Call::make(a.type(), Call::halving_subtract, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_halving_subtract(Expr a, Expr b) {
+    match_lanes(a, b);
+    internal_assert(a.type() == b.type());
+    return Call::make(a.type(), Call::rounding_halving_subtract, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 }  // namespace Internal

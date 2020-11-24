@@ -107,6 +107,7 @@ public:
             check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> cast<unsigned>(16)));
             check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> cast<int>(16)));
             check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) << cast<int>(-16)));
+            check("pmulhrsw", 4 * w, i16((i32(i16_1) * i32(i16_2) + 16384) >> 15));
 
             // Add a test with a constant as there was a bug on this.
             check("pmulhw", 4 * w, i16((3 * i32(i16_2)) / (256 * 256)));
@@ -1907,6 +1908,10 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         test.filter = argv[1];
         test.set_num_threads(1);
+    }
+
+    if (getenv("FILTER")) {
+        test.filter = getenv("FILTER");
     }
 
     // TODO: multithreading here is the cause of https://github.com/halide/Halide/issues/3669;

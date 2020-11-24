@@ -2961,7 +2961,68 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
             }
         }
-
+    } else if (op->is_intrinsic(Call::widening_add)) {
+        internal_assert(op->args.size() == 2);
+        value = codegen(widen(op->args[0]) + widen(op->args[1]));
+    } else if (op->is_intrinsic(Call::widening_subtract)) {
+        internal_assert(op->args.size() == 2);
+        value = codegen(widen(op->args[0]) - widen(op->args[1]));
+    } else if (op->is_intrinsic(Call::widening_multiply)) {
+        internal_assert(op->args.size() == 2);
+        value = codegen(widen(op->args[0]) * widen(op->args[1]));
+    } else if (op->is_intrinsic(Call::rounding_shift_right) || op->is_intrinsic(Call::rounding_shift_left)) {
+        internal_assert(op->args.size() == 2);
+        Expr a = op->args[0];
+        Expr b = op->args[1];
+        if (op->is_intrinsic(Call::rounding_shift_right)) {
+            Expr round = simplify((make_const(a.type(), 1) << max(b, 0)) >> 1);
+            value = codegen(Call::make(a.type(), Call::shift_right, {a + round, b}, Call::PureIntrinsic));
+        } else {
+            Expr round = simplify((make_const(a.type(), 1) >> min(b, 0)) >> 1);
+            value = codegen(Call::make(a.type(), Call::shift_left, {a + round, b}, Call::PureIntrinsic));
+        }
+    } else if (op->is_intrinsic(Call::saturating_add)) {
+        internal_assert(op->args.size() == 2);
+        std::string intrin;
+        if (op->type.is_int()) {
+            intrin = "llvm.sadd.sat.";
+        } else {
+            internal_assert(op->type.is_uint());
+            intrin = "llvm.uadd.sat.";
+        }
+        if (op->type.lanes() > 1) {
+            intrin += "v" + std::to_string(op->type.lanes());
+        }
+        intrin += "i" + std::to_string(op->type.bits());
+        value = call_intrin(op->type, op->type.lanes(), intrin, op->args);
+    } else if (op->is_intrinsic(Call::saturating_subtract)) {
+        internal_assert(op->args.size() == 2);
+        std::string intrin;
+        if (op->type.is_int()) {
+            intrin = "llvm.ssub.sat.";
+        } else {
+            internal_assert(op->type.is_uint());
+            intrin = "llvm.usub.sat.";
+        }
+        if (op->type.lanes() > 1) {
+            intrin += "v" + std::to_string(op->type.lanes());
+        }
+        intrin += "i" + std::to_string(op->type.bits());
+        value = call_intrin(op->type, op->type.lanes(), intrin, op->args);
+    } else if (op->is_intrinsic(Call::saturating_cast)) {
+        internal_assert(op->args.size() == 1);
+        Expr arg = op->args[0];
+        arg = min(arg, Cast::make(arg.type(), op->type.max()));
+        if (arg.type().is_int()) {
+            arg = max(arg, Cast::make(arg.type(), op->type.min()));
+        }
+        // Implement this narrowing 2x at a time, which is more likely to hit useful patterns.
+        if (arg.type().bits() <= op->type.bits() * 2) {
+            value = codegen(Cast::make(op->type, arg));
+        } else {
+            Type narrower = arg.type().with_bits(arg.type().bits() / 2);
+            value = codegen(saturating_cast(op->type, Cast::make(narrower, arg)));
+        }
     } else if (op->is_intrinsic(Call::stringify)) {
         internal_assert(!op->args.empty());
 

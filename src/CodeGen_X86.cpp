@@ -60,25 +60,19 @@ bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
     Type t = a.type();
     internal_assert(b.type() == t);
 
-    const Mul *ma = a.as<Mul>();
-    const Mul *mb = b.as<Mul>();
-
-    if (!(ma && mb && t.is_int() && t.bits() == 32 && (t.lanes() >= 4))) {
+    if (!(t.is_int() && t.bits() == 32 && (t.lanes() >= 4))) {
         return false;
     }
 
-    Type narrow = t.with_bits(16);
-    vector<Expr> args = {lossless_cast(narrow, ma->a),
-                         lossless_cast(narrow, ma->b),
-                         lossless_cast(narrow, mb->a),
-                         lossless_cast(narrow, mb->b)};
-    if (!args[0].defined() || !args[1].defined() ||
-        !args[2].defined() || !args[3].defined()) {
+    const Call *ma = Call::as_intrinsic(a, Call::widening_multiply);
+    const Call *mb = Call::as_intrinsic(b, Call::widening_multiply);
+    if (ma && mb) {
+        std::vector<Expr> args = {ma->args[0], ma->args[1], mb->args[0], mb->args[1]};
+        result.swap(args);
+        return true;
+    } else {
         return false;
     }
-
-    result.swap(args);
-    return true;
 }
 
 }  // namespace
@@ -251,96 +245,74 @@ void CodeGen_X86::visit(const Cast *op) {
 
     struct Pattern {
         Target::Feature feature;
-        bool wide_op;
-        Type type;
+        int lanes;
         int min_lanes;
         string intrin;
         Expr pattern;
     };
 
     static Pattern patterns[] = {
-        {Target::AVX2, true, Int(8, 32), 17, "llvm.sadd.sat.v32i8",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 16), 9, "llvm.sadd.sat.v16i8",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 8), 0, "llvm.sadd.sat.v8i8",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::AVX2, true, Int(8, 32), 17, "llvm.ssub.sat.v32i8",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 16), 9, "llvm.ssub.sat.v16i8",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 8), 0, "llvm.ssub.sat.v8i8",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.sadd.sat.v16i16",
-         i16_sat(wild_i32x_ + wild_i32x_)},
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.sadd.sat.v8i16",
-         i16_sat(wild_i32x_ + wild_i32x_)},
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.ssub.sat.v16i16",
-         i16_sat(wild_i32x_ - wild_i32x_)},
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.ssub.sat.v8i16",
-         i16_sat(wild_i32x_ - wild_i32x_)},
-
         // Some of the instructions referred to below only appear with
         // AVX2, but LLVM generates better AVX code if you give it
         // full 256-bit vectors and let it do the slicing up into
         // individual instructions itself. This is why we use
         // Target::AVX instead of Target::AVX2 as the feature flag
         // requirement.
-        {Target::AVX, true, UInt(8, 32), 17, "paddusbx32",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "paddusbx16",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::AVX, true, UInt(8, 32), 17, "psubusbx32",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "psubusbx16",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::AVX, true, UInt(16, 16), 9, "padduswx16",
-         u16_sat(wild_u32x_ + wild_u32x_)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "padduswx8",
-         u16_sat(wild_u32x_ + wild_u32x_)},
-        {Target::AVX, true, UInt(16, 16), 9, "psubuswx16",
-         u16(max(wild_i32x_ - wild_i32x_, 0))},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "psubuswx8",
-         u16(max(wild_i32x_ - wild_i32x_, 0))},
+        {Target::AVX, 32, 17, "paddusbx32",
+         saturating_add(wild_u8x_, wild_u8x_)},
+        {Target::FeatureEnd, 16, 0, "paddusbx16",
+         saturating_add(wild_u8x_, wild_u8x_)},
+        {Target::AVX, 32, 17, "psubusbx32",
+         saturating_subtract(wild_u8x_, wild_u8x_)},
+        {Target::FeatureEnd, 16, 0, "psubusbx16",
+         saturating_subtract(wild_u8x_, wild_u8x_)},
+        {Target::AVX, 16, 9, "padduswx16",
+         saturating_add(wild_u16x_, wild_u16x_)},
+        {Target::FeatureEnd, 8, 0, "padduswx8",
+         saturating_add(wild_u16x_, wild_u16x_)},
+        {Target::AVX, 16, 9, "psubuswx16",
+         saturating_subtract(wild_u16x_, wild_u16x_)},
+        {Target::FeatureEnd, 8, 0, "psubuswx8",
+         saturating_subtract(wild_u16x_, wild_u16x_)},
 
         // Only use the avx2 version if we have > 8 lanes
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmulh.w",
-         i16((wild_i32x_ * wild_i32x_) / 65536)},
-        {Target::AVX2, true, UInt(16, 16), 9, "llvm.x86.avx2.pmulhu.w",
-         u16((wild_u32x_ * wild_u32x_) / 65536)},
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmul.hr.sw",
-         i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
+        {Target::AVX2, 16, 9, "llvm.x86.avx2.pmulh.w",
+         i16(widening_multiply(wild_i16x_, wild_i16x_) >> 16)},
+        {Target::AVX2, 16, 9, "llvm.x86.avx2.pmulhu.w",
+         u16(widening_multiply(wild_u16x_, wild_u16x_) >> 16)},
+        {Target::AVX2, 16, 9, "llvm.x86.avx2.pmul.hr.sw",
+         i16(rounding_shift_right(widening_multiply(wild_i16x_, wild_i16x_), 15))},
 
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.pmulh.w",
-         i16((wild_i32x_ * wild_i32x_) / 65536)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
-         u16((wild_u32x_ * wild_u32x_) / 65536)},
-        {Target::SSE41, true, Int(16, 8), 0, "llvm.x86.ssse3.pmul.hr.sw.128",
-         i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
+        {Target::FeatureEnd, 8, 0, "llvm.x86.sse2.pmulh.w",
+         i16(widening_multiply(wild_i16x_, wild_i16x_) >> 16)},
+        {Target::FeatureEnd, 8, 0, "llvm.x86.sse2.pmulhu.w",
+         u16(widening_multiply(wild_u16x_, wild_u16x_) >> 16)},
+        {Target::SSE41, 8, 0, "llvm.x86.ssse3.pmul.hr.sw.128",
+         i16(rounding_shift_right(widening_multiply(wild_i16x_, wild_i16x_), 15))},
         // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
-        {Target::AVX2, true, UInt(8, 32), 17, "pavgbx32",
-         u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "pavgbx16",
-         u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
-        {Target::AVX2, true, UInt(16, 16), 9, "pavgwx16",
-         u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "pavgwx8",
-         u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
-        {Target::AVX2, false, Int(16, 16), 9, "packssdwx16",
+        {Target::AVX2, 32, 17, "pavgbx32",
+         u8(rounding_shift_right(widening_add(wild_u8x_, wild_u8x_), 1))},
+        {Target::FeatureEnd, 16, 0, "pavgbx16",
+         u8((widening_add(wild_u8x_, wild_u8x_) + 1) >> 1)},
+        {Target::AVX2, 16, 9, "pavgwx16",
+         u16((widening_add(wild_u16x_, wild_u16x_) + 1) >> 1)},
+        {Target::FeatureEnd, 8, 0, "pavgwx8",
+         u16((widening_add(wild_u16x_, wild_u16x_) + 1) >> 1)},
+        {Target::AVX2, 16, 9, "packssdwx16",
          i16_sat(wild_i32x_)},
-        {Target::FeatureEnd, false, Int(16, 8), 0, "packssdwx8",
+        {Target::FeatureEnd, 8, 0, "packssdwx8",
          i16_sat(wild_i32x_)},
-        {Target::AVX2, false, Int(8, 32), 17, "packsswbx32",
+        {Target::AVX2, 32, 17, "packsswbx32",
          i8_sat(wild_i16x_)},
-        {Target::FeatureEnd, false, Int(8, 16), 0, "packsswbx16",
+        {Target::FeatureEnd, 16, 0, "packsswbx16",
          i8_sat(wild_i16x_)},
-        {Target::AVX2, false, UInt(8, 32), 17, "packuswbx32",
+        {Target::AVX2, 32, 17, "packuswbx32",
          u8_sat(wild_i16x_)},
-        {Target::FeatureEnd, false, UInt(8, 16), 0, "packuswbx16",
+        {Target::FeatureEnd, 16, 0, "packuswbx16",
          u8_sat(wild_i16x_)},
-        {Target::AVX2, false, UInt(16, 16), 9, "packusdwx16",
+        {Target::AVX2, 16, 9, "packusdwx16",
          u16_sat(wild_i32x_)},
-        {Target::SSE41, false, UInt(16, 8), 0, "packusdwx8",
+        {Target::SSE41, 8, 0, "packusdwx8",
          u16_sat(wild_i32x_)}};
 
     for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
@@ -355,20 +327,8 @@ void CodeGen_X86::visit(const Cast *op) {
         }
 
         if (expr_match(pattern.pattern, op, matches)) {
-            bool match = true;
-            if (pattern.wide_op) {
-                // Try to narrow the matches to the target type.
-                for (size_t i = 0; i < matches.size(); i++) {
-                    matches[i] = lossless_cast(op->type, matches[i]);
-                    if (!matches[i].defined()) {
-                        match = false;
-                    }
-                }
-            }
-            if (match) {
-                value = call_intrin(op->type, pattern.type.lanes(), pattern.intrin, matches);
-                return;
-            }
+            value = call_intrin(op->type, pattern.lanes, pattern.intrin, matches);
+            return;
         }
     }
 
@@ -382,7 +342,7 @@ void CodeGen_X86::visit(const Cast *op) {
         Type signed_type = Int(32, op->type.lanes());
 
         // Convert the top 31 bits to float using the signed version
-        Expr top_bits = cast(signed_type, op->value / 2);
+        Expr top_bits = cast(signed_type, op->value >> 1);
         top_bits = cast(op->type, top_bits);
 
         // Convert the bottom bit
@@ -401,12 +361,8 @@ void CodeGen_X86::visit(const Call *op) {
     if (op->is_intrinsic(Call::mulhi_shr) &&
         op->type.is_vector() && op->type.bits() == 16) {
         internal_assert(op->args.size() == 3);
-        Expr p;
-        if (op->type.is_uint()) {
-            p = u16(u32(op->args[0]) * u32(op->args[1]) / 65536);
-        } else {
-            p = i16(i32(op->args[0]) * i32(op->args[1]) / 65536);
-        }
+        Expr p = widening_multiply(op->args[0], op->args[1]) >> 16;
+        p = op->type.is_uint() ? u16(p) : i16(p);
         const UIntImm *shift = op->args[2].as<UIntImm>();
         internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
         if (shift->value != 0) {
@@ -426,11 +382,10 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         op->type.bits() == 32 &&
         factor == 2 &&
         op->op == VectorReduce::Add) {
-        Type narrower = Int(16, op->value.type().lanes());
         Expr a, b;
-        if (const Mul *mul = op->value.as<Mul>()) {
-            a = lossless_cast(narrower, mul->a);
-            b = lossless_cast(narrower, mul->b);
+        if (const Call *mul = Call::as_intrinsic(op->value, Call::widening_multiply)) {
+            a = mul->args[0];
+            b = mul->args[1];
         } else {
             // One could do a horizontal widening addition with
             // pmaddwd against a vector of ones. Currently disabled

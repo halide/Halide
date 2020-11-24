@@ -331,6 +331,37 @@ Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
+/** Cast a to a type with twice as many or half as many bits. */
+Expr widen(Expr a);
+Expr narrow(Expr a);
+Expr saturating_narrow(Expr a);
+
+/** Compute widen(a) +,*,- widen(b) */
+Expr widening_add(Expr a, Expr b);
+Expr widening_multiply(Expr a, Expr b);
+Expr widening_subtract(Expr a, Expr b);
+
+/** Compute (a + (1 << max(b, 0)) / 2) >> b */
+Expr rounding_shift_right(Expr a, Expr b);
+/** Compute (a + (1 >> min(b, 0)) / 2) << b */
+Expr rounding_shift_left(Expr a, Expr b);
+
+/** Compute saturating_narrow(widen(a) + widen(b)) */
+Expr saturating_add(Expr a, Expr b);
+/** Compute saturating_narrow(widen(a) - widen(b)) */
+Expr saturating_subtract(Expr a, Expr b);
+/** Compute cast(t, clamp(a, type.min(), type.max())) */
+//Expr saturating_cast(Type t, Expr a);
+
+/** Compute narrow((widen(a) + widen(b)) / 2) */
+Expr halving_add(Expr a, Expr b);
+/** Compute narrow((widen(a) + widen(b) + 1) / 2) */
+Expr rounding_halving_add(Expr a, Expr b);
+/** Compute narrow((widen(a) - widen(b)) / 2) */
+Expr halving_subtract(Expr a, Expr b);
+/** Compute narrow((widen(a) - widen(b) + 1) / 2) */
+Expr rounding_halving_subtract(Expr a, Expr b);
+
 }  // namespace Internal
 
 /** Cast an expression to the halide type corresponding to the C++ type T. */
