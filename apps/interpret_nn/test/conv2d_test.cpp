@@ -39,7 +39,6 @@ struct Conv2D_ReferenceOp : public op_test::ReferenceOp {
                std::min(input_product_scale, (double)bias_scale) * 1e-6);
 
         const double output_multiplier = input_product_scale / output_scale;
-        // const auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(output_multiplier);
 
         const int input_depth = input_buf.dim(0).extent();
         const int input_width = input_buf.dim(1).extent();
