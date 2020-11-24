@@ -1529,9 +1529,9 @@ $(FILTERS_DIR)/nested_externs_%.a: $(BIN_DIR)/nested_externs.generator
 
 # Similarly, gpu_multi needs two different kernels to test compilation caching.
 # Also requies user-context.
-$(FILTERS_DIR)/gpu_multi_%.a: $(BIN_DIR)/gpu_multi.generator
+$(FILTERS_DIR)/gpu_multi_context_threaded_%.a: $(BIN_DIR)/gpu_multi_context_threaded.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g gpu_multi_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
+	$(CURDIR)/$< -g gpu_multi_context_threaded_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
 
 GEN_AOT_CXX_FLAGS=$(TEST_CXX_FLAGS) -Wno-unknown-pragmas
 GEN_AOT_INCLUDES=-I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools
@@ -1629,11 +1629,11 @@ generator_aot_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_multitarget
 	@-echo
 
 # gpu_multi_context_threaded has additional deps to link in
-$(BIN_DIR)/$(TARGET)/generator_aot_gpu_multi_context_threaded: $(ROOT_DIR)/test/generator/gpu_multi_context_threaded_aottest.cpp $(FILTERS_DIR)/gpu_multi_add.a $(FILTERS_DIR)/gpu_multi_mul.a $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+$(BIN_DIR)/$(TARGET)/generator_aot_gpu_multi_context_threaded: $(ROOT_DIR)/test/generator/gpu_multi_context_threaded_aottest.cpp $(FILTERS_DIR)/gpu_multi_context_threaded_add.a $(FILTERS_DIR)/gpu_multi_context_threaded_mul.a $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
 
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_gpu_multi_context_threaded: $(ROOT_DIR)/test/generator/gpu_multi_context_threaded_aottest.cpp $(FILTERS_DIR)/gpu_multi_add.halide_generated.cpp $(FILTERS_DIR)/gpu_multi_mul.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_gpu_multi_context_threaded: $(ROOT_DIR)/test/generator/gpu_multi_context_threaded_aottest.cpp $(FILTERS_DIR)/gpu_multi_context_threaded_add.halide_generated.cpp $(FILTERS_DIR)/gpu_multi_context_threaded_mul.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
 

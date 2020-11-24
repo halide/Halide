@@ -44,5 +44,5 @@ public:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(GpuAdd, gpu_multi_add)
-HALIDE_REGISTER_GENERATOR(GpuMul, gpu_multi_mul)
+HALIDE_REGISTER_GENERATOR(GpuAdd, gpu_multi_context_threaded_add)
+HALIDE_REGISTER_GENERATOR(GpuMul, gpu_multi_context_threaded_mul)

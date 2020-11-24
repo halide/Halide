@@ -21,8 +21,8 @@ int main(int argc, char **argv) {
 
 #include "gpu_context.h"
 
-#include "gpu_multi_add.h"
-#include "gpu_multi_mul.h"
+#include "gpu_multi_context_threaded_add.h"
+#include "gpu_multi_context_threaded_mul.h"
 
 using namespace Halide::Runtime;
 
@@ -121,13 +121,13 @@ void run_kernels_on_thread(gpu_context context1, bool destroy_when_done) {
         Buffer<int32_t> buf2_result(W, H);
         buf2_in.fill(0);
 
-        gpu_multi_add(&context1, buf1_in, buf1_result);
-        gpu_multi_mul(&context1, buf1_result, buf1_in);
-        gpu_multi_add(&context1, buf1_in, buf1_result);
+        gpu_multi_context_threaded_add(&context1, buf1_in, buf1_result);
+        gpu_multi_context_threaded_mul(&context1, buf1_result, buf1_in);
+        gpu_multi_context_threaded_add(&context1, buf1_in, buf1_result);
 
-        gpu_multi_add(&context2, buf2_in, buf2_result);
-        gpu_multi_mul(&context2, buf2_result, buf2_in);
-        gpu_multi_add(&context2, buf2_in, buf2_result);
+        gpu_multi_context_threaded_add(&context2, buf2_in, buf2_result);
+        gpu_multi_context_threaded_mul(&context2, buf2_result, buf2_in);
+        gpu_multi_context_threaded_add(&context2, buf2_in, buf2_result);
 
         buf1_result.copy_to_host(&context1);
         buf2_result.copy_to_host(&context2);
