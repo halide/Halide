@@ -741,8 +741,8 @@ WEAK int halide_metal_run(void *user_context,
     }
 
     mtl_library *library;
-    bool found_libdary = compilation_cache.lookup(metal_context.device, state_ptr, library);
-    halide_assert(user_context, found_libdary && library != nullptr);
+    bool found_library = compilation_cache.lookup(metal_context.device, state_ptr, library);
+    halide_assert(user_context, found_library && library != nullptr);
 
     mtl_function *function = new_function_with_name(library, entry_name, strlen(entry_name));
     if (function == nullptr) {
