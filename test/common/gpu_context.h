@@ -132,4 +132,3 @@ void destroy_cuda_context(CUcontext cuda_ctx) {
 }
 
 #endif
-
