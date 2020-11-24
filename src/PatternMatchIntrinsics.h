@@ -29,6 +29,9 @@ Expr lower_rounding_halving_add(Expr a, Expr b);
 Expr lower_halving_subtract(Expr a, Expr b);
 Expr lower_rounding_halving_subtract(Expr a, Expr b);
 
+/** Implement any arithmetic intrinsic. */
+Expr lower_intrinsic(const Call *op);
+
 }  // namespace Internal
 }  // namespace Halide
 

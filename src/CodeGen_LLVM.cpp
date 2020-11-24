@@ -2831,21 +2831,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
-    } else if (op->is_intrinsic(Call::mulhi_shr)) {
-        internal_assert(op->args.size() == 3);
-
-        Type ty = op->type;
-        Type wide_ty = ty.with_bits(ty.bits() * 2);
-
-        Expr p_wide = cast(wide_ty, op->args[0]) * cast(wide_ty, op->args[1]);
-        const UIntImm *shift = op->args[2].as<UIntImm>();
-        internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
-        value = codegen(cast(ty, p_wide >> (shift->value + ty.bits())));
-    } else if (op->is_intrinsic(Call::sorted_avg)) {
-        internal_assert(op->args.size() == 2);
-        // b > a, so the following works without widening:
-        // a + (b - a)/2
-        value = codegen(op->args[0] + (op->args[1] - op->args[0]) / 2);
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         // If we need to upgrade the type, do the entire lerp in the
@@ -2963,21 +2948,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
             }
         }
-    } else if (op->is_intrinsic(Call::widening_add)) {
-        internal_assert(op->args.size() == 2);
-        value = codegen(lower_widening_add(op->args[0], op->args[1]));
-    } else if (op->is_intrinsic(Call::widening_subtract)) {
-        internal_assert(op->args.size() == 2);
-        value = codegen(lower_widening_subtract(op->args[0], op->args[1]));
-    } else if (op->is_intrinsic(Call::widening_multiply)) {
-        internal_assert(op->args.size() == 2);
-        value = codegen(lower_widening_multiply(op->args[0], op->args[1]));
-    } else if (op->is_intrinsic(Call::rounding_shift_right)) {
-        internal_assert(op->args.size() == 2);
-        value = codegen(lower_rounding_shift_right(op->args[0], op->args[1]));
-    } else if (op->is_intrinsic(Call::rounding_shift_left)) {
-        internal_assert(op->args.size() == 2);
-        value = codegen(lower_rounding_shift_left(op->args[0], op->args[1]));
     } else if (op->is_intrinsic(Call::saturating_add) || op->is_intrinsic(Call::saturating_subtract)) {
         internal_assert(op->args.size() == 2);
         std::string intrin;
@@ -2998,18 +2968,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
         intrin += "i" + std::to_string(op->type.bits());
         value = call_intrin(op->type, op->type.lanes(), intrin, op->args);
-    } else if (op->is_intrinsic(Call::halving_add)) {
-        internal_assert(op->args.size() == 2);
-        value = codegen(lower_halving_add(op->args[0], op->args[1]));
-    } else if (op->is_intrinsic(Call::halving_subtract)) {
-        internal_assert(op->args.size() == 2);
-        value = codegen(lower_halving_subtract(op->args[0], op->args[1]));
-    } else if (op->is_intrinsic(Call::rounding_halving_add)) {
-        internal_assert(op->args.size() == 2);
-        value = codegen(lower_rounding_halving_add(op->args[0], op->args[1]));
-    } else if (op->is_intrinsic(Call::rounding_halving_subtract)) {
-        internal_assert(op->args.size() == 2);
-        value = codegen(lower_rounding_halving_subtract(op->args[0], op->args[1]));
     } else if (op->is_intrinsic(Call::stringify)) {
         internal_assert(!op->args.empty());
 
@@ -3339,7 +3297,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (is_float16_transcendental(op)) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic()) {
-        internal_error << "Unknown intrinsic: " << op->name << "\n";
+        value = codegen(lower_intrinsic(op));
     } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {
         internal_assert(op->args.size() == 2);
         Expr x = op->args[0];

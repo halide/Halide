@@ -30,7 +30,11 @@ Expr saturating_narrow(Expr a) {
 struct Pattern {
     Expr pattern;
     Call::IntrinsicOp replacement;
-    bool enabled = true;
+    bool enabled;
+
+    Pattern(Expr pattern, Call::IntrinsicOp replacement, bool enabled)
+        : pattern(pattern), replacement(replacement), enabled(enabled) {}
+    Pattern(Expr pattern, Call::IntrinsicOp replacement) : Pattern(pattern, replacement, true) {}
 };
 
 Expr apply_patterns(Type type, Expr x, const std::vector<Pattern> &patterns) {
@@ -48,20 +52,6 @@ Expr apply_patterns(Type type, Expr x, const std::vector<Pattern> &patterns) {
 class PatternMatchIntrinsics : public IRMutator {
 protected:
     using IRMutator::visit;
-
-    // Symbols used by rewrite rules
-    IRMatcher::Wild<0> x;
-    IRMatcher::Wild<1> y;
-    IRMatcher::Wild<2> z;
-    IRMatcher::Wild<3> w;
-    IRMatcher::Wild<4> u;
-    IRMatcher::Wild<5> v;
-    IRMatcher::WildConst<0> c0;
-    IRMatcher::WildConst<1> c1;
-    IRMatcher::WildConst<2> c2;
-    IRMatcher::WildConst<3> c3;
-    IRMatcher::WildConst<4> c4;
-    IRMatcher::WildConst<5> c5;
 
     Expr visit(const Add *op) override {
         Expr a = mutate(op->a);
@@ -331,6 +321,68 @@ Expr lower_rounding_halving_subtract(Expr a, Expr b) {
     return Cast::make(a.type(), rounding_shift_right(result_2x, 1));
 }
 
+Expr lower_intrinsic(const Call *op) {
+    if (op->is_intrinsic(Call::widening_add)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widening_add(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widening_subtract)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widening_subtract(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widening_multiply)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widening_multiply(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::rounding_shift_right)) {
+        internal_assert(op->args.size() == 2);
+        return lower_rounding_shift_right(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::rounding_shift_left)) {
+        internal_assert(op->args.size() == 2);
+        return lower_rounding_shift_left(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::halving_add)) {
+        internal_assert(op->args.size() == 2);
+        return lower_halving_add(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::halving_subtract)) {
+        internal_assert(op->args.size() == 2);
+        return lower_halving_subtract(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::rounding_halving_add)) {
+        internal_assert(op->args.size() == 2);
+        return lower_rounding_halving_add(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::rounding_halving_subtract)) {
+        internal_assert(op->args.size() == 2);
+        return lower_rounding_halving_subtract(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::mulhi_shr)) {
+        internal_assert(op->args.size() == 3);
+
+        Type ty = op->type;
+        Type wide_ty = ty.with_bits(ty.bits() * 2);
+
+        Expr p_wide = cast(wide_ty, op->args[0]) * cast(wide_ty, op->args[1]);
+        const UIntImm *shift = op->args[2].as<UIntImm>();
+        internal_assert(shift != nullptr)
+            << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
+        return cast(ty, p_wide >> (shift->value + ty.bits()));
+    } else if (op->is_intrinsic(Call::sorted_avg)) {
+        internal_assert(op->args.size() == 2);
+        // b > a, so the following works without widening:
+        // a + (b - a)/2
+        return op->args[0] + (op->args[1] - op->args[0]) / 2;
+    } else if (op->is_intrinsic(Call::abs)) {
+        // Generate select(x >= 0, x, -x) instead
+        std::string x_name = unique_name('x');
+        Expr x = Variable::make(op->args[0].type(), x_name);
+        return Let::make(x_name, op->args[0], select(x >= 0, x, -x));
+    } else if (op->is_intrinsic(Call::absd)) {
+        // Use a select instead
+        std::string a_name = unique_name('a');
+        std::string b_name = unique_name('b');
+        Expr a_var = Variable::make(op->args[0].type(), a_name);
+        Expr b_var = Variable::make(op->args[1].type(), b_name);
+        return Let::make(a_name, op->args[0],
+                          Let::make(b_name, op->args[1],
+                                    Select::make(a_var < b_var, b_var - a_var, a_var - b_var)));
+    } else {
+        internal_error << "Unknown intrinsic " << op->name;
+    }
+}
 
 }  // namespace Internal
 }  // namespace Halide
