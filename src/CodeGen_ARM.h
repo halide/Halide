@@ -25,7 +25,6 @@ protected:
     // @{
     void visit(const Cast *) override;
     void visit(const Sub *) override;
-    void visit(const Div *) override;
     void visit(const Mul *) override;
     void visit(const Min *) override;
     void visit(const Max *) override;
@@ -56,7 +55,7 @@ protected:
               intrin_lanes(l), pattern(std::move(p)), type(t) {
         }
     };
-    std::vector<Pattern> casts, averagings, negations, multiplies;
+    std::vector<Pattern> casts, averagings, negations;
 
     // Call an intrinsic as defined by a pattern. Dispatches to the
     // 32- or 64-bit name depending on the target's bit width.

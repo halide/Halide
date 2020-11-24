@@ -2998,6 +2998,18 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
         intrin += "i" + std::to_string(op->type.bits());
         value = call_intrin(op->type, op->type.lanes(), intrin, op->args);
+    } else if (op->is_intrinsic(Call::halving_add)) {
+        internal_assert(op->args.size() == 2);
+        value = codegen(lower_halving_add(op->args[0], op->args[1]));
+    } else if (op->is_intrinsic(Call::halving_subtract)) {
+        internal_assert(op->args.size() == 2);
+        value = codegen(lower_halving_subtract(op->args[0], op->args[1]));
+    } else if (op->is_intrinsic(Call::rounding_halving_add)) {
+        internal_assert(op->args.size() == 2);
+        value = codegen(lower_rounding_halving_add(op->args[0], op->args[1]));
+    } else if (op->is_intrinsic(Call::rounding_halving_subtract)) {
+        internal_assert(op->args.size() == 2);
+        value = codegen(lower_rounding_halving_subtract(op->args[0], op->args[1]));
     } else if (op->is_intrinsic(Call::stringify)) {
         internal_assert(!op->args.empty());
 

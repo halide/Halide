@@ -169,9 +169,8 @@ public:
         check("vavg(v*.h,v*.h):rnd", hvx_width / 2, i16((i32(i16_1) + i32(i16_2) + 1) / 2));
         check("vavg(v*.w,v*.w)", hvx_width / 4, i32((i64(i32_1) + i64(i32_2)) / 2));
         check("vavg(v*.w,v*.w):rnd", hvx_width / 4, i32((i64(i32_1) + i64(i32_2) + 1) / 2));
-        check("vnavg(v*.ub,v*.ub)", hvx_width / 1, i8_sat((i16(u8_1) - i16(u8_2)) / 2));
-        check("vnavg(v*.h,v*.h)", hvx_width / 2, i16_sat((i32(i16_1) - i32(i16_2)) / 2));
-        check("vnavg(v*.w,v*.w)", hvx_width / 4, i32_sat((i64(i32_1) - i64(i32_2)) / 2));
+        check("vnavg(v*.h,v*.h)", hvx_width / 2, i16((i32(i16_1) - i32(i16_2)) / 2));
+        check("vnavg(v*.w,v*.w)", hvx_width / 4, i32((i64(i32_1) - i64(i32_2)) / 2));
         if (isa_version >= 65) {
             check("vavg(v*.b,v*.b)", hvx_width / 1, i8((i16(i8_1) + i16(i8_2)) / 2));
             check("vavg(v*.uw,v*.uw)", hvx_width / 4, u32((u64(u32_1) + u64(u32_2)) / 2));
@@ -330,6 +329,9 @@ public:
 
         check("vround(v*.h,v*.h)", hvx_width / 1, u8_sat((i32(i16_1) + 128) / 256));
         check("vround(v*.h,v*.h)", hvx_width / 1, i8_sat((i32(i16_1) + 128) / 256));
+        // int32 is safe for overflow, allow non-widening rounding.
+        check("vround(v*.w,v*.w)", hvx_width / 2, u16_sat((i32_1 + 32768) / 65536));
+        check("vround(v*.w,v*.w)", hvx_width / 2, i16_sat((i32_1 + 32768) / 65536));
         check("vround(v*.w,v*.w)", hvx_width / 2, u16_sat((i64(i32_1) + 32768) / 65536));
         check("vround(v*.w,v*.w)", hvx_width / 2, i16_sat((i64(i32_1) + 32768) / 65536));
 
@@ -677,6 +679,11 @@ int main(int argc, char **argv) {
         test_hvx.filter = argv[1];
         test_hvx.set_num_threads(1);
     }
+
+    if (getenv("FILTER")) {
+        test_hvx.filter = getenv("FILTER");
+    }
+
     // Remove some features like simd_op_check.cpp used to do.
 
     // TODO: multithreading here is the cause of https://github.com/halide/Halide/issues/3669;

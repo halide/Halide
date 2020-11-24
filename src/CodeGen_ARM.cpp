@@ -39,128 +39,14 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled.\n";
     }
 
-    // Generate the cast patterns that can take vector types.  We need
-    // to iterate over all 64 and 128 bit integer types relevant for
-    // neon.
-    Type types[] = {Int(8, 8), Int(8, 16), UInt(8, 8), UInt(8, 16),
-                    Int(16, 4), Int(16, 8), UInt(16, 4), UInt(16, 8),
-                    Int(32, 2), Int(32, 4), UInt(32, 2), UInt(32, 4)};
-    for (size_t i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
-        Type t = types[i];
-
-        int intrin_lanes = t.lanes();
-        std::ostringstream oss;
-        oss << ".v" << intrin_lanes << "i" << t.bits();
-        string t_str = oss.str();
-
-        // For the 128-bit versions, we want to match any vector width.
-        if (t.bits() * t.lanes() == 128) {
-            t = t.with_lanes(0);
-        }
-
-        // Wider versions of the type
-        Type w = t.with_bits(t.bits() * 2);
-        Type ws = Int(t.bits() * 2, t.lanes());
-
-        // Vector wildcard for this type
-        Expr vector = Variable::make(t, "*");
-        Expr w_vector = Variable::make(w, "*");
-        Expr ws_vector = Variable::make(ws, "*");
-
-        // Bounds of the type stored in the wider vector type
-        Expr tmin = simplify(cast(w, t.min()));
-        Expr tmax = simplify(cast(w, t.max()));
-        Expr tsmin = simplify(cast(ws, t.min()));
-        Expr tsmax = simplify(cast(ws, t.max()));
-
-        Pattern p("", "", intrin_lanes, Expr(), Pattern::NarrowArgs);
-
-        // Rounding-up averaging
-        if (t.is_int()) {
-            p.intrin32 = "llvm.arm.neon.vrhadds" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.srhadd" + t_str;
-        } else {
-            p.intrin32 = "llvm.arm.neon.vrhaddu" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.urhadd" + t_str;
-        }
-
-        p.pattern = cast(t, (w_vector + w_vector + 1) / 2);
-        casts.push_back(p);
-        p.pattern = cast(t, (w_vector + (w_vector + 1)) / 2);
-        casts.push_back(p);
-        p.pattern = cast(t, ((w_vector + 1) + w_vector) / 2);
-        casts.push_back(p);
-
-        // Rounding down averaging
-        if (t.is_int()) {
-            p.intrin32 = "llvm.arm.neon.vhadds" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.shadd" + t_str;
-        } else {
-            p.intrin32 = "llvm.arm.neon.vhaddu" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.uhadd" + t_str;
-        }
-        p.pattern = cast(t, (w_vector + w_vector) / 2);
-        casts.push_back(p);
-
-        // Halving subtract
-        if (t.is_int()) {
-            p.intrin32 = "llvm.arm.neon.vhsubs" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.shsub" + t_str;
-        } else {
-            p.intrin32 = "llvm.arm.neon.vhsubu" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.uhsub" + t_str;
-        }
-        p.pattern = cast(t, (w_vector - w_vector) / 2);
-        casts.push_back(p);
-
-        // Saturating add
-        if (t.is_int()) {
-            p.intrin32 = "llvm.sadd.sat" + t_str;
-            p.intrin64 = "llvm.sadd.sat" + t_str;
-        } else {
-            p.intrin32 = "llvm.uadd.sat" + t_str;
-            p.intrin64 = "llvm.uadd.sat" + t_str;
-        }
-        p.pattern = cast(t, clamp(w_vector + w_vector, tmin, tmax));
-        casts.push_back(p);
-
-        // In the unsigned case, the saturation below is unnecessary
-        if (t.is_uint()) {
-            p.pattern = cast(t, min(w_vector + w_vector, tmax));
-            casts.push_back(p);
-        }
-
-        // Saturating subtract
-        // N.B. Saturating subtracts always widen to a signed type
-        if (t.is_int()) {
-            p.intrin32 = "llvm.ssub.sat" + t_str;
-            p.intrin64 = "llvm.ssub.sat" + t_str;
-        } else {
-            p.intrin32 = "llvm.usub.sat" + t_str;
-            p.intrin64 = "llvm.usub.sat" + t_str;
-        }
-        p.pattern = cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax));
-        casts.push_back(p);
-
-        // In the unsigned case, we may detect that the top of the clamp is unnecessary
-        if (t.is_uint()) {
-            p.pattern = cast(t, max(ws_vector - ws_vector, 0));
-            casts.push_back(p);
-        }
-    }
-
     casts.emplace_back("vqrdmulh.v4i16", "sqrdmulh.v4i16", 4,
-                       i16_sat((wild_i32x4 * wild_i32x4 + (1 << 14)) / (1 << 15)),
-                       Pattern::NarrowArgs);
+                       i16_sat(rounding_shift_right(widening_multiply(wild_i16x4, wild_i16x4), 15)));
     casts.emplace_back("vqrdmulh.v8i16", "sqrdmulh.v8i16", 8,
-                       i16_sat((wild_i32x_ * wild_i32x_ + (1 << 14)) / (1 << 15)),
-                       Pattern::NarrowArgs);
+                       i16_sat(rounding_shift_right(widening_multiply(wild_i16x_, wild_i16x_), 15)));
     casts.emplace_back("vqrdmulh.v2i32", "sqrdmulh.v2i32", 2,
-                       i32_sat((wild_i64x2 * wild_i64x2 + (1 << 30)) / Expr(int64_t(1) << 31)),
-                       Pattern::NarrowArgs);
+                       i32_sat(rounding_shift_right(widening_multiply(wild_i32x2, wild_i32x2), 31)));
     casts.emplace_back("vqrdmulh.v4i32", "sqrdmulh.v4i32", 4,
-                       i32_sat((wild_i64x_ * wild_i64x_ + (1 << 30)) / Expr(int64_t(1) << 31)),
-                       Pattern::NarrowArgs);
+                       i32_sat(rounding_shift_right(widening_multiply(wild_i32x_, wild_i32x_), 31)));
 
     casts.emplace_back("vqshiftns.v8i8", "sqshrn.v8i8", 8, i8_sat(wild_i16x_ / wild_i16x_), Pattern::RightShift);
     casts.emplace_back("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_ / wild_i32x_), Pattern::RightShift);
@@ -205,21 +91,6 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     casts.emplace_back("vqmovnsu.v4i16", "sqxtun.v4i16", 4, u16_sat(wild_i32x_));
     casts.emplace_back("vqmovnsu.v2i32", "sqxtun.v2i32", 2, u32_sat(wild_i64x_));
 
-    // Overflow for int32 is not defined by Halide, so for those we can take
-    // advantage of special add-and-halve instructions.
-    //
-    // 64-bit averaging round-down
-    averagings.emplace_back("vhadds.v2i32", "shadd.v2i32", 2, (wild_i32x2 + wild_i32x2));
-
-    // 128-bit
-    averagings.emplace_back("vhadds.v4i32", "shadd.v4i32", 4, (wild_i32x_ + wild_i32x_));
-
-    // 64-bit halving subtract
-    averagings.emplace_back("vhsubs.v2i32", "shsub.v2i32", 2, (wild_i32x2 - wild_i32x2));
-
-    // 128-bit
-    averagings.emplace_back("vhsubs.v4i32", "shsub.v4i32", 4, (wild_i32x_ - wild_i32x_));
-
     // 64-bit saturating negation
     negations.emplace_back("vqneg.v8i8", "sqneg.v8i8", 8, -max(wild_i8x8, -127));
     negations.emplace_back("vqneg.v4i16", "sqneg.v4i16", 4, -max(wild_i16x4, -32767));
@@ -229,26 +100,6 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     negations.emplace_back("vqneg.v16i8", "sqneg.v16i8", 16, -max(wild_i8x_, -127));
     negations.emplace_back("vqneg.v8i16", "sqneg.v8i16", 8, -max(wild_i16x_, -32767));
     negations.emplace_back("vqneg.v4i32", "sqneg.v4i32", 4, -max(wild_i32x_, -(0x7fffffff)));
-
-    // Widening multiplies.
-    multiplies.emplace_back("vmulls.v2i64", "smull.v2i64", 2,
-                            wild_i64x_ * wild_i64x_,
-                            Pattern::NarrowArgs);
-    multiplies.emplace_back("vmullu.v2i64", "umull.v2i64", 2,
-                            wild_u64x_ * wild_u64x_,
-                            Pattern::NarrowArgs);
-    multiplies.emplace_back("vmulls.v4i32", "smull.v4i32", 4,
-                            wild_i32x_ * wild_i32x_,
-                            Pattern::NarrowArgs);
-    multiplies.emplace_back("vmullu.v4i32", "umull.v4i32", 4,
-                            wild_u32x_ * wild_u32x_,
-                            Pattern::NarrowArgs);
-    multiplies.emplace_back("vmulls.v8i16", "smull.v8i16", 8,
-                            wild_i16x_ * wild_i16x_,
-                            Pattern::NarrowArgs);
-    multiplies.emplace_back("vmullu.v8i16", "umull.v8i16", 8,
-                            wild_u16x_ * wild_u16x_,
-                            Pattern::NarrowArgs);
 }
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, Type t, const vector<Expr> &args) {
@@ -382,7 +233,6 @@ void CodeGen_ARM::visit(const Mul *op) {
         return;
     }
 
-    Type t = op->type;
     vector<Expr> matches;
 
     int shift_amount = 0;
@@ -390,43 +240,6 @@ void CodeGen_ARM::visit(const Mul *op) {
         // Let LLVM handle these.
         CodeGen_Posix::visit(op);
         return;
-    }
-
-    // LLVM really struggles to generate mlal unless we generate mull intrinsics
-    // for the multiplication part first.
-    for (size_t i = 0; i < multiplies.size(); i++) {
-        const Pattern &pattern = multiplies[i];
-        //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
-        if (expr_match(pattern.pattern, op, matches)) {
-
-            //debug(4) << "Match!\n";
-            if (pattern.type == Pattern::Simple) {
-                value = call_pattern(pattern, t, matches);
-                return;
-            } else if (pattern.type == Pattern::NarrowArgs) {
-                Type narrow_t = t.with_bits(t.bits() / 2);
-                // Try to narrow all of the args.
-                bool all_narrow = true;
-                for (size_t i = 0; i < matches.size(); i++) {
-                    internal_assert(matches[i].type().bits() == t.bits());
-                    internal_assert(matches[i].type().lanes() == t.lanes());
-                    // debug(4) << "Attemping to narrow " << matches[i] << " to " << t << "\n";
-                    matches[i] = lossless_cast(narrow_t, matches[i]);
-                    if (!matches[i].defined()) {
-                        // debug(4) << "failed\n";
-                        all_narrow = false;
-                    } else {
-                        // debug(4) << "success: " << matches[i] << "\n";
-                        internal_assert(matches[i].type() == narrow_t);
-                    }
-                }
-
-                if (all_narrow) {
-                    value = call_pattern(pattern, t, matches);
-                    return;
-                }
-            }
-        }
     }
 
     // Vector multiplies by 3, 5, 7, 9 should do shift-and-add or
@@ -447,21 +260,6 @@ void CodeGen_ARM::visit(const Mul *op) {
         return;
     }
 
-    CodeGen_Posix::visit(op);
-}
-
-void CodeGen_ARM::visit(const Div *op) {
-    if (!neon_intrinsics_disabled() &&
-        op->type.is_vector() && is_const(op->b, 2) &&
-        (op->a.as<Add>() || op->a.as<Sub>())) {
-        vector<Expr> matches;
-        for (size_t i = 0; i < averagings.size(); i++) {
-            if (expr_match(averagings[i].pattern, op->a, matches)) {
-                value = call_pattern(averagings[i], op->type, matches);
-                return;
-            }
-        }
-    }
     CodeGen_Posix::visit(op);
 }
 
@@ -996,6 +794,77 @@ void CodeGen_ARM::visit(const Call *op) {
         Type wide_ty = ty.with_bits(ty.bits() * 2);
         // This will codegen to vhaddu (arm32) or uhadd (arm64).
         value = codegen(cast(ty, (cast(wide_ty, op->args[0]) + cast(wide_ty, op->args[1])) / 2));
+        return;
+    } else if (op->is_intrinsic(Call::widening_multiply) &&
+               (op->type.is_int() || op->type.is_uint()) && op->type.lanes() > 1 &&
+               !neon_intrinsics_disabled()) {
+        std::string intrin;
+        if (target.bits == 32) {
+            intrin = "llvm.arm.neon.";
+            if (op->type.is_uint()) {
+                intrin += "vmullu.";
+            } else {
+                intrin += "vmulls.";
+            }
+        } else {
+            intrin = "llvm.aarch64.neon.";
+            if (op->type.is_uint()) {
+                intrin += "umull.";
+            } else {
+                intrin += "smull.";
+            }
+        }
+        int simd_bits = 128;
+        intrin += "v" + std::to_string(simd_bits / op->type.bits()) + "i" + std::to_string(op->type.bits());
+        value = call_intrin(op->type, simd_bits / op->type.bits(), intrin, {op->args[0], op->args[1]});
+        return;
+    } else if ((op->is_intrinsic(Call::halving_add) || op->is_intrinsic(Call::rounding_halving_add)) &&
+               (op->type.is_int() || op->type.is_uint()) && op->type.lanes() > 1 &&
+               !neon_intrinsics_disabled()) {
+        std::string intrin;
+        std::string rounding = op->is_intrinsic(Call::rounding_halving_add) ? "r" : "";
+        if (target.bits == 32) {
+            intrin = "llvm.arm.neon.";
+            if (op->type.is_uint()) {
+                intrin += "v" + rounding + "haddu.";
+            } else {
+                intrin += "v" + rounding + "hadds.";
+            }
+        } else {
+            intrin = "llvm.aarch64.neon.";
+            if (op->type.is_uint()) {
+                intrin += "u" + rounding + "hadd.";
+            } else {
+                intrin += "s" + rounding + "hadd.";
+            }
+        }
+        int simd_bits = op->type.lanes() * op->type.bits() > 64 ? 128 : 64;
+        intrin += "v" + std::to_string(simd_bits / op->type.bits()) + "i" + std::to_string(op->type.bits());
+        value = call_intrin(op->type, simd_bits / op->type.bits(), intrin, {op->args[0], op->args[1]});
+        return;
+    } else if (op->is_intrinsic(Call::halving_subtract) &&
+               (op->type.is_int() || op->type.is_uint()) && op->type.lanes() > 1 &&
+               !neon_intrinsics_disabled()) {
+        std::string intrin;
+        std::string rounding = op->is_intrinsic(Call::rounding_halving_add) ? "r" : "";
+        if (target.bits == 32) {
+            intrin = "llvm.arm.neon.";
+            if (op->type.is_uint()) {
+                intrin += "vhsubu.";
+            } else {
+                intrin += "vhsubs.";
+            }
+        } else {
+            intrin = "llvm.aarch64.neon.";
+            if (op->type.is_uint()) {
+                intrin += "uhsub.";
+            } else {
+                intrin += "shsub.";
+            }
+        }
+        int simd_bits = op->type.lanes() * op->type.bits() > 64 ? 128 : 64;
+        intrin += "v" + std::to_string(simd_bits / op->type.bits()) + "i" + std::to_string(op->type.bits());
+        value = call_intrin(op->type, simd_bits / op->type.bits(), intrin, {op->args[0], op->args[1]});
         return;
     }
 

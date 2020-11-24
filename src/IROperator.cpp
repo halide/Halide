@@ -1050,11 +1050,13 @@ Expr widening_subtract(Expr a, Expr b) {
 
 Expr rounding_shift_right(Expr a, Expr b) {
     match_lanes(a, b);
+    match_bits(a, b);
     return Call::make(a.type(), Call::rounding_shift_right, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr rounding_shift_left(Expr a, Expr b) {
     match_lanes(a, b);
+    match_bits(a, b);
     return Call::make(a.type(), Call::rounding_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
