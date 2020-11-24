@@ -3,6 +3,11 @@
 
 #include "halide_benchmark.h"
 
+// This test makes sure GPU runtimes can handle many different small
+// kernels and can handle releasing a device context and making a new
+// one and still have many kernels work. This is needed due to kernel
+// compilation caching mechanisms int he GPU runtimes.
+
 using namespace Halide;
 
 constexpr size_t kNumKernels = 70;

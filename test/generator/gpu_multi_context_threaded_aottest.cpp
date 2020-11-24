@@ -1,5 +1,10 @@
 #include <stdio.h>
 
+// This test demonstrates how to use more than one GPU context with
+// Halide generated GPU support, specifically in a multithreaded
+// program. It of course also tests that this works correctly with the
+// Halide GPU runtimes.
+
 #ifdef _WIN32
 int main(int argc, char **argv) {
     printf("[SKIP] Test requires weak linkage, which is not available on Windows.\n");
