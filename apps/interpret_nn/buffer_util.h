@@ -74,7 +74,7 @@ struct CompareBuffersOptions {
     // What percentage (0..1) of elements in the result can be off by
     // more than exact_thresh (but <= close_thresh) and still have the
     // result be considered correct.
-    double max_close_percent = 0.001; // 0.1% by default. TODO: tweak as needed
+    double max_close_percent = 0.001;  // 0.1% by default. TODO: tweak as needed
     // If true, log info about failures to stderr.
     // If false, log nothing, stay silent.
     bool verbose = true;
