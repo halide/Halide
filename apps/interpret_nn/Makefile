@@ -1,6 +1,6 @@
 include ../support/Makefile.inc
 
-.PHONY: build clean test
+.PHONY: build clean test build_test_ops
 
 # Note: this requires that you have the flatbuffers `flatc` tool available on
 # the host system; this is usually easy to install via e.g.
@@ -21,12 +21,12 @@ FLATC ?= flatc
 FLATBUFFERS_INCLUDE_PATH ?= /usr/local/Cellar/flatbuffers/1.12.0/include
 
 build: $(BIN)/$(HL_TARGET)/benchmark \
-	$(BIN)/$(HL_TARGET)/convolution_test \
 	$(BIN)/$(HL_TARGET)/compare_vs_tflite \
 	$(BIN)/host/tflite_exploder \
+	build_test_ops
 
 
-test: $(BIN)/$(HL_TARGET)/benchmark
+test: test_ops $(BIN)/$(HL_TARGET)/benchmark
 	$(BIN)/$(HL_TARGET)/benchmark
 
 clean:
@@ -138,17 +138,6 @@ $(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/common_reference.o: halide/common_reference.cpp
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
-
-$(BIN)/%/convolution_test: halide/convolution_test.cpp $(BIN)/%/common_reference.o $(OPS_HALIDE)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
-test_convolution: $(BIN)/$(HL_TARGET)/convolution_test
-	$<
-
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
 # unit tests for each op (not yet complete)
@@ -160,17 +149,21 @@ $(BIN)/%/average_pool_test: test/average_pool_test.cpp $(BIN)/%/model.o $(BIN)/%
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-test_ops: $(BIN)/$(HL_TARGET)/add_test $(BIN)/$(HL_TARGET)/average_pool_test
+$(BIN)/%/conv2d_test: test/conv2d_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+
+$(BIN)/%/depthwise_conv2d_test: test/depthwise_conv2d_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+
+build_test_ops: $(BIN)/$(HL_TARGET)/add_test $(BIN)/$(HL_TARGET)/average_pool_test $(BIN)/$(HL_TARGET)/depthwise_conv2d_test
+
+test_ops: build_test_ops
 	$(BIN)/$(HL_TARGET)/add_test
 	$(BIN)/$(HL_TARGET)/average_pool_test
-
-# Experimental glue code to define RunGen rules for all of these (from Makefile.inc)
-# Not sure if useful or not, gonna leave in and see.
-$(eval $(call DEFINE_RUNGEN,add_uint8_uint8,$(BIN)/%/runtime.a))
-$(eval $(call DEFINE_RUNGEN,average_pool_uint8,$(BIN)/%/runtime.a))
-$(eval $(call DEFINE_RUNGEN,convolution_uint8,$(BIN)/%/runtime.a))
-$(eval $(call DEFINE_RUNGEN,depthwise_convolution_uint8,$(BIN)/%/runtime.a))
-$(eval $(call DEFINE_RUNGEN,max_pool_uint8,$(BIN)/%/runtime.a))
+	$(BIN)/$(HL_TARGET)/conv2d_test
+	$(BIN)/$(HL_TARGET)/depthwise_conv2d_test
 
 # Utility to explode a tflite pipeline into individual ops for testing.
 $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/%/tflite_schema_direct_generated.h

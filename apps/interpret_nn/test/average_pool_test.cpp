@@ -52,11 +52,13 @@ struct AveragePool_ReferenceOp : public op_test::ReferenceOp {
     }
 };
 
-struct AveragePoolOpTestFactory {
-    std::vector<std::shared_ptr<Tensor>> tensors = op_test::build_tensors({
-        {"MobilenetV2/Conv_1/Relu6", TensorType::UInt8, {1, 7, 7, 1280}, 0.023528, 0},
-        {"MobilenetV2/Logits/AvgPool", TensorType::UInt8, {1, 1, 1, 1280}, 0.023528, 0},
-    });
+struct AveragePoolOpTestFactory : public op_test::TestCaseFactory {
+    AveragePoolOpTestFactory() {
+        init_tensors({
+            {"MobilenetV2/Conv_1/Relu6", TensorType::UInt8, {1, 7, 7, 1280}, 0.023528, 0},
+            {"MobilenetV2/Logits/AvgPool", TensorType::UInt8, {1, 1, 1, 1280}, 0.023528, 0},
+        });
+    }
 
     struct AveragePoolOpTestTemplate {
         int in, out;
@@ -71,7 +73,7 @@ struct AveragePoolOpTestFactory {
     };
     size_t test_index = 0;
 
-    std::unique_ptr<op_test::TestCase> operator()() {
+    std::unique_ptr<op_test::TestCase> get_next_test() override {
         if (test_index >= test_templates.size()) {
             return nullptr;
         }
@@ -107,5 +109,6 @@ struct AveragePoolOpTestFactory {
 }  // namespace interpret_nn
 
 int main(int argc, char **argv) {
-    return interpret_nn::op_test::op_test_main(argc, argv, interpret_nn::AveragePoolOpTestFactory());
+    interpret_nn::AveragePoolOpTestFactory factory;
+    return interpret_nn::op_test::op_test_main(argc, argv, factory);
 }
