@@ -6,7 +6,39 @@
 #include <sstream>
 #include <string>
 
+#include "HalideRuntime.h"
+
 namespace interpret_nn {
+
+inline std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
+    if (type.code == halide_type_uint && type.bits == 1) {
+        stream << "bool";
+    } else {
+        assert(type.code >= 0 && type.code <= 3);
+        static const char *const names[4] = {"int", "uint", "float", "handle"};
+        stream << names[type.code] << (int)type.bits;
+    }
+    if (type.lanes > 1) {
+        stream << "x" << (int)type.lanes;
+    }
+    return stream;
+}
+
+inline std::ostream &operator<<(std::ostream &s, const halide_dimension_t &dim) {
+    return s << "{" << dim.min << ", " << dim.extent << ", " << dim.stride << "}";
+}
+
+template<typename T>
+inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {
+    s << "{";
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (i > 0) {
+            s << ", ";
+        }
+        s << v[i];
+    }
+    return s << "}";
+}
 
 namespace internal {
 

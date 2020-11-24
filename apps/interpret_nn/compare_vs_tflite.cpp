@@ -30,20 +30,6 @@ struct TfLiteReporter : public tflite::ErrorReporter {
     }
 };
 
-inline std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
-    if (type.code == halide_type_uint && type.bits == 1) {
-        stream << "bool";
-    } else {
-        assert(type.code >= 0 && type.code <= 3);
-        static const char *const names[4] = {"int", "uint", "float", "handle"};
-        stream << names[type.code] << (int)type.bits;
-    }
-    if (type.lanes > 1) {
-        stream << "x" << (int)type.lanes;
-    }
-    return stream;
-}
-
 std::chrono::duration<double> bench(std::function<void()> f) {
     auto result = Halide::Tools::benchmark(f);
     return std::chrono::duration<double>(result.wall_time);
@@ -232,7 +218,7 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
     for (size_t i = 0; i < tflite_outputs.size(); ++i) {
         const Buffer<const void> &tflite_buf = tflite_outputs[i];
         const Buffer<const void> &halide_buf = halide_outputs[i];
-        CHECK(tflite_buf.type() == halide_buf.type());
+        CHECK(tflite_buf.type() == halide_buf.type()) << "Expected type " << tflite_buf.type() << "; saw type " << halide_buf.type();
         CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
         for (int d = 0; d < tflite_buf.dimensions(); d++) {
             CHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
