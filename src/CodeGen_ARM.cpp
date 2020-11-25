@@ -59,7 +59,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         }
 
         // Wider versions of the type
-        Type w = t.with_bits(t.bits() * 2);
+        Type w = t.wide();
         Type ws = Int(t.bits() * 2, t.lanes());
 
         // Vector wildcard for this type
@@ -993,7 +993,7 @@ void CodeGen_ARM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         Type ty = op->type;
-        Type wide_ty = ty.with_bits(ty.bits() * 2);
+        Type wide_ty = ty.wide();
         // This will codegen to vhaddu (arm32) or uhadd (arm64).
         value = codegen(cast(ty, (cast(wide_ty, op->args[0]) + cast(wide_ty, op->args[1])) / 2));
         return;
