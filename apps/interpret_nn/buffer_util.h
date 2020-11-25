@@ -149,7 +149,7 @@ struct CompareBuffers {
         };
 
         CompareBuffersResult r = do_compare(false);
-        if (r.num_wrong > 0 || r.num_close >= max_close) {
+        if (r.num_wrong > 0 || r.num_close > max_close) {
             r.ok = false;
         }
         if (opts.verbose) {

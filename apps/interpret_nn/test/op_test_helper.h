@@ -231,6 +231,9 @@ public:
         while (run_next_test(seed, verbose)) {
             // nothing
         }
+        if (verbose && num_failures > 0) {
+            std::cerr << "num_failures is: " << num_failures << "\n";
+        }
         return num_failures;
     }
 
