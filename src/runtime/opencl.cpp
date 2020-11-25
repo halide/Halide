@@ -549,11 +549,11 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     return err;
 }
 
-WEAK cl_program compile_kernel(void *user_context, ClContext ctx, const char *src, int size) {
+WEAK cl_program compile_kernel(void *user_context, cl_context ctx, const char *src, int size) {
     cl_int err = 0;
     cl_device_id dev;
 
-    err = clGetContextInfo(ctx.context, CL_CONTEXT_DEVICES, sizeof(dev), &dev, nullptr);
+    err = clGetContextInfo(ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, nullptr);
     if (err != CL_SUCCESS) {
         error(user_context) << "CL: clGetContextInfo(CL_CONTEXT_DEVICES) failed: "
                             << get_opencl_error_name(err);
@@ -589,7 +589,7 @@ WEAK cl_program compile_kernel(void *user_context, ClContext ctx, const char *sr
 
     const char *sources[] = {src};
     debug(user_context) << "    clCreateProgramWithSource -> ";
-    cl_program program = clCreateProgramWithSource(ctx.context, 1, &sources[0], nullptr, &err);
+    cl_program program = clCreateProgramWithSource(ctx, 1, &sources[0], nullptr, &err);
     if (err != CL_SUCCESS) {
         debug(user_context) << get_opencl_error_name(err) << "\n";
         error(user_context) << "CL: clCreateProgramWithSource failed: "
@@ -748,7 +748,7 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
     debug(user_context) << "halide_cuda_initialize_kernels got compilation_cache mutex.\n";
     cl_program program;
     if (!compilation_cache.kernel_state_setup(user_context, state_ptr, ctx.context, program,
-                                              compile_kernel, user_context, ctx, src, size)) {
+                                              compile_kernel, user_context, ctx.context, src, size)) {
         return halide_error_code_generic_error;
     }
     halide_assert(user_context, program != nullptr);
