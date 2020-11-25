@@ -2742,29 +2742,25 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        Expr a = op->args[0];
-        Expr b = op->args[1];
         if (op->args[1].type().is_uint()) {
-            Value *a_value = codegen(a);
-            Value *b_value = codegen(b);
-            value = builder->CreateShl(a_value, b_value);
+            Value *a = codegen(op->args[0]);
+            Value *b = codegen(op->args[1]);
+            value = builder->CreateShl(a, b);
         } else {
-            value = codegen(lower_signed_shift_left(a, b));
+            value = codegen(lower_signed_shift_left(op->args[0], op->args[1]));
         }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        Expr a = op->args[0];
-        Expr b = op->args[1];
         if (op->args[1].type().is_uint()) {
-            Value *a_value = codegen(a);
-            Value *b_value = codegen(b);
+            Value *a = codegen(op->args[0]);
+            Value *b = codegen(op->args[1]);
             if (op->type.is_int()) {
-                value = builder->CreateAShr(a_value, b_value);
+                value = builder->CreateAShr(a, b);
             } else {
-                value = builder->CreateLShr(a_value, b_value);
+                value = builder->CreateLShr(a, b);
             }
         } else {
-            value = codegen(lower_signed_shift_right(a, b));
+            value = codegen(lower_signed_shift_right(op->args[0], op->args[1]));
         }
     } else if (op->is_intrinsic(Call::abs)) {
 
