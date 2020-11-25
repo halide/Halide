@@ -1235,13 +1235,18 @@ private:
                                        !b_interval.min.type().is_uint() &&
                                        can_prove(b_interval.min < 0 &&
                                                  b_interval.min > -t.bits())) {
-                                // Left shift by a possibly negative value can
-                                // decrease magnitude.
                                 if (a_interval.min.type().is_uint() || can_prove(a_interval.min >= 0)) {
                                     interval.min = a_interval.min >> abs(b_interval.min);
                                 } else if (can_prove(a_interval.min < 0)) {
-                                    // Left shift of a negative number by 0 is possible.
-                                    interval.min = a_interval.min;
+                                    if (b_interval.has_upper_bound()) {
+                                        if (can_prove(b_interval.max <= 0)) {
+                                            // If b is strictly non-positive, then the magnitude can only decrease.
+                                            interval.min = a_interval.min;
+                                        } else {
+                                            // If b could be positive, then the magnitude might increase.
+                                            interval.min = min(a_interval.min, a_interval.min << b_interval.max);
+                                        }
+                                    }
                                 }
                                 // TODO: Are there any other cases we can handle here?
                             }
@@ -3142,8 +3147,28 @@ void bounds_test() {
     // Regression tests on shifts (produced by z3).
     {
         ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, 0));
+        // -123 << 0 = -123
+        check(scope, x << y, -123, Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
         ScopedBinding<Interval> yb(scope, "y", Interval(-6, Interval::pos_inf()));
-        check(scope, x << y, -123, Interval::pos_inf()); // -123 << 0 = -123
+        // A negative value can increase in magnitude if the rhs is positive.
+        check(scope, x << y, Interval::neg_inf(), Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        Var c("c");
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, c));
+        // Can't prove anything about the upper bound.
+        check(scope, x << y, min((-123) << c, -123), Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, 4));
+        // -123 << 4 = -1968
+        check(scope, x << y, -1968, Interval::pos_inf());
     }
 
     // If we clamp something unbounded as one type, the bounds should
