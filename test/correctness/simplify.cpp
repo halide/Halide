@@ -1837,6 +1837,12 @@ void check_bitwise() {
     check(Let::make(x.as<Variable>()->name, 5, (((~x) & 3) | 16) ^ 33), ((~5 & 3) | 16) ^ 33);
     check(Let::make(x.as<Variable>()->name, 5, (((~cast<uint8_t>(x)) & 3) | 16) ^ 33), make_const(UInt(8), ((~5 & 3) | 16) ^ 33));
 
+    // Check bitwise ops of constant broadcasts.
+    Expr v = Broadcast::make(12, 4);
+    check(v >> 2, Broadcast::make(3, 4));
+    check(Broadcast::make(32768, 4) >> 1, Broadcast::make(16384, 4));
+    check((Broadcast::make(1, 4) << 15) >> 1, Broadcast::make(16384, 4));
+
     check_clz<int8_t>(10, 4);
     check_clz<int16_t>(10, 12);
     check_clz<int32_t>(10, 28);
