@@ -153,7 +153,7 @@ struct CompareBuffers {
             r.ok = false;
         }
         if (opts.verbose) {
-            if (r.num_wrong > 0 || r.num_close > max_close) {
+            if (!r.ok) {
                 // Run again just to log the diffs
                 std::cerr << "*** TOO MANY WRONG/INEXACT ELEMENTS (wrong " << r.num_wrong
                           << ", close " << r.num_close << " vs " << max_close << "):\n";
