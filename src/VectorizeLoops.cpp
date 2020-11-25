@@ -678,8 +678,8 @@ class VectorSubs : public IRMutator {
                 // for these are actually min/extent pairs; we need to maintain the proper dimensionality
                 // count and instead aggregate the widened values into a single pair.
                 for (size_t i = 1; i <= 2; i++) {
-                    const Call *call = new_args[i].as<Call>();
-                    internal_assert(call && call->is_intrinsic(Call::make_struct));
+                    const Call *call = Call::as_intrinsic(new_args[i], {Call::make_struct});
+                    internal_assert(call);
                     if (i == 1) {
                         // values should always be empty for these events
                         internal_assert(call->args.empty());
@@ -709,8 +709,8 @@ class VectorSubs : public IRMutator {
                 for (size_t i = 1; i <= 2; i++) {
                     // Each struct should be a struct-of-vectors, not a
                     // vector of distinct structs.
-                    const Call *call = new_args[i].as<Call>();
-                    internal_assert(call && call->is_intrinsic(Call::make_struct));
+                    const Call *call = Call::as_intrinsic(new_args[i], {Call::make_struct});
+                    internal_assert(call);
                     // Widen the call args to have the same lanes as the max lanes found
                     vector<Expr> call_args(call->args.size());
                     for (size_t j = 0; j < call_args.size(); j++) {
@@ -909,9 +909,7 @@ class VectorSubs : public IRMutator {
                      << predicated_stmt << "\n";
 
             // First check if the condition is marked as likely.
-            const Call *c = cond.as<Call>();
-            if (c && (c->is_intrinsic(Call::likely) ||
-                      c->is_intrinsic(Call::likely_if_innermost))) {
+            if (const Call *c = Call::as_intrinsic(cond, {Call::likely, Call::likely_if_innermost})) {
 
                 // The meaning of the likely intrinsic is that
                 // Halide should optimize for the case in which

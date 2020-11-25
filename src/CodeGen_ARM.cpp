@@ -357,8 +357,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         (op->value.type().is_int() || op->value.type().is_uint()) &&
         t.bits() == op->value.type().bits() * 2) {
         Expr a, b;
-        const Call *c = op->value.as<Call>();
-        if (c && c->is_intrinsic(Call::absd)) {
+        if (const Call *c = Call::as_intrinsic(op->value, {Call::absd})) {
             ostringstream ss;
             int intrin_lanes = 128 / t.bits();
             ss << "vabdl_" << (c->args[0].type().is_int() ? "i" : "u") << t.bits() / 2 << "x" << intrin_lanes;

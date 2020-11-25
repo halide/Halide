@@ -229,7 +229,7 @@ class ReducePrefetchDimension : public IRMutator {
         Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Evaluate>();
         internal_assert(op);
-        const Call *call = op->value.as<Call>();
+        const Call *call = Call::as_intrinsic(op->value, {Call::prefetch});
 
         // TODO(psuriana): Ideally, we want to keep the loop size minimal to
         // minimize the number of prefetch calls. We probably want to lift
@@ -237,7 +237,7 @@ class ReducePrefetchDimension : public IRMutator {
         // the prefetch call.
 
         size_t max_arg_size = 2 + 2 * max_dim;  // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...}
-        if (call && call->is_intrinsic(Call::prefetch) && (call->args.size() > max_arg_size)) {
+        if (call && (call->args.size() > max_arg_size)) {
             const Variable *base = call->args[0].as<Variable>();
             internal_assert(base && base->type.is_handle());
 
@@ -286,9 +286,7 @@ class SplitPrefetch : public IRMutator {
         Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Evaluate>();
         internal_assert(op);
-        const Call *call = op->value.as<Call>();
-
-        if (call && call->is_intrinsic(Call::prefetch)) {
+        if (const Call *call = Call::as_intrinsic(op->value, {Call::prefetch})) {
             const Variable *base = call->args[0].as<Variable>();
             internal_assert(base && base->type.is_handle());
 
