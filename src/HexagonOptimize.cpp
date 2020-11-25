@@ -389,7 +389,7 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
                 return 1;
             }
         }
-    } else if (const Call *widening_mul = Call::as_intrinsic(maybe_mul, {Call::widening_multiply})) {
+    } else if (const Call *widening_mul = Call::as_intrinsic(maybe_mul, {Call::widening_mul})) {
         internal_assert(widening_mul->args.size() == 2);
         Expr a = unbroadcast_lossless_cast(a_ty, widening_mul->args[0]);
         Expr b = unbroadcast_lossless_cast(b_ty, widening_mul->args[1]);
@@ -732,26 +732,26 @@ private:
             {"halide.hexagon.acc_add_4mpy.vw.vb.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vb.vb", wild_i8x, wild_i8x)},
 
             // Widening multiply-accumulates with a scalar.
-            {"halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + widening_multiply(wild_u8x, wild_u8), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + widening_mul(wild_u8x, wild_u8), Pattern::ReinterleaveOp0},
             {"halide.hexagon.add_mpy.vh.vub.b", wild_i16x + wild_i16x * bc(wild_i16), Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2},
-            {"halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + widening_multiply(wild_u16x, wild_u16), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + widening_multiply(wild_u8, wild_u8x), Pattern::ReinterleaveOp0 | Pattern::SwapOps12},
+            {"halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + widening_mul(wild_u16x, wild_u16), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + widening_mul(wild_u8, wild_u8x), Pattern::ReinterleaveOp0 | Pattern::SwapOps12},
             {"halide.hexagon.add_mpy.vh.vub.b", wild_i16x + bc(wild_i16) * wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 | Pattern::SwapOps12},
-            {"halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + widening_multiply(wild_u16, wild_u16x), Pattern::ReinterleaveOp0 | Pattern::SwapOps12},
+            {"halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + widening_mul(wild_u16, wild_u16x), Pattern::ReinterleaveOp0 | Pattern::SwapOps12},
 
             // These patterns aren't exactly right because the instruction
             // saturates the result. However, this is really the instruction
             // that we want to use in most cases, and we can exploit the fact
             // that 32 bit signed arithmetic overflow is undefined to argue
             // that these patterns are not completely incorrect.
-            {"halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + widening_multiply(wild_i16x, bc(wild_i16)), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + widening_multiply(bc(wild_i16), wild_i16x), Pattern::ReinterleaveOp0 | Pattern::SwapOps12},
+            {"halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + widening_mul(wild_i16x, bc(wild_i16)), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + widening_mul(bc(wild_i16), wild_i16x), Pattern::ReinterleaveOp0 | Pattern::SwapOps12},
 
             // Widening multiply-accumulates.
-            {"halide.hexagon.add_mpy.vuh.vub.vub", wild_u16x + widening_multiply(wild_u8x, wild_u8x), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.add_mpy.vuw.vuh.vuh", wild_u32x + widening_multiply(wild_u16x, wild_u16x), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.add_mpy.vh.vb.vb", wild_i16x + widening_multiply(wild_i8x, wild_i8x), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.add_mpy.vw.vh.vh", wild_i32x + widening_multiply(wild_i16x, wild_i16x), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.add_mpy.vuh.vub.vub", wild_u16x + widening_mul(wild_u8x, wild_u8x), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.add_mpy.vuw.vuh.vuh", wild_u32x + widening_mul(wild_u16x, wild_u16x), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.add_mpy.vh.vb.vb", wild_i16x + widening_mul(wild_i8x, wild_i8x), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.add_mpy.vw.vh.vh", wild_i32x + widening_mul(wild_i16x, wild_i16x), Pattern::ReinterleaveOp0},
 
             {"halide.hexagon.add_mpy.vh.vub.vb", wild_i16x + wild_i16x * wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2},
             {"halide.hexagon.add_mpy.vw.vh.vuh", wild_i32x + wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2},
@@ -839,20 +839,20 @@ private:
         // Separate these so we can do some special handling below.
         static const vector<Pattern> trunc_mpy = {
             // Multiply keep high half
-            {"halide.hexagon.trunc_mpy.vw.vw", i32(widening_multiply(wild_i32x, wild_i32x) >> wild_u64)},
+            {"halide.hexagon.trunc_mpy.vw.vw", i32(widening_mul(wild_i32x, wild_i32x) >> wild_u64)},
 
             // Scalar multiply keep high half, with multiplication by 2.
-            {"halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat(widening_multiply(wild_i16x, wild_i16) >> wild_u32)},
-            {"halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat(widening_multiply(wild_i16, wild_i16x) >> wild_u32), Pattern::SwapOps01},
+            {"halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat(widening_mul(wild_i16x, wild_i16) >> wild_u32)},
+            {"halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat(widening_mul(wild_i16, wild_i16x) >> wild_u32), Pattern::SwapOps01},
 
             // Scalar and vector multiply keep high half, with multiplication by 2, and rounding.
-            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat(rounding_shift_right(widening_multiply(wild_i16x, wild_i16), wild_u32))},
-            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat(rounding_shift_right(widening_multiply(wild_i16, wild_i16x), wild_u32)), Pattern::SwapOps01},
-            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16_sat(rounding_shift_right(widening_multiply(wild_i16x, wild_i16x), wild_u32))},
-            {"halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw", i32_sat(rounding_shift_right(widening_multiply(wild_i32x, wild_i32x), wild_u64))},
+            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat(rounding_shift_right(widening_mul(wild_i16x, wild_i16), wild_u32))},
+            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat(rounding_shift_right(widening_mul(wild_i16, wild_i16x), wild_u32)), Pattern::SwapOps01},
+            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16_sat(rounding_shift_right(widening_mul(wild_i16x, wild_i16x), wild_u32))},
+            {"halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw", i32_sat(rounding_shift_right(widening_mul(wild_i32x, wild_i32x), wild_u64))},
 
             // Vector multiply keep high half, with multiplication by 2.
-            {"halide.hexagon.trunc_satdw_mpy2.vw.vw", i32_sat(widening_multiply(wild_i32x, wild_i32x) >> wild_u64)},
+            {"halide.hexagon.trunc_satdw_mpy2.vw.vw", i32_sat(widening_mul(wild_i32x, wild_i32x) >> wild_u64)},
         };
 
         static const vector<Pattern> casts = {
@@ -1029,21 +1029,21 @@ private:
         }
         static const vector<Pattern> calls = {
             // Vector by scalar widening multiplies.
-            {"halide.hexagon.mpy.vub.ub", widening_multiply(wild_u8x, bc(wild_u8)), Pattern::InterleaveResult},
-            {"halide.hexagon.mpy.vuh.uh", widening_multiply(wild_u16x, bc(wild_u16)), Pattern::InterleaveResult},
-            {"halide.hexagon.mpy.vh.h", widening_multiply(wild_i16x, bc(wild_i16)), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vub.ub", widening_mul(wild_u8x, bc(wild_u8)), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vuh.uh", widening_mul(wild_u16x, bc(wild_u16)), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vh.h", widening_mul(wild_i16x, bc(wild_i16)), Pattern::InterleaveResult},
 
             // These look trivial, but they differ due to the interleave result flag.
             {"halide.hexagon.add_vuh.vub.vub", widening_add(wild_u8x, wild_u8x), Pattern::InterleaveResult},
             {"halide.hexagon.add_vuw.vuh.vuh", widening_add(wild_u16x, wild_u16x), Pattern::InterleaveResult},
             {"halide.hexagon.add_vw.vh.vh", widening_add(wild_i16x, wild_i16x), Pattern::InterleaveResult},
-            {"halide.hexagon.sub_vh.vub.vub", widening_subtract(wild_u8x, wild_u8x), Pattern::InterleaveResult},
-            {"halide.hexagon.sub_vw.vuh.vuh", widening_subtract(wild_u16x, wild_u16x), Pattern::InterleaveResult},
-            {"halide.hexagon.sub_vw.vh.vh", widening_subtract(wild_i16x, wild_i16x), Pattern::InterleaveResult},
-            {"halide.hexagon.mpy.vub.vub", widening_multiply(wild_u8x, wild_u8x), Pattern::InterleaveResult},
-            {"halide.hexagon.mpy.vuh.vuh", widening_multiply(wild_u16x, wild_u16x), Pattern::InterleaveResult},
-            {"halide.hexagon.mpy.vb.vb", widening_multiply(wild_i8x, wild_i8x), Pattern::InterleaveResult},
-            {"halide.hexagon.mpy.vh.vh", widening_multiply(wild_i16x, wild_i16x), Pattern::InterleaveResult},
+            {"halide.hexagon.sub_vh.vub.vub", widening_sub(wild_u8x, wild_u8x), Pattern::InterleaveResult},
+            {"halide.hexagon.sub_vw.vuh.vuh", widening_sub(wild_u16x, wild_u16x), Pattern::InterleaveResult},
+            {"halide.hexagon.sub_vw.vh.vh", widening_sub(wild_i16x, wild_i16x), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vub.vub", widening_mul(wild_u8x, wild_u8x), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vuh.vuh", widening_mul(wild_u16x, wild_u16x), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vb.vb", widening_mul(wild_i8x, wild_i8x), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vh.vh", widening_mul(wild_i16x, wild_i16x), Pattern::InterleaveResult},
         };
 
         if (op->type.is_vector()) {
@@ -2055,19 +2055,19 @@ private:
                 return mutate(simplify(sub->a * b) - simplify(sub->b * b));
             } else if (const Call *add = Call::as_intrinsic(a, {Call::widening_add})) {
                 return mutate(simplify(widen(add->args[0]) * b) + simplify(widen(add->args[1]) * b));
-            } else if (const Call *sub = Call::as_intrinsic(a, {Call::widening_subtract})) {
+            } else if (const Call *sub = Call::as_intrinsic(a, {Call::widening_sub})) {
                 return mutate(simplify(widen(sub->args[0]) * b) - simplify(widen(sub->args[1]) * b));
-            } else if (const Call *mul = Call::as_intrinsic(a, {Call::widening_multiply})) {
+            } else if (const Call *mul = Call::as_intrinsic(a, {Call::widening_mul})) {
                 Expr mul_a = mutate(mul->args[0]);
                 Expr mul_b = mutate(mul->args[1]);
 
                 Expr before = widen(mul_a) * widen(mul_b) * b;
                 Expr after = mutate(simplify(before));
                 if (!before.same_as(after)) {
-                    // Don't blow up widening_multiply unless the mutator changed something.
+                    // Don't blow up widening_mul unless the mutator changed something.
                     return after;
                 } else if(!mul_a.same_as(mul->args[0]) || !mul_b.same_as(mul->args[1])) {
-                    return widening_multiply(mul_a, mul_b);
+                    return widening_mul(mul_a, mul_b);
                 }
             }
         }
@@ -2083,7 +2083,7 @@ private:
     }
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::widening_multiply)) {
+        if (op->is_intrinsic(Call::widening_mul)) {
             Expr mutated = mutate_mul(simplify(widen(op->args[0])), simplify(widen(op->args[1])));
             if (mutated.defined()) {
                 return mutated;

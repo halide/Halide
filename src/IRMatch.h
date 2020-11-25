@@ -1409,22 +1409,22 @@ struct Intrin {
         Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::widening_add) {
             return widening_add(arg0, arg1);
-        } else if (intrin == Call::widening_subtract) {
-            return widening_subtract(arg0, arg1);
-        } else if (intrin == Call::widening_multiply) {
-            return widening_multiply(arg0, arg1);
+        } else if (intrin == Call::widening_sub) {
+            return widening_sub(arg0, arg1);
+        } else if (intrin == Call::widening_mul) {
+            return widening_mul(arg0, arg1);
         } else if (intrin == Call::saturating_add) {
             return saturating_add(arg0, arg1);
-        } else if (intrin == Call::saturating_subtract) {
-            return saturating_subtract(arg0, arg1);
+        } else if (intrin == Call::saturating_sub) {
+            return saturating_sub(arg0, arg1);
         } else if (intrin == Call::halving_add) {
             return halving_add(arg0, arg1);
-        } else if (intrin == Call::halving_subtract) {
-            return halving_subtract(arg0, arg1);
+        } else if (intrin == Call::halving_sub) {
+            return halving_sub(arg0, arg1);
         } else if (intrin == Call::rounding_halving_add) {
             return rounding_halving_add(arg0, arg1);
-        } else if (intrin == Call::rounding_halving_subtract) {
-            return rounding_halving_subtract(arg0, arg1);
+        } else if (intrin == Call::rounding_halving_sub) {
+            return rounding_halving_sub(arg0, arg1);
         } else if (intrin == Call::shift_left) {
             return arg0 << arg1;
         } else if (intrin == Call::shift_right) {

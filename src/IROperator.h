@@ -339,9 +339,9 @@ Expr narrow(Expr a);
 /** Compute widen(a) + widen(b). The result is always signed. */
 Expr widening_add(Expr a, Expr b);
 /** Compute widen(a) - widen(b). The result is always signed. */
-Expr widening_subtract(Expr a, Expr b);
+Expr widening_sub(Expr a, Expr b);
 /** Compute widen(a) * widen(b) */
-Expr widening_multiply(Expr a, Expr b);
+Expr widening_mul(Expr a, Expr b);
 
 /** Compute (widening_add(a  (1 << max(b, 0)) / 2) >> b */
 Expr rounding_shift_right(Expr a, Expr b);
@@ -351,16 +351,16 @@ Expr rounding_shift_left(Expr a, Expr b);
 /** Compute saturating_narrow(widen(a) + widen(b)) */
 Expr saturating_add(Expr a, Expr b);
 /** Compute saturating_narrow(widen(a) - widen(b)) */
-Expr saturating_subtract(Expr a, Expr b);
+Expr saturating_sub(Expr a, Expr b);
 
 /** Compute narrow((widen(a) + widen(b)) / 2) */
 Expr halving_add(Expr a, Expr b);
 /** Compute narrow((widen(a) + widen(b) + 1) / 2) */
 Expr rounding_halving_add(Expr a, Expr b);
 /** Compute narrow((widen(a) - widen(b)) / 2) */
-Expr halving_subtract(Expr a, Expr b);
+Expr halving_sub(Expr a, Expr b);
 /** Compute narrow((widen(a) - widen(b) + 1) / 2) */
-Expr rounding_halving_subtract(Expr a, Expr b);
+Expr rounding_halving_sub(Expr a, Expr b);
 
 }  // namespace Internal
 

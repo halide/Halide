@@ -36,36 +36,36 @@ auto widening_add(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::widening_add, a, b);
 }
 template <int A, typename B>
-auto widening_subtract(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::widening_subtract, a, b);
+auto widening_sub(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::widening_sub, a, b);
 }
 template <int A, typename B>
-auto widening_multiply(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::widening_multiply, a, b);
+auto widening_mul(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::widening_mul, a, b);
 }
 template <int A, typename B>
 auto saturating_add(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::saturating_add, a, b);
 }
 template <int A, typename B>
-auto saturating_subtract(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::saturating_subtract, a, b);
+auto saturating_sub(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::saturating_sub, a, b);
 }
 template <int A, typename B>
 auto halving_add(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::halving_add, a, b);
 }
 template <int A, typename B>
-auto halving_subtract(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::halving_subtract, a, b);
+auto halving_sub(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::halving_sub, a, b);
 }
 template <int A, typename B>
 auto rounding_halving_add(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::rounding_halving_add, a, b);
 }
 template <int A, typename B>
-auto rounding_halving_subtract(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::rounding_halving_subtract, a, b);
+auto rounding_halving_sub(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::rounding_halving_sub, a, b);
 }
 template <int A, typename B>
 auto shift_left(IRMatcher::Wild<A> a, B b) {
@@ -95,7 +95,7 @@ bool find_widening_add_or_subtract(const Expr &e, int max_depth) {
         return find_widening_add_or_subtract(add->a, max_depth) || find_widening_add_or_subtract(add->b, max_depth);
     } else if (const Sub *sub = e.as<Sub>()) {
         return find_widening_add_or_subtract(sub->a, max_depth) || find_widening_add_or_subtract(sub->b, max_depth);
-    } else if (Call::as_intrinsic(e, {Call::widening_add, Call::widening_subtract})) {
+    } else if (Call::as_intrinsic(e, {Call::widening_add, Call::widening_sub})) {
         return true;
     }
     return false;
@@ -234,7 +234,7 @@ protected:
             Expr narrow_b = lossless_cast(narrow, b);
 
             if (narrow_a.defined() && narrow_b.defined()) {
-                Expr result = widening_subtract(narrow_a, narrow_b);
+                Expr result = widening_sub(narrow_a, narrow_b);
                 if (result.type() != op->type) {
                     result = Cast::make(op->type, result);
                 }
@@ -269,7 +269,7 @@ protected:
         Expr narrow_b = lossless_cast(narrow, b);
 
         if (narrow_a.defined() && narrow_b.defined()) {
-            return widening_multiply(narrow_a, narrow_b);
+            return widening_mul(narrow_a, narrow_b);
         }
 
         if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -324,13 +324,13 @@ protected:
             auto is_same_int_or_uint = is_same_int || is_same_uint;
             // clang-format off
             if (rewrite(max(min(widening_add(x, y), upper), lower), saturating_add(x, y), is_same_int_or_uint) ||
-                rewrite(max(min(widening_subtract(x, y), upper), lower), saturating_subtract(x, y), is_same_int_or_uint) ||
+                rewrite(max(min(widening_sub(x, y), upper), lower), saturating_sub(x, y), is_same_int_or_uint) ||
                 rewrite(min(widening_add(x, y), upper), saturating_add(x, y), is_same_uint) ||
-                rewrite(max(widening_subtract(x, y), 0), saturating_subtract(x, y), is_same_uint) ||
+                rewrite(max(widening_sub(x, y), 0), saturating_sub(x, y), is_same_uint) ||
                 rewrite(intrin(Call::shift_right, widening_add(x, y), 1), halving_add(x, y), is_same_int_or_uint) ||
-                rewrite(intrin(Call::shift_right, widening_subtract(x, y), 1), halving_subtract(x, y), is_same_int_or_uint) ||
+                rewrite(intrin(Call::shift_right, widening_sub(x, y), 1), halving_sub(x, y), is_same_int_or_uint) ||
                 rewrite(intrin(Call::rounding_shift_right, widening_add(x, y), 1), rounding_halving_add(x, y), is_same_int_or_uint) ||
-                rewrite(intrin(Call::rounding_shift_right, widening_subtract(x, y), 1), halving_subtract(x, y), is_same_int) ||
+                rewrite(intrin(Call::rounding_shift_right, widening_sub(x, y), 1), halving_sub(x, y), is_same_int) ||
                 false) {
                 return rewrite.result;
             }
@@ -385,7 +385,7 @@ Expr lower_widening_add(const Expr &a, const Expr &b) {
     return widen(a) + widen(b);
 }
 
-Expr lower_widening_subtract(const Expr &a, const Expr &b) {
+Expr lower_widening_sub(const Expr &a, const Expr &b) {
     Type wide = a.type().with_bits(a.type().bits() * 2);
     if (wide.is_uint()) {
         wide = wide.with_code(halide_type_int);
@@ -393,7 +393,7 @@ Expr lower_widening_subtract(const Expr &a, const Expr &b) {
     return cast(wide, a) - cast(wide, b);
 }
 
-Expr lower_widening_multiply(const Expr &a, const Expr &b) {
+Expr lower_widening_mul(const Expr &a, const Expr &b) {
     return widen(a) * widen(b);
 }
 
@@ -409,16 +409,16 @@ Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
     return Call::make(a.type(), Call::shift_left, {a_rounded, b}, Call::PureIntrinsic);
 }
 
-// These intentionally use the non-lowered versions of widening_add/widening_subtract, in the
+// These intentionally use the non-lowered versions of widening_add/widening_sub, in the
 // hopes that maybe the user of this will be able to use the information. If not, it will
-// probably recursively call lower_widening_add/lower_widening_subtract.
+// probably recursively call lower_widening_add/lower_widening_sub.
 Expr lower_saturating_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     return saturating_narrow(widening_add(a, b));
 }
-Expr lower_saturating_subtract(const Expr &a, const Expr &b) {
+Expr lower_saturating_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return saturating_cast(a.type(), widening_subtract(a, b));
+    return saturating_cast(a.type(), widening_sub(a, b));
 }
 
 Expr lower_halving_add(const Expr &a, const Expr &b) {
@@ -433,20 +433,20 @@ Expr lower_rounding_halving_add(const Expr &a, const Expr &b) {
     return Cast::make(a.type(), rounding_shift_right(result_2x, 1));
 }
 
-Expr lower_halving_subtract(const Expr &a, const Expr &b) {
+Expr lower_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    Expr result_2x = widening_subtract(a, b);
+    Expr result_2x = widening_sub(a, b);
     return Cast::make(a.type(), result_2x >> 1);
 }
 
-Expr lower_rounding_halving_subtract(const Expr &a, const Expr &b) {
+Expr lower_rounding_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    Expr result_2x = widening_subtract(a, b);
+    Expr result_2x = widening_sub(a, b);
     return Cast::make(a.type(), rounding_shift_right(result_2x, 1));
 }
 
 Expr lower_mulhi_shr(const Expr &a, const Expr &b, const Expr &shift) {
-    Expr p = widening_multiply(a, b);
+    Expr p = widening_mul(a, b);
     p = p >> cast(UInt(p.type().bits()), p.type().bits() / 2);
     return narrow(p) >> shift;
 }
@@ -454,7 +454,7 @@ Expr lower_mulhi_shr(const Expr &a, const Expr &b, const Expr &shift) {
 Expr lower_sorted_avg(const Expr &a, const Expr &b) {
     // b > a, so the following works without widening:
     // a + (b - a)/2
-    // TODO: This is tricky. Targets with halving_subtract would be better off using that,
+    // TODO: This is tricky. Targets with halving_sub would be better off using that,
     // but presumably targets that have that also have halving_add, so there's no reason
     // to use this.
     return a + (b - a) / 2;
@@ -482,12 +482,12 @@ Expr lower_intrinsic(const Call *op) {
     if (op->is_intrinsic(Call::widening_add)) {
         internal_assert(op->args.size() == 2);
         return lower_widening_add(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::widening_subtract)) {
+    } else if (op->is_intrinsic(Call::widening_sub)) {
         internal_assert(op->args.size() == 2);
-        return lower_widening_subtract(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::widening_multiply)) {
+        return lower_widening_sub(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widening_mul)) {
         internal_assert(op->args.size() == 2);
-        return lower_widening_multiply(op->args[0], op->args[1]);
+        return lower_widening_mul(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::rounding_shift_right)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_shift_right(op->args[0], op->args[1]);
@@ -497,15 +497,15 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::halving_add)) {
         internal_assert(op->args.size() == 2);
         return lower_halving_add(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::halving_subtract)) {
+    } else if (op->is_intrinsic(Call::halving_sub)) {
         internal_assert(op->args.size() == 2);
-        return lower_halving_subtract(op->args[0], op->args[1]);
+        return lower_halving_sub(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::rounding_halving_add)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_halving_add(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::rounding_halving_subtract)) {
+    } else if (op->is_intrinsic(Call::rounding_halving_sub)) {
         internal_assert(op->args.size() == 2);
-        return lower_rounding_halving_subtract(op->args[0], op->args[1]);
+        return lower_rounding_halving_sub(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::mulhi_shr)) {
         internal_assert(op->args.size() == 3);
         return lower_mulhi_shr(op->args[0], op->args[1], op->args[2]);

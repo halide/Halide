@@ -64,8 +64,8 @@ bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
         return false;
     }
 
-    const Call *ma = Call::as_intrinsic(a, {Call::widening_multiply});
-    const Call *mb = Call::as_intrinsic(b, {Call::widening_multiply});
+    const Call *ma = Call::as_intrinsic(a, {Call::widening_mul});
+    const Call *mb = Call::as_intrinsic(b, {Call::widening_mul});
     if (ma && mb) {
         std::vector<Expr> args = {ma->args[0], ma->args[1], mb->args[0], mb->args[1]};
         result.swap(args);
@@ -236,32 +236,32 @@ void CodeGen_X86::visit(const Cast *op) {
         {Target::FeatureEnd, 16, 0, "paddusbx16",
          saturating_add(wild_u8x_, wild_u8x_)},
         {Target::AVX, 32, 17, "psubusbx32",
-         saturating_subtract(wild_u8x_, wild_u8x_)},
+         saturating_sub(wild_u8x_, wild_u8x_)},
         {Target::FeatureEnd, 16, 0, "psubusbx16",
-         saturating_subtract(wild_u8x_, wild_u8x_)},
+         saturating_sub(wild_u8x_, wild_u8x_)},
         {Target::AVX, 16, 9, "padduswx16",
          saturating_add(wild_u16x_, wild_u16x_)},
         {Target::FeatureEnd, 8, 0, "padduswx8",
          saturating_add(wild_u16x_, wild_u16x_)},
         {Target::AVX, 16, 9, "psubuswx16",
-         saturating_subtract(wild_u16x_, wild_u16x_)},
+         saturating_sub(wild_u16x_, wild_u16x_)},
         {Target::FeatureEnd, 8, 0, "psubuswx8",
-         saturating_subtract(wild_u16x_, wild_u16x_)},
+         saturating_sub(wild_u16x_, wild_u16x_)},
 
         // Only use the avx2 version if we have > 8 lanes
         {Target::AVX2, 16, 9, "llvm.x86.avx2.pmulh.w",
-         i16(widening_multiply(wild_i16x_, wild_i16x_) >> u32(16))},
+         i16(widening_mul(wild_i16x_, wild_i16x_) >> u32(16))},
         {Target::AVX2, 16, 9, "llvm.x86.avx2.pmulhu.w",
-         u16(widening_multiply(wild_u16x_, wild_u16x_) >> u32(16))},
+         u16(widening_mul(wild_u16x_, wild_u16x_) >> u32(16))},
         {Target::AVX2, 16, 9, "llvm.x86.avx2.pmul.hr.sw",
-         i16(rounding_shift_right(widening_multiply(wild_i16x_, wild_i16x_), u32(15)))},
+         i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u32(15)))},
 
         {Target::FeatureEnd, 8, 0, "llvm.x86.sse2.pmulh.w",
-         i16(widening_multiply(wild_i16x_, wild_i16x_) >> u32(16))},
+         i16(widening_mul(wild_i16x_, wild_i16x_) >> u32(16))},
         {Target::FeatureEnd, 8, 0, "llvm.x86.sse2.pmulhu.w",
-         u16(widening_multiply(wild_u16x_, wild_u16x_) >> u32(16))},
+         u16(widening_mul(wild_u16x_, wild_u16x_) >> u32(16))},
         {Target::SSE41, 8, 0, "llvm.x86.ssse3.pmul.hr.sw.128",
-         i16(rounding_shift_right(widening_multiply(wild_i16x_, wild_i16x_), u32(15)))},
+         i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u32(15)))},
         // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
         {Target::AVX2, 32, 17, "pavgbx32",
          rounding_halving_add(wild_u8x_, wild_u8x_)},
@@ -332,7 +332,7 @@ void CodeGen_X86::visit(const Cast *op) {
 
 void CodeGen_X86::visit(const Call *op) {
 #if LLVM_VERSION < 110
-    if (op->is_intrinsic(Call::widening_multiply) && (op->type.is_int() || op->type.is_uint())) {
+    if (op->is_intrinsic(Call::widening_mul) && (op->type.is_int() || op->type.is_uint())) {
         // Widening integer multiply of non-power-of-two vector sizes is
         // broken in older llvms for older x86:
         // https://bugs.llvm.org/show_bug.cgi?id=44976
@@ -366,7 +366,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         factor == 2 &&
         op->op == VectorReduce::Add) {
         Expr a, b;
-        if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_multiply})) {
+        if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
             a = mul->args[0];
             b = mul->args[1];
         } else {

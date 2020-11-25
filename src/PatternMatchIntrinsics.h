@@ -15,19 +15,19 @@ Stmt pattern_match_intrinsics(Stmt s);
 
 /** Implement intrinsics with non-intrinsic using equivalents. */
 Expr lower_widening_add(const Expr &a, const Expr &b);
-Expr lower_widening_subtract(const Expr &a, const Expr &b);
-Expr lower_widening_multiply(const Expr &a, const Expr &b);
+Expr lower_widening_sub(const Expr &a, const Expr &b);
+Expr lower_widening_mul(const Expr &a, const Expr &b);
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b);
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b);
 
 Expr lower_saturating_add(const Expr &a, const Expr &b);
-Expr lower_saturating_subtract(const Expr &a, const Expr &b);
+Expr lower_saturating_sub(const Expr &a, const Expr &b);
 
 Expr lower_halving_add(const Expr &a, const Expr &b);
 Expr lower_rounding_halving_add(const Expr &a, const Expr &b);
-Expr lower_halving_subtract(const Expr &a, const Expr &b);
-Expr lower_rounding_halving_subtract(const Expr &a, const Expr &b);
+Expr lower_halving_sub(const Expr &a, const Expr &b);
+Expr lower_rounding_halving_sub(const Expr &a, const Expr &b);
 
 Expr lower_mulhi_shr(const Expr &a, const Expr &b, const Expr &shift);
 Expr lower_sorted_avg(const Expr &a, const Expr &b);

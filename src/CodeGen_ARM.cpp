@@ -40,13 +40,13 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     }
 
     casts.emplace_back("vqrdmulh.v4i16", "sqrdmulh.v4i16", 4,
-                       i16_sat(rounding_shift_right(widening_multiply(wild_i16x4, wild_i16x4), 15)));
+                       i16_sat(rounding_shift_right(widening_mul(wild_i16x4, wild_i16x4), 15)));
     casts.emplace_back("vqrdmulh.v8i16", "sqrdmulh.v8i16", 8,
-                       i16_sat(rounding_shift_right(widening_multiply(wild_i16x_, wild_i16x_), 15)));
+                       i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), 15)));
     casts.emplace_back("vqrdmulh.v2i32", "sqrdmulh.v2i32", 2,
-                       i32_sat(rounding_shift_right(widening_multiply(wild_i32x2, wild_i32x2), 31)));
+                       i32_sat(rounding_shift_right(widening_mul(wild_i32x2, wild_i32x2), 31)));
     casts.emplace_back("vqrdmulh.v4i32", "sqrdmulh.v4i32", 4,
-                       i32_sat(rounding_shift_right(widening_multiply(wild_i32x_, wild_i32x_), 31)));
+                       i32_sat(rounding_shift_right(widening_mul(wild_i32x_, wild_i32x_), 31)));
 
     casts.emplace_back("vqshiftns.v8i8", "sqshrn.v8i8", 8, i8_sat(wild_i16x_ / wild_i16x_), Pattern::RightShift);
     casts.emplace_back("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_ / wild_i32x_), Pattern::RightShift);
@@ -795,7 +795,7 @@ void CodeGen_ARM::visit(const Call *op) {
         // This will codegen to vhaddu (arm32) or uhadd (arm64).
         value = codegen(cast(ty, (cast(wide_ty, op->args[0]) + cast(wide_ty, op->args[1])) / 2));
         return;
-    } else if (op->is_intrinsic(Call::widening_multiply) &&
+    } else if (op->is_intrinsic(Call::widening_mul) &&
                (op->type.is_int() || op->type.is_uint()) && op->type.lanes() > 1 &&
                !neon_intrinsics_disabled()) {
         std::string intrin;
@@ -842,7 +842,7 @@ void CodeGen_ARM::visit(const Call *op) {
         intrin += "v" + std::to_string(simd_bits / op->type.bits()) + "i" + std::to_string(op->type.bits());
         value = call_intrin(op->type, simd_bits / op->type.bits(), intrin, {op->args[0], op->args[1]});
         return;
-    } else if (op->is_intrinsic(Call::halving_subtract) &&
+    } else if (op->is_intrinsic(Call::halving_sub) &&
                (op->type.is_int() || op->type.is_uint()) && op->type.lanes() > 1 &&
                !neon_intrinsics_disabled()) {
         std::string intrin;

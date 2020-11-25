@@ -2274,9 +2274,9 @@ void CodeGen_Hexagon::visit(const Call *op) {
         {Call::get_intrinsic_name(Call::absd), {"halide.hexagon.absd", true}},
         {Call::get_intrinsic_name(Call::halving_add), {"halide.hexagon.avg", true}},
         {Call::get_intrinsic_name(Call::rounding_halving_add), {"halide.hexagon.avg_rnd", true}},
-        {Call::get_intrinsic_name(Call::halving_subtract), {"halide.hexagon.navg", true}},
+        {Call::get_intrinsic_name(Call::halving_sub), {"halide.hexagon.navg", true}},
         {Call::get_intrinsic_name(Call::saturating_add), {"halide.hexagon.sat_add", true}},
-        {Call::get_intrinsic_name(Call::saturating_subtract), {"halide.hexagon.sat_sub", true}},
+        {Call::get_intrinsic_name(Call::saturating_sub), {"halide.hexagon.sat_sub", true}},
     };
 
     if (is_native_interleave(op) || is_native_deinterleave(op)) {

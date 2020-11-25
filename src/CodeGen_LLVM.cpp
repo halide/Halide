@@ -2947,7 +2947,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
             }
         }
-    } else if (op->is_intrinsic(Call::saturating_add) || op->is_intrinsic(Call::saturating_subtract)) {
+    } else if (op->is_intrinsic(Call::saturating_add) || op->is_intrinsic(Call::saturating_sub)) {
         internal_assert(op->args.size() == 2);
         std::string intrin;
         if (op->type.is_int()) {
@@ -2959,7 +2959,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         if (op->is_intrinsic(Call::saturating_add)) {
             intrin += "add.sat.";
         } else {
-            internal_assert(op->is_intrinsic(Call::saturating_subtract));
+            internal_assert(op->is_intrinsic(Call::saturating_sub));
             intrin += "sub.sat.";
         }
         if (op->type.lanes() > 1) {
