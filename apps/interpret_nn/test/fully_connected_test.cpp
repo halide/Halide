@@ -79,10 +79,10 @@ struct FullyConnectedOpTestFactory : public op_test::TestCaseFactory {
 
     FullyConnectedOpTestFactory() {
         init_tensors({
-            {"input", TensorType::UInt8, {1, 1280}, 0.02352941222, 0},
-            {"filter", TensorType::UInt8, {1000, 1280}, 0.001603011042, 0},
+            {"input", TensorType::UInt8, {1280, 1}, 0.02352941222, 0},
+            {"filter", TensorType::UInt8, {1280, 1000}, 0.001603011042, 0},
             {"bias", TensorType::Int32, {1000}, 0.0000377179058, 0, fill_tensor_with_random_bias},
-            {"output", TensorType::UInt8, {1, 1000}, 0.08106886595, 0},
+            {"output", TensorType::UInt8, {1000, 1}, 0.08106886595, 0},
         });
     }
 

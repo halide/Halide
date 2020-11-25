@@ -52,9 +52,9 @@ struct Add_ReferenceOp : public op_test::ReferenceOp {
 struct AddOpTestFactory : public op_test::TestCaseFactory {
     AddOpTestFactory() {
         init_tensors({
-            {"MobilenetV2/expanded_conv_2/project/add_fold", TensorType::UInt8, {1, 56, 56, 24}, 0.401493, 136},
-            {"MobilenetV2/expanded_conv_1/project/add_fold", TensorType::UInt8, {1, 56, 56, 24}, 0.275834, 119},
-            {"MobilenetV2/expanded_conv_2/add", TensorType::UInt8, {1, 56, 56, 24}, 0.432169, 133},
+            {"MobilenetV2/expanded_conv_2/project/add_fold", TensorType::UInt8, {24, 56, 56, 1}, 0.401493, 136},
+            {"MobilenetV2/expanded_conv_1/project/add_fold", TensorType::UInt8, {24, 56, 56, 1}, 0.275834, 119},
+            {"MobilenetV2/expanded_conv_2/add", TensorType::UInt8, {24, 56, 56, 1}, 0.432169, 133},
         });
     }
 

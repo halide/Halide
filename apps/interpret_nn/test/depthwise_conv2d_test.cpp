@@ -142,11 +142,11 @@ struct DepthwiseConv2DOpTestFactory : public op_test::TestCaseFactory {
     }
     DepthwiseConv2DOpTestFactory() {
         init_tensors({
-            {"input", TensorType::UInt8, {1, 112, 112, 32}, 0.02352847718, 0},
-            {"filter_mobilenet", TensorType::UInt8, {1, 3, 3, 32}, 0.3436955214, 165, fill_filter_mobilenet},
+            {"input", TensorType::UInt8, {32, 112, 112, 1}, 0.02352847718, 0},
+            {"filter_mobilenet", TensorType::UInt8, {32, 3, 3, 1}, 0.3436955214, 165, fill_filter_mobilenet},
             {"bias_mobilenet", TensorType::Int32, {32}, 0.008086632006, 0, fill_bias_mobilenet},
-            {"output", TensorType::UInt8, {1, 112, 112, 32}, 0.02352847718, 0},
-            {"filter_random", TensorType::UInt8, {1, 3, 3, 32}, 0.3436955214, 165, fill_tensor_with_random},
+            {"output", TensorType::UInt8, {32, 112, 112, 1}, 0.02352847718, 0},
+            {"filter_random", TensorType::UInt8, {32, 3, 3, 1}, 0.3436955214, 165, fill_tensor_with_random},
             {"bias_random", TensorType::Int32, {32}, 0.008086632006, 0, fill_tensor_with_random_bias},
         });
     }

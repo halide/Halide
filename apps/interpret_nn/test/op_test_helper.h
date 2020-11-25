@@ -120,7 +120,7 @@ protected:
             size_t shape_size = 1;
             for (size_t i = 0; i < shape.size(); i++) {
                 shape[i].min = 0;
-                shape[i].extent = td.shape.at(shape.size() - i - 1);
+                shape[i].extent = td.shape.at(i);
                 shape[i].stride = shape_size;
                 shape_size *= shape[i].extent;
             }

@@ -55,8 +55,8 @@ struct AveragePool_ReferenceOp : public op_test::ReferenceOp {
 struct AveragePoolOpTestFactory : public op_test::TestCaseFactory {
     AveragePoolOpTestFactory() {
         init_tensors({
-            {"MobilenetV2/Conv_1/Relu6", TensorType::UInt8, {1, 7, 7, 1280}, 0.023528, 0},
-            {"MobilenetV2/Logits/AvgPool", TensorType::UInt8, {1, 1, 1, 1280}, 0.023528, 0},
+            {"MobilenetV2/Conv_1/Relu6", TensorType::UInt8, {1280, 7, 7, 1}, 0.023528, 0},
+            {"MobilenetV2/Logits/AvgPool", TensorType::UInt8, {1280, 1, 1, 1}, 0.023528, 0},
         });
     }
 

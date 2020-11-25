@@ -188,11 +188,11 @@ struct Conv2DOpTestFactory : public op_test::TestCaseFactory {
     }
     Conv2DOpTestFactory() {
         init_tensors({
-            {"input", TensorType::UInt8, {1, 224, 224, 3}, 0.0078125, 128},
-            {"filter_mobilenet", TensorType::UInt8, {32, 3, 3, 3}, 0.03396892548, 122, fill_filter_mobilenet},
+            {"input", TensorType::UInt8, {3, 224, 224, 1}, 0.0078125, 128},
+            {"filter_mobilenet", TensorType::UInt8, {3, 3, 3, 32}, 0.03396892548, 122, fill_filter_mobilenet},
             {"bias_mobilenet", TensorType::Int32, {32}, 0.0002653822303, 0, fill_bias_mobilenet},
-            {"output", TensorType::UInt8, {1, 112, 112, 32}, 0.02352847718, 0},
-            {"filter_random", TensorType::UInt8, {32, 3, 3, 3}, 0.03396892548, 122, fill_tensor_with_random},
+            {"output", TensorType::UInt8, {32, 112, 112, 1}, 0.02352847718, 0},
+            {"filter_random", TensorType::UInt8, {3, 3, 3, 32}, 0.03396892548, 122, fill_tensor_with_random},
             {"bias_random", TensorType::Int32, {32}, 0.0002653822303, 0, fill_tensor_with_random_bias},
         });
     }

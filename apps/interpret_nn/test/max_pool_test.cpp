@@ -52,8 +52,8 @@ struct MaxPool_ReferenceOp : public op_test::ReferenceOp {
 struct MaxPoolOpTestFactory : public op_test::TestCaseFactory {
     MaxPoolOpTestFactory() {
         init_tensors({
-            {"input", TensorType::UInt8, {1, 48, 48, 16}, 1.0, 0},
-            {"output", TensorType::UInt8, {1, 48, 48, 16}, 1.0, 0},
+            {"input", TensorType::UInt8, {16, 48, 48, 1}, 1.0, 0},
+            {"output", TensorType::UInt8, {16, 48, 48, 1}, 1.0, 0},
         });
     }
 
