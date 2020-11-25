@@ -284,7 +284,7 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
     int shift_amount;
     if (is_const_power_of_two_integer(b, &shift_amount) &&
         (t.is_int() || t.is_uint())) {
-        return a >> make_const(a.type(), shift_amount);
+        return a >> make_const(UInt(a.type().bits()), shift_amount);
     } else if (const_int_divisor &&
                t.is_int() &&
                (t.bits() == 8 || t.bits() == 16 || t.bits() == 32) &&
@@ -307,7 +307,7 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
 
         // Make an all-ones mask if the numerator is negative
         Type num_as_uint_t = num.type().with_code(Type::UInt);
-        Expr sign = cast(num_as_uint_t, num >> make_const(t, t.bits() - 1));
+        Expr sign = cast(num_as_uint_t, num >> make_const(UInt(t.bits()), t.bits() - 1));
 
         // Flip the numerator bits if the mask is high.
         num = cast(num_as_uint_t, num);
@@ -359,7 +359,7 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
 
             // Do the final shift
             if (shift) {
-                val = val >> make_const(t, shift);
+                val = val >> make_const(UInt(t.bits()), shift);
             }
         }
 
@@ -450,8 +450,8 @@ std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &num, const Expr &de
     Expr r = qr.second;
     // Correct the signs for quotient and remainder for signed integer division.
     if (num.type().is_int()) {
-        Expr num_neg = num >> make_const(num.type(), (num.type().bits() - 1));
-        Expr den_neg = den >> make_const(num.type(), (num.type().bits() - 1));
+        Expr num_neg = num >> make_const(UInt(num.type().bits()), (num.type().bits() - 1));
+        Expr den_neg = den >> make_const(UInt(num.type().bits()), (num.type().bits() - 1));
         q = cast(num.type(), q) * ((num_neg ^ den_neg) | 1);
         r = cast(num.type(), r) * (num_neg | 1);
     }
@@ -490,8 +490,8 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         Expr zero = make_zero(a.type());
         Expr minus_one = make_const(a.type(), -1);
 
-        Expr a_neg = a >> make_const(a.type(), (a.type().bits() - 1));
-        Expr b_neg = b >> make_const(a.type(), (a.type().bits() - 1));
+        Expr a_neg = a >> make_const(UInt(a.type().bits()), (a.type().bits() - 1));
+        Expr b_neg = b >> make_const(UInt(b.type().bits()), (b.type().bits() - 1));
         Expr b_zero = select(b == zero, minus_one, zero);
 
         // Give the simplifier the chance to skip some of this nonsense
@@ -546,8 +546,8 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         Expr zero = make_zero(a.type());
         Expr minus_one = make_const(a.type(), -1);
 
-        Expr a_neg = a >> make_const(a.type(), (a.type().bits() - 1));
-        Expr b_neg = b >> make_const(a.type(), (a.type().bits() - 1));
+        Expr a_neg = a >> make_const(UInt(a.type().bits()), (a.type().bits() - 1));
+        Expr b_neg = b >> make_const(UInt(a.type().bits()), (a.type().bits() - 1));
         Expr b_zero = select(b == zero, minus_one, zero);
 
         // Give the simplifier the chance to skip some of this nonsense
@@ -585,13 +585,12 @@ Expr lower_signed_shift_left(const Expr &a, const Expr &b) {
     internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
-        Type t = UInt(a.type().bits(), a.type().lanes());
         Expr val;
         const uint64_t b_unsigned = std::abs(*const_int_b);
         if (*const_int_b >= 0) {
-            val = a << make_const(t, b_unsigned);
+            val = a << make_const(UInt(a.type().bits()), b_unsigned);
         } else if (*const_int_b < 0) {
-            val = a >> make_const(t, b_unsigned);
+            val = a >> make_const(UInt(a.type().bits()), b_unsigned);
         }
         return common_subexpression_elimination(val);
     } else {
@@ -599,7 +598,7 @@ Expr lower_signed_shift_left(const Expr &a, const Expr &b) {
         // case for the most negative value because its result is unsigned.
         Expr b_unsigned = abs(b);
         Expr val = select(b >= 0, a << b_unsigned, a >> b_unsigned);
-        return simplify(common_subexpression_elimination(val));
+        return common_subexpression_elimination(val);
     }
 }
 
@@ -607,13 +606,12 @@ Expr lower_signed_shift_right(const Expr &a, const Expr &b) {
     internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
-        Type t = UInt(a.type().bits(), a.type().lanes());
         Expr val;
         const uint64_t b_unsigned = std::abs(*const_int_b);
         if (*const_int_b >= 0) {
-            val = a >> make_const(t, b_unsigned);
+            val = a >> make_const(UInt(a.type().bits()), b_unsigned);
         } else if (*const_int_b < 0) {
-            val = a << make_const(t, b_unsigned);
+            val = a << make_const(UInt(a.type().bits()), b_unsigned);
         }
         return common_subexpression_elimination(val);
     } else {
@@ -621,7 +619,7 @@ Expr lower_signed_shift_right(const Expr &a, const Expr &b) {
         // case for the most negative value because its result is unsigned.
         Expr b_unsigned = abs(b);
         Expr val = select(b >= 0, a >> b_unsigned, a << b_unsigned);
-        return simplify(common_subexpression_elimination(val));
+        return common_subexpression_elimination(val);
     }
 }
 

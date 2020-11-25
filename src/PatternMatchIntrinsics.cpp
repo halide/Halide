@@ -14,33 +14,9 @@ using namespace Halide::ConciseCasts;
 
 namespace {
 
-Expr widen(Expr a) {
-    return Cast::make(a.type().with_bits(a.type().bits() * 2), std::move(a));
-}
-
-Expr narrow(Expr a) {
-    return Cast::make(a.type().with_bits(a.type().bits() / 2), std::move(a));
-}
-
 Expr saturating_narrow(Expr a) {
     Type narrow = a.type().with_bits(a.type().bits() / 2);
     return saturating_cast(narrow, a);
-}
-
-Expr find_and_subtract(const Expr &e, const Expr &term) {
-    if (const Add *add = e.as<Add>()) {
-        Expr a = find_and_subtract(add->a, term);
-        if (!a.same_as(add->a)) {
-            return Add::make(a, add->b);
-        }
-        Expr b = find_and_subtract(add->b, term);
-        if (!b.same_as(add->b)) {
-            return Add::make(add->a, b);
-        }
-    } else if (can_prove(e == term)) {
-        return make_zero(e.type());
-    }
-    return e;
 }
 
 // Returns true iff t is an integral type where overflow is undefined
@@ -106,6 +82,102 @@ auto rounding_shift_left(IRMatcher::Wild<A> a, B b) {
 template <int A, typename B>
 auto rounding_shift_right(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::rounding_shift_right, a, b);
+}
+
+// If there's a widening add or subtract in the first e.type().bits() / 2 - 1
+// levels down a tree of adds or subtracts, we know there's enough headroom for
+// another add without overflow.
+bool find_widening_add_or_subtract(const Expr &e, int max_depth) {
+    if (max_depth-- <= 0) {
+        return false;
+    }
+    if (const Add *add = e.as<Add>()) {
+        return find_widening_add_or_subtract(add->a, max_depth) || find_widening_add_or_subtract(add->b, max_depth);
+    } else if (const Sub *sub = e.as<Sub>()) {
+        return find_widening_add_or_subtract(sub->a, max_depth) || find_widening_add_or_subtract(sub->b, max_depth);
+    } else if (Call::as_intrinsic(e, {Call::widening_add, Call::widening_subtract})) {
+        return true;
+    }
+    return false;
+}
+
+bool find_widening_add_or_subtract(const Expr &e) {
+    return find_widening_add_or_subtract(e, e.type().bits() / 2 - 1);
+}
+
+// We want to find and remove an add of 'term' from e.
+Expr find_and_subtract(const Expr &e, const Expr &round) {
+    if (const Add *add = e.as<Add>()) {
+        Expr a = find_and_subtract(add->a, round);
+        if (!a.same_as(add->a)) {
+            return Add::make(a, add->b);
+        }
+        Expr b = find_and_subtract(add->b, round);
+        if (!b.same_as(add->b)) {
+            return Add::make(add->a, b);
+        }
+    } else if (const Sub *sub = e.as<Sub>()) {
+        Expr a = find_and_subtract(sub->a, round);
+        if (!a.same_as(sub->a)) {
+            return Sub::make(a, sub->b);
+        }
+        // We can't recurse into the negatve part of a subtract.
+    } else if (can_prove(e == round)) {
+        return make_zero(e.type());
+    }
+    return e;
+}
+
+Expr to_rounding_shift(const Call *c) {
+    if (c->is_intrinsic(Call::shift_left) || c->is_intrinsic(Call::shift_right)) {
+        internal_assert(c->args.size() == 2);
+        Expr a = c->args[0];
+        Expr b = c->args[1];
+
+        // Helper to make the appropriate shift.
+        auto rounding_shift = [&](const Expr &a, const Expr &b) {
+            if (c->is_intrinsic(Call::shift_right)) {
+                return rounding_shift_right(a, b);
+            } else {
+                return rounding_shift_left(a, b);
+            }
+        };
+
+        // The rounding offset for the shift we have.
+        Expr round;
+        if (c->is_intrinsic(Call::shift_right)) {
+            round = simplify((make_const(a.type().with_lanes(1), 1) << max(b, 0)) >> 1);
+        } else {
+            round = simplify((make_const(a.type().with_lanes(1), 1) >> min(b, 0)) >> 1);
+        }
+
+        // We can always handle widening or saturating adds.
+        if (const Call *add = Call::as_intrinsic(a, {Call::widening_add, Call::saturating_add})) {
+            if (can_prove(add->args[0] == round)) {
+                return rounding_shift(cast(add->type, add->args[1]), b);
+            } else if (can_prove(add->args[1] == round)) {
+                return rounding_shift(cast(add->type, add->args[0]), b);
+            }
+        }
+
+        // If it wasn't a widening or saturating add, we might still
+        // be able to safely accept the rounding.
+        Expr a_less_round = find_and_subtract(a, round);
+        if (!a_less_round.same_as(a)) {
+            // We found and removed the rounding. However, we may have just changed
+            // behavior due to overflow. This is still save if the type is not
+            // overflowing, or we can find a widening add or subtract in the tree
+            // of adds/subtracts. This is a common pattern, e.g.
+            // rounding_halving_add(a, b) = shift_round(widening_add(a, b) + 1, 1).
+            // TODO: This could be done with bounds inference instead of this hack
+            // if it supported intrinsics like widening_add.
+            if (no_overflow(a.type()) || find_widening_add_or_subtract(a_less_round)) {
+                return rounding_shift(simplify(a_less_round), b);
+            }
+        }
+    }
+
+    return Expr();
 }
 
 // Perform peephole optimizations on the IR, adding appropriate
@@ -181,6 +253,16 @@ protected:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
+        // Rewrite multiplies to shifts if possible.
+        if (op->type.is_int() || op->type.is_uint()) {
+            int pow2 = 0;
+            if (is_const_power_of_two_integer(a, &pow2)) {
+                return b << pow2;
+            } else if (is_const_power_of_two_integer(b, &pow2)) {
+                return a << pow2;
+            }
+        }
+
         // We're applying this to float, which seems OK? float16 * float16 -> float32 is a widening multiply?
         Type narrow = op->type.with_bits(op->type.bits() / 2);
         Expr narrow_a = lossless_cast(narrow, a);
@@ -212,6 +294,21 @@ protected:
         }
     }
 
+    Expr visit(const Mod *op) override {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        if (!op->type.is_float()) {
+            return mutate(lower_int_uint_mod(a, b));
+        }
+
+        if (a.same_as(op->a) && b.same_as(op->b)) {
+            return op;
+        } else {
+            return Mod::make(a, b);
+        }
+    }
+
     Expr visit(const Cast *op) override {
         Expr value = mutate(op->value);
 
@@ -238,55 +335,6 @@ protected:
                 return rewrite.result;
             }
             // clang-format on
-
-            // Try removing saturation.
-            auto is_wide_int = is_int(x, 2 * bits);
-            auto is_wide_uint = is_uint(x, 2 * bits);
-            auto is_wide_int_or_uint = is_wide_int || is_wide_uint;
-            if (rewrite(max(min(x, upper), lower), x, is_wide_int_or_uint) ||
-                rewrite(min(x, upper), x, is_wide_uint) ||
-                false) {
-                if (const Call *c = rewrite.result.as<Call>()) {
-                    if (c->is_intrinsic(Call::shift_left) || c->is_intrinsic(Call::shift_right)) {
-                        internal_assert(c->args.size() == 2);
-                        Expr a = c->args[0];
-                        Expr b = c->args[1];
-
-                        // Helper to make the appropriate shift.
-                        auto rounding_shift = [&](const Expr &a, const Expr &b) {
-                            if (c->is_intrinsic(Call::shift_right)) {
-                                return rounding_shift_right(a, b);
-                            } else {
-                                return rounding_shift_left(a, b);
-                            }
-                        };
-
-                        // The rounding offset for the shift we have.
-                        Expr round;
-                        if (c->is_intrinsic(Call::shift_right)) {
-                            round = simplify((make_const(a.type(), 1) << max(b, 0)) >> 1);
-                        } else {
-                            round = simplify((make_const(a.type(), 1) >> min(b, 0)) >> 1);
-                        }
-                        // We can always handle widening adds.
-                        if (const Call *add = Call::as_intrinsic(a, Call::widening_add)) {
-                            if (can_prove(add->args[0] == round)) {
-                                return rounding_shift(add->args[1], b);
-                            } else if (can_prove(add->args[1] == round)) {
-                                return rounding_shift(add->args[0], b);
-                            }
-                        }
-
-                        // If it wasn't a widening add, we can only accept this for non-overflowing types.
-                        if (no_overflow(a.type())) {
-                            Expr a_less_round = find_and_subtract(a, round);
-                            if (!a_less_round.same_as(a)) {
-                                return rounding_shift(simplify(a_less_round), b);
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         if (value.same_as(op->value)) {
@@ -302,38 +350,22 @@ protected:
             Expr a = mutate(op->args[0]);
             Expr b = mutate(op->args[1]);
 
-            // If a can't overflow, we could possibly generate a rounding shift here.
-            if (no_overflow(a.type())) {
-                // Helper to make the appropriate shift.
-                auto rounding_shift = [&](const Expr &a, const Expr &b) {
-                    if (op->is_intrinsic(Call::shift_right)) {
-                        return rounding_shift_right(a, b);
-                    } else {
-                        return rounding_shift_left(a, b);
-                    }
-                };
-
-                // The rounding offset for the shift we have.
-                Expr round;
-                if (op->is_intrinsic(Call::shift_right)) {
-                    round = simplify((make_const(a.type(), 1) << max(b, 0)) >> 1);
-                } else {
-                    round = simplify((make_const(a.type(), 1) >> min(b, 0)) >> 1);
-                }
-
-                Expr a_less_round = find_and_subtract(a, round);
-                if (!a_less_round.same_as(a)) {
-                    return rounding_shift(simplify(a_less_round), b);
-                }
-            }
-
+            Expr result;
             if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
-                return op;
+                result = op;
             } else if (op->is_intrinsic(Call::shift_right)) {
-                return Call::make(op->type, Call::shift_right, {a, b}, Call::PureIntrinsic);
+                result = Call::make(op->type, Call::shift_right, {a, b}, Call::PureIntrinsic);
             } else {
-                return Call::make(op->type, Call::shift_left, {a, b}, Call::PureIntrinsic);
+                result = Call::make(op->type, Call::shift_left, {a, b}, Call::PureIntrinsic);
             }
+
+            // Try to turn this into a rounding shift.
+            Expr rounding_shift = to_rounding_shift(result.as<Call>());
+            if (rounding_shift.defined()) {
+                return rounding_shift;
+            }
+
+            return result;
         } else {
             return op;
         }
@@ -349,11 +381,11 @@ Stmt pattern_match_intrinsics(Stmt s) {
     return s;
 }
 
-Expr lower_widening_add(Expr a, Expr b) {
+Expr lower_widening_add(const Expr &a, const Expr &b) {
     return widen(a) + widen(b);
 }
 
-Expr lower_widening_subtract(Expr a, Expr b) {
+Expr lower_widening_subtract(const Expr &a, const Expr &b) {
     Type wide = a.type().with_bits(a.type().bits() * 2);
     if (wide.is_uint()) {
         wide = wide.with_code(halide_type_int);
@@ -361,59 +393,89 @@ Expr lower_widening_subtract(Expr a, Expr b) {
     return cast(wide, a) - cast(wide, b);
 }
 
-Expr lower_widening_multiply(Expr a, Expr b) {
+Expr lower_widening_multiply(const Expr &a, const Expr &b) {
     return widen(a) * widen(b);
 }
 
-
-Expr lower_rounding_shift_right(Expr a, Expr b) {
-    Expr round = simplify((make_const(a.type(), 1) << max(b, 0)) >> 1);
-    // This implementating of rounding shift overflows! But it matches a lot of old behavior.
-    a = simplify(a + round);
-    return Call::make(a.type(), Call::shift_right, {a, b}, Call::PureIntrinsic);
+Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
+    Expr round = (make_const(a.type(), 1) << max(b, 0)) >> 1;
+    Expr a_rounded = simplify(saturating_add(a, round));
+    return Call::make(a.type(), Call::shift_right, {a_rounded, b}, Call::PureIntrinsic);
 }
 
-Expr lower_rounding_shift_left(Expr a, Expr b) {
-    Expr round = simplify((make_const(a.type(), 1) >> min(b, 0)) >> 1);
-    // This implementating of rounding shift overflows! But it matches a lot of old behavior.
-    a = simplify(a + round);
-    return Call::make(a.type(), Call::shift_left, {a, b}, Call::PureIntrinsic);
+Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
+    Expr round = (make_const(a.type(), 1) >> min(b, 0)) >> 1;
+    Expr a_rounded = simplify(saturating_add(a, round));
+    return Call::make(a.type(), Call::shift_left, {a_rounded, b}, Call::PureIntrinsic);
 }
 
 // These intentionally use the non-lowered versions of widening_add/widening_subtract, in the
 // hopes that maybe the user of this will be able to use the information. If not, it will
 // probably recursively call lower_widening_add/lower_widening_subtract.
-Expr lower_saturating_add(Expr a, Expr b) {
+Expr lower_saturating_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     return saturating_narrow(widening_add(a, b));
 }
-Expr lower_saturating_subtract(Expr a, Expr b) {
+Expr lower_saturating_subtract(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     return saturating_cast(a.type(), widening_subtract(a, b));
 }
 
-Expr lower_halving_add(Expr a, Expr b) {
+Expr lower_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     Expr result_2x = widening_add(a, b);
     return Cast::make(a.type(), result_2x >> 1);
 }
 
-Expr lower_rounding_halving_add(Expr a, Expr b) {
+Expr lower_rounding_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     Expr result_2x = widening_add(a, b);
     return Cast::make(a.type(), rounding_shift_right(result_2x, 1));
 }
 
-Expr lower_halving_subtract(Expr a, Expr b) {
+Expr lower_halving_subtract(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     Expr result_2x = widening_subtract(a, b);
     return Cast::make(a.type(), result_2x >> 1);
 }
 
-Expr lower_rounding_halving_subtract(Expr a, Expr b) {
+Expr lower_rounding_halving_subtract(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     Expr result_2x = widening_subtract(a, b);
     return Cast::make(a.type(), rounding_shift_right(result_2x, 1));
+}
+
+Expr lower_mulhi_shr(const Expr &a, const Expr &b, const Expr &shift) {
+    Expr p = widening_multiply(a, b);
+    p = p >> cast(UInt(p.type().bits()), p.type().bits() / 2);
+    return narrow(p) >> shift;
+}
+
+Expr lower_sorted_avg(const Expr &a, const Expr &b) {
+    // b > a, so the following works without widening:
+    // a + (b - a)/2
+    // TODO: This is tricky. Targets with halving_subtract would be better off using that,
+    // but presumably targets that have that also have halving_add, so there's no reason
+    // to use this.
+    return a + (b - a) / 2;
+}
+
+Expr lower_abs(const Expr &a) {
+    // Generate select(x >= 0, x, -x) instead
+    std::string x_name = unique_name('x');
+    Expr x = Variable::make(a.type(), x_name);
+    return Let::make(x_name, a, select(x >= 0, x, -x));
+}
+
+Expr lower_absd(const Expr &a, const Expr &b) {
+    // Use a select instead
+    std::string a_name = unique_name('a');
+    std::string b_name = unique_name('b');
+    Expr a_var = Variable::make(a.type(), a_name);
+    Expr b_var = Variable::make(b.type(), b_name);
+    return Let::make(a_name, a,
+                      Let::make(b_name, b,
+                                Select::make(a_var < b_var, b_var - a_var, a_var - b_var)));
 }
 
 Expr lower_intrinsic(const Call *op) {
@@ -446,34 +508,16 @@ Expr lower_intrinsic(const Call *op) {
         return lower_rounding_halving_subtract(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::mulhi_shr)) {
         internal_assert(op->args.size() == 3);
-
-        Type ty = op->type;
-        Type wide_ty = ty.with_bits(ty.bits() * 2);
-
-        Expr p_wide = cast(wide_ty, op->args[0]) * cast(wide_ty, op->args[1]);
-        const UIntImm *shift = op->args[2].as<UIntImm>();
-        internal_assert(shift != nullptr)
-            << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
-        return cast(ty, p_wide >> (shift->value + ty.bits()));
+        return lower_mulhi_shr(op->args[0], op->args[1], op->args[2]);
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
-        // b > a, so the following works without widening:
-        // a + (b - a)/2
-        return op->args[0] + (op->args[1] - op->args[0]) / 2;
+        return lower_sorted_avg(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::abs)) {
-        // Generate select(x >= 0, x, -x) instead
-        std::string x_name = unique_name('x');
-        Expr x = Variable::make(op->args[0].type(), x_name);
-        return Let::make(x_name, op->args[0], select(x >= 0, x, -x));
+        internal_assert(op->args.size() == 1);
+        return lower_abs(op->args[0]);
     } else if (op->is_intrinsic(Call::absd)) {
-        // Use a select instead
-        std::string a_name = unique_name('a');
-        std::string b_name = unique_name('b');
-        Expr a_var = Variable::make(op->args[0].type(), a_name);
-        Expr b_var = Variable::make(op->args[1].type(), b_name);
-        return Let::make(a_name, op->args[0],
-                          Let::make(b_name, op->args[1],
-                                    Select::make(a_var < b_var, b_var - a_var, a_var - b_var)));
+        internal_assert(op->args.size() == 2);
+        return lower_absd(op->args[0], op->args[1]);
     } else {
         internal_error << "Unknown intrinsic " << op->name;
         return Expr();

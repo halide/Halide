@@ -331,6 +331,11 @@ Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
+/** Cast a to the same type with twice the bits. */
+Expr widen(Expr a);
+/** Cast a to the same type with half the bits. */
+Expr narrow(Expr a);
+
 /** Compute widen(a) + widen(b). The result is always signed. */
 Expr widening_add(Expr a, Expr b);
 /** Compute widen(a) - widen(b). The result is always signed. */
@@ -338,7 +343,7 @@ Expr widening_subtract(Expr a, Expr b);
 /** Compute widen(a) * widen(b) */
 Expr widening_multiply(Expr a, Expr b);
 
-/** Compute (a + (1 << max(b, 0)) / 2) >> b */
+/** Compute (widening_add(a  (1 << max(b, 0)) / 2) >> b */
 Expr rounding_shift_right(Expr a, Expr b);
 /** Compute (a + (1 >> min(b, 0)) / 2) << b */
 Expr rounding_shift_left(Expr a, Expr b);

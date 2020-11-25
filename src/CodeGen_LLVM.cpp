@@ -2737,22 +2737,30 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        Value *a = codegen(op->args[0]);
-        Value *b = codegen(op->args[1]);
         if (op->args[1].type().is_uint()) {
-            value = builder->CreateShl(a, b);
+            Expr a = op->args[0];
+            Expr b = op->args[1];
+            b = cast(b.type().with_lanes(a.type().lanes()), b);
+            if (b.type().lanes() == 1 && a.type().lanes() > 1) {
+                b = Broadcast::make(b, a.type().lanes());
+            }
+            value = builder->CreateShl(codegen(a), codegen(b));
         } else {
             value = codegen(lower_signed_shift_left(op->args[0], op->args[1]));
         }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        Value *a = codegen(op->args[0]);
-        Value *b = codegen(op->args[1]);
         if (op->args[1].type().is_uint()) {
+            Expr a = op->args[0];
+            Expr b = op->args[1];
+            b = cast(b.type().with_lanes(a.type().lanes()), b);
+            if (b.type().lanes() == 1 && a.type().lanes() > 1) {
+                b = Broadcast::make(b, a.type().lanes());
+            }
             if (op->type.is_int()) {
-                value = builder->CreateAShr(a, b);
+                value = builder->CreateAShr(codegen(a), codegen(b));
             } else {
-                value = builder->CreateLShr(a, b);
+                value = builder->CreateLShr(codegen(a), codegen(b));
             }
         } else {
             value = codegen(lower_signed_shift_right(op->args[0], op->args[1]));
@@ -2770,10 +2778,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         if (t.is_vector() && builtin_abs) {
             codegen(Call::make(op->type, name, op->args, Call::Extern));
         } else {
-            // Generate select(x >= 0, x, -x) instead
-            string x_name = unique_name('x');
-            Expr x = Variable::make(op->args[0].type(), x_name);
-            value = codegen(Let::make(x_name, op->args[0], select(x >= 0, x, -x)));
+            codegen(lower_abs(op->args[0]));
         }
     } else if (op->is_intrinsic(Call::absd)) {
 
@@ -2800,14 +2805,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         if (t.is_vector() && builtin_absd) {
             codegen(Call::make(op->type, name, op->args, Call::Extern));
         } else {
-            // Use a select instead
-            string a_name = unique_name('a');
-            string b_name = unique_name('b');
-            Expr a_var = Variable::make(op->args[0].type(), a_name);
-            Expr b_var = Variable::make(op->args[1].type(), b_name);
-            codegen(Let::make(a_name, op->args[0],
-                              Let::make(b_name, op->args[1],
-                                        Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
+            codegen(lower_absd(op->args[0], op->args[1]));
         }
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         internal_assert(op->args.size() == 2);
@@ -2835,6 +2833,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 3);
         // If we need to upgrade the type, do the entire lerp in the
         // upgraded type for better precision.
+        // TODO: This might be surprising behavior?
         Type t = upgrade_type_for_arithmetic(op->type);
         Type wt = upgrade_type_for_arithmetic(op->args[2].type());
         Expr e = lower_lerp(cast(t, op->args[0]),

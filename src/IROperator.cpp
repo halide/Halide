@@ -627,21 +627,9 @@ void match_types(Expr &a, Expr &b) {
 void match_bits(Expr &x, Expr &y) {
     // The signedness doesn't match, so just match the bits.
     if (x.type().bits() < y.type().bits()) {
-        Type t;
-        if (x.type().is_int()) {
-            t = Int(y.type().bits(), y.type().lanes());
-        } else {
-            t = UInt(y.type().bits(), y.type().lanes());
-        }
-        x = cast(t, x);
+        x = cast(x.type().with_bits(y.type().bits()), x);
     } else if (y.type().bits() < x.type().bits()) {
-        Type t;
-        if (y.type().is_int()) {
-            t = Int(x.type().bits(), x.type().lanes());
-        } else {
-            t = UInt(x.type().bits(), x.type().lanes());
-        }
-        y = cast(t, y);
+        y = cast(y.type().with_bits(x.type().bits()), y);
     }
 }
 
@@ -668,11 +656,7 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
 
     // Cast to the wider type of the two. Already guaranteed to leave
     // signed/unsigned on number of lanes unchanged.
-    if (x.type().bits() < y.type().bits()) {
-        x = cast(y.type(), x);
-    } else if (y.type().bits() < x.type().bits()) {
-        y = cast(x.type(), y);
-    }
+    match_bits(x, y);
 }
 
 // Fast math ops based on those from Syrah (http://github.com/boulos/syrah). Thanks, Solomon!
@@ -1023,6 +1007,14 @@ Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) 
                                 args, Internal::Call::PureIntrinsic);
 }
 
+Expr widen(Expr a) {
+    return Cast::make(a.type().with_bits(a.type().bits() * 2), std::move(a));
+}
+
+Expr narrow(Expr a) {
+    return Cast::make(a.type().with_bits(a.type().bits() / 2), std::move(a));
+}
+
 Expr widening_add(Expr a, Expr b) {
     match_lanes(a, b);
     internal_assert(a.type() == b.type());
@@ -1042,20 +1034,24 @@ Expr widening_subtract(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
     Type wide_type = a.type().with_bits(a.type().bits() * 2);
     if (wide_type.is_uint()) {
-        // widening_subtract always produces signed result.
+        // always produce a signed result.
         wide_type = wide_type.with_code(halide_type_int);
     }
     return Call::make(wide_type, Call::widening_subtract, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr rounding_shift_right(Expr a, Expr b) {
-    match_lanes(a, b);
+    if (b.type().is_vector() && !a.type().is_vector()) {
+        a = Internal::Broadcast::make(a, b.type().lanes());
+    }
     match_bits(a, b);
     return Call::make(a.type(), Call::rounding_shift_right, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr rounding_shift_left(Expr a, Expr b) {
-    match_lanes(a, b);
+    if (b.type().is_vector() && !a.type().is_vector()) {
+        a = Internal::Broadcast::make(a, b.type().lanes());
+    }
     match_bits(a, b);
     return Call::make(a.type(), Call::rounding_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }

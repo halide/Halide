@@ -653,10 +653,14 @@ struct Call : public ExprNode<Call> {
                 call_type == PureExtern);
     }
 
-    static const Call *as_intrinsic(const Expr &e, Call::IntrinsicOp intrinsic) {
+    /** Returns a pointer to a call if the expression is an intrinsic call
+     * of one of the IntrinsicOps in intrinsics. */
+    static const Call *as_intrinsic(const Expr &e, std::initializer_list<IntrinsicOp> intrinsics) {
         if (const Call *c = e.as<Call>()) {
-            if (c->is_intrinsic(intrinsic)) {
-                return c;
+            for (IntrinsicOp i : intrinsics) {
+                if (c->is_intrinsic(i)) {
+                    return c;
+                }
             }
         }
         return nullptr;
