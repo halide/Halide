@@ -3161,7 +3161,7 @@ void bounds_test() {
         ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
         Var c("c");
         ScopedBinding<Interval> yb(scope, "y", Interval(-6, c));
-        // Can't prove anything about the upper bound.
+        // Can't prove anything about the upper bound of y.
         check(scope, x << y, min((-123) << c, -123), Interval::pos_inf());
     }
     {
