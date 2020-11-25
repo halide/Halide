@@ -2745,7 +2745,9 @@ void CodeGen_LLVM::visit(const Call *op) {
         Expr a = op->args[0];
         Expr b = op->args[1];
         if (op->args[1].type().is_uint()) {
-            value = builder->CreateShl(codegen(a), codegen(b));
+            Value *a_value = codegen(a);
+            Value *b_value = codegen(b);
+            value = builder->CreateShl(a_value, b_value);
         } else {
             value = codegen(lower_signed_shift_left(a, b));
         }
@@ -2754,10 +2756,12 @@ void CodeGen_LLVM::visit(const Call *op) {
         Expr a = op->args[0];
         Expr b = op->args[1];
         if (op->args[1].type().is_uint()) {
+            Value *a_value = codegen(a);
+            Value *b_value = codegen(b);
             if (op->type.is_int()) {
-                value = builder->CreateAShr(codegen(a), codegen(b));
+                value = builder->CreateAShr(a_value, b_value);
             } else {
-                value = builder->CreateLShr(codegen(a), codegen(b));
+                value = builder->CreateLShr(a_value, b_value);
             }
         } else {
             value = codegen(lower_signed_shift_right(a, b));
