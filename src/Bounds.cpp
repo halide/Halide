@@ -1249,7 +1249,13 @@ private:
                                     }
                                 }
                                 // TODO: Are there any other cases we can handle here?
+                            } else if (a_interval.has_lower_bound() &&
+                                    b_interval.has_upper_bound() &&
+                                    can_prove(a_interval.min >= 0 && b_interval.max <= 0)) {
+                                // A positive value shifted cannot change sign.
+                                interval.min = make_zero(t);
                             }
+
                             if (a_interval.has_upper_bound() &&
                                 b_interval.has_upper_bound() &&
                                 can_prove(b_interval.max >= 0 &&
@@ -3169,6 +3175,12 @@ void bounds_test() {
         ScopedBinding<Interval> yb(scope, "y", Interval(-6, 4));
         // -123 << 4 = -1968
         check(scope, x << y, -1968, Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(24, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(Interval::neg_inf(), -1));
+        // Cannot change sign, only can decrease magnitude.
+        check(scope, x << y, 0, Interval::pos_inf());
     }
 
     // If we clamp something unbounded as one type, the bounds should
