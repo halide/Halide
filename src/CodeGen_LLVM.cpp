@@ -2742,25 +2742,25 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        Value *a = codegen(op->args[0]);
-        Value *b = codegen(op->args[1]);
+        Expr a = op->args[0];
+        Expr b = op->args[0];
         if (op->args[1].type().is_uint()) {
-            value = builder->CreateShl(a, b);
+            value = builder->CreateShl(codegen(a), codegen(b));
         } else {
-            value = codegen(lower_signed_shift_left(op->args[0], op->args[1]));
+            value = codegen(lower_signed_shift_left(a, b));
         }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        Value *a = codegen(op->args[0]);
-        Value *b = codegen(op->args[1]);
+        Expr a = op->args[0];
+        Expr b = op->args[0];
         if (op->args[1].type().is_uint()) {
             if (op->type.is_int()) {
-                value = builder->CreateAShr(a, b);
+                value = builder->CreateAShr(codegen(a), codegen(b));
             } else {
-                value = builder->CreateLShr(a, b);
+                value = builder->CreateLShr(codegen(a), codegen(b));
             }
         } else {
-            value = codegen(lower_signed_shift_right(op->args[0], op->args[1]));
+            value = codegen(lower_signed_shift_right(a, b));
         }
     } else if (op->is_intrinsic(Call::abs)) {
 
