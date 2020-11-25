@@ -78,6 +78,12 @@ struct CompareBuffersOptions {
     // If true, log info about failures to stderr.
     // If false, log nothing, stay silent.
     bool verbose = true;
+
+    void require_exact() {
+        exact_thresh = 0.0;
+        close_thresh = 0.0;
+        max_close_percent = 0.0;
+    }
 };
 
 struct CompareBuffersResult {

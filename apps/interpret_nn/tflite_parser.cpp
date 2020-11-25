@@ -187,7 +187,15 @@ public:
             inputs.push_back(result_.tensors[*i].get());
         }
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return make_unique<ConcatenationOp>(inputs, output, options->axis(), activation);
+        int axis = options->axis();
+        // Handle negative values, which are legal
+        if (axis < 0) {
+            axis = (int)output->shape().size() + axis;
+        }
+        // Now 'flip' the axis so that it refers to the right dimension in
+        // the Tensor (since we reverse the dimension order)
+        axis = (int)output->shape().size() - axis - 1;
+        return make_unique<ConcatenationOp>(inputs, output, axis, activation);
     }
 
     std::unique_ptr<Op> parse_conv2D(const tflite::Operator *op) {
