@@ -127,21 +127,22 @@ public:
             }
         }
 
-        if (type == TensorType::Int8) {
-            // Convert Int8 buffers to UInt8 buffers by adjusting the quantization info.
-            // TODO: Is this correct??
-            type = TensorType::UInt8;
-            if (quantization.scale.size() == 0) {
-                quantization.scale.push_back(1);
-            }
-            if (quantization.zero.size() == 0) {
-                quantization.zero.push_back(128);
-            } else {
-                for (int &i : quantization.zero) {
-                    i = 128 + i;
-                }
-            }
-        }
+        // TODO: revisit this to see if we can convince ourselves it's always correct.
+        // if (type == TensorType::Int8) {
+        //     // Convert Int8 buffers to UInt8 buffers by adjusting the quantization info.
+        //     // TODO: Is this correct??
+        //     type = TensorType::UInt8;
+        //     if (quantization.scale.size() == 0) {
+        //         quantization.scale.push_back(1);
+        //     }
+        //     if (quantization.zero.size() == 0) {
+        //         quantization.zero.push_back(128);
+        //     } else {
+        //         for (int &i : quantization.zero) {
+        //             i = 128 + i;
+        //         }
+        //     }
+        // }
 
         return make_unique<Tensor>(
             t->name()->str(), type, std::move(shape),

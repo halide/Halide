@@ -61,6 +61,15 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args)
 #undef HANDLE_CASE
 }
 
+inline void check_shapes_match(const Halide::Runtime::Buffer<const void> &a,
+                               const Halide::Runtime::Buffer<const void> &b) {
+    CHECK(a.dimensions() == b.dimensions());
+    for (int d = 0; d < a.dimensions(); d++) {
+        CHECK(a.dim(d).min() == b.dim(d).min());
+        CHECK(a.dim(d).extent() == b.dim(d).extent());
+    }
+}
+
 struct CompareBuffersOptions {
     // Threshold at which values are an 'exact' match.
     // For integral types this should always be 0.0.
@@ -102,11 +111,7 @@ struct CompareBuffers {
                                     const CompareBuffersOptions &opts) {
         Halide::Runtime::Buffer<const T> expected_buf = expected_buf_dynamic;
         Halide::Runtime::Buffer<const T> actual_buf = actual_buf_dynamic;
-        CHECK(expected_buf.dimensions() == actual_buf.dimensions());
-        for (int d = 0; d < expected_buf.dimensions(); d++) {
-            CHECK(expected_buf.dim(d).min() == actual_buf.dim(d).min());
-            CHECK(expected_buf.dim(d).extent() == actual_buf.dim(d).extent());
-        }
+        check_shapes_match(expected_buf, actual_buf);
 
         assert(opts.exact_thresh >= 0.0);
         assert(opts.close_thresh >= opts.exact_thresh);

@@ -173,6 +173,10 @@ $(BIN)/%/pad_test: test/pad_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
+$(BIN)/%/quantize_test: test/quantize_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+
 $(BIN)/%/reshape_test: test/reshape_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
@@ -186,6 +190,7 @@ build_test_ops: \
 	$(BIN)/$(HL_TARGET)/fully_connected_test \
 	$(BIN)/$(HL_TARGET)/max_pool_test \
 	$(BIN)/$(HL_TARGET)/pad_test \
+	$(BIN)/$(HL_TARGET)/quantize_test \
 	$(BIN)/$(HL_TARGET)/reshape_test
 
 test_ops: build_test_ops
@@ -197,6 +202,7 @@ test_ops: build_test_ops
 	$(BIN)/$(HL_TARGET)/fully_connected_test
 	$(BIN)/$(HL_TARGET)/max_pool_test
 	$(BIN)/$(HL_TARGET)/pad_test
+	$(BIN)/$(HL_TARGET)/quantize_test
 	$(BIN)/$(HL_TARGET)/reshape_test
 
 # Utility to explode a tflite pipeline into individual ops for testing.
