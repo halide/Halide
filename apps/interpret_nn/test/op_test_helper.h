@@ -146,13 +146,6 @@ protected:
     }
 
     bool run_next_test(int seed, bool verbose = false) {
-        std::unique_ptr<TestCase> test = get_next_test();
-        if (!test) {
-            return false;  // we're done
-        }
-
-        std::vector<Halide::Runtime::Buffer<const void>> reference_outputs, actual_outputs;
-
         const auto reset_tensors = [this](int seed) {
             for (size_t i = 0; i < this->tensors.size(); i++) {
                 seed++;
@@ -163,6 +156,17 @@ protected:
                 f(*t, seed);
             }
         };
+
+        // Call reset_tensors() before get_next_test(), since some ops
+        // (e.g. ReshapeOp) rely on the contents of a Tensor to fill in the op.
+        reset_tensors(seed);
+
+        std::unique_ptr<TestCase> test = get_next_test();
+        if (!test) {
+            return false;  // we're done
+        }
+
+        std::vector<Halide::Runtime::Buffer<const void>> reference_outputs, actual_outputs;
 
         const auto save_outputs = [&test](std::vector<Halide::Runtime::Buffer<const void>> &outputs) {
             for (auto &t : test->reference_op->outputs) {

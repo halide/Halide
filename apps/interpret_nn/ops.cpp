@@ -706,6 +706,12 @@ void ReshapeOp::execute(const Box &crop) {
     auto input_buf = in->data<void>();
     auto output_buf = out->data<void>(crop);
 
+    // TODO: should reality-check that the output buf matches the shape we expect
+    // assert((int) new_shape_.size() == output_buf.dimensions());
+    // for (int d = 0; d < output_buf.dimensions(); d++) {
+    //     assert(new_shape_.at(d) == output_buf.dim(d).extent());
+    // }
+
     // TODO: This should probably just be implemented by aliasing two of the tensors.
     assert(input_buf.number_of_elements() == output_buf.number_of_elements());
     // TODO: This should also check the strides are dense.
