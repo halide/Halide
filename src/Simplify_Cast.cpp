@@ -16,7 +16,7 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
-        if (const Call *call = Call::as_intrinsic(value, {Call::signed_integer_overflow})) {
+        if (Call::as_intrinsic(value, {Call::signed_integer_overflow})) {
             return make_signed_integer_overflow(op->type);
         } else if (value.type() == op->type) {
             return value;
