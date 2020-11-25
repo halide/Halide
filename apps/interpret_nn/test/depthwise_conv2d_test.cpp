@@ -120,10 +120,9 @@ struct DepthwiseConv2DOpTestFactory : public op_test::TestCaseFactory {
             106, 165, 166, 136, 165, 168, 166, 165, 172, 165, 164, 166, 164, 165, 165, 165, 165, 165, 165, 43,
             160, 165, 163, 172, 165, 164, 165, 165, 97, 156, 165, 165, 98, 165, 160, 106, 165, 165, 166, 165,
             165, 165, 165, 165, 165, 163, 167, 165};
-        constexpr size_t filter_data_size = sizeof(filter_data) / sizeof(filter_data[0]);
         auto buf = t.data<uint8_t>();
-        assert(buf.size_in_bytes() == filter_data_size);
-        memcpy(buf.data(), filter_data, filter_data_size);
+        assert(buf.size_in_bytes() == sizeof(filter_data));
+        memcpy(buf.data(), filter_data, sizeof(filter_data));
     }
 
     static void fill_bias_mobilenet(Tensor &t, int seed) {
@@ -135,10 +134,9 @@ struct DepthwiseConv2DOpTestFactory : public op_test::TestCaseFactory {
             0, 88, 255, 255, 255, 127, 0, 0, 0, 96, 1, 0, 0, 19, 0, 0, 0, 65, 255, 255, 255, 122, 1, 0, 0, 126,
             1, 0, 0, 1, 0, 0, 0, 167, 1, 0, 0, 190, 255, 255, 255, 254, 0, 0, 0, 175, 255, 255, 255, 73, 253,
             255, 255};
-        constexpr size_t bias_data_size = sizeof(bias_data) / sizeof(bias_data[0]);
         auto buf = t.data<int32_t>();
-        assert(buf.size_in_bytes() == bias_data_size);
-        memcpy(buf.data(), bias_data, bias_data_size);
+        assert(buf.size_in_bytes() == sizeof(bias_data));
+        memcpy(buf.data(), bias_data, sizeof(bias_data));
     }
     DepthwiseConv2DOpTestFactory() {
         init_tensors({
