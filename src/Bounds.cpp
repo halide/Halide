@@ -1250,8 +1250,7 @@ private:
                                 }
                                 // TODO: Are there any other cases we can handle here?
                             } else if (a_interval.has_lower_bound() &&
-                                       b_interval.has_upper_bound() &&
-                                       can_prove(a_interval.min >= 0 && b_interval.max <= 0)) {
+                                       can_prove(a_interval.min >= 0)) {
                                 // A positive value shifted cannot change sign.
                                 interval.min = make_zero(t);
                             }
