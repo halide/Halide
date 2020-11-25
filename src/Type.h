@@ -356,6 +356,16 @@ public:
         return Type(code(), bits(), new_lanes, handle_type);
     }
 
+    /** Return Type with the same type code and number of lanes, but with twice as many bits. */
+    Type widen() const {
+        return with_bits(bits() * 2);
+    }
+
+    /** REturn Type with the same type code and number of lanes, but with half as many bits. */
+    Type narrow() const {
+        return with_bits(bits() / 2);
+    }
+
     /** Type to be printed when declaring handles of this type. */
     const halide_handle_cplusplus_type *handle_type = nullptr;
 
