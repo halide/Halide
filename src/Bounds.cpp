@@ -1278,14 +1278,7 @@ private:
                                 can_prove(b_interval.max < 0 && b_interval.max > -t.bits());
                             if (a_interval.has_lower_bound()) {
                                 if (can_prove(a_interval.min >= 0) && b_max_ok_positive) {
-                                    if (a_interval.min.type().is_int() && t.bits() > 16) {
-                                        // Overflow is UB.
-                                        interval.min = a_interval.min >> b_interval.max;
-                                    } else if (a_interval.min.type().is_int_or_uint()) {
-                                        // Overflow wraps to 0.
-                                        // TODO: can we produce tighter bounds?
-                                        interval.min = make_zero(t);
-                                    }
+                                    interval.min = a_interval.min >> b_interval.max;
                                 } else if (can_prove(a_interval.min < 0) && b_max_ok_negative) {
                                     interval.min = a_interval.min << abs(b_interval.max);
                                 } else if (b_min_ok_positive && b_max_ok_positive) {
@@ -3151,12 +3144,6 @@ void bounds_test() {
         ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
         ScopedBinding<Interval> yb(scope, "y", Interval(-6, Interval::pos_inf()));
         check(scope, x << y, -123, Interval::pos_inf()); // -123 << 0 = -123
-    }
-    {
-        ScopedBinding<Interval> xb(scope, "x", Interval(64, 255));
-        ScopedBinding<Interval> yb(scope, "y", Interval(-124, 4));
-        // 128 >> -2 = 0 (unsigned overflow is allowed)
-        check(scope, cast<uint8_t>(x) >> cast<int8_t>(y), u8(0), u8(255));
     }
 
     // If we clamp something unbounded as one type, the bounds should
