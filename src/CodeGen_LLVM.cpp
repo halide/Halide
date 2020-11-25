@@ -2743,7 +2743,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
         Expr a = op->args[0];
-        Expr b = op->args[0];
+        Expr b = op->args[1];
         if (op->args[1].type().is_uint()) {
             value = builder->CreateShl(codegen(a), codegen(b));
         } else {
@@ -2752,7 +2752,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
         Expr a = op->args[0];
-        Expr b = op->args[0];
+        Expr b = op->args[1];
         if (op->args[1].type().is_uint()) {
             if (op->type.is_int()) {
                 value = builder->CreateAShr(codegen(a), codegen(b));
