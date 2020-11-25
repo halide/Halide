@@ -1339,6 +1339,10 @@ constexpr bool and_reduce(bool first, Args... rest) {
     return first && and_reduce(rest...);
 }
 
+constexpr int const_min(int a, int b) {
+    return a < b ? a : b;
+}
+
 template<typename... Args>
 struct Intrin {
     struct pattern_tag {};
@@ -1395,10 +1399,38 @@ struct Intrin {
 
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState &state, halide_type_t type_hint) const {
+        Expr arg0 = std::get<0>(args).make(state, type_hint);
+        Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::likely) {
-            return likely(std::get<0>(args).make(state, type_hint));
+            return likely(arg0);
         } else if (intrin == Call::likely_if_innermost) {
-            return likely_if_innermost(std::get<0>(args).make(state, type_hint));
+            return likely_if_innermost(arg0);
+        } else if (intrin == Call::widening_add) {
+            return widening_add(arg0, arg1);
+        } else if (intrin == Call::widening_subtract) {
+            return widening_subtract(arg0, arg1);
+        } else if (intrin == Call::widening_multiply) {
+            return widening_multiply(arg0, arg1);
+        } else if (intrin == Call::saturating_add) {
+            return saturating_add(arg0, arg1);
+        } else if (intrin == Call::saturating_subtract) {
+            return saturating_subtract(arg0, arg1);
+        } else if (intrin == Call::halving_add) {
+            return halving_add(arg0, arg1);
+        } else if (intrin == Call::halving_subtract) {
+            return halving_subtract(arg0, arg1);
+        } else if (intrin == Call::rounding_halving_add) {
+            return rounding_halving_add(arg0, arg1);
+        } else if (intrin == Call::rounding_halving_subtract) {
+            return rounding_halving_subtract(arg0, arg1);
+        } else if (intrin == Call::shift_left) {
+            return arg0 << arg1;
+        } else if (intrin == Call::shift_right) {
+            return arg0 >> arg1;
+        } else if (intrin == Call::rounding_shift_left) {
+            return rounding_shift_left(arg0, arg1);
+        } else if (intrin == Call::rounding_shift_right) {
+            return rounding_shift_right(arg0, arg1);
         }
         internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
         return Expr();
@@ -2112,6 +2144,88 @@ HALIDE_ALWAYS_INLINE auto is_float(A a) noexcept -> IsFloat<decltype(pattern_arg
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
     s << "is_float(" << op.a << ")";
+    return s;
+}
+
+template<typename A>
+struct IsInt {
+    struct pattern_tag {};
+    A a;
+    int bits;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = t.is_int() && (bits == 0 || t.bits() == bits);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    };
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto is_int(A a, int bits = 0) noexcept -> IsInt<decltype(pattern_arg(a))> {
+    return {pattern_arg(a), bits};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsInt<A> &op) {
+    s << "is_int(" << op.a;
+    if (op.bits > 0) {
+        s << ", " << op.bits;
+    }
+    s << ")";
+    return s;
+}
+
+template<typename A>
+struct IsUInt {
+    struct pattern_tag {};
+    A a;
+    int bits;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = t.is_uint() && (bits == 0 || t.bits() == bits);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    };
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto is_uint(A a, int bits = 0) noexcept -> IsUInt<decltype(pattern_arg(a))> {
+    return {pattern_arg(a), bits};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsUInt<A> &op) {
+    s << "is_uint(" << op.a;
+    if (op.bits > 0) {
+        s << ", " << op.bits;
+    }
+    s << ")";
     return s;
 }
 

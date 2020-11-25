@@ -84,6 +84,61 @@ Expr to_rounding_shift(Type result_type, const Call *shift) {
     return shift;
 }
 
+// Add helpers to let us (mostly) use intrinsics without the boilerplate in patterns.
+// These only work if the first argument is a wildcard.
+template <int A, typename B>
+auto widening_add(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::widening_add, a, b);
+}
+template <int A, typename B>
+auto widening_subtract(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::widening_subtract, a, b);
+}
+template <int A, typename B>
+auto widening_multiply(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::widening_multiply, a, b);
+}
+template <int A, typename B>
+auto saturating_add(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::saturating_add, a, b);
+}
+template <int A, typename B>
+auto saturating_subtract(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::saturating_subtract, a, b);
+}
+template <int A, typename B>
+auto halving_add(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::halving_add, a, b);
+}
+template <int A, typename B>
+auto halving_subtract(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::halving_subtract, a, b);
+}
+template <int A, typename B>
+auto rounding_halving_add(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::rounding_halving_add, a, b);
+}
+template <int A, typename B>
+auto rounding_halving_subtract(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::rounding_halving_subtract, a, b);
+}
+template <int A, typename B>
+auto shift_left(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::shift_left, a, b);
+}
+template <int A, typename B>
+auto shift_right(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::shift_right, a, b);
+}
+template <int A, typename B>
+auto rounding_shift_left(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::rounding_shift_left, a, b);
+}
+template <int A, typename B>
+auto rounding_shift_right(IRMatcher::Wild<A> a, B b) {
+    return IRMatcher::intrin(Call::rounding_shift_right, a, b);
+}
+
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
 class PatternMatchIntrinsics : public IRMutator {
@@ -192,91 +247,28 @@ protected:
         Expr value = mutate(op->value);
 
         if (op->type.is_int() || op->type.is_uint()) {
-            Expr lower = op->type.min();
-            Expr upper = op->type.max();
+            Expr lower = cast(value.type(), op->type.min());
+            Expr upper = cast(value.type(), op->type.max());
 
             auto rewrite = IRMatcher::rewriter(value, op->type);
 
+            int bits = op->type.bits();
+            auto is_same_int = is_int(x, bits);
+            auto is_same_uint = is_uint(x, bits);
+            auto is_same_int_or_uint = is_same_int || is_same_uint;
             // clang-format off
-            if (rewrite(max(min(intrin(Call::widening_add, x, y), upper), lower), intrin(Call::saturating_add, x, y)) ||
+            if (rewrite(max(min(widening_add(x, y), upper), lower), saturating_add(x, y), is_same_int_or_uint) ||
+                rewrite(max(min(widening_subtract(x, y), upper), lower), saturating_subtract(x, y), is_same_int_or_uint) ||
+                rewrite(min(widening_add(x, y), upper), saturating_add(x, y), is_same_uint) ||
+                rewrite(max(widening_subtract(x, y), 0), saturating_subtract(x, y), is_same_uint) ||
+                rewrite(intrin(Call::shift_right, widening_add(x, y), 1), halving_add(x, y), is_same_int_or_uint) ||
+                rewrite(intrin(Call::shift_right, widening_subtract(x, y), 1), halving_subtract(x, y), is_same_int_or_uint) ||
+                rewrite(intrin(Call::rounding_shift_right, widening_add(x, y), 1), rounding_halving_add(x, y), is_same_int_or_uint) ||
+                rewrite(intrin(Call::rounding_shift_right, widening_subtract(x, y), 1), halving_subtract(x, y), is_same_int) ||
                 false) {
                 return rewrite.result;
             }
-
-            // Peel off mins/maxes that clamp at the bounds of the cast type, remembering which ones we peeled.
-            Type value_t = value.type();
-            Expr unclamped_value = value;
-            bool clamped_upper = false;
-            bool clamped_lower = false;
-            while (true) {
-                if (const Min *min = unclamped_value.as<Min>()) {
-                    if (can_prove(upper == min->a)) {
-                        clamped_upper = true;
-                        unclamped_value = min->b;
-                        continue;
-                    }
-                    if (can_prove(upper == min->b)) {
-                        clamped_upper = true;
-                        unclamped_value = min->a;
-                        continue;
-                    }
-                }
-                if (const Max *max = unclamped_value.as<Max>()) {
-                    if (can_prove(lower == max->a)) {
-                        clamped_lower = true;
-                        unclamped_value = max->b;
-                        continue;
-                    }
-                    if (can_prove(lower == max->b)) {
-                        clamped_lower = true;
-                        unclamped_value = max->a;
-                        continue;
-                    }
-                }
-                break;
-            }
-
-            // If this is a narrowing cast of a call, maybe we could generate a rounding shift.
-            if (op->type.bits() * 2 == value_t.bits() && op->type.code() == value_t.code()) {
-                if (const Call *c = unclamped_value.as<Call>()) {
-                    unclamped_value = to_rounding_shift(op->type, c);
-                }
-            }
-
-            if (op->type.bits() * 2 == unclamped_value.type().bits()) {
-                // This is a narrowing cast.
-                if (const Call *c = unclamped_value.as<Call>()) {
-                    if (c->is_intrinsic(Call::widening_add)) {
-                        if ((op->type.is_uint() || clamped_lower) && clamped_upper) {
-                            internal_error << "IRMatcher failed: " << value << "\n";
-                            return Call::make(op->type, Call::saturating_add, c->args, Call::PureIntrinsic);
-                        }
-                    } else if (c->is_intrinsic(Call::widening_subtract)) {
-                        if (clamped_lower && (op->type.is_uint() || clamped_upper)) {
-                            return Call::make(op->type, Call::saturating_subtract, c->args, Call::PureIntrinsic);
-                        }
-                    } else if (c->is_intrinsic(Call::shift_right) && is_const_one(c->args[1])) {
-                        if (const Call *inner = c->args[0].as<Call>()) {
-                            if (inner->is_intrinsic(Call::widening_add)) {
-                                return Call::make(op->type, Call::halving_add, inner->args, Call::PureIntrinsic);
-                            } else if (inner->is_intrinsic(Call::widening_subtract)) {
-                                return Call::make(op->type, Call::halving_subtract, inner->args, Call::PureIntrinsic);
-                            }
-                        }
-                    } else if (c->is_intrinsic(Call::rounding_shift_right) && is_const_one(c->args[1])) {
-                        if (const Call *inner = c->args[0].as<Call>()) {
-                            if (inner->is_intrinsic(Call::widening_add)) {
-                                return Call::make(op->type, Call::rounding_halving_add, inner->args, Call::PureIntrinsic);
-                            } else if (inner->is_intrinsic(Call::widening_subtract)) {
-                                // This is only correct for signed types.
-                                if (op->type.is_int()) {
-                                    return Call::make(op->type, Call::rounding_halving_subtract, inner->args, Call::PureIntrinsic);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            // clang-format on
         }
 
         if (value.same_as(op->value)) {
