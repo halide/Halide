@@ -169,6 +169,10 @@ $(BIN)/%/max_pool_test: test/max_pool_test.cpp $(BIN)/%/model.o $(BIN)/%/interva
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
+$(BIN)/%/pad_test: test/pad_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+
 build_test_ops: \
 	$(BIN)/$(HL_TARGET)/add_test \
 	$(BIN)/$(HL_TARGET)/average_pool_test \
@@ -176,7 +180,8 @@ build_test_ops: \
 	$(BIN)/$(HL_TARGET)/conv2d_test \
 	$(BIN)/$(HL_TARGET)/depthwise_conv2d_test \
 	$(BIN)/$(HL_TARGET)/fully_connected_test \
-	$(BIN)/$(HL_TARGET)/max_pool_test
+	$(BIN)/$(HL_TARGET)/max_pool_test \
+	$(BIN)/$(HL_TARGET)/pad_test
 
 test_ops: build_test_ops
 	$(BIN)/$(HL_TARGET)/add_test
@@ -186,6 +191,7 @@ test_ops: build_test_ops
 	$(BIN)/$(HL_TARGET)/depthwise_conv2d_test
 	$(BIN)/$(HL_TARGET)/fully_connected_test
 	$(BIN)/$(HL_TARGET)/max_pool_test
+	$(BIN)/$(HL_TARGET)/pad_test
 
 # Utility to explode a tflite pipeline into individual ops for testing.
 $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/%/tflite_schema_direct_generated.h
