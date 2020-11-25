@@ -2194,9 +2194,16 @@ void CodeGen_LLVM::visit(const Ramp *op) {
         Expr broadcast = Broadcast::make(op->base, op->lanes);
         Expr ramp = Ramp::make(make_zero(op->base.type()), op->stride, op->lanes);
         value = codegen(broadcast + ramp);
+    } else if (!is_const(op->stride)) {
+        Expr broadcast_base = Broadcast::make(op->base, op->lanes);
+        Expr broadcast_stride = Broadcast::make(op->stride, op->lanes);
+        Expr ramp = Ramp::make(make_zero(op->base.type()), make_one(op->base.type()), op->lanes);
+        value = codegen(broadcast_base + broadcast_stride * ramp);
     } else {
-        // Otherwise we generate element by element by adding the stride to the base repeatedly
-
+        internal_assert(is_const(op->base) && is_const(op->stride));
+        // At this point base and stride should be constant. Generate
+        // an insert element sequence. The code will be lifted to a
+        // constant vector stored in .rodata or similar.
         Value *base = codegen(op->base);
         Value *stride = codegen(op->stride);
 
