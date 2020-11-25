@@ -27,21 +27,6 @@ Expr saturating_narrow(Expr a) {
     return saturating_cast(narrow, a);
 }
 
-struct Pattern {
-    Expr pattern;
-    Call::IntrinsicOp replacement;
-};
-
-Expr apply_patterns(Type type, Expr x, const std::vector<Pattern> &patterns) {
-    std::vector<Expr> matches;
-    for (const Pattern &i : patterns) {
-        if (expr_match(i.pattern, x, matches)) {
-            return Call::make(type, i.replacement, matches, Call::PureIntrinsic);
-        }
-    }
-    return Expr();
-}
-
 Expr find_and_subtract(const Expr &e, const Expr &term) {
     if (const Add *add = e.as<Add>()) {
         Expr a = find_and_subtract(add->a, term);
@@ -58,30 +43,14 @@ Expr find_and_subtract(const Expr &e, const Expr &term) {
     return e;
 }
 
-Expr to_rounding_shift(Type result_type, const Call *shift) {
-    internal_assert(shift->args.size() == 2);
-    Expr a = shift->args[0];
-    Expr b = shift->args[1];
+// Returns true iff t is an integral type where overflow is undefined
+bool no_overflow_int(Type t) {
+    return t.is_int() && t.bits() >= 32;
+}
 
-    // The rounding offset for the shift we have.
-    Expr round;
-    if (shift->is_intrinsic(Call::shift_right)) {
-        round = simplify((make_const(a.type(), 1) << max(b, 0)) >> 1);
-    } else {
-        round = simplify((make_const(a.type(), 1) >> min(b, 0)) >> 1);
-    }
-
-    Expr a_less_round = find_and_subtract(a, round);
-    if (!a_less_round.same_as(a)) {
-        a_less_round = simplify(a_less_round);
-        if (shift->is_intrinsic(Call::shift_right)) {
-            return rounding_shift_right(a_less_round, b);
-        } else {
-            return rounding_shift_left(a_less_round, b);
-        }
-    }
-
-    return shift;
+// Returns true iff t does not have a well defined overflow behavior.
+bool no_overflow(Type t) {
+    return t.is_float() || no_overflow_int(t);
 }
 
 // Add helpers to let us (mostly) use intrinsics without the boilerplate in patterns.
@@ -269,6 +238,55 @@ protected:
                 return rewrite.result;
             }
             // clang-format on
+
+            // Try removing saturation.
+            auto is_wide_int = is_int(x, 2 * bits);
+            auto is_wide_uint = is_uint(x, 2 * bits);
+            auto is_wide_int_or_uint = is_wide_int || is_wide_uint;
+            if (rewrite(max(min(x, upper), lower), x, is_wide_int_or_uint) ||
+                rewrite(min(x, upper), x, is_wide_uint) ||
+                false) {
+                if (const Call *c = rewrite.result.as<Call>()) {
+                    if (c->is_intrinsic(Call::shift_left) || c->is_intrinsic(Call::shift_right)) {
+                        internal_assert(c->args.size() == 2);
+                        Expr a = c->args[0];
+                        Expr b = c->args[1];
+
+                        // Helper to make the appropriate shift.
+                        auto rounding_shift = [&](const Expr &a, const Expr &b) {
+                            if (c->is_intrinsic(Call::shift_right)) {
+                                return rounding_shift_right(a, b);
+                            } else {
+                                return rounding_shift_left(a, b);
+                            }
+                        };
+
+                        // The rounding offset for the shift we have.
+                        Expr round;
+                        if (c->is_intrinsic(Call::shift_right)) {
+                            round = simplify((make_const(a.type(), 1) << max(b, 0)) >> 1);
+                        } else {
+                            round = simplify((make_const(a.type(), 1) >> min(b, 0)) >> 1);
+                        }
+                        // We can always handle widening adds.
+                        if (const Call *add = Call::as_intrinsic(a, Call::widening_add)) {
+                            if (can_prove(add->args[0] == round)) {
+                                return rounding_shift(add->args[1], b);
+                            } else if (can_prove(add->args[1] == round)) {
+                                return rounding_shift(add->args[0], b);
+                            }
+                        }
+
+                        // If it wasn't a widening add, we can only accept this for non-overflowing types.
+                        if (no_overflow(a.type())) {
+                            Expr a_less_round = find_and_subtract(a, round);
+                            if (!a_less_round.same_as(a)) {
+                                return rounding_shift(simplify(a_less_round), b);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if (value.same_as(op->value)) {
@@ -284,16 +302,38 @@ protected:
             Expr a = mutate(op->args[0]);
             Expr b = mutate(op->args[1]);
 
-            Expr result;
-            if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
-                result = op;
-            } else if (op->is_intrinsic(Call::shift_right)) {
-                result = Call::make(op->type, Call::shift_right, {a, b}, Call::PureIntrinsic);
-            } else {
-                result = Call::make(op->type, Call::shift_left, {a, b}, Call::PureIntrinsic);
+            // If a can't overflow, we could possibly generate a rounding shift here.
+            if (no_overflow(a.type())) {
+                // Helper to make the appropriate shift.
+                auto rounding_shift = [&](const Expr &a, const Expr &b) {
+                    if (op->is_intrinsic(Call::shift_right)) {
+                        return rounding_shift_right(a, b);
+                    } else {
+                        return rounding_shift_left(a, b);
+                    }
+                };
+
+                // The rounding offset for the shift we have.
+                Expr round;
+                if (op->is_intrinsic(Call::shift_right)) {
+                    round = simplify((make_const(a.type(), 1) << max(b, 0)) >> 1);
+                } else {
+                    round = simplify((make_const(a.type(), 1) >> min(b, 0)) >> 1);
+                }
+
+                Expr a_less_round = find_and_subtract(a, round);
+                if (!a_less_round.same_as(a)) {
+                    return rounding_shift(simplify(a_less_round), b);
+                }
             }
 
-            return to_rounding_shift(op->type, result.as<Call>());
+            if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+                return op;
+            } else if (op->is_intrinsic(Call::shift_right)) {
+                return Call::make(op->type, Call::shift_right, {a, b}, Call::PureIntrinsic);
+            } else {
+                return Call::make(op->type, Call::shift_left, {a, b}, Call::PureIntrinsic);
+            }
         } else {
             return op;
         }

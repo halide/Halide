@@ -1400,12 +1400,14 @@ struct Intrin {
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState &state, halide_type_t type_hint) const {
         Expr arg0 = std::get<0>(args).make(state, type_hint);
-        Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::likely) {
             return likely(arg0);
         } else if (intrin == Call::likely_if_innermost) {
             return likely_if_innermost(arg0);
-        } else if (intrin == Call::widening_add) {
+        }
+
+        Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
+        if (intrin == Call::widening_add) {
             return widening_add(arg0, arg1);
         } else if (intrin == Call::widening_subtract) {
             return widening_subtract(arg0, arg1);
@@ -1432,6 +1434,7 @@ struct Intrin {
         } else if (intrin == Call::rounding_shift_right) {
             return rounding_shift_right(arg0, arg1);
         }
+
         internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
         return Expr();
     }
