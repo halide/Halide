@@ -2343,7 +2343,7 @@ struct Rewriter {
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, after, true, wildcard_type, output_type);
 #endif
-        if (before.template match<0>(instance, state)) {
+        if (before.template match<0>(unwrap(instance), state)) {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
@@ -2361,7 +2361,7 @@ struct Rewriter {
              typename = typename enable_if_pattern<Before>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after) noexcept {
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
-        if (before.template match<0>(instance, state)) {
+        if (before.template match<0>(unwrap(instance), state)) {
             result = after;
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
@@ -2382,7 +2382,7 @@ struct Rewriter {
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, IntLiteral(after), true, wildcard_type, output_type);
 #endif
-        if (before.template match<0>(instance, state)) {
+        if (before.template match<0>(unwrap(instance), state)) {
             result = make_const(output_type, after);
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
@@ -2412,7 +2412,7 @@ struct Rewriter {
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, after, pred, wildcard_type, output_type);
 #endif
-        if (before.template match<0>(instance, state) &&
+        if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
@@ -2435,7 +2435,7 @@ struct Rewriter {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
 
-        if (before.template match<0>(instance, state) &&
+        if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
             result = after;
 #if HALIDE_DEBUG_MATCHED_RULES
@@ -2460,7 +2460,7 @@ struct Rewriter {
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, IntLiteral(after), pred, wildcard_type, output_type);
 #endif
-        if (before.template match<0>(instance, state) &&
+        if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
             result = make_const(output_type, after);
 #if HALIDE_DEBUG_MATCHED_RULES

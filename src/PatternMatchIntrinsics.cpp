@@ -63,6 +63,7 @@ Expr to_rounding_shift(Type result_type, const Call *shift) {
     Expr a = shift->args[0];
     Expr b = shift->args[1];
 
+    // The rounding offset for the shift we have.
     Expr round;
     if (shift->is_intrinsic(Call::shift_right)) {
         round = simplify((make_const(a.type(), 1) << max(b, 0)) >> 1);
@@ -191,13 +192,22 @@ protected:
         Expr value = mutate(op->value);
 
         if (op->type.is_int() || op->type.is_uint()) {
+            Expr lower = op->type.min();
+            Expr upper = op->type.max();
+
+            auto rewrite = IRMatcher::rewriter(value, op->type);
+
+            // clang-format off
+            if (rewrite(max(min(intrin(Call::widening_add, x, y), upper), lower), intrin(Call::saturating_add, x, y)) ||
+                false) {
+                return rewrite.result;
+            }
+
             // Peel off mins/maxes that clamp at the bounds of the cast type, remembering which ones we peeled.
             Type value_t = value.type();
             Expr unclamped_value = value;
             bool clamped_upper = false;
             bool clamped_lower = false;
-            Expr lower = op->type.min();
-            Expr upper = op->type.max();
             while (true) {
                 if (const Min *min = unclamped_value.as<Min>()) {
                     if (can_prove(upper == min->a)) {
@@ -238,6 +248,7 @@ protected:
                 if (const Call *c = unclamped_value.as<Call>()) {
                     if (c->is_intrinsic(Call::widening_add)) {
                         if ((op->type.is_uint() || clamped_lower) && clamped_upper) {
+                            internal_error << "IRMatcher failed: " << value << "\n";
                             return Call::make(op->type, Call::saturating_add, c->args, Call::PureIntrinsic);
                         }
                     } else if (c->is_intrinsic(Call::widening_subtract)) {
