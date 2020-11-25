@@ -58,6 +58,31 @@ Expr find_and_subtract(const Expr &e, const Expr &term) {
     return e;
 }
 
+Expr to_rounding_shift(Type result_type, const Call *shift) {
+    internal_assert(shift->args.size() == 2);
+    Expr a = shift->args[0];
+    Expr b = shift->args[1];
+
+    Expr round;
+    if (shift->is_intrinsic(Call::shift_right)) {
+        round = simplify((make_const(a.type(), 1) << max(b, 0)) >> 1);
+    } else {
+        round = simplify((make_const(a.type(), 1) >> min(b, 0)) >> 1);
+    }
+
+    Expr a_less_round = find_and_subtract(a, round);
+    if (!a_less_round.same_as(a)) {
+        a_less_round = simplify(a_less_round);
+        if (shift->is_intrinsic(Call::shift_right)) {
+            return rounding_shift_right(a_less_round, b);
+        } else {
+            return rounding_shift_left(a_less_round, b);
+        }
+    }
+
+    return shift;
+}
+
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
 class PatternMatchIntrinsics : public IRMutator {
@@ -165,57 +190,81 @@ protected:
     Expr visit(const Cast *op) override {
         Expr value = mutate(op->value);
 
-        if ((op->type.is_int() || op->type.is_uint()) && op->type.bits() > 1 && op->type.bits() <= 32) {
+        if (op->type.is_int() || op->type.is_uint()) {
+            // Peel off mins/maxes that clamp at the bounds of the cast type, remembering which ones we peeled.
+            Type value_t = value.type();
+            Expr unclamped_value = value;
+            bool clamped_upper = false;
+            bool clamped_lower = false;
             Expr lower = op->type.min();
             Expr upper = op->type.max();
-/*
-            auto rewrite = IRMatcher::rewriter(IRMatcher::cast(op->type, value), op->type);
-            using IRMatcher::intrin;
-            if (rewrite(max(min(intrin(Call::widening_add, x, y), c1), c0), intrin(Call::saturating_add, x, y)) ||
-                rewrite(min(max(intrin(Call::widening_add, x, y), c0), c1), intrin(Call::saturating_add, x, y)) ||
-                rewrite(max(min(intrin(Call::widening_subtract, x, y), c1), c0), intrin(Call::saturating_subtract, x, y)) ||
-                rewrite(min(max(intrin(Call::widening_subtract, x, y), c0), c1), intrin(Call::saturating_subtract, x, y)) ||
-                // These are only correct for unsigned types.
-                rewrite(min(intrin(Call::widening_add, x, y), c1), intrin(Call::saturating_add, x, y), c1 == upper) ||
-                rewrite(max(intrin(Call::widening_subtract, x, y), c0), intrin(Call::saturating_subtract, x, y), c0 == lower) ||
-
-                // Averaging/halving add/subtract.
-                //rewrite(intrin(Call::widening_add, x, y) >> 1, intrin(Call::halving_add, x, y)) ||
-                //rewrite(intrin(Call::widening_subtract, x, y) >> 1, intrin(Call::halving_subtract, x, y)) ||
-                //{ widening_subtract(w, w) >> 1, Call::halving_subtract },
-                //{ rounding_shift_right(widening_add(w, w), 1), Call::rounding_halving_add },
-                // This is only correct for signed types.
-                //{ rounding_shift_right(widening_subtract(sw, sw), 1), Call::rounding_halving_subtract },
-                false) {
-                return rewrite.result;
+            while (true) {
+                if (const Min *min = unclamped_value.as<Min>()) {
+                    if (can_prove(upper == min->a)) {
+                        clamped_upper = true;
+                        unclamped_value = min->b;
+                        continue;
+                    }
+                    if (can_prove(upper == min->b)) {
+                        clamped_upper = true;
+                        unclamped_value = min->a;
+                        continue;
+                    }
+                }
+                if (const Max *max = unclamped_value.as<Max>()) {
+                    if (can_prove(lower == max->a)) {
+                        clamped_lower = true;
+                        unclamped_value = max->b;
+                        continue;
+                    }
+                    if (can_prove(lower == max->b)) {
+                        clamped_lower = true;
+                        unclamped_value = max->a;
+                        continue;
+                    }
+                }
+                break;
             }
-*/
-            Expr w(Variable::make(op->type, "*"));
-            Expr sw(Variable::make(op->type.with_code(halide_type_int), "*"));
-            Expr uw(Variable::make(op->type.with_code(halide_type_uint), "*"));
 
-            std::vector<Pattern> patterns = {
-                // Saturating add/subtract
-                Pattern{max(min(widening_add(w, w), upper), lower), Call::saturating_add},
-                Pattern{min(max(widening_add(w, w), lower), upper), Call::saturating_add},
-                Pattern{max(min(widening_subtract(w, w), upper), lower), Call::saturating_subtract},
-                Pattern{min(max(widening_subtract(w, w), lower), upper), Call::saturating_subtract},
-                // These are only correct for unsigned types.
-                Pattern{min(widening_add(uw, uw), upper), Call::saturating_add},
-                Pattern{max(widening_subtract(uw, uw), lower), Call::saturating_subtract},
+            // If this is a narrowing cast of a call, maybe we could generate a rounding shift.
+            if (op->type.bits() * 2 == value_t.bits() && op->type.code() == value_t.code()) {
+                if (const Call *c = unclamped_value.as<Call>()) {
+                    unclamped_value = to_rounding_shift(op->type, c);
+                }
+            }
 
-                // Averaging/halving add/subtract.
-                Pattern{widening_add(w, w) >> 1, Call::halving_add},
-                Pattern{widening_subtract(w, w) >> 1, Call::halving_subtract},
-                Pattern{rounding_shift_right(widening_add(w, w), 1), Call::rounding_halving_add},
-                // This is only correct for signed types.
-                Pattern{rounding_shift_right(widening_subtract(sw, sw), 1), Call::rounding_halving_subtract},
-            };
-
-            Expr result = apply_patterns(op->type, value, patterns);
-            if (result.defined()) {
-                //internal_error << "expr_match worked but IRMatcher did not!\n" << Expr(op) << "\n" << result << "\n";
-                return result;
+            if (op->type.bits() * 2 == unclamped_value.type().bits()) {
+                // This is a narrowing cast.
+                if (const Call *c = unclamped_value.as<Call>()) {
+                    if (c->is_intrinsic(Call::widening_add)) {
+                        if ((op->type.is_uint() || clamped_lower) && clamped_upper) {
+                            return Call::make(op->type, Call::saturating_add, c->args, Call::PureIntrinsic);
+                        }
+                    } else if (c->is_intrinsic(Call::widening_subtract)) {
+                        if (clamped_lower && (op->type.is_uint() || clamped_upper)) {
+                            return Call::make(op->type, Call::saturating_subtract, c->args, Call::PureIntrinsic);
+                        }
+                    } else if (c->is_intrinsic(Call::shift_right) && is_const_one(c->args[1])) {
+                        if (const Call *inner = c->args[0].as<Call>()) {
+                            if (inner->is_intrinsic(Call::widening_add)) {
+                                return Call::make(op->type, Call::halving_add, inner->args, Call::PureIntrinsic);
+                            } else if (inner->is_intrinsic(Call::widening_subtract)) {
+                                return Call::make(op->type, Call::halving_subtract, inner->args, Call::PureIntrinsic);
+                            }
+                        }
+                    } else if (c->is_intrinsic(Call::rounding_shift_right) && is_const_one(c->args[1])) {
+                        if (const Call *inner = c->args[0].as<Call>()) {
+                            if (inner->is_intrinsic(Call::widening_add)) {
+                                return Call::make(op->type, Call::rounding_halving_add, inner->args, Call::PureIntrinsic);
+                            } else if (inner->is_intrinsic(Call::widening_subtract)) {
+                                // This is only correct for signed types.
+                                if (op->type.is_int()) {
+                                    return Call::make(op->type, Call::rounding_halving_subtract, inner->args, Call::PureIntrinsic);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -232,32 +281,16 @@ protected:
             Expr a = mutate(op->args[0]);
             Expr b = mutate(op->args[1]);
 
-            // Match rounding_shift_right(a, b) = (widen(a) + ((1 << b) / 2)) >> b
-            Expr round;
-            if (op->is_intrinsic(Call::shift_right)) {
-                round = (make_const(a.type(), 1) << max(b, 0)) >> 1;
-            } else {
-                round = (make_const(a.type(), 1) >> min(b, 0)) >> 1;
-            }
-            round = simplify(round);
-
-            Expr a_less_round = find_and_subtract(a, round);
-            if (!a_less_round.same_as(a)) {
-                a_less_round = simplify(a_less_round);
-                if (op->is_intrinsic(Call::shift_right)) {
-                    return mutate(rounding_shift_right(a_less_round, b));
-                } else {
-                    return mutate(rounding_shift_left(a_less_round, b));
-                }
-            }
-
+            Expr result;
             if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
-                return op;
+                result = op;
             } else if (op->is_intrinsic(Call::shift_right)) {
-                return Call::make(op->type, Call::shift_right, {a, b}, Call::PureIntrinsic);
+                result = Call::make(op->type, Call::shift_right, {a, b}, Call::PureIntrinsic);
             } else {
-                return Call::make(op->type, Call::shift_left, {a, b}, Call::PureIntrinsic);
+                result = Call::make(op->type, Call::shift_left, {a, b}, Call::PureIntrinsic);
             }
+
+            return to_rounding_shift(op->type, result.as<Call>());
         } else {
             return op;
         }
