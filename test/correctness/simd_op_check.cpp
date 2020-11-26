@@ -1107,7 +1107,7 @@ public:
             // zero). Otherwise these patterns would be more complicated.
             check(arm32 ? "vqrdmulh.s16" : "sqrdmulh*v*h", 4 * w, i16_sat((i32(i16_1) * i32(i16_2) + (1 << 14)) / (1 << 15)));
             check(arm32 ? "vqrdmulh.s32" : "sqrdmulh*v*s", 2 * w, i32_sat((i64(i32_1) * i64(i32_2) + (1 << 30)) / (Expr(int64_t(1)) << 31)));
-/*
+
             // VQRSHRN   I       -       Saturating Rounding Shift Right Narrow
             // VQRSHRUN  I       -       Saturating Rounding Shift Right Unsigned Narrow
             check(arm32 ? "vqrshrn.s16" : "sqrshrn*v*h", 8 * w, i8_sat((i16_1 + 8) / 16));
@@ -1126,16 +1126,16 @@ public:
             Expr round_8 = (u8(1) << shift_8) / 2;
             Expr round_16 = (u16(1) << shift_16) / 2;
             Expr round_32 = (u32(1) << shift_32) / 2;
-            check(arm32 ? "vqrshrn.s16" : "sqrshrn*v*h", 8 * w, i8_sat((i32(i16_1) + round_i8) >> shift_8));
-            check(arm32 ? "vqrshrn.s32" : "sqrshrn*v*s", 4 * w, i16_sat((i64(i32_1) + round_i16) >> shift_16));
-            check(arm32 ? "vqrshrn.s64" : "sqrshrn*v*d", 2 * w, i32_sat((i64_1 + round_i32) >> shift_32));
+            check(arm32 ? "vqrshrn.s16" : "sqrshrn*v*h", 8 * w, i8_sat((i32(i16_1) + round_8) >> shift_8));
+            check(arm32 ? "vqrshrn.s32" : "sqrshrn*v*s", 4 * w, i16_sat((i64(i32_1) + round_16) >> shift_16));
+            check(arm32 ? "vqrshrn.s64" : "sqrshrn*v*d", 2 * w, i32_sat((i64_1 + round_32) >> shift_32));
             check(arm32 ? "vqrshrun.s16" : "sqrshrun*v*h", 8 * w, u8_sat((i32(i16_1) + round_8) >> shift_8));
             check(arm32 ? "vqrshrun.s32" : "sqrshrun*v*s", 4 * w, u16_sat((i64(i32_1) + round_16) >> shift_16));
             check(arm32 ? "vqrshrun.s64" : "sqrshrun*v*d", 2 * w, u32_sat((i64_1 + round_32) >> shift_32));
             check(arm32 ? "vqrshrn.u16" : "uqrshrn*v*h", 8 * w, u8(min((u32(u16_1) + round_8) >> shift_8, max_u8)));
             check(arm32 ? "vqrshrn.u32" : "uqrshrn*v*s", 4 * w, u16(min((u64(u32_1) + round_16) >> shift_16, max_u16)));
             check(arm32 ? "vqrshrn.u64" : "uqrshrn*v*d", 2 * w, u32(min((u64_1 + round_32) >> shift_32, max_u32)));
-*/
+
             // VQSHL    I       -       Saturating Shift Left
             check(arm32 ? "vqshl.s8" : "sqshl*v*b", 8 * w, i8_sat(i16(i8_1) * 16));
             check(arm32 ? "vqshl.s16" : "sqshl*v*h", 4 * w, i16_sat(i32(i16_1) * 16));

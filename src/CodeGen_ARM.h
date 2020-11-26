@@ -38,14 +38,13 @@ protected:
 
     /** Various patterns to peephole match against */
     struct Pattern {
-        std::string intrin32;           ///< Name of the intrinsic for 32-bit arm
-        std::string intrin64;           ///< Name of the intrinsic for 64-bit arm
-        int intrin_lanes;               ///< The native vector width of the intrinsic
-        Expr pattern;                   ///< The pattern to match against
-        enum PatternType { Simple = 0,  ///< Just match the pattern
-                           LeftShift,   ///< Match the pattern if the RHS is a const power of two
-                           RightShift,  ///< Match the pattern if the RHS is a const power of two
-                           NarrowArgs   ///< Match the pattern if the args can be losslessly narrowed
+        std::string intrin32;            ///< Name of the intrinsic for 32-bit arm
+        std::string intrin64;            ///< Name of the intrinsic for 64-bit arm
+        int intrin_lanes;                ///< The native vector width of the intrinsic
+        Expr pattern;                    ///< The pattern to match against
+        enum PatternType { Simple = 0,   ///< Just match the pattern
+                           LeftShift,    ///< Match the pattern if the RHS is a const power of two
+                           RightShift,   ///< Match the pattern if the RHS is a const power of two
         };
         PatternType type;
         Pattern() = default;

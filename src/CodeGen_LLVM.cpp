@@ -262,6 +262,18 @@ CodeGen_LLVM::CodeGen_LLVM(Target t)
       wild_f32x_(Variable::make(Float(32, 0), "*")),
       wild_f64x_(Variable::make(Float(64, 0), "*")),
 
+      wild_u1_(Variable::make(UInt(1), "*")),
+      wild_i8_(Variable::make(Int(8), "*")),
+      wild_u8_(Variable::make(UInt(8), "*")),
+      wild_i16_(Variable::make(Int(16), "*")),
+      wild_u16_(Variable::make(UInt(16), "*")),
+      wild_i32_(Variable::make(Int(32), "*")),
+      wild_u32_(Variable::make(UInt(32), "*")),
+      wild_i64_(Variable::make(Int(64), "*")),
+      wild_u64_(Variable::make(UInt(64), "*")),
+      wild_f32_(Variable::make(Float(32), "*")),
+      wild_f64_(Variable::make(Float(64), "*")),
+
       // Bounds of types
       min_i8(Int(8).min()),
       max_i8(Int(8).max()),

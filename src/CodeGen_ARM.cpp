@@ -48,15 +48,25 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     casts.emplace_back("vqrdmulh.v4i32", "sqrdmulh.v4i32", 4,
                        i32_sat(rounding_shift_right(widening_mul(wild_i32x_, wild_i32x_), 31)));
 
-    casts.emplace_back("vqshiftns.v8i8", "sqshrn.v8i8", 8, i8_sat(wild_i16x_ / wild_i16x_), Pattern::RightShift);
-    casts.emplace_back("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_ / wild_i32x_), Pattern::RightShift);
-    casts.emplace_back("vqshiftns.v2i32", "sqshrn.v2i32", 2, i32_sat(wild_i64x_ / wild_i64x_), Pattern::RightShift);
-    casts.emplace_back("vqshiftnu.v8i8", "uqshrn.v8i8", 8, u8_sat(wild_u16x_ / wild_u16x_), Pattern::RightShift);
-    casts.emplace_back("vqshiftnu.v4i16", "uqshrn.v4i16", 4, u16_sat(wild_u32x_ / wild_u32x_), Pattern::RightShift);
-    casts.emplace_back("vqshiftnu.v2i32", "uqshrn.v2i32", 2, u32_sat(wild_u64x_ / wild_u64x_), Pattern::RightShift);
-    casts.emplace_back("vqshiftnsu.v8i8", "sqshrun.v8i8", 8, u8_sat(wild_i16x_ / wild_i16x_), Pattern::RightShift);
-    casts.emplace_back("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16_sat(wild_i32x_ / wild_i32x_), Pattern::RightShift);
-    casts.emplace_back("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32_sat(wild_i64x_ / wild_i64x_), Pattern::RightShift);
+    casts.emplace_back("vqshiftns.v8i8", "sqshrn.v8i8", 8, i8_sat(wild_i16x_ >> wild_u16_));
+    casts.emplace_back("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_ >> wild_u32_));
+    casts.emplace_back("vqshiftns.v2i32", "sqshrn.v2i32", 2, i32_sat(wild_i64x_ >> wild_u64_));
+    casts.emplace_back("vqshiftnu.v8i8", "uqshrn.v8i8", 8, u8_sat(wild_u16x_ >> wild_u16_));
+    casts.emplace_back("vqshiftnu.v4i16", "uqshrn.v4i16", 4, u16_sat(wild_u32x_ >> wild_u32_));
+    casts.emplace_back("vqshiftnu.v2i32", "uqshrn.v2i32", 2, u32_sat(wild_u64x_ >> wild_u64_));
+    casts.emplace_back("vqshiftnsu.v8i8", "sqshrun.v8i8", 8, u8_sat(wild_i16x_ >> wild_u16_));
+    casts.emplace_back("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16_sat(wild_i32x_ >> wild_u32_));
+    casts.emplace_back("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32_sat(wild_i64x_ >> wild_u64_));
+
+    casts.emplace_back("vqrshiftns.v8i8", "sqrshrn.v8i8", 8, i8_sat(rounding_shift_right(wild_i16x_, wild_u32_)), Pattern::WidenScalars);
+    casts.emplace_back("vqrshiftns.v4i16", "sqrshrn.v4i16", 4, i16_sat(rounding_shift_right(wild_i32x_, wild_u32_)), Pattern::WidenScalars);
+    casts.emplace_back("vqrshiftns.v2i32", "sqrshrn.v2i32", 2, i32_sat(rounding_shift_right(wild_i64x_, wild_u32_)), Pattern::WidenScalars);
+    casts.emplace_back("vqrshiftnu.v8i8", "uqrshrn.v8i8", 8, u8_sat(rounding_shift_right(wild_u16x_, wild_u32_)), Pattern::WidenScalars);
+    casts.emplace_back("vqrshiftnu.v4i16", "uqrshrn.v4i16", 4, u16_sat(rounding_shift_right(wild_u32x_, wild_u32_)), Pattern::WidenScalars);
+    casts.emplace_back("vqrshiftnu.v2i32", "uqrshrn.v2i32", 2, u32_sat(rounding_shift_right(wild_u64x_, wild_u32_)), Pattern::WidenScalars);
+    casts.emplace_back("vqrshiftnsu.v8i8", "sqrshrun.v8i8", 8, u8_sat(rounding_shift_right(wild_i16x_, wild_u32_)), Pattern::WidenScalars);
+    casts.emplace_back("vqrshiftnsu.v4i16", "sqrshrun.v4i16", 4, u16_sat(rounding_shift_right(wild_i32x_, wild_u32_)), Pattern::WidenScalars);
+    casts.emplace_back("vqrshiftnsu.v2i32", "sqrshrun.v2i32", 2, u32_sat(rounding_shift_right(wild_i64x_, wild_u32_)), Pattern::WidenScalars);
 
     // Where a 64-bit and 128-bit version exist, we use the 64-bit
     // version only when the args are 64-bits wide.
@@ -137,27 +147,6 @@ void CodeGen_ARM::visit(const Cast *op) {
             if (pattern.type == Pattern::Simple) {
                 value = call_pattern(pattern, t, matches);
                 return;
-            } else if (pattern.type == Pattern::NarrowArgs) {
-                // Try to narrow all of the args.
-                bool all_narrow = true;
-                for (size_t i = 0; i < matches.size(); i++) {
-                    internal_assert(matches[i].type().bits() == t.bits() * 2);
-                    internal_assert(matches[i].type().lanes() == t.lanes());
-                    // debug(4) << "Attemping to narrow " << matches[i] << " to " << t << "\n";
-                    matches[i] = lossless_cast(t, matches[i]);
-                    if (!matches[i].defined()) {
-                        // debug(4) << "failed\n";
-                        all_narrow = false;
-                    } else {
-                        // debug(4) << "success: " << matches[i] << "\n";
-                        internal_assert(matches[i].type() == t);
-                    }
-                }
-
-                if (all_narrow) {
-                    value = call_pattern(pattern, t, matches);
-                    return;
-                }
             } else {  // must be a shift
                 Expr constant = matches[1];
                 int shift_amount;

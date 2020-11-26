@@ -247,6 +247,12 @@ protected:
     Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
     Expr wild_i32x_, wild_u32x_, wild_i64x_, wild_u64x_;
     Expr wild_f32x_, wild_f64x_;
+
+    // Wildcards for scalars.
+    Expr wild_u1_, wild_i8_, wild_u8_, wild_i16_, wild_u16_;
+    Expr wild_i32_, wild_u32_, wild_i64_, wild_u64_;
+    Expr wild_f32_, wild_f64_;
+
     Expr min_i8, max_i8, max_u8;
     Expr min_i16, max_i16, max_u16;
     Expr min_i32, max_i32, max_u32;
