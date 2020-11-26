@@ -14,6 +14,13 @@ using namespace Halide::ConciseCasts;
 
 namespace {
 
+bool is_widen(const Expr &x) {
+    if (const Cast *cast = x.as<Cast>()) {
+        return cast->type.code() == cast->value.type().code() && cast->type.bits() > cast->value.type().bits();
+    }
+    return false;
+}
+
 Expr saturating_narrow(Expr a) {
     Type narrow = a.type().with_bits(a.type().bits() / 2);
     return saturating_cast(narrow, a);
@@ -215,6 +222,7 @@ protected:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
+        // Try widening both from the same type as the result, and from uint.
         for (halide_type_code_t code : {op->type.code(), halide_type_uint}) {
             Type narrow = op->type.with_bits(op->type.bits() / 2).with_code(code);
             Expr narrow_a = lossless_cast(narrow, a);
@@ -240,7 +248,8 @@ protected:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
-        for (halide_type_code_t code : {halide_type_int, halide_type_uint}) {
+        // Try widening both from the same type as the result, and from uint.
+        for (halide_type_code_t code : {op->type.code(), halide_type_uint}) {
             Type narrow = op->type.with_bits(op->type.bits() / 2).with_code(code);
             Expr narrow_a = lossless_cast(narrow, a);
             Expr narrow_b = lossless_cast(narrow, b);
@@ -331,20 +340,47 @@ protected:
             auto rewrite = IRMatcher::rewriter(value, op->type);
 
             int bits = op->type.bits();
-            auto is_same_int = is_int(x, bits);
-            auto is_same_uint = is_uint(x, bits);
-            auto is_same_int_or_uint = is_same_int || is_same_uint;
+            auto is_x_same_int = is_int(x, bits);
+            auto is_x_same_uint = is_uint(x, bits);
+            auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
             // clang-format off
-            if (rewrite(max(min(widening_add(x, y), upper), lower), saturating_add(x, y), is_same_int_or_uint) ||
-                rewrite(max(min(widening_sub(x, y), upper), lower), saturating_sub(x, y), is_same_int_or_uint) ||
-                rewrite(min(widening_add(x, y), upper), saturating_add(x, y), is_same_uint) ||
-                rewrite(max(widening_sub(x, y), 0), saturating_sub(x, y), is_same_uint) ||
-                rewrite(intrin(Call::shift_right, widening_add(x, y), 1), halving_add(x, y), is_same_int_or_uint) ||
-                rewrite(intrin(Call::shift_right, widening_sub(x, y), 1), halving_sub(x, y), is_same_int_or_uint) ||
-                rewrite(intrin(Call::rounding_shift_right, widening_add(x, y), 1), rounding_halving_add(x, y), is_same_int_or_uint) ||
-                rewrite(intrin(Call::rounding_shift_right, widening_sub(x, y), 1), rounding_halving_sub(x, y), is_same_int) ||
+            if (rewrite(max(min(widening_add(x, y), upper), lower), saturating_add(x, y), is_x_same_int_or_uint) ||
+                rewrite(max(min(widening_sub(x, y), upper), lower), saturating_sub(x, y), is_x_same_int_or_uint) ||
+                rewrite(min(widening_add(x, y), upper), saturating_add(x, y), is_x_same_uint) ||
+                rewrite(max(widening_sub(x, y), 0), saturating_sub(x, y), is_x_same_uint) ||
+
+                rewrite(intrin(Call::shift_right, widening_add(x, y), 1), halving_add(x, y), is_x_same_int_or_uint) ||
+                rewrite(intrin(Call::shift_right, widening_sub(x, y), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
+
+                rewrite(intrin(Call::halving_add, widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
+                rewrite(intrin(Call::halving_add, widening_add(x, 1), y), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
+                rewrite(intrin(Call::halving_add, widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int) ||
+                rewrite(intrin(Call::rounding_shift_right, widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
+                rewrite(intrin(Call::rounding_shift_right, widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int) ||
+
                 false) {
                 return rewrite.result;
+            }
+            // clang-format on
+
+            // When the argument is a widened rounding shift, and we know the shift is right
+            // by at least one, we don't need the widening.
+            auto is_x_wide_int = is_int(x, bits * 2);
+            auto is_x_wide_uint = is_uint(x, bits * 2);
+            auto is_x_wide_int_or_uint = is_x_wide_int || is_x_wide_uint;
+            // clang-format off
+            if (rewrite(max(min(rounding_shift_right(x, y), upper), lower), rounding_shift_right(x, y), is_x_wide_int_or_uint && y > 0) ||
+                rewrite(max(min(rounding_shift_left(x, y), upper), lower), rounding_shift_left(x, y), is_x_wide_int_or_uint && y < 0) ||
+                rewrite(rounding_shift_right(x, y), rounding_shift_right(x, y), is_x_wide_int_or_uint && y > 0) ||
+                rewrite(rounding_shift_left(x, y), rounding_shift_left(x, y), is_x_wide_int_or_uint && y < 0) ||
+
+                false) {
+                const Call *shift = Call::as_intrinsic(rewrite.result, {Call::rounding_shift_right, Call::rounding_shift_left});
+                if (is_widen(shift->args[0])) {
+                    Expr arg0 = shift->args[0].as<Cast>()->value;
+                    Expr arg1 = simplify(narrow(shift->args[1]));
+                    return Call::make(op->type, shift->name, {arg0, arg1}, Call::PureIntrinsic);
+                }
             }
             // clang-format on
         }
@@ -363,9 +399,6 @@ protected:
             // clang-format off
             if (rewrite(intrin(Call::shift_right, x + y, 1), halving_add(x, y)) ||
                 rewrite(intrin(Call::shift_right, x - y, 1), halving_sub(x, y)) ||
-                rewrite(intrin(Call::halving_add, widening_add(x, y), 1), rounding_halving_add(x, y)) ||
-                rewrite(intrin(Call::halving_add, widening_add(x, 1), y), rounding_halving_add(x, y)) ||
-                rewrite(intrin(Call::halving_add, widening_sub(x, y), 1), rounding_halving_sub(x, y)) ||
                 rewrite(intrin(Call::rounding_shift_right, x + y, 1), rounding_halving_add(x, y)) ||
                 rewrite(intrin(Call::rounding_shift_right, x - y, 1), rounding_halving_sub(x, y)) ||
                 false) {
@@ -416,6 +449,13 @@ Stmt pattern_match_intrinsics(Stmt s) {
     s = PatternMatchIntrinsics().mutate(s);
     s = common_subexpression_elimination(s);
     return s;
+}
+
+Expr pattern_match_intrinsics(Expr e) {
+    e = substitute_in_all_lets(e);
+    e = PatternMatchIntrinsics().mutate(e);
+    e = common_subexpression_elimination(e);
+    return e;
 }
 
 Expr as_add(const Expr &a) {

@@ -12,6 +12,7 @@ namespace Internal {
 
 /** Replace common arithmetic patterns with intrinsics. */
 Stmt pattern_match_intrinsics(Stmt s);
+Expr pattern_match_intrinsics(Expr e);
 
 /** Try to rewrite an expression as an Add expression instead of an intrinsic. */
 Expr as_add(const Expr &a);
