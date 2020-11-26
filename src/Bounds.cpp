@@ -1239,6 +1239,7 @@ private:
                                                  b_interval.min > -t.bits())) {
                                 interval.min = a_interval.min >> abs(b_interval.min);
                             } else if (a_interval.has_lower_bound() &&
+                                       a_interval.min.type().is_int() &&
                                        can_prove(a_interval.min < 0) &&
                                        b_interval.has_upper_bound()) {
                                 if (!b_interval.max.type().is_uint() &&
