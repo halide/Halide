@@ -727,8 +727,7 @@ Stmt add_image_checks(const Stmt &s,
 
         Stmt visit(const Block *op) override {
             const Evaluate *e = op->first.as<Evaluate>();
-            const Call *c = e ? e->value.as<Call>() : nullptr;
-            if (c && c->is_intrinsic(Call::add_image_checks_marker)) {
+            if (e && Call::as_intrinsic(e->value, {Call::add_image_checks_marker})) {
                 return add_image_checks_inner(op->rest, outputs, t, order, env, fb, will_inject_host_copies);
             } else {
                 return IRMutator::visit(op);

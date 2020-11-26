@@ -192,9 +192,7 @@ Stmt build_loop_nest(
     for (Expr pred : predicates) {
         pred = qualify(prefix, pred);
         // Add a likely qualifier if there isn't already one
-        const Call *c = pred.as<Call>();
-        if (!(c && (c->is_intrinsic(Call::likely) ||
-                    c->is_intrinsic(Call::likely_if_innermost)))) {
+        if (Call::as_intrinsic(pred, {Call::likely, Call::likely_if_innermost})) {
             pred = likely(pred);
         }
         pred_container.emplace_back(Container::If, 0, "", pred);
@@ -1058,9 +1056,8 @@ protected:
         vector<pair<string, Expr>> containers;
         while (1) {
             if (const LetStmt *l = body.as<LetStmt>()) {
-                const Call *call = l->value.as<Call>();
-                if (!(call && call->is_intrinsic(Call::promise_clamped)) &&
-                    !is_pure(l->value)) {
+                const Call *promise_clamped = Call::as_intrinsic(l->value, {Call::promise_clamped});
+                if (!promise_clamped && !is_pure(l->value)) {
                     // The consumer of the Func we're injecting may be an
                     // extern stage, which shows up in the IR as a let
                     // stmt with a side-effecty RHS. We need to take care
