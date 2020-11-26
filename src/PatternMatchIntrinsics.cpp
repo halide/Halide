@@ -413,13 +413,13 @@ Expr lower_widening_shift_left(const Expr &a, const Expr &b) {
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
     Expr round = (make_const(a.type(), 1) << max(b, 0)) >> 1;
     Expr a_rounded = simplify(saturating_add(a, round));
-    return Call::make(a.type(), Call::shift_right, {a_rounded, b}, Call::PureIntrinsic);
+    return a_rounded >> b;
 }
 
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
     Expr round = (make_const(a.type(), 1) >> min(b, 0)) >> 1;
     Expr a_rounded = simplify(saturating_add(a, round));
-    return Call::make(a.type(), Call::shift_left, {a_rounded, b}, Call::PureIntrinsic);
+    return a_rounded << b;
 }
 
 // These intentionally use the non-lowered versions of widening_add/widening_sub, in the
@@ -503,7 +503,7 @@ Expr lower_intrinsic(const Call *op) {
         return lower_widening_sub(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::widening_shift_left)) {
         internal_assert(op->args.size() == 2);
-        return widening_shift_left(op->args[0], op->args[1]);
+        return lower_widening_shift_left(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::rounding_shift_right)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_shift_right(op->args[0], op->args[1]);

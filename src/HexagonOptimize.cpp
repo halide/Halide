@@ -946,7 +946,7 @@ private:
                 }
 
                 if (expr_match(p.pattern, cast, matches)) {
-                    const int64_t *const_shift = as_const_int(matches[2]);
+                    const uint64_t *const_shift = as_const_uint(matches[2]);
                     if (!const_shift) {
                         continue;
                     }
@@ -1015,13 +1015,29 @@ private:
                 return mpyadds;
             }
         }
+
+        // These intrinsics should get the default lowering, and we need to recursively mutate the
+        // result. We don't want to let these fall through to CodeGen_Hexagon and CodeGen_LLVM,
+        // because they might generate interleaeves or deinterleaves we can simplify.
+        static const vector<Call::IntrinsicOp> default_lower = {
+            // TODO: Maybe there are widening shift instructions on Hexagon?
+            Call::widening_shift_left,
+        };
+
+        for (Call::IntrinsicOp i : default_lower) {
+            if (op->is_intrinsic(i)) {
+                return mutate(lower_intrinsic(op));
+            }
+        }
+
         static const vector<Pattern> calls = {
-            // Vector by scalar widening multiplies.
+            // Vector by scalar widening multiplies. These need to happen before the ones below, to avoid
+            // using vector versions when scalar versions would suffice.
             {"halide.hexagon.mpy.vub.ub", widening_mul(wild_u8x, bc(wild_u8)), Pattern::InterleaveResult},
             {"halide.hexagon.mpy.vuh.uh", widening_mul(wild_u16x, bc(wild_u16)), Pattern::InterleaveResult},
             {"halide.hexagon.mpy.vh.h", widening_mul(wild_i16x, bc(wild_i16)), Pattern::InterleaveResult},
 
-            // These look trivial, but they differ due to the interleave result flag.
+            // These are calls that are almost trivial, but they differ due to interleaving.
             {"halide.hexagon.add_vuh.vub.vub", widening_add(wild_u8x, wild_u8x), Pattern::InterleaveResult},
             {"halide.hexagon.add_vuw.vuh.vuh", widening_add(wild_u16x, wild_u16x), Pattern::InterleaveResult},
             {"halide.hexagon.add_vw.vh.vh", widening_add(wild_i16x, wild_i16x), Pattern::InterleaveResult},
