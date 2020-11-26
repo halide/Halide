@@ -70,15 +70,15 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 
     // Where a 64-bit and 128-bit version exist, we use the 64-bit
     // version only when the args are 64-bits wide.
-    casts.emplace_back("vqshifts.v8i8", "sqshl.v8i8", 8, i8_sat(widening_shift_left(wild_i8x8, wild_i8x)));
+    casts.emplace_back("vqshifts.v8i8", "sqshl.v8i8", 8, i8_sat(widening_shift_left(wild_i8x8, wild_i8x8)));
     casts.emplace_back("vqshifts.v4i16", "sqshl.v4i16", 4, i16_sat(widening_shift_left(wild_i16x4, wild_i16x4)));
-    casts.emplace_back("vqshifts.v2i32", "sqshl.v2i32", 2, i32_sat(widening_shift_left(wild_i32x2, wild_i64x2)));
-    casts.emplace_back("vqshiftu.v8i8", "uqshl.v8i8", 8, u8_sat(widening_shift_left(wild_u8x8, wild_i16x8)));
-    casts.emplace_back("vqshiftu.v4i16", "uqshl.v4i16", 4, u16_sat(widening_shift_left(wild_u16x4, wild_i32x4)));
-    casts.emplace_back("vqshiftu.v2i32", "uqshl.v2i32", 2, u32_sat(widening_shift_left(wild_u32x2, wild_i64x2)));
-    casts.emplace_back("vqshiftsu.v8i8", "sqshlu.v8i8", 8, u8_sat(widening_shift_left(wild_i8x8, wild_i16x8)));
-    casts.emplace_back("vqshiftsu.v4i16", "sqshlu.v4i16", 4, u16_sat(widening_shift_left(wild_i16x4, wild_i32x4)));
-    casts.emplace_back("vqshiftsu.v2i32", "sqshlu.v2i32", 2, u32_sat(widening_shift_left(wild_i32x2, wild_i64x2)));
+    casts.emplace_back("vqshifts.v2i32", "sqshl.v2i32", 2, i32_sat(widening_shift_left(wild_i32x2, wild_i32x2)));
+    casts.emplace_back("vqshiftu.v8i8", "uqshl.v8i8", 8, u8_sat(widening_shift_left(wild_u8x8, wild_i8x8)));
+    casts.emplace_back("vqshiftu.v4i16", "uqshl.v4i16", 4, u16_sat(widening_shift_left(wild_u16x4, wild_i16x4)));
+    casts.emplace_back("vqshiftu.v2i32", "uqshl.v2i32", 2, u32_sat(widening_shift_left(wild_u32x2, wild_i32x2)));
+    casts.emplace_back("vqshiftsu.v8i8", "sqshlu.v8i8", 8, u8_sat(widening_shift_left(wild_i8x8, wild_i8x8)));
+    casts.emplace_back("vqshiftsu.v4i16", "sqshlu.v4i16", 4, u16_sat(widening_shift_left(wild_i16x4, wild_i16x4)));
+    casts.emplace_back("vqshiftsu.v2i32", "sqshlu.v2i32", 2, u32_sat(widening_shift_left(wild_i32x2, wild_i32x2)));
 
     // We use the 128-bit version for all other vector widths.
     casts.emplace_back("vqshifts.v16i8", "sqshl.v16i8", 16, i8_sat(widening_shift_left(wild_i8x_, wild_i8x_)));
