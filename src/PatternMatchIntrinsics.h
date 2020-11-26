@@ -13,6 +13,11 @@ namespace Internal {
 /** Replace common arithmetic patterns with intrinsics. */
 Stmt pattern_match_intrinsics(Stmt s);
 
+/** Try to rewrite an expression as an Add expression instead of an intrinsic. */
+Expr as_add(const Expr &a);
+/** Try to rewrite an expression as a Mul expression instead of an intrinsic. */
+Expr as_mul(const Expr &a);
+
 /** Implement intrinsics with non-intrinsic using equivalents. */
 Expr lower_widening_add(const Expr &a, const Expr &b);
 Expr lower_widening_mul(const Expr &a, const Expr &b);

@@ -1043,7 +1043,6 @@ Expr widening_sub(Expr a, Expr b) {
 Expr widening_shift_left(Expr a, Expr b) {
     match_lanes(a, b);
     Type wide_type = a.type().with_bits(a.type().bits() * 2);
-    internal_assert(wide_type == b.type());
     return Call::make(wide_type, Call::widening_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 

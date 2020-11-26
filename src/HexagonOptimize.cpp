@@ -373,6 +373,7 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
             }
         }
     }
+    maybe_mul = as_mul(maybe_mul);
 
     if (const Mul *mul = maybe_mul.as<Mul>()) {
         Expr a = unbroadcast_lossless_cast(a_ty, mul->a);
@@ -389,43 +390,29 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
                 return 1;
             }
         }
-    } else if (const Call *widening_mul = Call::as_intrinsic(maybe_mul, {Call::widening_mul})) {
-        internal_assert(widening_mul->args.size() == 2);
-        Expr a = unbroadcast_lossless_cast(a_ty, widening_mul->args[0]);
-        Expr b = unbroadcast_lossless_cast(b_ty, widening_mul->args[1]);
-        if (a.defined() && b.defined()) {
-            mpys.emplace_back(a, b);
-            return 1;
-        } else {
-            // Try to commute the op.
-            a = unbroadcast_lossless_cast(a_ty, widening_mul->args[1]);
-            b = unbroadcast_lossless_cast(b_ty, widening_mul->args[0]);
-            if (a.defined() && b.defined()) {
-                mpys.emplace_back(a, b);
-                return 1;
-            }
-        }
-    } else if (const Call *shift = Call::as_intrinsic(maybe_mul, {Call::shift_left})) {
-        internal_assert(shift->args.size() == 2);
-        Expr a = unbroadcast_lossless_cast(a_ty, shift->args[0]);
-        Expr b = unbroadcast_lossless_cast(b_ty, simplify(1 << shift->args[1]));
-        if (a.defined() && b.defined()) {
-            mpys.emplace_back(a, b);
-            return 1;
-        } else {
-            // Try to commute the op.
-            a = unbroadcast_lossless_cast(a_ty, simplify(1 << shift->args[1]));
-            b = unbroadcast_lossless_cast(b_ty, shift->args[0]);
-            if (a.defined() && b.defined()) {
-                mpys.emplace_back(a, b);
-                return 1;
-            }
-        }
     } else if (const Add *add = op.as<Add>()) {
         int mpy_count = 0;
         mpy_count += find_mpy_ops(add->a, a_ty, b_ty, max_mpy_count, mpys, rest);
         mpy_count += find_mpy_ops(add->b, a_ty, b_ty, max_mpy_count, mpys, rest);
         return mpy_count;
+    } else if (const Sub *sub = op.as<Sub>()) {
+        // Try to rewrite subs as adds.
+        Expr sub_b = as_mul(sub->b);
+        if (const Mul *mul_b = sub_b.as<Mul>()) {
+            if (is_positive_const(mul_b->a) || is_negative_negatable_const(mul_b->a)) {
+                Expr add_b = Mul::make(simplify(-mul_b->a), mul_b->b);
+                int mpy_count = 0;
+                mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+                mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
+                return mpy_count;
+            } else if (is_positive_const(mul_b->b) || is_negative_negatable_const(mul_b->b)) {
+                Expr add_b = Mul::make(mul_b->a, simplify(-mul_b->b));
+                int mpy_count = 0;
+                mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+                mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
+                return mpy_count;
+            }
+        }
     }
 
     // Attempt to pretend this op is multiplied by 1.
@@ -2087,12 +2074,14 @@ private:
     }
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::widening_mul)) {
-            Expr mutated = mutate_mul(simplify(widen(op->args[0])), simplify(widen(op->args[1])));
+        Expr mul = as_mul(op);
+        if (const Mul *op = mul.as<Mul>()) {
+            Expr mutated = mutate_mul(op->a, op->b);
             if (mutated.defined()) {
                 return mutated;
             }
         }
+
         return IRMutator::visit(op);
     }
 };
