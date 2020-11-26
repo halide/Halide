@@ -48,17 +48,26 @@ function(add_app_test NAME)
         "-DLLVM_DIR=${LLVM_DIR}"
         "-DHalide_TARGET=${Halide_TARGET}")
 
+    # Note that we skip all tests that have the 'benchmark' label; some of the apps
+    # have benchmarks that are in the form of tests, and running them via this path
+    # isn't very useful, since we aren't guaranteed that the machine won't be under
+    # load with other tests. (Also, some of the apps have extensive benchmarks that
+    # take quite a while to run; e.g. apps/linear_algebra, which has over 500.)
+    #
+    # Note also that we specify `--build-noclean` explicitly; apparently the default
+    # for --build-and-test is to 'clean' first, which shouldn't be necessary here.
     add_test(NAME ${NAME}
              COMMAND ${CMAKE_CTEST_COMMAND}
              --output-on-failure
              --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/${NAME}" "${CMAKE_CURRENT_BINARY_DIR}/${NAME}"
              --build-generator "${CMAKE_GENERATOR}"
+             --build-noclean
              ${cmakeGenOpts}
              --build-config "$<CONFIG>"
              --build-options
              ${cmakeDefinitionOpts}
              ${cmakeToolchainOpts}
-             --test-command ${CMAKE_CTEST_COMMAND} -C $<CONFIG> -V)
+             --test-command ${CMAKE_CTEST_COMMAND} -C $<CONFIG> -LE benchmark)
     set_tests_properties(${NAME} PROPERTIES
                          FIXTURES_REQUIRED apps
                          LABELS apps

@@ -49,7 +49,7 @@ foreach (TARGET IN LISTS BENCHMARK_TARGETS)
                 add_test(NAME ${TEST_NAME}
                          COMMAND ${TARGET} ${FUNC} ${SIZE})
                 set_tests_properties("${TEST_NAME}" PROPERTIES
-                                     LABELS "${BLA_VENDOR};${LEVEL};internal_app_tests"
+                                     LABELS "${BLA_VENDOR};${LEVEL};internal_app_tests;benchmark"
                                      PASS_REGULAR_EXPRESSION "${FUNC}[ \t]+${SIZE}"
                                      SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
             endforeach ()
