@@ -7,7 +7,7 @@ using namespace Halide::Internal;
 
 void check_is_sio(const Expr &e) {
     Expr simpler = simplify(e);
-    if (Call::as_intrinsic(simpler, {Call::signed_integer_overflow})) {
+    if (!Call::as_intrinsic(simpler, {Call::signed_integer_overflow})) {
         std::cerr
             << "\nSimplification failure:\n"
             << "Input: " << e << "\n"
