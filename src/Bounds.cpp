@@ -1238,9 +1238,11 @@ private:
                                        can_prove(b_interval.min < 0 &&
                                                  b_interval.min > -t.bits())) {
                                 interval.min = a_interval.min >> abs(b_interval.min);
-                            } else if (can_prove(a_interval.min < 0) &&
+                            } else if (a_interval.has_lower_bound() &&
+                                       can_prove(a_interval.min < 0) &&
                                        b_interval.has_upper_bound()) {
-                                if (can_prove(b_interval.max <= 0)) {
+                                if (!b_interval.max.type().is_uint() &&
+                                    can_prove(b_interval.max <= 0)) {
                                     // If b is strictly non-positive, then the magnitude can only decrease.
                                     interval.min = a_interval.min;
                                 } else {
