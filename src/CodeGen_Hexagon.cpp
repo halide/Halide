@@ -490,7 +490,7 @@ namespace {
 
 struct HvxIntrinsic {
     enum {
-        BroadcastScalarsToWords = 1 << 0, // Some intrinsics need scalar arguments
+        BroadcastScalarsToWords = 1 << 0,  // Some intrinsics need scalar arguments
                                            // broadcasted up to 32 bits.
         v65OrLater = 1 << 1,
     };
