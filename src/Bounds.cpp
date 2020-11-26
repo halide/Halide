@@ -1233,27 +1233,26 @@ private:
                             } else if (a_interval.has_lower_bound() &&
                                        b_interval.has_lower_bound() &&
                                        !b_interval.min.type().is_uint() &&
+                                       (a_interval.min.type().is_uint() ||
+                                       can_prove(a_interval.min >= 0)) &&
                                        can_prove(b_interval.min < 0 &&
                                                  b_interval.min > -t.bits())) {
-                                if (a_interval.min.type().is_uint() || can_prove(a_interval.min >= 0)) {
-                                    interval.min = a_interval.min >> abs(b_interval.min);
-                                } else if (can_prove(a_interval.min < 0)) {
-                                    if (b_interval.has_upper_bound()) {
-                                        if (can_prove(b_interval.max <= 0)) {
-                                            // If b is strictly non-positive, then the magnitude can only decrease.
-                                            interval.min = a_interval.min;
-                                        } else {
-                                            // If b could be positive, then the magnitude might increase.
-                                            interval.min = min(a_interval.min, a_interval.min << b_interval.max);
-                                        }
-                                    }
+                                interval.min = a_interval.min >> abs(b_interval.min);
+                            } else if (can_prove(a_interval.min < 0) &&
+                                       b_interval.has_upper_bound()) {
+                                if (can_prove(b_interval.max <= 0)) {
+                                    // If b is strictly non-positive, then the magnitude can only decrease.
+                                    interval.min = a_interval.min;
+                                } else {
+                                    // If b could be positive, then the magnitude might increase.
+                                    interval.min = min(a_interval.min, a_interval.min << b_interval.max);
                                 }
-                                // TODO: Are there any other cases we can handle here?
                             } else if (a_interval.has_lower_bound() &&
                                        can_prove(a_interval.min >= 0)) {
                                 // A positive value shifted cannot change sign.
                                 interval.min = make_zero(t);
                             }
+                            // TODO: Are there any other cases we can handle for interval.min?
 
                             if (a_interval.has_upper_bound() &&
                                 b_interval.has_upper_bound() &&
