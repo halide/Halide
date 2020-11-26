@@ -1234,7 +1234,7 @@ private:
                                        b_interval.has_lower_bound() &&
                                        !b_interval.min.type().is_uint() &&
                                        (a_interval.min.type().is_uint() ||
-                                       can_prove(a_interval.min >= 0)) &&
+                                        can_prove(a_interval.min >= 0)) &&
                                        can_prove(b_interval.min < 0 &&
                                                  b_interval.min > -t.bits())) {
                                 interval.min = a_interval.min >> abs(b_interval.min);
