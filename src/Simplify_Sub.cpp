@@ -108,9 +108,6 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite((x - y) - (x + z), 0 - y - z) ||
              rewrite((x - y) - (z + x), 0 - y - z) ||
 
-             // Some things are easier as multiply-add instead of multiply-subtract.
-             rewrite(x - y*c0, x + y*fold(-c0)) ||  // TODO: How to avoid overflow for type.min() ?
-
              (no_overflow(op->type) &&
               (rewrite(max(x, y) - x, max(y - x, 0)) ||
                rewrite(min(x, y) - x, min(y - x, 0)) ||
