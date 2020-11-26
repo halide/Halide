@@ -9,6 +9,7 @@
 #include "JITModule.h"
 #include "LLVM_Headers.h"
 #include "Param.h"
+#include "Simplify.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -66,13 +67,28 @@ bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
 
     const Call *ma = Call::as_intrinsic(a, {Call::widening_mul});
     const Call *mb = Call::as_intrinsic(b, {Call::widening_mul});
-    if (ma && mb) {
-        std::vector<Expr> args = {ma->args[0], ma->args[1], mb->args[0], mb->args[1]};
-        result.swap(args);
-        return true;
-    } else {
-        return false;
+    // If the operands are widening shifts, we might be able to treat these as
+    // multiplies.
+    const Call *sa = Call::as_intrinsic(a, {Call::widening_shift_left});
+    const Call *sb = Call::as_intrinsic(b, {Call::widening_shift_left});
+    if (sa && !is_const(sa->args[1])) {
+        sa = nullptr;
     }
+    if (sb && !is_const(sb->args[1])) {
+        sb = nullptr;
+    }
+    if ((ma || sa) && (mb || sb)) {
+        Expr a0 = ma ? ma->args[0] : sa->args[0];
+        Expr a1 = ma ? ma->args[1] : lossless_cast(sa->args[0].type(), simplify(make_const(sa->type, 1) << sa->args[1]));
+        Expr b0 = mb ? mb->args[0] : sb->args[0];
+        Expr b1 = mb ? mb->args[1] : lossless_cast(sb->args[0].type(), simplify(make_const(sb->type, 1) << sb->args[1]));
+        if (a1.defined() && b1.defined()) {
+            std::vector<Expr> args = {a0, a1, b0, b1};
+            result.swap(args);
+            return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace

@@ -354,7 +354,7 @@ protected:
             if (op->is_intrinsic(Call::shift_left)) {
                 Expr a_narrow = lossless_cast(a.type().with_bits(a.type().bits() / 2), a);
                 if (a_narrow.defined()) {
-                    return widening_shift_left(a_narrow, b);
+                    return widening_shift_left(a_narrow, narrow(b));
                 }
             }
 
