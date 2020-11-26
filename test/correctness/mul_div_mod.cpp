@@ -322,7 +322,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
                 Expr be = cast<RT>(Expr(bi));
                 Expr re = simplify(ae * be);
 
-                if (re.as<Call>() && re.as<Call>()->is_intrinsic(Call::signed_integer_overflow)) {
+                if (Call::as_intrinsic(re, {Call::signed_integer_overflow})) {
                     // Don't check correctness of signed integer overflow.
                 } else {
                     if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
