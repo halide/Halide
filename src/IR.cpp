@@ -646,6 +646,7 @@ const char *const intrinsic_op_names[] = {
     "unsafe_promise_clamped",
     "widening_add",
     "widening_mul",
+    "widening_shift_left",
     "widening_sub",
 };
 

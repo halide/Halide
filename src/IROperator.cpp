@@ -1040,6 +1040,13 @@ Expr widening_sub(Expr a, Expr b) {
     return Call::make(wide_type, Call::widening_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
+Expr widening_shift_left(Expr a, Expr b) {
+    match_lanes(a, b);
+    Type wide_type = a.type().with_bits(a.type().bits() * 2);
+    internal_assert(wide_type == b.type());
+    return Call::make(wide_type, Call::widening_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
 Expr rounding_shift_right(Expr a, Expr b) {
     if (b.type().is_vector() && !a.type().is_vector()) {
         a = Internal::Broadcast::make(a, b.type().lanes());

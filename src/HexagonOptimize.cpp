@@ -797,18 +797,6 @@ private:
             Expr neg_b = lossless_negate(op->b);
             if (neg_b.defined()) {
                 return mutate(op->a + neg_b);
-            } else {
-                static const vector<Pattern> subs = {
-                    // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
-                    // To differentiate those from the widening ones, we encode the return type in the name here.
-                    {"halide.hexagon.sub_vuh.vub.vub", wild_u16x - wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps},
-                    {"halide.hexagon.sub_vuw.vuh.vuh", wild_u32x - wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps},
-                };
-
-                Expr new_expr = apply_patterns(op, subs, target, this);
-                if (!new_expr.same_as(op)) {
-                    return new_expr;
-                }
             }
         }
         return IRMutator::visit(op);

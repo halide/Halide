@@ -558,6 +558,7 @@ struct Call : public ExprNode<Call> {
         unsafe_promise_clamped,
         widening_add,
         widening_mul,
+        widening_shift_left,
         widening_sub,
         IntrinsicOpCount  // Sentinel: keep last.
     };

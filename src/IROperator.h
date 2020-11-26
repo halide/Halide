@@ -338,10 +338,12 @@ Expr narrow(Expr a);
 
 /** Compute widen(a) + widen(b). The result is always signed. */
 Expr widening_add(Expr a, Expr b);
-/** Compute widen(a) - widen(b). The result is always signed. */
-Expr widening_sub(Expr a, Expr b);
 /** Compute widen(a) * widen(b) */
 Expr widening_mul(Expr a, Expr b);
+/** Compute widen(a) - widen(b). The result is always signed. */
+Expr widening_sub(Expr a, Expr b);
+/** Compute widen(a) << b. */
+Expr widening_shift_left(Expr a, Expr b);
 
 /** Compute (widening_add(a  (1 << max(b, 0)) / 2) >> b */
 Expr rounding_shift_right(Expr a, Expr b);

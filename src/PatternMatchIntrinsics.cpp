@@ -350,6 +350,14 @@ protected:
             Expr a = mutate(op->args[0]);
             Expr b = mutate(op->args[1]);
 
+            // Try to turn this into a widening left shift.
+            if (op->is_intrinsic(Call::shift_left)) {
+                Expr a_narrow = lossless_cast(a.type().with_bits(a.type().bits() / 2), a);
+                if (a_narrow.defined()) {
+                    return widening_shift_left(a_narrow, b);
+                }
+            }
+
             Expr result;
             if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 result = op;
@@ -385,6 +393,10 @@ Expr lower_widening_add(const Expr &a, const Expr &b) {
     return widen(a) + widen(b);
 }
 
+Expr lower_widening_mul(const Expr &a, const Expr &b) {
+    return widen(a) * widen(b);
+}
+
 Expr lower_widening_sub(const Expr &a, const Expr &b) {
     Type wide = a.type().with_bits(a.type().bits() * 2);
     if (wide.is_uint()) {
@@ -393,8 +405,9 @@ Expr lower_widening_sub(const Expr &a, const Expr &b) {
     return cast(wide, a) - cast(wide, b);
 }
 
-Expr lower_widening_mul(const Expr &a, const Expr &b) {
-    return widen(a) * widen(b);
+Expr lower_widening_shift_left(const Expr &a, const Expr &b) {
+    Type wide = a.type().with_bits(a.type().bits() * 2);
+    return cast(wide, a) << b;
 }
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
@@ -482,12 +495,15 @@ Expr lower_intrinsic(const Call *op) {
     if (op->is_intrinsic(Call::widening_add)) {
         internal_assert(op->args.size() == 2);
         return lower_widening_add(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::widening_sub)) {
-        internal_assert(op->args.size() == 2);
-        return lower_widening_sub(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::widening_mul)) {
         internal_assert(op->args.size() == 2);
         return lower_widening_mul(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widening_sub)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widening_sub(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widening_shift_left)) {
+        internal_assert(op->args.size() == 2);
+        return widening_shift_left(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::rounding_shift_right)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_shift_right(op->args[0], op->args[1]);

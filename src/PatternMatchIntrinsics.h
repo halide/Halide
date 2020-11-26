@@ -15,8 +15,9 @@ Stmt pattern_match_intrinsics(Stmt s);
 
 /** Implement intrinsics with non-intrinsic using equivalents. */
 Expr lower_widening_add(const Expr &a, const Expr &b);
-Expr lower_widening_sub(const Expr &a, const Expr &b);
 Expr lower_widening_mul(const Expr &a, const Expr &b);
+Expr lower_widening_sub(const Expr &a, const Expr &b);
+Expr lower_widening_shift_left(const Expr &a, const Expr &b);
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b);
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b);
