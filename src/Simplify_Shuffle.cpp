@@ -22,6 +22,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
 
     // Mutate the vectors
     vector<Expr> new_vectors;
+    int input_lanes = 0;
     bool changed = false;
     for (const Expr &vector : op->vectors) {
         ExprInfo v_bounds;
@@ -29,6 +30,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         if (!vector.same_as(new_vector)) {
             changed = true;
         }
+        input_lanes += new_vector.type().lanes();
         if (bounds) {
             if (new_vectors.empty()) {
                 *bounds = v_bounds;
@@ -41,6 +43,28 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
             }
         }
         new_vectors.push_back(new_vector);
+    }
+
+    // Pull non-narrowing casts out of shuffles when the number of lanes is not increased.
+    if (op->type.lanes() <= input_lanes) {
+        if (const Cast *first_cast = new_vectors[0].as<Cast>()) {
+            if (first_cast->type.bits() >= first_cast->value.type().bits()) {
+                Type cast_type = first_cast->type.with_lanes(1);
+                vector<Expr> values;
+                for (const Expr &e : new_vectors) {
+                    const Cast *cast = e.as<Cast>();
+                    if (cast && cast->type.with_lanes(1) == cast_type) {
+                        values.push_back(cast->value);
+                    } else {
+                        break;
+                    }
+                }
+
+                if (values.size() == new_vectors.size()) {
+                    return mutate(Cast::make(cast_type.with_lanes(op->type.lanes()), Shuffle::make(values, op->indices)), bounds);
+                }
+            }
+        }
     }
 
     // Try to convert a load with shuffled indices into a
@@ -230,18 +254,6 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
 
             if (can_collapse) {
                 return Ramp::make(new_vectors[0], stride, op->indices.size());
-            }
-        }
-    }
-
-    // Pull a widening cast outside of a slice
-    if (new_vectors.size() == 1 &&
-        op->type.lanes() < new_vectors[0].type().lanes()) {
-        if (const Cast *cast = new_vectors[0].as<Cast>()) {
-            if (cast->type.bits() > cast->value.type().bits()) {
-                return mutate(Cast::make(cast->type.with_lanes(op->type.lanes()),
-                                         Shuffle::make({cast->value}, op->indices)),
-                              bounds);
             }
         }
     }

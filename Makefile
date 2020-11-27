@@ -454,6 +454,7 @@ SOURCE_FILES = \
   Expr.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
+  FindVectorReductions.cpp \
   FlattenNestedRamps.cpp \
   Float16.cpp \
   Func.cpp \
@@ -632,6 +633,7 @@ HEADER_FILES = \
   ExternFuncArgument.h \
   FastIntegerDivide.h \
   FindCalls.h \
+  FindVectorReductions.h \
   FlattenNestedRamps.h \
   Float16.h \
   Func.h \

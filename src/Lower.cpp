@@ -28,6 +28,7 @@
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
 #include "FuzzFloatStores.h"
+#include "FindVectorReductions.h"
 #include "HexagonOffload.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -412,6 +413,11 @@ Module lower(const vector<Function> &output_funcs,
         debug(2) << "Lowering after injecting warp shuffles:\n"
                  << s << "\n\n";
     }
+
+    debug(1) << "Finding vector reductions...\n";
+    s = find_vector_reductions(s);
+    debug(2) << "Lowering after finding vector reductions:\n"
+             << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
