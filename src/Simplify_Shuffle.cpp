@@ -154,8 +154,11 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                         break;
                     }
 
+                    // If the shuffle is a single element, we don't care what the stride is,
+                    // so we can just assume it is what we are looking for.
+                    int i_stride = i_shuffle->indices.size() > 1 ? i_shuffle->slice_stride() : terms;
                     // ... and that it is a slice in the right place...
-                    if (i_shuffle->slice_begin() != (int)i || i_shuffle->slice_stride() != terms) {
+                    if (i_shuffle->slice_begin() != (int)i || i_stride != terms) {
                         can_collapse = false;
                         break;
                     }
@@ -176,7 +179,12 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 }
 
                 if (can_collapse) {
-                    return Shuffle::make_concat(first_shuffle->vectors);
+                    // It's possible the slices didn't use all of the vector, in which case we need to slice it.
+                    Expr result = Shuffle::make_concat(first_shuffle->vectors);
+                    if (result.type().lanes() != op->type.lanes()) {
+                        result = Shuffle::make_slice(result, 0, 1, op->type.lanes());
+                    }
+                    return result;
                 }
             }
         }
