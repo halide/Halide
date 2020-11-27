@@ -2840,7 +2840,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 3);
 
         Type ty = op->type;
-        Type wide_ty = ty.wide();
+        Type wide_ty = ty.widen();
 
         Expr p_wide = cast(wide_ty, op->args[0]) * cast(wide_ty, op->args[1]);
         const UIntImm *shift = op->args[2].as<UIntImm>();
@@ -4638,7 +4638,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             }
             if (narrower.defined()) {
                 // Widen it by 2x before the horizontal add
-                narrower = cast(narrower.type().wide(), narrower);
+                narrower = cast(narrower.type().widen(), narrower);
                 equiv = VectorReduce::make(op->op, narrower, intermediate_type.lanes());
                 // Then widen it by 2x again afterwards
                 equiv = cast(intermediate_type, equiv);

@@ -357,7 +357,7 @@ public:
     }
 
     /** Return Type with the same type code and number of lanes, but with twice as many bits. */
-    Type wide() const {
+    Type widen() const {
         return with_bits(bits() * 2);
     }
 

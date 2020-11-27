@@ -126,7 +126,7 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
     user_assert(t.bits() == 8 || t.bits() == 16 || t.bits() == 32)
         << "Fast integer divide requires a numerator with 8, 16, or 32 bits\n";
 
-    Type wide = t.wide();
+    Type wide = t.widen();
 
     Expr result;
     if (t.is_uint()) {

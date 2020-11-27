@@ -2248,7 +2248,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
             // We found a widening op, we need to narrow back
             // down. The widening multiply deinterleaved the result,
             // but the trunc operation reinterleaves.
-            Type wide = op->type.wide();
+            Type wide = op->type.widen();
             value = call_intrin(llvm_type_of(op->type),
                                 "halide.hexagon.trunc" + type_suffix(wide, false),
                                 {value});
@@ -2427,7 +2427,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::mulhi_shr) && op->type.is_vector() &&
                (op->type.bits() == 8 || op->type.bits() == 16)) {
         internal_assert(op->args.size() == 3);
-        Type wide_ty = op->type.wide();
+        Type wide_ty = op->type.widen();
 
         // Generate a widening multiply.
         Expr p_wide = Call::make(
