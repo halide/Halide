@@ -751,9 +751,6 @@ private:
             {"halide.hexagon.add_shl.vw.vw.uw", wild_u32x + (wild_u32x << bc(wild_u32))},
             {"halide.hexagon.add_shl.vh.vh.uh", wild_i16x + (wild_i16x << bc(wild_u16)), Pattern::v65orLater},
             {"halide.hexagon.add_shl.vh.vh.uh", wild_u16x + (wild_u16x << bc(wild_u16)), Pattern::v65orLater},
-            // TODO: These two look wrong. Scalar by vector shifts?! Swapping ops?!
-            {"halide.hexagon.add_shl.vh.vh.uh", wild_i16x + (bc(wild_i16) << wild_u16x), Pattern::SwapOps12 | Pattern::v65orLater},
-            {"halide.hexagon.add_shl.vh.vh.uh", wild_u16x + (bc(wild_u16) << wild_u16x), Pattern::SwapOps12 | Pattern::v65orLater},
             {"halide.hexagon.add_shr.vh.vh.uh", wild_i16x + (wild_i16x >> bc(wild_u16)), Pattern::v65orLater},
             {"halide.hexagon.add_shl.vh.vh.uh", wild_i16x + (wild_i16x << bc(wild_i16)), Pattern::v65orLater},
             {"halide.hexagon.add_shl.vh.vh.uh", wild_u16x + (wild_u16x << bc(wild_u16)), Pattern::v65orLater},
