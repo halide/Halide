@@ -155,6 +155,13 @@ void check_casts() {
     }
     check(Shuffle::make({cast(UInt(64, 8), some_vector)}, indices),
           Shuffle::make({cast(UInt(64, 8), some_vector)}, indices));
+
+    // Interleaving simplifications can result in slices.
+    Expr var_vector = Variable::make(Int(32, 12), "v");
+    Expr even = Shuffle::make_slice(var_vector, 0, 2, 4);
+    Expr odd = Shuffle::make_slice(var_vector, 1, 2, 4);
+    check(Shuffle::make_interleave({even, odd}), Shuffle::make_slice(var_vector, 0, 1, 8));
+
 }
 
 void check_algebra() {
