@@ -799,12 +799,12 @@ private:
 
         static const vector<Pattern> casts = {
             // Saturating narrowing casts with rounding
-            {"halide.hexagon.trunc_satub_rnd.vh", u8_sat(rounding_shift_right(wild_i32x, u32(8))), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0},
-            {"halide.hexagon.trunc_satb_rnd.vh", i8_sat(rounding_shift_right(wild_i32x, u32(8))), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0},
-            {"halide.hexagon.trunc_satuh_rnd.vw", u16_sat(rounding_shift_right(wild_i64x, u64(16))), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0},
-            {"halide.hexagon.trunc_sath_rnd.vw", i16_sat(rounding_shift_right(wild_i64x, u64(16))), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0},
-            {"halide.hexagon.trunc_satuh_rnd.vw", u16_sat(rounding_shift_right(wild_i32x, u32(16))), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_sath_rnd.vw", i16_sat(rounding_shift_right(wild_i32x, u32(16))), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_satub_rnd.vh", u8_sat(rounding_shift_right(wild_i32x, bc(u32(8)))), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0},
+            {"halide.hexagon.trunc_satb_rnd.vh", i8_sat(rounding_shift_right(wild_i32x, bc(u32(8)))), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0},
+            {"halide.hexagon.trunc_satuh_rnd.vw", u16_sat(rounding_shift_right(wild_i64x, bc(u64(16)))), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0},
+            {"halide.hexagon.trunc_sath_rnd.vw", i16_sat(rounding_shift_right(wild_i64x, bc(u64(16)))), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0},
+            {"halide.hexagon.trunc_satuh_rnd.vw", u16_sat(rounding_shift_right(wild_i32x, bc(u32(16)))), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_sath_rnd.vw", i16_sat(rounding_shift_right(wild_i32x, bc(u32(16)))), Pattern::DeinterleaveOp0},
 
             // Saturating narrowing casts
             {"halide.hexagon.trunc_satub_shr.vh.uh", u8_sat(wild_i16x >> wild_u16), Pattern::DeinterleaveOp0},
@@ -827,14 +827,14 @@ private:
             {"halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0},
 
             // Narrowing casts. These may interleave later with trunclo.
-            {"halide.hexagon.packhi.vh", u8(wild_u16x >> u16(8))},
-            {"halide.hexagon.packhi.vh", u8(wild_i16x >> u16(8))},
-            {"halide.hexagon.packhi.vh", i8(wild_u16x >> u16(8))},
-            {"halide.hexagon.packhi.vh", i8(wild_i16x >> u16(8))},
-            {"halide.hexagon.packhi.vw", u16(wild_u32x >> u32(16))},
-            {"halide.hexagon.packhi.vw", u16(wild_i32x >> u32(16))},
-            {"halide.hexagon.packhi.vw", i16(wild_u32x >> u32(16))},
-            {"halide.hexagon.packhi.vw", i16(wild_i32x >> u32(16))},
+            {"halide.hexagon.packhi.vh", u8(wild_u16x >> bc(u16(8)))},
+            {"halide.hexagon.packhi.vh", u8(wild_i16x >> bc(u16(8)))},
+            {"halide.hexagon.packhi.vh", i8(wild_u16x >> bc(u16(8)))},
+            {"halide.hexagon.packhi.vh", i8(wild_i16x >> bc(u16(8)))},
+            {"halide.hexagon.packhi.vw", u16(wild_u32x >> bc(u32(16)))},
+            {"halide.hexagon.packhi.vw", u16(wild_i32x >> bc(u32(16)))},
+            {"halide.hexagon.packhi.vw", i16(wild_u32x >> bc(u32(16)))},
+            {"halide.hexagon.packhi.vw", i16(wild_i32x >> bc(u32(16)))},
 
             // Narrowing with shifting.
             {"halide.hexagon.trunc_shr.vw.uw", i16(wild_i32x >> wild_u32), Pattern::DeinterleaveOp0},

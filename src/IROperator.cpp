@@ -1063,17 +1063,13 @@ Expr widening_shift_left(Expr a, Expr b) {
 }
 
 Expr rounding_shift_right(Expr a, Expr b) {
-    if (b.type().is_vector() && !a.type().is_vector()) {
-        a = Internal::Broadcast::make(a, b.type().lanes());
-    }
+    match_lanes(a, b);
     match_bits(a, b);
     return Call::make(a.type(), Call::rounding_shift_right, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr rounding_shift_left(Expr a, Expr b) {
-    if (b.type().is_vector() && !a.type().is_vector()) {
-        a = Internal::Broadcast::make(a, b.type().lanes());
-    }
+    match_lanes(a, b);
     match_bits(a, b);
     return Call::make(a.type(), Call::rounding_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
@@ -2238,9 +2234,7 @@ Expr operator~(Expr x) {
 }
 
 Expr operator<<(Expr x, Expr y) {
-    if (y.type().is_vector() && !x.type().is_vector()) {
-        x = Internal::Broadcast::make(x, y.type().lanes());
-    }
+    match_lanes(x, y);
     match_bits(x, y);
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
@@ -2253,9 +2247,7 @@ Expr operator<<(Expr x, int y) {
 }
 
 Expr operator>>(Expr x, Expr y) {
-    if (y.type().is_vector() && !x.type().is_vector()) {
-        x = Internal::Broadcast::make(x, y.type().lanes());
-    }
+    match_lanes(x, y);
     match_bits(x, y);
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
