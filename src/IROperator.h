@@ -142,7 +142,6 @@ Expr const_false(int lanes = 1);
  * Expr. */
 Expr lossless_cast(Type t, Expr e);
 
-void lossless_cast_test();
 /** Attempt to negate x without introducing new IR and without overflow.
  * If it can't be done, return an undefined Expr. */
 Expr lossless_negate(const Expr &x);
