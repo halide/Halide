@@ -3005,7 +3005,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     StartCapturingGPUActivity();
 #endif
 
-    d3d12_library *library;
+    d3d12_library *library = nullptr;
     bool found_module = compilation_cache.lookup(device, state_ptr, library);
     halide_assert(user_context, found_module && library != nullptr);
 

@@ -6,7 +6,7 @@
 // This test makes sure GPU runtimes can handle many different small
 // kernels and can handle releasing a device context and making a new
 // one and still have many kernels work. This is needed due to kernel
-// compilation caching mechanisms int he GPU runtimes.
+// compilation caching mechanisms in the GPU runtimes.
 
 using namespace Halide;
 

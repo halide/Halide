@@ -1,5 +1,5 @@
 tests(GROUPS correctness_multi_gpu
-      SOURCES
+a      SOURCES
       gpu_multi_device.cpp
       )
 
@@ -134,6 +134,7 @@ tests(GROUPS correctness
       gpu_give_input_buffers_device_allocations.cpp
       gpu_jit_explicit_copy_to_device.cpp
       gpu_large_alloc.cpp
+      gpu_many_kernels.cpp
       gpu_mixed_dimensionality.cpp
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
