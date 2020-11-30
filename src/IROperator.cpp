@@ -543,6 +543,8 @@ Expr lossless_negate(const Expr &x) {
     } else if (const Cast *c = x.as<Cast>()) {
         Expr value = lossless_negate(c->value);
         if (value.defined()) {
+            // This works for constants, but not other things that
+            // could possibly be negated.
             value = lossless_cast(c->type, value);
             if (value.defined()) {
                 return value;
