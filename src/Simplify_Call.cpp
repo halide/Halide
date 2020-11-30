@@ -179,7 +179,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             b = cast(b.type().with_code(halide_type_uint), b);
         } else if (b_info.max_defined && b_info.max <= 0) {
             result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
-            b = cast(b.type().with_code(halide_type_uint), -b);
+            b = mutate(cast(b.type().with_code(halide_type_uint), -b), nullptr);
         }
 
         // If the shift is by a constant, it should now be unsigned.
