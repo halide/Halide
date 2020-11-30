@@ -354,7 +354,8 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
     }
     maybe_mul = as_mul(maybe_mul);
 
-    if (const Mul *mul = maybe_mul.as<Mul>()) {
+    if (maybe_mul.defined()) {
+        const Mul *mul = maybe_mul.as<Mul>();
         Expr a = unbroadcast_lossless_cast(a_ty, mul->a);
         Expr b = unbroadcast_lossless_cast(b_ty, mul->b);
         if (a.defined() && b.defined()) {
@@ -374,15 +375,11 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
         mpy_count += find_mpy_ops(add->a, a_ty, b_ty, max_mpy_count, mpys, rest);
         mpy_count += find_mpy_ops(add->b, a_ty, b_ty, max_mpy_count, mpys, rest);
         return mpy_count;
-    } else if (const Sub *sub = op.as<Sub>()) {
-        // Try to rewrite subs as adds.
-        Expr negative_b = lossless_negate(sub->b);
-        if (negative_b.defined()) {
-            int mpy_count = 0;
-            mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-            mpy_count += find_mpy_ops(negative_b, a_ty, b_ty, max_mpy_count, mpys, rest);
-            return mpy_count;
-        }
+    } else if (const Call *add = Call::as_intrinsic(op, {Call::widening_add})) {
+        int mpy_count = 0;
+        mpy_count += find_mpy_ops(cast(op.type(), add->args[0]), a_ty, b_ty, max_mpy_count, mpys, rest);
+        mpy_count += find_mpy_ops(cast(op.type(), add->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
+        return mpy_count;
     }
 
     // Attempt to pretend this op is multiplied by 1.
@@ -2042,7 +2039,8 @@ private:
 
     Expr visit(const Call *op) override {
         Expr mul = as_mul(op);
-        if (const Mul *op = mul.as<Mul>()) {
+        if (mul.defined()) {
+            const Mul *op = mul.as<Mul>();
             Expr mutated = mutate_mul(op->a, op->b);
             if (mutated.defined()) {
                 return mutated;

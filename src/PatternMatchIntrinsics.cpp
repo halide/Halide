@@ -290,7 +290,18 @@ protected:
         Expr narrow_b = lossless_cast(narrow, b);
 
         if (narrow_a.defined() && narrow_b.defined()) {
-            return widening_mul(narrow_a, narrow_b);
+            const Cast *ca = narrow_a.as<Cast>();
+            const Cast *cb = narrow_b.as<Cast>();
+            if (ca && cb) {
+                // If there is more casting, we can move it after the multiply.
+                narrow_a = ca->value;
+                narrow_b = cb->value;
+            }
+            Expr result = widening_mul(narrow_a, narrow_b);
+            if (result.type() != op->type) {
+                result = Cast::make(op->type, result);
+            }
+            return result;
         }
 
         if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -416,7 +427,7 @@ protected:
             if (op->is_intrinsic(Call::shift_left)) {
                 Expr a_narrow = lossless_cast(a.type().with_bits(a.type().bits() / 2), a);
                 if (a_narrow.defined()) {
-                    return widening_shift_left(a_narrow, narrow(b));
+                    return widening_shift_left(a_narrow, simplify(narrow(b)));
                 }
             }
 
@@ -462,21 +473,20 @@ Expr as_add(const Expr &a) {
     if (const Call *wa = Call::as_intrinsic(a, {Call::widening_add})) {
         return Add::make(cast(wa->type, wa->args[0]), cast(wa->type, wa->args[1]));
     }
-    return a;
+    return Expr();
 }
 
 Expr as_mul(const Expr &a) {
     if (const Call *wm = Call::as_intrinsic(a, {Call::widening_mul})) {
-        return Mul::make(cast(wm->type, wm->args[0]), cast(wm->type, wm->args[1]));
+        return simplify(Mul::make(cast(wm->type, wm->args[0]), cast(wm->type, wm->args[1])));
     } else if (const Call *s = Call::as_intrinsic(a, {Call::shift_left, Call::widening_shift_left})) {
         const uint64_t *log2_b = as_const_uint(s->args[1]);
         if (log2_b) {
             Expr b = cast(s->type, 1) << cast(UInt(s->type.bits()), (int)*log2_b);
-            b = simplify(b);
-            return Mul::make(cast(s->type, s->args[0]), b);
+            return simplify(Mul::make(cast(s->type, s->args[0]), b));
         }
     }
-    return a;
+    return Expr();
 }
 
 Expr lower_widening_add(const Expr &a, const Expr &b) {
