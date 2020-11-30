@@ -109,10 +109,23 @@ private:
         if (lanes < native_lanes) {
             // This load is smaller than a native vector. Load a
             // native vector.
-            Expr native_load = make_load(op, Ramp::make(ramp->base, 1, native_lanes), op->alignment);
+            Expr ramp_base = ramp->base;
+            ModulusRemainder alignment = op->alignment;
+            int slice_offset = 0;
+
+            // If load is smaller than a native vector and can fully fit inside of it and offset is known,
+            // we can simply offset the native load and slice.
+            if (!is_aligned && aligned_offset != 0 && Int(32).can_represent(aligned_offset)
+                 && (aligned_offset + lanes <= native_lanes)) {
+                ramp_base = simplify(ramp_base - (int)aligned_offset);
+                alignment = alignment - aligned_offset;
+                slice_offset = aligned_offset;
+            }
+
+            Expr native_load = make_load(op, Ramp::make(ramp_base, 1, native_lanes), alignment);
 
             // Slice the native load.
-            return Shuffle::make_slice(native_load, 0, 1, lanes);
+            return Shuffle::make_slice(native_load, slice_offset, 1, lanes);
         }
 
         if (lanes > native_lanes) {
