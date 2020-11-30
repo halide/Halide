@@ -48,11 +48,15 @@ function(add_app_test NAME)
         "-DLLVM_DIR=${LLVM_DIR}"
         "-DHalide_TARGET=${Halide_TARGET}")
 
-    # Note that we skip all tests that have the 'benchmark' label; some of the apps
-    # have benchmarks that are in the form of tests, and running them via this path
-    # isn't very useful, since we aren't guaranteed that the machine won't be under
-    # load with other tests. (Also, some of the apps have extensive benchmarks that
-    # take quite a while to run; e.g. apps/linear_algebra, which has over 500.)
+    # As a band-aid to keep test times under control, we explicitly skip tests
+    # that are labeled with `slow_tests` -- currently, this label only applies
+    # to a number of benchmarks under apps/linear_algebra, but could be applied
+    # to others as necessary. (The issue here is that --build-and-test will treat
+    # the entire subproject as a single 'test', with a single timeout applied to all
+    # of it, and apparently no way to get useful progress information bubbled out.
+    # It may be that we need to rethink how we handle building/testing the apps
+    # under CMake, in which case the `slow_tests` label will hopefully become
+    # useless and removed.)
     #
     # Note also that we specify `--build-noclean` explicitly; apparently the default
     # for --build-and-test is to 'clean' first, which shouldn't be necessary here.
@@ -67,7 +71,7 @@ function(add_app_test NAME)
              --build-options
              ${cmakeDefinitionOpts}
              ${cmakeToolchainOpts}
-             --test-command ${CMAKE_CTEST_COMMAND} -C $<CONFIG> -LE benchmark)
+             --test-command ${CMAKE_CTEST_COMMAND} -C $<CONFIG> -LE slow_tests)
     set_tests_properties(${NAME} PROPERTIES
                          FIXTURES_REQUIRED apps
                          LABELS apps
