@@ -154,11 +154,10 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                         break;
                     }
 
-                    // If the shuffle is a single element, we don't care what the stride is,
-                    // so we can just assume it is what we are looking for.
-                    int i_stride = i_shuffle->indices.size() > 1 ? i_shuffle->slice_stride() : terms;
                     // ... and that it is a slice in the right place...
-                    if (i_shuffle->slice_begin() != (int)i || i_stride != terms) {
+                    // If the shuffle is a single element, we don't care what the stride is.
+                    if (i_shuffle->slice_begin() != (int)i ||
+                        (i_shuffle->indices.size() != 1 && i_shuffle->slice_stride() != terms)) {
                         can_collapse = false;
                         break;
                     }
