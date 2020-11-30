@@ -46,8 +46,6 @@ const char *to_string(TensorType t) {
         return "int32";
     case TensorType::UInt8:
         return "uint8";
-    case TensorType::UInt64:
-        return "uint64";
     case TensorType::Int64:
         return "int64";
     case TensorType::Int16:
@@ -90,8 +88,6 @@ halide_type_t to_halide_type(TensorType t) {
         return halide_type_t(halide_type_int, 8);
     case TensorType::UInt8:
         return halide_type_t(halide_type_uint, 8);
-    case TensorType::UInt64:
-        return halide_type_t(halide_type_uint, 64);
 
     case TensorType::Complex64:
     case TensorType::Complex128:

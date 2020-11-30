@@ -38,7 +38,6 @@ enum class TensorType {
     Int8 = 9,
     Float64 = 10,
     Complex128 = 11,
-    UInt64 = 12,
 };
 
 size_t sizeof_tensor_type(TensorType t);
@@ -65,10 +64,6 @@ inline TensorType to_tensor_type<int32_t>() {
 template<>
 inline TensorType to_tensor_type<uint8_t>() {
     return TensorType::UInt8;
-}
-template<>
-inline TensorType to_tensor_type<uint64_t>() {
-    return TensorType::UInt64;
 }
 template<>
 inline TensorType to_tensor_type<int64_t>() {

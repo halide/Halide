@@ -108,7 +108,8 @@ $(BIN)/%/tflite_parser.o: tflite_parser.cpp $(BIN)/%/tflite_schema_generated.h
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I$(FLATBUFFERS_INCLUDE_PATH) -I$(BIN)/$* -c $< -o $@
 
-TFLITE_TAG ?= master
+# TODO: switch to v2.4.0 once released
+TFLITE_TAG ?= v2.4.0-rc3
 
 $(BIN)/%/tflite_schema.fbs:
 	@echo Fetching tflite_schema.fbs...
@@ -217,6 +218,7 @@ $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/%/tflite_schema_direct_gene
 #
 # 	- git clone https://github.com/tensorflow/tensorflow
 # 	- cd tensorflow
+#   - git checkout $(TFLITE_TAG)
 # 	- ./tensorflow/lite/tools/make/download_dependencies.sh
 # 	- make -j $(nproc) TARGET=native -C . -f ./tensorflow/lite/tools/make/Makefile
 # 	- library is at tensorflow/lite/tools/make/gen/native_x86_64/lib/libtensorflow-lite.a
