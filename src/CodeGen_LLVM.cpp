@@ -1449,7 +1449,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
     // of prefetch indicates the type being prefetched, which does not match the
     // implementation of prefetch.
     // See https://github.com/halide/Halide/issues/4211.
-    const bool is_prefetch = e.as<Call>() && e.as<Call>()->is_intrinsic(Call::prefetch);
+    const bool is_prefetch = Call::as_intrinsic(e, {Call::prefetch});
     internal_assert(is_bool_vector || is_prefetch ||
                     e.type().is_handle() ||
                     value->getType()->isVoidTy() ||
@@ -2742,18 +2742,18 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        Value *a = codegen(op->args[0]);
-        Value *b = codegen(op->args[1]);
         if (op->args[1].type().is_uint()) {
+            Value *a = codegen(op->args[0]);
+            Value *b = codegen(op->args[1]);
             value = builder->CreateShl(a, b);
         } else {
             value = codegen(lower_signed_shift_left(op->args[0], op->args[1]));
         }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        Value *a = codegen(op->args[0]);
-        Value *b = codegen(op->args[1]);
         if (op->args[1].type().is_uint()) {
+            Value *a = codegen(op->args[0]);
+            Value *b = codegen(op->args[1]);
             if (op->type.is_int()) {
                 value = builder->CreateAShr(a, b);
             } else {
