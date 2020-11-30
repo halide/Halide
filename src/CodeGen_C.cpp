@@ -257,8 +257,7 @@ private:
 
     void include_lerp_types(const Type &t) {
         if (t.is_vector() && t.is_int_or_uint() && (t.bits() >= 8 && t.bits() <= 32)) {
-            Type doubled = t.with_bits(t.bits() * 2);
-            include_type(doubled);
+            include_type(t.widen());
         }
     }
 
