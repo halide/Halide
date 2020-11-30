@@ -779,7 +779,7 @@ void CodeGen_ARM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         Type ty = op->type;
-        Type wide_ty = ty.with_bits(ty.bits() * 2);
+        Type wide_ty = ty.widen();
         // This will codegen to vhaddu (arm32) or uhadd (arm64).
         value = codegen(cast(ty, (cast(wide_ty, op->args[0]) + cast(wide_ty, op->args[1])) / 2));
         return;
@@ -937,7 +937,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         if (op->op == VectorReduce::Add &&
             op->type.bits() >= 16 &&
             !op->type.is_float()) {
-            Type narrower_type = arg.type().with_bits(arg.type().bits() / 2);
+            Type narrower_type = arg.type().narrow();
             Expr narrower = lossless_cast(narrower_type, arg);
             if (!narrower.defined() && arg.type().is_int()) {
                 // We can also safely accumulate from a uint into a

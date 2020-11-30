@@ -2757,29 +2757,21 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
         if (op->args[1].type().is_uint()) {
-            Expr a = op->args[0];
-            Expr b = op->args[1];
-            b = cast(b.type().with_lanes(a.type().lanes()), b);
-            if (b.type().lanes() == 1 && a.type().lanes() > 1) {
-                b = Broadcast::make(b, a.type().lanes());
-            }
-            value = builder->CreateShl(codegen(a), codegen(b));
+            Value *a = codegen(op->args[0]);
+            Value *b = codegen(op->args[1]);
+            value = builder->CreateShl(a, b);
         } else {
             value = codegen(lower_signed_shift_left(op->args[0], op->args[1]));
         }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
         if (op->args[1].type().is_uint()) {
-            Expr a = op->args[0];
-            Expr b = op->args[1];
-            b = cast(b.type().with_lanes(a.type().lanes()), b);
-            if (b.type().lanes() == 1 && a.type().lanes() > 1) {
-                b = Broadcast::make(b, a.type().lanes());
-            }
+            Value *a = codegen(op->args[0]);
+            Value *b = codegen(op->args[1]);
             if (op->type.is_int()) {
-                value = builder->CreateAShr(codegen(a), codegen(b));
+                value = builder->CreateAShr(a, b);
             } else {
-                value = builder->CreateLShr(codegen(a), codegen(b));
+                value = builder->CreateLShr(a, b);
             }
         } else {
             value = codegen(lower_signed_shift_right(op->args[0], op->args[1]));
@@ -4646,7 +4638,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         if (op->op == VectorReduce::Add &&
             (op->type.is_int() || op->type.is_uint()) &&
             op->type.bits() >= 32) {
-            Type narrower_type = op->value.type().with_bits(op->type.bits() / 4);
+            Type narrower_type = op->value.type().narrow().narrow();
             Expr narrower = lossless_cast(narrower_type, op->value);
             if (!narrower.defined() && narrower_type.is_int()) {
                 // Maybe we can narrow to an unsigned int instead.
@@ -4655,7 +4647,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             }
             if (narrower.defined()) {
                 // Widen it by 2x before the horizontal add
-                narrower = cast(narrower.type().with_bits(narrower.type().bits() * 2), narrower);
+                narrower = cast(narrower.type().widen(), narrower);
                 equiv = VectorReduce::make(op->op, narrower, intermediate_type.lanes());
                 // Then widen it by 2x again afterwards
                 equiv = cast(intermediate_type, equiv);

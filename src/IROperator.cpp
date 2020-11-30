@@ -274,30 +274,6 @@ bool is_negative_const(const Expr &e) {
     return false;
 }
 
-bool is_negative_negatable_const(const Expr &e, Type T) {
-    if (const IntImm *i = e.as<IntImm>()) {
-        return (i->value < 0 && !T.is_min(i->value));
-    }
-    if (const FloatImm *f = e.as<FloatImm>()) {
-        return f->value < 0.0f;
-    }
-    if (const Cast *c = e.as<Cast>()) {
-        return is_negative_negatable_const(c->value, c->type);
-    }
-    if (const Ramp *r = e.as<Ramp>()) {
-        // slightly conservative
-        return is_negative_negatable_const(r->base) && is_negative_const(r->stride);
-    }
-    if (const Broadcast *b = e.as<Broadcast>()) {
-        return is_negative_negatable_const(b->value);
-    }
-    return false;
-}
-
-bool is_negative_negatable_const(const Expr &e) {
-    return is_negative_negatable_const(e, e.type());
-}
-
 bool is_undef(const Expr &e) {
     if (const Call *c = e.as<Call>()) {
         return c->is_intrinsic(Call::undef);
@@ -471,8 +447,8 @@ Expr lossless_cast(Type t, Expr e) {
             // aggressively, we're good.
             // E.g. lossless_cast(uint16, (uint32)(some_u8) + 37)
             // = (uint16)(some_u8) + 37
-            Expr a = lossless_cast(t.with_bits(t.bits() / 2), add->a);
-            Expr b = lossless_cast(t.with_bits(t.bits() / 2), add->b);
+            Expr a = lossless_cast(t.narrow(), add->a);
+            Expr b = lossless_cast(t.narrow(), add->b);
             if (a.defined() && b.defined()) {
                 return cast(t, a) + cast(t, b);
             } else {
@@ -481,8 +457,8 @@ Expr lossless_cast(Type t, Expr e) {
         }
 
         if (const Sub *sub = e.as<Sub>()) {
-            Expr a = lossless_cast(t.with_bits(t.bits() / 2), sub->a);
-            Expr b = lossless_cast(t.with_bits(t.bits() / 2), sub->b);
+            Expr a = lossless_cast(t.narrow(), sub->a);
+            Expr b = lossless_cast(t.narrow(), sub->b);
             if (a.defined() && b.defined()) {
                 return cast(t, a) + cast(t, b);
             } else {
@@ -491,8 +467,8 @@ Expr lossless_cast(Type t, Expr e) {
         }
 
         if (const Mul *mul = e.as<Mul>()) {
-            Expr a = lossless_cast(t.with_bits(t.bits() / 2), mul->a);
-            Expr b = lossless_cast(t.with_bits(t.bits() / 2), mul->b);
+            Expr a = lossless_cast(t.narrow(), mul->a);
+            Expr b = lossless_cast(t.narrow(), mul->b);
             if (a.defined() && b.defined()) {
                 return cast(t, a) * cast(t, b);
             } else {
@@ -542,6 +518,50 @@ Expr lossless_cast(Type t, Expr e) {
             }
         }
         return Shuffle::make(vecs, shuf->indices);
+    }
+
+    return Expr();
+}
+
+Expr lossless_negate(const Expr &x) {
+    const Mul *m = x.as<Mul>();
+    if (m) {
+        Expr b = lossless_negate(m->b);
+        if (b.defined()) {
+            return Mul::make(m->a, b);
+        }
+        Expr a = lossless_negate(m->a);
+        if (a.defined()) {
+            return Mul::make(a, m->b);
+        }
+    } else if (const IntImm *i = x.as<IntImm>()) {
+        if (!i->type.is_min(i->value)) {
+            return IntImm::make(i->type, -i->value);
+        }
+    } else if (const FloatImm *f = x.as<FloatImm>()) {
+        return FloatImm::make(f->type, -f->value);
+    } else if (const Cast *c = x.as<Cast>()) {
+        Expr value = lossless_negate(c->value);
+        if (value.defined()) {
+            // This works for constants, but not other things that
+            // could possibly be negated.
+            value = lossless_cast(c->type, value);
+            if (value.defined()) {
+                return value;
+            }
+        }
+    } else if (const Ramp *r = x.as<Ramp>()) {
+        Expr base = lossless_negate(r->base);
+        Expr stride = lossless_negate(r->stride);
+        // slightly conservative
+        if (base.defined() && stride.defined()) {
+            return Ramp::make(base, stride, r->lanes);
+        }
+    } else if (const Broadcast *b = x.as<Broadcast>()) {
+        Expr value = lossless_negate(b->value);
+        if (value.defined()) {
+            return Broadcast::make(value, b->lanes);
+        }
     }
 
     return Expr();
@@ -654,8 +674,7 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
         internal_assert(x.type().lanes() == y.type().lanes()) << "Can't match types of differing widths";
     }
 
-    // Cast to the wider type of the two. Already guaranteed to leave
-    // signed/unsigned on number of lanes unchanged.
+    // Cast to the wider type of the two.
     match_bits(x, y);
 }
 
