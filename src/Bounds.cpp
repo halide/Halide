@@ -1251,7 +1251,8 @@ private:
                                     interval.min = min(a_interval.min, a_interval.min << b_interval.max);
                                 }
                             } else if (a_interval.has_lower_bound() &&
-                                       can_prove(a_interval.min >= 0)) {
+                                       (a_interval.min.type().is_uint() ||
+                                        can_prove(a_interval.min >= 0))) {
                                 // A positive value shifted cannot change sign.
                                 interval.min = make_zero(t);
                             }
