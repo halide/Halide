@@ -380,6 +380,22 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
         mpy_count += find_mpy_ops(cast(op.type(), add->args[0]), a_ty, b_ty, max_mpy_count, mpys, rest);
         mpy_count += find_mpy_ops(cast(op.type(), add->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
         return mpy_count;
+    } else if (const Sub *sub = op.as<Sub>()) {
+        Expr negative_b = lossless_negate(sub->b);
+        if (negative_b.defined()) {
+            int mpy_count = 0;
+            mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+            mpy_count += find_mpy_ops(negative_b, a_ty, b_ty, max_mpy_count, mpys, rest);
+            return mpy_count;
+        }
+    } else if (const Call *sub = Call::as_intrinsic(op, {Call::widening_sub})) {
+        Expr negative_b = lossless_negate(sub->args[1]);
+        if (negative_b.defined()) {
+            int mpy_count = 0;
+            mpy_count += find_mpy_ops(cast(op.type(), sub->args[0]), a_ty, b_ty, max_mpy_count, mpys, rest);
+            mpy_count += find_mpy_ops(cast(op.type(), negative_b), a_ty, b_ty, max_mpy_count, mpys, rest);
+            return mpy_count;
+        }
     }
 
     // Attempt to pretend this op is multiplied by 1.

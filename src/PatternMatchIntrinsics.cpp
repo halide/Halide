@@ -470,14 +470,18 @@ Expr pattern_match_intrinsics(Expr e) {
 }
 
 Expr as_add(const Expr &a) {
-    if (const Call *wa = Call::as_intrinsic(a, {Call::widening_add})) {
+    if (a.as<Add>()) {
+        return a;
+    } else if (const Call *wa = Call::as_intrinsic(a, {Call::widening_add})) {
         return Add::make(cast(wa->type, wa->args[0]), cast(wa->type, wa->args[1]));
     }
     return Expr();
 }
 
 Expr as_mul(const Expr &a) {
-    if (const Call *wm = Call::as_intrinsic(a, {Call::widening_mul})) {
+    if (a.as<Mul>()) {
+        return a;
+    } else if (const Call *wm = Call::as_intrinsic(a, {Call::widening_mul})) {
         return simplify(Mul::make(cast(wm->type, wm->args[0]), cast(wm->type, wm->args[1])));
     } else if (const Call *s = Call::as_intrinsic(a, {Call::shift_left, Call::widening_shift_left})) {
         const uint64_t *log2_b = as_const_uint(s->args[1]);
