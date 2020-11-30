@@ -2107,7 +2107,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 // and do a different shuffle. This helps expressions like
                 // (f(2*x) + f(2*x+1) share loads
                 const Add *add = ramp->base.as<Add>();
-                const IntImm *offset = add ? add->b.as<IntImm>() : nullptr;
+                const IntImm *offset = add ? add->b.as<IntImm>() : ramp->base.as<IntImm>();
                 if (offset && offset->value & 1) {
                     base_a -= 1;
                     align_a = align_a - 1;
