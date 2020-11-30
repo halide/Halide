@@ -1242,6 +1242,12 @@ private:
                                        a_interval.min.type().is_int() &&
                                        can_prove(a_interval.min < 0) &&
                                        b_interval.has_upper_bound()) {
+                                // If a can be negative, then we split a_interval into
+                                // two ranges, [a.min, 0) and [0, a.max]. Note that the
+                                // second range may not exist, if a's range is fully
+                                // negative, but that doesn't matter - a positive value
+                                // cannot be shifted to produce a negative, so the min
+                                // of the operation is produced in the negative range.
                                 if (!b_interval.max.type().is_uint() &&
                                     can_prove(b_interval.max <= 0)) {
                                     // If b is strictly non-positive, then the magnitude can only decrease.
@@ -1290,7 +1296,8 @@ private:
                                 !b_interval.max.type().is_uint() &&
                                 can_prove(b_interval.max < 0 && b_interval.max > -t.bits());
                             if (a_interval.has_lower_bound()) {
-                                if (can_prove(a_interval.min >= 0) && b_max_ok_positive) {
+                                if (b_max_ok_positive && (a_interval.min.type().is_uint() ||
+                                                          can_prove(a_interval.min >= 0))) {
                                     interval.min = a_interval.min >> b_interval.max;
                                 } else if (can_prove(a_interval.min < 0) && b_max_ok_negative) {
                                     interval.min = a_interval.min << abs(b_interval.max);
