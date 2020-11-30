@@ -274,30 +274,6 @@ bool is_negative_const(const Expr &e) {
     return false;
 }
 
-bool is_negative_negatable_const(const Expr &e, Type T) {
-    if (const IntImm *i = e.as<IntImm>()) {
-        return (i->value < 0 && !T.is_min(i->value));
-    }
-    if (const FloatImm *f = e.as<FloatImm>()) {
-        return f->value < 0.0f;
-    }
-    if (const Cast *c = e.as<Cast>()) {
-        return is_negative_negatable_const(c->value, c->type);
-    }
-    if (const Ramp *r = e.as<Ramp>()) {
-        // slightly conservative
-        return is_negative_negatable_const(r->base) && is_negative_const(r->stride);
-    }
-    if (const Broadcast *b = e.as<Broadcast>()) {
-        return is_negative_negatable_const(b->value);
-    }
-    return false;
-}
-
-bool is_negative_negatable_const(const Expr &e) {
-    return is_negative_negatable_const(e, e.type());
-}
-
 bool is_undef(const Expr &e) {
     if (const Call *c = e.as<Call>()) {
         return c->is_intrinsic(Call::undef);
@@ -542,6 +518,50 @@ Expr lossless_cast(Type t, Expr e) {
             }
         }
         return Shuffle::make(vecs, shuf->indices);
+    }
+
+    return Expr();
+}
+
+Expr lossless_negate(const Expr &x) {
+    const Mul *m = x.as<Mul>();
+    if (m) {
+        Expr b = lossless_negate(m->b);
+        if (b.defined()) {
+            return Mul::make(m->a, b);
+        }
+        Expr a = lossless_negate(m->a);
+        if (a.defined()) {
+            return Mul::make(a, m->b);
+        }
+    } else if (const IntImm *i = x.as<IntImm>()) {
+        if (!i->type.is_min(i->value)) {
+            return IntImm::make(i->type, -i->value);
+        }
+    } else if (const FloatImm *f = x.as<FloatImm>()) {
+        return FloatImm::make(f->type, -f->value);
+    } else if (const Cast *c = x.as<Cast>()) {
+        Expr value = lossless_negate(c->value);
+        if (value.defined()) {
+            // This works for constants, but not other things that
+            // could possibly be negated.
+            value = lossless_cast(c->type, value);
+            if (value.defined()) {
+                return value;
+            }
+        }
+    } else if (const Ramp *r = x.as<Ramp>()) {
+        Expr base = lossless_negate(r->base);
+        Expr stride = lossless_negate(r->stride);
+        // slightly conservative
+        if (base.defined() && stride.defined()) {
+            return Ramp::make(base, stride, r->lanes);
+        }
+    } else if (const Broadcast *b = x.as<Broadcast>()) {
+        Expr value = lossless_negate(b->value);
+        if (value.defined()) {
+            return Broadcast::make(value, b->lanes);
+        }
     }
 
     return Expr();
