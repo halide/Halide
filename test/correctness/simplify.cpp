@@ -161,7 +161,6 @@ void check_casts() {
     Expr even = Shuffle::make_slice(var_vector, 0, 2, 4);
     Expr odd = Shuffle::make_slice(var_vector, 1, 2, 4);
     check(Shuffle::make_interleave({even, odd}), Shuffle::make_slice(var_vector, 0, 1, 8));
-
 }
 
 void check_algebra() {
