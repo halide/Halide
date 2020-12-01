@@ -21,7 +21,6 @@ add_halide_library(halide_blur FROM blur.generator)
 
 # Main executable
 add_executable(blur_test test.cpp)
-target_compile_options(blur_test PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O2>)
 target_link_libraries(blur_test
                       PRIVATE
                       Halide::Tools
