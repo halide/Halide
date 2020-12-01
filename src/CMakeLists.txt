@@ -59,6 +59,7 @@ set(MIPS_HEADER_FILES
     )
 
 set(NVPTX_HEADER_FILES
+    CodeGen_PTX_Dev.h
     )
 
 set(POWERPC_HEADER_FILES
@@ -119,6 +120,7 @@ set(MIPS_SOURCE_FILES
     )
 
 set(NVPTX_SOURCE_FILES
+    CodeGen_PTX_Dev.cpp
     )
 
 set(POWERPC_SOURCE_FILES
@@ -181,25 +183,13 @@ set(HEADER_FILES
     Buffer.h
     CanonicalizeGPUVars.h
     Closure.h
-    #### CodeGen_ARM.h
     CodeGen_C.h
-    #### CodeGen_D3D12Compute_Dev.h
     CodeGen_GPU_Dev.h
     CodeGen_GPU_Host.h
     CodeGen_Internal.h
     CodeGen_LLVM.h
-    #### CodeGen_Metal_Dev.h
-    #### CodeGen_MIPS.h
-    #### CodeGen_OpenCL_Dev.h
-    #### CodeGen_OpenGL_Dev.h
-    #### CodeGen_OpenGLCompute_Dev.h
     CodeGen_Posix.h
-    #### CodeGen_PowerPC.h
-    CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
-    #### CodeGen_RISCV.h
-    #### CodeGen_WebAssembly.h
-    #### CodeGen_X86.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -234,12 +224,9 @@ set(HEADER_FILES
     FuseGPUThreadLoops.h
     FuzzFloatStores.h
     Generator.h
-    #### HexagonOffload.h
-    #### HexagonOptimize.h
     ImageParam.h
     InferArguments.h
     InjectHostDevBufferCopies.h
-    #### InjectOpenGLIntrinsics.h
     Inline.h
     InlineReductions.h
     IntegerDivisionTable.h
@@ -346,26 +333,13 @@ set(SOURCE_FILES
     Buffer.cpp
     CanonicalizeGPUVars.cpp
     Closure.cpp
-    #### CodeGen_ARM.cpp
     CodeGen_C.cpp
-    #### CodeGen_D3D12Compute_Dev.cpp
     CodeGen_GPU_Dev.cpp
     CodeGen_GPU_Host.cpp
-    #### CodeGen_Hexagon.cpp
     CodeGen_Internal.cpp
     CodeGen_LLVM.cpp
-    #### CodeGen_Metal_Dev.cpp
-    #### CodeGen_MIPS.cpp
-    #### CodeGen_OpenCL_Dev.cpp
-    #### CodeGen_OpenGL_Dev.cpp
-    #### CodeGen_OpenGLCompute_Dev.cpp
     CodeGen_Posix.cpp
-    #### CodeGen_PowerPC.cpp
-    CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
-    #### CodeGen_RISCV.cpp
-    #### CodeGen_WebAssembly.cpp
-    #### CodeGen_X86.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
     CSE.cpp
@@ -394,12 +368,9 @@ set(SOURCE_FILES
     FuseGPUThreadLoops.cpp
     FuzzFloatStores.cpp
     Generator.cpp
-    #### HexagonOffload.cpp
-    #### HexagonOptimize.cpp
     ImageParam.cpp
     InferArguments.cpp
     InjectHostDevBufferCopies.cpp
-    #### InjectOpenGLIntrinsics.cpp
     Inline.cpp
     InlineReductions.cpp
     IntegerDivisionTable.cpp

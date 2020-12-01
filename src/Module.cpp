@@ -472,12 +472,14 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 }
 
 Buffer<uint8_t> Module::compile_to_buffer() const {
+#ifdef WITH_HEXAGON
     // TODO: This Hexagon specific code should be removed as soon as possible.
     // This may involve adding more general support for post-processing and
     // a way of specifying to use it.
     if (target().arch == Target::Hexagon) {
         return compile_module_to_hexagon_shared_object(*this);
     }
+#endif // WITH_HEXAGON
 
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));

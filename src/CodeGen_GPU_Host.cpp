@@ -1,13 +1,23 @@
 #include <sstream>
 
-#include "CodeGen_D3D12Compute_Dev.h"
+#ifdef WITH_D3D12
+    #include "CodeGen_D3D12Compute_Dev.h"
+#endif
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_Internal.h"
-#include "CodeGen_Metal_Dev.h"
-#include "CodeGen_OpenCL_Dev.h"
-#include "CodeGen_OpenGLCompute_Dev.h"
-#include "CodeGen_OpenGL_Dev.h"
-#include "CodeGen_PTX_Dev.h"
+#ifdef WITH_METAL
+    #include "CodeGen_Metal_Dev.h"
+#endif
+#ifdef WITH_OPENCL
+    #include "CodeGen_OpenCL_Dev.h"
+#endif
+#ifdef WITH_OPENGL
+    #include "CodeGen_OpenGLCompute_Dev.h"
+    #include "CodeGen_OpenGL_Dev.h"
+#endif
+#ifdef WITH_NVPTX
+    #include "CodeGen_PTX_Dev.h"
+#endif
 #include "Debug.h"
 #include "DeviceArgument.h"
 #include "ExprUsesVar.h"
@@ -102,6 +112,7 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
     // OpenCL, CUDA, OpenGLCompute, and OpenGL last.
     // The code is in reverse order to allow later tests to override
     // earlier ones.
+#ifdef WITH_OPENGL
     if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
         cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
@@ -110,22 +121,29 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
         debug(1) << "Constructing OpenGL Compute device codegen\n";
         cgdev[DeviceAPI::OpenGLCompute] = new CodeGen_OpenGLCompute_Dev(target);
     }
+#endif
     if (target.has_feature(Target::CUDA)) {
         debug(1) << "Constructing CUDA device codegen\n";
         cgdev[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(target);
     }
+#ifdef WITH_OPENCL
     if (target.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
         cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
     }
+#endif
+#ifdef WITH_METAL
     if (target.has_feature(Target::Metal)) {
         debug(1) << "Constructing Metal device codegen\n";
         cgdev[DeviceAPI::Metal] = new CodeGen_Metal_Dev(target);
     }
+#endif // WITH_METAL
+#ifdef WITH_D3D12
     if (target.has_feature(Target::D3D12Compute)) {
         debug(1) << "Constructing Direct3D 12 Compute device codegen\n";
         cgdev[DeviceAPI::D3D12Compute] = new CodeGen_D3D12Compute_Dev(target);
     }
+#endif // WITH_D3D12
 
     if (cgdev.empty()) {
         internal_error << "Requested unknown GPU target: " << target.to_string() << "\n";

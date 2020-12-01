@@ -5,16 +5,30 @@
 
 #include "CPlusPlusMangle.h"
 #include "CSE.h"
-#include "CodeGen_ARM.h"
+#if defined(WITH_ARM) || defined(WITH_AARCH64)
+    #include "CodeGen_ARM.h"
+#endif
 #include "CodeGen_GPU_Host.h"
-#include "CodeGen_Hexagon.h"
+#ifdef WITH_HEXAGON
+    #include "CodeGen_Hexagon.h"
+#endif
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
-#include "CodeGen_MIPS.h"
-#include "CodeGen_PowerPC.h"
-#include "CodeGen_RISCV.h"
-#include "CodeGen_WebAssembly.h"
-#include "CodeGen_X86.h"
+#ifdef WITH_MIPS
+    #include "CodeGen_MIPS.h"
+#endif
+#ifdef WITH_POWERPC
+    #include "CodeGen_PowerPC.h"
+#endif
+#ifdef WITH_RISCV
+    #include "CodeGen_RISCV.h"
+#endif
+#ifdef WITH_WEBASSEMBLY
+    #include "CodeGen_WebAssembly.h"
+#endif
+#ifdef WITH_X86
+    #include "CodeGen_X86.h"
+#endif
 #include "CompilerLogger.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -352,20 +366,34 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
                    << target.to_string() << "\n";
         return nullptr;
 
+#ifdef WITH_X86
     } else if (target.arch == Target::X86) {
         return make_codegen<CodeGen_X86>(target, context);
+#endif
+#ifdef WITH_ARM
     } else if (target.arch == Target::ARM) {
         return make_codegen<CodeGen_ARM>(target, context);
+#endif
+#ifdef WITH_MIPS
     } else if (target.arch == Target::MIPS) {
         return make_codegen<CodeGen_MIPS>(target, context);
+#endif
+#ifdef WITH_POWERPC
     } else if (target.arch == Target::POWERPC) {
         return make_codegen<CodeGen_PowerPC>(target, context);
+#endif
+#ifdef WITH_HEXAGON
     } else if (target.arch == Target::Hexagon) {
         return make_codegen<CodeGen_Hexagon>(target, context);
+#endif
+#ifdef WITH_WEBASSEMBLY
     } else if (target.arch == Target::WebAssembly) {
         return make_codegen<CodeGen_WebAssembly>(target, context);
+#endif
+#ifdef WITH_RISCV
     } else if (target.arch == Target::RISCV) {
         return make_codegen<CodeGen_RISCV>(target, context);
+#endif
     }
 
     user_error << "Unknown target architecture: "

@@ -448,6 +448,7 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 
+#ifdef WITH_HEXAGON
     if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
         debug(1) << "Splitting off Hexagon offload...\n";
         s = inject_hexagon_rpc(s, t, result_module);
@@ -456,6 +457,7 @@ Module lower(const vector<Function> &output_funcs,
     } else {
         debug(1) << "Skipping Hexagon offload...\n";
     }
+#endif //WITH_HEXAGON
 
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
