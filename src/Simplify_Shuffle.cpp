@@ -263,7 +263,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 int concat_index = 0;
                 int new_slice_start = -1;
                 vector<Expr> new_concat_vectors;
-                for (const auto &v: inner_shuffle->vectors) {
+                for (const auto &v : inner_shuffle->vectors) {
                     // Check if current concat vector overlaps with slice.
                     if ((concat_index >= slice_min && concat_index <= slice_max) || ((concat_index + v.type().lanes() - 1) >= slice_min && (concat_index + v.type().lanes() - 1) <= slice_max)) {
                         if (new_slice_start < 0) {
