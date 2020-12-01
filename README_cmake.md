@@ -319,10 +319,15 @@ correspond to the longer ones above.
 > cmake --preset=win64         # VS 2019 generator, 64-bit build
 > cmake --preset=win32         # VC 2019 generator, 32-bit build
 $ cmake --preset=gcc-release   # Ninja generator, GCC compiler, Release build
+
+$ cmake --list-presets         # Get full list of presets.
 ```
 
 The Windows and MSVC presets assume that the environment variable `VCPKG_ROOT`
 is set and points to the root of the vcpkg installation.
+
+Note that the GCC presets do not define `NDEBUG` in release configurations,
+departing from the usual CMake behavior.
 
 ## Installing
 

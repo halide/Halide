@@ -13,18 +13,19 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O2",
+        "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-O2 -g",
+        "CMAKE_CXX_FLAGS_MINSIZEREL": "-Os"
       }
     },
     {
       "name": "gcc-release",
+      "inherits": "gcc-debug",
       "displayName": "GCC (Release)",
       "description": "Release build using Ninja generator and GCC-compatible compiler",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_CXX_FLAGS_RELEASE": "-O2 -DNDEBUG"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
