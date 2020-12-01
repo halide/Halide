@@ -1,5 +1,163 @@
 ##
-# Lists of source files. Keep ALL lists sorted in alphabetical order.
+# Set up additional backend options for Halide
+##
+option(TARGET_OPENCL "Include OpenCL-C target" ON)
+option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
+option(TARGET_METAL "Include Metal target" ON)
+option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
+
+##
+# List of optional targets
+##
+
+set(OPTIONAL_TARGETS
+    AARCH64
+    AMDGPU
+    ARM
+    HEXAGON
+    MIPS
+    NVPTX
+    POWERPC
+    RISCV
+    WEBASSEMBLY
+    X86
+    OPENCL
+    OPENGL
+    METAL
+    D3D12COMPUTE
+    )
+
+##
+# Lists of target-specific source files.
+# Keep ALL lists sorted in alphabetical order.
+##
+
+##
+# Header files
+##
+
+# The externally-visible header files that go into making Halide.h.
+# Don't include anything here that includes llvm headers.
+
+set(AARCH64_HEADER_FILES
+    )
+
+set(AMDGPU_HEADER_FILES
+    )
+
+set(ARM_HEADER_FILES
+    CodeGen_ARM.h
+    )
+
+set(HEXAGON_HEADER_FILES
+    HexagonOffload.h
+    HexagonOptimize.h
+    )
+
+set(MIPS_HEADER_FILES
+    CodeGen_MIPS.h
+    )
+
+set(NVPTX_HEADER_FILES
+    )
+
+set(POWERPC_HEADER_FILES
+    CodeGen_PowerPC.h
+    )
+
+set(RISCV_HEADER_FILES
+    CodeGen_RISCV.h
+    )
+
+set(WEBASSEMBLY_HEADER_FILES
+    CodeGen_WebAssembly.h
+    )
+
+set(X86_HEADER_FILES
+    CodeGen_X86.h
+    )
+
+set(OPENCL_HEADER_FILES
+    CodeGen_OpenCL_Dev.h
+    )
+
+set(OPENGL_HEADER_FILES
+    CodeGen_OpenGL_Dev.h
+    CodeGen_OpenGLCompute_Dev.h
+    InjectOpenGLIntrinsics.h
+    )
+
+set(METAL_HEADER_FILES
+    CodeGen_Metal_Dev.h
+    )
+
+set(D3D12COMPUTE_HEADER_FILES
+    CodeGen_D3D12Compute_Dev.h
+    )
+
+##
+# Source files
+##
+set(AARCH64_SOURCE_FILES
+    )
+
+set(AMDGPU_SOURCE_FILES
+    )
+
+set(ARM_SOURCE_FILES
+    CodeGen_ARM.cpp
+    )
+
+set(HEXAGON_SOURCE_FILES
+    CodeGen_Hexagon.cpp
+    HexagonOffload.cpp
+    HexagonOptimize.cpp
+    )
+
+set(MIPS_SOURCE_FILES
+    CodeGen_MIPS.cpp
+    )
+
+set(NVPTX_SOURCE_FILES
+    )
+
+set(POWERPC_SOURCE_FILES
+    CodeGen_PowerPC.cpp
+    )
+
+set(RISCV_SOURCE_FILES
+    CodeGen_RISCV.cpp
+    )
+
+set(WEBASSEMBLY_SOURCE_FILES
+    CodeGen_WebAssembly.cpp
+    )
+
+set(X86_SOURCE_FILES
+    CodeGen_X86.cpp
+    )
+
+set(OPENCL_SOURCE_FILES
+    CodeGen_OpenCL_Dev.cpp
+    )
+
+set(OPENGL_SOURCE_FILES
+    CodeGen_OpenGL_Dev.cpp
+    CodeGen_OpenGLCompute_Dev.cpp
+    InjectOpenGLIntrinsics.cpp
+    )
+
+set(METAL_SOURCE_FILES
+    CodeGen_Metal_Dev.cpp
+    )
+
+set(D3D12COMPUTE_SOURCE_FILES
+    CodeGen_D3D12Compute_Dev.cpp
+    )
+
+##
+# Lists of non-optional source files.
+# Keep ALL lists sorted in alphabetical order.
 ##
 
 # The externally-visible header files that go into making Halide.h.
@@ -23,25 +181,25 @@ set(HEADER_FILES
     Buffer.h
     CanonicalizeGPUVars.h
     Closure.h
-    CodeGen_ARM.h
+    #### CodeGen_ARM.h
     CodeGen_C.h
-    CodeGen_D3D12Compute_Dev.h
+    #### CodeGen_D3D12Compute_Dev.h
     CodeGen_GPU_Dev.h
     CodeGen_GPU_Host.h
     CodeGen_Internal.h
     CodeGen_LLVM.h
-    CodeGen_Metal_Dev.h
-    CodeGen_MIPS.h
-    CodeGen_OpenCL_Dev.h
-    CodeGen_OpenGL_Dev.h
-    CodeGen_OpenGLCompute_Dev.h
+    #### CodeGen_Metal_Dev.h
+    #### CodeGen_MIPS.h
+    #### CodeGen_OpenCL_Dev.h
+    #### CodeGen_OpenGL_Dev.h
+    #### CodeGen_OpenGLCompute_Dev.h
     CodeGen_Posix.h
-    CodeGen_PowerPC.h
+    #### CodeGen_PowerPC.h
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
-    CodeGen_RISCV.h
-    CodeGen_WebAssembly.h
-    CodeGen_X86.h
+    #### CodeGen_RISCV.h
+    #### CodeGen_WebAssembly.h
+    #### CodeGen_X86.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -76,12 +234,12 @@ set(HEADER_FILES
     FuseGPUThreadLoops.h
     FuzzFloatStores.h
     Generator.h
-    HexagonOffload.h
-    HexagonOptimize.h
+    #### HexagonOffload.h
+    #### HexagonOptimize.h
     ImageParam.h
     InferArguments.h
     InjectHostDevBufferCopies.h
-    InjectOpenGLIntrinsics.h
+    #### InjectOpenGLIntrinsics.h
     Inline.h
     InlineReductions.h
     IntegerDivisionTable.h
@@ -188,26 +346,26 @@ set(SOURCE_FILES
     Buffer.cpp
     CanonicalizeGPUVars.cpp
     Closure.cpp
-    CodeGen_ARM.cpp
+    #### CodeGen_ARM.cpp
     CodeGen_C.cpp
-    CodeGen_D3D12Compute_Dev.cpp
+    #### CodeGen_D3D12Compute_Dev.cpp
     CodeGen_GPU_Dev.cpp
     CodeGen_GPU_Host.cpp
-    CodeGen_Hexagon.cpp
+    #### CodeGen_Hexagon.cpp
     CodeGen_Internal.cpp
     CodeGen_LLVM.cpp
-    CodeGen_Metal_Dev.cpp
-    CodeGen_MIPS.cpp
-    CodeGen_OpenCL_Dev.cpp
-    CodeGen_OpenGL_Dev.cpp
-    CodeGen_OpenGLCompute_Dev.cpp
+    #### CodeGen_Metal_Dev.cpp
+    #### CodeGen_MIPS.cpp
+    #### CodeGen_OpenCL_Dev.cpp
+    #### CodeGen_OpenGL_Dev.cpp
+    #### CodeGen_OpenGLCompute_Dev.cpp
     CodeGen_Posix.cpp
-    CodeGen_PowerPC.cpp
+    #### CodeGen_PowerPC.cpp
     CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
-    CodeGen_RISCV.cpp
-    CodeGen_WebAssembly.cpp
-    CodeGen_X86.cpp
+    #### CodeGen_RISCV.cpp
+    #### CodeGen_WebAssembly.cpp
+    #### CodeGen_X86.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
     CSE.cpp
@@ -236,12 +394,12 @@ set(SOURCE_FILES
     FuseGPUThreadLoops.cpp
     FuzzFloatStores.cpp
     Generator.cpp
-    HexagonOffload.cpp
-    HexagonOptimize.cpp
+    #### HexagonOffload.cpp
+    #### HexagonOptimize.cpp
     ImageParam.cpp
     InferArguments.cpp
     InjectHostDevBufferCopies.cpp
-    InjectOpenGLIntrinsics.cpp
+    #### InjectOpenGLIntrinsics.cpp
     Inline.cpp
     InlineReductions.cpp
     IntegerDivisionTable.cpp
@@ -342,6 +500,28 @@ set(SOURCE_FILES
     )
 
 ##
+# Create optional targets
+##
+
+foreach(OPTIONAL_TARGET ${OPTIONAL_TARGETS})
+    if(TARGET_${OPTIONAL_TARGET})
+        add_library(Halide_${OPTIONAL_TARGET} INTERFACE)
+        target_sources(Halide_${OPTIONAL_TARGET} INTERFACE
+            ${${OPTIONAL_TARGET}_SOURCE_FILES}
+            )
+        target_compile_definitions(Halide_${OPTIONAL_TARGET} INTERFACE
+            WITH_${OPTIONAL_TARGET})
+
+        list(APPEND HEADER_FILES ${${OPTIONAL_TARGET}_HEADER_FILES})
+    endif()
+endforeach()
+
+# Special case definition for D3D12COMPUTE for compatibility
+if (TARGET_D3D12COMPUTE)
+    target_compile_definitions(Halide_D3D12COMPUTE INTERFACE WITH_D3D12)
+endif ()
+
+##
 # Build and import the runtime.
 ##
 
@@ -372,6 +552,16 @@ add_library(Halide
             # Including these as sources works around the need to "install" Halide_initmod
             $<TARGET_OBJECTS:Halide_initmod>)
 add_library(Halide::Halide ALIAS Halide)
+
+##
+# Link optional targets to the main library
+##
+
+foreach(OPTIONAL_TARGET ${OPTIONAL_TARGETS})
+    target_link_libraries(Halide PRIVATE
+        $<BUILD_INTERFACE:$<TARGET_NAME_IF_EXISTS:Halide_${OPTIONAL_TARGET}>>
+        )
+endforeach()
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
@@ -444,30 +634,6 @@ target_compile_definitions(Halide
                            $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
                            $<$<CXX_COMPILER_ID:MSVC>:_SCL_SECURE_NO_WARNINGS>
                            )
-
-##
-# Set up additional backend options for Halide
-##
-
-option(TARGET_OPENCL "Include OpenCL-C target" ON)
-if (TARGET_OPENCL)
-    target_compile_definitions(Halide PRIVATE WITH_OPENCL)
-endif ()
-
-option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
-if (TARGET_OPENGL)
-    target_compile_definitions(Halide PRIVATE WITH_OPENGL)
-endif ()
-
-option(TARGET_METAL "Include Metal target" ON)
-if (TARGET_METAL)
-    target_compile_definitions(Halide PRIVATE WITH_METAL)
-endif ()
-
-option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
-if (TARGET_D3D12COMPUTE)
-    target_compile_definitions(Halide PRIVATE WITH_D3D12)
-endif ()
 
 ##
 # Add autoschedulers to the build.
