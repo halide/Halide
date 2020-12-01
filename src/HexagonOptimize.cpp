@@ -2025,9 +2025,13 @@ private:
             } else if (const Sub *sub = a.as<Sub>()) {
                 return mutate(simplify(sub->a * b) - simplify(sub->b * b));
             } else if (const Call *add = Call::as_intrinsic(a, {Call::widening_add})) {
-                return mutate(simplify(widen(add->args[0]) * b) + simplify(widen(add->args[1]) * b));
+                Expr add_a = cast(add->type, add->args[0]);
+                Expr add_b = cast(add->type, add->args[1]);
+                return mutate(simplify(add_a * b) + simplify(add_b * b));
             } else if (const Call *sub = Call::as_intrinsic(a, {Call::widening_sub})) {
-                return mutate(simplify(widen(sub->args[0]) * b) - simplify(widen(sub->args[1]) * b));
+                Expr sub_a = cast(sub->type, sub->args[0]);
+                Expr sub_b = cast(sub->type, sub->args[1]);
+                return mutate(simplify(sub_a * b) - simplify(sub_b * b));
             } else if (const Call *mul = Call::as_intrinsic(a, {Call::widening_mul})) {
                 Expr mul_a = mutate(mul->args[0]);
                 Expr mul_b = mutate(mul->args[1]);

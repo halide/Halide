@@ -473,7 +473,7 @@ Expr as_add(const Expr &a) {
     if (a.as<Add>()) {
         return a;
     } else if (const Call *wa = Call::as_intrinsic(a, {Call::widening_add})) {
-        return Add::make(cast(wa->type, wa->args[0]), cast(wa->type, wa->args[1]));
+        return simplify(Add::make(cast(wa->type, wa->args[0]), cast(wa->type, wa->args[1])));
     }
     return Expr();
 }
