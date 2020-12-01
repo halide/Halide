@@ -115,8 +115,7 @@ private:
 
             // If load is smaller than a native vector and can fully fit inside of it and offset is known,
             // we can simply offset the native load and slice.
-            if (!is_aligned && aligned_offset != 0 && Int(32).can_represent(aligned_offset)
-                 && (aligned_offset + lanes <= native_lanes)) {
+            if (!is_aligned && aligned_offset != 0 && Int(32).can_represent(aligned_offset) && (aligned_offset + lanes <= native_lanes)) {
                 ramp_base = simplify(ramp_base - (int)aligned_offset);
                 alignment = alignment - aligned_offset;
                 slice_offset = aligned_offset;
