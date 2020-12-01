@@ -92,7 +92,7 @@ if (EXISTS ${IMAGE})
                  COMMAND resize ${INPUT} out_${VARIANT}.png -i ${INTERP} -t ${TYPE} -f ${F})
         set_tests_properties(resize_${VARIANT}
                              PROPERTIES FIXTURES_REQUIRED rgb_small
-                             LABELS internal_app_tests
+                             LABELS internal_app_tests;slow_tests
                              PASS_REGULAR_EXPRESSION "Success!"
                              SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
     endforeach ()
