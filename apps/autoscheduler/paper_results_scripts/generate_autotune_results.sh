@@ -179,6 +179,8 @@ for app in $APPS; do
         echo "Comparing with metrics..."
         bash ${SCRIPTS_DIR}/compare_with_metrics.sh ${app} ${CURRENT_DATE_TIME} 5
     fi
+
+    bash ${SCRIPTS_DIR}/app_predictions.sh $(basename ${SAMPLES_DIR}) ${app}
 done
 
 print_best_schedule_times $(dirname $0)/best
