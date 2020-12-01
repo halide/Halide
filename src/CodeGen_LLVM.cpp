@@ -1269,7 +1269,7 @@ void CodeGen_LLVM::optimize_module() {
     pb.crossRegisterProxies(lam, fam, cgam, mam);
     ModulePassManager mpm(debug_pass_manager);
 
-    PassBuilder::OptimizationLevel level = PassBuilder::OptimizationLevel::O2;
+    PassBuilder::OptimizationLevel level = PassBuilder::OptimizationLevel::O3;
 
     if (get_target().has_feature(Target::ASAN)) {
 #if LLVM_VERSION >= 120
