@@ -317,7 +317,7 @@ correspond to the longer ones above.
 ```
 > cmake --preset=msvc-release  # Ninja generator, MSVC compiler, Release build
 > cmake --preset=win64         # VS 2019 generator, 64-bit build
-> cmake --preset=win32         # VC 2019 generator, 32-bit build
+> cmake --preset=win32         # VS 2019 generator, 32-bit build
 $ cmake --preset=gcc-release   # Ninja generator, GCC compiler, Release build
 
 $ cmake --list-presets         # Get full list of presets.
