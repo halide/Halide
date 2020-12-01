@@ -24,6 +24,7 @@ void expr_match_test() {
     Expr fy = Variable::make(Float(32), "fy");
 
     Expr vec_wild = Variable::make(Int(32, 4), "*");
+    Expr vec_x4 = Variable::make(Int(32, 4), "vec_x4");
 
     internal_assert(expr_match(w, 3, matches) &&
                     equal(matches[0], 3));
@@ -46,6 +47,8 @@ void expr_match_test() {
                     matches.empty());
 
     internal_assert(expr_match(vec_wild * 3, Ramp::make(x, y, 4) * 3, matches));
+
+    internal_assert(expr_match(Shuffle::make_slice(vec_wild, 1, 1, 2), Shuffle::make_slice(3 * vec_x4, 1, 1, 2), matches));
 
     std::cout << "expr_match test passed" << std::endl;
 }
@@ -249,6 +252,20 @@ public:
         if (result && e && types_match(op->type, e->type)) {
             expr = e->value;
             op->value.accept(this);
+        } else {
+            result = false;
+        }
+    }
+
+    void visit(const Shuffle *op) override {
+        const Shuffle *e = expr.as<Shuffle>();
+        if (result && e && types_match(op->type, e->type)
+            && op->vectors.size() == e->vectors.size()
+            && op->indices == e->indices) {
+            for (size_t ix = 0; ix < op->vectors.size(); ix++) {
+                expr = e->vectors[ix];
+                op->vectors[ix].accept(this);
+            }
         } else {
             result = false;
         }
