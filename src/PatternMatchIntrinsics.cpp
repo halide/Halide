@@ -22,7 +22,7 @@ bool is_widen(const Expr &x) {
 }
 
 Expr saturating_narrow(Expr a) {
-    Type narrow = a.type().with_bits(a.type().bits() / 2);
+    Type narrow = a.type().narrow();
     return saturating_cast(narrow, a);
 }
 
@@ -224,7 +224,7 @@ protected:
 
         // Try widening both from the same type as the result, and from uint.
         for (halide_type_code_t code : {op->type.code(), halide_type_uint}) {
-            Type narrow = op->type.with_bits(op->type.bits() / 2).with_code(code);
+            Type narrow = op->type.narrow().with_code(code);
             Expr narrow_a = lossless_cast(narrow, a);
             Expr narrow_b = lossless_cast(narrow, b);
 
@@ -250,7 +250,7 @@ protected:
 
         // Try widening both from the same type as the result, and from uint.
         for (halide_type_code_t code : {op->type.code(), halide_type_uint}) {
-            Type narrow = op->type.with_bits(op->type.bits() / 2).with_code(code);
+            Type narrow = op->type.narrow().with_code(code);
             Expr narrow_a = lossless_cast(narrow, a);
             Expr narrow_b = lossless_cast(narrow, b);
 
@@ -285,7 +285,7 @@ protected:
         }
 
         // We're applying this to float, which seems OK? float16 * float16 -> float32 is a widening multiply?
-        Type narrow = op->type.with_bits(op->type.bits() / 2);
+        Type narrow = op->type.narrow();
         Expr narrow_a = lossless_cast(narrow, a);
         Expr narrow_b = lossless_cast(narrow, b);
 
@@ -425,7 +425,7 @@ protected:
 
             // Try to turn this into a widening left shift.
             if (op->is_intrinsic(Call::shift_left)) {
-                Expr a_narrow = lossless_cast(a.type().with_bits(a.type().bits() / 2), a);
+                Expr a_narrow = lossless_cast(a.type().narrow(), a);
                 if (a_narrow.defined()) {
                     if (const Cast *ca = a_narrow.as<Cast>()) {
                         // If there is more casting, we can move it after the shift.
@@ -513,7 +513,7 @@ Expr lower_widening_mul(const Expr &a, const Expr &b) {
 }
 
 Expr lower_widening_sub(const Expr &a, const Expr &b) {
-    Type wide = a.type().with_bits(a.type().bits() * 2);
+    Type wide = a.type().widen();
     if (wide.is_uint()) {
         wide = wide.with_code(halide_type_int);
     }

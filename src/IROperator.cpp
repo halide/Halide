@@ -1027,28 +1027,28 @@ Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) 
 }
 
 Expr widen(Expr a) {
-    return Cast::make(a.type().with_bits(a.type().bits() * 2), std::move(a));
+    return Cast::make(a.type().widen(), std::move(a));
 }
 
 Expr narrow(Expr a) {
-    return Cast::make(a.type().with_bits(a.type().bits() / 2), std::move(a));
+    return Cast::make(a.type().narrow(), std::move(a));
 }
 
 Expr widening_add(Expr a, Expr b) {
     match_types(a, b);
-    Type wide_type = a.type().with_bits(a.type().bits() * 2);
+    Type wide_type = a.type().widen();
     return Call::make(wide_type, Call::widening_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr widening_mul(Expr a, Expr b) {
     match_types(a, b);
-    Type wide_type = a.type().with_bits(a.type().bits() * 2);
+    Type wide_type = a.type().widen();
     return Call::make(wide_type, Call::widening_mul, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr widening_sub(Expr a, Expr b) {
     match_types(a, b);
-    Type wide_type = a.type().with_bits(a.type().bits() * 2);
+    Type wide_type = a.type().widen();
     if (wide_type.is_uint()) {
         // always produce a signed result.
         wide_type = wide_type.with_code(halide_type_int);
@@ -1059,7 +1059,7 @@ Expr widening_sub(Expr a, Expr b) {
 Expr widening_shift_left(Expr a, Expr b) {
     match_lanes(a, b);
     match_bits(a, b);
-    Type wide_type = a.type().with_bits(a.type().bits() * 2);
+    Type wide_type = a.type().widen();
     return Call::make(wide_type, Call::widening_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
