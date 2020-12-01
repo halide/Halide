@@ -400,7 +400,7 @@ Expr lossless_cast(Type t, Expr e) {
     }
 
     if (const Cast *c = e.as<Cast>()) {
-        if (t.can_represent(c->value.type())) {
+        if (c->type.can_represent(c->value.type())) {
             // We can recurse into widening casts.
             return lossless_cast(t, c->value);
         } else {
@@ -1058,6 +1058,7 @@ Expr widening_sub(Expr a, Expr b) {
 
 Expr widening_shift_left(Expr a, Expr b) {
     match_lanes(a, b);
+    match_bits(a, b);
     Type wide_type = a.type().with_bits(a.type().bits() * 2);
     return Call::make(wide_type, Call::widening_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }

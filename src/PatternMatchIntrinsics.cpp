@@ -427,7 +427,16 @@ protected:
             if (op->is_intrinsic(Call::shift_left)) {
                 Expr a_narrow = lossless_cast(a.type().with_bits(a.type().bits() / 2), a);
                 if (a_narrow.defined()) {
-                    return widening_shift_left(a_narrow, simplify(narrow(b)));
+                    if (const Cast *ca = a_narrow.as<Cast>()) {
+                        // If there is more casting, we can move it after the shift.
+                        a_narrow = ca->value;
+                    }
+                    b = simplify(cast(a_narrow.type().with_code(b.type().code()), b));
+                    Expr result = widening_shift_left(a_narrow, b);
+                    if (result.type() != op->type) {
+                        result = Cast::make(op->type, result);
+                    }
+                    return mutate(result);
                 }
             }
 
@@ -436,6 +445,8 @@ protected:
                 result = op;
             } else if (op->is_intrinsic(Call::shift_right)) {
                 result = Call::make(op->type, Call::shift_right, {a, b}, Call::PureIntrinsic);
+            } else if (op->is_intrinsic(Call::widening_shift_left)) {
+                result = Call::make(op->type, Call::widening_shift_left, {a, b}, Call::PureIntrinsic);
             } else {
                 result = Call::make(op->type, Call::shift_left, {a, b}, Call::PureIntrinsic);
             }
