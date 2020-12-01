@@ -40,29 +40,6 @@ test: test_ops
 clean:
 	rm -rf $(BIN)
 
-# ---------------------- tflite-schema
-
-# TODO: switch to v2.4.0 once released
-TFLITE_TAG ?= v2.4.0-rc3
-
-$(BIN)/schema/tflite_schema.fbs:
-	@echo Fetching tflite_schema.fbs...
-	@mkdir -p $(@D)
-	@wget --quiet -O $@ https://github.com/tensorflow/tensorflow/raw/$(TFLITE_TAG)/tensorflow/lite/schema/schema.fbs
-
-# This is a very minimal .h file that allows only for reading a flatbuffer...
-# which is all tflite_parser needs.
-$(BIN)/schema/tflite_schema_generated.h: $(BIN)/schema/tflite_schema.fbs
-	@mkdir -p $(@D)
-	$(FLATC) --cpp --no-includes -o $(@D) $<
-
-# This include extra API needed only by utilities that do flatbuffer surgery (eg tflite_exploder)
-$(BIN)/schema/tflite_schema_direct_generated.h: $(BIN)/schema/tflite_schema.fbs
-	@mkdir -p $(@D)
-	$(FLATC) --cpp --no-includes --gen-object-api --filename-suffix _direct_generated -o $(@D) $<
-
-TFLITE_SCHEMA_CXXFLAGS = -I$(BIN)/schema
-
 # ---------------------- halide
 
 $(GENERATOR_BIN)/common_halide.o: halide/common_halide.cpp
@@ -139,19 +116,50 @@ $(BIN)/%/interval.o: interpreter/interval.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(UTIL_CXXFLAGS) -c $< -o $@
 
-$(BIN)/%/tflite_parser.o: interpreter/tflite_parser.cpp $(BIN)/schema/tflite_schema_generated.h
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(UTIL_CXXFLAGS) -I$(FLATBUFFERS_INCLUDE_PATH) $(TFLITE_SCHEMA_CXXFLAGS) -c $< -o $@
-
 INTERPRETER_DEPS = \
 	$(BIN)/%/interpreter.o \
 	$(BIN)/%/interval.o \
 	$(BIN)/%/model.o \
 	$(BIN)/%/ops.o \
-	$(BIN)/%/tflite_parser.o \
 	$(OPS_HALIDE)
 
 INTERPRETER_CXXFLAGS = -I$(MAKEFILE_DIR)/interpreter $(UTIL_CXXFLAGS)
+
+# ---------------------- tflite
+
+# TODO: switch to v2.4.0 once released
+TFLITE_TAG ?= v2.4.0-rc3
+
+$(BIN)/schema/tflite_schema.fbs:
+	@echo Fetching tflite_schema.fbs...
+	@mkdir -p $(@D)
+	@wget --quiet -O $@ https://github.com/tensorflow/tensorflow/raw/$(TFLITE_TAG)/tensorflow/lite/schema/schema.fbs
+
+# This is a very minimal .h file that allows only for reading a flatbuffer...
+# which is all tflite_parser needs.
+$(BIN)/schema/tflite_schema_generated.h: $(BIN)/schema/tflite_schema.fbs
+	@mkdir -p $(@D)
+	$(FLATC) --cpp --no-includes -o $(@D) $<
+
+# This include extra API needed only by utilities that do flatbuffer surgery (eg tflite_exploder)
+$(BIN)/schema/tflite_schema_direct_generated.h: $(BIN)/schema/tflite_schema.fbs
+	@mkdir -p $(@D)
+	$(FLATC) --cpp --no-includes --gen-object-api --filename-suffix _direct_generated -o $(@D) $<
+
+TFLITE_SCHEMA_CXXFLAGS = -I$(BIN)/schema
+
+$(BIN)/%/tflite_parser.o: tflite/tflite_parser.cpp $(BIN)/schema/tflite_schema_generated.h
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(UTIL_CXXFLAGS) -I$(FLATBUFFERS_INCLUDE_PATH) $(TFLITE_SCHEMA_CXXFLAGS) -c $< -o $@
+
+$(BIN)/%/tflite_parser.o: tflite/tflite_parser.cpp $(BIN)/schema/tflite_schema_generated.h
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(UTIL_CXXFLAGS) $(INTERPRETER_CXXFLAGS) -I$(FLATBUFFERS_INCLUDE_PATH) $(TFLITE_SCHEMA_CXXFLAGS) -c $< -o $@
+
+TFLITE_PARSER_DEPS = \
+	$(BIN)/%/tflite_parser.o
+
+TFLITE_PARSER_CXXFLAGS = -I$(MAKEFILE_DIR)/tflite
 
 # ---------------------- test
 
@@ -222,9 +230,9 @@ test_ops: build_test_ops
 
 # ---------------------- toplevel executables
 
-$(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS)
+$(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(TFLITE_PARSER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 # Utility to explode a tflite pipeline into individual ops for testing.
 $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/schema/tflite_schema_direct_generated.h
@@ -248,7 +256,7 @@ TFLITE_STATIC_LIB ?= $(TFLITE_BASE)/tools/make/gen/native_x86_64/lib/libtensorfl
 
 TENSORFLOW_INCLUDES ?= $(TENSORFLOW_BASE)
 
-$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS)
+$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS)  $(TFLITE_PARSER_DEPS)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) -I$(TENSORFLOW_INCLUDES) $(filter %.cpp %.o %.a,$^) $(TFLITE_STATIC_LIB) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(TFLITE_PARSER_CXXFLAGS) -I$(TENSORFLOW_INCLUDES) $(filter %.cpp %.o %.a,$^) $(TFLITE_STATIC_LIB) -o $@ $(LDFLAGS-$*)
 
