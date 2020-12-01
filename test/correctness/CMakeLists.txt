@@ -1,5 +1,5 @@
 tests(GROUPS correctness_multi_gpu
-a      SOURCES
+      SOURCES
       gpu_multi_device.cpp
       )
 
