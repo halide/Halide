@@ -107,7 +107,7 @@ function(add_wasm_executable TARGET)
     endif ()
 
     set(EMCC_FLAGS
-        -O3
+        -O2
         -g
         -std=c++11
         -Wall

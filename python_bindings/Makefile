@@ -33,7 +33,7 @@ SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
 # Discover PyBind path from `python3 -m pybind11 --includes`
 PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes)
 
-OPTIMIZE ?= -O3
+OPTIMIZE ?= -O2
 
 # defining DEBUG + undefining NDEBUG gives extra debug info in PyBind11
 # OPTIMIZE ?= -g -DDEBUG=1 -UNDEBUG

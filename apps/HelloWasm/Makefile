@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 # The emscripten compiler
 EMCC ?= emcc
-EMCC_FLAGS ?= -s WASM=1 -s USE_SDL=2 -s TOTAL_MEMORY=512MB -O3 -I $(HALIDE_DISTRIB_PATH)/include
+EMCC_FLAGS ?= -s WASM=1 -s USE_SDL=2 -s TOTAL_MEMORY=512MB -O2 -I $(HALIDE_DISTRIB_PATH)/include
 EMCC_THREADS_FLAGS ?= $(EMCC_FLAGS) -pthread -matomics -mbulk-memory
 
 # the output dir for the .js products must be fixed, because that's what index.html looks for
@@ -54,7 +54,7 @@ $(BIN)/$(HL_TARGET)/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	$< -r runtime -o $(@D) target=$(HL_TARGET)
 
 js/index.js: core.cpp $(BIN)/wasm/reaction_diffusion_init.a $(BIN)/wasm/reaction_diffusion_update.a $(BIN)/wasm/reaction_diffusion_render.a $(BIN)/wasm/runtime.a
-	@mkdir -p $(@D)	
+	@mkdir -p $(@D)
 	$(EMCC) $^ $(EMCC_FLAGS) -I $(BIN)/wasm -o $@
 
 js/index_simd.js: core.cpp $(BIN)/wasm_simd/reaction_diffusion_init.a $(BIN)/wasm_simd/reaction_diffusion_update.a $(BIN)/wasm_simd/reaction_diffusion_render.a $(BIN)/wasm_simd/runtime.a
@@ -73,7 +73,7 @@ clean:
 	rm -rf js
 	rm -rf $(BIN)
 
-$(BIN)/$(HL_TARGET)/run: $(BIN)/$(HL_TARGET)/reaction_diffusion_init.a $(BIN)/$(HL_TARGET)/reaction_diffusion_update.a $(BIN)/$(HL_TARGET)/reaction_diffusion_render.a $(BIN)/$(HL_TARGET)/runtime.a 
+$(BIN)/$(HL_TARGET)/run: $(BIN)/$(HL_TARGET)/reaction_diffusion_init.a $(BIN)/$(HL_TARGET)/reaction_diffusion_update.a $(BIN)/$(HL_TARGET)/reaction_diffusion_render.a $(BIN)/$(HL_TARGET)/runtime.a
 	mkdir -p $(@D)
 	$(CXX) $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(BIN)/$(HL_TARGET)/reaction_diffusion_*.registration.cpp $^ -o $@ -I $(HALIDE_DISTRIB_PATH)/include $(IMAGE_IO_FLAGS) $(LDFLAGS)
 

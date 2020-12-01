@@ -17,7 +17,7 @@ endif ()
 
 configure_file(index.html index.html COPYONLY)
 
-set(EMCC_FLAGS -s WASM=1 -s USE_SDL=2 -s TOTAL_MEMORY=512MB -O3)
+set(EMCC_FLAGS -s WASM=1 -s USE_SDL=2 -s TOTAL_MEMORY=512MB -O2)
 set(EMCC_FLAGS_threads -pthread -matomics -mbulk-memory)
 
 add_executable(reaction_diffusion_generator reaction_diffusion_generator.cpp)

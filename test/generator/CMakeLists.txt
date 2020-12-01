@@ -73,7 +73,7 @@ set(EXTERNAL_CPP "${CMAKE_CURRENT_SOURCE_DIR}/external_code_extern.cpp")
 
 set(EC32 "external_code_extern_bitcode_32")
 add_custom_command(OUTPUT "${EC32}.bc"
-                   COMMAND clang -O3 -c -m32 -target le32-unknown-nacl-unknown -emit-llvm "$<SHELL_PATH:${EXTERNAL_CPP}>" -o "${EC32}.bc"
+                   COMMAND clang -O2 -c -m32 -target le32-unknown-nacl-unknown -emit-llvm "$<SHELL_PATH:${EXTERNAL_CPP}>" -o "${EC32}.bc"
                    DEPENDS "${EXTERNAL_CPP}"
                    VERBATIM)
 add_custom_command(OUTPUT "${EC32}.cpp"
@@ -83,7 +83,7 @@ add_custom_command(OUTPUT "${EC32}.cpp"
 
 set(EC64 "external_code_extern_bitcode_64")
 add_custom_command(OUTPUT "${EC64}.bc"
-                   COMMAND clang -O3 -c -m64 -target le64-unknown-unknown-unknown -emit-llvm "$<SHELL_PATH:${EXTERNAL_CPP}>" -o "${EC64}.bc"
+                   COMMAND clang -O2 -c -m64 -target le64-unknown-unknown-unknown -emit-llvm "$<SHELL_PATH:${EXTERNAL_CPP}>" -o "${EC64}.bc"
                    DEPENDS "${EXTERNAL_CPP}" binary2cpp
                    VERBATIM)
 add_custom_command(OUTPUT "${EC64}.cpp"

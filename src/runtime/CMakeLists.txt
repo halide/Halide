@@ -146,7 +146,7 @@ add_library(Halide_initmod OBJECT)
 # Note: ensure that these flags match the flags in the Makefile.
 # Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
 set(RUNTIME_CXX_FLAGS
-    -O3
+    -O2
     -ffreestanding
     -fno-blocks
     -fno-exceptions
