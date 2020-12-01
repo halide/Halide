@@ -1,7 +1,5 @@
 include ../support/Makefile.inc
 
-.PHONY: build clean test build_test_ops
-
 # Note: this requires that you have the flatbuffers `flatc` tool available on
 # the host system; this is usually easy to install via e.g.
 #
@@ -20,23 +18,29 @@ FLATC ?= flatc
 # This is the location that brew installs on my Mac.
 FLATBUFFERS_INCLUDE_PATH ?= /usr/local/Cellar/flatbuffers/1.12.0/include
 
-build: $(BIN)/$(HL_TARGET)/benchmark \
-	$(BIN)/$(HL_TARGET)/compare_vs_tflite \
-	$(BIN)/host/tflite_exploder \
-	build_test_ops
-
-
-test: test_ops $(BIN)/$(HL_TARGET)/benchmark
-	$(BIN)/$(HL_TARGET)/benchmark
-
-clean:
-	rm -rf $(BIN)
-
 CXXFLAGS += -Wno-unused-private-field
+
+MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
+
+.PHONY: all build clean test build_test_ops
+all: build
 
 # .SECONDARY with no prerequisites causes all targets to be treated as secondary
 # (i.e., no target is removed because it is considered intermediate).
 .SECONDARY:
+
+build: \
+	$(BIN)/$(HL_TARGET)/benchmark \
+	$(BIN)/$(HL_TARGET)/compare_vs_tflite \
+	$(BIN)/host/tflite_exploder \
+	build_test_ops
+
+test: test_ops
+
+clean:
+	rm -rf $(BIN)
+
+# ---------------------- halide
 
 $(GENERATOR_BIN)/common_halide.o: halide/common_halide.cpp
 	@mkdir -p $(@D)
@@ -88,99 +92,117 @@ OPS_HALIDE = \
 	$(BIN)/%/max_pool_uint8.a \
 	$(BIN)/%/runtime.a
 
-$(BIN)/%/interpreter.o: interpreter.cpp
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
+OPS_CXXFLAGS = -I$(BIN)/$*
 
-$(BIN)/%/model.o: model.cpp
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
+# ---------------------- util
 
-$(BIN)/%/ops.o: ops.cpp $(OPS_HALIDE)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
+UTIL_CXXFLAGS = -I$(MAKEFILE_DIR)/util
 
-$(BIN)/%/interval.o: interval.cpp $(OPS_HALIDE)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -c $< -o $@
+# ---------------------- interpreter
 
-$(BIN)/%/tflite_parser.o: tflite_parser.cpp $(BIN)/%/tflite_schema_generated.h
+$(BIN)/%/interpreter.o: interpreter/interpreter.cpp
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(FLATBUFFERS_INCLUDE_PATH) -I$(BIN)/$* -c $< -o $@
+	$(CXX-$*) $(CXXFLAGS-$*) $(UTIL_CXXFLAGS) -c $< -o $@
+
+$(BIN)/%/model.o: interpreter/model.cpp
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(UTIL_CXXFLAGS) -c $< -o $@
+
+$(BIN)/%/ops.o: interpreter/ops.cpp $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(UTIL_CXXFLAGS) $(OPS_CXXFLAGS) -c $< -o $@
+
+$(BIN)/%/interval.o: interpreter/interval.cpp $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(UTIL_CXXFLAGS) -c $< -o $@
+
+INTERPRETER_DEPS = \
+	$(BIN)/%/interpreter.o \
+	$(BIN)/%/interval.o \
+	$(BIN)/%/model.o \
+	$(BIN)/%/ops.o \
+	$(OPS_HALIDE)
+
+INTERPRETER_CXXFLAGS = -I$(MAKEFILE_DIR)/interpreter $(UTIL_CXXFLAGS)
+
+# ---------------------- tflite
 
 # TODO: switch to v2.4.0 once released
 TFLITE_TAG ?= v2.4.0-rc3
 
-$(BIN)/%/tflite_schema.fbs:
+$(BIN)/schema/tflite_schema.fbs:
 	@echo Fetching tflite_schema.fbs...
 	@mkdir -p $(@D)
 	@wget --quiet -O $@ https://github.com/tensorflow/tensorflow/raw/$(TFLITE_TAG)/tensorflow/lite/schema/schema.fbs
 
 # This is a very minimal .h file that allows only for reading a flatbuffer...
 # which is all tflite_parser needs.
-$(BIN)/%/tflite_schema_generated.h: $(BIN)/%/tflite_schema.fbs
+$(BIN)/schema/tflite_schema_generated.h: $(BIN)/schema/tflite_schema.fbs
 	@mkdir -p $(@D)
-	$(FLATC) --cpp --no-includes -o $(BIN)/$* $<
+	$(FLATC) --cpp --no-includes -o $(@D) $<
 
 # This include extra API needed only by utilities that do flatbuffer surgery (eg tflite_exploder)
-$(BIN)/%/tflite_schema_direct_generated.h: $(BIN)/%/tflite_schema.fbs
+$(BIN)/schema/tflite_schema_direct_generated.h: $(BIN)/schema/tflite_schema.fbs
 	@mkdir -p $(@D)
-	$(FLATC) --cpp --no-includes --gen-object-api --filename-suffix _direct_generated -o $(BIN)/$* $<
+	$(FLATC) --cpp --no-includes --gen-object-api --filename-suffix _direct_generated -o $(@D) $<
 
-INTERPRETER_DEPS = \
-	$(BIN)/%/interpreter.o \
-	$(BIN)/%/interval.o \
-	$(BIN)/%/model.o \
-	$(BIN)/%/tflite_parser.o \
-	$(BIN)/%/ops.o \
-	$(OPS_HALIDE)
+TFLITE_SCHEMA_CXXFLAGS = -I$(BIN)/schema
 
-$(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS)
+$(BIN)/%/tflite_parser.o: tflite/tflite_parser.cpp $(BIN)/schema/tflite_schema_generated.h
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(UTIL_CXXFLAGS) -I$(FLATBUFFERS_INCLUDE_PATH) $(TFLITE_SCHEMA_CXXFLAGS) -c $< -o $@
 
-MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
+$(BIN)/%/tflite_parser.o: tflite/tflite_parser.cpp $(BIN)/schema/tflite_schema_generated.h
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(UTIL_CXXFLAGS) $(INTERPRETER_CXXFLAGS) -I$(FLATBUFFERS_INCLUDE_PATH) $(TFLITE_SCHEMA_CXXFLAGS) -c $< -o $@
+
+TFLITE_PARSER_DEPS = \
+	$(BIN)/%/tflite_parser.o
+
+TFLITE_PARSER_CXXFLAGS = -I$(MAKEFILE_DIR)/tflite
+
+# ---------------------- test
 
 # unit tests for each op (not yet complete)
 $(BIN)/%/add_test: test/add_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(MAKEFILE_DIR) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 $(BIN)/%/average_pool_test: test/average_pool_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 $(BIN)/%/concatenation_test: test/concatenation_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 $(BIN)/%/conv2d_test: test/conv2d_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 $(BIN)/%/depthwise_conv2d_test: test/depthwise_conv2d_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 $(BIN)/%/fully_connected_test: test/fully_connected_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 $(BIN)/%/max_pool_test: test/max_pool_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 $(BIN)/%/pad_test: test/pad_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 $(BIN)/%/quantize_test: test/quantize_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 $(BIN)/%/reshape_test: test/reshape_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/.. -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 build_test_ops: \
 	$(BIN)/$(HL_TARGET)/add_test \
@@ -206,11 +228,16 @@ test_ops: build_test_ops
 	$(BIN)/$(HL_TARGET)/quantize_test
 	$(BIN)/$(HL_TARGET)/reshape_test
 
-# Utility to explode a tflite pipeline into individual ops for testing.
-$(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/%/tflite_schema_direct_generated.h
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
+# ---------------------- toplevel executables
 
+$(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(TFLITE_PARSER_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+
+# Utility to explode a tflite pipeline into individual ops for testing.
+$(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/schema/tflite_schema_direct_generated.h
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(UTIL_CXXFLAGS) $(TFLITE_SCHEMA_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
 
 # compare_vs_tflite requires the tflite includes and static library.
 #
@@ -229,7 +256,7 @@ TFLITE_STATIC_LIB ?= $(TFLITE_BASE)/tools/make/gen/native_x86_64/lib/libtensorfl
 
 TENSORFLOW_INCLUDES ?= $(TENSORFLOW_BASE)
 
-$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS)
+$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS)  $(TFLITE_PARSER_DEPS)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I$(BIN)/$* -I$(TENSORFLOW_INCLUDES) $(filter %.cpp %.o %.a,$^) $(TFLITE_STATIC_LIB) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(INTERPRETER_CXXFLAGS) $(TFLITE_PARSER_CXXFLAGS) -I$(TENSORFLOW_INCLUDES) $(filter %.cpp %.o %.a,$^) $(TFLITE_STATIC_LIB) -o $@ $(LDFLAGS-$*)
 
