@@ -157,7 +157,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::shift_left) ||
                op->is_intrinsic(Call::shift_right)) {
         Expr a = mutate(op->args[0], nullptr);
-        Expr b = mutate(op->args[1], nullptr);
+        ExprInfo b_info;
+        Expr b = mutate(op->args[1], &b_info);
 
         if (is_const_zero(b)) {
             return a;
@@ -170,23 +171,20 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
         const Type t = op->type;
 
+        // We might swap from a right to left shift or the reverse.
+        std::string result_op = op->name;
+
+        // If we know the sign of this shift, change it to an unsigned shift.
+        if (b_info.min_defined && b_info.min >= 0) {
+            b = mutate(cast(b.type().with_code(halide_type_uint), b), nullptr);
+        } else if (b_info.max_defined && b_info.max <= 0) {
+            result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
+            b = mutate(cast(b.type().with_code(halide_type_uint), -b), nullptr);
+        }
+
+        // If the shift is by a constant, it should now be unsigned.
         uint64_t ub = 0;
-        int64_t sb = 0;
-        bool b_is_const_uint = const_uint(b, &ub);
-        bool b_is_const_int = const_int(b, &sb);
-        if (b_is_const_uint || b_is_const_int) {
-            if (b_is_const_int) {
-                ub = std::abs(sb);
-            }
-
-            // Determine which direction to shift.
-            const bool b_is_pos = b_is_const_uint || (b_is_const_int && sb >= 0);
-            const bool b_is_neg = b_is_const_int && sb < 0;
-            const bool shift_left = ((op->is_intrinsic(Call::shift_left) && b_is_pos) ||
-                                     (op->is_intrinsic(Call::shift_right) && b_is_neg));
-            const bool shift_right = ((op->is_intrinsic(Call::shift_right) && b_is_pos) ||
-                                      (op->is_intrinsic(Call::shift_left) && b_is_neg));
-
+        if (const_uint(b, &ub)) {
             // LLVM shl and shr instructions produce poison for
             // shifts >= typesize, so we will follow suit in our simplifier.
             if (ub >= (uint64_t)(t.bits())) {
@@ -194,29 +192,28 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
             if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {
                 b = make_const(t, ((int64_t)1LL) << ub);
-                if (shift_left) {
+                if (result_op == Call::get_intrinsic_name(Call::shift_left)) {
                     return mutate(Mul::make(a, b), bounds);
-                } else if (shift_right) {
+                } else {
                     return mutate(Div::make(a, b), bounds);
                 }
             } else {
-                // For signed types, (1 << ub) will overflow into the sign bit while
-                // (-32768 >> ub) propagates the sign bit, making decomposition
+                // For signed types, (1 << (t.bits() - 1)) will overflow into the sign bit while
+                // (-32768 >> (t.bits() - 1)) propagates the sign bit, making decomposition
                 // into mul or div problematic, so just special-case them here.
-                if (shift_left) {
+                if (result_op == Call::get_intrinsic_name(Call::shift_left)) {
                     return mutate(select((a & 1) != 0, make_const(t, ((int64_t)1LL) << ub), make_zero(t)), bounds);
-                } else if (shift_right) {
+                } else {
                     return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                 }
             }
         }
 
         if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            internal_assert(result_op == op->name);
             return op;
-        } else if (op->is_intrinsic(Call::shift_left)) {
-            return a << b;
         } else {
-            return a >> b;
+            return Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic);
         }
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         Expr a = mutate(op->args[0], nullptr);
