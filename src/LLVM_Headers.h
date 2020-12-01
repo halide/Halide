@@ -116,6 +116,14 @@ inline std::string get_llvm_function_name(const llvm::Function &f) {
 #endif
 }
 
+inline llvm::StructType *get_llvm_struct_type_by_name(llvm::Module *module, const char *name) {
+#if LLVM_VERSION >= 120
+    return llvm::StructType::getTypeByName(module->getContext(), name);
+#else
+    return module->getTypeByName(name);
+#endif
+}
+
 }  // namespace Internal
 }  // namespace Halide
 
