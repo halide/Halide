@@ -111,6 +111,16 @@ public:
     Bounds(const Scope<Interval> *s, const FuncValueBounds &fb, bool const_bound)
         : func_bounds(fb), const_bound(const_bound) {
         scope.set_containing_scope(s);
+
+        // Find any points that are single_points but fail is_single_point due to
+        // pointer equality checks and replace with single_points.
+        for (auto item = s->cbegin(); item != s->cend(); ++item) {
+            const Interval &item_interval = item.value();
+            if (!item_interval.is_single_point() && item_interval.is_bounded() &&
+                can_prove(item_interval.min == item_interval.max)) {
+                scope.push(item.name(), Interval::single_point(item_interval.min));
+            }
+        }
     }
 
 private:
@@ -379,7 +389,7 @@ private:
         } else if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min + b.min);
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
             if (a.has_lower_bound() && b.has_lower_bound()) {
                 interval.min = a.min + b.min;
             }
@@ -419,7 +429,7 @@ private:
         } else if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min - b.min);
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
             if (a.has_lower_bound() && b.has_upper_bound()) {
                 interval.min = a.min - b.max;
             }
@@ -493,7 +503,7 @@ private:
                 Expr cmp = b.min >= make_zero(b.min.type().element_of());
                 interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
             } else {
-                interval = Interval::everything();
+                bounds_of_type(op->type);
             }
         } else if (a.is_bounded() && b.is_bounded()) {
             interval = Interval::nothing();
@@ -502,7 +512,7 @@ private:
             interval.include(a.max * b.min);
             interval.include(a.max * b.max);
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
         }
 
         // Assume no overflow for float, int32, and int64
@@ -557,7 +567,7 @@ private:
                     interval.max = max(-a.min, a.max);
                 }
             } else {
-                interval = Interval::everything();
+                bounds_of_type(op->type);
             }
         } else if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -581,7 +591,7 @@ private:
                 Expr cmp = b.min > make_zero(b.min.type().element_of());
                 interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
             } else {
-                interval = Interval::everything();
+                bounds_of_type(op->type);
             }
         } else if (a.is_bounded()) {
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
@@ -618,7 +628,7 @@ private:
                 interval.include(a.max / b.max);
             }
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
         }
     }
 
@@ -701,21 +711,24 @@ private:
         }
     }
 
+    // only used for LT and LE - GT and GE normalize to LT and LTE
     template<typename Cmp>
     void visit_compare(const Expr &a_expr, const Expr &b_expr) {
         a_expr.accept(this);
-        if (!interval.is_bounded()) {
+        if (!interval.has_upper_bound() && !interval.has_lower_bound()) {
             bounds_of_type(Bool());
             return;
         }
         Interval a = interval;
 
         b_expr.accept(this);
-        if (!interval.is_bounded()) {
+        if (!interval.has_upper_bound() && !interval.has_lower_bound()) {
             bounds_of_type(Bool());
             return;
         }
         Interval b = interval;
+
+        bounds_of_type(Bool());
 
         // The returned interval should have the property that min <=
         // val <= max. For integers it's clear what this means. For
@@ -724,8 +737,19 @@ private:
         // min implies val implies max.  So min should be a sufficient
         // condition, and max should be a necessary condition.
 
-        interval.min = Cmp::make(a.max, b.min);
-        interval.max = Cmp::make(a.min, b.max);
+        // a.max <(=) b.min implies a <(=) b, so a <(=) b is at least
+        // as true as a.max <(=) b.min. This does not depend on a's
+        // lower bound or b's upper bound.
+        if (a.has_upper_bound() && b.has_lower_bound()) {
+            interval.min = Cmp::make(a.max, b.min);
+        }
+
+        // a <(=) b implies a.min <(=) b.max, so a <(=) b is at most
+        // as true as a.min <(=) b.max. This does not depend on a's
+        // upper bound or b's lower bound.
+        if (a.has_lower_bound() && b.has_upper_bound()) {
+            interval.max = Cmp::make(a.min, b.max);
+        }
     }
 
     void visit(const LT *op) override {
@@ -768,6 +792,12 @@ private:
             // ranges overlap.
             if (a.is_bounded() && b.is_bounded()) {
                 interval.max = a.min <= b.max && b.min <= a.max;
+            } else if (a.has_upper_bound() && b.has_lower_bound()) {
+                // a.min <= b.max is implied if a.min = -inf or b.max = +inf.
+                interval.max = b.min <= a.max;
+            } else if (a.has_lower_bound() && b.has_upper_bound()) {
+                // b.min <= a.max is implied if a.max = +inf or b.min = -inf.
+                interval.max = a.min <= b.max;
             }
         }
     }
@@ -792,6 +822,16 @@ private:
             // a and b do not overlap, then they must be not equal.
             if (a.is_bounded() && b.is_bounded()) {
                 interval.min = a.min > b.max || b.min > a.max;
+            } else if (a.has_upper_bound() && b.has_lower_bound()) {
+                // a.min > b.max is false if a.min = -inf or b.max = +inf.
+                // a does not need a lower bound nor does b need
+                // an upper bound for this condition.
+                interval.min = b.min > a.max;
+            } else if (a.has_lower_bound() && b.has_upper_bound()) {
+                // b.min > a.max is false if a.max = +inf or b.min = -inf.
+                // a does not need an upper bound nor does b need
+                // a lower bound for this condition.
+                interval.min = a.min > b.max;
             }
         }
     }
@@ -1461,16 +1501,13 @@ private:
             // power. However it's extremely unlikely that a mul
             // reduce will ever make it into a bounds expression, so
             // for now we bail.
-            interval = Interval::everything();
+            bounds_of_type(op->value.type());
             break;
         case VectorReduce::Min:
         case VectorReduce::Max:
-            // The bounds of a single lane are sufficient
-            break;
         case VectorReduce::And:
         case VectorReduce::Or:
-            // Don't try for now
-            interval = Interval::everything();
+            // The bounds of a single lane are sufficient
             break;
         }
     }
@@ -3151,7 +3188,7 @@ void bounds_test() {
         check(scope, select(x == y * 2, y, y - 10),
               7, Interval::pos_inf());
         check(scope, select(x == y * 2, y - 10, y),
-              7, Interval::pos_inf());
+              select(x < 34, 17, 7), Interval::pos_inf());
     }
 
     vector<Expr> input_site_1 = {2 * x};

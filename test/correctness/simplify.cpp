@@ -7,8 +7,7 @@ using namespace Halide::Internal;
 
 void check_is_sio(const Expr &e) {
     Expr simpler = simplify(e);
-    const Call *call = simpler.as<Call>();
-    if (!(call && call->is_intrinsic(Call::signed_integer_overflow))) {
+    if (!Call::as_intrinsic(simpler, {Call::signed_integer_overflow})) {
         std::cerr
             << "\nSimplification failure:\n"
             << "Input: " << e << "\n"
@@ -1836,6 +1835,12 @@ void check_bitwise() {
     // Check constant-folding of bitwise ops (and indirectly, reinterpret)
     check(Let::make(x.as<Variable>()->name, 5, (((~x) & 3) | 16) ^ 33), ((~5 & 3) | 16) ^ 33);
     check(Let::make(x.as<Variable>()->name, 5, (((~cast<uint8_t>(x)) & 3) | 16) ^ 33), make_const(UInt(8), ((~5 & 3) | 16) ^ 33));
+
+    // Check bitwise ops of constant broadcasts.
+    Expr v = Broadcast::make(12, 4);
+    check(v >> 2, Broadcast::make(3, 4));
+    check(Broadcast::make(32768, 4) >> 1, Broadcast::make(16384, 4));
+    check((Broadcast::make(1, 4) << 15) >> 1, Broadcast::make(16384, 4));
 
     check_clz<int8_t>(10, 4);
     check_clz<int16_t>(10, 12);
