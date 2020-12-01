@@ -11,7 +11,6 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Simplify.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -425,14 +424,9 @@ Expr lossless_cast(Type t, Expr e) {
     }
 
     if (const Cast *c = e.as<Cast>()) {
-        Expr v = lossless_cast(t, c->value);
-        if (v.defined()) {
+        if (t.can_represent(c->value.type())) {
             // We can recurse into widening casts.
-            if (c->type.can_represent(c->value.type())) {
-                return v;
-            } else {
-                return cast(t, cast(c->type, v));
-            }
+            return lossless_cast(t, c->value);
         } else {
             return Expr();
         }
@@ -521,7 +515,6 @@ Expr lossless_cast(Type t, Expr e) {
                     Type narrower = reduce->value.type().with_bits(t.bits() / 2);
                     Expr val = lossless_cast(narrower, reduce->value);
                     if (val.defined()) {
-                        val = cast(narrower.with_bits(t.bits()), val);
                         return VectorReduce::make(reduce->op, val, reduce->type.lanes());
                     }
                 }
@@ -549,32 +542,6 @@ Expr lossless_cast(Type t, Expr e) {
             }
         }
         return Shuffle::make(vecs, shuf->indices);
-    }
-
-    if (const Mod *mod = e.as<Mod>()) {
-        if (lossless_cast(t, mod->b).defined()) {
-            return cast(t, e);
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const Ramp *ramp = e.as<Ramp>()) {
-        if (t.bits() > 32) {
-            return Expr();
-        }
-        Type ty = t.with_lanes(ramp->type.lanes() / t.lanes());
-        Type wide_ty = ty.with_bits(64);
-        Expr first = ramp->base;
-        // Cast to wide_ty to prevent overflows.
-        Expr last = simplify(cast(wide_ty, first) +
-                             cast(wide_ty, ramp->lanes - 1) * cast(wide_ty, ramp->stride));
-        if (lossless_cast(ty, first).defined() &&
-            lossless_cast(ty, last).defined()) {
-            return cast(t, e);
-        } else {
-            return Expr();
-        }
     }
 
     return Expr();
