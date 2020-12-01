@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 16,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "gcc-debug",
+      "displayName": "GCC (Debug)",
+      "description": "Debug build using Ninja generator and GCC-compatible compiler",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "gcc-release",
+      "displayName": "GCC (Release)",
+      "description": "Release build using Ninja generator and GCC-compatible compiler",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O2 -DNDEBUG"
+      }
+    },
+    {
+      "name": "msvc-debug",
+      "displayName": "MSVC (Debug)",
+      "description": "Debug build using Ninja generator and MSVC with vcpkg dependencies.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "msvc-release",
+      "displayName": "MSVC (Release)",
+      "description": "Debug build using Ninja generator and MSVC with vcpkg dependencies.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "win32",
+      "displayName": "Win32 (Visual Studio)",
+      "description": "Visual Studio-based Win32 build with vcpkg dependencies.",
+      "generator": "Visual Studio 16 2019",
+      "architecture": "Win32",
+      "toolset": "x64",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "win64",
+      "displayName": "Win64 (Visual Studio)",
+      "description": "Visual Studio-based Win64 build with vcpkg dependencies.",
+      "generator": "Visual Studio 16 2019",
+      "architecture": "Win32",
+      "toolset": "x64",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    }
+  ]
+}
