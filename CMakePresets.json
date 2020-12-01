@@ -55,7 +55,7 @@
       "description": "Visual Studio-based Win32 build with vcpkg dependencies.",
       "generator": "Visual Studio 16 2019",
       "architecture": "Win32",
-      "toolset": "x64",
+      "toolset": "host=x64",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
@@ -66,8 +66,8 @@
       "displayName": "Win64 (Visual Studio)",
       "description": "Visual Studio-based Win64 build with vcpkg dependencies.",
       "generator": "Visual Studio 16 2019",
-      "architecture": "Win32",
-      "toolset": "x64",
+      "architecture": "x64",
+      "toolset": "host=x64",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
