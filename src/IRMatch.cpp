@@ -259,9 +259,7 @@ public:
 
     void visit(const Shuffle *op) override {
         const Shuffle *e = expr.as<Shuffle>();
-        if (result && e && types_match(op->type, e->type)
-            && op->vectors.size() == e->vectors.size()
-            && op->indices == e->indices) {
+        if (result && e && types_match(op->type, e->type) && op->vectors.size() == e->vectors.size() && op->indices == e->indices) {
             for (size_t ix = 0; ix < op->vectors.size(); ix++) {
                 expr = e->vectors[ix];
                 op->vectors[ix].accept(this);
