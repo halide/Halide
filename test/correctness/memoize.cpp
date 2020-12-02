@@ -63,7 +63,7 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, halide_b
 extern "C" DLLEXPORT int computed_eviction_key(int a) {
     return 2020 + a;
 }
-HalideExtern_1(int, computed_eviction_key, int)
+HalideExtern_1(int, computed_eviction_key, int);
 
 void simple_free(void *user_context, void *ptr) {
     free(ptr);
