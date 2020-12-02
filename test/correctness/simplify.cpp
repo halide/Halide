@@ -112,14 +112,14 @@ void check_casts() {
     // Specific checks for 32 bit unsigned expressions - ensure simplifications are actually unsigned.
     // 4000000000 (4 billion) is less than 2^32 but more than 2^31.  As an int, it is negative.
     check(cast(UInt(32), (int)4000000000UL) + cast(UInt(32), 5), make_const(UInt(32), (int)4000000005UL));
-    check(cast(UInt(32), (int)4000000000UL) - cast(UInt(32), 5), make_const(UInt(32), (int)3999999995UL));
+    check(make_const(UInt(32, 4), (int)4000000000UL) - make_const(UInt(32, 4), 5), make_const(UInt(32, 4), (int)3999999995UL));
     check(cast(UInt(32), (int)4000000000UL) / cast(UInt(32), 5), make_const(UInt(32), 800000000));
     check(cast(UInt(32), 800000000) * cast(UInt(32), 5), make_const(UInt(32), (int)4000000000UL));
-    check(cast(UInt(32), (int)4000000023UL) % cast(UInt(32), 100), make_const(UInt(32), 23));
+    check(make_const(UInt(32, 2), (int)4000000023UL) % make_const(UInt(32, 2), 100), make_const(UInt(32, 2), 23));
     check(min(cast(UInt(32), (int)4000000023UL), cast(UInt(32), 1000)), make_const(UInt(32), (int)1000));
     check(max(cast(UInt(32), (int)4000000023UL), cast(UInt(32), 1000)), make_const(UInt(32), (int)4000000023UL));
     check(cast(UInt(32), (int)4000000023UL) < cast(UInt(32), 1000), const_false());
-    check(cast(UInt(32), (int)4000000023UL) == cast(UInt(32), 1000), const_false());
+    check(make_const(UInt(32, 3), (int)4000000023UL) == make_const(UInt(32, 3), 1000), const_false(3));
 
     check(cast(Float(64), 0.5f), Expr(0.5));
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
@@ -155,6 +155,12 @@ void check_casts() {
     }
     check(Shuffle::make({cast(UInt(64, 8), some_vector)}, indices),
           Shuffle::make({cast(UInt(64, 8), some_vector)}, indices));
+
+    // Interleaving simplifications can result in slices.
+    Expr var_vector = Variable::make(Int(32, 12), "v");
+    Expr even = Shuffle::make_slice(var_vector, 0, 2, 4);
+    Expr odd = Shuffle::make_slice(var_vector, 1, 2, 4);
+    check(Shuffle::make_interleave({even, odd}), Shuffle::make_slice(var_vector, 0, 1, 8));
 }
 
 void check_algebra() {
@@ -1798,18 +1804,30 @@ template<typename T>
 void check_clz(uint64_t value, uint64_t result) {
     Expr x = Variable::make(halide_type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_leading_zeros(x)), cast<T>(Expr(result)));
+
+    Type vt = halide_type_of<T>().with_lanes(4);
+    Expr xv = Variable::make(vt, "x");
+    check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_leading_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_ctz(uint64_t value, uint64_t result) {
     Expr x = Variable::make(halide_type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_trailing_zeros(x)), cast<T>(Expr(result)));
+
+    Type vt = halide_type_of<T>().with_lanes(4);
+    Expr xv = Variable::make(vt, "x");
+    check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_trailing_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_popcount(uint64_t value, uint64_t result) {
     Expr x = Variable::make(halide_type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), popcount(x)), cast<T>(Expr(result)));
+
+    Type vt = halide_type_of<T>().with_lanes(4);
+    Expr xv = Variable::make(vt, "x");
+    check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), popcount(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 void check_bitwise() {
@@ -1841,6 +1859,7 @@ void check_bitwise() {
     check(v >> 2, Broadcast::make(3, 4));
     check(Broadcast::make(32768, 4) >> 1, Broadcast::make(16384, 4));
     check((Broadcast::make(1, 4) << 15) >> 1, Broadcast::make(16384, 4));
+    check(Ramp::make(0, 1, 4) << Broadcast::make(4, 4), Ramp::make(0, 16, 4));
 
     check_clz<int8_t>(10, 4);
     check_clz<int16_t>(10, 12);

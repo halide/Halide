@@ -59,7 +59,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         }
 
         // Wider versions of the type
-        Type w = t.with_bits(t.bits() * 2);
+        Type w = t.widen();
         Type ws = Int(t.bits() * 2, t.lanes());
 
         // Vector wildcard for this type
@@ -403,7 +403,7 @@ void CodeGen_ARM::visit(const Mul *op) {
                 value = call_pattern(pattern, t, matches);
                 return;
             } else if (pattern.type == Pattern::NarrowArgs) {
-                Type narrow_t = t.with_bits(t.bits() / 2);
+                Type narrow_t = t.narrow();
                 // Try to narrow all of the args.
                 bool all_narrow = true;
                 for (size_t i = 0; i < matches.size(); i++) {
@@ -992,7 +992,7 @@ void CodeGen_ARM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         Type ty = op->type;
-        Type wide_ty = ty.with_bits(ty.bits() * 2);
+        Type wide_ty = ty.widen();
         // This will codegen to vhaddu (arm32) or uhadd (arm64).
         value = codegen(cast(ty, (cast(wide_ty, op->args[0]) + cast(wide_ty, op->args[1])) / 2));
         return;
@@ -1079,7 +1079,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         if (op->op == VectorReduce::Add &&
             op->type.bits() >= 16 &&
             !op->type.is_float()) {
-            Type narrower_type = arg.type().with_bits(arg.type().bits() / 2);
+            Type narrower_type = arg.type().narrow();
             Expr narrower = lossless_cast(narrower_type, arg);
             if (!narrower.defined() && arg.type().is_int()) {
                 // We can also safely accumulate from a uint into a
