@@ -234,6 +234,7 @@ using uint1x16_t = vboolN_2;
 using uint1x32_t = vboolN;
 using uint1x64_t = vbool2N;
 using float16 = xb_vecN_2xf32;
+using int8x4_t = int32_t;
 
 // TODO(vksnk): classes below can be templatized (b/173158037).
 class int32x32_t {
@@ -591,6 +592,24 @@ public:
 
 };
 
+class int8x128_t {
+  typedef int8_t ElementType;
+  typedef xb_vec2Nx8 CppVectorType;
+  static const int Lanes = 128;
+public:
+
+    CppVectorType native_vector[2];
+
+    enum Empty { empty };
+    inline int8x128_t(Empty) {}
+
+    enum FromCppVector { from_native_vector };
+    inline int8x128_t(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
+        native_vector[0] = src1;
+        native_vector[1] = src2;
+    }
+};
+
 class uint8x128_t {
   typedef uint8_t ElementType;
   typedef xb_vec2Nx8U CppVectorType;
@@ -663,8 +682,20 @@ public:
     }
 };
 
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x4_t int8x4_t_load(const void *base, int32_t offset) {
+    return *((const int8x4_t*)((int8_t*)base + offset));
+}
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x4_t int8x4_t_aligned_load(const void *base, int32_t offset) {
+    return *((const int8x4_t*)((int8_t*)base + offset));
+}
+
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x64_t int8x64_t_aligned_load(const void *base, int32_t offset) {
-    return *((const int8x64_t *)((int8_t*)base + offset));
+    return *((const int8x64_t *)((const int8_t*)base + offset));
+}
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x128_t int8x128_t_aligned_load(const void *base, int32_t offset) {
+    return *((const int8x128_t *)((uint8_t*)base + offset));
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x128_t uint8x128_t_aligned_load(const void *base, int32_t offset) {
@@ -672,7 +703,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x128_t uint8x128_t_aligned_load(co
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_aligned_load(const void *base, int32_t offset) {
-    return *((const uint8x64_t *)((uint8_t*)base + offset));
+    return *((const uint8x64_t *)((const uint8_t*)base + offset));
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_strided_load(const void *base, int32_t offset, int32_t stride) {
@@ -711,6 +742,13 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t int16x32_t_aligned_load(cons
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x64_t uint16x64_t_aligned_load(const void *base, int32_t offset) {
     return *((const uint16x64_t *)((uint16_t*)base + offset));
+}
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x64_t int8x64_t_load(const void *base, int32_t offset) {
+    int8x64_t r;
+    xb_vec2Nx8U* ptr = (xb_vec2Nx8*)((const int8_t*)base + offset);
+    IVP_L2U2NX8_XP(r, ptr, 0);
+    return r;
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t uint8x64_t_load(const void *base, int32_t offset) {
@@ -950,7 +988,11 @@ HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_deinterleave_even_u16(const uint1
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_deinterleave_odd_u16(const uint16x64_t& a) {
   return  IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_1);
 }
-
+/*
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_extract_i32(const int8x64_t& a, int index) {
+  return IVP_EXTRN_2X32(IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(a)), index);
+}
+*/
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_1_i16(const int16x64_t& a) {
   return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_1);
 }
@@ -1150,6 +1192,43 @@ HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_add_i48(const int48x32_t
   return r;
 }
 
+HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_mul_add_i24(const int24x64_t& a, const int8x64_t& b, const int8x64_t& c) {
+  int24x64_t r = a;
+  IVP_MULA2NX8(r, b, c);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_quad_mul_add_i24(
+                                            const int24x64_t& acc, 
+                                            const int8x64_t& a0,
+                                            const int8_t& s0,
+                                            const int8x64_t& a1,
+                                            const int8_t& s1,
+                                            const int8x64_t& a2,
+                                            const int8_t& s2,
+                                            const int8x64_t& a3,
+                                            const int8_t& s3
+                                            ) {
+  int24x64_t r = acc;
+  const int8_t scalar_coef[] = {s3, s2, s1, s0};
+  xb_int32pr * __restrict coef = (xb_int32pr*)scalar_coef;
+  IVP_MULQA2N8XR8(r, a0, a1, a2, a3, coef[0]);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_quad_mul_add_i24(
+                                            const int24x64_t& acc, 
+                                            const int8x64_t& a0,
+                                            const int8x64_t& a1,
+                                            const int8x64_t& a2,
+                                            const int8x64_t& a3,
+                                            const int8x4_t& s
+                                            ) {
+  int24x64_t r = acc;
+  IVP_MULQA2N8XR8(r, a3, a2, a1, a0, s);
+  return r;
+}
+
 HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_i48(const int16x32_t& a, const int16x32_t& b,
                                                                   const int16x32_t& c, const int16x32_t& d) {
   return IVP_MULPNX16(a, b, c, d);
@@ -1228,6 +1307,14 @@ HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_sat_narrow_i24x_with_shift_i8(const
 
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_sat_narrow_i24x_with_shift_u8(const int24x64_t& a, int shift) {
   return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKVRNR2NX24(a, shift));
+}
+
+HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_narrow_i24_with_shift_i16(const int24x64_t& a, int shift) {
+    int16x32_t even = IVP_PACKVRNR2NX24_0(a, shift);
+    int16x32_t odd = IVP_PACKVRNR2NX24_1(a, shift);
+    int16x64_t r(int16x64_t::empty);
+    IVP_DSELNX16I(r.native_vector[1], r.native_vector[0], odd, even, IVP_DSELI_INTERLEAVE_1);
+    return r;
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_i48_with_shift_i16(const int48x32_t& a, int shift) {
@@ -1728,6 +1815,15 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         return rhs.str();
     }
 
+    if (op->name == "halide_xtensa_extract_i32") {
+        if (op->args[0].type().lanes() == 128) {
+            rhs << "IVP_EXTRN_2X32(IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(" << args[0] + ".native_vector[0])), " + args[1] + ")";
+        } else {
+            rhs << "IVP_EXTRN_2X32(IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(" << args[0] + ")), " + args[1] + ")";
+        }
+        return rhs.str();
+    }
+
     if (op->name == "halide_xtensa_copy_1d") {
         args[0] = print_name(op->args[0].as<StringImm>()->value);
         args[1] = print_expr(op->args[1]);
@@ -1906,20 +2002,26 @@ void CodeGen_Xtensa::visit(const Ramp *op) {
 
 void CodeGen_Xtensa::visit(const Broadcast *op) {
     Type vector_type = op->type.with_lanes(op->lanes);
-    string id_value = print_expr(op->value);
     string rhs;
-    if (is_native_vector_type(op->type)) {
-        // TODO(vsknk): why it this extra cast to scalar is needed?
-        rhs = print_type(vector_type) + "((" + print_type(op->type.with_lanes(1)) + ")" + id_value + ")";
-    } else if (op->lanes > 1) {
-        if (op->type.is_bool() && op->type.lanes() == 32) {
-            // TODO(vksnk): figure out how to broadcast bool.
-            rhs = id_value + "? (int16x32_t(1) == int16x32_t(1)) : (int16x32_t(1) == int16x32_t(0))";
-        } else {
-            rhs = print_type(vector_type) + "::broadcast(" + id_value + ")";
-        }
+    if (op->type.is_int() && (op->type.bits() == 24) && is_const(op->value)) {
+        // Xtensa compiler seems to be very peculiar about assignments/casts to 24 bit.
+        rhs = std::to_string(op->value.as<IntImm>()->value);
     } else {
-        rhs = id_value;
+        string id_value = print_expr(op->value);
+
+        if (is_native_vector_type(op->type)) {
+            // TODO(vsknk): why it this extra cast to scalar is needed?
+            rhs = print_type(vector_type) + "((" + print_type(op->type.with_lanes(1)) + ")" + id_value + ")";
+        } else if (op->lanes > 1) {
+            if (op->type.is_bool() && op->type.lanes() == 32) {
+                // TODO(vksnk): figure out how to broadcast bool.
+                rhs = id_value + "? (int16x32_t(1) == int16x32_t(1)) : (int16x32_t(1) == int16x32_t(0))";
+            } else {
+                rhs = print_type(vector_type) + "::broadcast(" + id_value + ")";
+            }
+        } else {
+            rhs = id_value;
+        }
     }
 
     print_assignment(vector_type, rhs);
@@ -1987,7 +2089,7 @@ void CodeGen_Xtensa::visit(const Load *op) {
         internal_assert(t.is_vector());
         std::string op_name;
         // TODO(vksnk): generalize this!
-        int native_lanes = 64 / op->type.element_of().bytes();
+        int native_lanes = (op->type.element_of().bytes() == 3)? 64 : (64 / op->type.element_of().bytes());
         if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
             op_name = "_aligned_load(";
         } else {
@@ -2056,7 +2158,7 @@ void CodeGen_Xtensa::visit(const Store *op) {
         internal_assert(op->value.type().is_vector());
         string op_name;
         // TODO(vksnk): generalize this!
-        int native_lanes = 64 / op->value.type().element_of().bytes();
+        int native_lanes = (op->value.type().element_of().bytes() == 3)? 64 : (64 / op->value.type().element_of().bytes());
         if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
             op_name = "aligned_store(";
         } else {
@@ -2503,14 +2605,15 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
         } else {
             string storage_name = unique_name('_');
             stream << get_indent() << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
+            src = storage_name;
         }
     }
     ostringstream rhs;
     if (op->type.is_scalar()) {
         rhs << src << "[" << op->indices[0] << "]";
-    } else if (op->is_concat()) {
-        // Do nothing if it's just concat.
-        return;
+    // } else if (op->is_concat()) {
+    //     // Do nothing if it's just concat.
+    //     return;
     } else {
         string indices_name = unique_name('_');
         stream << get_indent() << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";

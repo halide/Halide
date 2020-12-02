@@ -238,6 +238,20 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         }
     }
 
+    // Try to collapse a slice of slice.
+    if (op->is_slice() && (new_vectors.size() == 1)) {
+        if (const Shuffle* inner_shuffle = new_vectors[0].as<Shuffle>()) {
+            if (inner_shuffle->is_slice() && (inner_shuffle->vectors.size() == 1)) {
+                // Indices of the slice are ramp, so nested slice is a1 * (a2 * x + b2) + b1 =
+                // = a1 * a2 * x + a1 * b2 + b1.
+                return Shuffle::make_slice(inner_shuffle->vectors[0],
+                                            op->slice_begin()  * inner_shuffle->slice_stride() + inner_shuffle->slice_begin(),
+                                            op->slice_stride() * inner_shuffle->slice_stride(),
+                                            op->indices.size());
+            }
+        }
+    }
+
     if (!changed) {
         return op;
     } else {

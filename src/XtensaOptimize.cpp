@@ -62,6 +62,7 @@ struct Pattern {
         EndPassOnlyOp = 4,    // PassOps[0|1|2|3].
 
         SameOp01 = 1 << 27,
+        SameOp12 = 1 << 28,
     };
 
     std::string intrin;  // Name of the intrinsic
@@ -80,6 +81,7 @@ Expr wild_u32 = Variable::make(UInt(32), "*");
 Expr wild_u64 = Variable::make(UInt(64), "*");
 Expr wild_i8 = Variable::make(Int(8), "*");
 Expr wild_i16 = Variable::make(Int(16), "*");
+Expr wild_i24 = Variable::make(Int(24), "*");
 Expr wild_i32 = Variable::make(Int(32), "*");
 Expr wild_i64 = Variable::make(Int(64), "*");
 
@@ -89,23 +91,65 @@ Expr wild_u16x = Variable::make(Type(Type::UInt, 16, 0), "*");
 Expr wild_u32x = Variable::make(Type(Type::UInt, 32, 0), "*");
 Expr wild_u64x = Variable::make(Type(Type::UInt, 64, 0), "*");
 Expr wild_i8x = Variable::make(Type(Type::Int, 8, 0), "*");
+Expr wild_i8x4 = Variable::make(Type(Type::Int, 8, 4), "*");
+Expr wild_i8x64 = Variable::make(Type(Type::Int, 8, 64), "*");
+Expr wild_i8x256 = Variable::make(Type(Type::Int, 8, 256), "*");
 Expr wild_i16x = Variable::make(Type(Type::Int, 16, 0), "*");
 Expr wild_i24x = Variable::make(Type(Type::Int, 24, 0), "*");
+Expr wild_i24x64 = Variable::make(Type(Type::Int, 24, 64), "*");
+Expr wild_i24x128 = Variable::make(Type(Type::Int, 24, 128), "*");
+Expr wild_i24x256 = Variable::make(Type(Type::Int, 24, 256), "*");
 Expr wild_i32x = Variable::make(Type(Type::Int, 32, 0), "*");
 Expr wild_i48x = Variable::make(Type(Type::Int, 48, 0), "*");
 Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 
+inline Expr i24(Expr e) {
+    Type t = Int(24, e.type().lanes());
+    return cast(t, std::move(e));
+}
+
+inline Expr i48(Expr e) {
+    Type t = Int(48, e.type().lanes());
+    return cast(t, std::move(e));
+}
+
 // Broadcast to an unknown number of lanes, for making patterns.
-Expr bc(Expr x) {
-    return Broadcast::make(std::move(x), 0);
+Expr bc(Expr x, int lanes = 0) {
+    return Broadcast::make(std::move(x), lanes);
+}
+
+Expr ramp(Expr base, Expr stride, int lanes = 0) {
+    return Ramp::make(std::move(base), std::move(stride), lanes);
 }
 
 Expr vector_reduce(VectorReduce::Operator op, Expr x) {
-    return VectorReduce::make(op, x, 0);
+    return VectorReduce::make(op, std::move(x), 0);
 }
 
 Expr call(const string &name, Expr return_type, vector<Expr> args) {
     return Call::make(return_type.type(), name, move(args), Call::PureExtern);
+}
+
+Expr concat(vector<Expr> x) {
+    return Shuffle::make_concat(std::move(x));
+}
+
+Expr repeat_each_element(Expr x, int times) {
+    vector<int> indices;
+    for (int ix = 0; ix < x.type().lanes(); ix++) {
+        for (int iy = 0; iy < times; iy++) {
+            indices.push_back(ix);
+        }
+    }
+    return Shuffle::make({std::move(x)}, indices);
+}
+
+Expr slice(Expr x, int begin, int stride, int size) {
+    return Shuffle::make_slice(std::move(x), begin, stride, size);
+}
+
+Expr load(const Type& type, const string& name, Expr index, ModulusRemainder alignment) {
+    return Load::make(type, name, index,  Buffer<>(), Parameter(), const_true(), alignment);
 }
 
 // Check if the matches satisfy the given pattern flags, and mutate the matches
@@ -163,6 +207,14 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
             return false;
         }
         matches = {matches[0]};
+    }
+
+    if (flags & Pattern::SameOp12) {
+        internal_assert(matches.size() == 3);
+        if (!graph_equal(matches[1], matches[2])) {
+            return false;
+        }
+        matches = {matches[0], matches[1]};
     }
 
     return true;
@@ -364,6 +416,10 @@ private:
                 //                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})),
                 //                    Pattern::AccumulatorOutput24},
 
+                {"halide_xtensa_qqqq", slice(wild_i24x256, 0, 1, 128) + slice(wild_i24x256, 128, 1, 128), Pattern::SameOp01},
+                {"halide_xtensa_yyyy", (call("halide_xtensa_xxxx", wild_i24x64, {wild_i24x64, wild_i24x128}) + slice(wild_i24x128, 64, 1, 64)), Pattern::SameOp12},
+                {"halide_xtensa_xxxx", (wild_i24x64 + slice(wild_i24x128, 0, 1, 64))},
+                
                 {"halide_xtensa_widen_pair_mul_i48", wild_i32x * wild_i32x + wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_pair_mul_u48", wild_u32x * wild_u32x + wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
 
@@ -372,6 +428,14 @@ private:
                 {"halide_xtensa_widen_mul_add_i48", i32(wild_i48x) + i32(halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput48},
 
                 {"halide_xtensa_widen_mul_add_vu8_si16_i24", i16(wild_i24x) + i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})), Pattern::AccumulatorOutput24},
+
+
+                {"halide_xtensa_widen_mul_add_i24", 
+                            wild_i24x + call("halide_xtensa_widen_mul_i24", wild_i24x, {wild_i8x, wild_i8x})},
+
+                {"halide_xtensa_widen_quad_mul_add_i24", 
+                            wild_i24x 
+                                + call("halide_xtensa_widen_quad_mul_i24", wild_i24x, {wild_i8x, wild_i8x, wild_i8x, wild_i8x, wild_i8x})},
 
                 // Add to accumulator type.
                 // Paired add.
@@ -432,12 +496,21 @@ private:
             static const std::vector<Pattern> muls = {
                 {"halide_xtensa_widen_mul_vu8_si16_i24", wild_i16x * bc(wild_i16x), Pattern::NarrowUnsignedOp0 | Pattern::AccumulatorOutput24},
 
+                {"halide_xtensa_widen_zzzzz", i24(concat({wild_i8x64, wild_i8x64, wild_i8x64, wild_i8x64})) * i24(repeat_each_element(wild_i8x4, 64))},
+
                 // Widening multiplication
                 // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
                 // {"halide_xtensa_widen_sqr_i48", wild_i32x * wild_i32x, Pattern::SameOp01 | Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_i48", wild_i32x * bc(wild_i32), Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_u48", wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_i48", wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
+
+                {"halide_xtensa_widen_mul_i24", wild_i16x * bc(wild_i16), Pattern::NarrowOps | Pattern::AccumulatorOutput24},
+                {"halide_xtensa_widen_mul_u24", wild_u16x * wild_u16x, Pattern::NarrowOps | Pattern::AccumulatorOutput24},
+                {"halide_xtensa_widen_mul_i24", wild_i16x * wild_i16x, Pattern::NarrowOps | Pattern::AccumulatorOutput24},
+
+                {"halide_xtensa_widen_mul_i24", i24(wild_i8x) * bc(i24(wild_i8))},
+                {"halide_xtensa_widen_mul_i24", i24(wild_i8x) * i24(wild_i8x), Pattern::NarrowOps | Pattern::AccumulatorOutput24},
 
                 {"halide_xtensa_widen_mul_i64", wild_i64x * wild_i64x, Pattern::NarrowOps | Pattern::AccumulatorOutput64},
             };
@@ -539,6 +612,9 @@ private:
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
 
+            {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x >> wild_i24)},
+            {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x / wild_i24), Pattern::ExactLog2Op1},
+
             {"halide_xtensa_narrow_high_i32", i32(wild_i64x >> 32)},
             {"halide_xtensa_narrow_high_i32", i32(wild_i64x / IntImm::make(Int(64), 4294967296ll))},
 
@@ -621,6 +697,11 @@ private:
                                   {mutate(op->vectors[0]), op->slice_begin()},
                                   Call::PureExtern);
             }
+        } else if (op->is_slice() && (op->slice_stride() == 1) 
+                    && (op->slice_begin() % 4 == 0) && op->type.is_int() 
+                    && (op->type.bits() == 8) && (op->type.lanes() == 4)) {
+            return Call::make(op->type, "halide_xtensa_extract_i32",
+                            {mutate(op->vectors[0]), op->slice_begin() / 4}, Call::PureExtern);
         } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_float() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
             return Call::make(op->type, "halide_xtensa_slice_f32",
                               {mutate(op->vectors[0]), op->slice_begin()},
@@ -749,6 +830,28 @@ private:
         }
 
         static const std::vector<Pattern> calls = {
+            {"halide_xtensa_widen_quad_mul_add_i24", 
+                        call("halide_xtensa_yyyy", wild_i24x, {
+                            wild_i24x,  call("halide_xtensa_qqqq", wild_i24x, {
+                                    call("halide_xtensa_widen_zzzzz", wild_i24x, {
+                                        wild_i8x, wild_i8x, wild_i8x, wild_i8x, wild_i8x
+                                    })
+                                })
+                            })
+            },
+
+
+            {"halide_xtensa_widen_quad_mul_add_i24", 
+                        call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {
+                            call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8, wild_i8x, wild_i8}),
+                            wild_i8x, wild_i8, wild_i8x, wild_i8})
+            },
+            {"halide_xtensa_widen_pair_mul_add_i24", 
+                        call("halide_xtensa_widen_mul_add_i24", wild_i24x, {
+                            call("halide_xtensa_widen_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8}),
+                            wild_i8x, wild_i8})
+            },
+
             // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
@@ -814,6 +917,42 @@ private:
             }
         }
 
+        if ((op->op == VectorReduce::Add) && (op->type.bits() == 24)
+                && (op->type.lanes() == 64) && (op->value.type().lanes() == 256)) {
+            // Expr p = i24(wild_i8x) * bc(i24(wild_i8x));
+            Expr p = wild_i24x * wild_i24x;
+            vector<Expr> matches;
+            if (expr_match(p, op->value, matches)) {
+                //debug(0) << "VECTOR REDUCE\n" << matches.size() << " " << matches[0] << " " << matches[1] << "\n";
+                debug(0) << "VECTOR REDUCE\n" << simplify(Shuffle::make_slice(matches[1], 0, 4, 64)) << "\n";
+                // Check that predicate is const true.
+                // if (const Load *full_load = matches[0].as<Load>()) {
+                //     vector<Expr> ramp_matches;
+                //     Expr ramp_of_ramps = ramp(ramp(wild_i32, wild_i32, 4), bc(1, 4), 64);
+                //     if (expr_match(ramp_of_ramps, full_load->index, ramp_matches)) {
+                //         debug(0) << "Matched ramp\n" << ramp_matches[0] << "\n";
+                //     }
+                //     Expr base = mutate(ramp_matches[0]);
+                //     Expr stride = mutate(ramp_matches[1]);
+
+                //     vector<Expr> args;
+                //     for (int ix = 0; ix < 4; ix++) {
+                //         args.push_back(
+                //             Load::make(
+                //                 Int(8, 64), full_load->name,
+                //                 Ramp::make(base + ix * stride, 1, 64), full_load->image,
+                //                 full_load->param, const_true(64), full_load->alignment));
+                //     }
+                //     // const Load* other_load = matches[1].as<Shuffle>()->vectors[0].as<Load>();
+                //     // Expr other_base = mutate(other_load->index.as<Ramp>()->base);
+                //     // args.push_back(Load::make(Int(8, 4), other_load->name, Ramp::make(other_base, 1, 4), 
+                //     //                             other_load->image, other_load->param, 
+                //     //                             const_true(4), other_load->alignment));
+                //     args.push_back(mutate(matches[1]));
+                //     return Call::make(op->type, "halide_xtensa_widen_quad_mul_i24", args, Call::PureExtern);
+                // }
+            }
+        }
         return IRGraphMutator::visit(op);
     }
 
@@ -1182,7 +1321,7 @@ private:
     Expr visit(const Call *op) override {
         int native_lanes = get_native_vector_lanes_num(op->type);
         if (native_lanes > 0) {
-            if (!(op->name == "halide_xtensa_interleave_i16")) {
+            if (!(op->name == "halide_xtensa_interleave_i16") && !(op->name == "halide_xtensa_narrow_i24_with_shift_i16")) {
                 const int total_lanes = op->type.lanes();
                 int split_to = op->type.lanes() / native_lanes;
                 vector<Expr> args;
@@ -1274,6 +1413,7 @@ Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
     s = align_loads(s, 64);
     debug(0) << s << "\n";
+
     // NOTE(vksnk): CSE seemed to break loop carry
     // s = common_subexpression_elimination(s);
 
@@ -1283,6 +1423,7 @@ Stmt match_xtensa_patterns(Stmt s) {
     // need to figure out where it goes wrong.
     s = loop_carry(s, 16);
     s = simplify(s);
+    // debug(0) << s << "\n";
     for (int ix = 0; ix < 10; ix++) {
         s = MatchXtensaPatterns().mutate(s);
     }
