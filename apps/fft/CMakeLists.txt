@@ -45,6 +45,6 @@ set_tests_properties(fft_aot_test PROPERTIES
                      SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 
 foreach (i IN ITEMS 8 12 16 24 32 48)
-    add_test(NAME bench${i}x${i} COMMAND bench_fft ${i} ${i})
+    add_test(NAME bench${i}x${i} COMMAND bench_fft ${i} ${i} "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(bench${i}x${i} PROPERTIES LABELS fft)
 endforeach ()
