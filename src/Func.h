@@ -2216,8 +2216,15 @@ public:
     /** Use the halide_memoization_cache_... interface to store a
      *  computed version of this function across invocations of the
      *  Func.
+     *
+     * If an eviction_key is provided, it must be an integer or handle
+     * type. It will be promoted to a uint64_t and can be used with
+     * halide_memoization_cache_evict to remove memoized entries using
+     * this eviction key from the cache. Memoized computations that do
+     * not provide an eviction key will never be evicted by this
+     * mechanism.
      */
-    Func &memoize();
+    Func &memoize(Expr eviction_key = Expr());
 
     /** Produce this Func asynchronously in a separate
      * thread. Consumers will be run by the task system when the

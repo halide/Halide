@@ -86,7 +86,6 @@ int main(int argc, char **argv) {
 
         Func f, f_memoized;
         f_memoized() = count_calls(0, 0);
-        f_memoized.compute_root().memoize();
         f() = f_memoized();
         f_memoized.compute_root().memoize();
 
@@ -646,6 +645,50 @@ int main(int argc, char **argv) {
         }
 
         printf("In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
+    }
+
+    // Test cache eviction.
+    {
+        Param<void *> p;
+        call_count = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
+
+        Func f, memoized_one, memoized_two;
+        memoized_one() = count_calls(0, 0);
+        memoized_two() = count_calls(1, 1);
+        memoized_one.compute_root().memoize(1);
+        memoized_two.compute_root().memoize(p);
+        f() = memoized_one() + memoized_two();
+
+        p.set((void *)&call_count);
+        Buffer<uint8_t> result1 = f.realize();
+        Buffer<uint8_t> result2 = f.realize();
+
+        assert(result1(0) == 84);
+        assert(result2(0) == 84);
+
+        assert(call_count == 2);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(1);
+        result1 = f.realize();
+        assert(result1(0) == 84);
+
+        printf("call_count is %d.\n", call_count);
+        assert(call_count == 3);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(1);
+        result1 = f.realize();
+        assert(result1(0) == 84);
+
+        assert(call_count == 4);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(1);
+        Internal::JITSharedRuntime::memoization_cache_evict((uint64_t)&call_count);
+        result1 = f.realize();
+        assert(result1(0) == 84);
+
+        assert(call_count == 6);
     }
 
     printf("Success!\n");

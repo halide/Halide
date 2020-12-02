@@ -127,6 +127,9 @@ struct JITModule {
     /** See JITSharedRuntime::memoization_cache_set_size */
     void memoization_cache_set_size(int64_t size) const;
 
+    /** See JITSharedRuntime::memoization_cache_evict */
+    void memoization_cache_evict(uint64_t eviction_key) const;
+
     /** See JITSharedRuntime::reuse_device_allocations */
     void reuse_device_allocations(bool) const;
 
@@ -166,6 +169,13 @@ public:
      * and call halide_memoization_cache_set_size() instead.
      */
     static void memoization_cache_set_size(int64_t size);
+
+    /** Evict all cache entries that were tagged with the given
+     * eviction_key in the memoize scheduling directive. If you are
+     * compiling statically, you should include HalideRuntime.h and
+     * call halide_memoization_cache_evict() instead.
+     */
+    static void memoization_cache_evict(uint64_t eviction_key);
 
     /** Set whether or not Halide may hold onto and reuse device
      * allocations to avoid calling expensive device API allocation

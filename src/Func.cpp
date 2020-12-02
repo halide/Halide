@@ -2066,9 +2066,29 @@ Func &Func::atomic(bool override_associativity_test) {
     return *this;
 }
 
-Func &Func::memoize() {
+Func &Func::memoize(Expr eviction_key) {
     invalidate_cache();
     func.schedule().memoized() = true;
+    if (eviction_key.defined()) {
+        const Type &t(eviction_key.type());
+        if (!t.is_scalar()) {
+            user_error << "Can't use a vector as a memoization eviction key. Expression is: " << eviction_key << "\n";
+        }
+        if (t.is_float()) {
+            user_error << "Can't use floating-point types as a memoization eviction key. Expression is: " << eviction_key << "\n";
+        } else if (t.is_handle()) {
+            // Wrap this in a memoize_tag so it does not get used in
+            // the cache key. Would be nice to have void version of
+            // memoize_tag that adds no bits to the key, but that is a
+            // small optimization.
+            func.schedule().memoize_eviction_key() = memoize_tag(reinterpret(UInt(64), eviction_key), 0);
+        } else {
+            // Ditto above re: memoize_tag
+            func.schedule().memoize_eviction_key() = memoize_tag(reinterpret(UInt(64), cast(t.with_bits(64), eviction_key)), 0);
+        }
+    } else {
+        func.schedule().memoize_eviction_key() = eviction_key; // not defined.
+    }
     return *this;
 }
 

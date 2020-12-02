@@ -529,6 +529,13 @@ public:
     bool memoized() const;
     // @}
 
+    /** This flag is set to true if the schedule is memoized and has an attached
+     *  eviction key. */
+    // @{
+    Expr &memoize_eviction_key();
+    Expr memoize_eviction_key() const;
+    // @}
+
     /** Is the production of this Function done asynchronously */
     bool &async();
     bool async() const;

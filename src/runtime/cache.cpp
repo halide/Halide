@@ -82,11 +82,14 @@ struct CacheEntry {
     halide_dimension_t *computed_bounds;
     // The actual stored data.
     halide_buffer_t *buf;
+    uint64_t eviction_key;
+    bool has_eviction_key;
 
     bool init(const uint8_t *cache_key, size_t cache_key_size,
               uint32_t key_hash,
               const halide_buffer_t *computed_bounds_buf,
-              int32_t tuples, halide_buffer_t **tuple_buffers);
+              int32_t tuples, halide_buffer_t **tuple_buffers,
+              bool has_eviction_key, uint64_t eviction_key);
     void destroy();
     halide_buffer_t &buffer(int32_t i);
 };
@@ -113,7 +116,8 @@ WEAK CacheBlockHeader *get_pointer_to_header(uint8_t *host) {
 
 WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
                            uint32_t key_hash, const halide_buffer_t *computed_bounds_buf,
-                           int32_t tuples, halide_buffer_t **tuple_buffers) {
+                           int32_t tuples, halide_buffer_t **tuple_buffers,
+                           bool has_eviction_key_arg, uint64_t eviction_key_arg) {
     next = nullptr;
     more_recent = nullptr;
     less_recent = nullptr;
@@ -167,6 +171,9 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
             buf[i].dim[j] = tuple_buffers[i]->dim[j];
         }
     }
+
+    has_eviction_key = has_eviction_key_arg;
+    eviction_key = eviction_key_arg;
     return true;
 }
 
@@ -417,8 +424,9 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
 
 WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
                                         halide_buffer_t *computed_bounds,
-                                        int32_t tuple_count, halide_buffer_t **tuple_buffers) {
-    debug(user_context) << "halide_memoization_cache_store\n";
+                                        int32_t tuple_count, halide_buffer_t **tuple_buffers,
+                                        bool has_eviction_key, uint64_t eviction_key) {
+    debug(user_context) << "halide_memoization_cache_store has_eviction_key: " << has_eviction_key << " eviction_key " << eviction_key << " .\n";
 
     uint32_t h = get_pointer_to_header(tuple_buffers[0]->host)->hash;
 
@@ -483,7 +491,8 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
     CacheEntry *new_entry = (CacheEntry *)halide_malloc(nullptr, sizeof(CacheEntry));
     bool inited = false;
     if (new_entry) {
-        inited = new_entry->init(cache_key, size, h, computed_bounds, tuple_count, tuple_buffers);
+        inited = new_entry->init(cache_key, size, h, computed_bounds, tuple_count, tuple_buffers,
+                                 has_eviction_key, eviction_key);
     }
     if (!inited) {
         current_cache_size -= added_size;
@@ -560,6 +569,41 @@ WEAK void halide_memoization_cache_cleanup() {
     current_cache_size = 0;
     most_recently_used = nullptr;
     least_recently_used = nullptr;
+}
+
+WEAK void halide_memoization_cache_evict(void *user_context, uint64_t eviction_key) {
+    ScopedMutexLock lock(&memoization_lock);
+    
+    for (size_t i = 0; i < kHashTableSize; i++) {
+        CacheEntry *entry = cache_entries[i];
+        if (entry != nullptr) {
+            CacheEntry **prev = &cache_entries[i];
+            while (entry != nullptr) {
+                CacheEntry *next = entry->next;
+                if (entry->has_eviction_key && entry->eviction_key == eviction_key) {
+                    *prev = next;
+                    if (entry->more_recent != nullptr) {
+                        entry->more_recent->less_recent = entry->less_recent;
+                    } else {
+                        most_recently_used = entry->less_recent;
+                    }                      
+                    if (entry->less_recent != nullptr) {
+                        entry->less_recent->more_recent = entry->more_recent;
+                    } else {
+                        least_recently_used = entry->more_recent;
+                    }                      
+                    entry->destroy();
+                    halide_free(user_context, entry);
+                } else {
+                    prev = &entry->next;
+                }
+                entry = next;
+            }
+        }
+    }
+#if CACHE_DEBUGGING
+    validate_cache();
+#endif
 }
 
 namespace {

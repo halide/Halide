@@ -284,7 +284,7 @@ public:
 
     // Returns a statement which will store the result of a computation under this key
     Stmt store_computation(const std::string &key_allocation_name, const std::string &computed_bounds_name,
-                           int32_t tuple_count, const std::string &storage_base_name) {
+                           const std::string &eviction_key_name, int32_t tuple_count, const std::string &storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
@@ -299,7 +299,13 @@ public:
             }
         }
         args.push_back(Call::make(type_of<halide_buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
-
+        if (!eviction_key_name.empty()) {
+            args.push_back(make_const(Bool(), true));
+            args.push_back(Variable::make(UInt(64), eviction_key_name));
+        } else {
+            args.push_back(make_const(Bool(), false));
+            args.push_back(make_const(UInt(64), 0));
+        }
         // This is actually a void call. How to indicate that? Look at Extern_ stuff.
         return Evaluate::make(Call::make(Int(32), "halide_memoization_cache_store", args, Call::Extern));
     }
@@ -358,10 +364,19 @@ private:
             std::string cache_result_name = op->name + ".cache_result";
             std::string cache_miss_name = op->name + ".cache_miss";
             std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
+            std::string eviction_key_name = op->name + ".cache_eviction_key";
+
+            Stmt eviction_key_marker;
+            const Expr &eviction_key = iter->second.schedule().memoize_eviction_key();
+            bool has_eviction_key = eviction_key.defined();
+            if (has_eviction_key) {
+                internal_assert(eviction_key.type() == UInt(64)) << "Logic error: bad type for memoization eviction key in expr: " << eviction_key << " .\n";
+                eviction_key_marker = LetStmt::make(eviction_key_name, eviction_key, mutated_body);
+            }
 
             Stmt cache_miss_marker = LetStmt::make(cache_miss_name,
                                                    Cast::make(Bool(), Variable::make(Int(32), cache_result_name)),
-                                                   mutated_body);
+                                                   has_eviction_key ? eviction_key_marker : mutated_body);
             Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), -1),
                                                                    Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern)),
                                                   cache_miss_marker);
@@ -417,9 +432,13 @@ private:
 
                 std::string cache_key_name = op->name + ".cache_key";
                 std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
+                std::string eviction_key_name = f.schedule().memoize_eviction_key().defined() ?
+                                                    op->name + ".cache_eviction_key" : "";
 
                 Stmt cache_store_back =
-                    IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
+                    IfThenElse::make(cache_miss,
+                                     key_info.store_computation(cache_key_name, computed_bounds_name,
+                                                                eviction_key_name, f.outputs(), op->name));
 
                 Stmt mutated_body = Block::make(cache_store_back, body);
                 return ProducerConsumer::make(op->name, op->is_producer, mutated_body);

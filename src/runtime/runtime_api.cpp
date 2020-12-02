@@ -105,6 +105,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_malloc,
     (void *)&halide_matlab_call_pipeline,
     (void *)&halide_memoization_cache_cleanup,
+    (void *)&halide_memoization_cache_evict,
     (void *)&halide_memoization_cache_lookup,
     (void *)&halide_memoization_cache_release,
     (void *)&halide_memoization_cache_set_size,
