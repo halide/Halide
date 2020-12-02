@@ -65,6 +65,8 @@ extern "C" int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl
 extern "C" int halide_release_cl_context(void *user_context) {
     return 0;
 }
+
+#define HAS_MULTIPLE_CONTEXTS true
 #elif defined(TEST_CUDA)
 
 typedef CUcontext gpu_context;
@@ -94,14 +96,20 @@ extern "C" int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, b
 extern "C" int halide_cuda_release_context(void *user_context) {
     return 0;
 }
+
+#define HAS_MULTIPLE_CONTEXTS true
 #else
+typedef int gpu_context;
+
 // Just use the default implementation of acquire/release.
-bool init_context() {
+bool init_context(int &context) {
     printf("Using default implementation of acquire/release\n");
+    context = 0;
     return true;
 }
-void destroy_context() {
-}
+void destroy_context(int & /* context */) {
+
+#define HAS_MULTIPLE_CONTEXTS false
 #endif
 
 void run_kernels_on_thread(gpu_context context1, bool destroy_when_done) {
@@ -143,7 +151,9 @@ void run_kernels_on_thread(gpu_context context1, bool destroy_when_done) {
         buf2_in.device_free(&context2);
         buf2_result.device_free(&context2);
 
-        halide_device_release(&context2, device_interface);
+        if (device_interface != nullptr) {
+            halide_device_release(&context2, device_interface);
+        }
         destroy_context(context2);
     }
 
@@ -151,7 +161,7 @@ void run_kernels_on_thread(gpu_context context1, bool destroy_when_done) {
     buf1_in.device_free(&context1);
     buf1_result.device_free(&context1);
 
-    if (destroy_when_done) {
+    if (destroy_when_done && device_interface != nullptr) {
         halide_device_release(&context1, device_interface);
         destroy_context(context1);
     }
@@ -171,8 +181,8 @@ int main(int argc, char **argv) {
     thread2.join();
 
     // Make sure using the same context on different threads works.
-    std::thread thread3(run_kernels_on_thread, contexta, true);
-    std::thread thread4(run_kernels_on_thread, contextb, true);
+    std::thread thread3(run_kernels_on_thread, contexta, HAS_MULTIPLE_CONTEXTS);
+    std::thread thread4(run_kernels_on_thread, contextb, HAS_MULTIPLE_CONTEXTS);
 
     thread3.join();
     thread4.join();
