@@ -244,9 +244,9 @@ class CSEEveryExprInStmt : public IRMutator {
             lets.emplace_back(let->name, let->value);
             dummy = let->body;
         }
-        const Call *c = dummy.as<Call>();
-        internal_assert(c && c->is_intrinsic(Call::bundle) && c->args.size() == 2);
-        Stmt s = Store::make(op->name, c->args[0], c->args[1],
+        const Call *bundle = Call::as_intrinsic(dummy, {Call::bundle});
+        internal_assert(bundle && bundle->args.size() == 2);
+        Stmt s = Store::make(op->name, bundle->args[0], bundle->args[1],
                              op->param, mutate(op->predicate), op->alignment);
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
             s = LetStmt::make(it->first, it->second, s);

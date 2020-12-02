@@ -600,37 +600,37 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
 
     // Ensure some types we need are defined
-    halide_buffer_t_type = module->getTypeByName("struct.halide_buffer_t");
+    halide_buffer_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_buffer_t");
     internal_assert(halide_buffer_t_type) << "Did not find halide_buffer_t in initial module";
 
-    type_t_type = module->getTypeByName("struct.halide_type_t");
+    type_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_type_t");
     internal_assert(type_t_type) << "Did not find halide_type_t in initial module";
 
-    dimension_t_type = module->getTypeByName("struct.halide_dimension_t");
+    dimension_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_dimension_t");
     internal_assert(dimension_t_type) << "Did not find halide_dimension_t in initial module";
 
-    metadata_t_type = module->getTypeByName("struct.halide_filter_metadata_t");
+    metadata_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_filter_metadata_t");
     internal_assert(metadata_t_type) << "Did not find halide_filter_metadata_t in initial module";
 
-    argument_t_type = module->getTypeByName("struct.halide_filter_argument_t");
+    argument_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_filter_argument_t");
     internal_assert(argument_t_type) << "Did not find halide_filter_argument_t in initial module";
 
-    scalar_value_t_type = module->getTypeByName("struct.halide_scalar_value_t");
+    scalar_value_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_scalar_value_t");
     internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
 
-    device_interface_t_type = module->getTypeByName("struct.halide_device_interface_t");
+    device_interface_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_device_interface_t");
     internal_assert(device_interface_t_type) << "Did not find halide_device_interface_t in initial module";
 
-    pseudostack_slot_t_type = module->getTypeByName("struct.halide_pseudostack_slot_t");
+    pseudostack_slot_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_pseudostack_slot_t");
     internal_assert(pseudostack_slot_t_type) << "Did not find halide_pseudostack_slot_t in initial module";
 
-    semaphore_t_type = module->getTypeByName("struct.halide_semaphore_t");
+    semaphore_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_semaphore_t");
     internal_assert(semaphore_t_type) << "Did not find halide_semaphore_t in initial module";
 
-    semaphore_acquire_t_type = module->getTypeByName("struct.halide_semaphore_acquire_t");
+    semaphore_acquire_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_semaphore_acquire_t");
     internal_assert(semaphore_acquire_t_type) << "Did not find halide_semaphore_acquire_t in initial module";
 
-    parallel_task_t_type = module->getTypeByName("struct.halide_parallel_task_t");
+    parallel_task_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_parallel_task_t");
     internal_assert(parallel_task_t_type) << "Did not find halide_parallel_task_t in initial module";
 }
 
@@ -1114,7 +1114,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     vector<Constant *> arguments_array_entries;
     for (int arg = 0; arg < num_args; ++arg) {
 
-        StructType *type_t_type = module->getTypeByName("struct.halide_type_t");
+        StructType *type_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_type_t");
         internal_assert(type_t_type) << "Did not find halide_type_t in module.\n";
 
         Constant *type_fields[] = {
@@ -1449,7 +1449,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
     // of prefetch indicates the type being prefetched, which does not match the
     // implementation of prefetch.
     // See https://github.com/halide/Halide/issues/4211.
-    const bool is_prefetch = e.as<Call>() && e.as<Call>()->is_intrinsic(Call::prefetch);
+    const bool is_prefetch = Call::as_intrinsic(e, {Call::prefetch});
     internal_assert(is_bool_vector || is_prefetch ||
                     e.type().is_handle() ||
                     value->getType()->isVoidTy() ||
@@ -2093,7 +2093,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 // and do a different shuffle. This helps expressions like
                 // (f(2*x) + f(2*x+1) share loads
                 const Add *add = ramp->base.as<Add>();
-                const IntImm *offset = add ? add->b.as<IntImm>() : nullptr;
+                const IntImm *offset = add ? add->b.as<IntImm>() : ramp->base.as<IntImm>();
                 if (offset && offset->value & 1) {
                     base_a -= 1;
                     align_a = align_a - 1;
@@ -2192,9 +2192,16 @@ void CodeGen_LLVM::visit(const Ramp *op) {
         Expr broadcast = Broadcast::make(op->base, op->lanes);
         Expr ramp = Ramp::make(make_zero(op->base.type()), op->stride, op->lanes);
         value = codegen(broadcast + ramp);
+    } else if (!is_const(op->stride)) {
+        Expr broadcast_base = Broadcast::make(op->base, op->lanes);
+        Expr broadcast_stride = Broadcast::make(op->stride, op->lanes);
+        Expr ramp = Ramp::make(make_zero(op->base.type()), make_one(op->base.type()), op->lanes);
+        value = codegen(broadcast_base + broadcast_stride * ramp);
     } else {
-        // Otherwise we generate element by element by adding the stride to the base repeatedly
-
+        internal_assert(is_const(op->base) && is_const(op->stride));
+        // At this point base and stride should be constant. Generate
+        // an insert element sequence. The code will be lifted to a
+        // constant vector stored in .rodata or similar.
         Value *base = codegen(op->base);
         Value *stride = codegen(op->stride);
 
@@ -2735,18 +2742,18 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        Value *a = codegen(op->args[0]);
-        Value *b = codegen(op->args[1]);
         if (op->args[1].type().is_uint()) {
+            Value *a = codegen(op->args[0]);
+            Value *b = codegen(op->args[1]);
             value = builder->CreateShl(a, b);
         } else {
             value = codegen(lower_signed_shift_left(op->args[0], op->args[1]));
         }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        Value *a = codegen(op->args[0]);
-        Value *b = codegen(op->args[1]);
         if (op->args[1].type().is_uint()) {
+            Value *a = codegen(op->args[0]);
+            Value *b = codegen(op->args[1]);
             if (op->type.is_int()) {
                 value = builder->CreateAShr(a, b);
             } else {
@@ -2833,7 +2840,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 3);
 
         Type ty = op->type;
-        Type wide_ty = ty.with_bits(ty.bits() * 2);
+        Type wide_ty = ty.widen();
 
         Expr p_wide = cast(wide_ty, op->args[0]) * cast(wide_ty, op->args[1]);
         const UIntImm *shift = op->args[2].as<UIntImm>();
@@ -4622,7 +4629,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         if (op->op == VectorReduce::Add &&
             (op->type.is_int() || op->type.is_uint()) &&
             op->type.bits() >= 32) {
-            Type narrower_type = op->value.type().with_bits(op->type.bits() / 4);
+            Type narrower_type = op->value.type().narrow().narrow();
             Expr narrower = lossless_cast(narrower_type, op->value);
             if (!narrower.defined() && narrower_type.is_int()) {
                 // Maybe we can narrow to an unsigned int instead.
@@ -4631,7 +4638,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             }
             if (narrower.defined()) {
                 // Widen it by 2x before the horizontal add
-                narrower = cast(narrower.type().with_bits(narrower.type().bits() * 2), narrower);
+                narrower = cast(narrower.type().widen(), narrower);
                 equiv = VectorReduce::make(op->op, narrower, intermediate_type.lanes());
                 // Then widen it by 2x again afterwards
                 equiv = cast(intermediate_type, equiv);
