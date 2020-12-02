@@ -573,7 +573,7 @@ WEAK void halide_memoization_cache_cleanup() {
 
 WEAK void halide_memoization_cache_evict(void *user_context, uint64_t eviction_key) {
     ScopedMutexLock lock(&memoization_lock);
-    
+
     for (size_t i = 0; i < kHashTableSize; i++) {
         CacheEntry *entry = cache_entries[i];
         if (entry != nullptr) {
@@ -586,12 +586,12 @@ WEAK void halide_memoization_cache_evict(void *user_context, uint64_t eviction_k
                         entry->more_recent->less_recent = entry->less_recent;
                     } else {
                         most_recently_used = entry->less_recent;
-                    }                      
+                    }
                     if (entry->less_recent != nullptr) {
                         entry->less_recent->more_recent = entry->more_recent;
                     } else {
                         least_recently_used = entry->more_recent;
-                    }                      
+                    }
                     entry->destroy();
                     halide_free(user_context, entry);
                 } else {

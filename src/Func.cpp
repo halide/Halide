@@ -2087,7 +2087,7 @@ Func &Func::memoize(Expr eviction_key) {
             func.schedule().memoize_eviction_key() = memoize_tag(reinterpret(UInt(64), cast(t.with_bits(64), eviction_key)), 0);
         }
     } else {
-        func.schedule().memoize_eviction_key() = eviction_key; // not defined.
+        func.schedule().memoize_eviction_key() = eviction_key;  // not defined.
     }
     return *this;
 }

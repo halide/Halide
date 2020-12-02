@@ -60,6 +60,11 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, halide_b
     return 0;
 }
 
+extern "C" DLLEXPORT int computed_eviction_key(int a) {
+    return 2020 + a;
+}
+HalideExtern_1(int, computed_eviction_key, int)
+
 void simple_free(void *user_context, void *ptr) {
     free(ptr);
 }
@@ -654,41 +659,50 @@ int main(int argc, char **argv) {
         Func count_calls;
         count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
-        Func f, memoized_one, memoized_two;
+        Func f, memoized_one, memoized_two, memoized_three;
         memoized_one() = count_calls(0, 0);
         memoized_two() = count_calls(1, 1);
+        memoized_three() = count_calls(3, 3);
         memoized_one.compute_root().memoize(1);
         memoized_two.compute_root().memoize(p);
-        f() = memoized_one() + memoized_two();
+        // The called extern here would usually take user_context and extact a value
+        // from within, but JIT mostly subsumes user_context, so this is just an example.
+        memoized_three.compute_root().memoize(computed_eviction_key(5));
+        f() = memoized_one() + memoized_two() + memoized_three();
 
         p.set((void *)&call_count);
         Buffer<uint8_t> result1 = f.realize();
         Buffer<uint8_t> result2 = f.realize();
 
-        assert(result1(0) == 84);
-        assert(result2(0) == 84);
+        assert(result1(0) == 126);
+        assert(result2(0) == 126);
 
-        assert(call_count == 2);
-
-        Internal::JITSharedRuntime::memoization_cache_evict(1);
-        result1 = f.realize();
-        assert(result1(0) == 84);
-
-        printf("call_count is %d.\n", call_count);
         assert(call_count == 3);
 
         Internal::JITSharedRuntime::memoization_cache_evict(1);
         result1 = f.realize();
-        assert(result1(0) == 84);
+        assert(result1(0) == 126);
 
         assert(call_count == 4);
 
         Internal::JITSharedRuntime::memoization_cache_evict(1);
+        result1 = f.realize();
+        assert(result1(0) == 126);
+
+        assert(call_count == 5);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(1);
         Internal::JITSharedRuntime::memoization_cache_evict((uint64_t)&call_count);
         result1 = f.realize();
-        assert(result1(0) == 84);
+        assert(result1(0) == 126);
 
-        assert(call_count == 6);
+        assert(call_count == 7);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(2025);
+        result1 = f.realize();
+        assert(result1(0) == 126);
+
+        assert(call_count == 8);
     }
 
     printf("Success!\n");

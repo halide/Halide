@@ -432,9 +432,11 @@ private:
 
                 std::string cache_key_name = op->name + ".cache_key";
                 std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
-                std::string eviction_key_name = f.schedule().memoize_eviction_key().defined() ?
-                                                    op->name + ".cache_eviction_key" : "";
+                std::string eviction_key_name;
 
+                if (f.schedule().memoize_eviction_key().defined()) {
+                    eviction_key_name = op->name + ".cache_eviction_key";
+                }
                 Stmt cache_store_back =
                     IfThenElse::make(cache_miss,
                                      key_info.store_computation(cache_key_name, computed_bounds_name,
