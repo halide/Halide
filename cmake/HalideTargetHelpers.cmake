@@ -51,6 +51,8 @@ endif ()
 
 if (NOT "$ENV{HL_TARGET}" STREQUAL "")
     set(Halide_TARGET "$ENV{HL_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
+elseif (Halide_HOST_TARGET STREQUAL Halide_CMAKE_TARGET)
+    set(Halide_TARGET "host" CACHE STRING "The target to use when compiling AOT tests")
 else ()
     set(Halide_TARGET "${Halide_CMAKE_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
 endif ()
