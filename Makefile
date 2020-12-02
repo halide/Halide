@@ -1630,7 +1630,8 @@ generator_aot_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_multitarget
 
 # gpu_multi_context_threaded has additional deps to link in
 $(BIN_DIR)/$(TARGET)/generator_aot_gpu_multi_context_threaded: $(ROOT_DIR)/test/generator/gpu_multi_context_threaded_aottest.cpp \
-	                                                       $(FILTERS_DIR)/gpu_multi_context_threaded_add.a $(FILTERS_DIR)/gpu_multi_context_threaded_mul.a
+	                                                       $(FILTERS_DIR)/gpu_multi_context_threaded_add.a \
+	                                                       $(FILTERS_DIR)/gpu_multi_context_threaded_mul.a \
 	                                                       $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
