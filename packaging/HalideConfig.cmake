@@ -59,13 +59,14 @@ macro(_Halide_include TYPE CAUSE)
         return()
     endif ()
 
-    include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-${TYPE}.cmake")
+    # Load the namespaced targets
+    include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-ns-${TYPE}.cmake")
 
     if (NOT ${CMAKE_FIND_PACKAGE_NAME}_both)
         if (CMAKE_VERSION VERSION_LESS 3.18)
             # In CMake < 3.18, ALIAS targets may not refer to non-global targets, so we
             # are forced to load copies of the targets in the plain Halide:: namespace
-            include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-ns-${TYPE}.cmake")
+            include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-${TYPE}.cmake")
         else ()
             foreach (target IN ITEMS Halide Generator RunGenMain Adams2019 Li2018 Mullapudi2016)
                 if (TARGET Halide::${TYPE}::${target})
