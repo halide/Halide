@@ -2066,7 +2066,7 @@ Func &Func::atomic(bool override_associativity_test) {
     return *this;
 }
 
-Func &Func::memoize(Expr eviction_key) {
+Func &Func::memoize(const Expr &eviction_key) {
     invalidate_cache();
     func.schedule().memoized() = true;
     if (eviction_key.defined()) {

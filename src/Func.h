@@ -2224,7 +2224,7 @@ public:
      * not provide an eviction key will never be evicted by this
      * mechanism.
      */
-    Func &memoize(Expr eviction_key = Expr());
+    Func &memoize(const Expr &eviction_key = Expr());
 
     /** Produce this Func asynchronously in a separate
      * thread. Consumers will be run by the task system when the
