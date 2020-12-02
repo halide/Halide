@@ -1,15 +1,17 @@
 cmake_minimum_required(VERSION 3.16)
 project(cuda_mat_mul)
 
-# This just checks whether CUDA is available ahead of time to allow CTest to
-# skip this app when CUDA/cuBLAS are not installed on the system.
+# This just checks whether CUDA is available ahead of time to allow
+# skipping this app when CUDA/cuBLAS are not installed on the system.
 find_package(CUDA)
 if (NOT CUDA_FOUND)
-    message(FATAL_ERROR "[SKIP] Could NOT find CUDA")
+    message(WARNING "Could NOT find CUDA")
+    return()
 endif ()
 
 if (NOT CUDA_CUBLAS_LIBRARIES)
-    message(FATAL_ERROR "[SKIP] Could NOT find cuBLAS")
+    message(WARNING "Could NOT find cuBLAS")
+    return()
 endif ()
 
 enable_testing()

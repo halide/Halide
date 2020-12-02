@@ -13,7 +13,6 @@ enable_testing()
 
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
-include(HalideTargetHelpers)
 include(HalideGeneratorHelpers)
 include(MakeShellPath)
 include(CMakeDependentOption)
@@ -61,7 +60,7 @@ add_subdirectory(src)
 add_subdirectory(tools)
 
 ##
-# Add tests, apps, tutorials, etc. if we're not being imported into another CMake project.
+# Add tests, tutorials, etc. if we're not being imported into another CMake project.
 ##
 
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)

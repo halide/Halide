@@ -42,7 +42,6 @@ endif ()
 
 if (NOT Halide_CMAKE_TARGET)
     _Halide_cmake_target(Halide_CMAKE_TARGET)
-    message(STATUS "Halide detected active CMake target `${Halide_CMAKE_TARGET}`")
 endif ()
 
 ##
@@ -55,4 +54,10 @@ elseif (Halide_HOST_TARGET STREQUAL Halide_CMAKE_TARGET)
     set(Halide_TARGET "host" CACHE STRING "The target to use when compiling AOT tests")
 else ()
     set(Halide_TARGET "${Halide_CMAKE_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
+endif ()
+
+if (NOT Halide_TARGET_MESSAGE_PRINTED)
+    message(STATUS "Halide detected current CMake target:  ${Halide_CMAKE_TARGET}")
+    message(STATUS "Halide using default generator target: ${Halide_TARGET}")
+    set(Halide_TARGET_MESSAGE_PRINTED TRUE CACHE INTERNAL "Limit printing the detected targets multiple times")
 endif ()
