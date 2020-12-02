@@ -40,6 +40,6 @@ target_link_libraries(runner PRIVATE Halide::Tools mat_mul ${CUDA_LIBRARIES} ${C
 # Test that the app actually works!
 add_test(NAME mat_mul COMMAND runner)
 set_tests_properties(mat_mul PROPERTIES
-                     LABELS internal_app_tests
+                     LABELS cuda_mat_mul
                      PASS_REGULAR_EXPRESSION "Success!"
                      SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
