@@ -31,13 +31,7 @@ add_halide_library(fft_inverse_c2c FROM fft.generator
 
 # Main executable
 add_executable(fft_aot_test fft_aot_test.cpp)
-target_link_libraries(fft_aot_test
-                      PRIVATE
-                      Halide::ImageIO
-                      fft_forward_r2c
-                      fft_inverse_c2r
-                      fft_forward_c2c
-                      fft_inverse_c2c)
+target_link_libraries(fft_aot_test PRIVATE Halide::ImageIO fft_forward_r2c fft_inverse_c2r fft_forward_c2c fft_inverse_c2c)
 
 # Benchmarking executable
 add_executable(bench_fft main.cpp fft.cpp)
