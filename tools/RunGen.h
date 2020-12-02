@@ -203,7 +203,7 @@ inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
 // variants *will* be instantiated (increasing code size), so this approach
 // should only be used when strictly necessary.
 template<template<typename> class Functor, typename... Args>
-auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
+auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
 #define HANDLE_CASE(CODE, BITS, TYPE)  \
     case halide_type_code(CODE, BITS): \

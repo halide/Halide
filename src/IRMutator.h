@@ -104,7 +104,7 @@ public:
 
 /** A helper function for mutator-like things to mutate regions */
 template<typename Mutator, typename... Args>
-std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&... args) {
+std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&...args) {
     Region new_bounds(bounds.size());
     bool bounds_changed = false;
 

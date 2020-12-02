@@ -57,7 +57,7 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_region(Region &collected_args,
 
 template<typename... Args>
 inline HALIDE_NO_USER_CODE_INLINE void collect_region(Region &collected_args,
-                                                      const Expr &a1, const Expr &a2, Args &&... args) {
+                                                      const Expr &a1, const Expr &a2, Args &&...args) {
     collected_args.push_back(Range(a1, a2));
     collect_region(collected_args, std::forward<Args>(args)...);
 }
@@ -124,7 +124,7 @@ HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Expr
 template<typename T, typename... Bounds,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
 HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Tuple &value,
-                                                  Bounds &&... bounds) {
+                                                  Bounds &&...bounds) {
     Region collected_bounds;
     Internal::collect_region(collected_bounds, std::forward<Bounds>(bounds)...);
     return constant_exterior(Internal::func_like_to_func(func_like), value, collected_bounds);
@@ -132,7 +132,7 @@ HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Tupl
 template<typename T, typename... Bounds,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
 HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Expr &value,
-                                                  Bounds &&... bounds) {
+                                                  Bounds &&...bounds) {
     return constant_exterior(func_like, Tuple(value), std::forward<Bounds>(bounds)...);
 }
 // @}
@@ -170,7 +170,7 @@ HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like) {
 template<typename T, typename... Bounds,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
 HALIDE_ATTRIBUTE_DEPRECATED("Add braces around the bounds like so: {{a, b}, {c, d}}")
-HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like, Bounds &&... bounds) {
+HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like, Bounds &&...bounds) {
     Region collected_bounds;
     Internal::collect_region(collected_bounds, std::forward<Bounds>(bounds)...);
     return repeat_edge(Internal::func_like_to_func(func_like), collected_bounds);
@@ -210,7 +210,7 @@ HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like) {
 template<typename T, typename... Bounds,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
 HALIDE_ATTRIBUTE_DEPRECATED("Add braces around the bounds like so: {{a, b}, {c, d}}")
-HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like, Bounds &&... bounds) {
+HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like, Bounds &&...bounds) {
     Region collected_bounds;
     Internal::collect_region(collected_bounds, std::forward<Bounds>(bounds)...);
     return repeat_image(Internal::func_like_to_func(func_like), collected_bounds);
@@ -250,7 +250,7 @@ HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like) {
 template<typename T, typename... Bounds,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
 HALIDE_ATTRIBUTE_DEPRECATED("Add braces around the bounds like so: {{a, b}, {c, d}}")
-HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like, Bounds &&... bounds) {
+HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like, Bounds &&...bounds) {
     Region collected_bounds;
     Internal::collect_region(collected_bounds, std::forward<Bounds>(bounds)...);
     return mirror_image(Internal::func_like_to_func(func_like), collected_bounds);
@@ -293,7 +293,7 @@ HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like) {
 template<typename T, typename... Bounds,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
 HALIDE_ATTRIBUTE_DEPRECATED("Add braces around the bounds like so: {{a, b}, {c, d}}")
-HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like, Bounds &&... bounds) {
+HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like, Bounds &&...bounds) {
     Region collected_bounds;
     Internal::collect_region(collected_bounds, std::forward<Bounds>(bounds)...);
     return mirror_interior(Internal::func_like_to_func(func_like), collected_bounds);

@@ -312,13 +312,13 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &arg
 }
 
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args &&... more_args) {
+inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args &&...more_args) {
     args.emplace_back(std::string(arg));
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
 
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args &&... more_args) {
+inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args &&...more_args) {
     args.push_back(std::move(arg));
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
@@ -624,7 +624,7 @@ inline Expr max(Expr a, float b) {
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type * = nullptr>
-inline Expr max(A &&a, B &&b, C &&c, Rest &&... rest) {
+inline Expr max(A &&a, B &&b, C &&c, Rest &&...rest) {
     return max(std::forward<A>(a), max(std::forward<B>(b), std::forward<C>(c), std::forward<Rest>(rest)...));
 }
 
@@ -659,7 +659,7 @@ inline Expr min(Expr a, float b) {
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type * = nullptr>
-inline Expr min(A &&a, B &&b, C &&c, Rest &&... rest) {
+inline Expr min(A &&a, B &&b, C &&c, Rest &&...rest) {
     return min(std::forward<A>(a), min(std::forward<B>(b), std::forward<C>(c), std::forward<Rest>(rest)...));
 }
 
@@ -764,7 +764,7 @@ Expr select(Expr condition, Expr true_value, Expr false_value);
  * final value if all conditions are false. */
 template<typename... Args,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type * = nullptr>
-inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&... args) {
+inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
     return select(std::move(c0), std::move(v0), select(std::move(c1), std::move(v1), std::forward<Args>(args)...));
 }
 
@@ -779,12 +779,12 @@ Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
 template<typename... Args>
-inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&... args) {
+inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&...args) {
     return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
 }
 
 template<typename... Args>
-inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&... args) {
+inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&...args) {
     return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
 }
 // @}
@@ -1209,7 +1209,7 @@ Expr random_int(Expr seed = Expr());
 Expr print(const std::vector<Expr> &values);
 
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE Expr print(Expr a, Args &&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr print(Expr a, Args &&...args) {
     std::vector<Expr> collected_args = {std::move(a)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print(collected_args);
@@ -1222,7 +1222,7 @@ inline HALIDE_NO_USER_CODE_INLINE Expr print(Expr a, Args &&... args) {
 Expr print_when(Expr condition, const std::vector<Expr> &values);
 
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE Expr print_when(Expr condition, Expr a, Args &&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr print_when(Expr condition, Expr a, Args &&...args) {
     std::vector<Expr> collected_args = {std::move(a)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print_when(std::move(condition), collected_args);
@@ -1255,7 +1255,7 @@ inline HALIDE_NO_USER_CODE_INLINE Expr print_when(Expr condition, Expr a, Args &
 Expr require(Expr condition, const std::vector<Expr> &values);
 
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE Expr require(Expr condition, Expr value, Args &&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr require(Expr condition, Expr value, Args &&...args) {
     std::vector<Expr> collected_args = {std::move(value)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return require(std::move(condition), collected_args);
@@ -1315,7 +1315,7 @@ inline Expr undef() {
  * on the digest. */
 // @{
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args &&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args &&...args) {
     std::vector<Expr> collected_args{std::forward<Args>(args)...};
     return Internal::memoize_tag_helper(std::move(result), collected_args);
 }
