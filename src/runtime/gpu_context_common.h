@@ -14,8 +14,8 @@ struct GPUCompilationCache {
 
     halide_mutex mutex;
 
-    static constexpr float kLoadFactor = .5f;
-    static constexpr int kInitialTableBits = 7;
+    static constexpr float kLoadFactor{.5f};
+    static constexpr int kInitialTableBits{7};
     int log2_compilations_size{0};  // number of bits in index into compilations table.
     CachedCompilation *compilations{nullptr};
     int count{0};
@@ -36,7 +36,7 @@ struct GPUCompilationCache {
         }
     }
 
-    bool insert(ContextT context, uint32_t id, ModuleStateT module_state) {
+    HALIDE_MUST_USE_RESULT bool insert(ContextT context, uint32_t id, ModuleStateT module_state) {
         if (log2_compilations_size == 0) {
             if (!resize_table(kInitialTableBits)) {
                 return false;
@@ -64,7 +64,7 @@ struct GPUCompilationCache {
         return false;
     }
 
-    bool find_internal(ContextT context, uint32_t id, ModuleStateT *&module_state) {
+    HALIDE_MUST_USE_RESULT bool find_internal(ContextT context, uint32_t id, ModuleStateT *&module_state) {
         if (log2_compilations_size == 0) {
             return false;
         }
@@ -84,7 +84,7 @@ struct GPUCompilationCache {
         return false;
     }
 
-    bool lookup(ContextT context, void *state_ptr, ModuleStateT &module_state) {
+    HALIDE_MUST_USE_RESULT bool lookup(ContextT context, void *state_ptr, ModuleStateT &module_state) {
         ScopedMutexLock lock_guard(&mutex);
         uint32_t id = (uint32_t)(uintptr_t)state_ptr;
         ModuleStateT *mod_ptr;
@@ -95,7 +95,7 @@ struct GPUCompilationCache {
         return false;
     }
 
-    bool resize_table(int size_bits) {
+    HALIDE_MUST_USE_RESULT bool resize_table(int size_bits) {
         if (size_bits != log2_compilations_size) {
             int new_size = (1 << size_bits);
             int old_size = (1 << log2_compilations_size);
@@ -113,7 +113,9 @@ struct GPUCompilationCache {
                 for (int32_t i = 0; i < old_size; i++) {
                     if (old_table[i].kernel_id != kInvalidId &&
                         old_table[i].kernel_id != kDeletedId) {
-                        insert(old_table[i].context, old_table[i].kernel_id, old_table[i].module_state);
+                        bool result = insert(old_table[i].context, old_table[i].kernel_id,
+                                             old_table[i].module_state);
+                        halide_assert(nullptr, result);  // Resizing the table while resizing the table is a logic error.
                     }
                 }
             }
@@ -157,10 +159,10 @@ struct GPUCompilationCache {
     }
 
     template<typename CompileModuleT, typename... Args>
-    bool kernel_state_setup(void *user_context, void **state_ptr,
-                            ContextT context, ModuleStateT &result,
-                            CompileModuleT f,
-                            Args... args) {
+    HALIDE_MUST_USE_RESULT bool kernel_state_setup(void *user_context, void **state_ptr,
+                                                   ContextT context, ModuleStateT &result,
+                                                   CompileModuleT f,
+                                                   Args... args) {
         ScopedMutexLock lock_guard(&mutex);
 
         uint32_t *id_ptr = (uint32_t *)state_ptr;
@@ -181,7 +183,9 @@ struct GPUCompilationCache {
             return false;
         }
 
-        insert(context, *id_ptr, compiled_module);
+        if (!insert(context, *id_ptr, compiled_module)) {
+            return false;
+        }
         result = compiled_module;
 
         return true;

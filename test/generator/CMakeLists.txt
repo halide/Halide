@@ -258,7 +258,7 @@ halide_define_aot_test(external_code GEN_DEPS external_code_generator_deps)
 halide_define_aot_test(float16_t)
 
 # gpu_multi_context_threaded_aottest.cpp
-# gpu_multi_generator.cpp
+# gpu_multi_context_threaded_generator.cpp
 halide_define_aot_test(gpu_multi_context_threaded
                        OMIT_DEFAULT_GENERATOR
                        EXTRA_LIBS
