@@ -447,8 +447,8 @@ Expr lossless_cast(Type t, Expr e) {
             // aggressively, we're good.
             // E.g. lossless_cast(uint16, (uint32)(some_u8) + 37)
             // = (uint16)(some_u8) + 37
-            Expr a = lossless_cast(t.with_bits(t.bits() / 2), add->a);
-            Expr b = lossless_cast(t.with_bits(t.bits() / 2), add->b);
+            Expr a = lossless_cast(t.narrow(), add->a);
+            Expr b = lossless_cast(t.narrow(), add->b);
             if (a.defined() && b.defined()) {
                 return cast(t, a) + cast(t, b);
             } else {
@@ -457,8 +457,8 @@ Expr lossless_cast(Type t, Expr e) {
         }
 
         if (const Sub *sub = e.as<Sub>()) {
-            Expr a = lossless_cast(t.with_bits(t.bits() / 2), sub->a);
-            Expr b = lossless_cast(t.with_bits(t.bits() / 2), sub->b);
+            Expr a = lossless_cast(t.narrow(), sub->a);
+            Expr b = lossless_cast(t.narrow(), sub->b);
             if (a.defined() && b.defined()) {
                 return cast(t, a) + cast(t, b);
             } else {
@@ -467,8 +467,8 @@ Expr lossless_cast(Type t, Expr e) {
         }
 
         if (const Mul *mul = e.as<Mul>()) {
-            Expr a = lossless_cast(t.with_bits(t.bits() / 2), mul->a);
-            Expr b = lossless_cast(t.with_bits(t.bits() / 2), mul->b);
+            Expr a = lossless_cast(t.narrow(), mul->a);
+            Expr b = lossless_cast(t.narrow(), mul->b);
             if (a.defined() && b.defined()) {
                 return cast(t, a) * cast(t, b);
             } else {
@@ -2165,9 +2165,14 @@ Expr operator<<(Expr x, Expr y) {
 }
 
 Expr operator<<(Expr x, int y) {
-    Type t = Int(x.type().bits(), x.type().lanes());
-    Internal::check_representable(t, y);
-    return std::move(x) << Internal::make_const(t, y);
+    Type t = x.type().with_code(halide_type_uint);
+    if (y >= 0) {
+        Internal::check_representable(t, y);
+        return std::move(x) << Internal::make_const(t, y);
+    } else {
+        Internal::check_representable(t, -y);
+        return std::move(x) >> Internal::make_const(t, -y);
+    }
 }
 
 Expr operator>>(Expr x, Expr y) {
@@ -2180,9 +2185,14 @@ Expr operator>>(Expr x, Expr y) {
 }
 
 Expr operator>>(Expr x, int y) {
-    Type t = Int(x.type().bits(), x.type().lanes());
-    Internal::check_representable(t, y);
-    return std::move(x) >> Internal::make_const(t, y);
+    Type t = x.type().with_code(halide_type_uint);
+    if (y >= 0) {
+        Internal::check_representable(t, y);
+        return std::move(x) >> Internal::make_const(t, y);
+    } else {
+        Internal::check_representable(t, -y);
+        return std::move(x) << Internal::make_const(t, -y);
+    }
 }
 
 Expr lerp(Expr zero_val, Expr one_val, Expr weight) {

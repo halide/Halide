@@ -217,11 +217,10 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     // significant bit), so we can check for them all in a loop.
     for (size_t i = 0; i < matches.size(); i++) {
         Type t = matches[i].type();
-        Type target_t = t.with_bits(t.bits() / 2);
         if (flags & (Pattern::NarrowOp0 << i)) {
-            matches[i] = lossless_cast(target_t, matches[i]);
+            matches[i] = lossless_cast(t.narrow(), matches[i]);
         } else if (flags & (Pattern::NarrowUnsignedOp0 << i)) {
-            matches[i] = lossless_cast(target_t.with_code(Type::UInt), matches[i]);
+            matches[i] = lossless_cast(t.narrow().with_code(Type::UInt), matches[i]);
         }
         if (!matches[i].defined()) {
             return false;
@@ -1101,14 +1100,14 @@ private:
 
     Expr visit(const Div *op) override {
         if (!op->type.is_float() && op->type.is_vector()) {
-            return mutate(simplify(lower_int_uint_div(op->a, op->b)));
+            return mutate(lower_int_uint_div(op->a, op->b));
         }
         return IRMutator::visit(op);
     }
 
     Expr visit(const Mod *op) override {
         if (!op->type.is_float() && op->type.is_vector()) {
-            return mutate(simplify(lower_int_uint_mod(op->a, op->b)));
+            return mutate(lower_int_uint_mod(op->a, op->b));
         }
         return IRMutator::visit(op);
     }
