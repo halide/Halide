@@ -52,5 +52,5 @@ set_tests_properties(fft_aot_test PROPERTIES
 
 foreach (i IN ITEMS 8 12 16 24 32 48)
     add_test(NAME bench${i}x${i} COMMAND bench_fft ${i} ${i})
-    set_target_properties(bench${i}x${i} PROPERTIES LABELS fft)
+    set_tests_properties(bench${i}x${i} PROPERTIES LABELS fft)
 endforeach ()
