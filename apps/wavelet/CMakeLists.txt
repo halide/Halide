@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
 # Find Halide
-find_package(Halide REQUIRED COMPONENTS PNG)
+find_package(Halide REQUIRED)
 
 # Generator
 add_executable(wavelet.generator
@@ -42,7 +42,7 @@ if (EXISTS ${IMAGE})
     configure_file(${IMAGE} gray.png COPYONLY)
     add_test(NAME wavelet COMMAND wavelet gray.png .)
     set_tests_properties(wavelet PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS wavelet
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()
