@@ -42,7 +42,7 @@ if (EXISTS ${IMAGE})
     add_test(NAME bilateral_grid_process
              COMMAND bilateral_grid_process gray.png out.png 0.1 10)
     set_tests_properties(bilateral_grid_process PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS bilateral_grid
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

@@ -36,7 +36,7 @@ if (EXISTS ${IMAGE})
     add_test(NAME iir_blur_filter
              COMMAND iir_blur_filter rgb.png out.png)
     set_tests_properties(iir_blur_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS iir_blur
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()
