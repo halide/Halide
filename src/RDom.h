@@ -198,7 +198,7 @@ class RDom {
     void initialize_from_region(const Region &region, std::string name = "");
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE void initialize_from_region(Region &region, const Expr &min, const Expr &extent, Args &&...args) {
+    HALIDE_NO_USER_CODE_INLINE void initialize_from_region(Region &region, const Expr &min, const Expr &extent, Args &&... args) {
         region.push_back({min, extent});
         initialize_from_region(region, std::forward<Args>(args)...);
     }
@@ -215,7 +215,7 @@ public:
     }
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE RDom(Expr min, Expr extent, Args &&...args) {
+    HALIDE_NO_USER_CODE_INLINE RDom(Expr min, Expr extent, Args &&... args) {
         // This should really just be a delegating constructor, but I couldn't make
         // that work with variadic template unpacking in visual studio 2013
         Region region;

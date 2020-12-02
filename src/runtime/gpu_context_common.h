@@ -5,7 +5,7 @@ namespace Halide {
 namespace Internal {
 
 template<typename ContextT, typename ModuleStateT>
-class GPUCompilationCache {
+struct GPUCompilationCache {
     struct CachedCompilation {
         ContextT context;
         ModuleStateT module_state;
@@ -25,7 +25,6 @@ class GPUCompilationCache {
 
     uint32_t unique_id{2};  // zero is an invalid id
 
-public:
     static ALWAYS_INLINE uintptr_t kernel_hash(ContextT context, uint32_t id, uint32_t bits) {
         uintptr_t addr = (uintptr_t)context + id;
         // Fibonacci hashing. The golden ratio is 1.9E3779B97F4A7C15F39...

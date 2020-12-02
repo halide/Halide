@@ -44,7 +44,7 @@ public:
     template<typename T,
              typename... Args,
              typename = typename std::enable_if<Internal::all_are_convertible<Buffer<void>, Args...>::value>::type>
-    Realization(Buffer<T> &a, Args &&...args) {
+    Realization(Buffer<T> &a, Args &&... args) {
         images = std::vector<Buffer<void>>({a, args...});
     }
 

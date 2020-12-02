@@ -121,7 +121,7 @@ public:
         }
         template<typename T, typename... Args,
                  typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
-        RealizationArg(Buffer<T> &a, Args &&...args) {
+        RealizationArg(Buffer<T> &a, Args &&... args) {
             buffer_list.reset(new std::vector<Buffer<>>({a, args...}));
         }
         RealizationArg(RealizationArg &&from) = default;
@@ -569,7 +569,7 @@ public:
     void trace_pipeline();
 
     template<typename... Args>
-    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...args) {
+    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&... args) {
         std::vector<Expr> collected_args;
         Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
         add_requirement(condition, collected_args);

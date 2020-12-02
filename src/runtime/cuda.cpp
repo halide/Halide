@@ -1059,7 +1059,7 @@ WEAK int halide_cuda_run(void *user_context,
 #endif
 
     halide_assert(user_context, state_ptr);
-    CUmodule mod = nullptr;
+    CUmodule mod;
     bool found_module = compilation_cache.lookup(ctx.context, state_ptr, mod);
     halide_assert(user_context, found_module && mod != nullptr);
     debug(user_context) << "Got module " << mod << "\n";

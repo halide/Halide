@@ -59,7 +59,7 @@ public:
     }
 
     template<typename... Args>
-    FuncRefT<T> operator()(Args &&...args) const {
+    FuncRefT<T> operator()(Args &&... args) const {
         return Func::operator()(std::forward<Args>(args)...);
     }
 

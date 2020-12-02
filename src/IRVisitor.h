@@ -159,7 +159,7 @@ template<typename T, typename ExprRet, typename StmtRet>
 class VariadicVisitor {
 private:
     template<typename... Args>
-    ExprRet dispatch_expr(const BaseExprNode *node, Args &&...args) {
+    ExprRet dispatch_expr(const BaseExprNode *node, Args &&... args) {
         if (node == nullptr) {
             return ExprRet{};
         };
@@ -249,7 +249,7 @@ private:
     }
 
     template<typename... Args>
-    StmtRet dispatch_stmt(const BaseStmtNode *node, Args &&...args) {
+    StmtRet dispatch_stmt(const BaseStmtNode *node, Args &&... args) {
         if (node == nullptr) {
             return StmtRet{};
         };
@@ -324,22 +324,22 @@ private:
 
 public:
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE StmtRet dispatch(const Stmt &s, Args &&...args) {
+    HALIDE_ALWAYS_INLINE StmtRet dispatch(const Stmt &s, Args &&... args) {
         return dispatch_stmt(s.get(), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE StmtRet dispatch(Stmt &&s, Args &&...args) {
+    HALIDE_ALWAYS_INLINE StmtRet dispatch(Stmt &&s, Args &&... args) {
         return dispatch_stmt(s.get(), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE ExprRet dispatch(const Expr &e, Args &&...args) {
+    HALIDE_ALWAYS_INLINE ExprRet dispatch(const Expr &e, Args &&... args) {
         return dispatch_expr(e.get(), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE ExprRet dispatch(Expr &&e, Args &&...args) {
+    HALIDE_ALWAYS_INLINE ExprRet dispatch(Expr &&e, Args &&... args) {
         return dispatch_expr(e.get(), std::forward<Args>(args)...);
     }
 };
