@@ -2,6 +2,7 @@
 #include "HalideRuntimeCuda.h"
 #include "halide_benchmark.h"
 #include "mat_mul.h"
+#include <cstdio>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
