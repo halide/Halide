@@ -166,6 +166,12 @@ install(EXPORT Halide_Targets
         FILE Halide-Targets-${LIB_TYPE}.cmake
         COMPONENT Halide_Development)
 
+install(EXPORT Halide_Targets
+        DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+        NAMESPACE Halide::
+        FILE Halide-Targets-ns-${LIB_TYPE}.cmake
+        COMPONENT Halide_Development)
+
 install(EXPORT Halide_Interfaces
         DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
         NAMESPACE Halide::

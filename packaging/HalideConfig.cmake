@@ -62,18 +62,17 @@ macro(_Halide_include TYPE CAUSE)
     include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-${TYPE}.cmake")
 
     if (NOT ${CMAKE_FIND_PACKAGE_NAME}_both)
-        foreach (target IN ITEMS Halide Generator RunGenMain Adams2019 Li2018 Mullapudi2016)
-            if (NOT TARGET Halide::${TYPE}::${target})
-                continue()
-            endif ()
-            if (CMAKE_VERSION VERSION_LESS 3.18)
-                # In CMake <= 3.17, ALIAS targets may not refer to non-global targets, so we
-                # are forced to promote here. This means that multiple different versions of
-                # Halide may not be used  in a single project via find_package until 3.18
-                set_target_properties(Halide::${TYPE}::${target} PROPERTIES IMPORTED_GLOBAL TRUE)
-            endif ()
-            add_library(Halide::${target} ALIAS Halide::${TYPE}::${target})
-        endforeach ()
+        if (CMAKE_VERSION VERSION_LESS 3.18)
+            # In CMake < 3.18, ALIAS targets may not refer to non-global targets, so we
+            # are forced to load copies of the targets in the plain Halide:: namespace
+            include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-ns-${TYPE}.cmake")
+        else ()
+            foreach (target IN ITEMS Halide Generator RunGenMain Adams2019 Li2018 Mullapudi2016)
+                if (TARGET Halide::${TYPE}::${target})
+                    add_library(Halide::${target} ALIAS Halide::${TYPE}::${target})
+                endif ()
+            endforeach ()
+        endif ()
     endif ()
 endmacro()
 
