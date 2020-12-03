@@ -257,19 +257,6 @@ halide_define_aot_test(external_code GEN_DEPS external_code_generator_deps)
 # float16_t_generator.cpp
 halide_define_aot_test(float16_t)
 
-# gpu_multi_context_threaded_aottest.cpp
-# gpu_multi_context_threaded_generator.cpp
-halide_define_aot_test(gpu_multi_context_threaded
-                       OMIT_DEFAULT_GENERATOR
-                       EXTRA_LIBS
-                       gpu_multi_context_threaded_add
-                       gpu_multi_context_threaded_mul)
-
-add_halide_library(gpu_multi_context_threaded_add FROM gpu_multi_context_threaded.generator 
-                   FEATURES user_context)
-add_halide_library(gpu_multi_context_threaded_mul FROM gpu_multi_context_threaded.generator
-                   FEATURES user_context)
-
 # gpu_object_lifetime_aottest.cpp
 # gpu_object_lifetime_generator.cpp
 halide_define_aot_test(gpu_object_lifetime FEATURES debug)

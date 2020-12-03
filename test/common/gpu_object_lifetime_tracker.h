@@ -22,24 +22,25 @@ class GpuObjectLifetimeTracker {
         }
     };
 
-    std::array<ObjectType, 11> object_types = {{
-        {"Caching compiled kernel:", "Releasing cached compilation:"},
-
+    std::array<ObjectType, 13> object_types = {{
         // OpenCL objects
         {"clCreateContext", "clReleaseContext", true},
         {"clCreateCommandQueue", "clReleaseCommandQueue", true},
         // This handles both "clCreateProgramWithSource" and
         // "clCreateProgramWithBinary".
+        {"clCreateProgram", "clReleaseProgram"},
         {"clCreateBuffer", "clReleaseMemObject"},
         {"clCreateKernel", "clReleaseKernel"},
 
         // CUDA objects
         {"cuCtxCreate", "cuCtxDestroy", true},
+        {"cuModuleLoad", "cuModuleUnload"},
         {"cuMemAlloc", "cuMemFree"},
 
         // Metal objects
         {"Allocating: MTLCreateSystemDefaultDevice", "Releasing: MTLCreateSystemDefaultDevice", true},
         {"Allocating: new_command_queue", "Releasing: new_command_queue"},
+        {"Allocating: new_library_with_source", "Releasing: new_library_with_source"},
 
         // Hexagon objects
         {"halide_remote_load_library", "halide_remote_release_library"},
