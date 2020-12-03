@@ -37,7 +37,7 @@ if (EXISTS ${IMAGE})
     add_test(NAME hist_filter
              COMMAND hist_filter rgb.png out.png)
     set_tests_properties(hist_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS hist
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()
