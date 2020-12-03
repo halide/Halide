@@ -605,12 +605,12 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vaddhsat_dv), i16v2, "sat_add.vh.vh.dv", {i16v2, i16v2}},
     {INTRINSIC_128B(vaddwsat_dv), i32v2, "sat_add.vw.vw.dv", {i32v2, i32v2}},
 
-    {INTRINSIC_128B(vsububsat), u8v1, "sat_sub.vub.vub", {u8v1, u8v1}},
-    {INTRINSIC_128B(vsubuhsat), u16v1, "sat_sub.vuh.vuh", {u16v1, u16v1}},
+    {INTRINSIC_128B(vsububsat), i8v1, "sat_sub.vub.vub", {u8v1, u8v1}},
+    {INTRINSIC_128B(vsubuhsat), i16v1, "sat_sub.vuh.vuh", {u16v1, u16v1}},
     {INTRINSIC_128B(vsubhsat), i16v1, "sat_sub.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vsubwsat), i32v1, "sat_sub.vw.vw", {i32v1, i32v1}},
-    {INTRINSIC_128B(vsububsat_dv), u8v2, "sat_sub.vub.vub.dv", {u8v2, u8v2}},
-    {INTRINSIC_128B(vsubuhsat_dv), u16v2, "sat_sub.vuh.vuh.dv", {u16v2, u16v2}},
+    {INTRINSIC_128B(vsububsat_dv), i8v2, "sat_sub.vub.vub.dv", {u8v2, u8v2}},
+    {INTRINSIC_128B(vsubuhsat_dv), i16v2, "sat_sub.vuh.vuh.dv", {u16v2, u16v2}},
     {INTRINSIC_128B(vsubhsat_dv), i16v2, "sat_sub.vh.vh.dv", {i16v2, i16v2}},
     {INTRINSIC_128B(vsubwsat_dv), i32v2, "sat_sub.vw.vw.dv", {i32v2, i32v2}},
 
