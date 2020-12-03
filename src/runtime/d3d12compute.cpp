@@ -45,7 +45,6 @@
 #include "HalideRuntimeD3D12Compute.h"
 #include "device_buffer_utils.h"
 #include "device_interface.h"
-#include "gpu_context_common.h"
 #include "printer.h"
 #include "scoped_spin_lock.h"
 
@@ -2438,24 +2437,16 @@ static void *buffer_contents(d3d12_buffer *buffer) {
 
 volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 
-WEAK Halide::Internal::GPUCompilationCache<d3d12_device *, d3d12_library *> compilation_cache;
-
-WEAK d3d12_library *compile_kernel(void *user_context, const char *source, int source_size, int *error_ret) {
-    D3D12ContextHolder d3d12_context(user_context, true);
-    if (d3d12_context.error != 0) {
-        *error_ret = d3d12_context.error;
-        return nullptr;
-    }
-
-    d3d12_library *library = new_library_with_source(d3d12_context.device, source, source_size);
-    if (library == nullptr) {
-        TRACEFATAL("D3D12Compute: new_library_with_source failed.");
-        *error_ret = halide_error_code_out_of_memory;
-        return nullptr;
-    }
-
-    return library;
-}
+// Structure to hold the state of a module attached to the context.
+// Also used as a linked-list to keep track of all the different
+// modules that are attached to a context in order to release them all
+// when then context is released.
+struct module_state {
+    d3d12_library *library;
+    module_state *next;
+};
+D3D12TYPENAME(module_state)
+WEAK module_state *state_list = nullptr;
 
 }  // namespace D3D12Compute
 }  // namespace Internal
@@ -2763,14 +2754,29 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *bu
 WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state_ptr, const char *source, int source_size) {
     TRACELOG;
 
-    D3D12ContextHolder d3d12_context(user_context, true);
+    // Create the state object if necessary. This only happens once, regardless
+    // of how many times halide_initialize_kernels/halide_release is called.
+    // halide_release traverses this list and releases the module objects, but
+    // it does not modify the list nodes created/inserted here.
+    module_state *&state = *(module_state **)state_ptr;
+    if (!state) {
+        state = malloct<module_state>();
+        state->library = nullptr;
+        state->next = state_list;
+        state_list = state;
+    }
 
-    int error = halide_error_code_generic_error;
-    d3d12_library *library;
-    if (!compilation_cache.kernel_state_setup(user_context, state_ptr, d3d12_context.device,
-                                              library, compile_kernel, user_context,
-                                              source, source_size, &error)) {
-        return error;
+    D3D12ContextHolder d3d12_context(user_context, true);
+    if (d3d12_context.error != 0) {
+        return d3d12_context.error;
+    }
+
+    if (state->library == nullptr) {
+        state->library = new_library_with_source(d3d12_context.device, source, source_size);
+        if (state->library == nullptr) {
+            TRACEFATAL("D3D12Compute: new_library_with_source failed.");
+            return halide_error_code_out_of_memory;
+        }
     }
 
     return 0;
@@ -2833,7 +2839,19 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
             release_object(buffer);
         }
 
-        compilation_cache.delete_context(user_context, device, release_object<d3d12_library>);
+        // Unload the modules attached to this device. Note that the list
+        // nodes themselves are not freed, only the program objects are
+        // released. Subsequent calls to halide_init_kernels might re-create
+        // the program object using the same list node to store the program
+        // object.
+        module_state *state = state_list;
+        while (state) {
+            if (state->library) {
+                release_object(state->library);
+                state->library = nullptr;
+            }
+            state = state->next;
+        }
 
         // Release the device itself, if we created it.
         if (acquired_device == device) {
@@ -3005,9 +3023,8 @@ WEAK int halide_d3d12compute_run(void *user_context,
     StartCapturingGPUActivity();
 #endif
 
-    d3d12_library *library = nullptr;
-    bool found_module = compilation_cache.lookup(device, state_ptr, library);
-    halide_assert(user_context, found_module && library != nullptr);
+    halide_assert(user_context, state_ptr);
+    module_state *state = (module_state *)state_ptr;
 
     d3d12_frame *frame = acquire_frame(device);
     d3d12_compute_command_list *cmdList = frame->cmd_list;
@@ -3019,7 +3036,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     d3d12_compute_pipeline_state *pipeline_state = nullptr;
     {
         TRACE_SCOPE("kernel shader selection");
-        function = new_function_with_name(device, library, entry_name, strlen(entry_name),
+        function = new_function_with_name(device, state->library, entry_name, strlen(entry_name),
                                           shared_mem_bytes, threadsX, threadsY, threadsZ);
         halide_assert(user_context, function);
         pipeline_state = function->pipeline_state;
@@ -3514,7 +3531,6 @@ WEAK const struct halide_device_interface_t *halide_d3d12compute_device_interfac
 namespace {
 WEAK __attribute__((destructor)) void halide_d3d12compute_cleanup() {
     TRACELOG;
-    compilation_cache.release_all(nullptr, release_object<d3d12_library>);
     halide_d3d12compute_device_release(nullptr);
 }
 }  // namespace
