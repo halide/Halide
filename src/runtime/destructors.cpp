@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "printer.h"
 
 extern "C" {
 

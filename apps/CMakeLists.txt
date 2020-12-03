@@ -23,7 +23,7 @@ add_subdirectory(camera_pipe)
 add_subdirectory(conv_layer)
 add_subdirectory(cuda_mat_mul)
 add_subdirectory(depthwise_separable_conv)
-# add_subdirectory(fft)  # TODO(#5374): missing CMake build
+add_subdirectory(fft)
 # add_subdirectory(glsl)  # TODO(#4937): bugged; not built by Makefile
 add_subdirectory(harris)
 # add_subdirectory(hexagon_benchmarks)  # TODO(#5374): missing CMake build
