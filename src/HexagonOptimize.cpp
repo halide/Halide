@@ -86,6 +86,22 @@ Expr bc(Expr x) {
     return Broadcast::make(std::move(x), 0);
 }
 
+// Helper to handle various forms of multiplication.
+Expr as_mul(const Expr &a) {
+    if (a.as<Mul>()) {
+        return a;
+    } else if (const Call *wm = Call::as_intrinsic(a, {Call::widening_mul})) {
+        return simplify(Mul::make(cast(wm->type, wm->args[0]), cast(wm->type, wm->args[1])));
+    } else if (const Call *s = Call::as_intrinsic(a, {Call::shift_left, Call::widening_shift_left})) {
+        const uint64_t *log2_b = as_const_uint(s->args[1]);
+        if (log2_b) {
+            Expr b = make_one(s->type) << cast(UInt(s->type.bits()), (int)*log2_b);
+            return simplify(Mul::make(cast(s->type, s->args[0]), b));
+        }
+    }
+    return Expr();
+}
+
 // This mutator rewrites patterns with an unknown number of lanes to
 // have the specified number of lanes.
 class WithLanes : public IRMutator {
@@ -380,22 +396,6 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
         mpy_count += find_mpy_ops(cast(op.type(), add->args[0]), a_ty, b_ty, max_mpy_count, mpys, rest);
         mpy_count += find_mpy_ops(cast(op.type(), add->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
         return mpy_count;
-    } else if (const Sub *sub = op.as<Sub>()) {
-        Expr negative_b = lossless_negate(sub->b);
-        if (negative_b.defined()) {
-            int mpy_count = 0;
-            mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-            mpy_count += find_mpy_ops(negative_b, a_ty, b_ty, max_mpy_count, mpys, rest);
-            return mpy_count;
-        }
-    } else if (const Call *sub = Call::as_intrinsic(op, {Call::widening_sub})) {
-        Expr negative_b = lossless_negate(sub->args[1]);
-        if (negative_b.defined()) {
-            int mpy_count = 0;
-            mpy_count += find_mpy_ops(cast(op.type(), sub->args[0]), a_ty, b_ty, max_mpy_count, mpys, rest);
-            mpy_count += find_mpy_ops(cast(op.type(), negative_b), a_ty, b_ty, max_mpy_count, mpys, rest);
-            return mpy_count;
-        }
     }
 
     // Attempt to pretend this op is multiplied by 1.
@@ -423,9 +423,6 @@ private:
 
     Expr visit(const Mul *op) override {
         static const vector<Pattern> scalar_muls = {
-            // Vector by scalar widening multiplies.
-            {"halide.hexagon.mpy.vub.b", wild_i16x * bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1},
-
             // Non-widening scalar multiplication.
             {"halide.hexagon.mul.vh.b", wild_i16x * bc(wild_i16), Pattern::NarrowOp1},
             {"halide.hexagon.mul.vw.h", wild_i32x * bc(wild_i32), Pattern::NarrowOp1},
@@ -436,17 +433,6 @@ private:
         };
 
         static const vector<Pattern> muls = {
-            // Widening multiplication
-            {"halide.hexagon.mpy.vub.vb", wild_i16x * wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1},
-            {"halide.hexagon.mpy.vh.vuh", wild_i32x * wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1},
-            // We need to check for the commuted versions of these patterns
-            // before the more general patterns below catch these ops. The
-            // other fix for this would be to break this into a third group of
-            // multiply patterns, so the commuted versions of these would get
-            // matched first.
-            {"halide.hexagon.mpy.vub.vb", wild_i16x * wild_i16x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::SwapOps01},
-            {"halide.hexagon.mpy.vh.vuh", wild_i32x * wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 | Pattern::SwapOps01},
-
             // One operand widening multiplication.
             {"halide.hexagon.mul.vw.vh", wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1},
             {"halide.hexagon.mul.vw.vuh", wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1},
@@ -702,12 +688,9 @@ private:
             {"halide.hexagon.acc_add_4mpy.vw.vb.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vb.vb", wild_i8x, wild_i8x)},
 
             // Widening multiply-accumulates with a scalar.
-            {"halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + widening_mul(wild_u8x, wild_u8), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.add_mpy.vh.vub.b", wild_i16x + wild_i16x * bc(wild_i16), Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2},
-            {"halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + widening_mul(wild_u16x, wild_u16), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + widening_mul(wild_u8, wild_u8x), Pattern::ReinterleaveOp0 | Pattern::SwapOps12},
-            {"halide.hexagon.add_mpy.vh.vub.b", wild_i16x + bc(wild_i16) * wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 | Pattern::SwapOps12},
-            {"halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + widening_mul(wild_u16, wild_u16x), Pattern::ReinterleaveOp0 | Pattern::SwapOps12},
+            {"halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + widening_mul(wild_u8x, bc(wild_u8)), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.add_mpy.vh.vub.b", wild_i16x + widening_mul(wild_u8x, bc(wild_i8)), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + widening_mul(wild_u16x, bc(wild_u16)), Pattern::ReinterleaveOp0},
 
             // These patterns aren't exactly right because the instruction
             // saturates the result. However, this is really the instruction
@@ -715,7 +698,6 @@ private:
             // that 32 bit signed arithmetic overflow is undefined to argue
             // that these patterns are not completely incorrect.
             {"halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + widening_mul(wild_i16x, bc(wild_i16)), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + widening_mul(bc(wild_i16), wild_i16x), Pattern::ReinterleaveOp0 | Pattern::SwapOps12},
 
             // Widening multiply-accumulates.
             {"halide.hexagon.add_mpy.vuh.vub.vub", wild_u16x + widening_mul(wild_u8x, wild_u8x), Pattern::ReinterleaveOp0},
@@ -723,10 +705,10 @@ private:
             {"halide.hexagon.add_mpy.vh.vb.vb", wild_i16x + widening_mul(wild_i8x, wild_i8x), Pattern::ReinterleaveOp0},
             {"halide.hexagon.add_mpy.vw.vh.vh", wild_i32x + widening_mul(wild_i16x, wild_i16x), Pattern::ReinterleaveOp0},
 
-            {"halide.hexagon.add_mpy.vh.vub.vb", wild_i16x + wild_i16x * wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2},
-            {"halide.hexagon.add_mpy.vw.vh.vuh", wild_i32x + wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2},
-            {"halide.hexagon.add_mpy.vh.vub.vb", wild_i16x + wild_i16x * wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 | Pattern::SwapOps12},
-            {"halide.hexagon.add_mpy.vw.vh.vuh", wild_i32x + wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12},
+            {"halide.hexagon.add_mpy.vh.vub.vb", wild_i16x + widening_mul(wild_u8x, wild_i8x), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.add_mpy.vw.vh.vuh", wild_i32x + widening_mul(wild_i16x, wild_u16x), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.add_mpy.vh.vub.vb", wild_i16x + widening_mul(wild_i8x, wild_u8x), Pattern::ReinterleaveOp0 | Pattern::SwapOps12},
+            {"halide.hexagon.add_mpy.vw.vh.vuh", wild_i32x + widening_mul(wild_u16x, wild_i16x), Pattern::ReinterleaveOp0 | Pattern::SwapOps12},
 
             // Shift-accumulates.
             {"halide.hexagon.add_shr.vw.vw.uw", wild_i32x + (wild_i32x >> bc(wild_u32))},
@@ -741,8 +723,6 @@ private:
             // Non-widening multiply-accumulates with a scalar.
             {"halide.hexagon.add_mul.vh.vh.b", wild_i16x + wild_i16x * bc(wild_i16), Pattern::NarrowOp2},
             {"halide.hexagon.add_mul.vw.vw.h", wild_i32x + wild_i32x * bc(wild_i32), Pattern::NarrowOp2},
-            {"halide.hexagon.add_mul.vh.vh.b", wild_i16x + bc(wild_i16) * wild_i16x, Pattern::NarrowOp1 | Pattern::SwapOps12},
-            {"halide.hexagon.add_mul.vw.vw.h", wild_i32x + bc(wild_i32) * wild_i32x, Pattern::NarrowOp1 | Pattern::SwapOps12},
             // TODO: There's also a add_mul.vw.vw.b
 
             // This pattern is very general, so it must come last.
@@ -997,10 +977,12 @@ private:
             }
         }
 
+
         static const vector<Pattern> calls = {
             // Vector by scalar widening multiplies. These need to happen before the ones below, to avoid
             // using vector versions when scalar versions would suffice.
             {"halide.hexagon.mpy.vub.ub", widening_mul(wild_u8x, bc(wild_u8)), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vub.b", widening_mul(wild_u8x, bc(wild_i8)), Pattern::InterleaveResult},
             {"halide.hexagon.mpy.vuh.uh", widening_mul(wild_u16x, bc(wild_u16)), Pattern::InterleaveResult},
             {"halide.hexagon.mpy.vh.h", widening_mul(wild_i16x, bc(wild_i16)), Pattern::InterleaveResult},
 
@@ -1012,9 +994,13 @@ private:
             {"halide.hexagon.sub_vw.vuh.vuh", widening_sub(wild_u16x, wild_u16x), Pattern::InterleaveResult},
             {"halide.hexagon.sub_vw.vh.vh", widening_sub(wild_i16x, wild_i16x), Pattern::InterleaveResult},
             {"halide.hexagon.mpy.vub.vub", widening_mul(wild_u8x, wild_u8x), Pattern::InterleaveResult},
-            {"halide.hexagon.mpy.vuh.vuh", widening_mul(wild_u16x, wild_u16x), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vub.vb", widening_mul(wild_u8x, wild_i8x), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vub.vb", widening_mul(wild_i8x, wild_u8x), Pattern::InterleaveResult | Pattern::SwapOps01},
             {"halide.hexagon.mpy.vb.vb", widening_mul(wild_i8x, wild_i8x), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vuh.vuh", widening_mul(wild_u16x, wild_u16x), Pattern::InterleaveResult},
             {"halide.hexagon.mpy.vh.vh", widening_mul(wild_i16x, wild_i16x), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vh.vuh", widening_mul(wild_i16x, wild_u16x), Pattern::InterleaveResult},
+            {"halide.hexagon.mpy.vh.vuh", widening_mul(wild_u16x, wild_i16x), Pattern::InterleaveResult | Pattern::SwapOps01},
         };
 
         if (op->type.is_vector()) {
@@ -1979,94 +1965,125 @@ private:
     }
 };
 
-// Convert some expressions to an equivalent form which could get better
-// optimized in later stages for hexagon
-class RearrangeExpressions : public IRMutator {
+// Distribute constant RHS widening shift lefts as multiplies.
+// TODO: This is an extremely unfortunate mess. I think the better
+// solution is for the simplifier to distribute constant multiplications
+// instead of factoring them, and then this logic is unnecessary (find_mpy_ops
+// would need to handle shifts, but that's easy).
+// Another possibility would be adding a widening_mul_add intrinsic that takes
+// a list of pairs of operands, and computes a widening sum of widening multiplies
+// of these pairs. PatternMatchIntrinsics could aggressively rewrite shifts as
+// widening_mul_add operands.
+class DistributeShiftsAsMuls : public IRMutator {
 private:
-    using IRMutator::visit;
-
-    Expr mutate_mul(const Expr &a, const Expr &b) {
-        if (!(a.type().is_vector() || b.type().is_vector())) {
-            // Only do this for vectors (where we have vmpa).
-            return Expr();
+    static bool is_cast(const Expr &e, Type value_t) {
+        if (const Cast *cast = e.as<Cast>()) {
+            return cast->value.type() == value_t;
         }
+        return false;
+    }
 
-        if (a.as<Broadcast>() && !b.as<Broadcast>()) {
-            // Ensures broadcasts always occurs as op1 not op0
-            return mutate_mul(b, a);
-        }
-
-        if (b.as<Broadcast>() && a.type().is_int() &&
-            (a.type().bits() == 16 || a.type().bits() == 32)) {
-            // Distributing broadcasts helps creating more vmpa
-            // because of more adds of muls. Since muls are
-            // generally widening ops we need not check if a
-            // is a sum of widening casts.
-            if (const Add *add = a.as<Add>()) {
-                // simplify() ensures that if add->a is also
-                // a scalar multiplications, then we combine the two
-                // broadcasts produced in add->a * b. For eg:
-                // add->a = bc * i16, then simplify combines
-                // bc * b into a single expression.
-                // Since the simplifier is used on the individual operands
-                // after distributing the broadcast, the mutation does not
-                // compete with the simplifier [the next mutation always occurs
-                // on the simplified operands]. For eg:
-                // Consider initial expression:
-                //      ((v0 * bc(x) + v1 * bc(y)) + v2) * bc(z)
-                // Mutation sequence:
-                // Step 1:
-                //      mutate((v0 * bc(x) + v1 * bc(y)) * bc(z) + v2 * bc(z))
-                // Step 2:
-                //      mutate((v0 * bc(x) + v1 * bc(y)) * bc(z)) + mutate(v2 * bc(z))
-                // Step 3 [Result]:
-                //      ((v0 * bc(x * z) + v1 * bc(y *z)) + v2 * bc(z))
-                return mutate(simplify(add->a * b) + simplify(add->b * b));
-            } else if (const Sub *sub = a.as<Sub>()) {
-                return mutate(simplify(sub->a * b) - simplify(sub->b * b));
-            } else if (const Call *add = Call::as_intrinsic(a, {Call::widening_add})) {
-                Expr add_a = cast(add->type, add->args[0]);
-                Expr add_b = cast(add->type, add->args[1]);
-                return mutate(simplify(add_a * b) + simplify(add_b * b));
-            } else if (const Call *sub = Call::as_intrinsic(a, {Call::widening_sub})) {
-                Expr sub_a = cast(sub->type, sub->args[0]);
-                Expr sub_b = cast(sub->type, sub->args[1]);
-                return mutate(simplify(sub_a * b) - simplify(sub_b * b));
-            } else if (const Call *mul = Call::as_intrinsic(a, {Call::widening_mul})) {
-                Expr mul_a = mutate(mul->args[0]);
-                Expr mul_b = mutate(mul->args[1]);
-
-                Expr before = widen(mul_a) * widen(mul_b) * b;
-                Expr after = mutate(simplify(before));
-                if (!before.same_as(after)) {
-                    // Don't blow up widening_mul unless the mutator changed something.
-                    return after;
-                } else if(!mul_a.same_as(mul->args[0]) || !mul_b.same_as(mul->args[1])) {
-                    return widening_mul(mul_a, mul_b);
+    static Expr distribute(Expr a, Expr b) {
+        if (const Add *add = a.as<Add>()) {
+            return Add::make(distribute(add->a, b), distribute(add->b, b));
+        } else if (const Sub *sub = a.as<Sub>()) {
+            Expr sub_a = distribute(sub->a, b);
+            Expr sub_b = distribute(sub->b, b);
+            Expr negative_sub_b = lossless_negate(sub_b);
+            if (negative_sub_b.defined()) {
+                return Add::make(sub_a, negative_sub_b);
+            } else {
+                return Sub::make(sub_a, sub_b);
+            }
+        } else if (const Cast *cast = a.as<Cast>()) {
+            Expr cast_b = lossless_cast(b.type().with_bits(cast->value.type().bits()), b);
+            if (cast_b.defined()) {
+                Expr mul = widening_mul(cast->value, cast_b);
+                if (mul.type().bits() <= cast->type.bits()) {
+                    if (mul.type() != cast->type) {
+                        mul = Cast::make(cast->type, mul);
+                    }
+                    return mul;
+                }
+            }
+        } else if (const Call *add = Call::as_intrinsic(a, {Call::widening_add})) {
+            Expr add_a = Cast::make(add->type, add->args[0]);
+            Expr add_b = Cast::make(add->type, add->args[1]);
+            add_a = distribute(add_a, b);
+            add_b = distribute(add_b, b);
+            // If add_a and add_b are the same kind of cast, we should remake a widening add.
+            const Cast *add_a_cast = add_a.as<Cast>();
+            const Cast *add_b_cast = add_b.as<Cast>();
+            if (add_a_cast && add_b_cast &&
+                add_a_cast->value.type() == add->args[0].type() &&
+                add_b_cast->value.type() == add->args[1].type()) {
+                return widening_add(add_a_cast->value, add_b_cast->value);
+            } else {
+                return Add::make(add_a, add_b);
+            }
+        } else if (const Call *sub = Call::as_intrinsic(a, {Call::widening_sub})) {
+            Expr sub_a = Cast::make(sub->type, sub->args[0]);
+            Expr sub_b = Cast::make(sub->type, sub->args[1]);
+            sub_a = distribute(sub_a, b);
+            sub_b = distribute(sub_b, b);
+            Expr negative_sub_b = lossless_negate(sub_b);
+            if (negative_sub_b.defined()) {
+                sub_b = negative_sub_b;
+            }
+            // If sub_a and sub_b are the same kind of cast, we should remake a widening sub.
+            const Cast *sub_a_cast = sub_a.as<Cast>();
+            const Cast *sub_b_cast = sub_b.as<Cast>();
+            if (sub_a_cast && sub_b_cast &&
+                sub_a_cast->value.type() == sub->args[0].type() &&
+                sub_b_cast->value.type() == sub->args[1].type()) {
+                if (negative_sub_b.defined()) {
+                    return widening_add(sub_a_cast->value, sub_b_cast->value);
+                } else {
+                    return widening_sub(sub_a_cast->value, sub_b_cast->value);
+                }
+            } else {
+                if (negative_sub_b.defined()) {
+                    return Add::make(sub_a, sub_b);
+                } else {
+                    return Sub::make(sub_a, sub_b);
+                }
+            }
+        } else if (const Call *mul = Call::as_intrinsic(a, {Call::widening_mul})) {
+            Expr mul_a = Cast::make(mul->type, mul->args[0]);
+            Expr mul_b = Cast::make(mul->type, mul->args[1]);
+            mul_a = distribute(mul_a, b);
+            if (const Cast *mul_a_cast = mul_a.as<Cast>()) {
+                if (mul_a_cast->value.type() == mul->args[0].type()) {
+                    return widening_mul(mul_a_cast->value, mul->args[1]);
+                }
+            }
+            mul_b = distribute(mul_b, b);
+            if (const Cast *mul_b_cast = mul_b.as<Cast>()) {
+                if (mul_b_cast->value.type() == mul->args[1].type()) {
+                    return widening_mul(mul->args[0], mul_b_cast->value);
                 }
             }
         }
-        return Expr();
-    }
-
-    Expr visit(const Mul *op) override {
-        Expr mutated = mutate_mul(op->a, op->b);
-        if (mutated.defined()) {
-            return mutated;
-        }
-        return IRMutator::visit(op);
+        return simplify(Mul::make(a, b));
     }
 
     Expr visit(const Call *op) override {
-        Expr mul = as_mul(op);
-        if (mul.defined()) {
-            const Mul *op = mul.as<Mul>();
-            Expr mutated = mutate_mul(op->a, op->b);
-            if (mutated.defined()) {
-                return mutated;
+        if (op->is_intrinsic(Call::shift_left)) {
+            if (const uint64_t *const_b = as_const_uint(op->args[1])) {
+                Expr a = op->args[0];
+                // Only rewrite widening shifts.
+                const Cast *cast_a = a.as<Cast>();
+                bool is_widening_cast = cast_a && cast_a->type.bits() >= cast_a->value.type().bits() * 2;
+                if (is_widening_cast || Call::as_intrinsic(a, {Call::widening_add, Call::widening_mul, Call::widening_sub})) {
+                    return mutate(distribute(a, make_one(a.type()) << *const_b));
+                }
+            }
+        } else if (op->is_intrinsic(Call::widening_shift_left)) {
+            if (const uint64_t *const_b = as_const_uint(op->args[1])) {
+                Expr a = Cast::make(op->type, op->args[0]);
+                return mutate(distribute(a, make_one(a.type()) << *const_b));
             }
         }
-
         return IRMutator::visit(op);
     }
 };
@@ -2338,16 +2355,16 @@ Stmt scatter_gather_generator(Stmt s) {
 }
 
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
-    // Convert some expressions to an equivalent form which get better
-    // optimized in later stages for hexagon
-    s = RearrangeExpressions().mutate(s);
+    // We need to redo intrinsic matching due to simplification that has
+    // happened after the end of target independent lowering.
+    s = pattern_match_intrinsics(s);
+
+    // Hexagon prefers widening shifts to be expressed as multiplies to
+    // hopefully hit compound widening multiplies.
+    s = DistributeShiftsAsMuls().mutate(s);
 
     // Peephole optimize for Hexagon instructions. These can generate
-    // interleaves and deinterleaves alongside the HVX intrinsics. We
-    // have to redo generic pattern matching because simplification and
-    // other mutations have rewritten the intrinsics generated by the
-    // one in lower.
-    s = pattern_match_intrinsics(s);
+    // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns(t).mutate(s);
 
     // Try to eliminate any redundant interleave/deinterleave pairs.

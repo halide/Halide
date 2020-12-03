@@ -334,7 +334,7 @@ Expr narrow(Expr a);
 
 /** Compute widen(a) + widen(b). The result is always signed. */
 Expr widening_add(Expr a, Expr b);
-/** Compute widen(a) * widen(b) */
+/** Compute widen(a) * widen(b). a and b may have different signedness. */
 Expr widening_mul(Expr a, Expr b);
 /** Compute widen(a) - widen(b). The result is always signed. */
 Expr widening_sub(Expr a, Expr b);

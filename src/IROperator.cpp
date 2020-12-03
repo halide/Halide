@@ -524,8 +524,7 @@ Expr lossless_cast(Type t, Expr e) {
 }
 
 Expr lossless_negate(const Expr &x) {
-    const Mul *m = x.as<Mul>();
-    if (m) {
+    if (const Mul *m = x.as<Mul>()) {
         Expr b = lossless_negate(m->b);
         if (b.defined()) {
             return Mul::make(m->a, b);
@@ -533,6 +532,15 @@ Expr lossless_negate(const Expr &x) {
         Expr a = lossless_negate(m->a);
         if (a.defined()) {
             return Mul::make(a, m->b);
+        }
+    } else if (const Call *m = Call::as_intrinsic(x, {Call::widening_mul})) {
+        Expr b = lossless_negate(m->args[1]);
+        if (b.defined()) {
+            return widening_mul(m->args[0], b);
+        }
+        Expr a = lossless_negate(m->args[0]);
+        if (a.defined()) {
+            return widening_mul(a, m->args[1]);
         }
     } else if (const IntImm *i = x.as<IntImm>()) {
         if (!i->type.is_min(i->value)) {
@@ -1041,8 +1049,13 @@ Expr widening_add(Expr a, Expr b) {
 }
 
 Expr widening_mul(Expr a, Expr b) {
-    match_types(a, b);
+    // Widening multiplies can have different signs.
+    match_bits(a, b);
+    match_lanes(a, b);
     Type wide_type = a.type().widen();
+    if (wide_type.is_uint() && b.type().is_int()) {
+        wide_type = wide_type.with_code(halide_type_int);
+    }
     return Call::make(wide_type, Call::widening_mul, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 

@@ -21,6 +21,14 @@ bool is_widen(const Expr &x) {
     return false;
 }
 
+Expr strip_widening_cast(const Expr &x) {
+    Expr narrow = lossless_cast(x.type().narrow(), x);
+    if (narrow.defined()) {
+        return narrow;
+    }
+    return lossless_cast(x.type().narrow().with_code(halide_type_uint), x);
+}
+
 Expr saturating_narrow(Expr a) {
     Type narrow = a.type().narrow();
     return saturating_cast(narrow, a);
@@ -28,13 +36,13 @@ Expr saturating_narrow(Expr a) {
 
 Expr make_shift_right(Expr a, int const_b) {
     internal_assert(const_b > 0);
-    Expr b = make_const(UInt(a.type().bits()), const_b);
+    Expr b = make_const(a.type().with_code(halide_type_uint), const_b);
     return Call::make(a.type(), Call::shift_right, {a, b}, Call::PureIntrinsic);
 }
 
 Expr make_rounding_shift_right(Expr a, int const_b) {
     internal_assert(const_b > 0);
-    Expr b = make_const(UInt(a.type().bits()), const_b);
+    Expr b = make_const(a.type().with_code(halide_type_uint), const_b);
     return Call::make(a.type(), Call::rounding_shift_right, {a, b}, Call::PureIntrinsic);
 }
 
@@ -233,7 +241,7 @@ protected:
                 if (result.type() != op->type) {
                     result = Cast::make(op->type, result);
                 }
-                return result;
+                return mutate(result);
             }
         }
 
@@ -255,12 +263,23 @@ protected:
             Expr narrow_b = lossless_cast(narrow, b);
 
             if (narrow_a.defined() && narrow_b.defined()) {
-                Expr result = widening_sub(narrow_a, narrow_b);
+                Expr negative_narrow_b = lossless_negate(narrow_b);
+                Expr result;
+                if (negative_narrow_b.defined()) {
+                    result = widening_add(narrow_a, negative_narrow_b);
+                } else {
+                    result = widening_sub(narrow_a, narrow_b);
+                }
                 if (result.type() != op->type) {
                     result = Cast::make(op->type, result);
                 }
-                return result;
+                return mutate(result);
             }
+        }
+
+        Expr negative_b = lossless_negate(b);
+        if (negative_b.defined()) {
+            return Add::make(a, negative_b);
         }
 
         if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -271,6 +290,19 @@ protected:
     }
 
     Expr visit(const Mul *op) override {
+        if (as_const_int(op->b) || as_const_uint(op->b)) {
+            // Distribute constants through add/sub. Do this before we muck everything up with widening
+            // intrinsics.
+            // TODO: Only do this for widening?
+            // TODO: Try to do this with IRMatcher::rewriter. The challenge is managing the narrowing/widening casts,
+            // and doing constant folding without the simplifier undoing the work.
+            if (const Add *add_a = op->a.as<Add>()) {
+                return mutate(Add::make(simplify(Mul::make(add_a->a, op->b)), simplify(Mul::make(add_a->b, op->b))));
+            } else if (const Sub *sub_a = op->a.as<Sub>()) {
+                return mutate(Sub::make(simplify(Mul::make(sub_a->a, op->b)), simplify(Mul::make(sub_a->b, op->b))));
+            }
+        }
+
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
@@ -285,23 +317,15 @@ protected:
         }
 
         // We're applying this to float, which seems OK? float16 * float16 -> float32 is a widening multiply?
-        Type narrow = op->type.narrow();
-        Expr narrow_a = lossless_cast(narrow, a);
-        Expr narrow_b = lossless_cast(narrow, b);
+        Expr narrow_a = strip_widening_cast(a);
+        Expr narrow_b = strip_widening_cast(b);
 
         if (narrow_a.defined() && narrow_b.defined()) {
-            const Cast *ca = narrow_a.as<Cast>();
-            const Cast *cb = narrow_b.as<Cast>();
-            if (ca && cb) {
-                // If there is more casting, we can move it after the multiply.
-                narrow_a = ca->value;
-                narrow_b = cb->value;
-            }
             Expr result = widening_mul(narrow_a, narrow_b);
             if (result.type() != op->type) {
                 result = Cast::make(op->type, result);
             }
-            return result;
+            return mutate(result);
         }
 
         if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -418,6 +442,47 @@ protected:
             // clang-format on
         }
 
+        if (op->is_intrinsic(Call::widening_mul)) {
+            internal_assert(op->args.size() == 2);
+            Expr a = mutate(op->args[0]);
+            Expr b = mutate(op->args[1]);
+            Expr narrow_a = strip_widening_cast(a);
+            Expr narrow_b = strip_widening_cast(b);
+            if (narrow_a.defined() && narrow_b.defined()) {
+                return Cast::make(op->type, widening_mul(narrow_a, narrow_b));
+            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+                return op;
+            } else {
+                return widening_mul(a, b);
+            }
+        } else if (op->is_intrinsic(Call::widening_add)) {
+            internal_assert(op->args.size() == 2);
+            Expr a = mutate(op->args[0]);
+            Expr b = mutate(op->args[1]);
+            Expr narrow_a = strip_widening_cast(a);
+            Expr narrow_b = strip_widening_cast(b);
+            if (narrow_a.defined() && narrow_b.defined()) {
+                return Cast::make(op->type, widening_add(narrow_a, narrow_b));
+            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+                return op;
+            } else {
+                return widening_add(a, b);
+            }
+        } else if (op->is_intrinsic(Call::widening_sub)) {
+            internal_assert(op->args.size() == 2);
+            Expr a = mutate(op->args[0]);
+            Expr b = mutate(op->args[1]);
+            Expr narrow_a = strip_widening_cast(a);
+            Expr narrow_b = strip_widening_cast(b);
+            if (narrow_a.defined() && narrow_b.defined()) {
+                return Cast::make(op->type, widening_sub(narrow_a, narrow_b));
+            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+                return op;
+            } else {
+                return widening_sub(a, b);
+            }
+        }
+
         if (op->is_intrinsic(Call::shift_right) || op->is_intrinsic(Call::shift_left)) {
             internal_assert(op->args.size() == 2);
             Expr a = mutate(op->args[0]);
@@ -480,30 +545,6 @@ Expr pattern_match_intrinsics(Expr e) {
     return e;
 }
 
-Expr as_add(const Expr &a) {
-    if (a.as<Add>()) {
-        return a;
-    } else if (const Call *wa = Call::as_intrinsic(a, {Call::widening_add})) {
-        return simplify(Add::make(cast(wa->type, wa->args[0]), cast(wa->type, wa->args[1])));
-    }
-    return Expr();
-}
-
-Expr as_mul(const Expr &a) {
-    if (a.as<Mul>()) {
-        return a;
-    } else if (const Call *wm = Call::as_intrinsic(a, {Call::widening_mul})) {
-        return simplify(Mul::make(cast(wm->type, wm->args[0]), cast(wm->type, wm->args[1])));
-    } else if (const Call *s = Call::as_intrinsic(a, {Call::shift_left, Call::widening_shift_left})) {
-        const uint64_t *log2_b = as_const_uint(s->args[1]);
-        if (log2_b) {
-            Expr b = cast(s->type, 1) << cast(UInt(s->type.bits()), (int)*log2_b);
-            return simplify(Mul::make(cast(s->type, s->args[0]), b));
-        }
-    }
-    return Expr();
-}
-
 Expr lower_widening_add(const Expr &a, const Expr &b) {
     return widen(a) + widen(b);
 }
@@ -560,55 +601,24 @@ Expr lower_halving_add(const Expr &a, const Expr &b) {
     return Cast::make(a.type(), make_shift_right(result_2x, 1));
 }
 
-Expr lower_rounding_halving_add(const Expr &a, const Expr &b) {
-    internal_assert(a.type() == b.type());
-    Expr result_2x = widening_add(a, b);
-    return Cast::make(a.type(), make_rounding_shift_right(result_2x, 1));
-}
-
 Expr lower_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     Expr result_2x = widening_sub(a, b);
     return Cast::make(a.type(), make_shift_right(result_2x, 1));
 }
 
+// TODO: These should using rounding_shift_right, but lowering that
+// results in double widening and the simplifier doesn't fix it.
+Expr lower_rounding_halving_add(const Expr &a, const Expr &b) {
+    internal_assert(a.type() == b.type());
+    Expr result_2x = widening_add(a, b) + 1;
+    return Cast::make(a.type(), make_shift_right(result_2x, 1));
+}
+
 Expr lower_rounding_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    Expr result_2x = widening_sub(a, b);
-    return Cast::make(a.type(), make_rounding_shift_right(result_2x, 1));
-}
-
-Expr lower_mulhi_shr(const Expr &a, const Expr &b, const Expr &shift) {
-    Expr p = widening_mul(a, b);
-    p = p >> cast(UInt(p.type().bits()), p.type().bits() / 2);
-    return narrow(p) >> shift;
-}
-
-Expr lower_sorted_avg(const Expr &a, const Expr &b) {
-    // b > a, so the following works without widening:
-    // a + (b - a)/2
-    // TODO: This is tricky. Targets with halving_sub would be better off using that,
-    // but presumably targets that have that also have halving_add, so there's no reason
-    // to use this.
-    return a + (b - a) / 2;
-}
-
-Expr lower_abs(const Expr &a) {
-    // Generate select(x >= 0, x, -x) instead
-    std::string x_name = unique_name('x');
-    Expr x = Variable::make(a.type(), x_name);
-    return Let::make(x_name, a, select(x >= 0, x, -x));
-}
-
-Expr lower_absd(const Expr &a, const Expr &b) {
-    // Use a select instead
-    std::string a_name = unique_name('a');
-    std::string b_name = unique_name('b');
-    Expr a_var = Variable::make(a.type(), a_name);
-    Expr b_var = Variable::make(b.type(), b_name);
-    return Let::make(a_name, a,
-                      Let::make(b_name, b,
-                                Select::make(a_var < b_var, b_var - a_var, a_var - b_var)));
+    Expr result_2x = widening_sub(a, b) + 1;
+    return Cast::make(a.type(), make_shift_right(result_2x, 1));
 }
 
 Expr lower_intrinsic(const Call *op) {
@@ -642,20 +652,7 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::rounding_halving_sub)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_halving_sub(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::mulhi_shr)) {
-        internal_assert(op->args.size() == 3);
-        return lower_mulhi_shr(op->args[0], op->args[1], op->args[2]);
-    } else if (op->is_intrinsic(Call::sorted_avg)) {
-        internal_assert(op->args.size() == 2);
-        return lower_sorted_avg(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::abs)) {
-        internal_assert(op->args.size() == 1);
-        return lower_abs(op->args[0]);
-    } else if (op->is_intrinsic(Call::absd)) {
-        internal_assert(op->args.size() == 2);
-        return lower_absd(op->args[0], op->args[1]);
     } else {
-        internal_error << "Unknown intrinsic " << op->name;
         return Expr();
     }
 }
