@@ -491,6 +491,7 @@ Expr lossless_cast(Type t, Expr e) {
                     Type narrower = reduce->value.type().with_bits(t.bits() / 2);
                     Expr val = lossless_cast(narrower, reduce->value);
                     if (val.defined()) {
+                        val = cast(narrower.with_bits(t.bits()), val);
                         return VectorReduce::make(reduce->op, val, reduce->type.lanes());
                     }
                 }

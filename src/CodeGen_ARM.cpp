@@ -25,6 +25,11 @@ using std::vector;
 using namespace Halide::ConciseCasts;
 using namespace llvm;
 
+// Broadcast to an unknown number of lanes, for making patterns.
+Expr bc(Expr x) {
+    return Broadcast::make(std::move(x), 0);
+}
+
 CodeGen_ARM::CodeGen_ARM(Target target)
     : CodeGen_Posix(target) {
     if (target.bits == 32) {
@@ -40,33 +45,37 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     }
 
     casts.emplace_back("vqrdmulh.v4i16", "sqrdmulh.v4i16", 4,
-                       i16_sat(rounding_shift_right(widening_mul(wild_i16x4, wild_i16x4), 15)));
+                       i16_sat(rounding_shift_right(widening_mul(wild_i16x4, wild_i16x4), u16(15))));
     casts.emplace_back("vqrdmulh.v8i16", "sqrdmulh.v8i16", 8,
-                       i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), 15)));
+                       i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))));
     casts.emplace_back("vqrdmulh.v2i32", "sqrdmulh.v2i32", 2,
-                       i32_sat(rounding_shift_right(widening_mul(wild_i32x2, wild_i32x2), 31)));
+                       i32_sat(rounding_shift_right(widening_mul(wild_i32x2, wild_i32x2), u32(31))));
     casts.emplace_back("vqrdmulh.v4i32", "sqrdmulh.v4i32", 4,
-                       i32_sat(rounding_shift_right(widening_mul(wild_i32x_, wild_i32x_), 31)));
+                       i32_sat(rounding_shift_right(widening_mul(wild_i32x_, wild_i32x_), u32(31))));
 
-    casts.emplace_back("vqshiftns.v8i8", "sqshrn.v8i8", 8, i8_sat(wild_i16x_ >> wild_u16_));
-    casts.emplace_back("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_ >> wild_u32_));
-    casts.emplace_back("vqshiftns.v2i32", "sqshrn.v2i32", 2, i32_sat(wild_i64x_ >> wild_u64_));
-    casts.emplace_back("vqshiftnu.v8i8", "uqshrn.v8i8", 8, u8_sat(wild_u16x_ >> wild_u16_));
-    casts.emplace_back("vqshiftnu.v4i16", "uqshrn.v4i16", 4, u16_sat(wild_u32x_ >> wild_u32_));
-    casts.emplace_back("vqshiftnu.v2i32", "uqshrn.v2i32", 2, u32_sat(wild_u64x_ >> wild_u64_));
-    casts.emplace_back("vqshiftnsu.v8i8", "sqshrun.v8i8", 8, u8_sat(wild_i16x_ >> wild_u16_));
-    casts.emplace_back("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16_sat(wild_i32x_ >> wild_u32_));
-    casts.emplace_back("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32_sat(wild_i64x_ >> wild_u64_));
+    casts.emplace_back("vqshiftns.v8i8", "sqshrn.v8i8", 8, i8_sat(wild_i16x_ >> bc(wild_u16_)));
+    casts.emplace_back("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_ >> bc(wild_u32_)));
+    casts.emplace_back("vqshiftns.v2i32", "sqshrn.v2i32", 2, i32_sat(wild_i64x_ >> bc(wild_u64_)));
+    casts.emplace_back("vqshiftnu.v8i8", "uqshrn.v8i8", 8, u8_sat(wild_u16x_ >> bc(wild_u16_)));
+    casts.emplace_back("vqshiftnu.v4i16", "uqshrn.v4i16", 4, u16_sat(wild_u32x_ >> bc(wild_u32_)));
+    casts.emplace_back("vqshiftnu.v2i32", "uqshrn.v2i32", 2, u32_sat(wild_u64x_ >> bc(wild_u64_)));
+    casts.emplace_back("vqshiftnsu.v8i8", "sqshrun.v8i8", 8, u8_sat(wild_i16x_ >> bc(wild_u16_)));
+    casts.emplace_back("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16_sat(wild_i32x_ >> bc(wild_u32_)));
+    casts.emplace_back("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32_sat(wild_i64x_ >> bc(wild_u64_)));
 
-    casts.emplace_back("vqrshiftns.v8i8", "sqrshrn.v8i8", 8, i8_sat(rounding_shift_right(wild_i16x_, wild_u32_)));
-    casts.emplace_back("vqrshiftns.v4i16", "sqrshrn.v4i16", 4, i16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
-    casts.emplace_back("vqrshiftns.v2i32", "sqrshrn.v2i32", 2, i32_sat(rounding_shift_right(wild_i64x_, wild_u32_)));
-    casts.emplace_back("vqrshiftnu.v8i8", "uqrshrn.v8i8", 8, u8_sat(rounding_shift_right(wild_u16x_, wild_u32_)));
-    casts.emplace_back("vqrshiftnu.v4i16", "uqrshrn.v4i16", 4, u16_sat(rounding_shift_right(wild_u32x_, wild_u32_)));
-    casts.emplace_back("vqrshiftnu.v2i32", "uqrshrn.v2i32", 2, u32_sat(rounding_shift_right(wild_u64x_, wild_u32_)));
-    casts.emplace_back("vqrshiftnsu.v8i8", "sqrshrun.v8i8", 8, u8_sat(rounding_shift_right(wild_i16x_, wild_u32_)));
-    casts.emplace_back("vqrshiftnsu.v4i16", "sqrshrun.v4i16", 4, u16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
-    casts.emplace_back("vqrshiftnsu.v2i32", "sqrshrun.v2i32", 2, u32_sat(rounding_shift_right(wild_i64x_, wild_u32_)));
+    casts.emplace_back("vqrshiftns.v8i8", "sqrshrn.v8i8", 8, i8_sat(rounding_shift_right(wild_i16x_, bc(wild_u32_))));
+    casts.emplace_back("vqrshiftns.v4i16", "sqrshrn.v4i16", 4, i16_sat(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
+    casts.emplace_back("vqrshiftns.v2i32", "sqrshrn.v2i32", 2, i32_sat(rounding_shift_right(wild_i64x_, bc(wild_u32_))));
+    casts.emplace_back("vqrshiftnu.v8i8", "uqrshrn.v8i8", 8, u8_sat(rounding_shift_right(wild_u16x_, bc(wild_u32_))));
+    casts.emplace_back("vqrshiftnu.v4i16", "uqrshrn.v4i16", 4, u16_sat(rounding_shift_right(wild_u32x_, bc(wild_u32_))));
+    casts.emplace_back("vqrshiftnu.v2i32", "uqrshrn.v2i32", 2, u32_sat(rounding_shift_right(wild_u64x_, bc(wild_u32_))));
+    casts.emplace_back("vqrshiftnsu.v8i8", "sqrshrun.v8i8", 8, u8_sat(rounding_shift_right(wild_i16x_, bc(wild_u32_))));
+    casts.emplace_back("vqrshiftnsu.v4i16", "sqrshrun.v4i16", 4, u16_sat(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
+    casts.emplace_back("vqrshiftnsu.v2i32", "sqrshrun.v2i32", 2, u32_sat(rounding_shift_right(wild_i64x_, bc(wild_u32_))));
+
+    casts.emplace_back("vraddhn.v8i8", "raddhn.v8i8", 8, i8_sat(rounding_shift_right(wild_i16x_ + wild_i16x_, 8)));
+    casts.emplace_back("vraddhn.v4i16", "raddhn.v4i16", 4, i16_sat(rounding_shift_right(wild_i32x_ + wild_i32x_, 16)));
+    casts.emplace_back("vraddhn.v2i32", "raddhn.v2i32", 2, i32_sat(rounding_shift_right(wild_i64x_ + wild_i64x_, 32)));
 
     // Where a 64-bit and 128-bit version exist, we use the 64-bit
     // version only when the args are 64-bits wide.
@@ -145,6 +154,11 @@ void CodeGen_ARM::visit(const Cast *op) {
 
             //debug(4) << "Match!\n";
             if (pattern.type == Pattern::Simple) {
+                for (Expr &i : matches) {
+                    if (i.type().is_scalar() && i.type().bits() != 32) {
+                        i = cast(i.type().with_bits(32), i);
+                    }
+                }
                 value = call_pattern(pattern, t, matches);
                 return;
             } else {  // must be a shift
