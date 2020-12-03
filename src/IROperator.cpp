@@ -447,8 +447,8 @@ Expr lossless_cast(Type t, Expr e) {
             // aggressively, we're good.
             // E.g. lossless_cast(uint16, (uint32)(some_u8) + 37)
             // = (uint16)(some_u8) + 37
-            Expr a = lossless_cast(t.with_bits(t.bits() / 2), add->a);
-            Expr b = lossless_cast(t.with_bits(t.bits() / 2), add->b);
+            Expr a = lossless_cast(t.narrow(), add->a);
+            Expr b = lossless_cast(t.narrow(), add->b);
             if (a.defined() && b.defined()) {
                 return cast(t, a) + cast(t, b);
             } else {
@@ -457,8 +457,8 @@ Expr lossless_cast(Type t, Expr e) {
         }
 
         if (const Sub *sub = e.as<Sub>()) {
-            Expr a = lossless_cast(t.with_bits(t.bits() / 2), sub->a);
-            Expr b = lossless_cast(t.with_bits(t.bits() / 2), sub->b);
+            Expr a = lossless_cast(t.narrow(), sub->a);
+            Expr b = lossless_cast(t.narrow(), sub->b);
             if (a.defined() && b.defined()) {
                 return cast(t, a) + cast(t, b);
             } else {
@@ -467,8 +467,8 @@ Expr lossless_cast(Type t, Expr e) {
         }
 
         if (const Mul *mul = e.as<Mul>()) {
-            Expr a = lossless_cast(t.with_bits(t.bits() / 2), mul->a);
-            Expr b = lossless_cast(t.with_bits(t.bits() / 2), mul->b);
+            Expr a = lossless_cast(t.narrow(), mul->a);
+            Expr b = lossless_cast(t.narrow(), mul->b);
             if (a.defined() && b.defined()) {
                 return cast(t, a) * cast(t, b);
             } else {
@@ -582,6 +582,17 @@ void check_representable(Type dst, int64_t x) {
     }
 }
 
+void match_lanes(Expr &a, Expr &b) {
+    // Broadcast scalar to match vector
+    if (a.type().is_scalar() && b.type().is_vector()) {
+        a = Broadcast::make(std::move(a), b.type().lanes());
+    } else if (a.type().is_vector() && b.type().is_scalar()) {
+        b = Broadcast::make(std::move(b), a.type().lanes());
+    } else {
+        internal_assert(a.type().lanes() == b.type().lanes()) << "Can't match types of differing widths";
+    }
+}
+
 void match_types(Expr &a, Expr &b) {
     if (a.type() == b.type()) {
         return;
@@ -591,14 +602,7 @@ void match_types(Expr &a, Expr &b) {
         << "Can't do arithmetic on opaque pointer types: "
         << a << ", " << b << "\n";
 
-    // Broadcast scalar to match vector
-    if (a.type().is_scalar() && b.type().is_vector()) {
-        a = Broadcast::make(std::move(a), b.type().lanes());
-    } else if (a.type().is_vector() && b.type().is_scalar()) {
-        b = Broadcast::make(std::move(b), a.type().lanes());
-    } else {
-        internal_assert(a.type().lanes() == b.type().lanes()) << "Can't match types of differing widths";
-    }
+    match_lanes(a, b);
 
     Type ta = a.type(), tb = b.type();
 
@@ -643,21 +647,9 @@ void match_types(Expr &a, Expr &b) {
 void match_bits(Expr &x, Expr &y) {
     // The signedness doesn't match, so just match the bits.
     if (x.type().bits() < y.type().bits()) {
-        Type t;
-        if (x.type().is_int()) {
-            t = Int(y.type().bits(), y.type().lanes());
-        } else {
-            t = UInt(y.type().bits(), y.type().lanes());
-        }
-        x = cast(t, x);
+        x = cast(x.type().with_bits(y.type().bits()), x);
     } else if (y.type().bits() < x.type().bits()) {
-        Type t;
-        if (y.type().is_int()) {
-            t = Int(x.type().bits(), x.type().lanes());
-        } else {
-            t = UInt(x.type().bits(), x.type().lanes());
-        }
-        y = cast(t, y);
+        y = cast(y.type().with_bits(x.type().bits()), y);
     }
 }
 
@@ -682,13 +674,8 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
         internal_assert(x.type().lanes() == y.type().lanes()) << "Can't match types of differing widths";
     }
 
-    // Cast to the wider type of the two. Already guaranteed to leave
-    // signed/unsigned on number of lanes unchanged.
-    if (x.type().bits() < y.type().bits()) {
-        x = cast(y.type(), x);
-    } else if (y.type().bits() < x.type().bits()) {
-        y = cast(x.type(), y);
-    }
+    // Cast to the wider type of the two.
+    match_bits(x, y);
 }
 
 // Fast math ops based on those from Syrah (http://github.com/boulos/syrah). Thanks, Solomon!
@@ -2178,9 +2165,14 @@ Expr operator<<(Expr x, Expr y) {
 }
 
 Expr operator<<(Expr x, int y) {
-    Type t = Int(x.type().bits(), x.type().lanes());
-    Internal::check_representable(t, y);
-    return std::move(x) << Internal::make_const(t, y);
+    Type t = x.type().with_code(halide_type_uint);
+    if (y >= 0) {
+        Internal::check_representable(t, y);
+        return std::move(x) << Internal::make_const(t, y);
+    } else {
+        Internal::check_representable(t, -y);
+        return std::move(x) >> Internal::make_const(t, -y);
+    }
 }
 
 Expr operator>>(Expr x, Expr y) {
@@ -2193,9 +2185,14 @@ Expr operator>>(Expr x, Expr y) {
 }
 
 Expr operator>>(Expr x, int y) {
-    Type t = Int(x.type().bits(), x.type().lanes());
-    Internal::check_representable(t, y);
-    return std::move(x) >> Internal::make_const(t, y);
+    Type t = x.type().with_code(halide_type_uint);
+    if (y >= 0) {
+        Internal::check_representable(t, y);
+        return std::move(x) >> Internal::make_const(t, y);
+    } else {
+        Internal::check_representable(t, -y);
+        return std::move(x) << Internal::make_const(t, -y);
+    }
 }
 
 Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
