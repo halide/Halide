@@ -36,7 +36,7 @@ if (EXISTS ${IMAGE})
     add_test(NAME lens_blur_filter
              COMMAND lens_blur_filter rgb.png 32 13 0.5 32 3 out.png)
     set_tests_properties(lens_blur_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS lens_blur
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()
