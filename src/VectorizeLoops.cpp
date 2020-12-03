@@ -678,17 +678,17 @@ class VectorSubs : public IRMutator {
                 // for these are actually min/extent pairs; we need to maintain the proper dimensionality
                 // count and instead aggregate the widened values into a single pair.
                 for (size_t i = 1; i <= 2; i++) {
-                    const Call *call = new_args[i].as<Call>();
-                    internal_assert(call && call->is_intrinsic(Call::make_struct));
+                    const Call *make_struct = Call::as_intrinsic(new_args[i], {Call::make_struct});
+                    internal_assert(make_struct);
                     if (i == 1) {
                         // values should always be empty for these events
-                        internal_assert(call->args.empty());
+                        internal_assert(make_struct->args.empty());
                         continue;
                     }
-                    vector<Expr> call_args(call->args.size());
+                    vector<Expr> call_args(make_struct->args.size());
                     for (size_t j = 0; j < call_args.size(); j += 2) {
-                        Expr min_v = widen(call->args[j], max_lanes);
-                        Expr extent_v = widen(call->args[j + 1], max_lanes);
+                        Expr min_v = widen(make_struct->args[j], max_lanes);
+                        Expr extent_v = widen(make_struct->args[j + 1], max_lanes);
                         Expr min_scalar = extract_lane(min_v, 0);
                         Expr max_scalar = min_scalar + extract_lane(extent_v, 0);
                         for (int k = 1; k < max_lanes; ++k) {
@@ -700,7 +700,7 @@ class VectorSubs : public IRMutator {
                         call_args[j] = min_scalar;
                         call_args[j + 1] = max_scalar - min_scalar;
                     }
-                    new_args[i] = Call::make(call->type.element_of(), Call::make_struct, call_args, Call::Intrinsic);
+                    new_args[i] = Call::make(make_struct->type.element_of(), Call::make_struct, call_args, Call::Intrinsic);
                 }
             } else {
                 // Call::trace vectorizes uniquely, because we want a
@@ -709,14 +709,14 @@ class VectorSubs : public IRMutator {
                 for (size_t i = 1; i <= 2; i++) {
                     // Each struct should be a struct-of-vectors, not a
                     // vector of distinct structs.
-                    const Call *call = new_args[i].as<Call>();
-                    internal_assert(call && call->is_intrinsic(Call::make_struct));
+                    const Call *make_struct = Call::as_intrinsic(new_args[i], {Call::make_struct});
+                    internal_assert(make_struct);
                     // Widen the call args to have the same lanes as the max lanes found
-                    vector<Expr> call_args(call->args.size());
+                    vector<Expr> call_args(make_struct->args.size());
                     for (size_t j = 0; j < call_args.size(); j++) {
-                        call_args[j] = widen(call->args[j], max_lanes);
+                        call_args[j] = widen(make_struct->args[j], max_lanes);
                     }
-                    new_args[i] = Call::make(call->type.element_of(), Call::make_struct,
+                    new_args[i] = Call::make(make_struct->type.element_of(), Call::make_struct,
                                              call_args, Call::Intrinsic);
                 }
                 // One of the arguments to the trace helper
@@ -909,18 +909,16 @@ class VectorSubs : public IRMutator {
                      << predicated_stmt << "\n";
 
             // First check if the condition is marked as likely.
-            const Call *c = cond.as<Call>();
-            if (c && (c->is_intrinsic(Call::likely) ||
-                      c->is_intrinsic(Call::likely_if_innermost))) {
+            if (const Call *likely = Call::as_intrinsic(cond, {Call::likely, Call::likely_if_innermost})) {
 
                 // The meaning of the likely intrinsic is that
                 // Halide should optimize for the case in which
                 // *every* likely value is true. We can do that by
                 // generating a scalar condition that checks if
                 // the least-true lane is true.
-                Expr all_true = bounds_of_lanes(c->args[0]).min;
+                Expr all_true = bounds_of_lanes(likely->args[0]).min;
                 // Wrap it in the same flavor of likely
-                all_true = Call::make(Bool(), c->name,
+                all_true = Call::make(Bool(), likely->name,
                                       {all_true}, Call::PureIntrinsic);
 
                 if (!vectorize_predicate) {
