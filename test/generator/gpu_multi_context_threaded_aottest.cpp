@@ -107,9 +107,7 @@ bool init_context(int &context) {
     context = 0;
     return true;
 }
-void destroy_context(int &context) {
-    context = 0;
-}
+void destroy_context(int & /* context */) {
 
 #define HAS_MULTIPLE_CONTEXTS false
 #endif
