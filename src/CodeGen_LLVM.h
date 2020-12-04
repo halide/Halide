@@ -90,6 +90,19 @@ public:
 protected:
     CodeGen_LLVM(Target t);
 
+    /** Description of an intrinsic function. */
+    struct Intrinsic {
+        Type result_type;
+        std::vector<Type> arg_types;
+        llvm::Function *impl;
+
+        Intrinsic(Type result_type, std::vector<Type> arg_types, llvm::Function *impl)
+            : result_type(result_type), arg_types(std::move(arg_types)), impl(impl) {}
+    };
+    std::map<std::string, std::vector<Intrinsic>> intrinsics;
+
+    llvm::Value *call_elementwise_intrinsic(const Type &t, const std::string &name, std::vector<Expr>);
+
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
     virtual void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
@@ -476,8 +489,12 @@ protected:
     // @{
     llvm::Value *call_intrin(const Type &t, int intrin_lanes,
                              const std::string &name, std::vector<Expr>);
+    llvm::Value *call_intrin(const Type &t, int intrin_lanes,
+                             llvm::Function *intrin, std::vector<Expr>);
     llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
                              const std::string &name, std::vector<llvm::Value *>);
+    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
+                             llvm::Function *intrin, std::vector<llvm::Value *>);
     // @}
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs

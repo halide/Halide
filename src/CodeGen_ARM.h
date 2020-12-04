@@ -21,6 +21,8 @@ public:
 protected:
     using CodeGen_Posix::visit;
 
+    void init_module() override;
+
     /** Nodes for which we want to emit specific neon intrinsics */
     // @{
     void visit(const Cast *) override;

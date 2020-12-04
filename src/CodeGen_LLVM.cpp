@@ -2866,7 +2866,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type *> arg_type(1);
         arg_type[0] = llvm_type_of(op->args[0].type());
-        llvm::Function *fn = Intrinsic::getDeclaration(module.get(), Intrinsic::ctpop, arg_type);
+        llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::ctpop, arg_type);
         Value *a = codegen(op->args[0]);
         CallInst *call = builder->CreateCall(fn, a);
         value = call;
@@ -2875,8 +2875,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type *> arg_type(1);
         arg_type[0] = llvm_type_of(op->args[0].type());
-        llvm::Function *fn = Intrinsic::getDeclaration(module.get(),
-                                                       (op->is_intrinsic(Call::count_leading_zeros)) ? Intrinsic::ctlz : Intrinsic::cttz,
+        llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(),
+                                                       (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
                                                        arg_type);
         llvm::Value *is_const_zero_undef = llvm::ConstantInt::getFalse(*context);
         llvm::Value *args[2] = {codegen(op->args[0]), is_const_zero_undef};
@@ -4718,6 +4718,48 @@ Value *CodeGen_LLVM::get_user_context() const {
     return ctx;
 }
 
+Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string &name, std::vector<Expr> args) {
+    auto impls_i = intrinsics.find(name);
+    internal_assert(impls_i != intrinsics.end()) << name << "\n";
+
+    const std::vector<Intrinsic> &impls = impls_i->second;
+
+    const Intrinsic *resolved = nullptr;
+    for (const Intrinsic &i : impls) {
+        if (i.arg_types.size() != args.size()) {
+            continue;
+        }
+
+        bool match = true;
+        for (int j = 0; j < (int)i.arg_types.size(); j++) {
+            if (i.arg_types[j].with_lanes(1) != args[j].type().with_lanes(1)) {
+                match = false;
+                break;
+            }
+
+            int required_lanes = t.lanes() * i.arg_types[j].lanes() / i.result_type.lanes();
+            if (required_lanes != args[j].type().lanes()) {
+                match = false;
+                break;
+            }
+        }
+        if (!match) {
+            continue;
+        }
+
+        // Prefer resolving to the smallest intrinsic that is still bigger than our arguments.
+        if (!resolved) {
+            resolved = &i;
+        } else if (t.lanes() >= i.result_type.lanes() && i.result_type.lanes() < resolved->result_type.lanes()) {
+            resolved = &i;
+        }
+    }
+
+    internal_assert(resolved) << "Unresolved intrinsic " << name;
+
+    return call_intrin(t, resolved->result_type.lanes(), resolved->impl, args);
+}
+
 Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
                                  const string &name, vector<Expr> args) {
     vector<Value *> arg_values(args.size());
@@ -4732,8 +4774,44 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
                        name, arg_values);
 }
 
+Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
+                                 llvm::Function *intrin, vector<Expr> args) {
+    vector<Value *> arg_values(args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        arg_values[i] = codegen(args[i]);
+    }
+
+    llvm::Type *t = llvm_type_of(result_type);
+
+    return call_intrin(t,
+                       intrin_lanes,
+                       intrin, arg_values);
+}
+
 Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
                                  const string &name, vector<Value *> arg_values) {
+    llvm::Function *fn = module->getFunction(name);
+
+    if (!fn) {
+        vector<llvm::Type *> arg_types(arg_values.size());
+        for (size_t i = 0; i < arg_values.size(); i++) {
+            arg_types[i] = arg_values[i]->getType();
+        }
+
+        llvm::Type *intrinsic_result_type = result_type->getScalarType();
+        if (intrin_lanes > 1) {
+            intrinsic_result_type = get_vector_type(result_type->getScalarType(), intrin_lanes);
+        }
+        FunctionType *func_t = FunctionType::get(intrinsic_result_type, arg_types, false);
+        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
+        fn->setCallingConv(CallingConv::C);
+    }
+
+    return call_intrin(result_type, intrin_lanes, fn, arg_values);
+}
+
+Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
+                                 llvm::Function *intrin, vector<Value *> arg_values) {
     int arg_lanes = 1;
     if (result_type->isVectorTy()) {
         arg_lanes = get_vector_num_elements(result_type);
@@ -4770,30 +4848,13 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
             llvm::Type *result_slice_type =
                 get_vector_type(result_type->getScalarType(), intrin_lanes);
 
-            results.push_back(call_intrin(result_slice_type, intrin_lanes, name, args));
+            results.push_back(call_intrin(result_slice_type, intrin_lanes, intrin, args));
         }
         Value *result = concat_vectors(results);
         return slice_vector(result, 0, arg_lanes);
     }
 
-    vector<llvm::Type *> arg_types(arg_values.size());
-    for (size_t i = 0; i < arg_values.size(); i++) {
-        arg_types[i] = arg_values[i]->getType();
-    }
-
-    llvm::Function *fn = module->getFunction(name);
-
-    if (!fn) {
-        llvm::Type *intrinsic_result_type = result_type->getScalarType();
-        if (intrin_lanes > 1) {
-            intrinsic_result_type = get_vector_type(result_type->getScalarType(), intrin_lanes);
-        }
-        FunctionType *func_t = FunctionType::get(intrinsic_result_type, arg_types, false);
-        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
-        fn->setCallingConv(CallingConv::C);
-    }
-
-    CallInst *call = builder->CreateCall(fn, arg_values);
+    CallInst *call = builder->CreateCall(intrin, arg_values);
 
     call->setDoesNotAccessMemory();
     call->setDoesNotThrow();

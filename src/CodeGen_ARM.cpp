@@ -295,7 +295,7 @@ halide_type_t f32v1 = f32.with_lanes(kHalfNeonWidth / 32);
 halide_type_t i8v2 = i8v1.with_lanes(i8v1.lanes * 2);
 halide_type_t i16v2 = i16v1.with_lanes(i16v1.lanes * 2);
 halide_type_t i32v2 = i32v1.with_lanes(i32v1.lanes * 2);
-halide_type_t i64v2 = i32v1.with_lanes(i64v1.lanes * 2);
+halide_type_t i64v2 = i64v1.with_lanes(i64v1.lanes * 2);
 halide_type_t u8v2 = u8v1.with_lanes(u8v1.lanes * 2);
 halide_type_t u16v2 = u16v1.with_lanes(u16v1.lanes * 2);
 halide_type_t u32v2 = u32v1.with_lanes(u32v1.lanes * 2);
@@ -482,30 +482,46 @@ const ArmIntrinsic intrinsic_wrappers[] = {
 
 }  // namespace
 
-/*
+
 void CodeGen_ARM::init_module() {
     CodeGen_Posix::init_module();
 
-    vector<Type> arg_types;
+    std::string prefix = target.bits == 32 ? "llvm.arm.neon." : "llvm.aarch64.neon.";
+
     for (const ArmIntrinsic &i : intrinsic_wrappers) {
-        const char *intrin;
+        std::string intrin_name = prefix;
         if (target.bits == 32) {
-            intrin = i.arm32;
+            intrin_name += i.arm32;
         } else {
-            intrin = i.arm64;
+            intrin_name += i.arm64;
         }
-        // Get the real intrinsic.
-        arg_types.clear();
-        for (const auto &a : i.arg_types) {
-            if (a.bits == 0) {
+
+        Type ret_type = i.ret_type;
+        std::vector<Type> arg_types;
+        arg_types.reserve(4);
+        for (halide_type_t i : i.arg_types) {
+            if (i.bits == 0) {
                 break;
             }
-            arg_types.emplace_back(a);
+            arg_types.push_back(i);
         }
-        define_arm_intrinsic(intrin, i.ret_type, i.name, arg_types);
+
+        llvm::Function *intrin = module->getFunction(intrin_name);
+        if (!intrin) {
+            vector<llvm::Type *> llvm_arg_types(arg_types.size());
+            for (size_t i = 0; i < arg_types.size(); i++) {
+                llvm_arg_types[i] = llvm_type_of(arg_types[i]);
+            }
+
+            llvm::Type *llvm_ret_type = llvm_type_of(ret_type);
+            FunctionType *func_t = FunctionType::get(llvm_ret_type, llvm_arg_types, false);
+            intrin = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
+            intrin->setCallingConv(CallingConv::C);
+        }
+
+        intrinsics[i.name].emplace_back(ret_type, std::move(arg_types), intrin);
     }
 }
-*/
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, Type t, const vector<Expr> &args) {
     if (target.bits == 32) {
@@ -762,72 +778,10 @@ void CodeGen_ARM::visit(const Sub *op) {
 }
 
 void CodeGen_ARM::visit(const Min *op) {
-    if (neon_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    if (op->type == Float(32)) {
-        // Use a 2-wide vector instead
-        Value *undef = UndefValue::get(f32x2);
-        Constant *zero = ConstantInt::get(i32_t, 0);
-        Value *a = codegen(op->a);
-        Value *a_wide = builder->CreateInsertElement(undef, a, zero);
-        Value *b = codegen(op->b);
-        Value *b_wide = builder->CreateInsertElement(undef, b, zero);
-        Value *wide_result;
-        if (target.bits == 32) {
-            wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmins.v2f32", {a_wide, b_wide});
-        } else {
-            wide_result = call_intrin(f32x2, 2, "llvm.aarch64.neon.fmin.v2f32", {a_wide, b_wide});
-        }
-        value = builder->CreateExtractElement(wide_result, zero);
-        return;
-    }
-
-    struct {
-        Type t;
-        const char *op;
-    } patterns[] = {
-        {UInt(8, 8), "v8i8"},
-        {UInt(16, 4), "v4i16"},
-        {UInt(32, 2), "v2i32"},
-        {Int(8, 8), "v8i8"},
-        {Int(16, 4), "v4i16"},
-        {Int(32, 2), "v2i32"},
-        {Float(32, 2), "v2f32"},
-        {UInt(8, 16), "v16i8"},
-        {UInt(16, 8), "v8i16"},
-        {UInt(32, 4), "v4i32"},
-        {Int(8, 16), "v16i8"},
-        {Int(16, 8), "v8i16"},
-        {Int(32, 4), "v4i32"},
-        {Float(32, 4), "v4f32"}};
-
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        bool match = op->type == patterns[i].t;
-
-        // The 128-bit versions are also used for other vector widths.
-        if (op->type.is_vector() && patterns[i].t.lanes() * patterns[i].t.bits() == 128) {
-            match = match || (op->type.element_of() == patterns[i].t.element_of());
-        }
-
-        if (match) {
-            string intrin;
-            if (target.bits == 32) {
-                intrin = (string("llvm.arm.neon.") + (op->type.is_uint() ? "vminu." : "vmins.")) + patterns[i].op;
-            } else {
-                intrin = "llvm.aarch64.neon.";
-                if (op->type.is_int()) {
-                    intrin += "smin.";
-                } else if (op->type.is_float()) {
-                    intrin += "fmin.";
-                } else {
-                    intrin += "umin.";
-                }
-                intrin += patterns[i].op;
-            }
-            value = call_intrin(op->type, patterns[i].t.lanes(), intrin, {op->a, op->b});
+    // Use a 2-wide vector for scalar floats.
+    if (!neon_intrinsics_disabled() && (op->type == Float(32) || op->type.is_vector())) {
+        value = call_elementwise_intrinsic(op->type, "min", {op->a, op->b});
+        if (value) {
             return;
         }
     }
@@ -836,72 +790,10 @@ void CodeGen_ARM::visit(const Min *op) {
 }
 
 void CodeGen_ARM::visit(const Max *op) {
-    if (neon_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    if (op->type == Float(32)) {
-        // Use a 2-wide vector instead
-        Value *undef = UndefValue::get(f32x2);
-        Constant *zero = ConstantInt::get(i32_t, 0);
-        Value *a = codegen(op->a);
-        Value *a_wide = builder->CreateInsertElement(undef, a, zero);
-        Value *b = codegen(op->b);
-        Value *b_wide = builder->CreateInsertElement(undef, b, zero);
-        Value *wide_result;
-        if (target.bits == 32) {
-            wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmaxs.v2f32", {a_wide, b_wide});
-        } else {
-            wide_result = call_intrin(f32x2, 2, "llvm.aarch64.neon.fmax.v2f32", {a_wide, b_wide});
-        }
-        value = builder->CreateExtractElement(wide_result, zero);
-        return;
-    }
-
-    struct {
-        Type t;
-        const char *op;
-    } patterns[] = {
-        {UInt(8, 8), "v8i8"},
-        {UInt(16, 4), "v4i16"},
-        {UInt(32, 2), "v2i32"},
-        {Int(8, 8), "v8i8"},
-        {Int(16, 4), "v4i16"},
-        {Int(32, 2), "v2i32"},
-        {Float(32, 2), "v2f32"},
-        {UInt(8, 16), "v16i8"},
-        {UInt(16, 8), "v8i16"},
-        {UInt(32, 4), "v4i32"},
-        {Int(8, 16), "v16i8"},
-        {Int(16, 8), "v8i16"},
-        {Int(32, 4), "v4i32"},
-        {Float(32, 4), "v4f32"}};
-
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        bool match = op->type == patterns[i].t;
-
-        // The 128-bit versions are also used for other vector widths.
-        if (op->type.is_vector() && patterns[i].t.lanes() * patterns[i].t.bits() == 128) {
-            match = match || (op->type.element_of() == patterns[i].t.element_of());
-        }
-
-        if (match) {
-            string intrin;
-            if (target.bits == 32) {
-                intrin = (string("llvm.arm.neon.") + (op->type.is_uint() ? "vmaxu." : "vmaxs.")) + patterns[i].op;
-            } else {
-                intrin = "llvm.aarch64.neon.";
-                if (op->type.is_int()) {
-                    intrin += "smax.";
-                } else if (op->type.is_float()) {
-                    intrin += "fmax.";
-                } else {
-                    intrin += "umax.";
-                }
-                intrin += patterns[i].op;
-            }
-            value = call_intrin(op->type, patterns[i].t.lanes(), intrin, {op->a, op->b});
+    // Use a 2-wide vector for scalar floats.
+    if (!neon_intrinsics_disabled() && (op->type == Float(32) || op->type.is_vector())) {
+        value = call_elementwise_intrinsic(op->type, "max", {op->a, op->b});
+        if (value) {
             return;
         }
     }
