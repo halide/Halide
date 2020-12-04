@@ -110,6 +110,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         }
     }
 
+    // clang-format off
     casts.emplace_back("qdmulh", i16_sat((wild_i32x_ * wild_i32x_) / (1 << 15)), Pattern::NarrowArgs);
     casts.emplace_back("qdmulh", i32_sat((wild_i64x_ * wild_i64x_) / Expr(int64_t(1) << 31)), Pattern::NarrowArgs);
     casts.emplace_back("qrdmulh", i16_sat((wild_i32x_ * wild_i32x_ + (1 << 14)) / (1 << 15)), Pattern::NarrowArgs);
@@ -166,6 +167,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     multiplies.emplace_back("widening_mul", wild_u32x_ * wild_u32x_, Pattern::NarrowArgs);
     multiplies.emplace_back("widening_mul", wild_i64x_ * wild_i64x_, Pattern::NarrowArgs);
     multiplies.emplace_back("widening_mul", wild_u64x_ * wild_u64x_, Pattern::NarrowArgs);
+    // clang-format on
 }
 
 namespace {
@@ -657,23 +659,6 @@ void CodeGen_ARM::visit(const Mul *op) {
 }
 
 void CodeGen_ARM::visit(const Div *op) {
-#if 0
-    // TODO: This is probably the easiest thing to convert to IRMatch rewriting, but it
-    // needs work.
-    if (!neon_intrinsics_disabled() && no_overflow(op->type)) {
-        IRMatcher::Wild<0> x;
-        IRMatcher::Wild<1> y;
-        auto rewrite = IRMatcher::rewriter(op, op->type);
-        using IRMatcher::intrin;
-        if (rewrite((x + y) / 2, intrin("halving_add", x, y)) ||
-            rewrite((x - y) / 2, intrin("halving_sub", x, y)) ||
-            false) {
-            value = codegen(rewrite.result);
-            return;
-        }
-    }
-#endif
-
     if (!neon_intrinsics_disabled() &&
         op->type.is_vector() && is_const(op->b, 2) &&
         (op->a.as<Add>() || op->a.as<Sub>())) {

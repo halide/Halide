@@ -366,6 +366,7 @@ void CodeGen_X86::visit(const Cast *op) {
         Expr pattern;
     };
 
+    // clang-format off
     static Pattern patterns[] = {
         {true, "saturating_add", i8_sat(wild_i16x_ + wild_i16x_)},
         {true, "saturating_sub", i8_sat(wild_i16x_ - wild_i16x_)},
@@ -388,6 +389,7 @@ void CodeGen_X86::visit(const Cast *op) {
         {false, "saturating_narrow", i8_sat(wild_i16x_)},
         {false, "saturating_narrow", u8_sat(wild_i16x_)},
     };
+    // clang-format on
 
     for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
