@@ -499,6 +499,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                         // The arm32 llvm backend wants right shifts to come in as negative values.
                         shift_amount = -shift_amount;
                     }
+                    // TODO: It would be nice if call_elementwise_intrinsic could handle this type promotion.
                     Expr b;
                     if (matches[1].type().is_scalar()) {
                         if (target.bits == 32) {
