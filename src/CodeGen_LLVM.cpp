@@ -2655,6 +2655,13 @@ void CodeGen_LLVM::visit(const Call *op) {
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
+    if (op->type.is_vector()) {
+        value = call_overloaded_intrin(op->type, op->name, op->args);
+        if (value) {
+            return;
+        }
+    }
+
     // Some call nodes are actually injected at various stages as a
     // cue for llvm to generate particular ops. In general these are
     // handled in the standard library, but ones with e.g. varying
@@ -2775,57 +2782,22 @@ void CodeGen_LLVM::visit(const Call *op) {
             value = codegen(lower_signed_shift_right(op->args[0], op->args[1]));
         }
     } else if (op->is_intrinsic(Call::abs)) {
-
         internal_assert(op->args.size() == 1);
-
-        // Check if an appropriate vector abs for this type exists in the initial module
-        Type t = op->args[0].type();
-        string name = (t.is_float() ? "abs_f" : "abs_i") + std::to_string(t.bits());
-        llvm::Function *builtin_abs =
-            find_vector_runtime_function(name, op->type.lanes()).first;
-
-        if (t.is_vector() && builtin_abs) {
-            codegen(Call::make(op->type, name, op->args, Call::Extern));
-        } else {
-            // Generate select(x >= 0, x, -x) instead
-            string x_name = unique_name('x');
-            Expr x = Variable::make(op->args[0].type(), x_name);
-            value = codegen(Let::make(x_name, op->args[0], select(x >= 0, x, -x)));
-        }
+        // Generate select(x >= 0, x, -x) instead
+        string x_name = unique_name('x');
+        Expr x = Variable::make(op->args[0].type(), x_name);
+        value = codegen(Let::make(x_name, op->args[0], select(x >= 0, x, -x)));
     } else if (op->is_intrinsic(Call::absd)) {
-
         internal_assert(op->args.size() == 2);
-
         Expr a = op->args[0];
         Expr b = op->args[1];
-
-        // Check if an appropriate vector abs for this type exists in the initial module
-        Type t = a.type();
-        string name;
-        if (t.is_float()) {
-            codegen(abs(a - b));
-            return;
-        } else if (t.is_int()) {
-            name = "absd_i" + std::to_string(t.bits());
-        } else {
-            name = "absd_u" + std::to_string(t.bits());
-        }
-
-        llvm::Function *builtin_absd =
-            find_vector_runtime_function(name, op->type.lanes()).first;
-
-        if (t.is_vector() && builtin_absd) {
-            codegen(Call::make(op->type, name, op->args, Call::Extern));
-        } else {
-            // Use a select instead
-            string a_name = unique_name('a');
-            string b_name = unique_name('b');
-            Expr a_var = Variable::make(op->args[0].type(), a_name);
-            Expr b_var = Variable::make(op->args[1].type(), b_name);
-            codegen(Let::make(a_name, op->args[0],
-                              Let::make(b_name, op->args[1],
-                                        Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
-        }
+        string a_name = unique_name('a');
+        string b_name = unique_name('b');
+        Expr a_var = Variable::make(op->args[0].type(), a_name);
+        Expr b_var = Variable::make(op->args[1].type(), b_name);
+        codegen(Let::make(a_name, op->args[0],
+                          Let::make(b_name, op->args[1],
+                                    Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
@@ -4730,7 +4702,7 @@ Value *CodeGen_LLVM::get_user_context() const {
     return ctx;
 }
 
-void CodeGen_LLVM::declare_intrinsic(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types) {
+void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types) {
     llvm::Function *intrin = module->getFunction(impl_name);
     if (!intrin) {
         vector<llvm::Type *> llvm_arg_types(arg_types.size());
@@ -4746,7 +4718,7 @@ void CodeGen_LLVM::declare_intrinsic(const std::string &name, const Type &ret_ty
     intrinsics[name].emplace_back(ret_type, std::move(arg_types), intrin);
 }
 
-Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &result_type, const std::string &name, const std::vector<Expr> &args) {
+Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args) {
     auto impls_i = intrinsics.find(name);
     if (impls_i == intrinsics.end()) {
         debug(2) << "No intrinsic " << name << "\n";
@@ -4790,11 +4762,21 @@ Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &result_type, const s
             continue;
         }
 
-        // Prefer resolving to the smallest intrinsic that is still bigger than our arguments.
         if (!resolved) {
             resolved = &i;
-        } else if (i.result_type.lanes() >= result_type.lanes() && i.result_type.lanes() < resolved->result_type.lanes()) {
-            resolved = &i;
+        } else {
+            if (resolved->result_type.lanes() < result_type.lanes()) {
+                // The current match is smaller than the result type. Take the bigger intrinsic.
+                if (i.result_type.lanes() > resolved->result_type.lanes()) {
+                    resolved = &i;
+                }
+            } else {
+                // The current match is bigger than the result type. If the current candidate is also bigger,
+                // but smaller than the current match, take it instead.
+                if (i.result_type.lanes() >= result_type.lanes() && i.result_type.lanes() < resolved->result_type.lanes()) {
+                    resolved = &i;
+                }
+            }
         }
     }
 

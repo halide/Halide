@@ -178,18 +178,33 @@ struct ArmIntrinsic {
 
 // clang-format off
 const ArmIntrinsic intrinsic_defs[] = {
-    // Absolute value
-    // TODO: Once all backends have these, we can remove the abs implementations
-    // from the runtime .ll modules.
-    {"llvm.fabs.v2f32", "llvm.fabs.v2f32", Float(32, 2), "abs", {Float(32, 2)}},
     {"vabs.v8i8", "abs.v8i8", UInt(8, 8), "abs", {Int(8, 8)}},
     {"vabs.v4i16", "abs.v4i16", UInt(16, 4), "abs", {Int(16, 4)}},
     {"vabs.v2i32", "abs.v2i32", UInt(32, 2), "abs", {Int(32, 2)}},
+    {"llvm.fabs.v2f32", "llvm.fabs.v2f32", Float(32, 2), "abs", {Float(32, 2)}},
 
-    {"llvm.fabs.v4f32", "llvm.fabs.v4f32", Float(32, 4), "abs", {Float(32, 4)}},
     {"vabs.v16i8", "abs.v16i8", UInt(8, 16), "abs", {Int(8, 16)}},
     {"vabs.v8i16", "abs.v8i16", UInt(16, 8), "abs", {Int(16, 8)}},
     {"vabs.v4i32", "abs.v4i32", UInt(32, 4), "abs", {Int(32, 4)}},
+    {"llvm.fabs.v4f32", "llvm.fabs.v4f32", Float(32, 4), "abs", {Float(32, 4)}},
+
+    {"llvm.sqrt.v4f32", "llvm.sqrt.v4f32", Float(32, 4), "sqrt_f32", {Float(32, 4)}},
+    {"llvm.sqrt.v2f64", "llvm.sqrt.v2f64", Float(64, 2), "sqrt_f64", {Float(64, 2)}},
+
+    // Absolute difference
+    {"vabds.v8i8", "sabd.v8i8", UInt(8, 8), "absd", {Int(8, 8), Int(8, 8)}},
+    {"vabdu.v8i8", "uabd.v8i8", UInt(8, 8), "absd", {UInt(8, 8), UInt(8, 8)}},
+    {"vabds.v4i16", "sabd.v4i16", UInt(16, 4), "absd", {Int(16, 4), Int(16, 4)}},
+    {"vabdu.v4i16", "uabd.v4i16", UInt(16, 4), "absd", {UInt(16, 4), UInt(16, 4)}},
+    {"vabds.v2i32", "sabd.v2i32", UInt(32, 2), "absd", {Int(32, 2), Int(32, 2)}},
+    {"vabdu.v2i32", "uabd.v2i32", UInt(32, 2), "absd", {UInt(32, 2), UInt(32, 2)}},
+
+    {"vabds.v16i8", "sabd.v16i8", UInt(8, 16), "absd", {Int(8, 16), Int(8, 16)}},
+    {"vabdu.v16i8", "uabd.v16i8", UInt(8, 16), "absd", {UInt(8, 16), UInt(8, 16)}},
+    {"vabds.v8i16", "sabd.v8i16", UInt(16, 8), "absd", {Int(16, 8), Int(16, 8)}},
+    {"vabdu.v8i16", "uabd.v8i16", UInt(16, 8), "absd", {UInt(16, 8), UInt(16, 8)}},
+    {"vabds.v4i32", "sabd.v4i32", UInt(32, 4), "absd", {Int(32, 4), Int(32, 4)}},
+    {"vabdu.v4i32", "uabd.v4i32", UInt(32, 4), "absd", {UInt(32, 4), UInt(32, 4)}},
 
     // Widening multiply
     {"vmulls.v8i16", "smull.v8i16", Int(16, 8), "widening_mul", {Int(8, 8), Int(8, 8)}},
@@ -332,7 +347,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     // TODO: There's also qshl by a scalar immediate we should target. I think
     // LLVM pattern matches this automatically.
     // TODO: Rather than duplicating this part of the table so many times, maybe we should
-    // allow call_elementwise_intrinsic to cast as needed.
+    // allow call_overloaded_intrin to cast as needed.
     {"vqshifts.v8i8", "sqshl.v8i8", Int(8, 8), "saturating_shift_left", {Int(8, 8), Int(8, 8)}},
     {"vqshiftu.v8i8", "uqshl.v8i8", UInt(8, 8), "saturating_shift_left", {UInt(8, 8), Int(8, 8)}},
     {"vqshifts.v4i16", "sqshl.v4i16", Int(16, 4), "saturating_shift_left", {Int(16, 4), Int(16, 4)}},
@@ -448,7 +463,7 @@ void CodeGen_ARM::init_module() {
             arg_types.push_back(i);
         }
 
-        declare_intrinsic(i.name, ret_type, full_name, std::move(arg_types));
+        declare_intrin_overload(i.name, ret_type, full_name, std::move(arg_types));
     }
 }
 
@@ -469,7 +484,7 @@ void CodeGen_ARM::visit(const Cast *op) {
 
             //debug(4) << "Match!\n";
             if (pattern.type == Pattern::Simple) {
-                value = call_elementwise_intrinsic(t, pattern.intrin, matches);
+                value = call_overloaded_intrin(t, pattern.intrin, matches);
                 return;
             } else if (pattern.type == Pattern::NarrowArgs) {
                 // Try to narrow all of the args.
@@ -489,7 +504,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                 }
 
                 if (all_narrow) {
-                    value = call_elementwise_intrinsic(t, pattern.intrin, matches);
+                    value = call_overloaded_intrin(t, pattern.intrin, matches);
                     return;
                 }
             } else {  // must be a shift
@@ -501,7 +516,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                         // The arm32 llvm backend wants right shifts to come in as negative values.
                         shift_amount = -shift_amount;
                     }
-                    // TODO: It would be nice if call_elementwise_intrinsic could handle this type promotion.
+                    // TODO: It would be nice if call_overloaded_intrin could handle this type promotion.
                     Expr b;
                     if (matches[1].type().is_scalar()) {
                         if (target.bits == 32) {
@@ -512,7 +527,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                     } else {
                         b = make_const(Int(matches[0].type().bits(), matches[0].type().lanes()), shift_amount);
                     }
-                    value = call_elementwise_intrinsic(t, pattern.intrin, {matches[0], b});
+                    value = call_overloaded_intrin(t, pattern.intrin, {matches[0], b});
                     return;
                 }
             }
@@ -539,6 +554,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
+    // Catch signed widening of absolute difference.
     // Catch widening of absolute difference
     if (t.is_vector() &&
         (t.is_int() || t.is_uint()) &&
@@ -588,7 +604,7 @@ void CodeGen_ARM::visit(const Mul *op) {
 
             //debug(4) << "Match!\n";
             if (pattern.type == Pattern::Simple) {
-                value = call_elementwise_intrinsic(t, pattern.intrin, matches);
+                value = call_overloaded_intrin(t, pattern.intrin, matches);
                 return;
             } else if (pattern.type == Pattern::NarrowArgs) {
                 Type narrow_t = t.narrow();
@@ -609,7 +625,7 @@ void CodeGen_ARM::visit(const Mul *op) {
                 }
 
                 if (all_narrow) {
-                    value = call_elementwise_intrinsic(t, pattern.intrin, matches);
+                    value = call_overloaded_intrin(t, pattern.intrin, matches);
                     return;
                 }
             }
@@ -661,7 +677,7 @@ void CodeGen_ARM::visit(const Div *op) {
         vector<Expr> matches;
         for (size_t i = 0; i < averagings.size(); i++) {
             if (expr_match(averagings[i].pattern, op->a, matches)) {
-                value = call_elementwise_intrinsic(op->type, averagings[i].intrin, matches);
+                value = call_overloaded_intrin(op->type, averagings[i].intrin, matches);
                 return;
             }
         }
@@ -679,7 +695,7 @@ void CodeGen_ARM::visit(const Sub *op) {
     for (size_t i = 0; i < negations.size(); i++) {
         if (op->type.is_vector() &&
             expr_match(negations[i].pattern, op, matches)) {
-            value = call_elementwise_intrinsic(op->type, negations[i].intrin, matches);
+            value = call_overloaded_intrin(op->type, negations[i].intrin, matches);
             return;
         }
     }
@@ -713,7 +729,7 @@ void CodeGen_ARM::visit(const Sub *op) {
 void CodeGen_ARM::visit(const Min *op) {
     // Use a 2-wide vector for scalar floats.
     if (!neon_intrinsics_disabled() && (op->type == Float(32) || op->type.is_vector())) {
-        value = call_elementwise_intrinsic(op->type, "min", {op->a, op->b});
+        value = call_overloaded_intrin(op->type, "min", {op->a, op->b});
         if (value) {
             return;
         }
@@ -725,7 +741,7 @@ void CodeGen_ARM::visit(const Min *op) {
 void CodeGen_ARM::visit(const Max *op) {
     // Use a 2-wide vector for scalar floats.
     if (!neon_intrinsics_disabled() && (op->type == Float(32) || op->type.is_vector())) {
-        value = call_elementwise_intrinsic(op->type, "max", {op->a, op->b});
+        value = call_overloaded_intrin(op->type, "max", {op->a, op->b});
         if (value) {
             return;
         }
@@ -1045,7 +1061,7 @@ void CodeGen_ARM::visit(const Load *op) {
 }
 
 void CodeGen_ARM::visit(const Call *op) {
-    if (op->is_intrinsic(Call::abs) && op->type.is_uint()) {
+    if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
         // If the arg is a subtract with narrowable args, we can use vabdl.
         const Sub *sub = op->args[0].as<Sub>();

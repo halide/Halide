@@ -64,6 +64,15 @@ struct x86Intrinsic {
 
 // clang-format off
 const x86Intrinsic intrinsic_defs[] = {
+    {"abs_i8x32", UInt(8, 32), "abs", {Int(8, 32)}, Target::AVX},
+    {"abs_i16x16", UInt(16, 16), "abs", {Int(16, 16)}, Target::AVX},
+    {"abs_i32x8", UInt(32, 8), "abs", {Int(32, 8)}, Target::AVX},
+    {"abs_f32x8", Float(32, 8), "abs", {Float(32, 8)}, Target::AVX},
+    {"abs_i8x16", UInt(8, 16), "abs", {Int(8, 16)}, Target::SSE41},
+    {"abs_i16x8", UInt(16, 8), "abs", {Int(16, 8)}, Target::SSE41},
+    {"abs_i32x4", UInt(32, 4), "abs", {Int(32, 4)}, Target::SSE41},
+    {"abs_f32x4", Float(32, 4), "abs", {Float(32, 4)}},
+
     {"llvm.sadd.sat.v32i8", Int(8, 32), "saturating_add", {Int(8, 32), Int(8, 32)}, Target::AVX2},
     {"llvm.sadd.sat.v16i8", Int(8, 16), "saturating_add", {Int(8, 16), Int(8, 16)}},
     {"llvm.sadd.sat.v8i8", Int(8, 8), "saturating_add", {Int(8, 8), Int(8, 8)}},
@@ -144,7 +153,7 @@ void CodeGen_X86::init_module() {
             arg_types.push_back(i);
         }
 
-        declare_intrinsic(i.name, ret_type, i.intrin_name, std::move(arg_types));
+        declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
     }
 }
 
@@ -185,7 +194,7 @@ void CodeGen_X86::visit(const Add *op) {
     if (should_use_pmaddwd(op->a, op->b, matches)) {
         Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
         Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
-        value = call_elementwise_intrinsic(op->type, "pmaddwd", {ac, bd});
+        value = call_overloaded_intrin(op->type, "pmaddwd", {ac, bd});
         internal_assert(value);
     } else {
         CodeGen_Posix::visit(op);
@@ -203,7 +212,7 @@ void CodeGen_X86::visit(const Sub *op) {
         }
         Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
         Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
-        value = call_elementwise_intrinsic(op->type, "pmaddwd", {ac, bd});
+        value = call_overloaded_intrin(op->type, "pmaddwd", {ac, bd});
         internal_assert(value);
     } else {
         CodeGen_Posix::visit(op);
@@ -395,7 +404,7 @@ void CodeGen_X86::visit(const Cast *op) {
                 }
             }
             if (match) {
-                value = call_elementwise_intrinsic(op->type, pattern.intrin, matches);
+                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
                 if (value) {
                     return;
                 }
@@ -471,7 +480,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             //b = make_const(narrower, 1);
         }
         if (a.defined() && b.defined()) {
-            value = call_elementwise_intrinsic(op->type, "pmaddwd", {a, b});
+            value = call_overloaded_intrin(op->type, "pmaddwd", {a, b});
             if (init.defined()) {
                 Value *x = value;
                 Value *y = codegen(init);

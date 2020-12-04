@@ -486,9 +486,9 @@ protected:
     std::map<std::string, std::vector<Intrinsic>> intrinsics;
 
     /** Declare an intrinsic function that participates in overload resolution. */
-    void declare_intrinsic(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types);
+    void declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types);
     /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found. */
-    llvm::Value *call_elementwise_intrinsic(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
+    llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
