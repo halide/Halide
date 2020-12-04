@@ -138,30 +138,6 @@ define weak_odr <4 x float> @fast_inverse_sqrt_f32x4(<4 x float> %x) nounwind uw
   ret <4 x float> %approx
 }
 
-define weak_odr <4 x float> @min_f32x4(<4 x float> %a, <4 x float> %b) nounwind uwtable readnone alwaysinline {
-  %c = fcmp olt <4 x float> %a, %b
-  %result = select <4 x i1> %c, <4 x float> %a, <4 x float> %b
-  ret <4 x float> %result
-}
-
-define weak_odr <4 x float> @max_f32x4(<4 x float> %a, <4 x float> %b) nounwind uwtable readnone alwaysinline {
-  %c = fcmp olt <4 x float> %a, %b
-  %result = select <4 x i1> %c, <4 x float> %b, <4 x float> %a
-  ret <4 x float> %result
-}
-
-define weak_odr <2 x double> @min_f64x2(<2 x double> %a, <2 x double> %b) nounwind uwtable readnone alwaysinline {
-  %c = fcmp olt <2 x double> %a, %b
-  %result = select <2 x i1> %c, <2 x double> %a, <2 x double> %b
-  ret <2 x double> %result
-}
-
-define weak_odr <2 x double> @max_f64x2(<2 x double> %a, <2 x double> %b) nounwind uwtable readnone alwaysinline {
-  %c = fcmp olt <2 x double> %a, %b
-  %result = select <2 x i1> %c, <2 x double> %b, <2 x double> %a
-  ret <2 x double> %result
-}
-
 ; An admittedly ugly but functional version: "info" is an in-out parameter,
 ; with the selector being passed as info[0] (other fields ignored on input),
 ; and info[0...3] as output. This is regrettable but solves two issues:
