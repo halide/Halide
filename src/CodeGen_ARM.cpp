@@ -65,7 +65,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         Expr tsmax = simplify(cast(ws, t.max()));
 
         Pattern p("", Expr(), Pattern::NarrowArgs);
-        p.intrin = "rhadd";
+        p.intrin = "rounding_halving_add";
         p.pattern = cast(t, (w_vector + w_vector + 1) / 2);
         casts.push_back(p);
         p.pattern = cast(t, (w_vector + (w_vector + 1)) / 2);
@@ -74,17 +74,17 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         casts.push_back(p);
 
         // Rounding down averaging
-        p.intrin = "hadd";
+        p.intrin = "halving_add";
         p.pattern = cast(t, (w_vector + w_vector) / 2);
         casts.push_back(p);
 
         // Halving subtract
-        p.intrin = "hsub";
+        p.intrin = "halving_sub";
         p.pattern = cast(t, (w_vector - w_vector) / 2);
         casts.push_back(p);
 
         // Saturating add
-        p.intrin = "addsat";
+        p.intrin = "saturating_add";
         p.pattern = cast(t, clamp(w_vector + w_vector, tmin, tmax));
         casts.push_back(p);
 
@@ -95,7 +95,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         }
 
         // Saturating subtract
-        p.intrin = "subsat";
+        p.intrin = "saturating_sub";
         p.pattern = cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax));
         casts.push_back(p);
 
@@ -109,57 +109,57 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     casts.emplace_back("qrdmulh", i16_sat((wild_i32x_ * wild_i32x_ + (1 << 14)) / (1 << 15)), Pattern::NarrowArgs);
     casts.emplace_back("qrdmulh", i32_sat((wild_i64x_ * wild_i64x_ + (1 << 30)) / Expr(int64_t(1) << 31)), Pattern::NarrowArgs);
 
-    casts.emplace_back("qshrn", i8_sat(wild_i16x_ / bc(wild_i16_)), Pattern::RightShift);
-    casts.emplace_back("qshrn", i16_sat(wild_i32x_ / bc(wild_i32_)), Pattern::RightShift);
-    casts.emplace_back("qshrn", i32_sat(wild_i64x_ / bc(wild_i64_)), Pattern::RightShift);
-    casts.emplace_back("qshrn", u8_sat(wild_u16x_ / bc(wild_u16_)), Pattern::RightShift);
-    casts.emplace_back("qshrn", u16_sat(wild_u32x_ / bc(wild_u32_)), Pattern::RightShift);
-    casts.emplace_back("qshrn", u32_sat(wild_u64x_ / bc(wild_u64_)), Pattern::RightShift);
-    casts.emplace_back("qshrn", u8_sat(wild_i16x_ / bc(wild_i16_)), Pattern::RightShift);
-    casts.emplace_back("qshrn", u16_sat(wild_i32x_ / bc(wild_i32_)), Pattern::RightShift);
-    casts.emplace_back("qshrn", u32_sat(wild_i64x_ / bc(wild_i64_)), Pattern::RightShift);
+    casts.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ / bc(wild_i16_)), Pattern::RightShift);
+    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ / bc(wild_i32_)), Pattern::RightShift);
+    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ / bc(wild_i64_)), Pattern::RightShift);
+    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ / bc(wild_u16_)), Pattern::RightShift);
+    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ / bc(wild_u32_)), Pattern::RightShift);
+    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ / bc(wild_u64_)), Pattern::RightShift);
+    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ / bc(wild_i16_)), Pattern::RightShift);
+    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ / bc(wild_i32_)), Pattern::RightShift);
+    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ / bc(wild_i64_)), Pattern::RightShift);
 
-    casts.emplace_back("qshl", i8_sat(i16(wild_i8x_) * wild_i16x_), Pattern::LeftShift);
-    casts.emplace_back("qshl", i16_sat(i32(wild_i16x_) * wild_i32x_), Pattern::LeftShift);
-    casts.emplace_back("qshl", i32_sat(i64(wild_i32x_) * wild_i64x_), Pattern::LeftShift);
-    casts.emplace_back("qshl", u8_sat(u16(wild_u8x_) * wild_u16x_), Pattern::LeftShift);
-    casts.emplace_back("qshl", u16_sat(u32(wild_u16x_) * wild_u32x_), Pattern::LeftShift);
-    casts.emplace_back("qshl", u32_sat(u64(wild_u32x_) * wild_u64x_), Pattern::LeftShift);
-    casts.emplace_back("qshl", u8_sat(i16(wild_i8x_) * wild_i16x_), Pattern::LeftShift);
-    casts.emplace_back("qshl", u16_sat(i32(wild_i16x_) * wild_i32x_), Pattern::LeftShift);
-    casts.emplace_back("qshl", u32_sat(i64(wild_i32x_) * wild_i64x_), Pattern::LeftShift);
+    casts.emplace_back("saturating_shift_left", i8_sat(i16(wild_i8x_) * wild_i16x_), Pattern::LeftShift);
+    casts.emplace_back("saturating_shift_left", i16_sat(i32(wild_i16x_) * wild_i32x_), Pattern::LeftShift);
+    casts.emplace_back("saturating_shift_left", i32_sat(i64(wild_i32x_) * wild_i64x_), Pattern::LeftShift);
+    casts.emplace_back("saturating_shift_left", u8_sat(u16(wild_u8x_) * wild_u16x_), Pattern::LeftShift);
+    casts.emplace_back("saturating_shift_left", u16_sat(u32(wild_u16x_) * wild_u32x_), Pattern::LeftShift);
+    casts.emplace_back("saturating_shift_left", u32_sat(u64(wild_u32x_) * wild_u64x_), Pattern::LeftShift);
+    casts.emplace_back("saturating_shift_left", u8_sat(i16(wild_i8x_) * wild_i16x_), Pattern::LeftShift);
+    casts.emplace_back("saturating_shift_left", u16_sat(i32(wild_i16x_) * wild_i32x_), Pattern::LeftShift);
+    casts.emplace_back("saturating_shift_left", u32_sat(i64(wild_i32x_) * wild_i64x_), Pattern::LeftShift);
 
-    casts.emplace_back("qxtn", i8_sat(wild_i16x_));
-    casts.emplace_back("qxtn", i16_sat(wild_i32x_));
-    casts.emplace_back("qxtn", i32_sat(wild_i64x_));
-    casts.emplace_back("qxtn", u8_sat(wild_u16x_));
-    casts.emplace_back("qxtn", u16_sat(wild_u32x_));
-    casts.emplace_back("qxtn", u32_sat(wild_u64x_));
-    casts.emplace_back("qxtn", u8_sat(wild_i16x_));
-    casts.emplace_back("qxtn", u16_sat(wild_i32x_));
-    casts.emplace_back("qxtn", u32_sat(wild_i64x_));
+    casts.emplace_back("saturating_narrow", i8_sat(wild_i16x_));
+    casts.emplace_back("saturating_narrow", i16_sat(wild_i32x_));
+    casts.emplace_back("saturating_narrow", i32_sat(wild_i64x_));
+    casts.emplace_back("saturating_narrow", u8_sat(wild_u16x_));
+    casts.emplace_back("saturating_narrow", u16_sat(wild_u32x_));
+    casts.emplace_back("saturating_narrow", u32_sat(wild_u64x_));
+    casts.emplace_back("saturating_narrow", u8_sat(wild_i16x_));
+    casts.emplace_back("saturating_narrow", u16_sat(wild_i32x_));
+    casts.emplace_back("saturating_narrow", u32_sat(wild_i64x_));
 
     // Overflow for int32 is not defined by Halide, so for those we can take
     // advantage of special add-and-halve instructions.
     //
     // 128-bit
-    averagings.emplace_back("hadd", (wild_i32x_ + wild_i32x_));
+    averagings.emplace_back("halving_add", (wild_i32x_ + wild_i32x_));
 
     // 128-bit
-    averagings.emplace_back("hsub", (wild_i32x_ - wild_i32x_));
+    averagings.emplace_back("halving_sub", (wild_i32x_ - wild_i32x_));
 
     // 128-bit
-    negations.emplace_back("qneg", -max(wild_i8x_, -127));
-    negations.emplace_back("qneg", -max(wild_i16x_, -32767));
-    negations.emplace_back("qneg", -max(wild_i32x_, -(0x7fffffff)));
+    negations.emplace_back("saturating_negate", -max(wild_i8x_, -127));
+    negations.emplace_back("saturating_negate", -max(wild_i16x_, -32767));
+    negations.emplace_back("saturating_negate", -max(wild_i32x_, -(0x7fffffff)));
 
     // Widening multiplies.
-    multiplies.emplace_back("mull", wild_i16x_ * wild_i16x_, Pattern::NarrowArgs);
-    multiplies.emplace_back("mull", wild_u16x_ * wild_u16x_, Pattern::NarrowArgs);
-    multiplies.emplace_back("mull", wild_i32x_ * wild_i32x_, Pattern::NarrowArgs);
-    multiplies.emplace_back("mull", wild_u32x_ * wild_u32x_, Pattern::NarrowArgs);
-    multiplies.emplace_back("mull", wild_i64x_ * wild_i64x_, Pattern::NarrowArgs);
-    multiplies.emplace_back("mull", wild_u64x_ * wild_u64x_, Pattern::NarrowArgs);
+    multiplies.emplace_back("widening_mul", wild_i16x_ * wild_i16x_, Pattern::NarrowArgs);
+    multiplies.emplace_back("widening_mul", wild_u16x_ * wild_u16x_, Pattern::NarrowArgs);
+    multiplies.emplace_back("widening_mul", wild_i32x_ * wild_i32x_, Pattern::NarrowArgs);
+    multiplies.emplace_back("widening_mul", wild_u32x_ * wild_u32x_, Pattern::NarrowArgs);
+    multiplies.emplace_back("widening_mul", wild_i64x_ * wild_i64x_, Pattern::NarrowArgs);
+    multiplies.emplace_back("widening_mul", wild_u64x_ * wild_u64x_, Pattern::NarrowArgs);
 }
 
 
@@ -215,88 +215,101 @@ halide_type_t f32v2 = f32v1.with_lanes(f32v1.lanes * 2);
 
 // clang-format off
 const ArmIntrinsic intrinsic_defs[] = {
+    // Absolute value
+    // TODO: Once all backends have these, we can remove the abs implementations
+    // from the runtime .ll modules.
+    {"llvm.fabs.v2f32", "llvm.fabs.v2f32", f32v1, "abs", {f32v1}},
+    {"vabs.v8i8", "abs.v8i8", u8v1, "abs", {i8v1}},
+    {"vabs.v4i16", "abs.v4i16", u16v1, "abs", {i16v1}},
+    {"vabs.v2i32", "abs.v2i32", u32v1, "abs", {i32v1}},
+
+    {"llvm.fabs.v4f32", "llvm.fabs.v4f32", f32v2, "abs", {f32v2}},
+    {"vabs.v16i8", "abs.v16i8", u8v2, "abs", {i8v2}},
+    {"vabs.v8i16", "abs.v8i16", u16v2, "abs", {i16v2}},
+    {"vabs.v4i32", "abs.v4i32", u32v2, "abs", {i32v2}},
+
     // Widening multiply
-    {"vmulls.v8i16", "smull.v8i16", i16v2, "mull", {i8v1, i8v1}},
-    {"vmullu.v8i16", "umull.v8i16", u16v2, "mull", {u8v1, u8v1}},
-    {"vmulls.v4i32", "smull.v4i32", i32v2, "mull", {i16v1, i16v1}},
-    {"vmullu.v4i32", "umull.v4i32", u32v2, "mull", {u16v1, u16v1}},
-    {"vmulls.v2i64", "smull.v2i64", i64v2, "mull", {i32v1, i32v1}},
-    {"vmullu.v2i64", "umull.v2i64", u64v2, "mull", {u32v1, u32v1}},
+    {"vmulls.v8i16", "smull.v8i16", i16v2, "widening_mul", {i8v1, i8v1}},
+    {"vmullu.v8i16", "umull.v8i16", u16v2, "widening_mul", {u8v1, u8v1}},
+    {"vmulls.v4i32", "smull.v4i32", i32v2, "widening_mul", {i16v1, i16v1}},
+    {"vmullu.v4i32", "umull.v4i32", u32v2, "widening_mul", {u16v1, u16v1}},
+    {"vmulls.v2i64", "smull.v2i64", i64v2, "widening_mul", {i32v1, i32v1}},
+    {"vmullu.v2i64", "umull.v2i64", u64v2, "widening_mul", {u32v1, u32v1}},
 
     // Saturating add
-    {"llvm.sadd.sat.v8i8", "llvm.sadd.sat.v8i8", i8v1, "addsat", {i8v1, i8v1}},
-    {"llvm.uadd.sat.v8i8", "llvm.uadd.sat.v8i8", u8v1, "addsat", {u8v1, u8v1}},
-    {"llvm.sadd.sat.v4i16", "llvm.sadd.sat.v4i16", i16v1, "addsat", {i16v1, i16v1}},
-    {"llvm.uadd.sat.v4i16", "llvm.uadd.sat.v4i16", u16v1, "addsat", {u16v1, u16v1}},
-    {"llvm.sadd.sat.v2i32", "llvm.sadd.sat.v2i32", i32v1, "addsat", {i32v1, i32v1}},
-    {"llvm.uadd.sat.v2i32", "llvm.uadd.sat.v2i32", u32v1, "addsat", {u32v1, u32v1}},
+    {"llvm.sadd.sat.v8i8", "llvm.sadd.sat.v8i8", i8v1, "saturating_add", {i8v1, i8v1}},
+    {"llvm.uadd.sat.v8i8", "llvm.uadd.sat.v8i8", u8v1, "saturating_add", {u8v1, u8v1}},
+    {"llvm.sadd.sat.v4i16", "llvm.sadd.sat.v4i16", i16v1, "saturating_add", {i16v1, i16v1}},
+    {"llvm.uadd.sat.v4i16", "llvm.uadd.sat.v4i16", u16v1, "saturating_add", {u16v1, u16v1}},
+    {"llvm.sadd.sat.v2i32", "llvm.sadd.sat.v2i32", i32v1, "saturating_add", {i32v1, i32v1}},
+    {"llvm.uadd.sat.v2i32", "llvm.uadd.sat.v2i32", u32v1, "saturating_add", {u32v1, u32v1}},
 
-    {"llvm.sadd.sat.v16i8", "llvm.sadd.sat.v16i8", i8v2, "addsat", {i8v2, i8v2}},
-    {"llvm.uadd.sat.v16i8", "llvm.uadd.sat.v16i8", u8v2, "addsat", {u8v2, u8v2}},
-    {"llvm.sadd.sat.v8i16", "llvm.sadd.sat.v8i16", i16v2, "addsat", {i16v2, i16v2}},
-    {"llvm.uadd.sat.v8i16", "llvm.uadd.sat.v8i16", u16v2, "addsat", {u16v2, u16v2}},
-    {"llvm.sadd.sat.v4i32", "llvm.sadd.sat.v4i32", i32v2, "addsat", {i32v2, i32v2}},
-    {"llvm.uadd.sat.v4i32", "llvm.uadd.sat.v4i32", u32v2, "addsat", {u32v2, u32v2}},
+    {"llvm.sadd.sat.v16i8", "llvm.sadd.sat.v16i8", i8v2, "saturating_add", {i8v2, i8v2}},
+    {"llvm.uadd.sat.v16i8", "llvm.uadd.sat.v16i8", u8v2, "saturating_add", {u8v2, u8v2}},
+    {"llvm.sadd.sat.v8i16", "llvm.sadd.sat.v8i16", i16v2, "saturating_add", {i16v2, i16v2}},
+    {"llvm.uadd.sat.v8i16", "llvm.uadd.sat.v8i16", u16v2, "saturating_add", {u16v2, u16v2}},
+    {"llvm.sadd.sat.v4i32", "llvm.sadd.sat.v4i32", i32v2, "saturating_add", {i32v2, i32v2}},
+    {"llvm.uadd.sat.v4i32", "llvm.uadd.sat.v4i32", u32v2, "saturating_add", {u32v2, u32v2}},
 
     // Saturating subtract
-    {"llvm.ssub.sat.v8i8", "llvm.ssub.sat.v8i8", i8v1, "subsat", {i8v1, i8v1}},
-    {"llvm.usub.sat.v8i8", "llvm.usub.sat.v8i8", u8v1, "subsat", {u8v1, u8v1}},
-    {"llvm.ssub.sat.v4i16", "llvm.ssub.sat.v4i16", i16v1, "subsat", {i16v1, i16v1}},
-    {"llvm.usub.sat.v4i16", "llvm.usub.sat.v4i16", u16v1, "subsat", {u16v1, u16v1}},
-    {"llvm.ssub.sat.v2i32", "llvm.ssub.sat.v2i32", i32v1, "subsat", {i32v1, i32v1}},
-    {"llvm.usub.sat.v2i32", "llvm.usub.sat.v2i32", u32v1, "subsat", {u32v1, u32v1}},
+    {"llvm.ssub.sat.v8i8", "llvm.ssub.sat.v8i8", i8v1, "saturating_sub", {i8v1, i8v1}},
+    {"llvm.usub.sat.v8i8", "llvm.usub.sat.v8i8", u8v1, "saturating_sub", {u8v1, u8v1}},
+    {"llvm.ssub.sat.v4i16", "llvm.ssub.sat.v4i16", i16v1, "saturating_sub", {i16v1, i16v1}},
+    {"llvm.usub.sat.v4i16", "llvm.usub.sat.v4i16", u16v1, "saturating_sub", {u16v1, u16v1}},
+    {"llvm.ssub.sat.v2i32", "llvm.ssub.sat.v2i32", i32v1, "saturating_sub", {i32v1, i32v1}},
+    {"llvm.usub.sat.v2i32", "llvm.usub.sat.v2i32", u32v1, "saturating_sub", {u32v1, u32v1}},
 
-    {"llvm.ssub.sat.v16i8", "llvm.ssub.sat.v16i8", i8v2, "subsat", {i8v2, i8v2}},
-    {"llvm.usub.sat.v16i8", "llvm.usub.sat.v16i8", u8v2, "subsat", {u8v2, u8v2}},
-    {"llvm.ssub.sat.v8i16", "llvm.ssub.sat.v8i16", i16v2, "subsat", {i16v2, i16v2}},
-    {"llvm.usub.sat.v8i16", "llvm.usub.sat.v8i16", u16v2, "subsat", {u16v2, u16v2}},
-    {"llvm.ssub.sat.v4i32", "llvm.ssub.sat.v4i32", i32v2, "subsat", {i32v2, i32v2}},
-    {"llvm.usub.sat.v4i32", "llvm.usub.sat.v4i32", u32v2, "subsat", {u32v2, u32v2}},
+    {"llvm.ssub.sat.v16i8", "llvm.ssub.sat.v16i8", i8v2, "saturating_sub", {i8v2, i8v2}},
+    {"llvm.usub.sat.v16i8", "llvm.usub.sat.v16i8", u8v2, "saturating_sub", {u8v2, u8v2}},
+    {"llvm.ssub.sat.v8i16", "llvm.ssub.sat.v8i16", i16v2, "saturating_sub", {i16v2, i16v2}},
+    {"llvm.usub.sat.v8i16", "llvm.usub.sat.v8i16", u16v2, "saturating_sub", {u16v2, u16v2}},
+    {"llvm.ssub.sat.v4i32", "llvm.ssub.sat.v4i32", i32v2, "saturating_sub", {i32v2, i32v2}},
+    {"llvm.usub.sat.v4i32", "llvm.usub.sat.v4i32", u32v2, "saturating_sub", {u32v2, u32v2}},
 
     // Halving add
-    {"vhadds.v8i8", "shadd.v8i8", i8v1, "hadd", {i8v1, i8v1}},
-    {"vhaddu.v8i8", "uhadd.v8i8", u8v1, "hadd", {u8v1, u8v1}},
-    {"vhadds.v4i16", "shadd.v4i16", i16v1, "hadd", {i16v1, i16v1}},
-    {"vhaddu.v4i16", "uhadd.v4i16", u16v1, "hadd", {u16v1, u16v1}},
-    {"vhadds.v2i32", "shadd.v2i32", i32v1, "hadd", {i32v1, i32v1}},
-    {"vhaddu.v2i32", "uhadd.v2i32", u32v1, "hadd", {u32v1, u32v1}},
+    {"vhadds.v8i8", "shadd.v8i8", i8v1, "halving_add", {i8v1, i8v1}},
+    {"vhaddu.v8i8", "uhadd.v8i8", u8v1, "halving_add", {u8v1, u8v1}},
+    {"vhadds.v4i16", "shadd.v4i16", i16v1, "halving_add", {i16v1, i16v1}},
+    {"vhaddu.v4i16", "uhadd.v4i16", u16v1, "halving_add", {u16v1, u16v1}},
+    {"vhadds.v2i32", "shadd.v2i32", i32v1, "halving_add", {i32v1, i32v1}},
+    {"vhaddu.v2i32", "uhadd.v2i32", u32v1, "halving_add", {u32v1, u32v1}},
 
-    {"vhadds.v16i8", "shadd.v16i8", i8v2, "hadd", {i8v2, i8v2}},
-    {"vhaddu.v16i8", "uhadd.v16i8", u8v2, "hadd", {u8v2, u8v2}},
-    {"vhadds.v8i16", "shadd.v8i16", i16v2, "hadd", {i16v2, i16v2}},
-    {"vhaddu.v8i16", "uhadd.v8i16", u16v2, "hadd", {u16v2, u16v2}},
-    {"vhadds.v4i32", "shadd.v4i32", i32v2, "hadd", {i32v2, i32v2}},
-    {"vhaddu.v4i32", "uhadd.v4i32", u32v2, "hadd", {u32v2, u32v2}},
+    {"vhadds.v16i8", "shadd.v16i8", i8v2, "halving_add", {i8v2, i8v2}},
+    {"vhaddu.v16i8", "uhadd.v16i8", u8v2, "halving_add", {u8v2, u8v2}},
+    {"vhadds.v8i16", "shadd.v8i16", i16v2, "halving_add", {i16v2, i16v2}},
+    {"vhaddu.v8i16", "uhadd.v8i16", u16v2, "halving_add", {u16v2, u16v2}},
+    {"vhadds.v4i32", "shadd.v4i32", i32v2, "halving_add", {i32v2, i32v2}},
+    {"vhaddu.v4i32", "uhadd.v4i32", u32v2, "halving_add", {u32v2, u32v2}},
 
     // Halving subtract
-    {"vhsubs.v8i8", "shsub.v8i8", i8v1, "hsub", {i8v1, i8v1}},
-    {"vhsubu.v8i8", "uhsub.v8i8", u8v1, "hsub", {u8v1, u8v1}},
-    {"vhsubs.v4i16", "shsub.v4i16", i16v1, "hsub", {i16v1, i16v1}},
-    {"vhsubu.v4i16", "uhsub.v4i16", u16v1, "hsub", {u16v1, u16v1}},
-    {"vhsubs.v2i32", "shsub.v2i32", i32v1, "hsub", {i32v1, i32v1}},
-    {"vhsubu.v2i32", "uhsub.v2i32", u32v1, "hsub", {u32v1, u32v1}},
+    {"vhsubs.v8i8", "shsub.v8i8", i8v1, "halving_sub", {i8v1, i8v1}},
+    {"vhsubu.v8i8", "uhsub.v8i8", u8v1, "halving_sub", {u8v1, u8v1}},
+    {"vhsubs.v4i16", "shsub.v4i16", i16v1, "halving_sub", {i16v1, i16v1}},
+    {"vhsubu.v4i16", "uhsub.v4i16", u16v1, "halving_sub", {u16v1, u16v1}},
+    {"vhsubs.v2i32", "shsub.v2i32", i32v1, "halving_sub", {i32v1, i32v1}},
+    {"vhsubu.v2i32", "uhsub.v2i32", u32v1, "halving_sub", {u32v1, u32v1}},
 
-    {"vhsubs.v16i8", "shsub.v16i8", i8v2, "hsub", {i8v2, i8v2}},
-    {"vhsubu.v16i8", "uhsub.v16i8", u8v2, "hsub", {u8v2, u8v2}},
-    {"vhsubs.v8i16", "shsub.v8i16", i16v2, "hsub", {i16v2, i16v2}},
-    {"vhsubu.v8i16", "uhsub.v8i16", u16v2, "hsub", {u16v2, u16v2}},
-    {"vhsubs.v4i32", "shsub.v4i32", i32v2, "hsub", {i32v2, i32v2}},
-    {"vhsubu.v4i32", "uhsub.v4i32", u32v2, "hsub", {u32v2, u32v2}},
+    {"vhsubs.v16i8", "shsub.v16i8", i8v2, "halving_sub", {i8v2, i8v2}},
+    {"vhsubu.v16i8", "uhsub.v16i8", u8v2, "halving_sub", {u8v2, u8v2}},
+    {"vhsubs.v8i16", "shsub.v8i16", i16v2, "halving_sub", {i16v2, i16v2}},
+    {"vhsubu.v8i16", "uhsub.v8i16", u16v2, "halving_sub", {u16v2, u16v2}},
+    {"vhsubs.v4i32", "shsub.v4i32", i32v2, "halving_sub", {i32v2, i32v2}},
+    {"vhsubu.v4i32", "uhsub.v4i32", u32v2, "halving_sub", {u32v2, u32v2}},
 
-    // Halving add rounding
-    {"vrhadds.v8i8", "srhadd.v8i8", i8v1, "rhadd", {i8v1, i8v1}},
-    {"vrhaddu.v8i8", "urhadd.v8i8", u8v1, "rhadd", {u8v1, u8v1}},
-    {"vrhadds.v4i16", "srhadd.v4i16", i16v1, "rhadd", {i16v1, i16v1}},
-    {"vrhaddu.v4i16", "urhadd.v4i16", u16v1, "rhadd", {u16v1, u16v1}},
-    {"vrhadds.v2i32", "srhadd.v2i32", i32v1, "rhadd", {i32v1, i32v1}},
-    {"vrhaddu.v2i32", "urhadd.v2i32", u32v1, "rhadd", {u32v1, u32v1}},
+    // Halving add with rounding rounding
+    {"vrhadds.v8i8", "srhadd.v8i8", i8v1, "rounding_halving_add", {i8v1, i8v1}},
+    {"vrhaddu.v8i8", "urhadd.v8i8", u8v1, "rounding_halving_add", {u8v1, u8v1}},
+    {"vrhadds.v4i16", "srhadd.v4i16", i16v1, "rounding_halving_add", {i16v1, i16v1}},
+    {"vrhaddu.v4i16", "urhadd.v4i16", u16v1, "rounding_halving_add", {u16v1, u16v1}},
+    {"vrhadds.v2i32", "srhadd.v2i32", i32v1, "rounding_halving_add", {i32v1, i32v1}},
+    {"vrhaddu.v2i32", "urhadd.v2i32", u32v1, "rounding_halving_add", {u32v1, u32v1}},
 
-    {"vrhadds.v16i8", "srhadd.v16i8", i8v2, "rhadd", {i8v2, i8v2}},
-    {"vrhaddu.v16i8", "urhadd.v16i8", u8v2, "rhadd", {u8v2, u8v2}},
-    {"vrhadds.v8i16", "srhadd.v8i16", i16v2, "rhadd", {i16v2, i16v2}},
-    {"vrhaddu.v8i16", "urhadd.v8i16", u16v2, "rhadd", {u16v2, u16v2}},
-    {"vrhadds.v4i32", "srhadd.v4i32", i32v2, "rhadd", {i32v2, i32v2}},
-    {"vrhaddu.v4i32", "urhadd.v4i32", u32v2, "rhadd", {u32v2, u32v2}},
+    {"vrhadds.v16i8", "srhadd.v16i8", i8v2, "rounding_halving_add", {i8v2, i8v2}},
+    {"vrhaddu.v16i8", "urhadd.v16i8", u8v2, "rounding_halving_add", {u8v2, u8v2}},
+    {"vrhadds.v8i16", "srhadd.v8i16", i16v2, "rounding_halving_add", {i16v2, i16v2}},
+    {"vrhaddu.v8i16", "urhadd.v8i16", u16v2, "rounding_halving_add", {u16v2, u16v2}},
+    {"vrhadds.v4i32", "srhadd.v4i32", i32v2, "rounding_halving_add", {i32v2, i32v2}},
+    {"vrhaddu.v4i32", "urhadd.v4i32", u32v2, "rounding_halving_add", {u32v2, u32v2}},
 
     // Min
     {"vmins.v8i8", "smin.v8i8", i8v1, "min", {i8v1, i8v1}},
@@ -333,80 +346,93 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vmaxs.v4f32", "fmax.v4f32", f32v2, "max", {f32v2, f32v2}},
 
     // Saturating negation
-    {"vqneg.v8i8", "sqneg.v8i8", i8v1, "qneg", {i8v1}},
-    {"vqneg.v4i16", "sqneg.v4i16", i16v1, "qneg", {i16v1}},
-    {"vqneg.v2i32", "sqneg.v2i32", i32v1, "qneg", {i32v1}},
+    {"vqneg.v8i8", "sqneg.v8i8", i8v1, "saturating_negate", {i8v1}},
+    {"vqneg.v4i16", "sqneg.v4i16", i16v1, "saturating_negate", {i16v1}},
+    {"vqneg.v2i32", "sqneg.v2i32", i32v1, "saturating_negate", {i32v1}},
 
-    {"vqneg.v16i8", "sqneg.v16i8", i8v2, "qneg", {i8v2}},
-    {"vqneg.v8i16", "sqneg.v8i16", i16v2, "qneg", {i16v2}},
-    {"vqneg.v4i32", "sqneg.v4i32", i32v2, "qneg", {i32v2}},
+    {"vqneg.v16i8", "sqneg.v16i8", i8v2, "saturating_negate", {i8v2}},
+    {"vqneg.v8i16", "sqneg.v8i16", i16v2, "saturating_negate", {i16v2}},
+    {"vqneg.v4i32", "sqneg.v4i32", i32v2, "saturating_negate", {i32v2}},
 
     // Saturating narrowing
-    {"vqmovns.v8i8", "sqxtn.v8i8", i8v1, "qxtn", {i16v2}},
-    {"vqmovnu.v8i8", "uqxtn.v8i8", u8v1, "qxtn", {u16v2}},
-    {"vqmovns.v4i16", "sqxtn.v4i16", i16v1, "qxtn", {i32v2}},
-    {"vqmovnu.v4i16", "uqxtn.v4i16", u16v1, "qxtn", {u32v2}},
-    {"vqmovns.v2i32", "sqxtn.v2i32", i32v1, "qxtn", {i64v2}},
-    {"vqmovnu.v2i32", "uqxtn.v2i32", u32v1, "qxtn", {u64v2}},
-    {"vqmovnsu.v8i8", "sqxtun.v8i8", u8v1, "qxtn", {i16v2}},
-    {"vqmovnsu.v4i16", "sqxtun.v4i16", u16v1, "qxtn", {i32v2}},
-    {"vqmovnsu.v2i32", "sqxtun.v2i32", u32v1, "qxtn", {i64v2}},
+    {"vqmovns.v8i8", "sqxtn.v8i8", i8v1, "saturating_narrow", {i16v2}},
+    {"vqmovnu.v8i8", "uqxtn.v8i8", u8v1, "saturating_narrow", {u16v2}},
+    {"vqmovns.v4i16", "sqxtn.v4i16", i16v1, "saturating_narrow", {i32v2}},
+    {"vqmovnu.v4i16", "uqxtn.v4i16", u16v1, "saturating_narrow", {u32v2}},
+    {"vqmovns.v2i32", "sqxtn.v2i32", i32v1, "saturating_narrow", {i64v2}},
+    {"vqmovnu.v2i32", "uqxtn.v2i32", u32v1, "saturating_narrow", {u64v2}},
+    {"vqmovnsu.v8i8", "sqxtun.v8i8", u8v1, "saturating_narrow", {i16v2}},
+    {"vqmovnsu.v4i16", "sqxtun.v4i16", u16v1, "saturating_narrow", {i32v2}},
+    {"vqmovnsu.v2i32", "sqxtun.v2i32", u32v1, "saturating_narrow", {i64v2}},
 
     // Saturating shift left by signed register
-    // TODO: There's also qshl by a scalar immediate we should target.
+    // TODO: There's also qshl by a scalar immediate we should target. I think
+    // LLVM pattern matches this automatically.
     // TODO: Rather than duplicating this part of the table so many times, maybe we should
     // allow call_elementwise_intrinsic to cast as needed.
-    {"vqshifts.v8i8", "sqshl.v8i8", i8v1, "qshl", {i8v1, i8v1}},
-    {"vqshiftu.v8i8", "uqshl.v8i8", u8v1, "qshl", {u8v1, i8v1}},
-    {"vqshifts.v4i16", "sqshl.v4i16", i16v1, "qshl", {i16v1, i16v1}},
-    {"vqshiftu.v4i16", "uqshl.v4i16", u16v1, "qshl", {u16v1, i16v1}},
-    {"vqshifts.v2i32", "sqshl.v2i32", i32v1, "qshl", {i32v1, i32v1}},
-    {"vqshiftu.v2i32", "uqshl.v2i32", u32v1, "qshl", {u32v1, i32v1}},
-    {"vqshiftsu.v8i8", "sqshlu.v8i8", u8v1, "qshl", {i8v1, i8v1}},
-    {"vqshiftsu.v4i16", "sqshlu.v4i16", u16v1, "qshl", {i16v1, i16v1}},
-    {"vqshiftsu.v2i32", "sqshlu.v2i32", u32v1, "qshl", {i32v1, i32v1}},
+    {"vqshifts.v8i8", "sqshl.v8i8", i8v1, "saturating_shift_left", {i8v1, i8v1}},
+    {"vqshiftu.v8i8", "uqshl.v8i8", u8v1, "saturating_shift_left", {u8v1, i8v1}},
+    {"vqshifts.v4i16", "sqshl.v4i16", i16v1, "saturating_shift_left", {i16v1, i16v1}},
+    {"vqshiftu.v4i16", "uqshl.v4i16", u16v1, "saturating_shift_left", {u16v1, i16v1}},
+    {"vqshifts.v2i32", "sqshl.v2i32", i32v1, "saturating_shift_left", {i32v1, i32v1}},
+    {"vqshiftu.v2i32", "uqshl.v2i32", u32v1, "saturating_shift_left", {u32v1, i32v1}},
+    {"vqshiftsu.v8i8", "sqshlu.v8i8", u8v1, "saturating_shift_left", {i8v1, i8v1}},
+    {"vqshiftsu.v4i16", "sqshlu.v4i16", u16v1, "saturating_shift_left", {i16v1, i16v1}},
+    {"vqshiftsu.v2i32", "sqshlu.v2i32", u32v1, "saturating_shift_left", {i32v1, i32v1}},
 
-    {"vqshifts.v16i8", "sqshl.v16i8", i8v2, "qshl", {i8v2, i8v2}},
-    {"vqshiftu.v16i8", "uqshl.v16i8", u8v2, "qshl", {u8v2, i8v2}},
-    {"vqshifts.v8i16", "sqshl.v8i16", i16v2, "qshl", {i16v2, i16v2}},
-    {"vqshiftu.v8i16", "uqshl.v8i16", u16v2, "qshl", {u16v2, i16v2}},
-    {"vqshifts.v4i32", "sqshl.v4i32", i32v2, "qshl", {i32v2, i32v2}},
-    {"vqshiftu.v4i32", "uqshl.v4i32", u32v2, "qshl", {u32v2, i32v2}},
-    {"vqshiftsu.v16i8", "sqshlu.v16i8", u8v2, "qshl", {i8v2, i8v2}},
-    {"vqshiftsu.v8i16", "sqshlu.v8i16", u16v2, "qshl", {i16v2, i16v2}},
-    {"vqshiftsu.v4i32", "sqshlu.v4i32", u32v2, "qshl", {i32v2, i32v2}},
+    {"vqshifts.v16i8", "sqshl.v16i8", i8v2, "saturating_shift_left", {i8v2, i8v2}},
+    {"vqshiftu.v16i8", "uqshl.v16i8", u8v2, "saturating_shift_left", {u8v2, i8v2}},
+    {"vqshifts.v8i16", "sqshl.v8i16", i16v2, "saturating_shift_left", {i16v2, i16v2}},
+    {"vqshiftu.v8i16", "uqshl.v8i16", u16v2, "saturating_shift_left", {u16v2, i16v2}},
+    {"vqshifts.v4i32", "sqshl.v4i32", i32v2, "saturating_shift_left", {i32v2, i32v2}},
+    {"vqshiftu.v4i32", "uqshl.v4i32", u32v2, "saturating_shift_left", {u32v2, i32v2}},
+    {"vqshiftsu.v16i8", "sqshlu.v16i8", u8v2, "saturating_shift_left", {i8v2, i8v2}},
+    {"vqshiftsu.v8i16", "sqshlu.v8i16", u16v2, "saturating_shift_left", {i16v2, i16v2}},
+    {"vqshiftsu.v4i32", "sqshlu.v4i32", u32v2, "saturating_shift_left", {i32v2, i32v2}},
 
     // Saturating shift left by unsigned register
-    {"vqshifts.v8i8", "sqshl.v8i8", i8v1, "qshl", {i8v1, u8v1}},
-    {"vqshiftu.v8i8", "uqshl.v8i8", u8v1, "qshl", {u8v1, u8v1}},
-    {"vqshifts.v4i16", "sqshl.v4i16", i16v1, "qshl", {i16v1, u16v1}},
-    {"vqshiftu.v4i16", "uqshl.v4i16", u16v1, "qshl", {u16v1, u16v1}},
-    {"vqshifts.v2i32", "sqshl.v2i32", i32v1, "qshl", {i32v1, u32v1}},
-    {"vqshiftu.v2i32", "uqshl.v2i32", u32v1, "qshl", {u32v1, u32v1}},
-    {"vqshiftsu.v8i8", "sqshlu.v8i8", u8v1, "qshl", {i8v1, u8v1}},
-    {"vqshiftsu.v4i16", "sqshlu.v4i16", u16v1, "qshl", {i16v1, u16v1}},
-    {"vqshiftsu.v2i32", "sqshlu.v2i32", u32v1, "qshl", {i32v1, u32v1}},
+    {"vqshifts.v8i8", "sqshl.v8i8", i8v1, "saturating_shift_left", {i8v1, u8v1}},
+    {"vqshiftu.v8i8", "uqshl.v8i8", u8v1, "saturating_shift_left", {u8v1, u8v1}},
+    {"vqshifts.v4i16", "sqshl.v4i16", i16v1, "saturating_shift_left", {i16v1, u16v1}},
+    {"vqshiftu.v4i16", "uqshl.v4i16", u16v1, "saturating_shift_left", {u16v1, u16v1}},
+    {"vqshifts.v2i32", "sqshl.v2i32", i32v1, "saturating_shift_left", {i32v1, u32v1}},
+    {"vqshiftu.v2i32", "uqshl.v2i32", u32v1, "saturating_shift_left", {u32v1, u32v1}},
+    {"vqshiftsu.v8i8", "sqshlu.v8i8", u8v1, "saturating_shift_left", {i8v1, u8v1}},
+    {"vqshiftsu.v4i16", "sqshlu.v4i16", u16v1, "saturating_shift_left", {i16v1, u16v1}},
+    {"vqshiftsu.v2i32", "sqshlu.v2i32", u32v1, "saturating_shift_left", {i32v1, u32v1}},
 
-    {"vqshifts.v16i8", "sqshl.v16i8", i8v2, "qshl", {i8v2, u8v2}},
-    {"vqshiftu.v16i8", "uqshl.v16i8", u8v2, "qshl", {u8v2, u8v2}},
-    {"vqshifts.v8i16", "sqshl.v8i16", i16v2, "qshl", {i16v2, u16v2}},
-    {"vqshiftu.v8i16", "uqshl.v8i16", u16v2, "qshl", {u16v2, u16v2}},
-    {"vqshifts.v4i32", "sqshl.v4i32", i32v2, "qshl", {i32v2, u32v2}},
-    {"vqshiftu.v4i32", "uqshl.v4i32", u32v2, "qshl", {u32v2, u32v2}},
-    {"vqshiftsu.v16i8", "sqshlu.v16i8", u8v2, "qshl", {i8v2, u8v2}},
-    {"vqshiftsu.v8i16", "sqshlu.v8i16", u16v2, "qshl", {i16v2, u16v2}},
-    {"vqshiftsu.v4i32", "sqshlu.v4i32", u32v2, "qshl", {i32v2, u32v2}},
+    {"vqshifts.v16i8", "sqshl.v16i8", i8v2, "saturating_shift_left", {i8v2, u8v2}},
+    {"vqshiftu.v16i8", "uqshl.v16i8", u8v2, "saturating_shift_left", {u8v2, u8v2}},
+    {"vqshifts.v8i16", "sqshl.v8i16", i16v2, "saturating_shift_left", {i16v2, u16v2}},
+    {"vqshiftu.v8i16", "uqshl.v8i16", u16v2, "saturating_shift_left", {u16v2, u16v2}},
+    {"vqshifts.v4i32", "sqshl.v4i32", i32v2, "saturating_shift_left", {i32v2, u32v2}},
+    {"vqshiftu.v4i32", "uqshl.v4i32", u32v2, "saturating_shift_left", {u32v2, u32v2}},
+    {"vqshiftsu.v16i8", "sqshlu.v16i8", u8v2, "saturating_shift_left", {i8v2, u8v2}},
+    {"vqshiftsu.v8i16", "sqshlu.v8i16", u16v2, "saturating_shift_left", {i16v2, u16v2}},
+    {"vqshiftsu.v4i32", "sqshlu.v4i32", u32v2, "saturating_shift_left", {i32v2, u32v2}},
 
-    // Saturating narrowing shift right by an immediate
-    {"vqshiftns.v8i8", "sqshrn.v8i8", i8v1, "qshrn", {i16v2, u32}},
-    {"vqshiftnu.v8i8", "uqshrn.v8i8", u8v1, "qshrn", {u16v2, u32}},
-    {"vqshiftns.v4i16", "sqshrn.v4i16", i16v1, "qshrn", {i32v2, u32}},
-    {"vqshiftnu.v4i16", "uqshrn.v4i16", u16v1, "qshrn", {u32v2, u32}},
-    {"vqshiftns.v2i32", "sqshrn.v2i32", i32v1, "qshrn", {i64v2, u32}},
-    {"vqshiftnu.v2i32", "uqshrn.v2i32", u32v1, "qshrn", {u64v2, u32}},
-    {"vqshiftnsu.v8i8", "sqshrun.v8i8", u8v1, "qshrn", {i16v2, u32}},
-    {"vqshiftnsu.v4i16", "sqshrun.v4i16", u16v1, "qshrn", {i32v2, u32}},
-    {"vqshiftnsu.v2i32", "sqshrun.v2i32", u32v1, "qshrn", {i64v2, u32}},
+    // Saturating narrowing shift right by an immediate.
+    // arm32 expects a vector RHS of the same type as the LHS except signed.
+    {"vqshiftns.v8i8", nullptr, i8v1, "saturating_shift_right_narrow", {i16v2, i16v2}},
+    {"vqshiftnu.v8i8", nullptr, u8v1, "saturating_shift_right_narrow", {u16v2, i16v2}},
+    {"vqshiftns.v4i16", nullptr, i16v1, "saturating_shift_right_narrow", {i32v2, i32v2}},
+    {"vqshiftnu.v4i16", nullptr, u16v1, "saturating_shift_right_narrow", {u32v2, i32v2}},
+    {"vqshiftns.v2i32", nullptr, i32v1, "saturating_shift_right_narrow", {i64v2, i64v2}},
+    {"vqshiftnu.v2i32", nullptr, u32v1, "saturating_shift_right_narrow", {u64v2, i64v2}},
+    {"vqshiftnsu.v8i8", nullptr, u8v1, "saturating_shift_right_narrow", {i16v2, i16v2}},
+    {"vqshiftnsu.v4i16", nullptr, u16v1, "saturating_shift_right_narrow", {i32v2, i32v2}},
+    {"vqshiftnsu.v2i32", nullptr, u32v1, "saturating_shift_right_narrow", {i64v2, i64v2}},
+
+    // arm64 expects a 32-bit constant.
+    {nullptr, "sqshrn.v8i8", i8v1, "saturating_shift_right_narrow", {i16v2, i32}},
+    {nullptr, "uqshrn.v8i8", u8v1, "saturating_shift_right_narrow", {u16v2, i32}},
+    {nullptr, "sqshrn.v4i16", i16v1, "saturating_shift_right_narrow", {i32v2, i32}},
+    {nullptr, "uqshrn.v4i16", u16v1, "saturating_shift_right_narrow", {u32v2, i32}},
+    {nullptr, "sqshrn.v2i32", i32v1, "saturating_shift_right_narrow", {i64v2, i32}},
+    {nullptr, "uqshrn.v2i32", u32v1, "saturating_shift_right_narrow", {u64v2, i32}},
+    {nullptr, "sqshrun.v8i8", u8v1, "saturating_shift_right_narrow", {i16v2, i32}},
+    {nullptr, "sqshrun.v4i16", u16v1, "saturating_shift_right_narrow", {i32v2, i32}},
+    {nullptr, "sqshrun.v2i32", u32v1, "saturating_shift_right_narrow", {i64v2, i32}},
 
     // Saturating doubling multiply keep high half.
     {"vqdmulh.v4i16", "sqdmulh.v4i16", i16v1, "qdmulh", {i16v1, i16v1}},
@@ -426,22 +452,24 @@ const ArmIntrinsic intrinsic_defs[] = {
 
 }  // namespace
 
-
 void CodeGen_ARM::init_module() {
     CodeGen_Posix::init_module();
 
     std::string prefix = target.bits == 32 ? "llvm.arm.neon." : "llvm.aarch64.neon.";
 
     for (const ArmIntrinsic &i : intrinsic_defs) {
-        std::string intrin_name;
+        const char *intrin_name = nullptr;
         if (target.bits == 32) {
             intrin_name = i.arm32;
         } else {
             intrin_name = i.arm64;
         }
-
-        if (!starts_with(intrin_name, "llvm.")) {
-            intrin_name = prefix + intrin_name;
+        if (!intrin_name) {
+            continue;
+        }
+        std::string full_name = intrin_name;
+        if (!starts_with(full_name, "llvm.")) {
+            full_name = prefix + full_name;
         }
 
         Type ret_type = i.ret_type;
@@ -454,25 +482,8 @@ void CodeGen_ARM::init_module() {
             arg_types.push_back(i);
         }
 
-        llvm::Function *intrin = module->getFunction(intrin_name);
-        if (!intrin) {
-            vector<llvm::Type *> llvm_arg_types(arg_types.size());
-            for (size_t i = 0; i < arg_types.size(); i++) {
-                llvm_arg_types[i] = llvm_type_of(arg_types[i]);
-            }
-
-            llvm::Type *llvm_ret_type = llvm_type_of(ret_type);
-            FunctionType *func_t = FunctionType::get(llvm_ret_type, llvm_arg_types, false);
-            intrin = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
-            intrin->setCallingConv(CallingConv::C);
-        }
-
-        intrinsics[i.name].emplace_back(ret_type, std::move(arg_types), intrin);
+        declare_intrinsic(i.name, ret_type, full_name, std::move(arg_types));
     }
-}
-
-Value *CodeGen_ARM::call_pattern(const Pattern &p, Type t, const vector<Expr> &args) {
-    return call_elementwise_intrinsic(t, p.intrin, args);
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
@@ -492,7 +503,7 @@ void CodeGen_ARM::visit(const Cast *op) {
 
             //debug(4) << "Match!\n";
             if (pattern.type == Pattern::Simple) {
-                value = call_pattern(pattern, t, matches);
+                value = call_elementwise_intrinsic(t, pattern.intrin, matches);
                 return;
             } else if (pattern.type == Pattern::NarrowArgs) {
                 // Try to narrow all of the args.
@@ -512,7 +523,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                 }
 
                 if (all_narrow) {
-                    value = call_pattern(pattern, t, matches);
+                    value = call_elementwise_intrinsic(t, pattern.intrin, matches);
                     return;
                 }
             } else {  // must be a shift
@@ -526,11 +537,15 @@ void CodeGen_ARM::visit(const Cast *op) {
                     }
                     Expr b;
                     if (matches[1].type().is_scalar()) {
-                        b = make_const(UInt(32), shift_amount);
+                        if (target.bits == 32) {
+                            b = make_const(matches[0].type().with_code(halide_type_int), shift_amount);
+                        } else {
+                            b = make_const(Int(32), shift_amount);
+                        }
                     } else {
                         b = make_const(Int(matches[0].type().bits(), matches[0].type().lanes()), shift_amount);
                     }
-                    value = call_pattern(pattern, t, {matches[0], b});
+                    value = call_elementwise_intrinsic(t, pattern.intrin, {matches[0], b});
                     return;
                 }
             }
@@ -606,7 +621,7 @@ void CodeGen_ARM::visit(const Mul *op) {
 
             //debug(4) << "Match!\n";
             if (pattern.type == Pattern::Simple) {
-                value = call_pattern(pattern, t, matches);
+                value = call_elementwise_intrinsic(t, pattern.intrin, matches);
                 return;
             } else if (pattern.type == Pattern::NarrowArgs) {
                 Type narrow_t = t.narrow();
@@ -627,7 +642,7 @@ void CodeGen_ARM::visit(const Mul *op) {
                 }
 
                 if (all_narrow) {
-                    value = call_pattern(pattern, t, matches);
+                    value = call_elementwise_intrinsic(t, pattern.intrin, matches);
                     return;
                 }
             }
@@ -656,13 +671,30 @@ void CodeGen_ARM::visit(const Mul *op) {
 }
 
 void CodeGen_ARM::visit(const Div *op) {
+#if 0
+    // TODO: This is probably the easiest thing to convert to IRMatch rewriting, but it
+    // needs work.
+    if (!neon_intrinsics_disabled() && no_overflow(op->type)) {
+        IRMatcher::Wild<0> x;
+        IRMatcher::Wild<1> y;
+        auto rewrite = IRMatcher::rewriter(op, op->type);
+        using IRMatcher::intrin;
+        if (rewrite((x + y) / 2, intrin("halving_add", x, y)) ||
+            rewrite((x - y) / 2, intrin("halving_sub", x, y)) ||
+            false) {
+            value = codegen(rewrite.result);
+            return;
+        }
+    }
+#endif
+
     if (!neon_intrinsics_disabled() &&
         op->type.is_vector() && is_const(op->b, 2) &&
         (op->a.as<Add>() || op->a.as<Sub>())) {
         vector<Expr> matches;
         for (size_t i = 0; i < averagings.size(); i++) {
             if (expr_match(averagings[i].pattern, op->a, matches)) {
-                value = call_pattern(averagings[i], op->type, matches);
+                value = call_elementwise_intrinsic(op->type, averagings[i].intrin, matches);
                 return;
             }
         }
@@ -680,7 +712,7 @@ void CodeGen_ARM::visit(const Sub *op) {
     for (size_t i = 0; i < negations.size(); i++) {
         if (op->type.is_vector() &&
             expr_match(negations[i].pattern, op, matches)) {
-            value = call_pattern(negations[i], op->type, matches);
+            value = call_elementwise_intrinsic(op->type, negations[i].intrin, matches);
             return;
         }
     }

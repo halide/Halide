@@ -101,7 +101,8 @@ protected:
     };
     std::map<std::string, std::vector<Intrinsic>> intrinsics;
 
-    llvm::Value *call_elementwise_intrinsic(const Type &t, const std::string &name, std::vector<Expr>);
+    void declare_intrinsic(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types);
+    llvm::Value *call_elementwise_intrinsic(const Type &t, const std::string &name, const std::vector<Expr> &args);
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{

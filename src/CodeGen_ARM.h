@@ -56,12 +56,6 @@ protected:
     };
     std::vector<Pattern> casts, averagings, negations, multiplies;
 
-    // Call an intrinsic as defined by a pattern. Dispatches to the
-    // 32- or 64-bit name depending on the target's bit width.
-    // @{
-    llvm::Value *call_pattern(const Pattern &p, Type t, const std::vector<Expr> &args);
-    // @}
-
     std::string mcpu() const override;
     std::string mattrs() const override;
     bool use_soft_float_abi() const override;

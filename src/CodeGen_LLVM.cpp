@@ -4730,7 +4730,24 @@ Value *CodeGen_LLVM::get_user_context() const {
     return ctx;
 }
 
-Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string &name, std::vector<Expr> args) {
+void CodeGen_LLVM::declare_intrinsic(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types) {
+    llvm::Function *intrin = module->getFunction(impl_name);
+    if (!intrin) {
+        vector<llvm::Type *> llvm_arg_types(arg_types.size());
+        for (size_t i = 0; i < arg_types.size(); i++) {
+            llvm_arg_types[i] = llvm_type_of(arg_types[i]);
+        }
+
+        llvm::Type *llvm_ret_type = llvm_type_of(ret_type);
+        FunctionType *func_t = FunctionType::get(llvm_ret_type, llvm_arg_types, false);
+        intrin = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, impl_name, module.get());
+        intrin->setCallingConv(CallingConv::C);
+
+        intrinsics[name].emplace_back(ret_type, std::move(arg_types), intrin);
+    }
+}
+
+Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string &name, const std::vector<Expr> &args) {
     auto impls_i = intrinsics.find(name);
     internal_assert(impls_i != intrinsics.end()) << name << "\n";
 
@@ -4753,7 +4770,9 @@ Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string
                 break;
             }
 
-            if (i.arg_types[j].lanes() == 1) {
+            if (args[j].type().lanes() == 1) {
+                // We can broadcast the argument.
+            } else if (i.arg_types[j].lanes() == 1) {
                 if (args[j].type().lanes() != 1) {
                     match = false;
                     break;
@@ -4840,6 +4859,13 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
         arg_lanes = get_vector_num_elements(result_type);
     }
 
+    for (size_t i = 0; i < arg_values.size(); i++) {
+        llvm::Type *arg_type_i = intrin->getFunctionType()->getParamType(i);
+        if (arg_type_i->isVectorTy() && !arg_values[i]->getType()->isVectorTy()) {
+            // Scalar argument to a function accepting a vector. Broadcast it.
+            arg_values[i] = create_broadcast(arg_values[i], get_vector_num_elements(arg_type_i));
+        }
+    }
     if (intrin_lanes != arg_lanes) {
         // Cut up each arg into appropriately-sized pieces, call the
         // intrinsic on each, then splice together the results.
