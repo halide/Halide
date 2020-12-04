@@ -261,6 +261,18 @@ CodeGen_LLVM::CodeGen_LLVM(Target t)
       wild_f32x_(Variable::make(Float(32, 0), "*")),
       wild_f64x_(Variable::make(Float(64, 0), "*")),
 
+      wild_u1_(Variable::make(UInt(1), "*")),
+      wild_i8_(Variable::make(Int(8), "*")),
+      wild_u8_(Variable::make(UInt(8), "*")),
+      wild_i16_(Variable::make(Int(16), "*")),
+      wild_u16_(Variable::make(UInt(16), "*")),
+      wild_i32_(Variable::make(Int(32), "*")),
+      wild_u32_(Variable::make(UInt(32), "*")),
+      wild_i64_(Variable::make(Int(64), "*")),
+      wild_u64_(Variable::make(UInt(64), "*")),
+      wild_f32_(Variable::make(Float(32), "*")),
+      wild_f64_(Variable::make(Float(64), "*")),
+
       // Bounds of types
       min_i8(Int(8).min()),
       max_i8(Int(8).max()),
@@ -4730,6 +4742,10 @@ Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string
             continue;
         }
 
+        if (i.result_type.with_lanes(1) != t.with_lanes(1)) {
+            continue;
+        }
+
         bool match = true;
         for (int j = 0; j < (int)i.arg_types.size(); j++) {
             if (i.arg_types[j].with_lanes(1) != args[j].type().with_lanes(1)) {
@@ -4737,10 +4753,17 @@ Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string
                 break;
             }
 
-            int required_lanes = t.lanes() * i.arg_types[j].lanes() / i.result_type.lanes();
-            if (required_lanes != args[j].type().lanes()) {
-                match = false;
-                break;
+            if (i.arg_types[j].lanes() == 1) {
+                if (args[j].type().lanes() != 1) {
+                    match = false;
+                    break;
+                }
+            } else {
+                int required_lanes = t.lanes() * i.arg_types[j].lanes() / i.result_type.lanes();
+                if (required_lanes != args[j].type().lanes()) {
+                    match = false;
+                    break;
+                }
             }
         }
         if (!match) {
@@ -4755,7 +4778,7 @@ Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string
         }
     }
 
-    internal_assert(resolved) << "Unresolved intrinsic " << name;
+    internal_assert(resolved) << "Unresolved intrinsic " << t << " " << name << " " << args[0] << " " << args[1] << "\n";
 
     return call_intrin(t, resolved->result_type.lanes(), resolved->impl, args);
 }
