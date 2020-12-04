@@ -567,12 +567,12 @@ public:
             check(arm32 ? "vabd.u32" : "uabd*v*s", 2 * w, u32(abs(i64(u32_2) - u32_3)));
 
             // VABDL    I       -       Absolute Difference Long
-            //check(arm32 ? "vabdl.s8" : "sabdl*v*b", 8 * w, i16(absd(i8_2, i8_3)));
-            //check(arm32 ? "vabdl.u8" : "uabdl*v*b", 8 * w, u16(absd(u8_2, u8_3)));
-            //check(arm32 ? "vabdl.s16" : "sabdl*v*h", 4 * w, i32(absd(i16_2, i16_3)));
-            //check(arm32 ? "vabdl.u16" : "uabdl*v*h", 4 * w, u32(absd(u16_2, u16_3)));
-            //check(arm32 ? "vabdl.s32" : "sabdl*v*s", 2 * w, i64(absd(i32_2, i32_3)));
-            //check(arm32 ? "vabdl.u32" : "uabdl*v*s", 2 * w, u64(absd(u32_2, u32_3)));
+            check(arm32 ? "vabdl.s8" : "sabdl*v*b", 8 * w, i16(absd(i8_2, i8_3)));
+            check(arm32 ? "vabdl.u8" : "uabdl*v*b", 8 * w, u16(absd(u8_2, u8_3)));
+            check(arm32 ? "vabdl.s16" : "sabdl*v*h", 4 * w, i32(absd(i16_2, i16_3)));
+            check(arm32 ? "vabdl.u16" : "uabdl*v*h", 4 * w, u32(absd(u16_2, u16_3)));
+            check(arm32 ? "vabdl.s32" : "sabdl*v*s", 2 * w, i64(absd(i32_2, i32_3)));
+            check(arm32 ? "vabdl.u32" : "uabdl*v*s", 2 * w, u64(absd(u32_2, u32_3)));
 
             // Via widening then taking an abs
             check(arm32 ? "vabdl.s8" : "sabdl*v*b", 8 * w, abs(i16(i8_2) - i16(i8_3)));
