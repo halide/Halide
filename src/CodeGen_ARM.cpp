@@ -106,6 +106,8 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         }
     }
 
+    casts.emplace_back("qdmulh", i16_sat((wild_i32x_ * wild_i32x_) / (1 << 15)), Pattern::NarrowArgs);
+    casts.emplace_back("qdmulh", i32_sat((wild_i64x_ * wild_i64x_) / Expr(int64_t(1) << 31)), Pattern::NarrowArgs);
     casts.emplace_back("qrdmulh", i16_sat((wild_i32x_ * wild_i32x_ + (1 << 14)) / (1 << 15)), Pattern::NarrowArgs);
     casts.emplace_back("qrdmulh", i32_sat((wild_i64x_ * wild_i64x_ + (1 << 30)) / Expr(int64_t(1) << 31)), Pattern::NarrowArgs);
 
