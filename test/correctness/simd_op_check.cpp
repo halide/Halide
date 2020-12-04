@@ -687,24 +687,24 @@ public:
 #endif
 
             // VCLZ     I       -       Count Leading Zeros
-            check(arm32 ? "vclz.s8" : "clz*v*b", 8 * w, count_leading_zeros(i8_1));
-            check(arm32 ? "vclz.s8" : "clz*v*b", 8 * w, count_leading_zeros(u8_1));
-            check(arm32 ? "vclz.s16" : "clz*v*h", 8 * w, count_leading_zeros(i16_1));
-            check(arm32 ? "vclz.s16" : "clz*v*h", 8 * w, count_leading_zeros(u16_1));
-            check(arm32 ? "vclz.s32" : "clz*v*s", 8 * w, count_leading_zeros(i32_1));
-            check(arm32 ? "vclz.s32" : "clz*v*s", 8 * w, count_leading_zeros(u32_1));
+            check(arm32 ? "vclz.i8" : "clz*v*b", 8 * w, count_leading_zeros(i8_1));
+            check(arm32 ? "vclz.i8" : "clz*v*b", 8 * w, count_leading_zeros(u8_1));
+            check(arm32 ? "vclz.i16" : "clz*v*h", 8 * w, count_leading_zeros(i16_1));
+            check(arm32 ? "vclz.i16" : "clz*v*h", 8 * w, count_leading_zeros(u16_1));
+            check(arm32 ? "vclz.i32" : "clz*v*s", 8 * w, count_leading_zeros(i32_1));
+            check(arm32 ? "vclz.i32" : "clz*v*s", 8 * w, count_leading_zeros(u32_1));
 
             // VCMP     -       F, D    Compare Setting Flags
             // We skip this
 
             // VCNT     I       -       Count Number of Set Bits
-            check(arm32 ? "vcnt.s8" : "cnt*v*b", 8 * w, popcount(i8_1));
-            check(arm32 ? "vcnt.s8" : "cnt*v*b", 8 * w, popcount(u8_1));
+            check(arm32 ? "vcnt.8" : "cnt*v*b", 8 * w, popcount(i8_1));
+            check(arm32 ? "vcnt.8" : "cnt*v*b", 8 * w, popcount(u8_1));
             // There is only cnt for bytes, and then horizontal adds.
-            check(arm32 ? "vcnt.s16" : "cnt*v*b", 8 * w, popcount(i16_1));
-            check(arm32 ? "vcnt.s16" : "cnt*v*b", 8 * w, popcount(u16_1));
-            check(arm32 ? "vcnt.s32" : "cnt*v*b", 8 * w, popcount(i32_1));
-            check(arm32 ? "vcnt.s32" : "cnt*v*b", 8 * w, popcount(u32_1));
+            check(arm32 ? "vcnt.8" : "cnt*v*b", 8 * w, popcount(i16_1));
+            check(arm32 ? "vcnt.8" : "cnt*v*b", 8 * w, popcount(u16_1));
+            check(arm32 ? "vcnt.8" : "cnt*v*b", 8 * w, popcount(i32_1));
+            check(arm32 ? "vcnt.8" : "cnt*v*b", 8 * w, popcount(u32_1));
 
             // VCVT     I, F, H I, F, D, H      Convert Between Floating-Point and 32-bit Integer Types
             check(arm32 ? "vcvt.f32.u32" : "ucvtf*v*s", 2 * w, f32(u32_1));
