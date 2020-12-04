@@ -65,9 +65,9 @@ struct x86Intrinsic {
 // clang-format off
 const x86Intrinsic intrinsic_defs[] = {
     {"abs_i8x32", UInt(8, 32), "abs", {Int(8, 32)}, Target::AVX},
-    {"abs_i16x16", UInt(16, 16), "abs", {Int(16, 16)}, Target::AVX},
-    {"abs_i32x8", UInt(32, 8), "abs", {Int(32, 8)}, Target::AVX},
-    {"abs_f32x8", Float(32, 8), "abs", {Float(32, 8)}, Target::AVX},
+    {"abs_i16x16", UInt(16, 16), "abs", {Int(16, 16)}, Target::AVX2},
+    {"abs_i32x8", UInt(32, 8), "abs", {Int(32, 8)}, Target::AVX2},
+    {"abs_f32x8", Float(32, 8), "abs", {Float(32, 8)}, Target::AVX2},
     {"abs_i8x16", UInt(8, 16), "abs", {Int(8, 16)}, Target::SSE41},
     {"abs_i16x8", UInt(16, 8), "abs", {Int(16, 8)}, Target::SSE41},
     {"abs_i32x4", UInt(32, 4), "abs", {Int(32, 4)}, Target::SSE41},
@@ -121,9 +121,9 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.x86.avx2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.x86.avx2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
     {"llvm.x86.avx2.pmul.hr.sw", Int(16, 16), "pmulhr", {Int(16, 16), Int(16, 16)}, Target::AVX2},
-    {"llvm.x86.sse2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}},
-    {"llvm.x86.sse2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}},
-    {"llvm.x86.sse3.pmul.hr.sw.128", Int(16, 16), "pmulhr", {Int(16, 16), Int(16, 16)}, Target::SSE41},
+    {"llvm.x86.sse2.pmulh.w", Int(16, 8), "pmulh", {Int(16, 8), Int(16, 8)}},
+    {"llvm.x86.sse2.pmulhu.w", UInt(16, 8), "pmulh", {UInt(16, 8), UInt(16, 8)}},
+    {"llvm.x86.sse3.pmul.hr.sw.128", Int(16, 8), "pmulhr", {Int(16, 8), Int(16, 8)}, Target::SSE41},
 
     // Pairwise multiply-add
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "pmaddwd", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},

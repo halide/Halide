@@ -25,10 +25,14 @@ using std::vector;
 using namespace Halide::ConciseCasts;
 using namespace llvm;
 
+namespace {
+
 // Broadcast to an unknown number of lanes, for making patterns.
 Expr bc(Expr x) {
     return Broadcast::make(std::move(x), 0);
 }
+
+}  // namespace
 
 CodeGen_ARM::CodeGen_ARM(Target target)
     : CodeGen_Posix(target) {
