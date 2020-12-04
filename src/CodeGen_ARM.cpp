@@ -168,7 +168,6 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     multiplies.emplace_back("widening_mul", wild_u64x_ * wild_u64x_, Pattern::NarrowArgs);
 }
 
-
 namespace {
 
 struct ArmIntrinsic {

@@ -51,7 +51,6 @@ CodeGen_X86::CodeGen_X86(Target t)
     user_assert(llvm_X86_enabled) << "llvm build not configured with X86 target enabled.\n";
 }
 
-
 namespace {
 
 struct x86Intrinsic {

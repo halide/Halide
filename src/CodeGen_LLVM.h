@@ -480,7 +480,8 @@ protected:
         llvm::Function *impl;
 
         Intrinsic(Type result_type, std::vector<Type> arg_types, llvm::Function *impl)
-            : result_type(result_type), arg_types(std::move(arg_types)), impl(impl) {}
+            : result_type(result_type), arg_types(std::move(arg_types)), impl(impl) {
+        }
     };
     /** Mapping of intrinsic functions to the various overloads implementing it. */
     std::map<std::string, std::vector<Intrinsic>> intrinsics;
