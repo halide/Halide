@@ -463,7 +463,7 @@ void CodeGen_ARM::init_module() {
             if (i.bits == 0) {
                 break;
             }
-            arg_types.push_back(i);
+            arg_types.emplace_back(i);
         }
 
         declare_intrin_overload(i.name, ret_type, full_name, std::move(arg_types));
