@@ -372,9 +372,9 @@ void CodeGen_X86::visit(const Cast *op) {
         {true, "pmulh", u16((wild_u32x_ * wild_u32x_) / 65536)},
         {true, "pmulhr", i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
 
-        // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
         {true, "rounding_halving_add", u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
         {true, "rounding_halving_add", u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
+
         {false, "saturating_narrow", i16_sat(wild_i32x_)},
         {false, "saturating_narrow", u16_sat(wild_i32x_)},
         {false, "saturating_narrow", i8_sat(wild_i16x_)},
