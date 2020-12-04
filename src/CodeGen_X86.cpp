@@ -123,7 +123,7 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.x86.avx2.pmul.hr.sw", Int(16, 16), "pmulhr", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.x86.sse2.pmulh.w", Int(16, 8), "pmulh", {Int(16, 8), Int(16, 8)}},
     {"llvm.x86.sse2.pmulhu.w", UInt(16, 8), "pmulh", {UInt(16, 8), UInt(16, 8)}},
-    {"llvm.x86.sse3.pmul.hr.sw.128", Int(16, 8), "pmulhr", {Int(16, 8), Int(16, 8)}, Target::SSE41},
+    {"llvm.x86.ssse3.pmul.hr.sw.128", Int(16, 8), "pmulhr", {Int(16, 8), Int(16, 8)}, Target::SSE41},
 
     // Pairwise multiply-add
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "pmaddwd", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
