@@ -183,7 +183,10 @@ bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
 void CodeGen_X86::visit(const Add *op) {
     vector<Expr> matches;
     if (should_use_pmaddwd(op->a, op->b, matches)) {
-        codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
+        Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
+        Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
+        value = call_elementwise_intrinsic(op->type, "pmaddwd", {ac, bd});
+        internal_assert(value);
     } else {
         CodeGen_Posix::visit(op);
     }
@@ -198,7 +201,10 @@ void CodeGen_X86::visit(const Sub *op) {
         } else {
             matches[3] = -matches[3];
         }
-        codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
+        Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
+        Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
+        value = call_elementwise_intrinsic(op->type, "pmaddwd", {ac, bd});
+        internal_assert(value);
     } else {
         CodeGen_Posix::visit(op);
     }

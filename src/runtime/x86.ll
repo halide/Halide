@@ -77,15 +77,6 @@ define weak_odr <8 x i16>  @packssdwx8(<8 x i32> %arg) nounwind alwaysinline {
   ret <8 x i16> %3
 }
 
-declare <4 x i32> @llvm.x86.sse2.pmadd.wd(<8 x i16>, <8 x i16>)
-
-define weak_odr <4 x i32> @pmaddwdx4(<4 x i16> %a, <4 x i16> %b, <4 x i16> %c, <4 x i16> %d) nounwind alwaysinline {
-  %1 = shufflevector <4 x i16> %a, <4 x i16> %c, <8 x i32> <i32 0, i32 4, i32 1, i32 5, i32 2, i32 6, i32 3, i32 7>
-  %2 = shufflevector <4 x i16> %b, <4 x i16> %d, <8 x i32> <i32 0, i32 4, i32 1, i32 5, i32 2, i32 6, i32 3, i32 7>
-  %3 = tail call <4 x i32> @llvm.x86.sse2.pmadd.wd(<8 x i16> %1, <8 x i16> %2)
-  ret <4 x i32> %3
-}
-
 define weak_odr <4 x float> @sqrt_f32x4(<4 x float> %x) nounwind uwtable readnone alwaysinline {
   %1 = tail call <4 x float> @llvm.x86.sse.sqrt.ps(<4 x float> %x) nounwind
   ret <4 x float> %1
