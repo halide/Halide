@@ -4746,7 +4746,7 @@ void CodeGen_LLVM::declare_intrinsic(const std::string &name, const Type &ret_ty
     intrinsics[name].emplace_back(ret_type, std::move(arg_types), intrin);
 }
 
-Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string &name, const std::vector<Expr> &args) {
+Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &result_type, const std::string &name, const std::vector<Expr> &args) {
     auto impls_i = intrinsics.find(name);
     if (impls_i == intrinsics.end()) {
         debug(2) << "No intrinsic " << name << "\n";
@@ -4759,7 +4759,7 @@ Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string
             continue;
         }
 
-        if (i.result_type.with_lanes(1) != t.with_lanes(1)) {
+        if (i.result_type.with_lanes(1) != result_type.with_lanes(1)) {
             continue;
         }
 
@@ -4772,13 +4772,14 @@ Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string
 
             if (args[j].type().lanes() == 1) {
                 // We can broadcast the argument.
+                // TODO: Should we prioritize overloads that don't need this?
             } else if (i.arg_types[j].lanes() == 1) {
                 if (args[j].type().lanes() != 1) {
                     match = false;
                     break;
                 }
             } else {
-                int required_lanes = t.lanes() * i.arg_types[j].lanes() / i.result_type.lanes();
+                int required_lanes = result_type.lanes() * i.arg_types[j].lanes() / i.result_type.lanes();
                 if (required_lanes != args[j].type().lanes()) {
                     match = false;
                     break;
@@ -4792,13 +4793,13 @@ Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string
         // Prefer resolving to the smallest intrinsic that is still bigger than our arguments.
         if (!resolved) {
             resolved = &i;
-        } else if (i.result_type.lanes() >= t.lanes() && i.result_type.lanes() < resolved->result_type.lanes()) {
+        } else if (i.result_type.lanes() >= result_type.lanes() && i.result_type.lanes() < resolved->result_type.lanes()) {
             resolved = &i;
         }
     }
 
     if (resolved) {
-        return call_intrin(t, resolved->result_type.lanes(), resolved->impl, args);
+        return call_intrin(result_type, resolved->result_type.lanes(), resolved->impl, args);
     } else {
         debug(2) << "Unresolved intrinsic " << name << "\n";
     }
@@ -4862,13 +4863,6 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
         arg_lanes = get_vector_num_elements(result_type);
     }
 
-    for (size_t i = 0; i < arg_values.size(); i++) {
-        llvm::Type *arg_type_i = intrin->getFunctionType()->getParamType(i);
-        if (arg_type_i->isVectorTy() && !arg_values[i]->getType()->isVectorTy()) {
-            // Scalar argument to a function accepting a vector. Broadcast it.
-            arg_values[i] = create_broadcast(arg_values[i], get_vector_num_elements(arg_type_i));
-        }
-    }
     if (intrin_lanes != arg_lanes) {
         // Cut up each arg into appropriately-sized pieces, call the
         // intrinsic on each, then splice together the results.
@@ -4880,6 +4874,7 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
                 if (arg_values[i]->getType()->isVectorTy()) {
                     arg_i_lanes = get_vector_num_elements(arg_values[i]->getType());
                 }
+
                 if (arg_i_lanes >= arg_lanes) {
                     // Horizontally reducing intrinsics may have
                     // arguments that have more lanes than the
@@ -4888,8 +4883,14 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
                     int reduce = arg_i_lanes / arg_lanes;
                     args.push_back(slice_vector(arg_values[i], start * reduce, intrin_lanes * reduce));
                 } else if (arg_i_lanes == 1) {
-                    // It's a scalar arg to an intrinsic that returns
-                    // a vector. Replicate it over the slices.
+                    if (intrin->getFunctionType()->getParamType(i)->isVectorTy()) {
+                        // It's a scalar argument to a vector parameter. Broadcast it.
+                        // Overwriting the parameter means this only happens once.
+                        arg_values[i] = create_broadcast(arg_values[i], intrin_lanes);
+                    } else {
+                        // It's a scalar arg to an intrinsic that returns
+                        // a vector. Replicate it over the slices.
+                    }
                     args.push_back(arg_values[i]);
                 } else {
                     internal_error << "Argument in call_intrin has " << arg_i_lanes

@@ -90,20 +90,6 @@ public:
 protected:
     CodeGen_LLVM(Target t);
 
-    /** Description of an intrinsic function. */
-    struct Intrinsic {
-        Type result_type;
-        std::vector<Type> arg_types;
-        llvm::Function *impl;
-
-        Intrinsic(Type result_type, std::vector<Type> arg_types, llvm::Function *impl)
-            : result_type(result_type), arg_types(std::move(arg_types)), impl(impl) {}
-    };
-    std::map<std::string, std::vector<Intrinsic>> intrinsics;
-
-    void declare_intrinsic(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types);
-    llvm::Value *call_elementwise_intrinsic(const Type &t, const std::string &name, const std::vector<Expr> &args);
-
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
     virtual void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
@@ -484,6 +470,25 @@ protected:
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
     virtual llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
+
+    /** Description of an intrinsic function overload. Overloads are resolved
+     * using both argument and return types. The scalar types of the arguments
+     * and return type must match exactly for an overload resolution to succeed. */
+    struct Intrinsic {
+        Type result_type;
+        std::vector<Type> arg_types;
+        llvm::Function *impl;
+
+        Intrinsic(Type result_type, std::vector<Type> arg_types, llvm::Function *impl)
+            : result_type(result_type), arg_types(std::move(arg_types)), impl(impl) {}
+    };
+    /** Mapping of intrinsic functions to the various overloads implementing it. */
+    std::map<std::string, std::vector<Intrinsic>> intrinsics;
+
+    /** Declare an intrinsic function that participates in overload resolution. */
+    void declare_intrinsic(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types);
+    /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found. */
+    llvm::Value *call_elementwise_intrinsic(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width

@@ -82,7 +82,7 @@ const x86Intrinsic intrinsic_defs[] = {
     // individual instructions itself. This is why we use
     // Target::AVX instead of Target::AVX2 as the feature flag
     // requirement.
-    // TODO: Just use llvm.*add/*sub.sat?
+    // TODO: Just use llvm.*add/*sub.sat, and verify the above comment?
     {"paddusbx32", UInt(8, 32), "saturating_add", {UInt(8, 32), UInt(8, 32)}, Target::AVX},
     {"paddusbx16", UInt(8, 16), "saturating_add", {UInt(8, 16), UInt(8, 16)}},
     {"psubusbx32", UInt(8, 32), "saturating_sub", {UInt(8, 32), UInt(8, 32)}, Target::AVX},
@@ -92,14 +92,6 @@ const x86Intrinsic intrinsic_defs[] = {
     {"padduswx8", UInt(16, 8), "saturating_add", {UInt(16, 8), UInt(16, 8)}},
     {"psubuswx16", UInt(16, 16), "saturating_sub", {UInt(16, 16), UInt(16, 16)}, Target::AVX},
     {"psubuswx8", UInt(16, 8), "saturating_sub", {UInt(16, 8), UInt(16, 8)}},
-
-    {"llvm.x86.avx2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}, Target::AVX2},
-    {"llvm.x86.avx2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
-    {"llvm.x86.avx2.pmul.hr.sw", Int(16, 16), "pmulhr", {Int(16, 16), Int(16, 16)}, Target::AVX2},
-
-    {"llvm.x86.sse2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}},
-    {"llvm.x86.sse2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}},
-    {"llvm.x86.sse3.pmul.hr.sw.128", Int(16, 16), "pmulhr", {Int(16, 16), Int(16, 16)}, Target::SSE41},
 
     // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
     {"pavgbx32", UInt(8, 32), "rounding_halving_add", {UInt(8, 32), UInt(8, 32)}, Target::AVX2},
@@ -115,6 +107,20 @@ const x86Intrinsic intrinsic_defs[] = {
     {"packusdwx8", UInt(16, 8), "saturating_narrow", {Int(32, 8)}, Target::SSE41},
     {"packuswbx32", UInt(8, 32), "saturating_narrow", {Int(16, 32)}, Target::AVX2},
     {"packuswbx16", UInt(8, 16), "saturating_narrow", {Int(16, 16)}},
+
+    // Multiply keep high half
+    {"llvm.x86.avx2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.x86.avx2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
+    {"llvm.x86.avx2.pmul.hr.sw", Int(16, 16), "pmulhr", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.x86.sse2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}},
+    {"llvm.x86.sse2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}},
+    {"llvm.x86.sse3.pmul.hr.sw.128", Int(16, 16), "pmulhr", {Int(16, 16), Int(16, 16)}, Target::SSE41},
+
+    // Pairwise multiply-add
+    {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "pmaddwd", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
+    {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "pmaddwd", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
+    {"llvm.x86.avx2.pmadd.wd", Int(32, 8), "pmaddwd", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.x86.sse2.pmadd.wd", Int(32, 4), "pmaddwd", {Int(16, 8), Int(16, 8)}},
 };
 // clang-format on
 
@@ -459,16 +465,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             //b = make_const(narrower, 1);
         }
         if (a.defined() && b.defined()) {
-            if ((target.has_feature(Target::AVX512_Skylake) ||
-                 target.has_feature(Target::AVX512_Cannonlake)) &&
-                op->type.lanes() > 8) {
-                // These generations have the AVX512_BW extension
-                value = call_intrin(op->type, 16, "llvm.x86.avx512.pmaddw.d.512", {a, b});
-            } else if (target.has_feature(Target::AVX2) && op->type.lanes() > 4) {
-                value = call_intrin(op->type, 8, "llvm.x86.avx2.pmadd.wd", {a, b});
-            } else {
-                value = call_intrin(op->type, 4, "llvm.x86.sse2.pmadd.wd", {a, b});
-            }
+            value = call_elementwise_intrinsic(op->type, "pmaddwd", {a, b});
             if (init.defined()) {
                 Value *x = value;
                 Value *y = codegen(init);
