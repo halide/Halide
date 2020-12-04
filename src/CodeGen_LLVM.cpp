@@ -4742,19 +4742,19 @@ void CodeGen_LLVM::declare_intrinsic(const std::string &name, const Type &ret_ty
         FunctionType *func_t = FunctionType::get(llvm_ret_type, llvm_arg_types, false);
         intrin = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, impl_name, module.get());
         intrin->setCallingConv(CallingConv::C);
-
-        intrinsics[name].emplace_back(ret_type, std::move(arg_types), intrin);
     }
+    intrinsics[name].emplace_back(ret_type, std::move(arg_types), intrin);
 }
 
 Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string &name, const std::vector<Expr> &args) {
     auto impls_i = intrinsics.find(name);
-    internal_assert(impls_i != intrinsics.end()) << name << "\n";
-
-    const std::vector<Intrinsic> &impls = impls_i->second;
+    if (impls_i == intrinsics.end()) {
+        debug(2) << "No intrinsic " << name << "\n";
+        return nullptr;
+    }
 
     const Intrinsic *resolved = nullptr;
-    for (const Intrinsic &i : impls) {
+    for (const Intrinsic &i : impls_i->second) {
         if (i.arg_types.size() != args.size()) {
             continue;
         }
@@ -4792,14 +4792,17 @@ Value *CodeGen_LLVM::call_elementwise_intrinsic(const Type &t, const std::string
         // Prefer resolving to the smallest intrinsic that is still bigger than our arguments.
         if (!resolved) {
             resolved = &i;
-        } else if (t.lanes() >= i.result_type.lanes() && i.result_type.lanes() < resolved->result_type.lanes()) {
+        } else if (i.result_type.lanes() >= t.lanes() && i.result_type.lanes() < resolved->result_type.lanes()) {
             resolved = &i;
         }
     }
 
-    internal_assert(resolved) << "Unresolved intrinsic " << t << " " << name << " " << args[0] << " " << args[1] << "\n";
-
-    return call_intrin(t, resolved->result_type.lanes(), resolved->impl, args);
+    if (resolved) {
+        return call_intrin(t, resolved->result_type.lanes(), resolved->impl, args);
+    } else {
+        debug(2) << "Unresolved intrinsic " << name << "\n";
+    }
+    return nullptr;
 }
 
 Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,

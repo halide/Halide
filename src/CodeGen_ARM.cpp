@@ -455,8 +455,11 @@ const ArmIntrinsic intrinsic_defs[] = {
 void CodeGen_ARM::init_module() {
     CodeGen_Posix::init_module();
 
-    std::string prefix = target.bits == 32 ? "llvm.arm.neon." : "llvm.aarch64.neon.";
+    if (neon_intrinsics_disabled()) {
+        return;
+    }
 
+    std::string prefix = target.bits == 32 ? "llvm.arm.neon." : "llvm.aarch64.neon.";
     for (const ArmIntrinsic &i : intrinsic_defs) {
         const char *intrin_name = nullptr;
         if (target.bits == 32) {

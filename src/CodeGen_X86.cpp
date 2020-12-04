@@ -51,6 +51,97 @@ CodeGen_X86::CodeGen_X86(Target t)
     user_assert(llvm_X86_enabled) << "llvm build not configured with X86 target enabled.\n";
 }
 
+
+namespace {
+
+struct x86Intrinsic {
+    const char *intrin_name;
+    halide_type_t ret_type;
+    const char *name;
+    halide_type_t arg_types[4];
+    Target::Feature feature = Target::FeatureEnd;
+};
+
+// clang-format off
+const x86Intrinsic intrinsic_defs[] = {
+    {"llvm.sadd.sat.v32i8", Int(8, 32), "saturating_add", {Int(8, 32), Int(8, 32)}, Target::AVX2},
+    {"llvm.sadd.sat.v16i8", Int(8, 16), "saturating_add", {Int(8, 16), Int(8, 16)}},
+    {"llvm.sadd.sat.v8i8", Int(8, 8), "saturating_add", {Int(8, 8), Int(8, 8)}},
+    {"llvm.ssub.sat.v32i8", Int(8, 32), "saturating_sub", {Int(8, 32), Int(8, 32)}, Target::AVX2},
+    {"llvm.ssub.sat.v16i8", Int(8, 16), "saturating_sub", {Int(8, 16), Int(8, 16)}},
+    {"llvm.ssub.sat.v8i8", Int(8, 8), "saturating_sub", {Int(8, 8), Int(8, 8)}},
+
+    {"llvm.sadd.sat.v16i16", Int(16, 16), "saturating_add", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.sadd.sat.v8i16", Int(16, 8), "saturating_add", {Int(16, 8), Int(16, 8)}},
+    {"llvm.ssub.sat.v16i16", Int(16, 16), "saturating_sub", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.ssub.sat.v8i16", Int(16, 8), "saturating_sub", {Int(16, 8), Int(16, 8)}},
+
+    // Some of the instructions referred to below only appear with
+    // AVX2, but LLVM generates better AVX code if you give it
+    // full 256-bit vectors and let it do the slicing up into
+    // individual instructions itself. This is why we use
+    // Target::AVX instead of Target::AVX2 as the feature flag
+    // requirement.
+    // TODO: Just use llvm.*add/*sub.sat?
+    {"paddusbx32", UInt(8, 32), "saturating_add", {UInt(8, 32), UInt(8, 32)}, Target::AVX},
+    {"paddusbx16", UInt(8, 16), "saturating_add", {UInt(8, 16), UInt(8, 16)}},
+    {"psubusbx32", UInt(8, 32), "saturating_sub", {UInt(8, 32), UInt(8, 32)}, Target::AVX},
+    {"psubusbx16", UInt(8, 16), "saturating_sub", {UInt(8, 16), UInt(8, 16)}},
+
+    {"padduswx16", UInt(16, 16), "saturating_add", {UInt(16, 16), UInt(16, 16)}, Target::AVX},
+    {"padduswx8", UInt(16, 8), "saturating_add", {UInt(16, 8), UInt(16, 8)}},
+    {"psubuswx16", UInt(16, 16), "saturating_sub", {UInt(16, 16), UInt(16, 16)}, Target::AVX},
+    {"psubuswx8", UInt(16, 8), "saturating_sub", {UInt(16, 8), UInt(16, 8)}},
+
+    {"llvm.x86.avx2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.x86.avx2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
+    {"llvm.x86.avx2.pmul.hr.sw", Int(16, 16), "pmulhr", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+
+    {"llvm.x86.sse2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}},
+    {"llvm.x86.sse2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}},
+    {"llvm.x86.sse3.pmul.hr.sw.128", Int(16, 16), "pmulhr", {Int(16, 16), Int(16, 16)}, Target::SSE41},
+
+    // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
+    {"pavgbx32", UInt(8, 32), "rounding_halving_add", {UInt(8, 32), UInt(8, 32)}, Target::AVX2},
+    {"pavgbx16", UInt(8, 16), "rounding_halving_add", {UInt(8, 16), UInt(8, 16)}},
+    {"pavgwx16", UInt(16, 16), "rounding_halving_add", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
+    {"pavgwx8", UInt(16, 8), "rounding_halving_add", {UInt(16, 8), UInt(16, 8)}},
+
+    {"packssdwx16", Int(16, 16), "saturating_narrow", {Int(32, 16)}, Target::AVX2},
+    {"packssdwx8", Int(16, 8), "saturating_narrow", {Int(32, 8)}},
+    {"packsswbx32", Int(8, 32), "saturating_narrow", {Int(16, 32)}, Target::AVX2},
+    {"packsswbx16", Int(8, 16), "saturating_narrow", {Int(16, 16)}},
+    {"packusdwx16", UInt(16, 16), "saturating_narrow", {Int(32, 16)}, Target::AVX2},
+    {"packusdwx8", UInt(16, 8), "saturating_narrow", {Int(32, 8)}, Target::SSE41},
+    {"packuswbx32", UInt(8, 32), "saturating_narrow", {Int(16, 32)}, Target::AVX2},
+    {"packuswbx16", UInt(8, 16), "saturating_narrow", {Int(16, 16)}},
+};
+// clang-format on
+
+}  // namespace
+
+void CodeGen_X86::init_module() {
+    CodeGen_Posix::init_module();
+
+    for (const x86Intrinsic &i : intrinsic_defs) {
+        if (i.feature != Target::FeatureEnd && !target.has_feature(i.feature)) {
+            continue;
+        }
+
+        Type ret_type = i.ret_type;
+        std::vector<Type> arg_types;
+        arg_types.reserve(4);
+        for (halide_type_t i : i.arg_types) {
+            if (i.bits == 0) {
+                break;
+            }
+            arg_types.push_back(i);
+        }
+
+        declare_intrinsic(i.name, ret_type, i.intrin_name, std::move(arg_types));
+    }
+}
+
 namespace {
 
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
@@ -250,110 +341,36 @@ void CodeGen_X86::visit(const Cast *op) {
     vector<Expr> matches;
 
     struct Pattern {
-        Target::Feature feature;
         bool wide_op;
-        Type type;
-        int min_lanes;
         string intrin;
         Expr pattern;
     };
 
     static Pattern patterns[] = {
-        {Target::AVX2, true, Int(8, 32), 17, "llvm.sadd.sat.v32i8",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 16), 9, "llvm.sadd.sat.v16i8",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 8), 0, "llvm.sadd.sat.v8i8",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::AVX2, true, Int(8, 32), 17, "llvm.ssub.sat.v32i8",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 16), 9, "llvm.ssub.sat.v16i8",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 8), 0, "llvm.ssub.sat.v8i8",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.sadd.sat.v16i16",
-         i16_sat(wild_i32x_ + wild_i32x_)},
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.sadd.sat.v8i16",
-         i16_sat(wild_i32x_ + wild_i32x_)},
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.ssub.sat.v16i16",
-         i16_sat(wild_i32x_ - wild_i32x_)},
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.ssub.sat.v8i16",
-         i16_sat(wild_i32x_ - wild_i32x_)},
+        {true, "saturating_add", i8_sat(wild_i16x_ + wild_i16x_)},
+        {true, "saturating_sub", i8_sat(wild_i16x_ - wild_i16x_)},
+        {true, "saturating_add", i16_sat(wild_i32x_ + wild_i32x_)},
+        {true, "saturating_sub", i16_sat(wild_i32x_ - wild_i32x_)},
+        {true, "saturating_add", u8_sat(wild_u16x_ + wild_u16x_)},
+        {true, "saturating_sub", u8(max(wild_i16x_ - wild_i16x_, 0))},
+        {true, "saturating_add", u16_sat(wild_u32x_ + wild_u32x_)},
+        {true, "saturating_sub", u16(max(wild_i32x_ - wild_i32x_, 0))},
 
-        // Some of the instructions referred to below only appear with
-        // AVX2, but LLVM generates better AVX code if you give it
-        // full 256-bit vectors and let it do the slicing up into
-        // individual instructions itself. This is why we use
-        // Target::AVX instead of Target::AVX2 as the feature flag
-        // requirement.
-        {Target::AVX, true, UInt(8, 32), 17, "paddusbx32",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "paddusbx16",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::AVX, true, UInt(8, 32), 17, "psubusbx32",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "psubusbx16",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::AVX, true, UInt(16, 16), 9, "padduswx16",
-         u16_sat(wild_u32x_ + wild_u32x_)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "padduswx8",
-         u16_sat(wild_u32x_ + wild_u32x_)},
-        {Target::AVX, true, UInt(16, 16), 9, "psubuswx16",
-         u16(max(wild_i32x_ - wild_i32x_, 0))},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "psubuswx8",
-         u16(max(wild_i32x_ - wild_i32x_, 0))},
+        {true, "pmulh", i16((wild_i32x_ * wild_i32x_) / 65536)},
+        {true, "pmulh", u16((wild_u32x_ * wild_u32x_) / 65536)},
+        {true, "pmulhr", i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
 
-        // Only use the avx2 version if we have > 8 lanes
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmulh.w",
-         i16((wild_i32x_ * wild_i32x_) / 65536)},
-        {Target::AVX2, true, UInt(16, 16), 9, "llvm.x86.avx2.pmulhu.w",
-         u16((wild_u32x_ * wild_u32x_) / 65536)},
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmul.hr.sw",
-         i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
-
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.pmulh.w",
-         i16((wild_i32x_ * wild_i32x_) / 65536)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
-         u16((wild_u32x_ * wild_u32x_) / 65536)},
-        {Target::SSE41, true, Int(16, 8), 0, "llvm.x86.ssse3.pmul.hr.sw.128",
-         i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
         // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
-        {Target::AVX2, true, UInt(8, 32), 17, "pavgbx32",
-         u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "pavgbx16",
-         u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
-        {Target::AVX2, true, UInt(16, 16), 9, "pavgwx16",
-         u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "pavgwx8",
-         u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
-        {Target::AVX2, false, Int(16, 16), 9, "packssdwx16",
-         i16_sat(wild_i32x_)},
-        {Target::FeatureEnd, false, Int(16, 8), 0, "packssdwx8",
-         i16_sat(wild_i32x_)},
-        {Target::AVX2, false, Int(8, 32), 17, "packsswbx32",
-         i8_sat(wild_i16x_)},
-        {Target::FeatureEnd, false, Int(8, 16), 0, "packsswbx16",
-         i8_sat(wild_i16x_)},
-        {Target::AVX2, false, UInt(8, 32), 17, "packuswbx32",
-         u8_sat(wild_i16x_)},
-        {Target::FeatureEnd, false, UInt(8, 16), 0, "packuswbx16",
-         u8_sat(wild_i16x_)},
-        {Target::AVX2, false, UInt(16, 16), 9, "packusdwx16",
-         u16_sat(wild_i32x_)},
-        {Target::SSE41, false, UInt(16, 8), 0, "packusdwx8",
-         u16_sat(wild_i32x_)}};
+        {true, "rounding_halving_add", u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
+        {true, "rounding_halving_add", u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
+        {false, "saturating_narrow", i16_sat(wild_i32x_)},
+        {false, "saturating_narrow", u16_sat(wild_i32x_)},
+        {false, "saturating_narrow", i8_sat(wild_i16x_)},
+        {false, "saturating_narrow", u8_sat(wild_i16x_)},
+    };
 
     for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
-
-        if (!target.has_feature(pattern.feature)) {
-            continue;
-        }
-
-        if (op->type.lanes() < pattern.min_lanes) {
-            continue;
-        }
-
         if (expr_match(pattern.pattern, op, matches)) {
             bool match = true;
             if (pattern.wide_op) {
@@ -366,8 +383,10 @@ void CodeGen_X86::visit(const Cast *op) {
                 }
             }
             if (match) {
-                value = call_intrin(op->type, pattern.type.lanes(), pattern.intrin, matches);
-                return;
+                value = call_elementwise_intrinsic(op->type, pattern.intrin, matches);
+                if (value) {
+                    return;
+                }
             }
         }
     }
