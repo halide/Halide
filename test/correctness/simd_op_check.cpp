@@ -1107,11 +1107,6 @@ public:
             check(arm32 ? "vqdmulh.s16" : "sqdmulh*v*h", 4 * w, i16_sat((i32(i16_1) * i32(i16_2)) >> 15));
             check(arm32 ? "vqdmulh.s32" : "sqdmulh*v*s", 2 * w, i32_sat((i64(i32_1) * i64(i32_2)) >> 31));
 
-            // VQDMULH  I       -       Saturating Doubling Multiply Returning High Half
-            // VQDMULL  I       -       Saturating Doubling Multiply Long
-            check(arm32 ? "vqdmulh.s16" : "sqdmulh*v*h", 4 * w, i16_sat((i32(i16_1) * i32(i16_2)) >> 15));
-            check(arm32 ? "vqdmulh.s32" : "sqdmulh*v*s", 2 * w, i32_sat((i64(i32_1) * i64(i32_2)) >> 31));
-
             // VQMOVN   I       -       Saturating Move and Narrow
             check(arm32 ? "vqmovn.s16" : "sqxtn*v*h", 8 * w, i8_sat(i16_1));
             check(arm32 ? "vqmovn.s32" : "sqxtn*v*s", 4 * w, i16_sat(i32_1));
