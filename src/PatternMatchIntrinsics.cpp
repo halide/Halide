@@ -446,12 +446,17 @@ protected:
 
         if (no_overflow(op->type)) {
             // clang-format off
-            if (rewrite(intrin(Call::shift_right, x + y, 1), halving_add(x, y)) ||
+            if (rewrite(intrin(Call::halving_add, x + y, 1), rounding_halving_add(x, y)) ||
+                rewrite(intrin(Call::halving_add, x, y + 1), rounding_halving_add(x, y)) ||
+                rewrite(intrin(Call::halving_add, x + 1, y), rounding_halving_add(x, y)) ||
+                rewrite(intrin(Call::halving_add, x - y, 1), rounding_halving_sub(x, y)) ||
+                rewrite(intrin(Call::halving_sub, x + 1, y), rounding_halving_sub(x, y)) ||
+                rewrite(intrin(Call::shift_right, x + y, 1), halving_add(x, y)) ||
                 rewrite(intrin(Call::shift_right, x - y, 1), halving_sub(x, y)) ||
                 rewrite(intrin(Call::rounding_shift_right, x + y, 1), rounding_halving_add(x, y)) ||
                 rewrite(intrin(Call::rounding_shift_right, x - y, 1), rounding_halving_sub(x, y)) ||
                 false) {
-                return rewrite.result;
+                return mutate(rewrite.result);
             }
             // clang-format on
         }
