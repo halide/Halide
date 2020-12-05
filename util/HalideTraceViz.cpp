@@ -536,6 +536,9 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
                     fi.config.strides = {{0, 0}, {1, 0}, {0, 1}};
                 }
             }
+        } else if (dims.size() == 4) {
+            // 4D, maybe a Tensor? Treat as grayscale with x = dim(1), y = dim(2)
+            fi.config.strides = {{0, 0}, {1, 0}, {0, 1}, {0, 0}};
         }
     }
 
@@ -587,13 +590,32 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
     info() << "pos for " << func_name << " is " << fi.config.pos.x << " " << fi.config.pos.y << "\n";
 
     if (fi.config.labels.empty()) {
-        std::string label = func_name + " (" + std::to_string((int)(fi.config.zoom * 100)) + "%)";
-        const int label_width = label.size() * inconsolata_char_width;
+        std::string label_suffix = " (" + std::to_string((int)(fi.config.zoom * 100)) + "%)";
+        std::string label = func_name + label_suffix;
         const int label_space = cell_size.x - pad.x * 2;
         float h_scale = 1.f;
+        int label_width = label.size() * inconsolata_char_width;
         if (label_width > label_space) {
-            h_scale = std::max(0.25f, std::min(1.f, (float)label_space / (float)label_width));
-            info() << "h_scale for label (" << label << " is " << h_scale << "\n";
+            // "minimum" depends on lots of things but for 1080p output, 70% seems fair
+            const float min_readable_h_scale = 0.7f;
+            h_scale = std::max(min_readable_h_scale, std::min(1.f, (float)label_space / (float)label_width));
+            info() << "h_scale for label (" << label << ") is " << h_scale << "\n";
+            // Still too wide? Discard the suffix.
+            if (label_width * h_scale > label_space) {
+                label = func_name;
+                label_width = label.size() * inconsolata_char_width;
+            }
+            // Still too wide? Try lopping off characters to shorten it rather
+            // than squishing it into oblivion. Let's lop off the *beginning*
+            // rather than the end, on the assumption that long names are more unique at the end.
+            if (label_width * h_scale > label_space) {
+                while (label.size() > 1 && (label.size() + 1) * inconsolata_char_width * h_scale > label_space) {
+                    label = label.substr(1);
+                }
+                // prepend "~" to hint it's squished
+                label = "~" + label;
+                info() << "label squished to (" << label << ")\n";
+            }
         }
         fi.config.labels.push_back({label, {0, 0}, 10, h_scale});
     }

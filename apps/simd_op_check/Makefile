@@ -1,34 +1,18 @@
-CXX-host ?= c++
+include ../support/Makefile.inc
 
-BIN ?= bin
-
-OPTIMIZE ?= -O3
-
-# Use the build/tools/make-standalone-toolchain.sh script inside the
-# android ndk to make a standalone toolchain to use for this app.
-CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
-CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
-CXX-hexagon-32-noos-hvx_64 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
 CXX-hexagon-32-noos-hvx_128 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
 
-CXXFLAGS-arm-64-android ?= -llog -fPIE -pie
-CXXFLAGS-arm-32-android ?= -llog -fPIE -pie
-CXXFLAGS-hexagon-32-noos-hvx_64 ?= -mhvx -mhvx-length=64B -G0
 CXXFLAGS-hexagon-32-noos-hvx_128 ?= -mhvx -mhvx-length=128B -G0
 
-LDFLAGS-host ?= -lpthread -ldl
-LDFLAGS-hexagon-32-noos-hvx_64 ?= -L../../src/runtime/hexagon_remote/bin/v60/ -lsim_qurt
 LDFLAGS-hexagon-32-noos-hvx_128 ?= -L../../src/runtime/hexagon_remote/bin/v60/ -lsim_qurt
 
 all: \
 	$(BIN)/driver-host \
 	$(BIN)/driver-arm-64-android \
 	$(BIN)/driver-arm-32-android \
-	$(BIN)/driver-hexagon-32-noos-hvx_64 \
 	$(BIN)/driver-hexagon-32-noos-hvx_128 \
 
 hvx_128: $(BIN)/driver-hexagon-32-noos-hvx_128
-hvx_64 : $(BIN)/driver-hexagon-32-noos-hvx_64
 
 arm_32: $(BIN)/driver-arm-32-android
 arm_64: $(BIN)/driver-arm-64-android

@@ -540,15 +540,9 @@ LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib
 
 ### To build and run the blur example in Halide/apps/blur on Android:
 
-To build the example for Android, first ensure that you have a standalone
-toolchain created from the NDK using the make-standalone-toolchain.sh script:
-
-```
-export ANDROID_NDK_HOME=$SDK_LOC/Hexagon_SDK/3.0/tools/android-ndk-r10d/
-export ANDROID_ARM64_TOOLCHAIN=<path to put new arm64 toolchain>
-$ANDROID_NDK_HOME/build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 \
-    --install-dir=$ANDROID_ARM64_TOOLCHAIN
-```
+To build the example for Android, first ensure that you have Android NDK r19b or
+later installed, and the ANDROID_NDK_ROOT environment variable points to it.
+(Note that Qualcomm Hexagon SDK v3.5.2 includes Android NDK r19c, which is fine.)
 
 Now build and run the blur example using the script to run it on device:
 
