@@ -74,6 +74,9 @@ int main(int argc, char **argv) {
 
     check(i8_sat(i16(xi) + yi), saturating_add(xi, yi));
     check(u8_sat(u16(xu) + yu), saturating_add(xu, yu));
+    check(u8(min(u16(xu) + u16(yu), 255)), saturating_add(xu, yu));
+    check(u8(min(i16(xu) + i16(yu), 255)), saturating_add(xu, yu));
+    check(u8(max(i16(xu) - i16(yu), 0)), saturating_sub(xu, yu));
 
     check(i8_sat(i16(xi) - yi), saturating_sub(xi, yi));
 
