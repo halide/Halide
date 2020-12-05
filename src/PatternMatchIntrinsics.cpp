@@ -385,8 +385,8 @@ protected:
             // clang-format off
             if (rewrite(max(min(widening_add(x, y), upper), lower), saturating_add(x, y), is_x_same_int_or_uint) ||
                 rewrite(max(min(widening_sub(x, y), upper), lower), saturating_sub(x, y), is_x_same_int_or_uint) ||
-                rewrite(min(widening_add(x, y), upper), saturating_add(x, y), is_x_same_uint) ||
-                rewrite(max(widening_sub(x, y), 0), saturating_sub(x, y), is_x_same_uint) ||
+                rewrite(min(widening_add(x, y), upper), saturating_add(x, y), op->type.is_uint() && is_x_same_uint) ||
+                rewrite(max(widening_sub(x, y), lower), saturating_sub(x, y), op->type.is_uint() && is_x_same_uint) ||
 
                 rewrite(intrin(Call::shift_right, widening_add(x, y), 1), halving_add(x, y), is_x_same_int_or_uint) ||
                 rewrite(intrin(Call::shift_right, widening_sub(x, y), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
