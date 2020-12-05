@@ -34,6 +34,8 @@ protected:
 
     using CodeGen_Posix::visit;
 
+    void init_module() override;
+
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     // @{
     void visit(const Add *) override;

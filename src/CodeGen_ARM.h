@@ -21,6 +21,8 @@ public:
 protected:
     using CodeGen_Posix::visit;
 
+    void init_module() override;
+
     /** Nodes for which we want to emit specific neon intrinsics */
     // @{
     void visit(const Cast *) override;
@@ -38,30 +40,19 @@ protected:
 
     /** Various patterns to peephole match against */
     struct Pattern {
-        std::string intrin32;            ///< Name of the intrinsic for 32-bit arm
-        std::string intrin64;            ///< Name of the intrinsic for 64-bit arm
-        int intrin_lanes;                ///< The native vector width of the intrinsic
-        Expr pattern;                    ///< The pattern to match against
-        enum PatternType { Simple = 0,   ///< Just match the pattern
-                           LeftShift,    ///< Match the pattern if the RHS is a const power of two
-                           RightShift,   ///< Match the pattern if the RHS is a const power of two
+        std::string intrin;             ///< Name of the intrinsic
+        Expr pattern;                   ///< The pattern to match against
+        enum PatternType { Simple = 0,  ///< Just match the pattern
+                           LeftShift,   ///< Match the pattern if the RHS is a const power of two
+                           RightShift,  ///< Match the pattern if the RHS is a const power of two
         };
         PatternType type;
         Pattern() = default;
-        Pattern(const std::string &i32, const std::string &i64, int l, Expr p, PatternType t = Simple)
-            : intrin32("llvm.arm.neon." + i32),
-              intrin64("llvm.aarch64.neon." + i64),
-              intrin_lanes(l), pattern(std::move(p)), type(t) {
+        Pattern(const std::string &intrin, Expr p, PatternType t = Simple)
+            : intrin(intrin), pattern(std::move(p)), type(t) {
         }
     };
     std::vector<Pattern> casts, averagings, negations;
-
-    // Call an intrinsic as defined by a pattern. Dispatches to the
-    // 32- or 64-bit name depending on the target's bit width.
-    // @{
-    llvm::Value *call_pattern(const Pattern &p, Type t, const std::vector<Expr> &args);
-    llvm::Value *call_pattern(const Pattern &p, llvm::Type *t, const std::vector<llvm::Value *> &args);
-    // @}
 
     std::string mcpu() const override;
     std::string mattrs() const override;
