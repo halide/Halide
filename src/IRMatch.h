@@ -1404,10 +1404,14 @@ struct Intrin {
             return likely(arg0);
         } else if (intrin == Call::likely_if_innermost) {
             return likely_if_innermost(arg0);
+        } else if (intrin == Call::abs) {
+            return abs(arg0);
         }
 
         Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
-        if (intrin == Call::widening_add) {
+        if (intrin == Call::absd) {
+            return absd(arg0, arg1);
+        } else if (intrin == Call::widening_add) {
             return widening_add(arg0, arg1);
         } else if (intrin == Call::widening_sub) {
             return widening_sub(arg0, arg1);
