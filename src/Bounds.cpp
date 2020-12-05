@@ -1233,10 +1233,37 @@ private:
                             } else if (a_interval.has_lower_bound() &&
                                        b_interval.has_lower_bound() &&
                                        !b_interval.min.type().is_uint() &&
+                                       (a_interval.min.type().is_uint() ||
+                                        can_prove(a_interval.min >= 0)) &&
                                        can_prove(b_interval.min < 0 &&
                                                  b_interval.min > -t.bits())) {
                                 interval.min = a_interval.min >> abs(b_interval.min);
+                            } else if (a_interval.has_lower_bound() &&
+                                       a_interval.min.type().is_int() &&
+                                       can_prove(a_interval.min < 0) &&
+                                       b_interval.has_upper_bound()) {
+                                // If a can be negative, then we split a_interval into
+                                // two ranges, [a.min, 0) and [0, a.max]. Note that the
+                                // second range may not exist, if a's range is fully
+                                // negative, but that doesn't matter - a positive value
+                                // cannot be shifted to produce a negative, so the min
+                                // of the operation is produced in the negative range.
+                                if (!b_interval.max.type().is_uint() &&
+                                    can_prove(b_interval.max <= 0)) {
+                                    // If b is strictly non-positive, then the magnitude can only decrease.
+                                    interval.min = a_interval.min;
+                                } else {
+                                    // If b could be positive, then the magnitude might increase.
+                                    interval.min = min(a_interval.min, a_interval.min << b_interval.max);
+                                }
+                            } else if (a_interval.has_lower_bound() &&
+                                       (a_interval.min.type().is_uint() ||
+                                        can_prove(a_interval.min >= 0))) {
+                                // A positive value shifted cannot change sign.
+                                interval.min = make_zero(t);
                             }
+                            // TODO: Are there any other cases we can handle for interval.min?
+
                             if (a_interval.has_upper_bound() &&
                                 b_interval.has_upper_bound() &&
                                 can_prove(b_interval.max >= 0 &&
@@ -1269,7 +1296,8 @@ private:
                                 !b_interval.max.type().is_uint() &&
                                 can_prove(b_interval.max < 0 && b_interval.max > -t.bits());
                             if (a_interval.has_lower_bound()) {
-                                if (can_prove(a_interval.min >= 0) && b_max_ok_positive) {
+                                if (b_max_ok_positive && (a_interval.min.type().is_uint() ||
+                                                          can_prove(a_interval.min >= 0))) {
                                     interval.min = a_interval.min >> b_interval.max;
                                 } else if (can_prove(a_interval.min < 0) && b_max_ok_negative) {
                                     interval.min = a_interval.min << abs(b_interval.max);
@@ -3130,6 +3158,39 @@ void bounds_test() {
     check(scope, x & 4095, 0, 10);          // LHS known to be positive
     check(scope, x & 123, 0, 10);           // Doesn't have to be a precise bitmask
     check(scope, (x - 1) & 4095, 0, 4095);  // LHS could be -1
+
+    // Regression tests on shifts (produced by z3).
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, 0));
+        // -123 << 0 = -123
+        check(scope, x << y, -123, Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, Interval::pos_inf()));
+        // A negative value can increase in magnitude if the rhs is positive.
+        check(scope, x << y, Interval::neg_inf(), Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        Var c("c");
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, c));
+        // Can't prove anything about the upper bound of y.
+        check(scope, x << y, min((-123) << c, -123), Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, 4));
+        // -123 << 4 = -1968
+        check(scope, x << y, -1968, Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(24, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(Interval::neg_inf(), -1));
+        // Cannot change sign, only can decrease magnitude.
+        check(scope, x << y, 0, Interval::pos_inf());
+    }
 
     // If we clamp something unbounded as one type, the bounds should
     // propagate through casts whenever the cast can be proved to not
