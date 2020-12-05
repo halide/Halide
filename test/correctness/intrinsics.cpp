@@ -93,6 +93,11 @@ int main(int argc, char **argv) {
     check(i8((i16(xi) - yi + 1) / 2), rounding_halving_sub(xi, yi));
     check(i8((widening_sub(xi, yi) + 1) / 2), rounding_halving_sub(xi, yi));
 
+    check(abs(i16(xi) - i16(yi)), u16(absd(xi, yi)));
+    check(abs(i16(xu) - i16(yu)), u16(absd(xu, yu)));
+    check(abs(widening_sub(xi, yi)), u16(absd(xi, yi)));
+    check(abs(widening_sub(xu, yu)), u16(absd(xu, yu)));
+
     // Test combinations of multiplies and adds with widening
     // Same sign:
     check(i16(xi) * yi + i16(zi) * wi, widening_mul(xi, yi) + widening_mul(zi, wi));

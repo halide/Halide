@@ -21,6 +21,10 @@ bool is_widen(const Expr &x) {
     return false;
 }
 
+Expr lossless_narrow(const Expr &x) {
+    return lossless_cast(x.type().narrow(), x);
+}
+
 Expr strip_widening_cast(const Expr &x) {
     Expr narrow = lossless_cast(x.type().narrow(), x);
     if (narrow.defined()) {
@@ -428,9 +432,19 @@ protected:
     }
 
     Expr visit(const Call *op) override {
-        if (no_overflow(op->type)) {
-            auto rewrite = IRMatcher::rewriter(op, op->type);
+        Expr mutated = IRMutator::visit(op);
+        op = mutated.as<Call>();
+        if (!op) {
+            return mutated;
+        }
 
+        auto rewrite = IRMatcher::rewriter(op, op->type);
+        if (rewrite(intrin(Call::abs, widening_sub(x, y)), cast(op->type, intrin(Call::absd, x, y))) ||
+            false) {
+            return rewrite.result;
+        }
+
+        if (no_overflow(op->type)) {
             // clang-format off
             if (rewrite(intrin(Call::shift_right, x + y, 1), halving_add(x, y)) ||
                 rewrite(intrin(Call::shift_right, x - y, 1), halving_sub(x, y)) ||
@@ -444,58 +458,39 @@ protected:
 
         if (op->is_intrinsic(Call::widening_mul)) {
             internal_assert(op->args.size() == 2);
-            Expr a = mutate(op->args[0]);
-            Expr b = mutate(op->args[1]);
-            Expr narrow_a = strip_widening_cast(a);
-            Expr narrow_b = strip_widening_cast(b);
+            Expr narrow_a = strip_widening_cast(op->args[0]);
+            Expr narrow_b = strip_widening_cast(op->args[1]);
             if (narrow_a.defined() && narrow_b.defined()) {
                 return Cast::make(op->type, widening_mul(narrow_a, narrow_b));
-            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
-                return op;
-            } else {
-                return widening_mul(a, b);
             }
         } else if (op->is_intrinsic(Call::widening_add)) {
             internal_assert(op->args.size() == 2);
-            Expr a = mutate(op->args[0]);
-            Expr b = mutate(op->args[1]);
-            Expr narrow_a = strip_widening_cast(a);
-            Expr narrow_b = strip_widening_cast(b);
+            Expr narrow_a = strip_widening_cast(op->args[0]);
+            Expr narrow_b = strip_widening_cast(op->args[1]);
             if (narrow_a.defined() && narrow_b.defined()) {
                 return Cast::make(op->type, widening_add(narrow_a, narrow_b));
-            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
-                return op;
-            } else {
-                return widening_add(a, b);
             }
         } else if (op->is_intrinsic(Call::widening_sub)) {
             internal_assert(op->args.size() == 2);
-            Expr a = mutate(op->args[0]);
-            Expr b = mutate(op->args[1]);
-            Expr narrow_a = strip_widening_cast(a);
-            Expr narrow_b = strip_widening_cast(b);
+            Expr narrow_a = strip_widening_cast(op->args[0]);
+            Expr narrow_b = strip_widening_cast(op->args[1]);
             if (narrow_a.defined() && narrow_b.defined()) {
                 return Cast::make(op->type, widening_sub(narrow_a, narrow_b));
-            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
-                return op;
-            } else {
-                return widening_sub(a, b);
             }
         }
 
         if (op->is_intrinsic(Call::shift_right) || op->is_intrinsic(Call::shift_left)) {
             internal_assert(op->args.size() == 2);
-            Expr a = mutate(op->args[0]);
-            Expr b = mutate(op->args[1]);
 
             // Try to turn this into a widening left shift.
             if (op->is_intrinsic(Call::shift_left)) {
-                Expr a_narrow = lossless_cast(a.type().narrow(), a);
+                Expr a_narrow = lossless_narrow(op->args[0]);
                 if (a_narrow.defined()) {
                     if (const Cast *ca = a_narrow.as<Cast>()) {
                         // If there is more casting, we can move it after the shift.
                         a_narrow = ca->value;
                     }
+                    Expr b = op->args[1];
                     b = simplify(cast(a_narrow.type().with_code(b.type().code()), b));
                     Expr result = widening_shift_left(a_narrow, b);
                     if (result.type() != op->type) {
@@ -505,27 +500,13 @@ protected:
                 }
             }
 
-            Expr result;
-            if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
-                result = op;
-            } else if (op->is_intrinsic(Call::shift_right)) {
-                result = Call::make(op->type, Call::shift_right, {a, b}, Call::PureIntrinsic);
-            } else if (op->is_intrinsic(Call::widening_shift_left)) {
-                result = Call::make(op->type, Call::widening_shift_left, {a, b}, Call::PureIntrinsic);
-            } else {
-                result = Call::make(op->type, Call::shift_left, {a, b}, Call::PureIntrinsic);
-            }
-
             // Try to turn this into a rounding shift.
-            Expr rounding_shift = to_rounding_shift(result.as<Call>());
+            Expr rounding_shift = to_rounding_shift(op);
             if (rounding_shift.defined()) {
                 return mutate(rounding_shift);
             }
-
-            return result;
-        } else {
-            return op;
         }
+        return op;
     }
 };
 

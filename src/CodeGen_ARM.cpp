@@ -765,33 +765,7 @@ void CodeGen_ARM::visit(const Load *op) {
 }
 
 void CodeGen_ARM::visit(const Call *op) {
-    if (op->is_intrinsic(Call::abs) && op->type.is_uint()) {
-        internal_assert(op->args.size() == 1);
-        // If the arg is a subtract with narrowable args, we can use vabdl.
-        const Sub *sub = op->args[0].as<Sub>();
-        if (sub) {
-            Expr a = sub->a, b = sub->b;
-            Type narrow = UInt(a.type().bits() / 2, a.type().lanes());
-            Expr na = lossless_cast(narrow, a);
-            Expr nb = lossless_cast(narrow, b);
-
-            // Also try an unsigned narrowing
-            if (!na.defined() || !nb.defined()) {
-                narrow = Int(narrow.bits(), narrow.lanes());
-                na = lossless_cast(narrow, a);
-                nb = lossless_cast(narrow, b);
-            }
-
-            if (na.defined() && nb.defined()) {
-                Expr absd = Call::make(UInt(narrow.bits(), narrow.lanes()), Call::absd,
-                                       {na, nb}, Call::PureIntrinsic);
-
-                absd = Cast::make(op->type, absd);
-                codegen(absd);
-                return;
-            }
-        }
-    } else if (op->is_intrinsic(Call::sorted_avg)) {
+    if (op->is_intrinsic(Call::sorted_avg)) {
         Type ty = op->type;
         Type wide_ty = ty.widen();
         // This will codegen to vhaddu (arm32) or uhadd (arm64).
