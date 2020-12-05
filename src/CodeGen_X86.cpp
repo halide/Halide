@@ -394,67 +394,6 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
-    struct Pattern {
-        Target::Feature feature;
-        int lanes;
-        int min_lanes;
-        string intrin;
-        Expr pattern;
-    };
-
-    static Pattern patterns[] = {
-        // Some of the instructions referred to below only appear with
-        // AVX2, but LLVM generates better AVX code if you give it
-        // full 256-bit vectors and let it do the slicing up into
-        // individual instructions itself. This is why we use
-        // Target::AVX instead of Target::AVX2 as the feature flag
-        // requirement.
-        {Target::AVX, 32, 17, "paddusbx32",
-         saturating_add(wild_u8x_, wild_u8x_)},
-        {Target::FeatureEnd, 16, 0, "paddusbx16",
-         saturating_add(wild_u8x_, wild_u8x_)},
-        {Target::AVX, 32, 17, "psubusbx32",
-         saturating_sub(wild_u8x_, wild_u8x_)},
-        {Target::FeatureEnd, 16, 0, "psubusbx16",
-         saturating_sub(wild_u8x_, wild_u8x_)},
-        {Target::AVX, 16, 9, "padduswx16",
-         saturating_add(wild_u16x_, wild_u16x_)},
-        {Target::FeatureEnd, 8, 0, "padduswx8",
-         saturating_add(wild_u16x_, wild_u16x_)},
-        {Target::AVX, 16, 9, "psubuswx16",
-         saturating_sub(wild_u16x_, wild_u16x_)},
-        {Target::FeatureEnd, 8, 0, "psubuswx8",
-         saturating_sub(wild_u16x_, wild_u16x_)},
-
-        // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
-        {Target::AVX2, 32, 17, "pavgbx32",
-         rounding_halving_add(wild_u8x_, wild_u8x_)},
-        {Target::FeatureEnd, 16, 0, "pavgbx16",
-         rounding_halving_add(wild_u8x_, wild_u8x_)},
-        {Target::AVX2, 16, 9, "pavgwx16",
-         rounding_halving_add(wild_u16x_, wild_u16x_)},
-        {Target::FeatureEnd, 8, 0, "pavgwx8",
-         rounding_halving_add(wild_u16x_, wild_u16x_)},
-    };
-
-    vector<Expr> matches;
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        const Pattern &pattern = patterns[i];
-
-        if (!target.has_feature(pattern.feature)) {
-            continue;
-        }
-
-        if (op->type.lanes() < pattern.min_lanes) {
-            continue;
-        }
-
-        if (expr_match(pattern.pattern, op, matches)) {
-            value = call_intrin(op->type, pattern.lanes, pattern.intrin, matches);
-            return;
-        }
-    }
-
 #if LLVM_VERSION < 110
     if (op->is_intrinsic(Call::widening_mul) && (op->type.is_int() || op->type.is_uint())) {
         // Widening integer multiply of non-power-of-two vector sizes is
