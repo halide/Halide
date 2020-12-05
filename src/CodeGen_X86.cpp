@@ -63,7 +63,7 @@ struct x86Intrinsic {
 
 // clang-format off
 const x86Intrinsic intrinsic_defs[] = {
-    {"abs_i8x32", UInt(8, 32), "abs", {Int(8, 32)}, Target::AVX},
+    {"abs_i8x32", UInt(8, 32), "abs", {Int(8, 32)}, Target::AVX2},
     {"abs_i16x16", UInt(16, 16), "abs", {Int(16, 16)}, Target::AVX2},
     {"abs_i32x8", UInt(32, 8), "abs", {Int(32, 8)}, Target::AVX2},
     {"abs_f32x8", Float(32, 8), "abs", {Float(32, 8)}, Target::AVX2},
