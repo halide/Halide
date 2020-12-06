@@ -1473,12 +1473,7 @@ bool is_power_of_two(int x) {
 }
 
 int next_power_of_two(int x) {
-    for (int p2 = 1;; p2 *= 2) {
-        if (p2 >= x) {
-            return p2;
-        }
-    }
-    // unreachable.
+    return static_cast<int>(1) << static_cast<int>(std::ceil(std::log2(x)));
 }
 
 }  // namespace
