@@ -1077,6 +1077,13 @@ Expr widening_shift_left(Expr a, Expr b) {
     return Call::make(wide_type, Call::widening_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
+Expr widening_shift_right(Expr a, Expr b) {
+    match_lanes(a, b);
+    match_bits(a, b);
+    Type wide_type = a.type().widen();
+    return Call::make(wide_type, Call::widening_shift_right, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
 Expr rounding_shift_right(Expr a, Expr b) {
     match_lanes(a, b);
     match_bits(a, b);

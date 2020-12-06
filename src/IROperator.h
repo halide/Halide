@@ -340,11 +340,13 @@ Expr widening_mul(Expr a, Expr b);
 Expr widening_sub(Expr a, Expr b);
 /** Compute widen(a) << b. */
 Expr widening_shift_left(Expr a, Expr b);
+/** Compute widen(a) >> b. */
+Expr widening_shift_right(Expr a, Expr b);
 
-/** Compute (widening_add(a  (1 << max(b, 0)) / 2) >> b */
-Expr rounding_shift_right(Expr a, Expr b);
 /** Compute (a + (1 >> min(b, 0)) / 2) << b */
 Expr rounding_shift_left(Expr a, Expr b);
+/** Compute (widening_add(a  (1 << max(b, 0)) / 2) >> b */
+Expr rounding_shift_right(Expr a, Expr b);
 
 /** Compute saturating_narrow(widen(a) + widen(b)) */
 Expr saturating_add(Expr a, Expr b);

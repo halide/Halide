@@ -647,6 +647,7 @@ const char *const intrinsic_op_names[] = {
     "widening_add",
     "widening_mul",
     "widening_shift_left",
+    "widening_shift_right",
     "widening_sub",
 };
 

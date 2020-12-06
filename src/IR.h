@@ -559,6 +559,7 @@ struct Call : public ExprNode<Call> {
         widening_add,
         widening_mul,
         widening_shift_left,
+        widening_shift_right,
         widening_sub,
         IntrinsicOpCount  // Sentinel: keep last.
     };
