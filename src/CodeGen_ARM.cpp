@@ -149,6 +149,18 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         }
     }
 
+    casts.emplace_back("vqdmulh.v4i16", "sqdmulh.v4i16", 4,
+                       i16_sat((wild_i32x4 * wild_i32x4) / (1 << 15)),
+                       Pattern::NarrowArgs);
+    casts.emplace_back("vqdmulh.v8i16", "sqdmulh.v8i16", 8,
+                       i16_sat((wild_i32x_ * wild_i32x_) / (1 << 15)),
+                       Pattern::NarrowArgs);
+    casts.emplace_back("vqdmulh.v2i32", "sqdmulh.v2i32", 2,
+                       i32_sat((wild_i64x2 * wild_i64x2) / Expr(int64_t(1) << 31)),
+                       Pattern::NarrowArgs);
+    casts.emplace_back("vqdmulh.v4i32", "sqdmulh.v4i32", 4,
+                       i32_sat((wild_i64x_ * wild_i64x_) / Expr(int64_t(1) << 31)),
+                       Pattern::NarrowArgs);
     casts.emplace_back("vqrdmulh.v4i16", "sqrdmulh.v4i16", 4,
                        i16_sat((wild_i32x4 * wild_i32x4 + (1 << 14)) / (1 << 15)),
                        Pattern::NarrowArgs);
