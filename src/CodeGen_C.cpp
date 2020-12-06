@@ -7,6 +7,7 @@
 #include "IROperator.h"
 #include "Lerp.h"
 #include "Param.h"
+#include "PatternMatchIntrinsics.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Type.h"
@@ -300,6 +301,12 @@ protected:
             // lower_lerp() can synthesize wider vector types.
             for (const auto &a : op->args) {
                 include_lerp_types(a.type());
+            }
+        } else if (op->is_intrinsic()) {
+            Expr lowered = lower_intrinsic(op);
+            if (lowered.defined()) {
+                lowered.accept(this);
+                return;
             }
         }
 
