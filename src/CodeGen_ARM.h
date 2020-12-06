@@ -42,14 +42,9 @@ protected:
     struct Pattern {
         std::string intrin;             ///< Name of the intrinsic
         Expr pattern;                   ///< The pattern to match against
-        enum PatternType { Simple = 0,  ///< Just match the pattern
-                           LeftShift,   ///< Match the pattern if the RHS is a const power of two
-                           RightShift,  ///< Match the pattern if the RHS is a const power of two
-        };
-        PatternType type;
         Pattern() = default;
-        Pattern(const std::string &intrin, Expr p, PatternType t = Simple)
-            : intrin(intrin), pattern(std::move(p)), type(t) {
+        Pattern(const std::string &intrin, Expr p)
+            : intrin(intrin), pattern(std::move(p)) {
         }
     };
     std::vector<Pattern> casts, averagings, negations;

@@ -14,13 +14,6 @@ using namespace Halide::ConciseCasts;
 
 namespace {
 
-bool is_widen(const Expr &x) {
-    if (const Cast *cast = x.as<Cast>()) {
-        return cast->type.code() == cast->value.type().code() && cast->type.bits() > cast->value.type().bits();
-    }
-    return false;
-}
-
 Expr lossless_narrow(const Expr &x) {
     return lossless_cast(x.type().narrow(), x);
 }
@@ -174,19 +167,24 @@ Expr to_rounding_shift(const Call *c) {
             }
         };
 
+
         // The rounding offset for the shift we have.
+        Type round_type = a.type().with_lanes(1);
+        if (Call::as_intrinsic(a, {Call::widening_add})) {
+            round_type = round_type.narrow();
+        }
         Expr round;
         if (c->is_intrinsic(Call::shift_right)) {
-            round = simplify(make_shift_right(make_one(a.type().with_lanes(1)) << max(b, 0), 1));
+            round = simplify((make_one(round_type) << max(cast(b.type().with_bits(round_type.bits()), b), 0)) / 2);
         } else {
-            round = simplify(make_shift_right(make_one(a.type().with_lanes(1)) >> min(b, 0), 1));
+            round = simplify((make_one(round_type) >> min(cast(b.type().with_bits(round_type.bits()), b), 0)) / 2);
         }
 
         // We can always handle widening or saturating adds.
         if (const Call *add = Call::as_intrinsic(a, {Call::widening_add, Call::saturating_add})) {
-            if (can_prove(add->args[0] == round)) {
+            if (can_prove(lower_intrinsics(add->args[0]) == round)) {
                 return rounding_shift(cast(add->type, add->args[1]), b);
-            } else if (can_prove(add->args[1] == round)) {
+            } else if (can_prove(lower_intrinsics(add->args[1]) == round)) {
                 return rounding_shift(cast(add->type, add->args[0]), b);
             }
         }
@@ -369,8 +367,45 @@ protected:
         }
     }
 
+    template <class MinOrMax>
+    Expr visit_min_or_max(const MinOrMax *op) {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        if (const Cast *cast_a = a.as<Cast>()) {
+            Expr cast_b = lossless_cast(cast_a->value.type(), b);
+            if (cast_a->type.can_represent(cast_a->value.type()) && cast_b.defined()) {
+                // This cast can be moved outside the min.
+                return mutate(Cast::make(cast_a->type, MinOrMax::make(cast_a->value, cast_b)));
+            }
+        }
+        if (a.same_as(op->a) && b.same_as(op->b)) {
+            return op;
+        } else {
+            return MinOrMax::make(a, b);
+        }
+    }
+
+    Expr visit(const Min *op) override {
+        return visit_min_or_max(op);
+    }
+
+    Expr visit(const Max *op) override {
+        return visit_min_or_max(op);
+    }
+
     Expr visit(const Cast *op) override {
         Expr value = mutate(op->value);
+
+        // This mutator can generate redundant casts. We can't use the simplifier because it
+        // undoes some of the intrinsic lowering here, and it causes some problems due to
+        // factoring (instead of distributing) constants.
+        if (const Cast *cast = value.as<Cast>()) {
+            if (cast->type.can_represent(cast->value.type()) || cast->type.can_represent(op->type)) {
+                // The intermediate cast is redundant.
+                value = cast->value;
+            }
+        }
 
         if (op->type.is_int() || op->type.is_uint()) {
             Expr lower = cast(value.type(), op->type.min());
@@ -398,7 +433,7 @@ protected:
                 rewrite(intrin(Call::rounding_shift_right, widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int) ||
 
                 false) {
-                return rewrite.result;
+                return mutate(rewrite.result);
             }
             // clang-format on
 
@@ -408,17 +443,16 @@ protected:
             auto is_x_wide_uint = is_uint(x, bits * 2);
             auto is_x_wide_int_or_uint = is_x_wide_int || is_x_wide_uint;
             // clang-format off
-            if (rewrite(max(min(rounding_shift_right(x, y), upper), lower), rounding_shift_right(x, y), is_x_wide_int_or_uint && y > 0) ||
-                rewrite(max(min(rounding_shift_left(x, y), upper), lower), rounding_shift_left(x, y), is_x_wide_int_or_uint && y < 0) ||
-                rewrite(rounding_shift_right(x, y), rounding_shift_right(x, y), is_x_wide_int_or_uint && y > 0) ||
-                rewrite(rounding_shift_left(x, y), rounding_shift_left(x, y), is_x_wide_int_or_uint && y < 0) ||
+            if (rewrite(max(min(rounding_shift_right(x, c0), upper), lower), rounding_shift_right(x, c0), is_x_wide_int_or_uint && c0 > 0) ||
+                rewrite(rounding_shift_right(x, y), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
+                rewrite(rounding_shift_left(x, y), rounding_shift_left(x, y), is_x_wide_int_or_uint) ||
 
                 false) {
                 const Call *shift = Call::as_intrinsic(rewrite.result, {Call::rounding_shift_right, Call::rounding_shift_left});
-                if (is_widen(shift->args[0])) {
-                    Expr arg0 = shift->args[0].as<Cast>()->value;
-                    Expr arg1 = simplify(narrow(shift->args[1]));
-                    return Call::make(op->type, shift->name, {arg0, arg1}, Call::PureIntrinsic);
+                Expr a = lossless_cast(op->type, shift->args[0]);
+                if (a.defined()) {
+                    Expr b = simplify(narrow(shift->args[1]));
+                    return mutate(Call::make(op->type, shift->name, {a, b}, Call::PureIntrinsic));
                 }
             }
             // clang-format on
@@ -426,8 +460,10 @@ protected:
 
         if (value.same_as(op->value)) {
             return op;
-        } else {
+        } else if (op->type != value.type()) {
             return Cast::make(op->type, value);
+        } else {
+            return value;
         }
     }
 
@@ -466,49 +502,62 @@ protected:
             Expr narrow_a = strip_widening_cast(op->args[0]);
             Expr narrow_b = strip_widening_cast(op->args[1]);
             if (narrow_a.defined() && narrow_b.defined()) {
-                return Cast::make(op->type, widening_mul(narrow_a, narrow_b));
+                return mutate(Cast::make(op->type, widening_mul(narrow_a, narrow_b)));
             }
         } else if (op->is_intrinsic(Call::widening_add)) {
             internal_assert(op->args.size() == 2);
             Expr narrow_a = strip_widening_cast(op->args[0]);
             Expr narrow_b = strip_widening_cast(op->args[1]);
             if (narrow_a.defined() && narrow_b.defined()) {
-                return Cast::make(op->type, widening_add(narrow_a, narrow_b));
+                return mutate(Cast::make(op->type, widening_add(narrow_a, narrow_b)));
             }
         } else if (op->is_intrinsic(Call::widening_sub)) {
             internal_assert(op->args.size() == 2);
             Expr narrow_a = strip_widening_cast(op->args[0]);
             Expr narrow_b = strip_widening_cast(op->args[1]);
             if (narrow_a.defined() && narrow_b.defined()) {
-                return Cast::make(op->type, widening_sub(narrow_a, narrow_b));
+                return mutate(Cast::make(op->type, widening_sub(narrow_a, narrow_b)));
             }
         }
 
         if (op->is_intrinsic(Call::shift_right) || op->is_intrinsic(Call::shift_left)) {
+            // Try to turn this into a widening shift.
             internal_assert(op->args.size() == 2);
-
-            // Try to turn this into a widening left shift.
-            if (op->is_intrinsic(Call::shift_left)) {
-                Expr a_narrow = lossless_narrow(op->args[0]);
-                if (a_narrow.defined()) {
-                    if (const Cast *ca = a_narrow.as<Cast>()) {
-                        // If there is more casting, we can move it after the shift.
-                        a_narrow = ca->value;
-                    }
-                    Expr b = op->args[1];
-                    b = simplify(cast(a_narrow.type().with_code(b.type().code()), b));
-                    Expr result = widening_shift_left(a_narrow, b);
-                    if (result.type() != op->type) {
-                        result = Cast::make(op->type, result);
-                    }
-                    return mutate(result);
+            Expr a_narrow = lossless_narrow(op->args[0]);
+            Expr b_narrow = lossless_narrow(op->args[1]);
+            if (a_narrow.defined() && b_narrow.defined()) {
+                Expr result = op->is_intrinsic(Call::shift_left) ? widening_shift_left(a_narrow, b_narrow) : widening_shift_right(a_narrow, b_narrow);
+                if (result.type() != op->type) {
+                    result = Cast::make(op->type, result);
                 }
+                return mutate(result);
             }
 
             // Try to turn this into a rounding shift.
             Expr rounding_shift = to_rounding_shift(op);
             if (rounding_shift.defined()) {
                 return mutate(rounding_shift);
+            }
+        }
+
+        if (op->is_intrinsic(Call::rounding_shift_left) || op->is_intrinsic(Call::rounding_shift_right)) {
+            // Try to turn this into a widening shift.
+            internal_assert(op->args.size() == 2);
+            Expr a_narrow = lossless_narrow(op->args[0]);
+            Expr b_narrow = lossless_narrow(op->args[1]);
+            if (a_narrow.defined() && b_narrow.defined()) {
+                Expr result;
+                if (op->is_intrinsic(Call::rounding_shift_right) && can_prove(b_narrow > 0)) {
+                    result = rounding_shift_right(a_narrow, b_narrow);
+                } else if (op->is_intrinsic(Call::rounding_shift_left) && can_prove(b_narrow < 0)) {
+                    result = rounding_shift_left(a_narrow, b_narrow);
+                } else {
+                    return op;
+                }
+                if (result.type() != op->type) {
+                    result = Cast::make(op->type, result);
+                }
+                return mutate(result);
             }
         }
         return op;
@@ -548,34 +597,30 @@ Expr lower_widening_sub(const Expr &a, const Expr &b) {
 }
 
 Expr lower_widening_shift_left(const Expr &a, const Expr &b) {
-    const uint64_t *const_shift = as_const_uint(b);
-    if (const_shift && (a.type().is_vector() || b.type().is_vector())) {
-        Expr const_b = lossless_cast(a.type(), make_const(UInt(64), 1LL << *const_shift));
-        if (const_b.defined()) {
-            // Most backends would probably rather see a widening multiply by a constant (1-2 vector-instructions)
-            // than a widen (1-2 vector-instructions) followed by a shift (2 vector-instructions).
-            return widening_mul(a, const_b);
-        }
-    }
     return widen(a) << b;
 }
 
-Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
-    Expr round = make_shift_right(make_one(a.type()) << max(b, 0), 1);
-    Expr a_rounded = simplify(saturating_add(a, round));
-    return a_rounded >> b;
+Expr lower_widening_shift_right(const Expr &a, const Expr &b) {
+    return widen(a) >> b;
 }
 
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
-    Expr round = make_shift_right(make_one(a.type()) >> min(b, 0), 1);
-    Expr a_rounded = simplify(saturating_add(a, round));
+    Expr round = simplify(make_shift_right(make_one(a.type()) >> min(b, 0), 1));
+    Expr a_rounded = saturating_add(a, round);
     return a_rounded << b;
+}
+
+Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
+    Expr round = simplify(make_shift_right(make_one(a.type()) << max(b, 0), 1));
+    Expr a_rounded = saturating_add(a, round);
+    return a_rounded >> b;
 }
 
 Expr lower_saturating_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     return saturating_narrow(widening_add(a, b));
 }
+
 Expr lower_saturating_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     return saturating_cast(a.type(), widening_sub(a, b));
@@ -620,6 +665,9 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::widening_shift_left)) {
         internal_assert(op->args.size() == 2);
         return lower_widening_shift_left(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widening_shift_right)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widening_shift_right(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::rounding_shift_right)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_shift_right(op->args[0], op->args[1]);
@@ -641,6 +689,30 @@ Expr lower_intrinsic(const Call *op) {
     } else {
         return Expr();
     }
+}
+
+namespace {
+
+class LowerIntrinsics : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Call *op) {
+        Expr lowered = lower_intrinsic(op);
+        if (lowered.defined()) {
+            return mutate(lowered);
+        }
+        return IRMutator::visit(op);
+    }
+};
+
+}  // namespace
+
+Expr lower_intrinsics(const Expr &e) {
+    return LowerIntrinsics().mutate(e);
+}
+
+Stmt lower_intrinsics(const Stmt &s) {
+    return LowerIntrinsics().mutate(s);
 }
 
 }  // namespace Internal

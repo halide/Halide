@@ -1442,7 +1442,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
     debug(4) << "Codegen: " << e.type() << ", " << e << "\n";
     value = nullptr;
     e.accept(this);
-    internal_assert(value) << "Codegen of an expr did not produce an llvm value\n";
+    internal_assert(value) << "Codegen of an expr did not produce an llvm value\n" << e;
 
     // Halide's type system doesn't distinguish between scalars and
     // vectors of size 1, so if a codegen method returned a vector of
@@ -4742,41 +4742,73 @@ void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &
 }
 
 Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args) {
+    constexpr int debug_level = 2;
+
+    debug(debug_level) << "call_overloaded_intrin: " << result_type << " " << name << "(";
+    for (const Expr &i : args) {
+        debug(debug_level) << ", " << i;
+    }
+    debug(debug_level) << ")\n";
+
     auto impls_i = intrinsics.find(name);
     if (impls_i == intrinsics.end()) {
-        debug(2) << "No intrinsic " << name << "\n";
+        debug(debug_level) << "No intrinsic " << name << "\n";
         return nullptr;
     }
 
     const Intrinsic *resolved = nullptr;
-    for (const Intrinsic &i : impls_i->second) {
-        if (i.arg_types.size() != args.size()) {
+    for (const Intrinsic &overload : impls_i->second) {
+        debug(debug_level) << "Considering candidate " << overload.result_type << "(";
+        for (const auto &i : overload.arg_types) {
+            debug(debug_level) << ", " << i;
+        }
+        debug(debug_level) << "\n";
+        if (overload.arg_types.size() != args.size()) {
+            debug(debug_level) << "Wrong number of arguments\n";
             continue;
         }
 
-        if (i.result_type.with_lanes(1) != result_type.with_lanes(1)) {
+        if (overload.result_type.with_lanes(1) != result_type.with_lanes(1)) {
+            debug(debug_level) << "Wrong result type\n";
             continue;
         }
 
         bool match = true;
-        for (int j = 0; j < (int)i.arg_types.size(); j++) {
-            if (i.arg_types[j].with_lanes(1) != args[j].type().with_lanes(1)) {
-                match = false;
-                break;
-            }
-
-            if (args[j].type().lanes() == 1) {
-                // We can broadcast the argument.
-                // TODO: Should we prioritize overloads that don't need this?
-            } else if (i.arg_types[j].lanes() == 1) {
-                if (args[j].type().lanes() != 1) {
+        for (int i = 0; i < (int)overload.arg_types.size(); i++) {
+            if (args[i].type().is_scalar()) {
+                // Allow lossless casting for scalar arguments, and
+                // allow broadcasting to vector arguments.
+                if (!lossless_cast(overload.arg_types[i].with_lanes(1), args[i]).defined()) {
                     match = false;
+                    debug(debug_level) << "Cannot promote scalar argument " << i << "\n";
+                    break;
+                }
+            } else if (overload.arg_types[i].is_vector()) {
+                // Vector arguments must be exact.
+                if (overload.arg_types[i].with_lanes(1) != args[i].type().with_lanes(1)) {
+                    match = false;
+                    debug(debug_level) << "Vector types not equal " << i << "\n";
                     break;
                 }
             } else {
-                int required_lanes = result_type.lanes() * i.arg_types[j].lanes() / i.result_type.lanes();
-                if (required_lanes != args[j].type().lanes()) {
+                match = false;
+                debug(debug_level) << "Cannot pass a vector argument to a scalar parameter " << i << "\n";
+            }
+
+            if (args[i].type().lanes() == 1) {
+                // We can broadcast the argument.
+                // TODO: Should we prioritize overloads that don't need this?
+            } else if (overload.arg_types[i].lanes() == 1) {
+                if (args[i].type().lanes() != 1) {
                     match = false;
+                    debug(debug_level) << "Cannot pass vector to scalar argument " << i << "\n";
+                    break;
+                }
+            } else {
+                int required_lanes = result_type.lanes() * overload.arg_types[i].lanes() / overload.result_type.lanes();
+                if (required_lanes != args[i].type().lanes()) {
+                    match = false;
+                    debug(debug_level) << "Need " << required_lanes << " lanes for argument " << i << "\n";
                     break;
                 }
             }
@@ -4786,27 +4818,45 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
         }
 
         if (!resolved) {
-            resolved = &i;
+            debug(debug_level) << "Resolved!\n";
+            resolved = &overload;
         } else {
             if (resolved->result_type.lanes() < result_type.lanes()) {
                 // The current match is smaller than the result type. Take the bigger intrinsic.
-                if (i.result_type.lanes() > resolved->result_type.lanes()) {
-                    resolved = &i;
+                if (overload.result_type.lanes() > resolved->result_type.lanes()) {
+                    debug(debug_level) << "Replaced with bigger intrinsic\n";
+                    resolved = &overload;
                 }
             } else {
                 // The current match is bigger than the result type. If the current candidate is also bigger,
                 // but smaller than the current match, take it instead.
-                if (i.result_type.lanes() >= result_type.lanes() && i.result_type.lanes() < resolved->result_type.lanes()) {
-                    resolved = &i;
+                if (overload.result_type.lanes() >= result_type.lanes() && overload.result_type.lanes() < resolved->result_type.lanes()) {
+                    debug(debug_level) << "Replaced with smaller intrinsic\n";
+                    resolved = &overload;
                 }
             }
         }
     }
 
     if (resolved) {
-        return call_intrin(result_type, resolved->result_type.lanes(), resolved->impl, args);
+        std::vector<Expr> promoted_args;
+        promoted_args.reserve(args.size());
+        for (size_t i = 0; i < args.size(); i++) {
+            Expr promoted_arg = args[i];
+            if (args[i].type().is_scalar()) {
+                promoted_arg = lossless_cast(resolved->arg_types[i].with_lanes(1), promoted_arg);
+            }
+            if (resolved->arg_types[i].is_vector() && args[i].type().is_scalar() && result_type.lanes() > 1) {
+                // We're passing a scalar to a vector argument, broadcast it.
+                promoted_args.emplace_back(Broadcast::make(promoted_arg, result_type.lanes()));
+            } else {
+                promoted_args.emplace_back(promoted_arg);
+            }
+            internal_assert(promoted_args.back().defined());
+        }
+        return call_intrin(result_type, resolved->result_type.lanes(), resolved->impl, promoted_args);
     } else {
-        debug(2) << "Unresolved intrinsic " << name << "\n";
+        debug(debug_level) << "Unresolved intrinsic " << name << "\n";
     }
     return nullptr;
 }
@@ -4888,14 +4938,8 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
                     int reduce = arg_i_lanes / arg_lanes;
                     args.push_back(slice_vector(arg_values[i], start * reduce, intrin_lanes * reduce));
                 } else if (arg_i_lanes == 1) {
-                    if (intrin->getFunctionType()->getParamType(i)->isVectorTy()) {
-                        // It's a scalar argument to a vector parameter. Broadcast it.
-                        // Overwriting the parameter means this only happens once.
-                        arg_values[i] = create_broadcast(arg_values[i], intrin_lanes);
-                    } else {
-                        // It's a scalar arg to an intrinsic that returns
-                        // a vector. Replicate it over the slices.
-                    }
+                    // It's a scalar arg to an intrinsic that returns
+                    // a vector. Replicate it over the slices.
                     args.push_back(arg_values[i]);
                 } else {
                     internal_error << "Argument in call_intrin has " << arg_i_lanes

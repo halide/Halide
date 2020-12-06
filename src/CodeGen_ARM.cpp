@@ -48,35 +48,66 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled.\n";
     }
 
+    // RADDHN - Add and narrow with rounding
+    // These must come before other narrowing rounding shift patterns
+    casts.emplace_back("rounding_add_narrow", i8(rounding_shift_right(wild_i16x_ + wild_i16x_, u16(8))));
+    casts.emplace_back("rounding_add_narrow", u8(rounding_shift_right(wild_u16x_ + wild_u16x_, u16(8))));
+    casts.emplace_back("rounding_add_narrow", i16(rounding_shift_right(wild_i32x_ + wild_i32x_, u32(16))));
+    casts.emplace_back("rounding_add_narrow", u16(rounding_shift_right(wild_u32x_ + wild_u32x_, u32(16))));
+    casts.emplace_back("rounding_add_narrow", i32(rounding_shift_right(wild_i64x_ + wild_i64x_, u64(32))));
+    casts.emplace_back("rounding_add_narrow", u32(rounding_shift_right(wild_u64x_ + wild_u64x_, u64(32))));
+
+    // RSUBHN - Add and narrow with rounding
+    // These must come before other narrowing rounding shift patterns
+    casts.emplace_back("rounding_sub_narrow", i8(rounding_shift_right(wild_i16x_ - wild_i16x_, u16(8))));
+    casts.emplace_back("rounding_sub_narrow", u8(rounding_shift_right(wild_u16x_ - wild_u16x_, u16(8))));
+    casts.emplace_back("rounding_sub_narrow", i16(rounding_shift_right(wild_i32x_ - wild_i32x_, u32(16))));
+    casts.emplace_back("rounding_sub_narrow", u16(rounding_shift_right(wild_u32x_ - wild_u32x_, u32(16))));
+    casts.emplace_back("rounding_sub_narrow", i32(rounding_shift_right(wild_i64x_ - wild_i64x_, u64(32))));
+    casts.emplace_back("rounding_sub_narrow", u32(rounding_shift_right(wild_u64x_ - wild_u64x_, u64(32))));
+
+    // QDMULH - Saturating doubling multiply keep high half
     casts.emplace_back("qdmulh", i16_sat(widening_mul(wild_i16x_, wild_i16x_) >> u16(15)));
     casts.emplace_back("qdmulh", i32_sat(widening_mul(wild_i32x_, wild_i32x_) >> u32(31)));
+
+    // QRDMULH - Saturating doubling multiply keep high half with rounding
     casts.emplace_back("qrdmulh", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))));
     casts.emplace_back("qrdmulh", i32_sat(rounding_shift_right(widening_mul(wild_i32x_, wild_i32x_), u32(31))));
 
-    casts.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> bc(wild_u16_)));
-    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> bc(wild_u32_)));
-    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> bc(wild_u64_)));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> bc(wild_u16_)));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> bc(wild_u32_)));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> bc(wild_u64_)));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> bc(wild_u16_)));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> bc(wild_u32_)));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> bc(wild_u64_)));
+    // RSHRN - Rounding shift right narrow (by immediate in [1, LHS bits])
+    casts.emplace_back("rounding_shift_right_narrow", i8(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
+    casts.emplace_back("rounding_shift_right_narrow", i16(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
+    casts.emplace_back("rounding_shift_right_narrow", i32(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
+    casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_u16x_, bc(wild_u16_))));
+    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_u32x_, bc(wild_u32_))));
+    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_u64x_, bc(wild_u64_))));
+    casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
+    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
+    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
 
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i8_sat(rounding_shift_right(wild_i16x_, bc(wild_u32_))));
+    // SHRN - Shift right narrow (by immediate in [1, LHS bits])
+    casts.emplace_back("shift_right_narrow", i8(wild_i16x_ >> bc(wild_u16_)));
+    casts.emplace_back("shift_right_narrow", i16(wild_i32x_ >> bc(wild_u32_)));
+    casts.emplace_back("shift_right_narrow", i32(wild_i64x_ >> bc(wild_u64_)));
+    casts.emplace_back("shift_right_narrow", u8(wild_u16x_ >> bc(wild_u16_)));
+    casts.emplace_back("shift_right_narrow", u16(wild_u32x_ >> bc(wild_u32_)));
+    casts.emplace_back("shift_right_narrow", u32(wild_u64x_ >> bc(wild_u64_)));
+
+    // SQRSHL, UQRSHL - Saturating rounding shift left (by signed vector)
+    // TODO: We need to match rounding shift right, and negate the RHS.
+
+    // SQRSHRN, SQRSHRUN, UQRSHRN - Saturating rounding narrowing shift right narrow (by immediate in [1, output bits])
+    casts.emplace_back("saturating_rounding_shift_right_narrow", i8_sat(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
     casts.emplace_back("saturating_rounding_shift_right_narrow", i16_sat(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_u16x_, bc(wild_u32_))));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_u16x_, bc(wild_u16_))));
     casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_u32x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_i16x_, bc(wild_u32_))));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, bc(wild_u64_))));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
     casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, bc(wild_u32_))));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
 
-    casts.emplace_back("rounding_add_narrow", i8_sat(rounding_shift_right(wild_i16x_ + wild_i16x_, 8)));
-    casts.emplace_back("rounding_add_narrow", i16_sat(rounding_shift_right(wild_i32x_ + wild_i32x_, 16)));
-    casts.emplace_back("rounding_add_narrow", i32_sat(rounding_shift_right(wild_i64x_ + wild_i64x_, 32)));
-
+    // SQSHL, UQSHL, SQSHLU - Saturating shift left by signed register.
     casts.emplace_back("saturating_shift_left", i8_sat(widening_shift_left(wild_i8x_, wild_i8x_)));
     casts.emplace_back("saturating_shift_left", i16_sat(widening_shift_left(wild_i16x_, wild_i16x_)));
     casts.emplace_back("saturating_shift_left", i32_sat(widening_shift_left(wild_i32x_, wild_i32x_)));
@@ -87,6 +118,39 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     casts.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_i16x_, wild_i16x_)));
     casts.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_i32x_, wild_i32x_)));
 
+    // It also works for unsigned registers.
+    // TODO: We shouldn't need to duplicate all of these just for this.
+    casts.emplace_back("saturating_shift_left", i8_sat(widening_shift_left(wild_i8x_, wild_u8x_)));
+    casts.emplace_back("saturating_shift_left", i16_sat(widening_shift_left(wild_i16x_, wild_u16x_)));
+    casts.emplace_back("saturating_shift_left", i32_sat(widening_shift_left(wild_i32x_, wild_u32x_)));
+    casts.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_u8x_, wild_u8x_)));
+    casts.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_u16x_, wild_u16x_)));
+    casts.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_u32x_, wild_u32x_)));
+    casts.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_i8x_, wild_u8x_)));
+    casts.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_i16x_, wild_u16x_)));
+    casts.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_i32x_, wild_u32x_)));
+
+    // SQSHRN, UQSHRN, SQRSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
+    casts.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> bc(wild_u16_)));
+    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> bc(wild_u32_)));
+    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> bc(wild_u64_)));
+    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> bc(wild_u16_)));
+    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> bc(wild_u32_)));
+    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> bc(wild_u64_)));
+    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> bc(wild_u16_)));
+    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> bc(wild_u32_)));
+    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> bc(wild_u64_)));
+
+    // SRSHL, URSHL - Rounding shift left (by signed vector)
+    // TODO: We need to match rounding shift right, and negate the RHS.
+
+    // SRSHR, URSHR - Rounding shift right (by immediate in [1, LHS bits])
+    // These patterns are almost identity, we just need to strip off the broadcast.
+
+    // SSHLL, USHLL - Shift left long (by immediate in [0, LHS bits - 1])
+    // These patterns are almost identity, we just need to strip off the broadcast.
+
+    // SQXTN, UQXTN, SQXTUN - Saturating narrow.
     casts.emplace_back("saturating_narrow", i8_sat(wild_i16x_));
     casts.emplace_back("saturating_narrow", i16_sat(wild_i32x_));
     casts.emplace_back("saturating_narrow", i32_sat(wild_i64x_));
@@ -97,6 +161,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     casts.emplace_back("saturating_narrow", u16_sat(wild_i32x_));
     casts.emplace_back("saturating_narrow", u32_sat(wild_i64x_));
 
+    // SQNEG - Saturating negate
     negations.emplace_back("saturating_negate", -max(wild_i8x_, -127));
     negations.emplace_back("saturating_negate", -max(wild_i16x_, -32767));
     negations.emplace_back("saturating_negate", -max(wild_i32x_, -(0x7fffffff)));
@@ -129,7 +194,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"llvm.sqrt.v4f32", "llvm.sqrt.v4f32", Float(32, 4), "sqrt_f32", {Float(32, 4)}},
     {"llvm.sqrt.v2f64", "llvm.sqrt.v2f64", Float(64, 2), "sqrt_f64", {Float(64, 2)}},
 
-    // Absolute difference
+    // SABD, UABD - Absolute difference
     {"vabds.v8i8", "sabd.v8i8", UInt(8, 8), "absd", {Int(8, 8), Int(8, 8)}},
     {"vabdu.v8i8", "uabd.v8i8", UInt(8, 8), "absd", {UInt(8, 8), UInt(8, 8)}},
     {"vabds.v4i16", "sabd.v4i16", UInt(16, 4), "absd", {Int(16, 4), Int(16, 4)}},
@@ -144,7 +209,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vabds.v4i32", "sabd.v4i32", UInt(32, 4), "absd", {Int(32, 4), Int(32, 4)}},
     {"vabdu.v4i32", "uabd.v4i32", UInt(32, 4), "absd", {UInt(32, 4), UInt(32, 4)}},
 
-    // Widening multiply
+    // SMULL, UMULL - Widening multiply
     {"vmulls.v8i16", "smull.v8i16", Int(16, 8), "widening_mul", {Int(8, 8), Int(8, 8)}},
     {"vmullu.v8i16", "umull.v8i16", UInt(16, 8), "widening_mul", {UInt(8, 8), UInt(8, 8)}},
     {"vmulls.v4i32", "smull.v4i32", Int(32, 4), "widening_mul", {Int(16, 4), Int(16, 4)}},
@@ -152,7 +217,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vmulls.v2i64", "smull.v2i64", Int(64, 2), "widening_mul", {Int(32, 2), Int(32, 2)}},
     {"vmullu.v2i64", "umull.v2i64", UInt(64, 2), "widening_mul", {UInt(32, 2), UInt(32, 2)}},
 
-    // Saturating add
+    // SQADD, UQADD - Saturating add
     {"llvm.sadd.sat.v8i8", "llvm.sadd.sat.v8i8", Int(8, 8), "saturating_add", {Int(8, 8), Int(8, 8)}},
     {"llvm.uadd.sat.v8i8", "llvm.uadd.sat.v8i8", UInt(8, 8), "saturating_add", {UInt(8, 8), UInt(8, 8)}},
     {"llvm.sadd.sat.v4i16", "llvm.sadd.sat.v4i16", Int(16, 4), "saturating_add", {Int(16, 4), Int(16, 4)}},
@@ -167,7 +232,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"llvm.sadd.sat.v4i32", "llvm.sadd.sat.v4i32", Int(32, 4), "saturating_add", {Int(32, 4), Int(32, 4)}},
     {"llvm.uadd.sat.v4i32", "llvm.uadd.sat.v4i32", UInt(32, 4), "saturating_add", {UInt(32, 4), UInt(32, 4)}},
 
-    // Saturating subtract
+    // SQSUB, UQSUB - Saturating subtract
     {"llvm.ssub.sat.v8i8", "llvm.ssub.sat.v8i8", Int(8, 8), "saturating_sub", {Int(8, 8), Int(8, 8)}},
     {"llvm.usub.sat.v8i8", "llvm.usub.sat.v8i8", UInt(8, 8), "saturating_sub", {UInt(8, 8), UInt(8, 8)}},
     {"llvm.ssub.sat.v4i16", "llvm.ssub.sat.v4i16", Int(16, 4), "saturating_sub", {Int(16, 4), Int(16, 4)}},
@@ -182,7 +247,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"llvm.ssub.sat.v4i32", "llvm.ssub.sat.v4i32", Int(32, 4), "saturating_sub", {Int(32, 4), Int(32, 4)}},
     {"llvm.usub.sat.v4i32", "llvm.usub.sat.v4i32", UInt(32, 4), "saturating_sub", {UInt(32, 4), UInt(32, 4)}},
 
-    // Halving add
+    // SHADD, UHADD - Halving add
     {"vhadds.v8i8", "shadd.v8i8", Int(8, 8), "halving_add", {Int(8, 8), Int(8, 8)}},
     {"vhaddu.v8i8", "uhadd.v8i8", UInt(8, 8), "halving_add", {UInt(8, 8), UInt(8, 8)}},
     {"vhadds.v4i16", "shadd.v4i16", Int(16, 4), "halving_add", {Int(16, 4), Int(16, 4)}},
@@ -197,7 +262,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vhadds.v4i32", "shadd.v4i32", Int(32, 4), "halving_add", {Int(32, 4), Int(32, 4)}},
     {"vhaddu.v4i32", "uhadd.v4i32", UInt(32, 4), "halving_add", {UInt(32, 4), UInt(32, 4)}},
 
-    // Halving subtract
+    // SHSUB, UHSUB - Halving subtract
     {"vhsubs.v8i8", "shsub.v8i8", Int(8, 8), "halving_sub", {Int(8, 8), Int(8, 8)}},
     {"vhsubu.v8i8", "uhsub.v8i8", UInt(8, 8), "halving_sub", {UInt(8, 8), UInt(8, 8)}},
     {"vhsubs.v4i16", "shsub.v4i16", Int(16, 4), "halving_sub", {Int(16, 4), Int(16, 4)}},
@@ -212,7 +277,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vhsubs.v4i32", "shsub.v4i32", Int(32, 4), "halving_sub", {Int(32, 4), Int(32, 4)}},
     {"vhsubu.v4i32", "uhsub.v4i32", UInt(32, 4), "halving_sub", {UInt(32, 4), UInt(32, 4)}},
 
-    // Halving add with rounding rounding
+    // SRHADD, URHADD - Halving add with rounding
     {"vrhadds.v8i8", "srhadd.v8i8", Int(8, 8), "rounding_halving_add", {Int(8, 8), Int(8, 8)}},
     {"vrhaddu.v8i8", "urhadd.v8i8", UInt(8, 8), "rounding_halving_add", {UInt(8, 8), UInt(8, 8)}},
     {"vrhadds.v4i16", "srhadd.v4i16", Int(16, 4), "rounding_halving_add", {Int(16, 4), Int(16, 4)}},
@@ -227,7 +292,22 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vrhadds.v4i32", "srhadd.v4i32", Int(32, 4), "rounding_halving_add", {Int(32, 4), Int(32, 4)}},
     {"vrhaddu.v4i32", "urhadd.v4i32", UInt(32, 4), "rounding_halving_add", {UInt(32, 4), UInt(32, 4)}},
 
-    // Min
+    // SRHSUB, URHSUB - Halving add with rounding
+    {"vrhsubs.v8i8", "srhsub.v8i8", Int(8, 8), "rounding_halving_sub", {Int(8, 8), Int(8, 8)}},
+    {"vrhsubu.v8i8", "urhsub.v8i8", UInt(8, 8), "rounding_halving_sub", {UInt(8, 8), UInt(8, 8)}},
+    {"vrhsubs.v4i16", "srhsub.v4i16", Int(16, 4), "rounding_halving_sub", {Int(16, 4), Int(16, 4)}},
+    {"vrhsubu.v4i16", "urhsub.v4i16", UInt(16, 4), "rounding_halving_sub", {UInt(16, 4), UInt(16, 4)}},
+    {"vrhsubs.v2i32", "srhsub.v2i32", Int(32, 2), "rounding_halving_sub", {Int(32, 2), Int(32, 2)}},
+    {"vrhsubu.v2i32", "urhsub.v2i32", UInt(32, 2), "rounding_halving_sub", {UInt(32, 2), UInt(32, 2)}},
+
+    {"vrhsubs.v16i8", "srhsub.v16i8", Int(8, 16), "rounding_halving_sub", {Int(8, 16), Int(8, 16)}},
+    {"vrhsubu.v16i8", "urhsub.v16i8", UInt(8, 16), "rounding_halving_sub", {UInt(8, 16), UInt(8, 16)}},
+    {"vrhsubs.v8i16", "srhsub.v8i16", Int(16, 8), "rounding_halving_sub", {Int(16, 8), Int(16, 8)}},
+    {"vrhsubu.v8i16", "urhsub.v8i16", UInt(16, 8), "rounding_halving_sub", {UInt(16, 8), UInt(16, 8)}},
+    {"vrhsubs.v4i32", "srhsub.v4i32", Int(32, 4), "rounding_halving_sub", {Int(32, 4), Int(32, 4)}},
+    {"vrhsubu.v4i32", "urhsub.v4i32", UInt(32, 4), "rounding_halving_sub", {UInt(32, 4), UInt(32, 4)}},
+
+    // SMIN, UMIN, FMIN - Min
     {"vmins.v8i8", "smin.v8i8", Int(8, 8), "min", {Int(8, 8), Int(8, 8)}},
     {"vminu.v8i8", "umin.v8i8", UInt(8, 8), "min", {UInt(8, 8), UInt(8, 8)}},
     {"vmins.v4i16", "smin.v4i16", Int(16, 4), "min", {Int(16, 4), Int(16, 4)}},
@@ -244,7 +324,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vminu.v4i32", "umin.v4i32", UInt(32, 4), "min", {UInt(32, 4), UInt(32, 4)}},
     {"vmins.v4f32", "fmin.v4f32", Float(32, 4), "min", {Float(32, 4), Float(32, 4)}},
 
-    // Max
+    // SMAX, UMAX, FMAX - Max
     {"vmaxs.v8i8", "smax.v8i8", Int(8, 8), "max", {Int(8, 8), Int(8, 8)}},
     {"vmaxu.v8i8", "umax.v8i8", UInt(8, 8), "max", {UInt(8, 8), UInt(8, 8)}},
     {"vmaxs.v4i16", "smax.v4i16", Int(16, 4), "max", {Int(16, 4), Int(16, 4)}},
@@ -261,16 +341,18 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vmaxu.v4i32", "umax.v4i32", UInt(32, 4), "max", {UInt(32, 4), UInt(32, 4)}},
     {"vmaxs.v4f32", "fmax.v4f32", Float(32, 4), "max", {Float(32, 4), Float(32, 4)}},
 
-    // Saturating negation
+    // SQNEG, UQNEG - Saturating negation
     {"vqneg.v8i8", "sqneg.v8i8", Int(8, 8), "saturating_negate", {Int(8, 8)}},
     {"vqneg.v4i16", "sqneg.v4i16", Int(16, 4), "saturating_negate", {Int(16, 4)}},
     {"vqneg.v2i32", "sqneg.v2i32", Int(32, 2), "saturating_negate", {Int(32, 2)}},
+    {"vqneg.v1i64", "sqneg.v1i64", Int(64, 1), "saturating_negate", {Int(64, 1)}},
 
     {"vqneg.v16i8", "sqneg.v16i8", Int(8, 16), "saturating_negate", {Int(8, 16)}},
     {"vqneg.v8i16", "sqneg.v8i16", Int(16, 8), "saturating_negate", {Int(16, 8)}},
     {"vqneg.v4i32", "sqneg.v4i32", Int(32, 4), "saturating_negate", {Int(32, 4)}},
+    {"vqneg.v2i64", "sqneg.v2i64", Int(64, 2), "saturating_negate", {Int(64, 2)}},
 
-    // Saturating narrowing
+    // SQXTN, UQXTN, SQXTUN - Saturating narrowing
     {"vqmovns.v8i8", "sqxtn.v8i8", Int(8, 8), "saturating_narrow", {Int(16, 8)}},
     {"vqmovnu.v8i8", "uqxtn.v8i8", UInt(8, 8), "saturating_narrow", {UInt(16, 8)}},
     {"vqmovns.v4i16", "sqxtn.v4i16", Int(16, 4), "saturating_narrow", {Int(32, 4)}},
@@ -281,11 +363,66 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vqmovnsu.v4i16", "sqxtun.v4i16", UInt(16, 4), "saturating_narrow", {Int(32, 4)}},
     {"vqmovnsu.v2i32", "sqxtun.v2i32", UInt(32, 2), "saturating_narrow", {Int(64, 2)}},
 
-    // Saturating shift left by signed register
-    // TODO: There's also qshl by a scalar immediate we should target. I think
-    // LLVM pattern matches this automatically.
-    // TODO: Rather than duplicating this part of the table so many times, maybe we should
-    // allow call_overloaded_intrin to cast as needed.
+    // RSHRN - Rounding shift right narrow (by immediate in [1, LHS bits])
+    // arm32 expects a vector RHS of the same type as the LHS except signed.
+    {"vrshiftn.v8i8", nullptr, Int(8, 8), "rounding_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
+    {"vrshiftn.v8i8", nullptr, UInt(8, 8), "rounding_shift_right_narrow", {UInt(16, 8), Int(16, 8)}},
+    {"vrshiftn.v4i16", nullptr, Int(16, 4), "rounding_shift_right_narrow", {Int(32, 4), Int(32, 4)}},
+    {"vrshiftn.v4i16", nullptr, UInt(16, 4), "rounding_shift_right_narrow", {UInt(32, 4), Int(32, 4)}},
+    {"vrshiftn.v2i32", nullptr, Int(32, 2), "rounding_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
+    {"vrshiftn.v2i32", nullptr, UInt(32, 2), "rounding_shift_right_narrow", {UInt(64, 2), Int(64, 2)}},
+
+    // arm64 expects a 32-bit constant.
+    {nullptr, "rshrn.v8i8", Int(8, 8), "rounding_shift_right_narrow", {Int(16, 8), UInt(32)}},
+    {nullptr, "rshrn.v8i8", UInt(8, 8), "rounding_shift_right_narrow", {UInt(16, 8), UInt(32)}},
+    {nullptr, "rshrn.v4i16", Int(16, 4), "rounding_shift_right_narrow", {Int(32, 4), UInt(32)}},
+    {nullptr, "rshrn.v4i16", UInt(16, 4), "rounding_shift_right_narrow", {UInt(32, 4), UInt(32)}},
+    {nullptr, "rshrn.v2i32", Int(32, 2), "rounding_shift_right_narrow", {Int(64, 2), UInt(32)}},
+    {nullptr, "rshrn.v2i32", UInt(32, 2), "rounding_shift_right_narrow", {UInt(64, 2), UInt(32)}},
+
+    // SHRN - Shift right narrow (by immediate in [1, LHS bits])
+    // LLVM pattern matches these.
+
+    // SQRSHL, UQRSHL - Saturating rounding shift left (by signed vector)
+    {"vqrshifts.v8i8", "sqrshl.v8i8", Int(8, 8), "saturating_rounding_shift_left", {Int(8, 8), Int(8, 8)}},
+    {"vqrshiftu.v8i8", "uqrshl.v8i8", UInt(8, 8), "saturating_rounding_shift_left", {UInt(8, 8), Int(8, 8)}},
+    {"vqrshifts.v4i16", "sqrshl.v4i16", Int(16, 4), "saturating_rounding_shift_left", {Int(16, 4), Int(16, 4)}},
+    {"vqrshiftu.v4i16", "uqrshl.v4i16", UInt(16, 4), "saturating_rounding_shift_left", {UInt(16, 4), Int(16, 4)}},
+    {"vqrshifts.v2i32", "sqrshl.v2i32", Int(32, 2), "saturating_rounding_shift_left", {Int(32, 2), Int(32, 2)}},
+    {"vqrshiftu.v2i32", "uqrshl.v2i32", UInt(32, 2), "saturating_rounding_shift_left", {UInt(32, 2), Int(32, 2)}},
+
+    {"vqrshifts.v16i8", "sqrshl.v16i8", Int(8, 16), "saturating_rounding_shift_left", {Int(8, 16), Int(8, 16)}},
+    {"vqrshiftu.v16i8", "uqrshl.v16i8", UInt(8, 16), "saturating_rounding_shift_left", {UInt(8, 16), Int(8, 16)}},
+    {"vqrshifts.v8i16", "sqrshl.v8i16", Int(16, 8), "saturating_rounding_shift_left", {Int(16, 8), Int(16, 8)}},
+    {"vqrshiftu.v8i16", "uqrshl.v8i16", UInt(16, 8), "saturating_rounding_shift_left", {UInt(16, 8), Int(16, 8)}},
+    {"vqrshifts.v4i32", "sqrshl.v4i32", Int(32, 4), "saturating_rounding_shift_left", {Int(32, 4), Int(32, 4)}},
+    {"vqrshiftu.v4i32", "uqrshl.v4i32", UInt(32, 4), "saturating_rounding_shift_left", {UInt(32, 4), Int(32, 4)}},
+
+    // SQRSHRN, UQRSHRN, SQRSHRUN - Saturating rounding narrowing shift right narrow (by immediate in [1, output bits])
+    // arm32 expects a vector RHS of the same type as the LHS except signed.
+    {"vqrshiftns.v8i8", nullptr, Int(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
+    {"vqrshiftnu.v8i8", nullptr, UInt(8, 8), "saturating_rounding_shift_right_narrow", {UInt(16, 8), Int(16, 8)}},
+    {"vqrshiftns.v4i16", nullptr, Int(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), Int(32, 4)}},
+    {"vqrshiftnu.v4i16", nullptr, UInt(16, 4), "saturating_rounding_shift_right_narrow", {UInt(32, 4), Int(32, 4)}},
+    {"vqrshiftns.v2i32", nullptr, Int(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
+    {"vqrshiftnu.v2i32", nullptr, UInt(32, 2), "saturating_rounding_shift_right_narrow", {UInt(64, 2), Int(64, 2)}},
+    {"vqrshiftnsu.v8i8", nullptr, UInt(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
+    {"vqrshiftnsu.v4i16", nullptr, UInt(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), Int(32, 4)}},
+    {"vqrshiftnsu.v2i32", nullptr, UInt(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
+
+    // arm64 expects a 32-bit constant.
+    {nullptr, "sqrshrn.v8i8", Int(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), UInt(32)}},
+    {nullptr, "uqrshrn.v8i8", UInt(8, 8), "saturating_rounding_shift_right_narrow", {UInt(16, 8), UInt(32)}},
+    {nullptr, "sqrshrn.v4i16", Int(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), UInt(32)}},
+    {nullptr, "uqrshrn.v4i16", UInt(16, 4), "saturating_rounding_shift_right_narrow", {UInt(32, 4), UInt(32)}},
+    {nullptr, "sqrshrn.v2i32", Int(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), UInt(32)}},
+    {nullptr, "uqrshrn.v2i32", UInt(32, 2), "saturating_rounding_shift_right_narrow", {UInt(64, 2), UInt(32)}},
+    {nullptr, "sqrshrun.v8i8", UInt(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), UInt(32)}},
+    {nullptr, "sqrshrun.v4i16", UInt(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), UInt(32)}},
+    {nullptr, "sqrshrun.v2i32", UInt(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), UInt(32)}},
+
+    // SQSHL, UQSHL, SQSHLU - Saturating shift left by signed register.
+    // There is also an immediate version of this - hopefully LLVM does this matching when appropriate.
     {"vqshifts.v8i8", "sqshl.v8i8", Int(8, 8), "saturating_shift_left", {Int(8, 8), Int(8, 8)}},
     {"vqshiftu.v8i8", "uqshl.v8i8", UInt(8, 8), "saturating_shift_left", {UInt(8, 8), Int(8, 8)}},
     {"vqshifts.v4i16", "sqshl.v4i16", Int(16, 4), "saturating_shift_left", {Int(16, 4), Int(16, 4)}},
@@ -306,7 +443,8 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vqshiftsu.v8i16", "sqshlu.v8i16", UInt(16, 8), "saturating_shift_left", {Int(16, 8), Int(16, 8)}},
     {"vqshiftsu.v4i32", "sqshlu.v4i32", UInt(32, 4), "saturating_shift_left", {Int(32, 4), Int(32, 4)}},
 
-    // Saturating shift left by unsigned register
+    // These also accept an unsigned RHS.
+    // TODO: We shouldn't need to duplicate this table for this.
     {"vqshifts.v8i8", "sqshl.v8i8", Int(8, 8), "saturating_shift_left", {Int(8, 8), UInt(8, 8)}},
     {"vqshiftu.v8i8", "uqshl.v8i8", UInt(8, 8), "saturating_shift_left", {UInt(8, 8), UInt(8, 8)}},
     {"vqshifts.v4i16", "sqshl.v4i16", Int(16, 4), "saturating_shift_left", {Int(16, 4), UInt(16, 4)}},
@@ -327,65 +465,74 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vqshiftsu.v8i16", "sqshlu.v8i16", UInt(16, 8), "saturating_shift_left", {Int(16, 8), UInt(16, 8)}},
     {"vqshiftsu.v4i32", "sqshlu.v4i32", UInt(32, 4), "saturating_shift_left", {Int(32, 4), UInt(32, 4)}},
 
-    // Saturating narrowing shift right by an immediate.
-    // arm32 expects a vector RHS of the same type as the LHS except signed.
-    {"vqshiftns.v8i8", nullptr, Int(8, 8), "saturating_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
-    {"vqshiftnu.v8i8", nullptr, UInt(8, 8), "saturating_shift_right_narrow", {UInt(16, 8), Int(16, 8)}},
-    {"vqshiftns.v4i16", nullptr, Int(16, 4), "saturating_shift_right_narrow", {Int(32, 4), Int(32, 4)}},
-    {"vqshiftnu.v4i16", nullptr, UInt(16, 4), "saturating_shift_right_narrow", {UInt(32, 4), Int(32, 4)}},
-    {"vqshiftns.v2i32", nullptr, Int(32, 2), "saturating_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
-    {"vqshiftnu.v2i32", nullptr, UInt(32, 2), "saturating_shift_right_narrow", {UInt(64, 2), Int(64, 2)}},
-    {"vqshiftnsu.v8i8", nullptr, UInt(8, 8), "saturating_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
-    {"vqshiftnsu.v4i16", nullptr, UInt(16, 4), "saturating_shift_right_narrow", {Int(32, 4), Int(32, 4)}},
-    {"vqshiftnsu.v2i32", nullptr, UInt(32, 2), "saturating_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
+    // SQSHRN, UQSHRN, SQRSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
+    // arm32 expects a vector RHS of the same type as the LHS.
+    {"vqshiftns.v8i8", nullptr, Int(8, 8), "saturating_shift_right_narrow", {Int(16, 8), UInt(16, 8)}},
+    {"vqshiftnu.v8i8", nullptr, UInt(8, 8), "saturating_shift_right_narrow", {UInt(16, 8), UInt(16, 8)}},
+    {"vqshiftns.v4i16", nullptr, Int(16, 4), "saturating_shift_right_narrow", {Int(32, 4), UInt(32, 4)}},
+    {"vqshiftnu.v4i16", nullptr, UInt(16, 4), "saturating_shift_right_narrow", {UInt(32, 4), UInt(32, 4)}},
+    {"vqshiftns.v2i32", nullptr, Int(32, 2), "saturating_shift_right_narrow", {Int(64, 2), UInt(64, 2)}},
+    {"vqshiftnu.v2i32", nullptr, UInt(32, 2), "saturating_shift_right_narrow", {UInt(64, 2), UInt(64, 2)}},
+    {"vqshiftnsu.v8i8", nullptr, UInt(8, 8), "saturating_shift_right_narrow", {Int(16, 8), UInt(16, 8)}},
+    {"vqshiftnsu.v4i16", nullptr, UInt(16, 4), "saturating_shift_right_narrow", {Int(32, 4), UInt(32, 4)}},
+    {"vqshiftnsu.v2i32", nullptr, UInt(32, 2), "saturating_shift_right_narrow", {Int(64, 2), UInt(64, 2)}},
 
     // arm64 expects a 32-bit constant.
-    {nullptr, "sqshrn.v8i8", Int(8, 8), "saturating_shift_right_narrow", {Int(16, 8), Int(32)}},
-    {nullptr, "uqshrn.v8i8", UInt(8, 8), "saturating_shift_right_narrow", {UInt(16, 8), Int(32)}},
-    {nullptr, "sqshrn.v4i16", Int(16, 4), "saturating_shift_right_narrow", {Int(32, 4), Int(32)}},
-    {nullptr, "uqshrn.v4i16", UInt(16, 4), "saturating_shift_right_narrow", {UInt(32, 4), Int(32)}},
-    {nullptr, "sqshrn.v2i32", Int(32, 2), "saturating_shift_right_narrow", {Int(64, 2), Int(32)}},
-    {nullptr, "uqshrn.v2i32", UInt(32, 2), "saturating_shift_right_narrow", {UInt(64, 2), Int(32)}},
-    {nullptr, "sqshrun.v8i8", UInt(8, 8), "saturating_shift_right_narrow", {Int(16, 8), Int(32)}},
-    {nullptr, "sqshrun.v4i16", UInt(16, 4), "saturating_shift_right_narrow", {Int(32, 4), Int(32)}},
-    {nullptr, "sqshrun.v2i32", UInt(32, 2), "saturating_shift_right_narrow", {Int(64, 2), Int(32)}},
+    {nullptr, "sqshrn.v8i8", Int(8, 8), "saturating_shift_right_narrow", {Int(16, 8), UInt(32)}},
+    {nullptr, "uqshrn.v8i8", UInt(8, 8), "saturating_shift_right_narrow", {UInt(16, 8), UInt(32)}},
+    {nullptr, "sqshrn.v4i16", Int(16, 4), "saturating_shift_right_narrow", {Int(32, 4), UInt(32)}},
+    {nullptr, "uqshrn.v4i16", UInt(16, 4), "saturating_shift_right_narrow", {UInt(32, 4), UInt(32)}},
+    {nullptr, "sqshrn.v2i32", Int(32, 2), "saturating_shift_right_narrow", {Int(64, 2), UInt(32)}},
+    {nullptr, "uqshrn.v2i32", UInt(32, 2), "saturating_shift_right_narrow", {UInt(64, 2), UInt(32)}},
+    {nullptr, "sqshrun.v8i8", UInt(8, 8), "saturating_shift_right_narrow", {Int(16, 8), UInt(32)}},
+    {nullptr, "sqshrun.v4i16", UInt(16, 4), "saturating_shift_right_narrow", {Int(32, 4), UInt(32)}},
+    {nullptr, "sqshrun.v2i32", UInt(32, 2), "saturating_shift_right_narrow", {Int(64, 2), UInt(32)}},
 
-    // Saturating rounding narrowing shift right by an immediate.
-    // arm32 expects a vector RHS of the same type as the LHS except signed.
-    {"vqrshiftns.v8i8", nullptr, Int(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
-    {"vqrshiftnu.v8i8", nullptr, UInt(8, 8), "saturating_rounding_shift_right_narrow", {UInt(16, 8), Int(16, 8)}},
-    {"vqrshiftns.v4i16", nullptr, Int(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), Int(32, 4)}},
-    {"vqrshiftnu.v4i16", nullptr, UInt(16, 4), "saturating_rounding_shift_right_narrow", {UInt(32, 4), Int(32, 4)}},
-    {"vqrshiftns.v2i32", nullptr, Int(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
-    {"vqrshiftnu.v2i32", nullptr, UInt(32, 2), "saturating_rounding_shift_right_narrow", {UInt(64, 2), Int(64, 2)}},
-    {"vqrshiftnsu.v8i8", nullptr, UInt(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
-    {"vqrshiftnsu.v4i16", nullptr, UInt(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), Int(32, 4)}},
-    {"vqrshiftnsu.v2i32", nullptr, UInt(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
+    // SRSHL, URSHL - Rounding shift left (by signed vector)
+    {"vrshifts.v8i8", "srshl.v8i8", Int(8, 8), "rounding_shift_left", {Int(8, 8), Int(8, 8)}},
+    {"vrshiftu.v8i8", "urshl.v8i8", UInt(8, 8), "rounding_shift_left", {UInt(8, 8), Int(8, 8)}},
+    {"vrshifts.v4i16", "srshl.v4i16", Int(16, 4), "rounding_shift_left", {Int(16, 4), Int(16, 4)}},
+    {"vrshiftu.v4i16", "urshl.v4i16", UInt(16, 4), "rounding_shift_left", {UInt(16, 4), Int(16, 4)}},
+    {"vrshifts.v2i32", "srshl.v2i32", Int(32, 2), "rounding_shift_left", {Int(32, 2), Int(32, 2)}},
+    {"vrshiftu.v2i32", "urshl.v2i32", UInt(32, 2), "rounding_shift_left", {UInt(32, 2), Int(32, 2)}},
 
-    // arm64 expects a 32-bit constant.
-    {nullptr, "sqrshrn.v8i8", Int(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), Int(32)}},
-    {nullptr, "uqrshrn.v8i8", UInt(8, 8), "saturating_rounding_shift_right_narrow", {UInt(16, 8), Int(32)}},
-    {nullptr, "sqrshrn.v4i16", Int(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), Int(32)}},
-    {nullptr, "uqrshrn.v4i16", UInt(16, 4), "saturating_rounding_shift_right_narrow", {UInt(32, 4), Int(32)}},
-    {nullptr, "sqrshrn.v2i32", Int(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), Int(32)}},
-    {nullptr, "uqrshrn.v2i32", UInt(32, 2), "saturating_rounding_shift_right_narrow", {UInt(64, 2), Int(32)}},
-    {nullptr, "sqrshrun.v8i8", UInt(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), Int(32)}},
-    {nullptr, "sqrshrun.v4i16", UInt(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), Int(32)}},
-    {nullptr, "sqrshrun.v2i32", UInt(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), Int(32)}},
+    {"vrshifts.v16i8", "srshl.v16i8", Int(8, 16), "rounding_shift_left", {Int(8, 16), Int(8, 16)}},
+    {"vrshiftu.v16i8", "urshl.v16i8", UInt(8, 16), "rounding_shift_left", {UInt(8, 16), Int(8, 16)}},
+    {"vrshifts.v8i16", "srshl.v8i16", Int(16, 8), "rounding_shift_left", {Int(16, 8), Int(16, 8)}},
+    {"vrshiftu.v8i16", "urshl.v8i16", UInt(16, 8), "rounding_shift_left", {UInt(16, 8), Int(16, 8)}},
+    {"vrshifts.v4i32", "srshl.v4i32", Int(32, 4), "rounding_shift_left", {Int(32, 4), Int(32, 4)}},
+    {"vrshiftu.v4i32", "urshl.v4i32", UInt(32, 4), "rounding_shift_left", {UInt(32, 4), Int(32, 4)}},
 
-    // Add and narrow with rounding.
+    // SRSHR, URSHR - Rounding shift right (by immediate in [1, LHS bits])
+    // LLVM wants these expressed as SRSHL by negative amounts.
+
+    // SSHLL, USHLL - Shift left long (by immediate in [0, LHS bits - 1])
+    // LLVM pattern matches these for us.
+
+    // RADDHN - Add and narrow with rounding.
     {"vraddhn.v8i8", "raddhn.v8i8", Int(8, 8), "rounding_add_narrow", {Int(16, 8), Int(16, 8)}},
+    {"vraddhn.v8i8", "raddhn.v8i8", UInt(8, 8), "rounding_add_narrow", {UInt(16, 8), UInt(16, 8)}},
     {"vraddhn.v4i16", "raddhn.v4i16", Int(16, 4), "rounding_add_narrow", {Int(32, 4), Int(32, 4)}},
+    {"vraddhn.v4i16", "raddhn.v4i16", UInt(16, 4), "rounding_add_narrow", {UInt(32, 4), UInt(32, 4)}},
     {"vraddhn.v2i32", "raddhn.v2i32", Int(32, 2), "rounding_add_narrow", {Int(64, 2), Int(64, 2)}},
+    {"vraddhn.v2i32", "raddhn.v2i32", UInt(32, 2), "rounding_add_narrow", {UInt(64, 2), UInt(64, 2)}},
 
-    // Saturating doubling multiply keep high half.
+    // RSUBHN - Sub and narrow with rounding.
+    {"vrsubhn.v8i8", "rsubhn.v8i8", Int(8, 8), "rounding_sub_narrow", {Int(16, 8), Int(16, 8)}},
+    {"vrsubhn.v8i8", "rsubhn.v8i8", UInt(8, 8), "rounding_sub_narrow", {UInt(16, 8), UInt(16, 8)}},
+    {"vrsubhn.v4i16", "rsubhn.v4i16", Int(16, 4), "rounding_sub_narrow", {Int(32, 4), Int(32, 4)}},
+    {"vrsubhn.v4i16", "rsubhn.v4i16", UInt(16, 4), "rounding_sub_narrow", {UInt(32, 4), UInt(32, 4)}},
+    {"vrsubhn.v2i32", "rsubhn.v2i32", Int(32, 2), "rounding_sub_narrow", {Int(64, 2), Int(64, 2)}},
+    {"vrsubhn.v2i32", "rsubhn.v2i32", UInt(32, 2), "rounding_sub_narrow", {UInt(64, 2), UInt(64, 2)}},
+
+    // SQDMULH - Saturating doubling multiply keep high half.
     {"vqdmulh.v4i16", "sqdmulh.v4i16", Int(16, 4), "qdmulh", {Int(16, 4), Int(16, 4)}},
     {"vqdmulh.v2i32", "sqdmulh.v2i32", Int(32, 2), "qdmulh", {Int(32, 2), Int(32, 2)}},
 
     {"vqdmulh.v8i16", "sqdmulh.v8i16", Int(16, 8), "qdmulh", {Int(16, 8), Int(16, 8)}},
     {"vqdmulh.v4i32", "sqdmulh.v4i32", Int(32, 4), "qdmulh", {Int(32, 4), Int(32, 4)}},
 
-    // Saturating doubling multiply keep high half with rounding.
+    // SQRDMULH - Saturating doubling multiply keep high half with rounding.
     {"vqrdmulh.v4i16", "sqrdmulh.v4i16", Int(16, 4), "qrdmulh", {Int(16, 4), Int(16, 4)}},
     {"vqrdmulh.v2i32", "sqrdmulh.v2i32", Int(32, 2), "qrdmulh", {Int(32, 2), Int(32, 2)}},
 
@@ -434,89 +581,30 @@ void CodeGen_ARM::init_module() {
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
-    if (neon_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    Type t = op->type;
-
-    vector<Expr> matches;
-
-    for (size_t i = 0; i < casts.size(); i++) {
-        const Pattern &pattern = casts[i];
-        //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
-        if (expr_match(pattern.pattern, op, matches)) {
-
-            //debug(4) << "Match!\n";
-            if (pattern.type == Pattern::Simple) {
-                for (Expr &i : matches) {
-                    if (i.type().is_scalar() && i.type().bits() != 32) {
-                        i = cast(i.type().with_bits(32), i);
-                    }
-                }
-                value = call_overloaded_intrin(t, pattern.intrin, matches);
-                return;
-            } else {  // must be a shift
-                Expr constant = matches[1];
-                int shift_amount;
-                bool power_of_two = is_const_power_of_two_integer(constant, &shift_amount);
-                if (power_of_two && shift_amount < matches[0].type().bits()) {
-                    if (target.bits == 32 && pattern.type == Pattern::RightShift) {
-                        // The arm32 llvm backend wants right shifts to come in as negative values.
-                        shift_amount = -shift_amount;
-                    }
-                    // TODO: It would be nice if call_overloaded_intrin could handle this type promotion.
-                    Expr b;
-                    if (matches[1].type().is_scalar()) {
-                        if (target.bits == 32) {
-                            b = make_const(matches[0].type().with_code(halide_type_int), shift_amount);
-                        } else {
-                            b = make_const(Int(32), shift_amount);
-                        }
-                    } else {
-                        b = make_const(Int(matches[0].type().bits(), matches[0].type().lanes()), shift_amount);
-                    }
-                    value = call_overloaded_intrin(t, pattern.intrin, {matches[0], b});
+    if (!neon_intrinsics_disabled() && op->type.is_vector()) {
+        vector<Expr> matches;
+        for (const Pattern &pattern : casts) {
+            if (expr_match(pattern.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+                if (value) {
                     return;
                 }
             }
         }
-    }
 
-    // Catch extract-high-half-of-signed integer pattern and convert
-    // it to extract-high-half-of-unsigned-integer. llvm peephole
-    // optimization recognizes logical shift right but not arithemtic
-    // shift right for this pattern. This matters for vaddhn of signed
-    // integers.
-    if (t.is_vector() &&
-        (t.is_int() || t.is_uint()) &&
-        op->value.type().is_int() &&
-        t.bits() == op->value.type().bits() / 2) {
-        const Div *d = op->value.as<Div>();
-        if (d && is_const(d->b, int64_t(1) << t.bits())) {
-            Type unsigned_type = UInt(t.bits() * 2, t.lanes());
-            Expr replacement = cast(t,
-                                    cast(unsigned_type, d->a) /
-                                        cast(unsigned_type, d->b));
-            replacement.accept(this);
-            return;
-        }
-    }
-
-    // Catch signed widening of absolute difference.
-    // Catch widening of absolute difference
-    if (t.is_vector() &&
-        (t.is_int() || t.is_uint()) &&
-        (op->value.type().is_int() || op->value.type().is_uint()) &&
-        t.bits() == op->value.type().bits() * 2) {
-        Expr a, b;
-        if (const Call *absd = Call::as_intrinsic(op->value, {Call::absd})) {
-            ostringstream ss;
-            int intrin_lanes = 128 / t.bits();
-            ss << "vabdl_" << (absd->args[0].type().is_int() ? "i" : "u") << t.bits() / 2 << "x" << intrin_lanes;
-            value = call_intrin(t, intrin_lanes, ss.str(), absd->args);
-            return;
+        // Catch signed widening of absolute difference.
+        // Catch widening of absolute difference
+        Type t = op->type;
+        if ((t.is_int() || t.is_uint()) &&
+            (op->value.type().is_int() || op->value.type().is_uint()) &&
+            t.bits() == op->value.type().bits() * 2) {
+            if (const Call *absd = Call::as_intrinsic(op->value, {Call::absd})) {
+                ostringstream ss;
+                int intrin_lanes = 128 / t.bits();
+                ss << "vabdl_" << (absd->args[0].type().is_int() ? "i" : "u") << t.bits() / 2 << "x" << intrin_lanes;
+                value = call_intrin(t, intrin_lanes, ss.str(), absd->args);
+                return;
+            }
         }
     }
 
@@ -571,12 +659,13 @@ void CodeGen_ARM::visit(const Sub *op) {
         return;
     }
 
-    vector<Expr> matches;
-    for (size_t i = 0; i < negations.size(); i++) {
-        if (op->type.is_vector() &&
-            expr_match(negations[i].pattern, op, matches)) {
-            value = call_overloaded_intrin(op->type, negations[i].intrin, matches);
-            return;
+    if (op->type.is_vector()) {
+        vector<Expr> matches;
+        for (size_t i = 0; i < negations.size(); i++) {
+            if (expr_match(negations[i].pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, negations[i].intrin, matches);
+                return;
+            }
         }
     }
 
@@ -943,6 +1032,16 @@ void CodeGen_ARM::visit(const Load *op) {
 void CodeGen_ARM::visit(const Call *op) {
     if (op->is_intrinsic(Call::sorted_avg)) {
         value = codegen(halving_add(op->args[0], op->args[1]));
+        return;
+    }
+
+    if (op->is_intrinsic(Call::rounding_shift_right)) {
+        // LLVM wants these as rounding_shift_left with a negative b instead.
+        Expr b = op->args[1];
+        if (!b.type().is_int()) {
+            b = Cast::make(b.type().with_code(halide_type_int), b);
+        }
+        value = codegen(rounding_shift_left(op->args[0], simplify(-b)));
         return;
     }
 

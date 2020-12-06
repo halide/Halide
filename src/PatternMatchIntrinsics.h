@@ -10,29 +10,34 @@
 namespace Halide {
 namespace Internal {
 
-/** Replace common arithmetic patterns with intrinsics. */
-Stmt pattern_match_intrinsics(Stmt s);
-Expr pattern_match_intrinsics(Expr e);
-
 /** Implement intrinsics with non-intrinsic using equivalents. */
 Expr lower_widening_add(const Expr &a, const Expr &b);
 Expr lower_widening_mul(const Expr &a, const Expr &b);
 Expr lower_widening_sub(const Expr &a, const Expr &b);
 Expr lower_widening_shift_left(const Expr &a, const Expr &b);
+Expr lower_widening_shift_right(const Expr &a, const Expr &b);
 
-Expr lower_rounding_shift_right(const Expr &a, const Expr &b);
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b);
+Expr lower_rounding_shift_right(const Expr &a, const Expr &b);
 
 Expr lower_saturating_add(const Expr &a, const Expr &b);
 Expr lower_saturating_sub(const Expr &a, const Expr &b);
 
 Expr lower_halving_add(const Expr &a, const Expr &b);
-Expr lower_rounding_halving_add(const Expr &a, const Expr &b);
 Expr lower_halving_sub(const Expr &a, const Expr &b);
+Expr lower_rounding_halving_add(const Expr &a, const Expr &b);
 Expr lower_rounding_halving_sub(const Expr &a, const Expr &b);
 
 /** Implement any arithmetic intrinsic. */
 Expr lower_intrinsic(const Call *op);
+
+/** Replace common arithmetic patterns with intrinsics. */
+Stmt pattern_match_intrinsics(Stmt s);
+Expr pattern_match_intrinsics(Expr e);
+
+/** The reverse of pattern_match_intrinsics. */
+Expr lower_intrinsics(const Expr &e);
+Stmt lower_intrinsics(const Stmt &s);
 
 }  // namespace Internal
 }  // namespace Halide

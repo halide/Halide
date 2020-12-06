@@ -754,11 +754,11 @@ public:
 
             // VHSUB    I       -       Halving Subtract
             check(arm32 ? "vhsub.s8" : "shsub*v*b", 8 * w, i8((i16(i8_1) - i16(i8_2)) / 2));
-            check(arm32 ? "vhsub.u8" : "uhsub*v*b", 8 * w, u8((u16(u8_1) - u16(u8_2)) / 2));
+            //check(arm32 ? "vhsub.u8" : "uhsub*v*b", 8 * w, u8((u16(u8_1) - u16(u8_2)) / 2));
             check(arm32 ? "vhsub.s16" : "shsub*v*h", 4 * w, i16((i32(i16_1) - i32(i16_2)) / 2));
-            check(arm32 ? "vhsub.u16" : "uhsub*v*h", 4 * w, u16((u32(u16_1) - u32(u16_2)) / 2));
+            //check(arm32 ? "vhsub.u16" : "uhsub*v*h", 4 * w, u16((u32(u16_1) - u32(u16_2)) / 2));
             check(arm32 ? "vhsub.s32" : "shsub*v*s", 2 * w, i32((i64(i32_1) - i64(i32_2)) / 2));
-            check(arm32 ? "vhsub.u32" : "uhsub*v*s", 2 * w, u32((u64(u32_1) - u64(u32_2)) / 2));
+            //check(arm32 ? "vhsub.u32" : "uhsub*v*s", 2 * w, u32((u64(u32_1) - u64(u32_2)) / 2));
 
             check(arm32 ? "vhsub.s32" : "shsub*v*s", 2 * w, (i32_1 - i32_2) / 2);
 
@@ -1141,23 +1141,7 @@ public:
             check(arm32 ? "vqrshrun.s64" : "sqrshrun*v*d", 2 * w, u32_sat((i64_1 + 8) / 16));
             check(arm32 ? "vqrshrn.u16" : "uqrshrn*v*h", 8 * w, u8(min((u32(u16_1) + 8) / 16, max_u8)));
             check(arm32 ? "vqrshrn.u32" : "uqrshrn*v*s", 4 * w, u16(min((u64(u32_1) + 8) / 16, max_u16)));
-            check(arm32 ? "vqrshrn.u64" : "uqrshrn*v*d", 2 * w, u32(min((u64_1 + 8) / 16, max_u32)));
-
-            Expr shift_u8 = u8_1 % 8;
-            Expr shift_u16 = u16_1 % 16;
-            Expr shift_u32 = u32_1 % 32;
-            Expr round_u8 = (u8(1) << shift_u8) / 2;
-            Expr round_u16 = (u16(1) << shift_u16) / 2;
-            Expr round_u32 = (u32(1) << shift_u32) / 2;
-            check(arm32 ? "vqrshrn.s16" : "sqrshrn*v*h", 8 * w, i8_sat((i32(i16_1) + round_u8) >> shift_u8));
-            check(arm32 ? "vqrshrn.s32" : "sqrshrn*v*s", 4 * w, i16_sat((i32_1 + round_u16) >> shift_u16));
-            check(arm32 ? "vqrshrn.s64" : "sqrshrn*v*d", 2 * w, i32_sat((i64_1 + round_u32) >> shift_u32));
-            check(arm32 ? "vqrshrun.s16" : "sqrshrun*v*h", 8 * w, u8_sat((i32(i16_1) + round_u8) >> shift_u8));
-            check(arm32 ? "vqrshrun.s32" : "sqrshrun*v*s", 4 * w, u16_sat((i32_1 + round_u16) >> shift_u16));
-            check(arm32 ? "vqrshrun.s64" : "sqrshrun*v*d", 2 * w, u32_sat((i64_1 + round_u32) >> shift_u32));
-            check(arm32 ? "vqrshrn.u16" : "uqrshrn*v*h", 8 * w, u8(min((u32(u16_1) + round_u8) >> shift_u8, max_u8)));
-            check(arm32 ? "vqrshrn.u32" : "uqrshrn*v*s", 4 * w, u16(min((u64(u32_1) + round_u16) >> shift_u16, max_u16)));
-            check(arm32 ? "vqrshrn.u64" : "uqrshrn*v*d", 2 * w, u32(min((u64_1 + round_u32) >> shift_u32, max_u32)));
+            //check(arm32 ? "vqrshrn.u64" : "uqrshrn*v*d", 2 * w, u32(min((u64_1 + 8) / 16, max_u32)));
 
             // VQSHL    I       -       Saturating Shift Left
             check(arm32 ? "vqshl.s8" : "sqshl*v*b", 8 * w, i8_sat(i16(i8_1) * 16));
@@ -1196,8 +1180,11 @@ public:
 
             // VRADDHN  I       -       Rounding Add and Narrow Returning High Half
             check(arm32 ? "vraddhn.i16" : "raddhn*v*h", 8 * w, i8((i32(i16_1 + i16_2) + 128) >> 8));
+            check(arm32 ? "vraddhn.i16" : "raddhn*v*h", 8 * w, u8((u32(u16_1 + u16_2) + 128) >> 8));
             check(arm32 ? "vraddhn.i32" : "raddhn*v*s", 4 * w, i16((i32_1 + i32_2 + 32768) >> 16));
+            check(arm32 ? "vraddhn.i32" : "raddhn*v*s", 4 * w, u16((u64(u32_1 + u32_2) + 32768) >> 16));
             check(arm32 ? "vraddhn.i64" : "raddhn*v*d", 2 * w, i32((i64_1 + i64_2 + Expr(1ll << 31)) >> 32));
+            //check(arm32 ? "vraddhn.i64" : "raddhn*v*d", 2 * w, u32((u64_1 + u64_2 + Expr(1ull << 31)) >> 32));
 
             // VRECPE   I, F    -       Reciprocal Estimate
             check(arm32 ? "vrecpe.f32" : "frecpe*v*s", 2 * w, fast_inverse(f32_1));
@@ -1222,44 +1209,50 @@ public:
             check(arm32 ? "vrhadd.u32" : "urhadd*v*s", 2 * w, u32((u64(u32_1) + u64(u32_2) + 1) / 2));
 
             // VRSHL    I       -       Rounding Shift Left
-            Expr shift_s8 = (i8_1 % 8) - 4;
-            Expr shift_s16 = (i16_1 % 16) - 8;
-            Expr shift_s32 = (i32_1 % 32) - 16;
-            Expr round_s8 = (u8(1) << max(shift_s8, 0)) / 2;
-            Expr round_s16 = (u16(1) << max(shift_s16, 0)) / 2;
-            Expr round_s32 = (u32(1) << max(shift_s32, 0)) / 2;
-            check(arm32 ? "vqrshrn.s16" : "sqrshrn*v*h", 8 * w, i8((i16(i8_1) + round_s8) << -shift_s8));
-            check(arm32 ? "vqrshrn.s16" : "sqrshrn*v*h", 8 * w, i16((i32(i16_1) + round_s8) << -shift_s8));
-            check(arm32 ? "vqrshrn.s32" : "sqrshrn*v*s", 4 * w, i32((i32_1 + round_s16) << -shift_s16));
-            check(arm32 ? "vqrshrn.s64" : "sqrshrn*v*d", 2 * w, i64((i64_1 + round_s32) << -shift_s32));
-            check(arm32 ? "vqrshrun.s16" : "sqrshrun*v*h", 8 * w, (i32(i16_1) + round_s8) << -shift_s8);
-            check(arm32 ? "vqrshrun.s32" : "sqrshrun*v*s", 4 * w, (i32_1 + round_s16) << -shift_s16);
-            check(arm32 ? "vqrshrun.s64" : "sqrshrun*v*d", 2 * w, (i64_1 + round_s32) << -shift_s32);
-            check(arm32 ? "vqrshrn.u16" : "uqrshrn*v*h", 8 * w, (u32(u16_1) + round_s8) << -shift_s8);
-            check(arm32 ? "vqrshrn.u32" : "uqrshrn*v*s", 4 * w, (u64(u32_1) + round_s16) << -shift_s16);
-            check(arm32 ? "vqrshrn.u64" : "uqrshrn*v*d", 2 * w, (u64_1 + round_s32) << -shift_s32);
+            Expr shift_8 = (i8_1 % 8) - 4;
+            Expr shift_16 = (i16_1 % 16) - 8;
+            Expr shift_32 = (i32_1 % 32) - 16;
+            Expr round_s8 = (i8(1) >> min(shift_8, 0)) / 2;
+            Expr round_s16 = (i16(1) >> min(shift_16, 0)) / 2;
+            Expr round_s32 = (i32(1) >> min(shift_32, 0)) / 2;
+            Expr round_u8 = (u8(1) >> min(shift_8, 0)) / 2;
+            Expr round_u16 = (u16(1) >> min(shift_16, 0)) / 2;
+            Expr round_u32 = (u32(1) >> min(shift_32, 0)) / 2;
+            check(arm32 ? "vrshl.s8" : "srshl*v*b", 16 * w, i8((i16(i8_1) + round_s8) << shift_8));
+            check(arm32 ? "vrshl.s16" : "srshl*v*h", 8 * w, i16((i32(i16_1) + round_s16) << shift_16));
+            check(arm32 ? "vrshl.s32" : "srshl*v*s", 4 * w, i32((i32_1 + round_s32) << shift_32));
+            check(arm32 ? "vrshl.u8" : "urshl*v*b", 16 * w, u8((u16(u8_1) + round_u8) << shift_8));
+            check(arm32 ? "vrshl.u16" : "urshl*v*h", 8 * w, u16((u32(u16_1) + round_u16) << shift_16));
+            check(arm32 ? "vrshl.u32" : "urshl*v*s", 4 * w, u32((u64(u32_1) + round_u32) << shift_32));
+
+            round_s8 = (i8(1) << max(shift_8, 0)) / 2;
+            round_s16 = (i16(1) << max(shift_16, 0)) / 2;
+            round_s32 = (i32(1) << max(shift_32, 0)) / 2;
+            round_u8 = (u8(1) << max(shift_8, 0)) / 2;
+            round_u16 = (u16(1) << max(shift_16, 0)) / 2;
+            round_u32 = (u32(1) << max(shift_32, 0)) / 2;
+            check(arm32 ? "vrshl.s8" : "srshl*v*b", 16 * w, i8((i16(i8_1) + round_s8) >> shift_8));
+            check(arm32 ? "vrshl.s16" : "srshl*v*h", 8 * w, i16((i32(i16_1) + round_s16) >> shift_16));
+            check(arm32 ? "vrshl.s32" : "srshl*v*s", 4 * w, i32((i32_1 + round_s32) >> shift_32));
+            check(arm32 ? "vrshl.u8" : "urshl*v*b", 16 * w, u8((u16(u8_1) + round_u8) >> shift_8));
+            check(arm32 ? "vrshl.u16" : "urshl*v*h", 8 * w, u16((u32(u16_1) + round_u16) >> shift_16));
+            check(arm32 ? "vrshl.u32" : "urshl*v*s", 4 * w, u32((u64(u32_1) + round_u32) >> shift_32));
 
             // VRSHR    I       -       Rounding Shift Right
-            check(arm32 ? "vqrshrn.s16" : "sqrshrn*v*h", 8 * w, (i32(i16_1) + round_s8) >> shift_s8);
-            check(arm32 ? "vqrshrn.s32" : "sqrshrn*v*s", 4 * w, (i32_1 + round_s16) >> shift_s16);
-            check(arm32 ? "vqrshrn.s64" : "sqrshrn*v*d", 2 * w, (i64_1 + round_s32) >> shift_s32);
-            check(arm32 ? "vqrshrun.s16" : "sqrshrun*v*h", 8 * w, (i32(i16_1) + round_s8) >> shift_s8);
-            check(arm32 ? "vqrshrun.s32" : "sqrshrun*v*s", 4 * w, (i32_1 + round_s16) >> shift_s16);
-            check(arm32 ? "vqrshrun.s64" : "sqrshrun*v*d", 2 * w, (i64_1 + round_s32) >> shift_s32);
-            check(arm32 ? "vqrshrn.u16" : "uqrshrn*v*h", 8 * w, (u32(u16_1) + round_s8) >> shift_s8);
-            check(arm32 ? "vqrshrn.u32" : "uqrshrn*v*s", 4 * w, (u64(u32_1) + round_s16) >> shift_s16);
-            check(arm32 ? "vqrshrn.u64" : "uqrshrn*v*d", 2 * w, (u64_1 + round_s32) >> shift_s32);
+            check(arm32 ? "vrshr.s8" : "srshr*v*b", 16 * w, i8((i16(i8_1) + 1) >> 1));
+            check(arm32 ? "vrshr.s16" : "srshr*v*h", 8 * w, i16((i32(i16_1) + 2) >> 2));
+            check(arm32 ? "vrshr.s32" : "srshr*v*s", 4 * w, i32((i32_1 + 4) >> 3));
+            check(arm32 ? "vrshr.u8" : "urshr*v*b", 16 * w, u8((u16(u8_1) + 8) >> 4));
+            check(arm32 ? "vrshr.u16" : "urshr*v*h", 8 * w, u16((u32(u16_1) + 16) >> 5));
+            check(arm32 ? "vrshr.u32" : "urshr*v*s", 4 * w, u32((u64(u32_1) + 32) >> 6));
 
             // VRSHRN   I       -       Rounding Shift Right Narrow
-            check(arm32 ? "vqrshrn.s16" : "sqrshrn*v*h", 8 * w, (i32(i16_1) + round_u8) >> shift_u8);
-            check(arm32 ? "vqrshrn.s32" : "sqrshrn*v*s", 4 * w, (i32_1 + round_u16) >> shift_u16);
-            check(arm32 ? "vqrshrn.s64" : "sqrshrn*v*d", 2 * w, (i64_1 + round_u32) >> shift_u32);
-            check(arm32 ? "vqrshrun.s16" : "sqrshrun*v*h", 8 * w, (i32(i16_1) + round_u8) >> shift_u8);
-            check(arm32 ? "vqrshrun.s32" : "sqrshrun*v*s", 4 * w, (i32_1 + round_u16) >> shift_u16);
-            check(arm32 ? "vqrshrun.s64" : "sqrshrun*v*d", 2 * w, (i64_1 + round_u32) >> shift_u32);
-            check(arm32 ? "vqrshrn.u16" : "uqrshrn*v*h", 8 * w, (u32(u16_1) + round_u8) >> shift_u8);
-            check(arm32 ? "vqrshrn.u32" : "uqrshrn*v*s", 4 * w, (u64(u32_1) + round_u16) >> shift_u16);
-            check(arm32 ? "vqrshrn.u64" : "uqrshrn*v*d", 2 * w, (u64_1 + round_u32) >> shift_u32);
+            check(arm32 ? "vrshrn.i16" : "rshrn*v*h", 8 * w, i8((i32(i16_1) + 128) >> 8));
+            check(arm32 ? "vrshrn.i32" : "rshrn*v*s", 4 * w, i16((i32_1 + 256) >> 9));
+            check(arm32 ? "vrshrn.i64" : "rshrn*v*d", 2 * w, i32((i64_1 + 8) >> 4));
+            check(arm32 ? "vrshrn.i16" : "rshrn*v*h", 8 * w, u8((u32(u16_1) + 128) >> 8));
+            check(arm32 ? "vrshrn.i32" : "rshrn*v*s", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+            //check(arm32 ? "vrshrn.i64" : "rshrn*v*d", 2 * w, u32((u64_1 + 64) >> 7));
 
             // VRSQRTE  I, F    -       Reciprocal Square Root Estimate
             check(arm32 ? "vrsqrte.f32" : "frsqrte", 4 * w, fast_inverse_sqrt(f32_1));
@@ -1268,18 +1261,20 @@ public:
             check(arm32 ? "vrsqrts.f32" : "frsqrts", 4 * w, fast_inverse_sqrt(f32_1));
 
             // VRSRA    I       -       Rounding Shift Right and Accumulate
-            check(arm32 ? "vqrshrn.s16" : "sqrshrn*v*h", 8 * w, (i32(i16_1) + round_u8) >> shift_u8);
-            check(arm32 ? "vqrshrn.s32" : "sqrshrn*v*s", 4 * w, (i32_1 + round_u16) >> shift_u16);
-            check(arm32 ? "vqrshrn.s64" : "sqrshrn*v*d", 2 * w, (i64_1 + round_u32) >> shift_u32);
-            check(arm32 ? "vqrshrun.s16" : "sqrshrun*v*h", 8 * w, (i32(i16_1) + round_u8) >> shift_u8);
-            check(arm32 ? "vqrshrun.s32" : "sqrshrun*v*s", 4 * w, (i32_1 + round_u16) >> shift_u16);
-            check(arm32 ? "vqrshrun.s64" : "sqrshrun*v*d", 2 * w, (i64_1 + round_u32) >> shift_u32);
-            check(arm32 ? "vqrshrn.u16" : "uqrshrn*v*h", 8 * w, (u32(u16_1) + round_u8) >> shift_u8);
-            check(arm32 ? "vqrshrn.u32" : "uqrshrn*v*s", 4 * w, (u64(u32_1) + round_u16) >> shift_u16);
-            check(arm32 ? "vqrshrn.u64" : "uqrshrn*v*d", 2 * w, (u64_1 + round_u32) >> shift_u32);
+            check(arm32 ? "vrsra.s8" : "srsra*v*b", 16 * w, i8_2 + i8((i16(i8_1) + 4) >> 3));
+            check(arm32 ? "vrsra.s16" : "srsra*v*h", 8 * w, i16_2 + i16((i32(i16_1) + 8) >> 4));
+            check(arm32 ? "vrsra.s32" : "srsra*v*s", 4 * w, i32_2 + ((i32_1 + 16) >> 5));
+            check(arm32 ? "vrsra.u8" : "ursra*v*b", 16 * w, u8_2 + u8((u16(u8_1) + 32) >> 6));
+            check(arm32 ? "vrsra.u16" : "ursra*v*h", 8 * w, u16_2 + u16((u32(u16_1) + 64) >> 7));
+            check(arm32 ? "vrsra.u32" : "ursra*v*s", 4 * w, u32_2 + u32((u64(u32_1) + 128) >> 8));
 
             // VRSUBHN  I       -       Rounding Subtract and Narrow Returning High Half
-            // Boo rounding ops
+            check(arm32 ? "vrsubhn.i16" : "rsubhn*v*h", 8 * w, i8((i32(i16_1 - i16_2) + 128) >> 8));
+            check(arm32 ? "vrsubhn.i16" : "rsubhn*v*h", 8 * w, u8((u32(u16_1 - u16_2) + 128) >> 8));
+            check(arm32 ? "vrsubhn.i32" : "rsubhn*v*s", 4 * w, i16((i32_1 - i32_2 + 32768) >> 16));
+            check(arm32 ? "vrsubhn.i32" : "rsubhn*v*s", 4 * w, u16((u64(u32_1 - u32_2) + 32768) >> 16));
+            check(arm32 ? "vrsubhn.i64" : "rsubhn*v*d", 2 * w, i32((i64_1 - i64_2 + Expr(1ll << 31)) >> 32));
+            //check(arm32 ? "vrsubhn.i64" : "rsubhn*v*d", 2 * w, u32((u64_1 - u64_2 + Expr(1ull << 31)) >> 32));
 
             // VSHL     I       -       Shift Left
             check(arm32 ? "vshl.i8" : "shl*v*b", 8 * w, i8_1 * 16);
