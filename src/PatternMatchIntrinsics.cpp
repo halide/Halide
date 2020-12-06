@@ -1,11 +1,9 @@
 #include "PatternMatchIntrinsics.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
-#include "CSE.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "Simplify.h"
-#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -567,17 +565,11 @@ protected:
 }  // namespace
 
 Stmt pattern_match_intrinsics(Stmt s) {
-    s = substitute_in_all_lets(s);
-    s = PatternMatchIntrinsics().mutate(s);
-    s = common_subexpression_elimination(s);
-    return s;
+    return PatternMatchIntrinsics().mutate(s);
 }
 
 Expr pattern_match_intrinsics(Expr e) {
-    e = substitute_in_all_lets(e);
-    e = PatternMatchIntrinsics().mutate(e);
-    e = common_subexpression_elimination(e);
-    return e;
+    return PatternMatchIntrinsics().mutate(e);
 }
 
 Expr lower_widening_add(const Expr &a, const Expr &b) {
