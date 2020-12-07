@@ -100,7 +100,7 @@ inline bool is_type(TensorType t) {
 struct QuantizationInfo {
     std::vector<float> scale;
     std::vector<int32_t> zero;
-    int32_t dimension;
+    int32_t dimension = -1;
 };
 
 inline std::ostream &operator<<(std::ostream &s, const QuantizationInfo &q) {
