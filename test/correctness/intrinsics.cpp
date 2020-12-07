@@ -41,7 +41,6 @@ int main(int argc, char **argv) {
     Expr f32x = Variable::make(Float(32, 4), "f32x");
     Expr f32y = Variable::make(Float(32, 4), "f32y");
 
-
     // Check powers of two multiply/divide rewritten to shifts.
     check(i8x * 2, i8x << 1);
     check(u8x * 4, u8x << 2);
@@ -93,6 +92,9 @@ int main(int argc, char **argv) {
     check(widening_add(i32(i8x), i32(i8y)), i64(widening_add(i8x, i8y)));
     check(widening_add(u32(u8x), u32(u8y)), u64(widening_add(u8x, u8y)));
     check(widening_add(i32(u8x), i32(u8y)), i64(widening_add(u8x, u8y)));
+
+    // Tricky case.
+    check(i32(u8x) + 1, i32(widening_add(u8x, u8(1))));
 
 
     // Check saturating arithmetic

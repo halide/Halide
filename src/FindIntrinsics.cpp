@@ -510,17 +510,23 @@ protected:
             }
         } else if (op->is_intrinsic(Call::widening_add)) {
             internal_assert(op->args.size() == 2);
-            Expr narrow_a = strip_widening_cast(op->args[0]);
-            Expr narrow_b = strip_widening_cast(op->args[1]);
-            if (narrow_a.defined() && narrow_b.defined()) {
-                return mutate(Cast::make(op->type, widening_add(narrow_a, narrow_b)));
+            for (halide_type_code_t t : {op->type.code(), halide_type_uint}) {
+                Type narrow_t = op->type.narrow().narrow().with_code(t);
+                Expr narrow_a = lossless_cast(narrow_t, op->args[0]);
+                Expr narrow_b = lossless_cast(narrow_t, op->args[1]);
+                if (narrow_a.defined() && narrow_b.defined()) {
+                    return mutate(Cast::make(op->type, widening_add(narrow_a, narrow_b)));
+                }
             }
         } else if (op->is_intrinsic(Call::widening_sub)) {
             internal_assert(op->args.size() == 2);
-            Expr narrow_a = strip_widening_cast(op->args[0]);
-            Expr narrow_b = strip_widening_cast(op->args[1]);
-            if (narrow_a.defined() && narrow_b.defined()) {
-                return mutate(Cast::make(op->type, widening_sub(narrow_a, narrow_b)));
+            for (halide_type_code_t t : {op->type.code(), halide_type_uint}) {
+                Type narrow_t = op->type.narrow().narrow().with_code(t);
+                Expr narrow_a = lossless_cast(narrow_t, op->args[0]);
+                Expr narrow_b = lossless_cast(narrow_t, op->args[1]);
+                if (narrow_a.defined() && narrow_b.defined()) {
+                    return mutate(Cast::make(op->type, widening_sub(narrow_a, narrow_b)));
+                }
             }
         }
 
