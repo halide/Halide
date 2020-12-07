@@ -525,7 +525,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         q = q & ~b_zero;
     }
 
-    q = common_subexpression_elimination(q);
+    q = simplify(common_subexpression_elimination(q));
 
     return q;
 }
@@ -576,7 +576,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         q = q & ~b_zero;
     }
 
-    q = common_subexpression_elimination(q);
+    q = simplify(common_subexpression_elimination(q));
 
     return q;
 }
