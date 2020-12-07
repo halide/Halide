@@ -253,6 +253,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else if (const_uint(b, &ub) &&
                    b.type().is_max(ub)) {
             return a;
+        } else if (const_int(b, &ib) &&
+                   ib == -1) {
+            return a;
         } else if (const_uint(b, &ub) &&
                    is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
             return Mod::make(a, make_const(a.type(), ub + 1));
