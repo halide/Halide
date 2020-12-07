@@ -68,6 +68,7 @@ set(HEADER_FILES
     ExternFuncArgument.h
     FastIntegerDivide.h
     FindCalls.h
+    FindIntrinsics.h
     FlattenNestedRamps.h
     Float16.h
     Func.h
@@ -117,7 +118,6 @@ set(HEADER_FILES
     Parameter.h
     ParamMap.h
     PartitionLoops.h
-    PatternMatchIntrinsics.h
     Pipeline.h
     Prefetch.h
     Profiling.h
@@ -230,6 +230,7 @@ set(SOURCE_FILES
     Expr.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
+    FindIntrinsics.cpp
     FlattenNestedRamps.cpp
     Float16.cpp
     Func.cpp
@@ -274,7 +275,6 @@ set(SOURCE_FILES
     Parameter.cpp
     ParamMap.cpp
     PartitionLoops.cpp
-    PatternMatchIntrinsics.cpp
     Pipeline.cpp
     Prefetch.cpp
     PrintLoopNest.cpp

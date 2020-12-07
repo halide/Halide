@@ -4,13 +4,13 @@
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
 #include "ExprUsesVar.h"
+#include "FindIntrinsics.h"
 #include "HexagonAlignment.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Lerp.h"
-#include "PatternMatchIntrinsics.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
@@ -882,7 +882,7 @@ private:
             // If the simplifier cancels a factor out of these patterns, we can
             // still use them, but we have to inject the factor back into the
             // expression.
-            // TODO: Move this logic to pattern_match_intrinsics?
+            // TODO: Move this logic to find_intrinsics?
             vector<Expr> matches;
             for (const Pattern &p : trunc_mpy) {
                 if (!check_pattern_target(p.flags, target)) {
@@ -1969,7 +1969,7 @@ private:
 // would need to handle shifts, but that's easy).
 // Another possibility would be adding a widening_mul_add intrinsic that takes
 // a list of pairs of operands, and computes a widening sum of widening multiplies
-// of these pairs. PatternMatchIntrinsics could aggressively rewrite shifts as
+// of these pairs. FindIntrinsics could aggressively rewrite shifts as
 // widening_mul_add operands.
 class DistributeShiftsAsMuls : public IRMutator {
 private:
@@ -2354,7 +2354,7 @@ Stmt scatter_gather_generator(Stmt s) {
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     // We need to redo intrinsic matching due to simplification that has
     // happened after the end of target independent lowering.
-    s = pattern_match_intrinsics(s);
+    s = find_intrinsics(s);
 
     // Hexagon prefers widening shifts to be expressed as multiplies to
     // hopefully hit compound widening multiplies.

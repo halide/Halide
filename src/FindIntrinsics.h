@@ -1,5 +1,5 @@
-#ifndef HALIDE_PATTERN_MATCH_INTRINSICS_H
-#define HALIDE_PATTERN_MATCH_INTRINSICS_H
+#ifndef HALIDE_FIND_INTRINSICS_H
+#define HALIDE_FIND_INTRINSICS_H
 
 /** \file
  * Tools to replace common patterns with more readily recognizable intrinsics.
@@ -32,10 +32,10 @@ Expr lower_rounding_halving_sub(const Expr &a, const Expr &b);
 Expr lower_intrinsic(const Call *op);
 
 /** Replace common arithmetic patterns with intrinsics. */
-Stmt pattern_match_intrinsics(Stmt s);
-Expr pattern_match_intrinsics(Expr e);
+Stmt find_intrinsics(Stmt s);
+Expr find_intrinsics(Expr e);
 
-/** The reverse of pattern_match_intrinsics. */
+/** The reverse of FIND_INTRINSICS. */
 Expr lower_intrinsics(const Expr &e);
 Stmt lower_intrinsics(const Stmt &s);
 

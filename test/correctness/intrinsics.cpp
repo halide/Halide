@@ -9,7 +9,7 @@ using namespace Halide::Internal;
 void check(Expr test, Expr expected, Type required_type) {
     // Some of the below tests assume the simplifier has run.
     test = simplify(test);
-    Expr result = pattern_match_intrinsics(test);
+    Expr result = find_intrinsics(test);
     if (!equal(result, expected) || required_type != expected.type()) {
         std::cout << "failure!\n";
         std::cout << "test: " << test << "\n";

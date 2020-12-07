@@ -1,4 +1,4 @@
-#include "PatternMatchIntrinsics.h"
+#include "FindIntrinsics.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
 #include "IRMatch.h"
@@ -209,7 +209,7 @@ Expr to_rounding_shift(const Call *c) {
 
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
-class PatternMatchIntrinsics : public IRMutator {
+class FindIntrinsics : public IRMutator {
 protected:
     using IRMutator::visit;
 
@@ -558,12 +558,12 @@ protected:
 
 }  // namespace
 
-Stmt pattern_match_intrinsics(Stmt s) {
-    return PatternMatchIntrinsics().mutate(s);
+Stmt find_intrinsics(Stmt s) {
+    return FindIntrinsics().mutate(s);
 }
 
-Expr pattern_match_intrinsics(Expr e) {
-    return PatternMatchIntrinsics().mutate(e);
+Expr find_intrinsics(Expr e) {
+    return FindIntrinsics().mutate(e);
 }
 
 Expr lower_widening_add(const Expr &a, const Expr &b) {
