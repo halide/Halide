@@ -28,11 +28,13 @@ CodeGen_WebAssembly::CodeGen_WebAssembly(Target t)
 
 namespace {
 
+constexpr int max_intrinsic_args = 4;
+
 struct WasmIntrinsic {
     const char *intrin_name;
     halide_type_t ret_type;
     const char *name;
-    halide_type_t arg_types[4];
+    halide_type_t arg_types[max_intrinsic_args];
     Target::Feature feature = Target::FeatureEnd;
 };
 
@@ -75,7 +77,7 @@ void CodeGen_WebAssembly::init_module() {
 
         Type ret_type = i.ret_type;
         std::vector<Type> arg_types;
-        arg_types.reserve(4);
+        arg_types.reserve(max_intrinsic_args);
         for (halide_type_t i : i.arg_types) {
             if (i.bits == 0) {
                 break;
