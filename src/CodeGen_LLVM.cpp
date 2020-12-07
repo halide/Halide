@@ -4735,22 +4735,22 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
             continue;
         }
 
-        if (i.result_type.with_lanes(1) != result_type.with_lanes(1)) {
+        if (i.result_type.element_of() != result_type.element_of()) {
             continue;
         }
 
         bool match = true;
         for (int j = 0; j < (int)i.arg_types.size(); j++) {
-            if (i.arg_types[j].with_lanes(1) != args[j].type().with_lanes(1)) {
+            if (i.arg_types[j].element_of() != args[j].type().element_of()) {
                 match = false;
                 break;
             }
 
-            if (args[j].type().lanes() == 1) {
+            if (args[j].type().is_scalar()) {
                 // We can broadcast the argument.
                 // TODO: Should we prioritize overloads that don't need this?
-            } else if (i.arg_types[j].lanes() == 1) {
-                if (args[j].type().lanes() != 1) {
+            } else if (i.arg_types[j].is_scalar()) {
+                if (args[j].type().is_vector()) {
                     match = false;
                     break;
                 }

@@ -172,12 +172,14 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 
 namespace {
 
+constexpr int max_intrinsic_args = 4;
+
 struct ArmIntrinsic {
     const char *arm32;
     const char *arm64;
     halide_type_t ret_type;
     const char *name;
-    halide_type_t arg_types[4];
+    halide_type_t arg_types[max_intrinsic_args];
     int flags;
 };
 
@@ -460,7 +462,7 @@ void CodeGen_ARM::init_module() {
 
         Type ret_type = i.ret_type;
         std::vector<Type> arg_types;
-        arg_types.reserve(4);
+        arg_types.reserve(max_intrinsic_args);
         for (halide_type_t i : i.arg_types) {
             if (i.bits == 0) {
                 break;
@@ -527,6 +529,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                         if (target.bits == 32) {
                             b = make_const(matches[0].type().with_code(halide_type_int), shift_amount);
                         } else {
+                            // The arm64 llvm backend wants i32 constants for right shifts.
                             b = make_const(Int(32), shift_amount);
                         }
                     } else {
