@@ -380,7 +380,7 @@ Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
 
     int bits;
     if (is_const_power_of_two_integer(b, &bits)) {
-        return a & (b - 1);
+        return a & simplify(b - 1);
     } else if (const_int_divisor &&
                t.is_int() &&
                (t.bits() == 8 || t.bits() == 16 || t.bits() == 32) &&
