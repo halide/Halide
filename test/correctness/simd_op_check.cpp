@@ -754,11 +754,11 @@ public:
 
             // VHSUB    I       -       Halving Subtract
             check(arm32 ? "vhsub.s8" : "shsub*v*b", 8 * w, i8((i16(i8_1) - i16(i8_2)) / 2));
-            //check(arm32 ? "vhsub.u8" : "uhsub*v*b", 8 * w, u8((u16(u8_1) - u16(u8_2)) / 2));
+            check(arm32 ? "vhsub.u8" : "uhsub*v*b", 8 * w, u8((u16(u8_1) - u16(u8_2)) / 2));
             check(arm32 ? "vhsub.s16" : "shsub*v*h", 4 * w, i16((i32(i16_1) - i32(i16_2)) / 2));
-            //check(arm32 ? "vhsub.u16" : "uhsub*v*h", 4 * w, u16((u32(u16_1) - u32(u16_2)) / 2));
+            check(arm32 ? "vhsub.u16" : "uhsub*v*h", 4 * w, u16((u32(u16_1) - u32(u16_2)) / 2));
             check(arm32 ? "vhsub.s32" : "shsub*v*s", 2 * w, i32((i64(i32_1) - i64(i32_2)) / 2));
-            //check(arm32 ? "vhsub.u32" : "uhsub*v*s", 2 * w, u32((u64(u32_1) - u64(u32_2)) / 2));
+            check(arm32 ? "vhsub.u32" : "uhsub*v*s", 2 * w, u32((u64(u32_1) - u64(u32_2)) / 2));
 
             check(arm32 ? "vhsub.s32" : "shsub*v*s", 2 * w, (i32_1 - i32_2) / 2);
 

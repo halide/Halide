@@ -117,6 +117,12 @@ bool is_safe_for_add(const Expr &e, int max_depth) {
         return is_safe_for_add(add->a, max_depth) || is_safe_for_add(add->b, max_depth);
     } else if (const Sub *sub = e.as<Sub>()) {
         return is_safe_for_add(sub->a, max_depth) || is_safe_for_add(sub->b, max_depth);
+    } else if (const Cast *cast = e.as<Cast>()) {
+        if (cast->type.bits() > cast->value.type().bits()) {
+            return true;
+        } else if (cast->type.bits() == cast->value.type().bits()) {
+            return is_safe_for_add(cast->value, max_depth);
+        }
     } else if (Call::as_intrinsic(e, {Call::widening_add, Call::widening_sub})) {
         return true;
     }
@@ -402,9 +408,11 @@ protected:
 
             auto rewrite = IRMatcher::rewriter(value, op->type);
 
+            Type op_type_wide = op->type.widen();
+
             int bits = op->type.bits();
-            auto is_x_same_int = is_int(x, bits);
-            auto is_x_same_uint = is_uint(x, bits);
+            auto is_x_same_int = op->type.is_int() && is_int(x, bits);
+            auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
             auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
             // clang-format off
             if (rewrite(max(min(widening_add(x, y), upper), lower), saturating_add(x, y), is_x_same_int_or_uint) ||
@@ -417,9 +425,13 @@ protected:
 
                 rewrite(intrin(Call::halving_add, widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
                 rewrite(intrin(Call::halving_add, widening_add(x, 1), y), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
-                rewrite(intrin(Call::halving_add, widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int) ||
+                rewrite(intrin(Call::halving_add, widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
                 rewrite(intrin(Call::rounding_shift_right, widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
-                rewrite(intrin(Call::rounding_shift_right, widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int) ||
+                rewrite(intrin(Call::rounding_shift_right, widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
+
+                // We can ignore the sign of the widening subtract for halving subtracts.
+                rewrite(intrin(Call::shift_right, cast(op_type_wide, widening_sub(x, y)), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
+                rewrite(intrin(Call::rounding_shift_right, cast(op_type_wide, widening_sub(x, y)), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
 
                 false) {
                 return mutate(rewrite.result);
@@ -428,8 +440,8 @@ protected:
 
             // When the argument is a widened rounding shift, and we know the shift is a zero
             // or right shift, we don't need the widening.
-            auto is_x_wide_int = is_int(x, bits * 2);
-            auto is_x_wide_uint = is_uint(x, bits * 2);
+            auto is_x_wide_int = op->type.is_int() && is_int(x, bits * 2);
+            auto is_x_wide_uint = op->type.is_uint() && is_uint(x, bits * 2);
             auto is_x_wide_int_or_uint = is_x_wide_int || is_x_wide_uint;
             // clang-format off
             if (rewrite(max(min(rounding_shift_right(x, y), upper), lower), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||

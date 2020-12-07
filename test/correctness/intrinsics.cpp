@@ -114,7 +114,9 @@ int main(int argc, char **argv) {
     check((f32x + f32y) / 2, (f32x + f32y) * 0.5f);
 
     check(i8((i16(i8x) - i8y) / 2), halving_sub(i8x, i8y));
+    check(u8((u16(u8x) - u8y) / 2), halving_sub(u8x, u8y));
     check(i8(widening_sub(i8x, i8y) / 2), halving_sub(i8x, i8y));
+    check(u8(widening_sub(u8x, u8y) / 2), halving_sub(u8x, u8y));
     check((i32x - i32y) / 2, halving_sub(i32x, i32y));
     check((f32x - f32y) / 2, (f32x - f32y) * 0.5f);
 
@@ -125,7 +127,9 @@ int main(int argc, char **argv) {
     check((i32x + i32y + 1) / 2, rounding_halving_add(i32x, i32y));
 
     check(i8((i16(i8x) - i8y + 1) / 2), rounding_halving_sub(i8x, i8y));
+    check(u8((u16(u8x) - u8y + 1) / 2), rounding_halving_sub(u8x, u8y));
     check(i8((widening_sub(i8x, i8y) + 1) / 2), rounding_halving_sub(i8x, i8y));
+    check(u8((widening_sub(u8x, u8y) + 1) / 2), rounding_halving_sub(u8x, u8y));
     check((i32x - i32y + 1) / 2, rounding_halving_sub(i32x, i32y));
 
 
