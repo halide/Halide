@@ -30,15 +30,22 @@ public:
 
 class ParseCondition : public IRVisitor {
 public:
-    Expr left, right;
+    Expr condition;
 
     using IRVisitor::visit;
     void visit(const Mod *op) override {
-        left = op->a;
-        right = op->b;
-        return;
+        condition = op;
+    }
+
+    void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::bitwise_and)) {
+            condition = op;
+        } else {
+            IRVisitor::visit(op);
+        }
     }
 };
+
 class CountHostAlignmentAsserts : public IRVisitor {
 public:
     int count;
@@ -58,15 +65,23 @@ public:
             Expr c = op->condition;
             ParseCondition p;
             c.accept(&p);
-            if (p.left.defined() && p.right.defined()) {
-                const Call *reinterpret_call = p.left.as<Call>();
+            if (p.condition.defined()) {
+                Expr left, right;
+                if (const Mod *mod = p.condition.as<Mod>()) {
+                    left = mod->a;
+                    right = mod->b;
+                } else if (const Call *call = Call::as_intrinsic(p.condition, {Call::bitwise_and})) {
+                    left = call->args[0];
+                    right = call->args[1];
+                }
+                const Call *reinterpret_call = left.as<Call>();
                 if (!reinterpret_call ||
                     !reinterpret_call->is_intrinsic(Call::reinterpret)) return;
                 Expr name = reinterpret_call->args[0];
                 const Variable *V = name.as<Variable>();
                 string name_host_ptr = V->name;
                 int expected_alignment = alignments_needed[name_host_ptr];
-                if (is_const(p.right, expected_alignment)) {
+                if (is_const(right, expected_alignment) || is_const(right, expected_alignment - 1)) {
                     count++;
                     alignments_needed.erase(name_host_ptr);
                 }
