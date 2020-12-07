@@ -1,10 +1,7 @@
 #ifndef ERROR_UTIL_H_
 #define ERROR_UTIL_H_
 
-#include <iostream>
-#include <memory>
 #include <sstream>
-#include <string>
 
 #include "HalideRuntime.h"
 
@@ -40,43 +37,53 @@ inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {
     return s << "}";
 }
 
+// Note: all severity values output to stderr, not stdout.
+// Note: ERROR does *not* trigger an exit()/abort() call.
+enum LogSeverity {
+    INFO = 0,
+    WARNING = 1,
+    ERROR = 2,
+};
+
 namespace internal {
 
-struct FatalError final {
+struct Logger {
     std::ostringstream msg;
+    const LogSeverity severity;
 
-    FatalError(const char *file, int line, const char *condition_string) {
-        msg << "Error @ " << file << ":" << line << ".";
-        if (condition_string) {
-            msg << " Condition failed: " << condition_string;
-        }
-        msg << "\n";
-    }
+    Logger(LogSeverity severity);
+    Logger(LogSeverity severity, const char *file, int line);
 
-    [[noreturn]] ~FatalError() noexcept(false) {
-        if (!msg.str().empty() && msg.str().back() != '\n') {
-            msg << "\n";
-        }
-
-        std::cerr << msg.str();
-        abort();
-    }
+    ~Logger() noexcept(false);
 
     template<typename T>
-    FatalError &operator<<(const T &x) {
+    Logger &operator<<(const T &x) {
         msg << x;
         return *this;
     }
 
-    FatalError &ref() {
+    Logger &ref() {
         return *this;
     }
 
-    FatalError() = delete;
-    FatalError(const FatalError &) = delete;
-    FatalError &operator=(const FatalError &) = delete;
-    FatalError(FatalError &&) = delete;
-    FatalError &operator=(FatalError &&) = delete;
+    Logger() = delete;
+    Logger(const Logger &) = delete;
+    Logger &operator=(const Logger &) = delete;
+    Logger(Logger &&) = delete;
+    Logger &operator=(Logger &&) = delete;
+};
+
+struct CheckLogger : public Logger {
+    CheckLogger(LogSeverity severity, const char *condition_string);
+    CheckLogger(LogSeverity severity, const char *file, int line, const char *condition_string);
+
+    [[noreturn]] ~CheckLogger() noexcept(false);
+
+    CheckLogger() = delete;
+    CheckLogger(const CheckLogger &) = delete;
+    CheckLogger &operator=(const CheckLogger &) = delete;
+    CheckLogger(CheckLogger &&) = delete;
+    CheckLogger &operator=(CheckLogger &&) = delete;
 };
 
 // This uses operator precedence as a trick to avoid argument evaluation if
@@ -93,14 +100,21 @@ public:
 
     // This has to be an operator with a precedence lower than << but
     // higher than ?:
-    void operator&(FatalError &) {
+    void operator&(Logger &) {
     }
 };
 
 }  // namespace internal
 
-#define LOG_FATAL \
-    ::interpret_nn::internal::FatalError(__FILE__, __LINE__, nullptr)
+#ifndef NDEBUG
+// In debug builds, include file-and-line
+#define LOG(SEVERITY) \
+    ::interpret_nn::internal::Logger(::interpret_nn::SEVERITY, __FILE__, __LINE__)
+#else
+// In nondebug builds, don't include file-and-line
+#define LOG(SEVERITY) \
+    ::interpret_nn::internal::Logger(::interpret_nn::SEVERITY)
+#endif
 
 /**
  * CHECK() is used to implement our assertion macros
@@ -110,15 +124,21 @@ public:
  * Note that this macro intentionally has no parens internally; in actual
  * use, the implicit grouping will end up being
  *
- *   condition ? (void) : (Voidifier() & (FatalError << arg1 << arg2 ... << argN))
+ *   condition ? (void) : (Voidifier() & (Logger << arg1 << arg2 ... << argN))
  *
  * This (regrettably) requires a macro to work, but has the highly desirable
  * effect that all assertion parameters are totally skipped (not ever evaluated)
  * when the assertion is true.
  */
+#ifndef NDEBUG
+// In debug builds, include file-and-line
 #define CHECK(condition) \
-    (condition) ? (void)0 : ::interpret_nn::internal::Voidifier() & ::interpret_nn::internal::FatalError(__FILE__, __LINE__, #condition).ref()
-
+    (condition) ? (void)0 : ::interpret_nn::internal::Voidifier() & ::interpret_nn::internal::CheckLogger(::interpret_nn::ERROR, __FILE__, __LINE__, #condition).ref()
+#else
+// In nondebug builds, don't include file-and-line
+#define CHECK(condition) \
+    (condition) ? (void)0 : ::interpret_nn::internal::Voidifier() & ::interpret_nn::internal::CheckLogger(::interpret_nn::ERROR, #condition).ref()
+#endif
 }  // namespace interpret_nn
 
 #endif  // ERROR_UTIL_H_
