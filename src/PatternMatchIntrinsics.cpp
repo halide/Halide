@@ -127,7 +127,7 @@ bool is_safe_for_add(const Expr &e) {
     return is_safe_for_add(e, e.type().bits() / 2 - 1);
 }
 
-// We want to find and remove an add of 'term' from e.
+// We want to find and remove an add of 'round' from e.
 Expr find_and_subtract(const Expr &e, const Expr &round) {
     if (const Add *add = e.as<Add>()) {
         Expr a = find_and_subtract(add->a, round);
@@ -215,16 +215,7 @@ protected:
 
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
-    IRMatcher::Wild<2> z;
-    IRMatcher::Wild<3> w;
-    IRMatcher::Wild<4> u;
-    IRMatcher::Wild<5> v;
     IRMatcher::WildConst<0> c0;
-    IRMatcher::WildConst<1> c1;
-    IRMatcher::WildConst<2> c2;
-    IRMatcher::WildConst<3> c3;
-    IRMatcher::WildConst<4> c4;
-    IRMatcher::WildConst<5> c5;
 
     Expr visit(const Add *op) override {
         Expr a = mutate(op->a);
@@ -435,22 +426,25 @@ protected:
             }
             // clang-format on
 
-            // When the argument is a widened rounding shift, and we know the shift is right
-            // by at least one, we don't need the widening.
+            // When the argument is a widened rounding shift, and we know the shift is a zero
+            // or right shift, we don't need the widening.
             auto is_x_wide_int = is_int(x, bits * 2);
             auto is_x_wide_uint = is_uint(x, bits * 2);
             auto is_x_wide_int_or_uint = is_x_wide_int || is_x_wide_uint;
             // clang-format off
-            if (rewrite(max(min(rounding_shift_right(x, c0), upper), lower), rounding_shift_right(x, c0), is_x_wide_int_or_uint && c0 > 0) ||
+            if (rewrite(max(min(rounding_shift_right(x, y), upper), lower), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_right(x, y), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_left(x, y), rounding_shift_left(x, y), is_x_wide_int_or_uint) ||
-
                 false) {
                 const Call *shift = Call::as_intrinsic(rewrite.result, {Call::rounding_shift_right, Call::rounding_shift_left});
+                internal_assert(shift);
                 Expr a = lossless_cast(op->type, shift->args[0]);
-                if (a.defined()) {
-                    Expr b = simplify(narrow(shift->args[1]));
-                    return mutate(Call::make(op->type, shift->name, {a, b}, Call::PureIntrinsic));
+                Expr b = lossless_cast(op->type.with_code(shift->args[1].type().code()), shift->args[1]);
+                if (a.defined() && b.defined()) {
+                    if ((shift->is_intrinsic(Call::rounding_shift_right) && can_prove(b >= 0)) ||
+                        (shift->is_intrinsic(Call::rounding_shift_left) && can_prove(b <= 0))) {
+                        return mutate(Call::make(op->type, shift->name, {a, b}, Call::PureIntrinsic));
+                    }
                 }
             }
             // clang-format on
