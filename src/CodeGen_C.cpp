@@ -2230,8 +2230,13 @@ void CodeGen_C::visit(const Call *op) {
         string arg0 = print_expr(op->args[0]);
         rhs << "(" << arg0 << ")";
     } else if (op->is_intrinsic()) {
-        // TODO: other intrinsics
-        internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
+        Expr lowered = lower_intrinsic(op);
+        if (lowered.defined()) {
+            lowered.accept(this);
+        } else {
+            // TODO: other intrinsics
+            internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
+        }
     } else {
         // Generic extern calls
         rhs << print_extern_call(op);
