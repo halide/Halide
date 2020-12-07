@@ -236,7 +236,7 @@ public:
             // nothing
         }
         if (verbose && num_failures > 0) {
-            std::cerr << "num_failures is: " << num_failures << "\n";
+            LOG(INFO) << "num_failures is: " << num_failures << "\n";
         }
         return num_failures;
     }
@@ -258,7 +258,7 @@ int op_test_main(int argc, char **argv, TestCaseFactory &factory) {
             verbose = true;
             continue;
         }
-        std::cerr << "Usage: TODO\n";
+        LOG(INFO) << "Usage: TODO\n";
         return -1;
     }
 

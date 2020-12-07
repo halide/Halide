@@ -54,7 +54,7 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args)
         // require handling pointer types in our functors
         // HANDLE_CASE(halide_type_handle, 64, void *)
     default:
-        LOG_FATAL << "Unsupported type";
+        CHECK(0) << "Unsupported type";
         using ReturnType = decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...));
         return ReturnType();
     }

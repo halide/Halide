@@ -31,7 +31,7 @@ size_t sizeof_tensor_type(TensorType t) {
     // case TensorType::String:  fallthru
     // case TensorType::Bool:    fallthru
     default:
-        LOG_FATAL << "Unknown size of type";
+        CHECK(0) << "Unknown size of type";
         return 0;
     }
 }
@@ -63,7 +63,7 @@ const char *to_string(TensorType t) {
     case TensorType::Bool:
         return "bool";
     default:
-        LOG_FATAL << "Unhandled interpret_nn::TensorType";
+        CHECK(0) << "Unhandled interpret_nn::TensorType";
         return "";
     }
 }
@@ -93,7 +93,7 @@ halide_type_t to_halide_type(TensorType t) {
     case TensorType::Complex128:
     case TensorType::String:
     default:
-        LOG_FATAL << "Unhandled type in to_halide_type";
+        CHECK(0) << "Unhandled type in to_halide_type";
         return halide_type_t();
     }
 }

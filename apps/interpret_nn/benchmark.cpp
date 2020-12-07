@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
     }
 
     if (options.verbose && options.trace) {
-        std::cerr << "You cannot specify --trace and --verbose at the same time.\n";
+        LOG(ERROR) << "You cannot specify --trace and --verbose at the same time.\n";
         exit(-1);
     }
 

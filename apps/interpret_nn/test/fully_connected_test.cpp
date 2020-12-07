@@ -133,7 +133,7 @@ struct FullyConnectedOpTestFactory : public op_test::TestCaseFactory {
 }  // namespace interpret_nn
 
 int main(int argc, char **argv) {
-    std::cerr << "(fully_connected_test is not yet complete; skipping)\n";
+    LOG(ERROR) << "(fully_connected_test is not yet complete; skipping)\n";
     return 0;
     // interpret_nn::FullyConnectedOpTestFactory factory;
     // return interpret_nn::op_test::op_test_main(argc, argv, factory);

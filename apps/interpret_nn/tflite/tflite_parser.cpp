@@ -43,7 +43,7 @@ public:
         case tflite::ActivationFunctionType_SIGN_BIT:
             return ActivationFunction::SignBit;
         default:
-            LOG_FATAL << "Unknown tflite::ActivationFunctionType";
+            CHECK(0) << "Unknown tflite::ActivationFunctionType";
         }
     }
 
@@ -74,7 +74,7 @@ public:
         case tflite::TensorType_COMPLEX128:
             return TensorType::Complex128;
         default:
-            LOG_FATAL << "Unknown tflite::TensorType";
+            CHECK(0) << "Unknown tflite::TensorType";
         }
     }
 
@@ -85,7 +85,7 @@ public:
         case tflite::Padding_VALID:
             return Padding::Valid;
         default:
-            LOG_FATAL << "Unknown tflite::Padding";
+            CHECK(0) << "Unknown tflite::Padding";
         }
     }
 
@@ -307,8 +307,8 @@ public:
         case tflite::BuiltinOperator_FULLY_CONNECTED:
             return parse_fully_connected(op);
         default:
-            LOG_FATAL << "Unsupported op "
-                      << tflite::EnumNameBuiltinOperator(builtin_code);
+            CHECK(0) << "Unsupported op "
+                     << tflite::EnumNameBuiltinOperator(builtin_code);
         }
     }
 

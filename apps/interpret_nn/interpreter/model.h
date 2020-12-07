@@ -49,7 +49,7 @@ inline TensorType to_tensor_type() {
     if (std::is_const<T>::value) {
         return to_tensor_type<typename std::remove_const<T>::type>();
     }
-    LOG_FATAL << "Type is not convertible to TensorType";
+    CHECK(0) << "Type is not convertible to TensorType";
     // unreachable
 }
 
@@ -264,7 +264,7 @@ public:
         if (output_count() == 1) {
             return without_strides(output(0)->shape());
         } else {
-            LOG_FATAL << "More than one output requires get_full_crop override.";
+            CHECK(0) << "More than one output requires get_full_crop override.";
             return Box();
         }
     }

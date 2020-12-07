@@ -60,7 +60,7 @@ halide_type_t tf_lite_type_to_halide_type(TfLiteType t) {
     case kTfLiteNoType:
     case kTfLiteComplex64:
     case kTfLiteComplex128:
-        LOG_FATAL << "Unsupported TfLiteType: " << TfLiteTypeGetName(t);
+        CHECK(0) << "Unsupported TfLiteType: " << TfLiteTypeGetName(t);
         return halide_type_t();
     }
 }
