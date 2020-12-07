@@ -1998,10 +1998,6 @@ int main(int argc, char **argv) {
         test.set_num_threads(1);
     }
 
-    if (getenv("FILTER")) {
-        test.filter = getenv("FILTER");
-    }
-
     // TODO: multithreading here is the cause of https://github.com/halide/Halide/issues/3669;
     // the fundamental issue is that we make one set of ImageParams to construct many
     // Exprs, then realize those Exprs on arbitrary threads; it is known that sharing

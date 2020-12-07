@@ -1479,10 +1479,23 @@ void CodeGen_LLVM::codegen(const Stmt &s) {
     value = nullptr;
     s.accept(this);
 }
+namespace {
+
+bool is_power_of_two(int x) {
+    return (x & (x - 1)) == 0;
+}
+
+int next_power_of_two(int x) {
+    return static_cast<int>(1) << static_cast<int>(std::ceil(std::log2(x)));
+}
+
+}  // namespace
 
 Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
     if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
         return Float(32, t.lanes());
+    } else if (t.is_int_or_uint() && !is_power_of_two(t.bits())) {
+        return t.with_bits(next_power_of_two(t.bits()));
     } else {
         return t;
     }
@@ -1503,6 +1516,8 @@ Type CodeGen_LLVM::upgrade_type_for_storage(const Type &t) const {
         return t.with_bits(8);
     } else if (t.is_handle()) {
         return UInt(64, t.lanes());
+    } else if (t.is_int_or_uint() && !is_power_of_two(t.bits())) {
+        return t.with_bits(next_power_of_two(t.bits()));
     } else {
         return t;
     }
@@ -1974,17 +1989,6 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
 
     return builder->CreateInBoundsGEP(base_address, index);
 }
-
-namespace {
-int next_power_of_two(int x) {
-    for (int p2 = 1;; p2 *= 2) {
-        if (p2 >= x) {
-            return p2;
-        }
-    }
-    // unreachable.
-}
-}  // namespace
 
 void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, const Expr &index) {
 
@@ -4768,7 +4772,7 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
             continue;
         }
 
-        if (overload.result_type.with_lanes(1) != result_type.with_lanes(1)) {
+        if (overload.result_type.element_of() != result_type.element_of()) {
             debug(debug_level) << "Wrong result type\n";
             continue;
         }
@@ -4778,14 +4782,14 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
             if (args[i].type().is_scalar()) {
                 // Allow lossless casting for scalar arguments, and
                 // allow broadcasting to vector arguments.
-                if (!lossless_cast(overload.arg_types[i].with_lanes(1), args[i]).defined()) {
+                if (!lossless_cast(overload.arg_types[i].element_of(), args[i]).defined()) {
                     match = false;
                     debug(debug_level) << "Cannot promote scalar argument " << i << "\n";
                     break;
                 }
             } else if (overload.arg_types[i].is_vector()) {
                 // Vector arguments must be exact.
-                if (overload.arg_types[i].with_lanes(1) != args[i].type().with_lanes(1)) {
+                if (overload.arg_types[i].element_of() != args[i].type().element_of()) {
                     match = false;
                     debug(debug_level) << "Vector types not equal " << i << "\n";
                     break;
@@ -4795,11 +4799,11 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
                 debug(debug_level) << "Cannot pass a vector argument to a scalar parameter " << i << "\n";
             }
 
-            if (args[i].type().lanes() == 1) {
+            if (args[i].type().is_scalar()) {
                 // We can broadcast the argument.
                 // TODO: Should we prioritize overloads that don't need this?
-            } else if (overload.arg_types[i].lanes() == 1) {
-                if (args[i].type().lanes() != 1) {
+            } else if (overload.arg_types[i].is_scalar()) {
+                if (args[i].type().is_vector()) {
                     match = false;
                     debug(debug_level) << "Cannot pass vector to scalar argument " << i << "\n";
                     break;
@@ -4844,7 +4848,7 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
         for (size_t i = 0; i < args.size(); i++) {
             Expr promoted_arg = args[i];
             if (args[i].type().is_scalar()) {
-                promoted_arg = lossless_cast(resolved->arg_types[i].with_lanes(1), promoted_arg);
+                promoted_arg = lossless_cast(resolved->arg_types[i].element_of(), promoted_arg);
             }
             if (resolved->arg_types[i].is_vector() && args[i].type().is_scalar() && result_type.lanes() > 1) {
                 // We're passing a scalar to a vector argument, broadcast it.

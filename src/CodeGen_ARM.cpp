@@ -164,12 +164,14 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 
 namespace {
 
+constexpr int max_intrinsic_args = 4;
+
 struct ArmIntrinsic {
     const char *arm32;
     const char *arm64;
     halide_type_t ret_type;
     const char *name;
-    halide_type_t arg_types[4];
+    halide_type_t arg_types[max_intrinsic_args];
     int flags;
     enum {
         AllowUnsignedOp1 = 1 << 0,  // Generate a second version of the instruction with the second operand unsigned.
