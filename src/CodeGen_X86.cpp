@@ -451,12 +451,14 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         }
         if (a.defined() && b.defined()) {
             value = call_overloaded_intrin(op->type, "pmaddwd", {a, b});
-            if (init.defined()) {
-                Value *x = value;
-                Value *y = codegen(init);
-                value = builder->CreateAdd(x, y);
+            if (value) {
+                if (init.defined()) {
+                    Value *x = value;
+                    Value *y = codegen(init);
+                    value = builder->CreateAdd(x, y);
+                }
+                return;
             }
-            return;
         }
     }
 
