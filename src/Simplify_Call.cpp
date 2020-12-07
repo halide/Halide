@@ -157,6 +157,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::shift_left) ||
                op->is_intrinsic(Call::shift_right)) {
         Expr a = mutate(op->args[0], nullptr);
+        // TODO: When simplifying b, it would be nice to specify the min/max useful bounds, so
+        // stronger simplifications could occur. For example, x >> min(-i8, 0) should be simplified
+        // to x >> -max(i8, 0) and then x << max(i8, 0). This isn't safe because -i8 can overflow.
         ExprInfo b_info;
         Expr b = mutate(op->args[1], &b_info);
 
@@ -206,6 +209,15 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 } else {
                     return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                 }
+            }
+        }
+
+        // Rewrite shifts with negated RHSes as shifts of the other direction.
+        if (const Sub *sub = b.as<Sub>()) {
+            if (is_const_zero(sub->a)) {
+                result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
+                b = sub->b;
+                return mutate(Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic), bounds);
             }
         }
 
