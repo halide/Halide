@@ -1,12 +1,12 @@
-#include "tflite_parser.h"
+#include "tflite/tflite_parser.h"
 
 #include <algorithm>
 #include <iostream>
 #include <memory>
 
-#include "error_util.h"
-#include "ops.h"
+#include "interpreter/ops.h"
 #include "tflite_schema_generated.h"
+#include "util/error_util.h"
 
 namespace interpret_nn {
 

@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "model.h"
+#include "interpreter/model.h"
 
 namespace interpret_nn {
 

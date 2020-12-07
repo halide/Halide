@@ -5,10 +5,10 @@
 #include <iostream>
 #include <random>
 
-#include "buffer_util.h"
-#include "error_util.h"
 #include "halide_benchmark.h"
-#include "ops.h"
+#include "interpreter/ops.h"
+#include "util/buffer_util.h"
+#include "util/error_util.h"
 
 namespace interpret_nn {
 namespace op_test {

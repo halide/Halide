@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-#include "error_util.h"
+#include "util/error_util.h"
 
 namespace interpret_nn {
 
