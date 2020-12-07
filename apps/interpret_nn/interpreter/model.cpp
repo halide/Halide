@@ -1,5 +1,5 @@
-#include "model.h"
-#include "error_util.h"
+#include "interpreter/model.h"
+#include "util/error_util.h"
 
 #include <cmath>
 #include <list>

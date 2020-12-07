@@ -1,5 +1,5 @@
-#include "ops.h"
-#include "error_util.h"
+#include "interpreter/ops.h"
+#include "util/error_util.h"
 
 #include <atomic>
 #include <cmath>

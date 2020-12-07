@@ -7,8 +7,8 @@
 #include <vector>
 
 #include "HalideBuffer.h"
-#include "error_util.h"
 #include "interval.h"
+#include "util/error_util.h"
 
 namespace interpret_nn {
 
