@@ -76,21 +76,21 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 
     // RSHRN - Rounding shift right narrow (by immediate in [1, LHS bits])
     casts.emplace_back("rounding_shift_right_narrow", i8(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
-    casts.emplace_back("rounding_shift_right_narrow", i16(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("rounding_shift_right_narrow", i32(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
     casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_u16x_, bc(wild_u16_))));
-    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_u32x_, bc(wild_u32_))));
-    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_u64x_, bc(wild_u64_))));
     casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
+    casts.emplace_back("rounding_shift_right_narrow", i16(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
+    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_u32x_, bc(wild_u32_))));
     casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
+    casts.emplace_back("rounding_shift_right_narrow", i32(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
+    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_u64x_, bc(wild_u64_))));
     casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
 
     // SHRN - Shift right narrow (by immediate in [1, LHS bits])
     casts.emplace_back("shift_right_narrow", i8(wild_i16x_ >> bc(wild_u16_)));
-    casts.emplace_back("shift_right_narrow", i16(wild_i32x_ >> bc(wild_u32_)));
-    casts.emplace_back("shift_right_narrow", i32(wild_i64x_ >> bc(wild_u64_)));
     casts.emplace_back("shift_right_narrow", u8(wild_u16x_ >> bc(wild_u16_)));
+    casts.emplace_back("shift_right_narrow", i16(wild_i32x_ >> bc(wild_u32_)));
     casts.emplace_back("shift_right_narrow", u16(wild_u32x_ >> bc(wild_u32_)));
+    casts.emplace_back("shift_right_narrow", i32(wild_i64x_ >> bc(wild_u64_)));
     casts.emplace_back("shift_right_narrow", u32(wild_u64x_ >> bc(wild_u64_)));
 
     // SQRSHL, UQRSHL - Saturating rounding shift left (by signed vector)
@@ -98,13 +98,13 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 
     // SQRSHRN, SQRSHRUN, UQRSHRN - Saturating rounding narrowing shift right narrow (by immediate in [1, output bits])
     casts.emplace_back("saturating_rounding_shift_right_narrow", i8_sat(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i16_sat(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
     casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_u16x_, bc(wild_u16_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_u32x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, bc(wild_u64_))));
     casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", i16_sat(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_u32x_, bc(wild_u32_))));
     casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, bc(wild_u64_))));
     casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
 
     // SQSHL, UQSHL, SQSHLU - Saturating shift left by signed register.
@@ -126,13 +126,13 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 
     // SQSHRN, UQSHRN, SQRSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
     casts.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> bc(wild_u16_)));
-    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> bc(wild_u32_)));
-    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> bc(wild_u64_)));
     casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> bc(wild_u16_)));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> bc(wild_u32_)));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> bc(wild_u64_)));
     casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> bc(wild_u16_)));
+    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> bc(wild_u32_)));
+    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> bc(wild_u32_)));
     casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> bc(wild_u32_)));
+    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> bc(wild_u64_)));
+    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> bc(wild_u64_)));
     casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> bc(wild_u64_)));
 
     // SRSHL, URSHL - Rounding shift left (by signed vector)
@@ -146,13 +146,13 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 
     // SQXTN, UQXTN, SQXTUN - Saturating narrow.
     casts.emplace_back("saturating_narrow", i8_sat(wild_i16x_));
-    casts.emplace_back("saturating_narrow", i16_sat(wild_i32x_));
-    casts.emplace_back("saturating_narrow", i32_sat(wild_i64x_));
     casts.emplace_back("saturating_narrow", u8_sat(wild_u16x_));
-    casts.emplace_back("saturating_narrow", u16_sat(wild_u32x_));
-    casts.emplace_back("saturating_narrow", u32_sat(wild_u64x_));
     casts.emplace_back("saturating_narrow", u8_sat(wild_i16x_));
+    casts.emplace_back("saturating_narrow", i16_sat(wild_i32x_));
+    casts.emplace_back("saturating_narrow", u16_sat(wild_u32x_));
     casts.emplace_back("saturating_narrow", u16_sat(wild_i32x_));
+    casts.emplace_back("saturating_narrow", i32_sat(wild_i64x_));
+    casts.emplace_back("saturating_narrow", u32_sat(wild_u64x_));
     casts.emplace_back("saturating_narrow", u32_sat(wild_i64x_));
 
     // SQNEG - Saturating negate
@@ -316,7 +316,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vqrshifts", "sqrshl", Int(64, 2), "saturating_rounding_shift_left", {Int(64, 2), Int(64, 2)}},
     {"vqrshiftu", "uqrshl", UInt(64, 2), "saturating_rounding_shift_left", {UInt(64, 2), Int(64, 2)}},
 
-    // SQRSHRN, UQRSHRN, SQRSHRUN - Saturating rounding narrowing shift right narrow (by immediate in [1, output bits])
+    // SQRSHRN, UQRSHRN, SQRSHRUN - Saturating rounding narrowing shift right (by immediate in [1, output bits])
     // arm32 expects a vector RHS of the same type as the LHS except signed.
     {"vqrshiftns", nullptr, Int(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
     {"vqrshiftnu", nullptr, UInt(8, 8), "saturating_rounding_shift_right_narrow", {UInt(16, 8), Int(16, 8)}},
