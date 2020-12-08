@@ -1209,9 +1209,9 @@ public:
             check(arm32 ? "vrhadd.u32" : "urhadd*v*s", 2 * w, u32((u64(u32_1) + u64(u32_2) + 1) / 2));
 
             // VRSHL    I       -       Rounding Shift Left
-            Expr shift_8 = (i8_1 % 8) - 4;
-            Expr shift_16 = (i16_1 % 16) - 8;
-            Expr shift_32 = (i32_1 % 32) - 16;
+            Expr shift_8 = (i8_2 % 8) - 4;
+            Expr shift_16 = (i16_2 % 16) - 8;
+            Expr shift_32 = (i32_2 % 32) - 16;
             Expr round_s8 = (i8(1) >> min(shift_8, 0)) / 2;
             Expr round_s16 = (i16(1) >> min(shift_16, 0)) / 2;
             Expr round_s32 = (i32(1) >> min(shift_32, 0)) / 2;
