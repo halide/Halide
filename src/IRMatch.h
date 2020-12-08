@@ -1339,6 +1339,7 @@ constexpr bool and_reduce(bool first, Args... rest) {
     return first && and_reduce(rest...);
 }
 
+// TODO: this can be replaced with std::min() once we require C++14 or later
 constexpr int const_min(int a, int b) {
     return a < b ? a : b;
 }
