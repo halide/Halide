@@ -702,7 +702,6 @@ Expr lower_sorted_avg(const Expr &a, const Expr &b) {
     return a + (b - a) / 2;
 }
 
-
 Expr lower_intrinsic(const Call *op) {
     if (op->is_intrinsic(Call::widening_add)) {
         internal_assert(op->args.size() == 2);
