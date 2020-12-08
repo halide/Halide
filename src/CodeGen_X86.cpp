@@ -370,6 +370,14 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
+    if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
+        if (op->value.type().bits() < op->type.bits() && op->type.bits() <= 32) {
+            // LLVM/x86 really doesn't like 8 -> 16 bit multiplication.
+            value = codegen(simplify(Mul::make(Cast::make(op->type, mul->args[0]), Cast::make(op->type, mul->args[1]))));
+            return;
+        }
+    }
+
     // Workaround for https://llvm.org/bugs/show_bug.cgi?id=24512
     // LLVM uses a numerically unstable method for vector
     // uint32->float conversion before AVX.
@@ -435,28 +443,43 @@ void CodeGen_X86::visit(const Call *op) {
 void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     const int factor = op->value.type().lanes() / op->type.lanes();
 
-    if (op->type.is_int() &&
-        op->type.bits() == 32 &&
-        factor == 2 &&
-        op->op == VectorReduce::Add) {
-        Expr a, b;
-        if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
-            a = mul->args[0];
-            b = mul->args[1];
-        } else {
-            // One could do a horizontal widening addition with
-            // pmaddwd against a vector of ones. Currently disabled
-            // because I haven't found case where it's clearly better.
+    struct Pattern {
+        VectorReduce::Operator op;
+        int factor;
+        Expr pattern;
+        const char *intrin;
+        Type narrow_type;
+    };
+    static Pattern patterns[] = {
+        { VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16) },
+        { VectorReduce::Add, 2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16) },
+        { VectorReduce::Add, 2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16) },
+        { VectorReduce::Add, 2, i32(widening_mul(wild_u8x_, wild_i8x_)), "pmaddwd", Int(16) },
+        { VectorReduce::Add, 2, i32(widening_mul(wild_u8x_, wild_u8x_)), "pmaddwd", Int(16) },
+        // One could do a horizontal widening addition with
+        // pmaddwd against a vector of ones. Currently disabled
+        // because I haven't found case where it's clearly better.
+    };
 
-            //a = lossless_cast(narrower, op->value);
-            //b = make_const(narrower, 1);
+    std::vector<Expr> matches;
+    for (const Pattern &pattern : patterns) {
+        if (pattern.op != op->op || pattern.factor != factor) {
+            continue;
         }
-        if (a.defined() && b.defined()) {
-            value = call_overloaded_intrin(op->type, "pmaddwd", {a, b});
+        if (expr_match(pattern.pattern, op->value, matches)) {
+            Expr a = matches[0];
+            Expr b = matches[1];
+            a = lossless_cast(pattern.narrow_type.with_lanes(a.type().lanes()), a);
+            b = lossless_cast(pattern.narrow_type.with_lanes(b.type().lanes()), b);
+            internal_assert(a.defined());
+            internal_assert(b.defined());
+
+            value = call_overloaded_intrin(op->type, pattern.intrin, {a, b});
             if (value) {
                 if (init.defined()) {
                     Value *x = value;
                     Value *y = codegen(init);
+                    internal_assert(pattern.op == VectorReduce::Add);
                     value = builder->CreateAdd(x, y);
                 }
                 return;
