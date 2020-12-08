@@ -108,17 +108,17 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
 
     // SQSHL, UQSHL, SQSHLU - Saturating shift left by signed register.
-    for (Expr rhs : {wild_i8x_, wild_u8x_}) {
+    for (const Expr &rhs : {wild_i8x_, wild_u8x_}) {
         casts.emplace_back("saturating_shift_left", i8_sat(widening_shift_left(wild_i8x_, rhs)));
         casts.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_u8x_, rhs)));
         casts.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_i8x_, rhs)));
     }
-    for (Expr rhs : {wild_i16x_, wild_u16x_}) {
+    for (const Expr &rhs : {wild_i16x_, wild_u16x_}) {
         casts.emplace_back("saturating_shift_left", i16_sat(widening_shift_left(wild_i16x_, rhs)));
         casts.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_u16x_, rhs)));
         casts.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_i16x_, rhs)));
     }
-    for (Expr rhs : {wild_i32x_, wild_u32x_}) {
+    for (const Expr &rhs : {wild_i32x_, wild_u32x_}) {
         casts.emplace_back("saturating_shift_left", i32_sat(widening_shift_left(wild_i32x_, rhs)));
         casts.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_u32x_, rhs)));
         casts.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_i32x_, rhs)));

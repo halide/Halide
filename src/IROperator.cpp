@@ -1036,11 +1036,13 @@ Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) 
 }
 
 Expr widen(Expr a) {
-    return Cast::make(a.type().widen(), std::move(a));
+    Type result_type = a.type().widen();
+    return Cast::make(result_type, std::move(a));
 }
 
 Expr narrow(Expr a) {
-    return Cast::make(a.type().narrow(), std::move(a));
+    Type result_type = a.type().narrow();
+    return Cast::make(result_type, std::move(a));
 }
 
 Expr widening_add(Expr a, Expr b) {

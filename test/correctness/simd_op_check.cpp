@@ -1183,8 +1183,8 @@ public:
             check(arm32 ? "vraddhn.i16" : "raddhn*v*h", 8 * w, u8((u32(u16_1 + u16_2) + 128) >> 8));
             check(arm32 ? "vraddhn.i32" : "raddhn*v*s", 4 * w, i16((i32_1 + i32_2 + 32768) >> 16));
             check(arm32 ? "vraddhn.i32" : "raddhn*v*s", 4 * w, u16((u64(u32_1 + u32_2) + 32768) >> 16));
-            check(arm32 ? "vraddhn.i64" : "raddhn*v*d", 2 * w, i32((i64_1 + i64_2 + Expr(1ll << 31)) >> 32));
-            //check(arm32 ? "vraddhn.i64" : "raddhn*v*d", 2 * w, u32((u64_1 + u64_2 + Expr(1ull << 31)) >> 32));
+            check(arm32 ? "vraddhn.i64" : "raddhn*v*d", 2 * w, i32((i64_1 + i64_2 + (Expr(int64_t(1)) << 31)) >> 32));
+            //check(arm32 ? "vraddhn.i64" : "raddhn*v*d", 2 * w, u32((u128(u64_1) + u64_2 + (Expr(uint64_t(1)) << 31)) >> 32));
 
             // VRECPE   I, F    -       Reciprocal Estimate
             check(arm32 ? "vrecpe.f32" : "frecpe*v*s", 2 * w, fast_inverse(f32_1));
@@ -1273,8 +1273,8 @@ public:
             check(arm32 ? "vrsubhn.i16" : "rsubhn*v*h", 8 * w, u8((u32(u16_1 - u16_2) + 128) >> 8));
             check(arm32 ? "vrsubhn.i32" : "rsubhn*v*s", 4 * w, i16((i32_1 - i32_2 + 32768) >> 16));
             check(arm32 ? "vrsubhn.i32" : "rsubhn*v*s", 4 * w, u16((u64(u32_1 - u32_2) + 32768) >> 16));
-            check(arm32 ? "vrsubhn.i64" : "rsubhn*v*d", 2 * w, i32((i64_1 - i64_2 + Expr(1ll << 31)) >> 32));
-            //check(arm32 ? "vrsubhn.i64" : "rsubhn*v*d", 2 * w, u32((u64_1 - u64_2 + Expr(1ull << 31)) >> 32));
+            check(arm32 ? "vrsubhn.i64" : "rsubhn*v*d", 2 * w, i32((i64_1 - i64_2 + (Expr(int64_t(1)) << 31)) >> 32));
+            //check(arm32 ? "vrsubhn.i64" : "rsubhn*v*d", 2 * w, u32((u64_1 - u64_2 + (Expr(uint64_t(1)) << 31)) >> 32));
 
             // VSHL     I       -       Shift Left
             check(arm32 ? "vshl.i8" : "shl*v*b", 8 * w, i8_1 * 16);

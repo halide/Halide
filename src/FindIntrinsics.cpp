@@ -29,18 +29,18 @@ Expr strip_widening_cast(const Expr &x) {
     return lossless_cast(x.type().narrow().with_code(halide_type_uint), x);
 }
 
-Expr saturating_narrow(Expr a) {
+Expr saturating_narrow(const Expr &a) {
     Type narrow = a.type().narrow();
     return saturating_cast(narrow, a);
 }
 
-Expr make_shift_right(Expr a, int const_b) {
+Expr make_shift_right(const Expr &a, int const_b) {
     internal_assert(const_b > 0);
     Expr b = make_const(a.type().with_code(halide_type_uint), const_b);
     return Call::make(a.type(), Call::shift_right, {a, b}, Call::PureIntrinsic);
 }
 
-Expr make_rounding_shift_right(Expr a, int const_b) {
+Expr make_rounding_shift_right(const Expr &a, int const_b) {
     internal_assert(const_b > 0);
     Expr b = make_const(a.type().with_code(halide_type_uint), const_b);
     return Call::make(a.type(), Call::rounding_shift_right, {a, b}, Call::PureIntrinsic);
@@ -612,11 +612,11 @@ protected:
 
 }  // namespace
 
-Stmt find_intrinsics(Stmt s) {
+Stmt find_intrinsics(const Stmt &s) {
     return FindIntrinsics().mutate(s);
 }
 
-Expr find_intrinsics(Expr e) {
+Expr find_intrinsics(const Expr &e) {
     return FindIntrinsics().mutate(e);
 }
 
