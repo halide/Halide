@@ -28,14 +28,14 @@ Expr lower_halving_sub(const Expr &a, const Expr &b);
 Expr lower_rounding_halving_add(const Expr &a, const Expr &b);
 Expr lower_rounding_halving_sub(const Expr &a, const Expr &b);
 
-/** Implement any arithmetic intrinsic. */
+/** Replace one of the above ops with equivalent arithmetic. */
 Expr lower_intrinsic(const Call *op);
 
 /** Replace common arithmetic patterns with intrinsics. */
 Stmt find_intrinsics(Stmt s);
 Expr find_intrinsics(Expr e);
 
-/** The reverse of FIND_INTRINSICS. */
+/** The reverse of find_intrinsics. */
 Expr lower_intrinsics(const Expr &e);
 Stmt lower_intrinsics(const Stmt &s);
 
