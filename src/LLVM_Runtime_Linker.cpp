@@ -570,9 +570,9 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // linking the module will fail.
     if (t.os == Target::IOS || t.os == Target::OSX) {
         for (auto &global_obj : modules[0]->global_objects()) {
-	    global_obj.setComdat(nullptr);
-	}
-	modules[0]->getComdatSymbolTable().clear();
+            global_obj.setComdat(nullptr);
+        }
+        modules[0]->getComdatSymbolTable().clear();
     }
 
     // Enumerate the global variables.
