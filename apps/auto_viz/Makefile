@@ -17,7 +17,7 @@ $$(BIN)/%/auto_viz_demo_$(1)_up.a: $$(GENERATOR_BIN)/auto_viz_demo.generator
 	@mkdir -p $$(@D)
 	$$^ -g auto_viz_demo -o $$(@D) -f auto_viz_demo_$(1)_up \
 		-e $$(GENERATOR_OUTPUTS) \
-		target=$$*-no_runtime-trace_all \
+		target=$$(HL_TARGET)-no_runtime-trace_all \
 		schedule_type=$$$$(echo $(1) | cut -d_ -f1) \
 		upsample=true
 
@@ -25,7 +25,7 @@ $$(BIN)/%/auto_viz_demo_$(1)_down.a: $$(GENERATOR_BIN)/auto_viz_demo.generator
 	@mkdir -p $$(@D)
 	$$^ -g auto_viz_demo -o $$(@D) -f auto_viz_demo_$(1)_down \
 		-e $$(GENERATOR_OUTPUTS) \
-		target=$$*-no_runtime-trace_all \
+		target=$$(HL_TARGET)-no_runtime-trace_all \
 		schedule_type=$$$$(echo $(1) | cut -d_ -f1) \
 		upsample=false
 
@@ -59,7 +59,7 @@ $(foreach V,$(VARIANTS),$(eval $(call GEN_RULES,$(V))))
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/auto_viz_demo.generator
 	@mkdir -p $(@D)
-	$^ -r runtime -o $(@D) target=$*
+	$^ -r runtime -o $(@D) target=$(HL_TARGET)
 
 LIBRARIES = $(foreach V,$(VARIANTS),$(BIN)/%/auto_viz_demo_$(V)_up.a $(BIN)/%/auto_viz_demo_$(V)_down.a)
 $(BIN)/%/auto_viz_demo: auto_viz_demo.cpp $(BIN)/%/runtime.a $(LIBRARIES)

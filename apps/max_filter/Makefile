@@ -12,15 +12,15 @@ $(GENERATOR_BIN)/max_filter.generator: max_filter_generator.cpp $(GENERATOR_DEPS
 
 $(BIN)/%/max_filter.a: $(GENERATOR_BIN)/max_filter.generator
 	@mkdir -p $(@D)
-	$< -g max_filter -f max_filter -o $(BIN)/$* target=$*-no_runtime auto_schedule=false
+	$< -g max_filter -f max_filter -o $(BIN)/$* target=$(HL_TARGET)-no_runtime auto_schedule=false
 
 $(BIN)/%/max_filter_auto_schedule.a: $(GENERATOR_BIN)/max_filter.generator
 	@mkdir -p $(@D)
-	$< -g max_filter -f max_filter_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
+	$< -g max_filter -f max_filter_auto_schedule -o $(BIN)/$* target=$(HL_TARGET)-no_runtime auto_schedule=true
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/max_filter.generator
 	@mkdir -p $(@D)
-	$< -r runtime -o $(BIN)/$* target=$*
+	$< -r runtime -o $(BIN)/$* target=$(HL_TARGET)
 
 $(BIN)/%/filter: filter.cpp $(BIN)/%/max_filter.a $(BIN)/%/max_filter_auto_schedule.a $(BIN)/%/runtime.a
 	@mkdir -p $(@D)

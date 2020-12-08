@@ -31,7 +31,7 @@ $(BIN)/hexagon-32-noos-%/filters.h:
 $(BIN)/%/filters.h:
 	@mkdir -p $(@D)
 	make -C ../../ bin/correctness_simd_op_check
-	cd $(BIN)/$* && HL_TARGET=$* LD_LIBRARY_PATH=../../../../bin:$$LD_LIBRARY_PATH ../../../../bin/correctness_simd_op_check
+	cd $(BIN)/$* && HL_target=$(HL_TARGET) LD_LIBRARY_PATH=../../../../bin:$$LD_LIBRARY_PATH ../../../../bin/correctness_simd_op_check
 	cat $(BIN)/$*/test_*.h > $(BIN)/$*/filter_headers.h
 	echo "filter filters[] = {" > $(BIN)/$*/filters.h
 	cd $(BIN)/$*; for f in test_*.h; do n=$${f/.h/}; echo '{"'$${n}'", &'$${n}'},'; done >> filters.h

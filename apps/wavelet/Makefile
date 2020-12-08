@@ -21,7 +21,7 @@ define GEN_RULE
 $$(BIN)/%/$(1).a: $$(GENERATOR_BIN)/$(1).generator
 	@echo Running Generator $$<
 	@mkdir -p $$(@D)
-	@$$< -g $(1) -o $$(@D) target=$$*-no_runtime
+	@$$< -g $(1) -o $$(@D) target=$$(HL_TARGET)-no_runtime
 endef
 
 $(foreach V,$(VARIANTS),$(eval $(call GEN_RULE,$(V))))
@@ -29,7 +29,7 @@ $(foreach V,$(VARIANTS),$(eval $(call GEN_RULE,$(V))))
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/haar_x.generator
 	@echo Compiling Halide runtime for target $*
 	@mkdir -p $(@D)
-	@$< -r runtime -o $(@D) target=$*
+	@$< -r runtime -o $(@D) target=$(HL_TARGET)
 
 $(BIN)/%/wavelet: wavelet.cpp $(foreach V,$(VARIANTS),$(BIN)/%/$(V).a) $(BIN)/%/runtime.a
 	@$(CXX) $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN)/$* $^ $(IMAGE_IO_LIBS) $(LDFLAGS) -o $@

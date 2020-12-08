@@ -57,7 +57,7 @@ $(GENERATOR_BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERA
 
 #$(BIN)/%/onnx_mnist_model.a : $(GENERATOR_BIN)/onnx_converter.generator $(BIN)/%/onnx_model_zoo/mnist/model.onnx
 #	@mkdir -p $(@D)
-#	$^ -g onnx_model_inference -o $(@D) -f onnx_model_inference target=$* model_file_path=$(BIN)/$*/onnx_model_zoo/mnist/model.onnx
+#	$^ -g onnx_model_inference -o $(@D) -f onnx_model_inference target=$(HL_TARGET) model_file_path=$(BIN)/$*/onnx_model_zoo/mnist/model.onnx
 
 $(BIN)/%/test_model.onnx: test_model_proto.txt $(BIN)/%/onnx/onnx.proto
 	@mkdir -p $(@D)
@@ -65,7 +65,7 @@ $(BIN)/%/test_model.onnx: test_model_proto.txt $(BIN)/%/onnx/onnx.proto
 
 $(BIN)/%/test_model.a: $(GENERATOR_BIN)/onnx_converter.generator $(BIN)/%/test_model.onnx
 	@mkdir -p $(@D)
-	$< -g onnx_model_generator -o $(@D) -f test_model target=$* model_file_path=$(BIN)/$*/test_model.onnx
+	$< -g onnx_model_generator -o $(@D) -f test_model target=$(HL_TARGET) model_file_path=$(BIN)/$*/test_model.onnx
 
 $(BIN)/%/onnx_converter_generator_test: onnx_converter_generator_test.cc $(BIN)/%/test_model.a
 	@mkdir -p $(@D)

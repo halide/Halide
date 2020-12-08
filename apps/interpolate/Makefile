@@ -12,15 +12,15 @@ $(GENERATOR_BIN)/interpolate.generator: interpolate_generator.cpp $(GENERATOR_DE
 
 $(BIN)/%/interpolate.a: $(GENERATOR_BIN)/interpolate.generator
 	@mkdir -p $(@D)
-	$< -g interpolate -f interpolate -o $(BIN)/$* target=$*-no_runtime auto_schedule=false
+	$< -g interpolate -f interpolate -o $(BIN)/$* target=$(HL_TARGET)-no_runtime auto_schedule=false
 
 $(BIN)/%/interpolate_auto_schedule.a: $(GENERATOR_BIN)/interpolate.generator
 	@mkdir -p $(@D)
-	$< -g interpolate -f interpolate_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
+	$< -g interpolate -f interpolate_auto_schedule -o $(BIN)/$* target=$(HL_TARGET)-no_runtime auto_schedule=true
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/interpolate.generator
 	@mkdir -p $(@D)
-	$< -r runtime -o $(BIN)/$* target=$*
+	$< -r runtime -o $(BIN)/$* target=$(HL_TARGET)
 
 $(BIN)/%/filter: filter.cpp $(BIN)/%/interpolate.a $(BIN)/%/interpolate_auto_schedule.a $(BIN)/%/runtime.a
 	@mkdir -p $(@D)

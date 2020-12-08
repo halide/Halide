@@ -84,7 +84,7 @@ $(BIN)/%/add_float32.a: $(GENERATOR_BIN)/add.generator
 		-f add_float32 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$* \
+		target=$(HL_TARGET) \
 		auto_schedule=false
 
 $(BIN)/%/add_halidegrad_float32.a: $(GENERATOR_BIN)/add.generator
@@ -96,7 +96,7 @@ $(BIN)/%/add_halidegrad_float32.a: $(GENERATOR_BIN)/add.generator
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
 		-d 1 \
-		target=$* \
+		target=$(HL_TARGET) \
 		auto_schedule=true
 
 $(BIN)/%/add_grad_float32.a: $(GENERATOR_BIN)/add.generator
@@ -107,7 +107,7 @@ $(BIN)/%/add_grad_float32.a: $(GENERATOR_BIN)/add.generator
 		-f add_grad_float32 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$* \
+		target=$(HL_TARGET) \
 		auto_schedule=false
 
 $(BIN)/%/add_float64.a: $(GENERATOR_BIN)/add.generator
@@ -118,7 +118,7 @@ $(BIN)/%/add_float64.a: $(GENERATOR_BIN)/add.generator
 		-f add_float64 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$* \
+		target=$(HL_TARGET) \
 		auto_schedule=false
 
 $(BIN)/%/add_halidegrad_float64.a: $(GENERATOR_BIN)/add.generator
@@ -129,9 +129,9 @@ $(BIN)/%/add_halidegrad_float64.a: $(GENERATOR_BIN)/add.generator
 		-f add_halidegrad_float64 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$* \
+		target=$(HL_TARGET) \
 		-d 1 \
-		target=$* \
+		target=$(HL_TARGET) \
 		auto_schedule=true
 
 $(BIN)/%/add_grad_float64.a: $(GENERATOR_BIN)/add.generator
@@ -142,7 +142,7 @@ $(BIN)/%/add_grad_float64.a: $(GENERATOR_BIN)/add.generator
 		-f add_grad_float64 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$* \
+		target=$(HL_TARGET) \
 		auto_schedule=false
 
 # -----------------------------------------------------------------------------

@@ -10,15 +10,15 @@ $(GENERATOR_BIN)/iir_blur.generator: iir_blur_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/iir_blur.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)
-	$< -g iir_blur -f iir_blur -o $(BIN)/$* target=$*-no_runtime auto_schedule=false
+	$< -g iir_blur -f iir_blur -o $(BIN)/$* target=$(HL_TARGET)-no_runtime auto_schedule=false
 
 $(BIN)/%/iir_blur_auto_schedule.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)
-	$< -g iir_blur -f iir_blur_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
+	$< -g iir_blur -f iir_blur_auto_schedule -o $(BIN)/$* target=$(HL_TARGET)-no_runtime auto_schedule=true
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)
-	$< -r runtime -o $(BIN)/$* target=$*
+	$< -r runtime -o $(BIN)/$* target=$(HL_TARGET)
 
 $(BIN)/%/filter: filter.cpp $(BIN)/%/iir_blur.a $(BIN)/%/iir_blur_auto_schedule.a $(BIN)/%/runtime.a
 	@mkdir -p $(@D)

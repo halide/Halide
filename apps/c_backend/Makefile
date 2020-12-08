@@ -16,11 +16,11 @@ $(GENERATOR_BIN)/pipeline.generator: pipeline_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/pipeline_native.a: $(GENERATOR_BIN)/pipeline.generator
 	@mkdir -p $(@D)
-	$^ -g pipeline -o $(@D) -f pipeline_native -e $(GENERATOR_OUTPUTS) target=$*
+	$^ -g pipeline -o $(@D) -f pipeline_native -e $(GENERATOR_OUTPUTS) target=$(HL_TARGET)
 
 $(BIN)/%/pipeline_c.halide_generated.cpp: $(GENERATOR_BIN)/pipeline.generator
 	@mkdir -p $(@D)
-	$^ -g pipeline -o $(@D) -f pipeline_c -e c_source,c_header target=$*
+	$^ -g pipeline -o $(@D) -f pipeline_c -e c_source,c_header target=$(HL_TARGET)
 
 $(BIN)/%/run: run.cpp $(BIN)/%/pipeline_c.halide_generated.cpp $(BIN)/%/pipeline_native.a
 	$(CXX) $(CXXFLAGS) -Wall -I$(BIN)/$* $(filter-out %.h,$^) -o $@  $(LDFLAGS)

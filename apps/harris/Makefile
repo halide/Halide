@@ -10,15 +10,15 @@ $(GENERATOR_BIN)/harris.generator: harris_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/harris.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)
-	$< -g harris -f harris -o $(BIN)/$* target=$*-no_runtime auto_schedule=false
+	$< -g harris -f harris -o $(BIN)/$* target=$(HL_TARGET)-no_runtime auto_schedule=false
 
 $(BIN)/%/harris_auto_schedule.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)
-	$< -g harris -f harris_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
+	$< -g harris -f harris_auto_schedule -o $(BIN)/$* target=$(HL_TARGET)-no_runtime auto_schedule=true
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)
-	$< -r runtime -o $(BIN)/$* target=$*
+	$< -r runtime -o $(BIN)/$* target=$(HL_TARGET)
 
 $(BIN)/%/filter: filter.cpp $(BIN)/%/harris.a $(BIN)/%/harris_auto_schedule.a $(BIN)/%/runtime.a
 	@mkdir -p $(@D)

@@ -33,7 +33,7 @@ define GEN_RULE
 $$(BIN)/%/resize_$(1).a: $$(GENERATOR_BIN)/resize.generator
 	@mkdir -p $$(@D)
 	$$^ -g resize -o $$(@D) -f resize_$(1) \
-	target=$$*-no_runtime \
+	target=$$(HL_TARGET)-no_runtime \
 	interpolation_type=$$$$(echo $(1) | cut -d_ -f1) \
 	input.type=$$$$(echo $(1) | cut -d_ -f2) \
 	upsample=$$$$(echo $(1) | cut -d_ -f3 | sed 's/up/true/;s/down/false/')
@@ -43,7 +43,7 @@ $(foreach V,$(VARIANTS),$(eval $(call GEN_RULE,$(V))))
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/resize.generator
 	@mkdir -p $(@D)
-	$^ -r runtime -o $(@D) target=$*
+	$^ -r runtime -o $(@D) target=$(HL_TARGET)
 
 $(BIN)/%/resize: resize.cpp $(LIBRARIES) $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
