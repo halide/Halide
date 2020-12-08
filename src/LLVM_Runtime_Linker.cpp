@@ -568,6 +568,10 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // only works if there is a single instance, which is generally
     // the case for the runtime. Presumably if this isn't true,
     // linking the module will fail.
+    //
+    // Comdats are left in for other platforms as they are required
+    // for certain things on Windows and they are useful in general in
+    // ELF based formats.
     if (t.os == Target::IOS || t.os == Target::OSX) {
         for (auto &global_obj : modules[0]->global_objects()) {
             global_obj.setComdat(nullptr);
