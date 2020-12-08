@@ -12,6 +12,11 @@ using namespace Halide::ConciseCasts;
 
 namespace {
 
+bool find_intrinsics_for_type(const Type &t) {
+    // Currently, we only try to find and replace intrinsics for vector types.
+    return t.is_vector();
+}
+
 Expr lossless_narrow(const Expr &x) {
     return lossless_cast(x.type().narrow(), x);
 }
@@ -224,6 +229,10 @@ protected:
     IRMatcher::WildConst<0> c0;
 
     Expr visit(const Add *op) override {
+        if (!find_intrinsics_for_type(op->type)) {
+            return IRMutator::visit(op);
+        }
+
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
@@ -250,6 +259,10 @@ protected:
     }
 
     Expr visit(const Sub *op) override {
+        if (!find_intrinsics_for_type(op->type)) {
+            return IRMutator::visit(op);
+        }
+
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
@@ -287,6 +300,10 @@ protected:
     }
 
     Expr visit(const Mul *op) override {
+        if (!find_intrinsics_for_type(op->type)) {
+            return IRMutator::visit(op);
+        }
+
         if (as_const_int(op->b) || as_const_uint(op->b)) {
             // Distribute constants through add/sub. Do this before we muck everything up with widening
             // intrinsics.
@@ -333,6 +350,10 @@ protected:
     }
 
     Expr visit(const Div *op) override {
+        if (!find_intrinsics_for_type(op->type)) {
+            return IRMutator::visit(op);
+        }
+
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
@@ -348,6 +369,10 @@ protected:
     }
 
     Expr visit(const Mod *op) override {
+        if (!find_intrinsics_for_type(op->type)) {
+            return IRMutator::visit(op);
+        }
+
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
@@ -364,6 +389,10 @@ protected:
 
     template <class MinOrMax>
     Expr visit_min_or_max(const MinOrMax *op) {
+        if (!find_intrinsics_for_type(op->type)) {
+            return IRMutator::visit(op);
+        }
+
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
@@ -390,6 +419,10 @@ protected:
     }
 
     Expr visit(const Cast *op) override {
+        if (!find_intrinsics_for_type(op->type)) {
+            return IRMutator::visit(op);
+        }
+
         Expr value = mutate(op->value);
 
         // This mutator can generate redundant casts. We can't use the simplifier because it
@@ -472,6 +505,10 @@ protected:
     }
 
     Expr visit(const Call *op) override {
+        if (!find_intrinsics_for_type(op->type)) {
+            return IRMutator::visit(op);
+        }
+
         Expr mutated = IRMutator::visit(op);
         op = mutated.as<Call>();
         if (!op) {
