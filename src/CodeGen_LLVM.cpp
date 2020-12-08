@@ -4797,6 +4797,7 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
             } else {
                 match = false;
                 debug(debug_level) << "Cannot pass a vector argument to a scalar parameter " << i << "\n";
+                break;
             }
 
             if (args[i].type().is_scalar()) {
