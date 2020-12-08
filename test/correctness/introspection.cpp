@@ -6,17 +6,17 @@ using namespace Halide;
 // The check has to go in the Halide namespace, because get_source_location looks for the first thing outside of it
 namespace Halide {
 bool paths_equal(const std::string &path1, const std::string &path2) {
-    int length_delta = path1.size() - path2.size();
-    if (length_delta > 0) {
-        char sep = path1[length_delta - 1];
-        return (sep == '/' || sep == '\\') &&
-               path1.substr(length_delta) == path2;
-    } else if (length_delta < 0) {
-        char sep = path2[-length_delta - 1];
-        return (sep == '/' || sep == '\\') &&
-               path2.substr(-length_delta) == path1;
+    bool one_is_first = path1.size() >= path2.size();
+    const std::string &first(one_is_first ? path1 : path2);
+    const std::string &second(one_is_first ? path2 : path1);
+
+    if (first.empty() || first.size() == second.size()) {
+        return first == second;
     }
-    return path1 == path2;
+    size_t length_delta = first.size() - second.size();
+    char sep = first[length_delta - 1];
+    return (sep == '/' || sep == '\\') &&
+           first.substr(length_delta) == second;
 }
 
 void check(const void *var, const std::string &type,
