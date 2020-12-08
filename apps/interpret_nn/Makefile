@@ -40,7 +40,19 @@ test: test_ops
 clean:
 	rm -rf $(BIN)
 
-APP_CXXFLAGS = -I$(MAKEFILE_DIR)
+# Choosing TFLite 2.3.0 because it's the most recent stable release with an Android AAR file available.
+# (Inexplicably, there doesn't seem to be an AAR for 2.3.1.)
+# Upgrade
+TFLITE_VERSION_MAJOR ?= 2
+TFLITE_VERSION_MINOR ?= 3
+TFLITE_VERSION_PATCH ?= 0
+
+TFLITE_TAG = v$(TFLITE_VERSION_MAJOR).$(TFLITE_VERSION_MINOR).$(TFLITE_VERSION_PATCH)
+
+# Define `TFLITE_VERSION` here to allow for code that compiles against multiple versions of
+# TFLite (both the C API and the Schema). This deliberately ignores the 'patch' version so
+# 2.3.x is 23. (Yes, this is inadequate if a minor version ever goes above 9.)
+APP_CXXFLAGS = -I$(MAKEFILE_DIR) -DTFLITE_VERSION=$(TFLITE_VERSION_MAJOR)$(TFLITE_VERSION_MINOR)
 
 # ---------------------- halide
 
@@ -131,9 +143,6 @@ INTERPRETER_DEPS = \
 	$(OPS_HALIDE)
 
 # ---------------------- tflite
-
-# TODO: switch to v2.4.0 once released
-TFLITE_TAG ?= v2.4.0-rc3
 
 $(BIN)/schema/tflite_schema.fbs:
 	@echo Fetching tflite_schema.fbs...
@@ -242,24 +251,46 @@ $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/schema/tflite_schema_direct
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(APP_CXXFLAGS) $(TFLITE_SCHEMA_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
 
-# compare_vs_tflite requires the tflite includes and static library.
+# compare_vs_tflite requires the tflite headers and library.
 #
-# For now, you must clone and build tflite locally if you want to build compare_vs_tflite:
+# For host, you need to clone and build locally (if there is a prebuilt
+# library for TFLite for linux, etc # that's generally available, I haven't
+# found it, except for the Python plugins, which won't work for our purposes).
+# Note that we require the C API for TFLite (not the C++ API); building
+# `//tensorflow/lite:libtensorflowlite.so` will only provide the C++ API. To
+# get the C API version, use `bazel build -c opt //tensorflow/lite/c:tensorflowlite_c`
+# instead.
+
+ifneq (,$(findstring host,$(HL_TARGET)))
+
+# Normally, TENSORFLOW_BASE is the only symbol you need to define.
+# (This seems like a plausible default.)
 #
-# 	- git clone https://github.com/tensorflow/tensorflow
-# 	- cd tensorflow
-#   - git checkout $(TFLITE_TAG)
-# 	- ./tensorflow/lite/tools/make/download_dependencies.sh
-# 	- make -j $(nproc) TARGET=native -C . -f ./tensorflow/lite/tools/make/Makefile
-# 	- library is at tensorflow/lite/tools/make/gen/native_x86_64/lib/libtensorflow-lite.a
+# Sample steps to build:
+#
+# 	$ git clone https://github.com/tensorflow/tensorflow
+# 	$ cd tensorflow
+#   $ git checkout $(TFLITE_TAG)
+#	$ ./configure
+# 	$ bazelisk build -c opt //tensorflow/lite/c:tensorflowlite_c
+#
+# (Note that TFLite is very picky about the version of Bazel installed, thus this suggests
+# using bazelisk rather than bazel; see https://github.com/bazelbuild/bazelisk)
 
-TENSORFLOW_BASE ?= ${HOME}/GitHub/tensorflow
-TFLITE_BASE ?= $(TENSORFLOW_BASE)/tensorflow/lite
-TFLITE_STATIC_LIB ?= $(TFLITE_BASE)/tools/make/gen/native_x86_64/lib/libtensorflow-lite.a
+TENSORFLOW_BASE ?= $(HOME)/GitHub/tensorflow
+TFLITE_INCLUDES ?= $(TENSORFLOW_BASE)
+TFLITE_SHARED_LIBRARY ?= $(TENSORFLOW_BASE)/bazel-bin/tensorflow/lite/c/libtensorflowlite_c.$(SHARED_EXT)
 
-TENSORFLOW_INCLUDES ?= $(TENSORFLOW_BASE)
+else
 
-$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS)  $(TFLITE_PARSER_DEPS) $(UTIL_DEPS)
+# Other values for HL_TARGET will be special-cased here in the future.
+# Unhandled cases will fail to compile/link.
+TFLITE_INCLUDES ?= ERROR_TODO
+TFLITE_SHARED_LIBRARY ?= ERROR_TODO
+
+endif
+
+$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) $(TFLITE_SHARED_LIBRARY)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(TENSORFLOW_INCLUDES) $(filter %.cpp %.o %.a,$^) $(TFLITE_STATIC_LIB) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(TFLITE_INCLUDES) -Wl,-rpath,$(dir $(TFLITE_SHARED_LIBRARY)) $(filter %.cpp %.o %.a %.$(SHARED_EXT),$^) -o $@ $(LDFLAGS-$*)
 

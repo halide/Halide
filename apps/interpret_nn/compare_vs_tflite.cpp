@@ -52,7 +52,10 @@ halide_type_t tf_lite_type_to_halide_type(TfLiteType t) {
     case kTfLiteString:
     case kTfLiteNoType:
     case kTfLiteComplex64:
+#if TFLITE_VERSION >= 24
     case kTfLiteComplex128:
+#endif
+    default:
         CHECK(0) << "Unsupported TfLiteType: " << TfLiteTypeGetName(t);
         return halide_type_t();
     }

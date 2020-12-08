@@ -13,9 +13,13 @@ namespace interpret_nn {
 namespace {
 
 tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
+#if TFLITE_VERSION >= 24
     return std::max(
         op_code->builtin_code(),
         static_cast<tflite::BuiltinOperator>(op_code->deprecated_builtin_code()));
+#else
+    return op_code->builtin_code();
+#endif
 }
 
 class Parser {
@@ -71,8 +75,10 @@ public:
             return TensorType::Int8;
         case tflite::TensorType_FLOAT64:
             return TensorType::Float64;
+#if TFLITE_VERSION >= 24
         case tflite::TensorType_COMPLEX128:
             return TensorType::Complex128;
+#endif
         default:
             CHECK(0) << "Unknown tflite::TensorType";
         }
