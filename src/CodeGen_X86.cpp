@@ -441,21 +441,24 @@ void CodeGen_X86::visit(const Call *op) {
 }
 
 void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (op->op != VectorReduce::Add) {
+        CodeGen_Posix::codegen_vector_reduce(op, init);
+        return;
+    }
     const int factor = op->value.type().lanes() / op->type.lanes();
 
     struct Pattern {
-        VectorReduce::Operator op;
         int factor;
         Expr pattern;
         const char *intrin;
         Type narrow_type;
     };
     static Pattern patterns[] = {
-        { VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16) },
-        { VectorReduce::Add, 2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16) },
-        { VectorReduce::Add, 2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16) },
-        { VectorReduce::Add, 2, i32(widening_mul(wild_u8x_, wild_i8x_)), "pmaddwd", Int(16) },
-        { VectorReduce::Add, 2, i32(widening_mul(wild_u8x_, wild_u8x_)), "pmaddwd", Int(16) },
+        { 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16) },
+        { 2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16) },
+        { 2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16) },
+        { 2, i32(widening_mul(wild_u8x_, wild_i8x_)), "pmaddwd", Int(16) },
+        { 2, i32(widening_mul(wild_u8x_, wild_u8x_)), "pmaddwd", Int(16) },
         // One could do a horizontal widening addition with
         // pmaddwd against a vector of ones. Currently disabled
         // because I haven't found case where it's clearly better.
@@ -463,7 +466,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
 
     std::vector<Expr> matches;
     for (const Pattern &pattern : patterns) {
-        if (pattern.op != op->op || pattern.factor != factor) {
+        if (pattern.factor != factor) {
             continue;
         }
         if (expr_match(pattern.pattern, op->value, matches)) {
@@ -479,7 +482,6 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 if (init.defined()) {
                     Value *x = value;
                     Value *y = codegen(init);
-                    internal_assert(pattern.op == VectorReduce::Add);
                     value = builder->CreateAdd(x, y);
                 }
                 return;
