@@ -83,8 +83,9 @@ set(RUNTIME_CPP
     trace_helper
     tracing
     wasm_cpu_features
-    windows_clock_x86
-    windows_clock_arm
+    windows_clock
+    #windows_clock_x86
+    #windows_clock_arm
     windows_cuda
     windows_d3d12compute_x86
 	windows_d3d12compute_arm
@@ -203,6 +204,7 @@ foreach (i IN LISTS RUNTIME_CPP)
 					set(fpic "")
 					set(TARGET "i386-unknown-windows-unknown")
 				else ()
+                    set(fpic "")
                     set(TARGET "le64-unknown-unknown-unknown")
 				endif ()
 			endif()
