@@ -54,9 +54,13 @@ using std::make_unique;
 #endif
 
 tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
+#if TFLITE_VERSION >= 24
     return std::max(
         op_code->builtin_code(),
         static_cast<tflite::BuiltinOperator>(op_code->deprecated_builtin_code()));
+#else
+    return op_code->builtin_code();
+#endif
 }
 
 }  // namespace
@@ -163,9 +167,11 @@ int main(int argc, char **argv) {
         // Blow away all the metadata (we'll just assume we can live without it).
         new_model->metadata_buffer.clear();
         new_model->metadata.clear();
+#if TFLITE_VERSION >= 24
         // signature_defs is optional -- not sure if we need it for out purposes.
         // TODO: might need to translate it.
         new_model->signature_defs.clear();
+#endif
 
         flatbuffers::FlatBufferBuilder fbb;
         auto model_offset = tflite::Model::Pack(fbb, new_model.get());
