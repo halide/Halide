@@ -2232,7 +2232,7 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (lowered.defined()) {
-            lowered.accept(this);
+            rhs << print_expr(lowered);
         } else {
             // TODO: other intrinsics
             internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
