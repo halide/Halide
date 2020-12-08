@@ -2827,18 +2827,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
-    } else if (op->is_intrinsic(Call::mulhi_shr)) {
-        internal_assert(op->args.size() == 3);
-
-        Expr p_wide = widening_mul(op->args[0], op->args[1]);
-        const UIntImm *shift = op->args[2].as<UIntImm>();
-        internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
-        value = codegen(cast(op->type, p_wide >> (shift->value + op->type.bits())));
-    } else if (op->is_intrinsic(Call::sorted_avg)) {
-        internal_assert(op->args.size() == 2);
-        // b > a, so the following works without widening:
-        // a + (b - a)/2
-        value = codegen(op->args[0] + (op->args[1] - op->args[0]) / 2);
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         // If we need to upgrade the type, do the entire lerp in the

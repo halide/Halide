@@ -332,8 +332,9 @@ protected:
         // We're applying this to float, which seems OK? float16 * float16 -> float32 is a widening multiply?
         Expr narrow_a = strip_widening_cast(a);
         Expr narrow_b = strip_widening_cast(b);
-
-        if (narrow_a.defined() && narrow_b.defined()) {
+        if (narrow_a.defined() && narrow_b.defined() &&
+            (narrow_a.type().is_int_or_uint() == narrow_b.type().is_int_or_uint() ||
+             narrow_a.type().is_float() == narrow_b.type().is_float())) {
             Expr result = widening_mul(narrow_a, narrow_b);
             if (result.type() != op->type) {
                 result = Cast::make(op->type, result);
@@ -692,6 +693,16 @@ Expr lower_rounding_halving_sub(const Expr &a, const Expr &b) {
     return Cast::make(a.type(), make_shift_right(result_2x, 1));
 }
 
+Expr lower_mulhi_shr(const Type &result_type, const Expr &a, const Expr &b, const Expr &shift) {
+    return cast(result_type, widening_mul(a, b) >> simplify(shift + result_type.bits()));
+}
+
+Expr lower_sorted_avg(const Expr &a, const Expr &b) {
+    // b > a, so the following works without widening.
+    return a + (b - a) / 2;
+}
+
+
 Expr lower_intrinsic(const Call *op) {
     if (op->is_intrinsic(Call::widening_add)) {
         internal_assert(op->args.size() == 2);
@@ -726,6 +737,12 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::rounding_halving_sub)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_halving_sub(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::mulhi_shr)) {
+        internal_assert(op->args.size() == 3);
+        return lower_mulhi_shr(op->type, op->args[0], op->args[1], op->args[2]);
+    } else if (op->is_intrinsic(Call::sorted_avg)) {
+        internal_assert(op->args.size() == 2);
+        return lower_sorted_avg(op->args[0], op->args[1]);
     } else {
         return Expr();
     }
