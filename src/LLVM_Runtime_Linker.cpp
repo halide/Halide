@@ -140,7 +140,8 @@ DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
-DECLARE_CPP_INITMOD(windows_clock)
+DECLARE_CPP_INITMOD(windows_clock_x86)
+DECLARE_CPP_INITMOD(windows_clock_arm)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
 DECLARE_CPP_INITMOD(windows_io)
@@ -839,7 +840,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-                modules.push_back(get_initmod_windows_clock(c, bits_64, debug));
+                if (t.arch == Target::X86) {
+                    modules.push_back(get_initmod_windows_clock_x86(c, bits_64, debug));
+                } else if (t.arch == Target::ARM) {
+                    modules.push_back(get_initmod_windows_clock_arm(c, bits_64, debug));
+                } else {
+                    user_error << "Windows platform can only be targeted on ARM or X86 architectures.\n";
+                }
                 modules.push_back(get_initmod_windows_io(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_yield(c, bits_64, debug));
                 if (tsan) {

@@ -83,7 +83,8 @@ set(RUNTIME_CPP
     trace_helper
     tracing
     wasm_cpu_features
-    windows_clock
+    windows_clock_x86
+    windows_clock_arm
     windows_cuda
     windows_d3d12compute_x86
 	windows_d3d12compute_arm
@@ -196,6 +197,9 @@ foreach (i IN LISTS RUNTIME_CPP)
 			# Windows Generic
 			else()
 				if (j EQUAL 32)
+                    # TODO(marcos): generic code won't hold for ARM32... If ARM32 support becomes necessary,
+                    # all windows-related runtime modules will have to be wrapped in windows_*_arm.cpp files
+                    # for now, generic Windows 32bit code just assumes x86 (i386)
 					set(fpic "")
 					set(TARGET "i386-unknown-windows-unknown")
 				else ()
