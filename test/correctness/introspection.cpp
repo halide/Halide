@@ -18,7 +18,6 @@ bool paths_equal(const std::string &path1, const std::string &path2) {
     }
     return path1 == path2;
 }
-                   
 
 void check(const void *var, const std::string &type,
            const std::string &correct_name,
