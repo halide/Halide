@@ -1,7 +1,9 @@
 #ifndef ERROR_UTIL_H_
 #define ERROR_UTIL_H_
 
+#include <cassert>
 #include <sstream>
+#include <vector>
 
 #include "HalideRuntime.h"
 

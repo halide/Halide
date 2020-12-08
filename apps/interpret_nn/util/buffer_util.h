@@ -182,45 +182,45 @@ struct FillWithRandom {
     void operator()(Halide::Runtime::Buffer<> &b_dynamic, int seed) {
         Halide::Runtime::Buffer<T> b = b_dynamic;
         std::mt19937 rng(seed);
-        fill_with_random_impl<T>(b, rng);
+        fill_with_random_impl(b, rng);
     }
 
 private:
-    template<typename T2 = T>
-    static void fill_with_random_impl(Halide::Runtime::Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<T2> dis(std::numeric_limits<T2>::min(),
-                                              std::numeric_limits<T2>::max());
-        b.for_each_value([&rng, &dis](T2 &value) {
+    static void fill_with_random_impl(Halide::Runtime::Buffer<T> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<T> dis(std::numeric_limits<T>::min(),
+                                             std::numeric_limits<T>::max());
+        b.for_each_value([&rng, &dis](T &value) {
             value = dis(rng);
-        });
-    }
-
-    template<>
-    static void fill_with_random_impl(Halide::Runtime::Buffer<float> &b, std::mt19937 &rng) {
-        // Floating point. We arbitrarily choose to use the range [0.0, 1.0].
-        std::uniform_real_distribution<float> dis(0.0, 1.0);
-        b.for_each_value([&rng, &dis](float &value) {
-            value = dis(rng);
-        });
-    }
-
-    template<>
-    static void fill_with_random_impl(Halide::Runtime::Buffer<double> &b, std::mt19937 &rng) {
-        // Floating point. We arbitrarily choose to use the range [0.0, 1.0].
-        std::uniform_real_distribution<double> dis(0.0, 1.0);
-        b.for_each_value([&rng, &dis](double &value) {
-            value = dis(rng);
-        });
-    }
-
-    template<>
-    static void fill_with_random_impl(Halide::Runtime::Buffer<bool> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<int> dis(0, 1);
-        b.for_each_value([&rng, &dis](bool &value) {
-            value = static_cast<bool>(dis(rng));
         });
     }
 };
+
+// Specializations must be at namespace scope, not class scope
+template<>
+/*static*/ void FillWithRandom<float>::fill_with_random_impl(Halide::Runtime::Buffer<float> &b, std::mt19937 &rng) {
+    // Floating point. We arbitrarily choose to use the range [0.0, 1.0].
+    std::uniform_real_distribution<float> dis(0.0, 1.0);
+    b.for_each_value([&rng, &dis](float &value) {
+        value = dis(rng);
+    });
+}
+
+template<>
+/*static*/ void FillWithRandom<double>::fill_with_random_impl(Halide::Runtime::Buffer<double> &b, std::mt19937 &rng) {
+    // Floating point. We arbitrarily choose to use the range [0.0, 1.0].
+    std::uniform_real_distribution<double> dis(0.0, 1.0);
+    b.for_each_value([&rng, &dis](double &value) {
+        value = dis(rng);
+    });
+}
+
+template<>
+/*static*/ void FillWithRandom<bool>::fill_with_random_impl(Halide::Runtime::Buffer<bool> &b, std::mt19937 &rng) {
+    std::uniform_int_distribution<int> dis(0, 1);
+    b.for_each_value([&rng, &dis](bool &value) {
+        value = static_cast<bool>(dis(rng));
+    });
+}
 
 // Functor for use with dynamic_type_dispatch() to dump a buffer's contents
 // to std::cerr in a very simple way. Intended only for temporary debugging.
