@@ -1087,43 +1087,51 @@ Expr widening_shift_right(Expr a, Expr b) {
 Expr rounding_shift_right(Expr a, Expr b) {
     match_lanes(a, b);
     match_bits(a, b);
-    return Call::make(a.type(), Call::rounding_shift_right, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_shift_right, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr rounding_shift_left(Expr a, Expr b) {
     match_lanes(a, b);
     match_bits(a, b);
-    return Call::make(a.type(), Call::rounding_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr saturating_add(Expr a, Expr b) {
     match_types(a, b);
-    return Call::make(a.type(), Call::saturating_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::saturating_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr saturating_sub(Expr a, Expr b) {
     match_types(a, b);
-    return Call::make(a.type(), Call::saturating_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::saturating_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr halving_add(Expr a, Expr b) {
     match_types(a, b);
-    return Call::make(a.type(), Call::halving_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::halving_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr rounding_halving_add(Expr a, Expr b) {
     match_types(a, b);
-    return Call::make(a.type(), Call::rounding_halving_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_halving_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr halving_sub(Expr a, Expr b) {
     match_types(a, b);
-    return Call::make(a.type(), Call::halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr rounding_halving_sub(Expr a, Expr b) {
     match_types(a, b);
-    return Call::make(a.type(), Call::rounding_halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 }  // namespace Internal

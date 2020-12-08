@@ -513,7 +513,6 @@ private:
         }
     }
 
-
     // We need to be able to
     Expr find_mpyadds(const Expr &op_add) {
         const Add *op = op_add.as<Add>();
@@ -973,7 +972,6 @@ private:
                 return mutate(lower_intrinsic(op));
             }
         }
-
 
         static const vector<Pattern> calls = {
             // Vector by scalar widening multiplies. These need to happen before the ones below, to avoid
@@ -2063,6 +2061,8 @@ private:
         }
         return simplify(Mul::make(a, b));
     }
+
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::shift_left)) {

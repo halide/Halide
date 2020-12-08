@@ -1442,7 +1442,8 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
     debug(4) << "Codegen: " << e.type() << ", " << e << "\n";
     value = nullptr;
     e.accept(this);
-    internal_assert(value) << "Codegen of an expr did not produce an llvm value\n" << e;
+    internal_assert(value) << "Codegen of an expr did not produce an llvm value\n"
+                           << e;
 
     // Halide's type system doesn't distinguish between scalars and
     // vectors of size 1, so if a codegen method returned a vector of

@@ -58,55 +58,55 @@ bool no_overflow(Type t) {
 
 // Add helpers to let us (mostly) use intrinsics without the boilerplate in patterns.
 // These only work if the first argument is a wildcard.
-template <int A, typename B>
+template<int A, typename B>
 auto widening_add(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::widening_add, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto widening_sub(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::widening_sub, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto widening_mul(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::widening_mul, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto saturating_add(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::saturating_add, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto saturating_sub(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::saturating_sub, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto halving_add(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::halving_add, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto halving_sub(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::halving_sub, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto rounding_halving_add(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::rounding_halving_add, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto rounding_halving_sub(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::rounding_halving_sub, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto shift_left(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::shift_left, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto shift_right(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::shift_right, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto rounding_shift_left(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::rounding_shift_left, a, b);
 }
-template <int A, typename B>
+template<int A, typename B>
 auto rounding_shift_right(IRMatcher::Wild<A> a, B b) {
     return IRMatcher::intrin(Call::rounding_shift_right, a, b);
 }
@@ -175,7 +175,6 @@ Expr to_rounding_shift(const Call *c) {
                 return rounding_shift_left(a, b);
             }
         };
-
 
         // The rounding offset for the shift we have.
         Type round_type = a.type().with_lanes(1);
@@ -387,7 +386,7 @@ protected:
         }
     }
 
-    template <class MinOrMax>
+    template<class MinOrMax>
     Expr visit_min_or_max(const MinOrMax *op) {
         if (!find_intrinsics_for_type(op->type)) {
             return IRMutator::visit(op);

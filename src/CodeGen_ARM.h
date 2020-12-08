@@ -40,8 +40,8 @@ protected:
 
     /** Various patterns to peephole match against */
     struct Pattern {
-        std::string intrin;             ///< Name of the intrinsic
-        Expr pattern;                   ///< The pattern to match against
+        std::string intrin;  ///< Name of the intrinsic
+        Expr pattern;        ///< The pattern to match against
         Pattern() = default;
         Pattern(const std::string &intrin, Expr p)
             : intrin(intrin), pattern(std::move(p)) {

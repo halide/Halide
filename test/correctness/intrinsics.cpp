@@ -51,7 +51,6 @@ int main(int argc, char **argv) {
     check(u16(u8x) * 128, widening_shift_left(u8x, u8(7)));
     //check(u32(u8x) * 256, u32(widening_shift_left(u8x, u8(8))));
 
-
     // Check widening arithmetic
     check(i16(i8x) + i8y, widening_add(i8x, i8y));
     check(u16(u8x) + u8y, widening_add(u8x, u8y));
@@ -96,7 +95,6 @@ int main(int argc, char **argv) {
     // Tricky case.
     check(i32(u8x) + 1, i32(widening_add(u8x, u8(1))));
 
-
     // Check saturating arithmetic
     check(i8_sat(i16(i8x) + i8y), saturating_add(i8x, i8y));
     check(u8_sat(u16(u8x) + u8y), saturating_add(u8x, u8y));
@@ -105,7 +103,6 @@ int main(int argc, char **argv) {
 
     check(i8_sat(i16(i8x) - i8y), saturating_sub(i8x, i8y));
     check(u8(max(i16(u8x) - i16(u8y), 0)), saturating_sub(u8x, u8y));
-
 
     // Check halving arithmetic
     check(i8((i16(i8x) + i8y) / 2), halving_add(i8x, i8y));
@@ -134,7 +131,6 @@ int main(int argc, char **argv) {
     check(u8((widening_sub(u8x, u8y) + 1) / 2), rounding_halving_sub(u8x, u8y));
     check((i32x - i32y + 1) / 2, rounding_halving_sub(i32x, i32y));
 
-
     // Check absd
     check(abs(i16(i8x) - i16(i8y)), u16(absd(i8x, i8y)));
     check(abs(i16(u8x) - i16(u8y)), u16(absd(u8x, u8y)));
@@ -143,7 +139,6 @@ int main(int argc, char **argv) {
     check(abs(widening_sub(i8x, i8y)), u16(absd(i8x, i8y)));
     check(abs(widening_sub(u8x, u8y)), u16(absd(u8x, u8y)));
     check(abs(widening_sub(f16x, f16y)), f32(abs(f16x - f16y)));
-
 
     // Check rounding shifts
     // With constants
@@ -179,7 +174,6 @@ int main(int argc, char **argv) {
     //check(saturating_add(i8x, (i8(1) << max(-i8y, 0)) / 2) << i8y, rounding_shift_left(i8x, i8y));
     //check(i8(widening_add(i8x, (i8(1) << max(-i8y, 0)) / 2) << i8y), i8(rounding_shift_left(widen(i8x), i8y)));
     check((i32x + (i32(1) << max(-i32y, 0)) / 2) << i32y, rounding_shift_left(i32x, i32y));
-
 
     // Test combinations of multiplies and adds with widening
     // Same sign:
