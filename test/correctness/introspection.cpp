@@ -5,6 +5,21 @@ using namespace Halide;
 
 // The check has to go in the Halide namespace, because get_source_location looks for the first thing outside of it
 namespace Halide {
+bool paths_equal(const std::string &path1, const std::string &path2) {
+    int length_delta = path1.size() - path2.size();
+    if (length_delta > 0) {
+        char sep = path1[length_delta - 1];
+        return (sep == '/' || sep == '\\') &&
+               path1.substr(length_delta) == path2;
+    } else if (length_delta < 0) {
+        char sep = path2[-length_delta - 1];
+        return (sep == '/' || sep == '\\') &&
+               path2.substr(-length_delta) == path1;
+    }
+    return path1 == path2;
+}
+                   
+
 void check(const void *var, const std::string &type,
            const std::string &correct_name,
            const std::string &correct_file, int line) {
@@ -12,13 +27,13 @@ void check(const void *var, const std::string &type,
     std::string loc = Halide::Internal::Introspection::get_source_location();
     std::string name = Halide::Internal::Introspection::get_variable_name(var, type);
 
-    if (name != correct_name) {
+    if (!paths_equal(correct_name, name)) {
         printf("Mispredicted name: %s vs %s\n",
                name.c_str(), correct_name.c_str());
         exit(-1);
     }
 
-    if (loc != correct_loc) {
+    if (!paths_equal(loc, correct_loc)) {
         printf("Mispredicted source location: %s vs %s\n",
                loc.c_str(), correct_loc.c_str());
         exit(-1);
@@ -193,11 +208,11 @@ int main(int argc, char **argv) {
         Var x;
         f(x) = x;
         loc = std::string(__FILE__) + ":" + std::to_string(__LINE__ - 1);
-        assert(f.source_location() == loc);
+        assert(paths_equal(f.source_location(), loc));
 
         f(x) += 1;
         loc = std::string(__FILE__) + ":" + std::to_string(__LINE__ - 1);
-        assert(f.update().source_location() == loc);
+        assert(paths_equal(f.update().source_location(), loc));
     }
 
     printf("Success!\n");
