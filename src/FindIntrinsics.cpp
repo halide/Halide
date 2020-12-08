@@ -736,7 +736,7 @@ namespace {
 class LowerIntrinsics : public IRMutator {
     using IRMutator::visit;
 
-    Expr visit(const Call *op) {
+    Expr visit(const Call *op) override {
         Expr lowered = lower_intrinsic(op);
         if (lowered.defined()) {
             return mutate(lowered);

@@ -1978,7 +1978,7 @@ private:
         return false;
     }
 
-    static Expr distribute(Expr a, Expr b) {
+    static Expr distribute(const Expr &a, const Expr &b) {
         if (const Add *add = a.as<Add>()) {
             return Add::make(distribute(add->a, b), distribute(add->b, b));
         } else if (const Sub *sub = a.as<Sub>()) {
