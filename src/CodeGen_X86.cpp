@@ -453,16 +453,18 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         const char *intrin;
         Type narrow_type;
     };
+    // clang-format off
     static const Pattern patterns[] = {
-        { 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16) },
-        { 2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16) },
-        { 2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16) },
-        { 2, i32(widening_mul(wild_u8x_, wild_i8x_)), "pmaddwd", Int(16) },
-        { 2, i32(widening_mul(wild_u8x_, wild_u8x_)), "pmaddwd", Int(16) },
+        {2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_u8x_, wild_i8x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_u8x_, wild_u8x_)), "pmaddwd", Int(16)},
         // One could do a horizontal widening addition with
         // pmaddwd against a vector of ones. Currently disabled
         // because I haven't found case where it's clearly better.
     };
+    // clang-format on
 
     std::vector<Expr> matches;
     for (const Pattern &p : patterns) {

@@ -174,12 +174,12 @@ struct ArmIntrinsic {
     halide_type_t arg_types[max_intrinsic_args];
     int flags;
     enum {
-        AllowUnsignedOp1 = 1 << 0,  // Generate a second version of the instruction with the second operand unsigned.
-        HalfWidth = 1 << 1,         // This is a half-width instruction that should have a full width version generated as well.
-        NoMangle = 1 << 2,          // Don't mangle this intrinsic name.
-        MangleArgs = 1 << 3,        // Most intrinsics only mangle the return type. Some mangle the arguments instead.
-        MangleRetArgs = 1 << 4,     // Most intrinsics only mangle the return type. Some mangle the return type and arguments instead.
-        ScalarsAreVectors = 1 << 5, // Some intrinsics have scalar arguments that are vector parameters :(
+        AllowUnsignedOp1 = 1 << 0,   // Generate a second version of the instruction with the second operand unsigned.
+        HalfWidth = 1 << 1,          // This is a half-width instruction that should have a full width version generated as well.
+        NoMangle = 1 << 2,           // Don't mangle this intrinsic name.
+        MangleArgs = 1 << 3,         // Most intrinsics only mangle the return type. Some mangle the arguments instead.
+        MangleRetArgs = 1 << 4,      // Most intrinsics only mangle the return type. Some mangle the return type and arguments instead.
+        ScalarsAreVectors = 1 << 5,  // Some intrinsics have scalar arguments that are vector parameters :(
     };
 };
 
@@ -1111,11 +1111,13 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         const char *intrin;
         Target::Feature required_feature;
     };
+    // clang-format off
     static const Pattern patterns[] = {
-        { 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd },
-        { 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd },
-        { 4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd },
+        {4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
+        {4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
+        {4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
     };
+    // clang-format on
 
     int factor = op->value.type().lanes() / op->type.lanes();
     std::vector<Expr> matches;
