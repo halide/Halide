@@ -19,6 +19,16 @@ FIX=$1
 [ -z "$CLANG_TIDY_LLVM_INSTALL_DIR" ] && echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script." && exit
 echo CLANG_TIDY_LLVM_INSTALL_DIR = ${CLANG_TIDY_LLVM_INSTALL_DIR}
 
+VERSION=$(${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy --version)
+if [[ ${VERSION} =~ .*version\ 10.* ]]
+then
+    echo "clang-tidy version 10 found."
+else
+    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 10 install!"
+    exit 1
+fi
+
+
 # Use a temp folder for the CMake stuff here, so it's fresh & correct every time
 CLANG_TIDY_BUILD_DIR=`mktemp -d`
 echo CLANG_TIDY_BUILD_DIR = ${CLANG_TIDY_BUILD_DIR}
