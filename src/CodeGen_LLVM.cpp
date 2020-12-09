@@ -4718,15 +4718,21 @@ Value *CodeGen_LLVM::get_user_context() const {
     return ctx;
 }
 
-void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types) {
+void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors) {
     llvm::Function *intrin = module->getFunction(impl_name);
     if (!intrin) {
         vector<llvm::Type *> llvm_arg_types(arg_types.size());
         for (size_t i = 0; i < arg_types.size(); i++) {
             llvm_arg_types[i] = llvm_type_of(arg_types[i]);
+            if (arg_types[i].is_scalar() && scalars_are_vectors) {
+                llvm_arg_types[i] = get_vector_type(llvm_arg_types[i], 1);
+            }
         }
 
         llvm::Type *llvm_ret_type = llvm_type_of(ret_type);
+        if (ret_type.is_scalar() && scalars_are_vectors) {
+            llvm_ret_type = get_vector_type(llvm_ret_type, 1);
+        }
         FunctionType *func_t = FunctionType::get(llvm_ret_type, llvm_arg_types, false);
         intrin = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, impl_name, module.get());
         intrin->setCallingConv(CallingConv::C);
@@ -4776,33 +4782,18 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
                     debug(debug_level) << "Cannot promote scalar argument " << i << "\n";
                     break;
                 }
-            } else if (overload.arg_types[i].is_vector()) {
-                // Vector arguments must be exact.
-                if (overload.arg_types[i].element_of() != args[i].type().element_of()) {
-                    match = false;
-                    debug(debug_level) << "Vector types not equal " << i << "\n";
-                    break;
-                }
-            } else {
-                match = false;
-                debug(debug_level) << "Cannot pass a vector argument to a scalar parameter " << i << "\n";
-                break;
-            }
-
-            if (args[i].type().is_scalar()) {
-                // We can broadcast the argument.
-                // TODO: Should we prioritize overloads that don't need this?
-            } else if (overload.arg_types[i].is_scalar()) {
-                if (args[i].type().is_vector()) {
-                    match = false;
-                    debug(debug_level) << "Cannot pass vector to scalar argument " << i << "\n";
-                    break;
-                }
             } else {
                 int required_lanes = result_type.lanes() * overload.arg_types[i].lanes() / overload.result_type.lanes();
                 if (required_lanes != args[i].type().lanes()) {
                     match = false;
                     debug(debug_level) << "Need " << required_lanes << " lanes for argument " << i << "\n";
+                    break;
+                }
+
+                // Vector arguments must be exact.
+                if (overload.arg_types[i].element_of() != args[i].type().element_of()) {
+                    match = false;
+                    debug(debug_level) << "Vector types not equal " << i << "\n";
                     break;
                 }
             }
@@ -4954,6 +4945,15 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
         }
         Value *result = concat_vectors(results);
         return slice_vector(result, 0, arg_lanes);
+    }
+
+    llvm::FunctionType *intrin_type = intrin->getFunctionType();
+    for (int i = 0; i < (int)arg_values.size(); i++) {
+        if (arg_values[i]->getType() != intrin_type->getParamType(i)) {
+            // There can be some mismatches in types, such as when passing scalar Halide type T
+            // to LLVM vector type <1 x T>.
+            arg_values[i] = builder->CreateBitCast(arg_values[i], intrin_type->getParamType(i));
+        }
     }
 
     CallInst *call = builder->CreateCall(intrin, arg_values);

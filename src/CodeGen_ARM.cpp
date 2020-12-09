@@ -176,6 +176,10 @@ struct ArmIntrinsic {
     enum {
         AllowUnsignedOp1 = 1 << 0,  // Generate a second version of the instruction with the second operand unsigned.
         HalfWidth = 1 << 1,         // This is a half-width instruction that should have a full width version generated as well.
+        NoMangle = 1 << 2,          // Don't mangle this intrinsic name.
+        MangleArgs = 1 << 3,        // Most intrinsics only mangle the return type. Some mangle the arguments instead.
+        MangleRetArgs = 1 << 4,     // Most intrinsics only mangle the return type. Some mangle the return type and arguments instead.
+        ScalarsAreVectors = 1 << 5, // Some intrinsics have scalar arguments that are vector parameters :(
     };
 };
 
@@ -418,6 +422,84 @@ const ArmIntrinsic intrinsic_defs[] = {
     // SQRDMULH - Saturating doubling multiply keep high half with rounding.
     {"vqrdmulh", "sqrdmulh", Int(16, 4), "qrdmulh", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
     {"vqrdmulh", "sqrdmulh", Int(32, 2), "qrdmulh", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
+
+    // PADD - Pairwise add.
+    // TODO: It seems like there should be full width versions of these, but there seem not to be?
+    {"vpadd", "addp", Int(8, 8), "pairwise_concat_add", {Int(8, 8), Int(8, 8)}},
+    {"vpadd", "addp", UInt(8, 8), "pairwise_concat_add", {UInt(8, 8), UInt(8, 8)}},
+    {"vpadd", "addp", Int(16, 4), "pairwise_concat_add", {Int(16, 4), Int(16, 4)}},
+    {"vpadd", "addp", UInt(16, 4), "pairwise_concat_add", {UInt(16, 4), UInt(16, 4)}},
+    {"vpadd", "addp", Int(32, 2), "pairwise_concat_add", {Int(32, 2), Int(32, 2)}},
+    {"vpadd", "addp", UInt(32, 2), "pairwise_concat_add", {UInt(32, 2), UInt(32, 2)}},
+    {"vpadd", "addp", Float(32, 2), "pairwise_concat_add", {Float(32, 2), Float(32, 2)}},
+    {nullptr, "addp", Float(64, 2), "pairwise_concat_add", {Float(64, 2), Float(64, 2)}},
+
+    // SADDLP, UADDLP - Pairwise add long.
+    {"vpaddls", "saddlp", Int(16, 4), "pairwise_widening_add", {Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
+    {"vpaddlu", "uaddlp", UInt(16, 4), "pairwise_widening_add", {UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
+    {"vpaddlu", "uaddlp", Int(16, 4), "pairwise_widening_add", {UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
+    {"vpaddls", "saddlp", Int(32, 2), "pairwise_widening_add", {Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
+    {"vpaddlu", "uaddlp", UInt(32, 2), "pairwise_widening_add", {UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
+    {"vpaddlu", "uaddlp", Int(32, 2), "pairwise_widening_add", {UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
+    {"vpaddls", "saddlp", Int(64, 1), "pairwise_widening_add", {Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::ScalarsAreVectors},
+    {"vpaddlu", "uaddlp", UInt(64, 1), "pairwise_widening_add", {UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::ScalarsAreVectors},
+    {"vpaddlu", "uaddlp", Int(64, 1), "pairwise_widening_add", {UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::ScalarsAreVectors},
+
+    // SPADAL, UPADAL - Pairwise add and accumulate long.
+    {"vpadals", nullptr, Int(16, 4), "pairwise_widening_add_accumulate", {Int(16, 4), Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
+    {"vpadalu", nullptr, UInt(16, 4), "pairwise_widening_add_accumulate", {UInt(16, 4), UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
+    {"vpadalu", nullptr, Int(16, 4), "pairwise_widening_add_accumulate", {Int(16, 4), UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
+    {"vpadals", nullptr, Int(32, 2), "pairwise_widening_add_accumulate", {Int(32, 2), Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
+    {"vpadalu", nullptr, UInt(32, 2), "pairwise_widening_add_accumulate", {UInt(32, 2), UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
+    {"vpadalu", nullptr, Int(32, 2), "pairwise_widening_add_accumulate", {Int(32, 2), UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
+    {"vpadals", nullptr, Int(64, 1), "pairwise_widening_add_accumulate", {Int(64, 1), Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::ScalarsAreVectors},
+    {"vpadalu", nullptr, UInt(64, 1), "pairwise_widening_add_accumulate", {UInt(64, 1), UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::ScalarsAreVectors},
+    {"vpadalu", nullptr, Int(64, 1), "pairwise_widening_add_accumulate", {Int(64, 1), UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::ScalarsAreVectors},
+
+    // SMAXP, UMAXP, FMAXP - Pairwise max.
+    {nullptr, "smaxp", Int(8, 8), "pairwise_concat_max", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "umaxp", UInt(8, 8), "pairwise_concat_max", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "smaxp", Int(16, 4), "pairwise_concat_max", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "umaxp", UInt(16, 4), "pairwise_concat_max", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "smaxp", Int(32, 2), "pairwise_concat_max", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "umaxp", UInt(32, 2), "pairwise_concat_max", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "fmaxp", Float(32, 2), "pairwise_concat_max", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
+
+    // On arm32, we only have half-width versions of these.
+    {"vpmaxs", nullptr, Int(8, 8), "pairwise_concat_max", {Int(8, 8), Int(8, 8)}},
+    {"vpmaxu", nullptr, UInt(8, 8), "pairwise_concat_max", {UInt(8, 8), UInt(8, 8)}},
+    {"vpmaxs", nullptr, Int(16, 4), "pairwise_concat_max", {Int(16, 4), Int(16, 4)}},
+    {"vpmaxu", nullptr, UInt(16, 4), "pairwise_concat_max", {UInt(16, 4), UInt(16, 4)}},
+    {"vpmaxs", nullptr, Int(32, 2), "pairwise_concat_max", {Int(32, 2), Int(32, 2)}},
+    {"vpmaxu", nullptr, UInt(32, 2), "pairwise_concat_max", {UInt(32, 2), UInt(32, 2)}},
+    {"vpmaxs", nullptr, Float(32, 2), "pairwise_concat_max", {Float(32, 2), Float(32, 2)}},
+
+    // SMINP, UMINP, FMINP - Pairwise min.
+    {nullptr, "sminp", Int(8, 8), "pairwise_concat_min", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "uminp", UInt(8, 8), "pairwise_concat_min", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "sminp", Int(16, 4), "pairwise_concat_min", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "uminp", UInt(16, 4), "pairwise_concat_min", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "sminp", Int(32, 2), "pairwise_concat_min", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "uminp", UInt(32, 2), "pairwise_concat_min", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "fminp", Float(32, 2), "pairwise_concat_min", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
+
+    // On arm32, we only have half-width versions of these.
+    {"vpmins", nullptr, Int(8, 8), "pairwise_concat_min", {Int(8, 8), Int(8, 8)}},
+    {"vpminu", nullptr, UInt(8, 8), "pairwise_concat_min", {UInt(8, 8), UInt(8, 8)}},
+    {"vpmins", nullptr, Int(16, 4), "pairwise_concat_min", {Int(16, 4), Int(16, 4)}},
+    {"vpminu", nullptr, UInt(16, 4), "pairwise_concat_min", {UInt(16, 4), UInt(16, 4)}},
+    {"vpmins", nullptr, Int(32, 2), "pairwise_concat_min", {Int(32, 2), Int(32, 2)}},
+    {"vpminu", nullptr, UInt(32, 2), "pairwise_concat_min", {UInt(32, 2), UInt(32, 2)}},
+    {"vpmins", nullptr, Float(32, 2), "pairwise_concat_min", {Float(32, 2), Float(32, 2)}},
+
+    // SDOT, UDOT - Dot products.
+    // Mangle this one manually, there aren't that many and it is a special case.
+    {nullptr, "sdot.v2i32.v8i8", Int(32, 2), "dot_product", {Int(32, 2), Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle},
+    {nullptr, "udot.v2i32.v8i8", Int(32, 2), "dot_product", {Int(32, 2), UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle},
+    {nullptr, "udot.v2i32.v8i8", UInt(32, 2), "dot_product", {UInt(32, 2), UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle},
+    {nullptr, "sdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle},
+    {nullptr, "udot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
+    {nullptr, "udot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
 };
 // clang-format on
 
@@ -474,22 +556,34 @@ void CodeGen_ARM::init_module() {
             // Generate the LLVM mangled name.
             std::stringstream mangled_name;
             mangled_name << full_name;
-            if (starts_with(full_name, "llvm.")) {
-                // Append LLVM name mangling
-                mangled_name << ".v" << ret_type.lanes();
-                if (ret_type.is_int() || ret_type.is_uint()) {
-                    mangled_name << "i";
-                } else if (ret_type.is_float()) {
-                    mangled_name << "f";
+            if (starts_with(full_name, "llvm.") && (intrin.flags & ArmIntrinsic::NoMangle) == 0) {
+                // Append LLVM name mangling for either the return type or the arguments, or both.
+                std::vector<Type> types;
+                if (intrin.flags & ArmIntrinsic::MangleArgs) {
+                    types = arg_types;
+                } else if (intrin.flags & ArmIntrinsic::MangleRetArgs) {
+                    types = {ret_type};
+                    types.insert(types.end(), arg_types.begin(), arg_types.end());
+                } else {
+                    types = {ret_type};
                 }
-                mangled_name << ret_type.bits();
+                for (const Type &t : types) {
+                    mangled_name << ".v" << t.lanes();
+                    if (t.is_int() || t.is_uint()) {
+                        mangled_name << "i";
+                    } else if (t.is_float()) {
+                        mangled_name << "f";
+                    }
+                    mangled_name << t.bits();
+                }
             }
 
-            declare_intrin_overload(intrin.name, ret_type, mangled_name.str(), arg_types);
+            bool scalars_are_vectors = intrin.flags & ArmIntrinsic::ScalarsAreVectors;
+            declare_intrin_overload(intrin.name, ret_type, mangled_name.str(), arg_types, scalars_are_vectors);
             if (intrin.flags & ArmIntrinsic::AllowUnsignedOp1) {
                 // Also generate a version of this intrinsic where the second operand is unsigned.
                 arg_types[1] = arg_types[1].with_code(halide_type_uint);
-                declare_intrin_overload(intrin.name, ret_type, mangled_name.str(), arg_types);
+                declare_intrin_overload(intrin.name, ret_type, mangled_name.str(), arg_types, scalars_are_vectors);
             }
         }
     }
@@ -991,6 +1085,17 @@ void CodeGen_ARM::visit(const LE *op) {
     CodeGen_Posix::visit(op);
 }
 
+namespace {
+
+std::vector<Expr> split_vector(const Expr &e) {
+    return {
+        Shuffle::make_slice(e, 0, 1, e.type().lanes() / 2),
+        Shuffle::make_slice(e, e.type().lanes() / 2, 1, e.type().lanes() / 2),
+    };
+}
+
+}  // namespace
+
 void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     if (neon_intrinsics_disabled() ||
         op->op == VectorReduce::Or ||
@@ -1000,169 +1105,109 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         return;
     }
 
-    // ARM has a variety of pairwise reduction ops for +, min,
-    // max. The versions that do not widen take two 64-bit args and
-    // return one 64-bit vector of the same type. The versions that
-    // widen take one arg and return something with half the vector
-    // lanes and double the bit-width.
+    struct Pattern {
+        int factor;
+        Expr pattern;
+        const char *intrin;
+        Target::Feature required_feature;
+    };
+    static const Pattern patterns[] = {
+        { 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd },
+        { 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd },
+        { 4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd },
+    };
 
     int factor = op->value.type().lanes() / op->type.lanes();
-
-    // These are the types for which we have reduce intrinsics in the
-    // runtime.
-    bool have_reduce_intrinsic = (op->type.is_int() ||
-                                  op->type.is_uint() ||
-                                  op->type.is_float());
-
-    // We don't have 16-bit float or bfloat horizontal ops
-    if (op->type.is_bfloat() || (op->type.is_float() && op->type.bits() < 32)) {
-        have_reduce_intrinsic = false;
-    }
-
-    // Only aarch64 has float64 horizontal ops
-    if (target.bits == 32 && op->type.element_of() == Float(64)) {
-        have_reduce_intrinsic = false;
-    }
-
-    // For 64-bit integers, we only have addition, not min/max
-    if (op->type.bits() == 64 &&
-        !op->type.is_float() &&
-        op->op != VectorReduce::Add) {
-        have_reduce_intrinsic = false;
-    }
-
-    // We only have intrinsics that reduce by a factor of two
-    if (factor != 2) {
-        have_reduce_intrinsic = false;
-    }
-
-    if (have_reduce_intrinsic) {
-        Expr arg = op->value;
-        if (op->op == VectorReduce::Add &&
-            op->type.bits() >= 16 &&
-            !op->type.is_float()) {
-            Type narrower_type = arg.type().narrow();
-            Expr narrower = lossless_cast(narrower_type, arg);
-            if (!narrower.defined() && arg.type().is_int()) {
-                // We can also safely accumulate from a uint into a
-                // wider int, because the addition uses at most one
-                // extra bit.
-                narrower = lossless_cast(narrower_type.with_code(Type::UInt), arg);
-            }
-            if (narrower.defined()) {
-                arg = narrower;
-            }
+    std::vector<Expr> matches;
+    for (const Pattern &p : patterns) {
+        if (factor % p.factor != 0) {
+            continue;
         }
-        int output_bits;
-        if (target.bits == 32 && arg.type().bits() == op->type.bits()) {
-            // For the non-widening version, the output must be 64-bit
-            output_bits = 64;
-        } else if (op->type.bits() * op->type.lanes() <= 64) {
-            // No point using the 128-bit version of the instruction if the output is narrow.
-            output_bits = 64;
-        } else {
-            output_bits = 128;
+        if (!target.has_feature(p.required_feature)) {
+            continue;
         }
-
-        const int output_lanes = output_bits / op->type.bits();
-        Type intrin_type = op->type.with_lanes(output_lanes);
-        Type arg_type = arg.type().with_lanes(output_lanes * 2);
-        if (op->op == VectorReduce::Add &&
-            arg.type().bits() == op->type.bits() &&
-            arg_type.is_uint()) {
-            // For non-widening additions, there is only a signed
-            // version (because it's equivalent).
-            arg_type = arg_type.with_code(Type::Int);
-            intrin_type = intrin_type.with_code(Type::Int);
-        } else if (arg.type().is_uint() && intrin_type.is_int()) {
-            // Use the uint version
-            intrin_type = intrin_type.with_code(Type::UInt);
-        }
-
-        std::stringstream ss;
-        vector<Expr> args;
-        ss << "pairwise_" << op->op << "_" << intrin_type << "_" << arg_type;
-        Expr accumulator = init;
-        if (op->op == VectorReduce::Add &&
-            accumulator.defined() &&
-            arg_type.bits() < intrin_type.bits()) {
-            // We can use the accumulating variant
-            ss << "_accumulate";
-            args.push_back(init);
-            accumulator = Expr();
-        }
-        args.push_back(arg);
-        value = call_intrin(op->type, output_lanes, ss.str(), args);
-
-        if (accumulator.defined()) {
-            // We still have an initial value to take care of
-            string n = unique_name('t');
-            sym_push(n, value);
-            Expr v = Variable::make(accumulator.type(), n);
-            switch (op->op) {
-            case VectorReduce::Add:
-                accumulator += v;
-                break;
-            case VectorReduce::Min:
-                accumulator = min(accumulator, v);
-                break;
-            case VectorReduce::Max:
-                accumulator = max(accumulator, v);
-                break;
-            default:
-                internal_error << "unreachable";
-            }
-            codegen(accumulator);
-            sym_pop(n);
-        }
-
-        return;
-    }
-
-    // Pattern-match 8-bit dot product instructions available on newer
-    // ARM cores.
-    if (target.has_feature(Target::ARMDotProd) &&
-        factor % 4 == 0 &&
-        op->op == VectorReduce::Add &&
-        target.bits == 64 &&
-        (op->type.element_of() == Int(32) ||
-         op->type.element_of() == UInt(32))) {
-        const Mul *mul = op->value.as<Mul>();
-        if (mul) {
-            const int input_lanes = mul->type.lanes();
-            Expr a = lossless_cast(UInt(8, input_lanes), mul->a);
-            Expr b = lossless_cast(UInt(8, input_lanes), mul->b);
-            if (!a.defined()) {
-                a = lossless_cast(Int(8, input_lanes), mul->a);
-                b = lossless_cast(Int(8, input_lanes), mul->b);
-            }
-            if (a.defined() && b.defined()) {
-                if (factor != 4) {
-                    Expr equiv = VectorReduce::make(op->op, op->value, input_lanes / 4);
-                    equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
-                    codegen_vector_reduce(equiv.as<VectorReduce>(), init);
-                    return;
-                }
-                Expr i = init;
-                if (!i.defined()) {
-                    i = make_zero(op->type);
-                }
-                vector<Expr> args{i, a, b};
-                if (op->type.lanes() <= 2) {
-                    if (op->type.is_uint()) {
-                        value = call_intrin(op->type, 2, "llvm.aarch64.neon.udot.v2i32.v8i8", args);
-                    } else {
-                        value = call_intrin(op->type, 2, "llvm.aarch64.neon.sdot.v2i32.v8i8", args);
-                    }
-                } else {
-                    if (op->type.is_uint()) {
-                        value = call_intrin(op->type, 4, "llvm.aarch64.neon.udot.v4i32.v16i8", args);
-                    } else {
-                        value = call_intrin(op->type, 4, "llvm.aarch64.neon.sdot.v4i32.v16i8", args);
-                    }
-                }
+        if (expr_match(p.pattern, op->value, matches)) {
+            if (factor != 4) {
+                Expr equiv = VectorReduce::make(op->op, op->value, op->value.type().lanes() / 4);
+                equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
+                codegen_vector_reduce(equiv.as<VectorReduce>(), init);
                 return;
             }
+
+            Expr i = init;
+            if (!i.defined()) {
+                i = make_zero(op->type);
+            }
+            value = call_overloaded_intrin(op->type, p.intrin, {i, matches[0], matches[1]});
+            if (value) {
+                return;
+            }
+        }
+    }
+
+    // TODO: Move this to be patterns? The patterns are pretty trivial, but some
+    // of the other logic is tricky.
+    const char *intrin = nullptr;
+    std::vector<Expr> intrin_args;
+    Expr accumulator = init;
+    if (op->op == VectorReduce::Add && factor == 2) {
+        Type narrow_type = op->type.narrow().with_lanes(op->value.type().lanes());
+        Expr narrow = lossless_cast(narrow_type, op->value);
+        if (!narrow.defined() && op->type.is_int()) {
+            // We can also safely accumulate from a uint into a
+            // wider int, because the addition uses at most one
+            // extra bit.
+            narrow = lossless_cast(narrow_type.with_code(Type::UInt), op->value);
+        }
+        if (narrow.defined()) {
+            if (init.defined() && target.bits == 32) {
+                // On 32-bit, we have an intrinsic for widening add-accumulate.
+                intrin = "pairwise_widening_add_accumulate";
+                intrin_args = {accumulator, narrow};
+                accumulator = Expr();
+            } else {
+                // On 64-bit, LLVM pattern matches widening add-accumulate if
+                // we give it the widening add.
+                intrin = "pairwise_widening_add";
+                intrin_args = {narrow};
+            }
+        } else {
+            intrin = "pairwise_concat_add";
+            intrin_args = split_vector(op->value);
+        }
+    } else if (op->op == VectorReduce::Min && factor == 2) {
+        intrin = "pairwise_concat_min";
+        intrin_args = split_vector(op->value);
+    } else if (op->op == VectorReduce::Max && factor == 2) {
+        intrin = "pairwise_concat_max";
+        intrin_args = split_vector(op->value);
+    }
+
+    if (intrin) {
+        value = call_overloaded_intrin(op->type, intrin, intrin_args);
+        if (value) {
+            if (accumulator.defined()) {
+                // We still have an initial value to take care of
+                string n = unique_name('t');
+                sym_push(n, value);
+                Expr v = Variable::make(accumulator.type(), n);
+                switch (op->op) {
+                case VectorReduce::Add:
+                    accumulator += v;
+                    break;
+                case VectorReduce::Min:
+                    accumulator = min(accumulator, v);
+                    break;
+                case VectorReduce::Max:
+                    accumulator = max(accumulator, v);
+                    break;
+                default:
+                    internal_error << "unreachable";
+                }
+                codegen(accumulator);
+                sym_pop(n);
+            }
+            return;
         }
     }
 

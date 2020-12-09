@@ -453,7 +453,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         const char *intrin;
         Type narrow_type;
     };
-    static Pattern patterns[] = {
+    static const Pattern patterns[] = {
         { 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16) },
         { 2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16) },
         { 2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16) },
@@ -465,19 +465,19 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     };
 
     std::vector<Expr> matches;
-    for (const Pattern &pattern : patterns) {
-        if (pattern.factor != factor) {
+    for (const Pattern &p : patterns) {
+        if (p.factor != factor) {
             continue;
         }
-        if (expr_match(pattern.pattern, op->value, matches)) {
+        if (expr_match(p.pattern, op->value, matches)) {
             Expr a = matches[0];
             Expr b = matches[1];
-            a = lossless_cast(pattern.narrow_type.with_lanes(a.type().lanes()), a);
-            b = lossless_cast(pattern.narrow_type.with_lanes(b.type().lanes()), b);
+            a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
+            b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
             internal_assert(a.defined());
             internal_assert(b.defined());
 
-            value = call_overloaded_intrin(op->type, pattern.intrin, {a, b});
+            value = call_overloaded_intrin(op->type, p.intrin, {a, b});
             if (value) {
                 if (init.defined()) {
                     Value *x = value;
