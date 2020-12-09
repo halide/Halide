@@ -357,8 +357,9 @@ protected:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
-        if (!op->type.is_float()) {
-            return mutate(lower_int_uint_div(a, b));
+        int shift_amount;
+        if (is_const_power_of_two_integer(b, &shift_amount) && op->type.is_int_or_uint()) {
+            return a >> make_const(UInt(a.type().bits()), shift_amount);
         }
 
         if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -376,8 +377,9 @@ protected:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
-        if (!op->type.is_float()) {
-            return mutate(lower_int_uint_mod(a, b));
+        int shift_amount;
+        if (is_const_power_of_two_integer(b, &shift_amount) && op->type.is_int_or_uint()) {
+            return a & simplify(b - 1);
         }
 
         if (a.same_as(op->a) && b.same_as(op->b)) {

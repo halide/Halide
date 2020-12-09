@@ -1717,7 +1717,6 @@ void CodeGen_LLVM::visit(const Div *op) {
         Value *b = codegen(op->b);
         value = builder->CreateFDiv(a, b);
     } else {
-        // Should we assert here? Probably should never get here.
         value = codegen(lower_int_uint_div(op->a, op->b));
     }
 }
