@@ -48,7 +48,7 @@ function(add_halide_library TARGET)
     ##
 
     set(options C_BACKEND GRADIENT_DESCENT)
-    set(oneValueArgs FROM GENERATOR FUNCTION_NAME USE_RUNTIME AUTOSCHEDULER ${EXTRA_OUTPUT_NAMES})
+    set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER ${EXTRA_OUTPUT_NAMES})
     set(multiValueArgs TARGETS FEATURES PARAMS PLUGINS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -77,6 +77,10 @@ function(add_halide_library TARGET)
 
     if (NOT ARG_FUNCTION_NAME)
         set(ARG_FUNCTION_NAME "${TARGET}")
+    endif ()
+
+    if (ARG_NAMESPACE)
+        set(ARG_FUNCTION_NAME "${ARG_NAMESPACE}::${ARG_FUNCTION_NAME}")
     endif ()
 
     # If no TARGETS argument, use Halide_TARGET instead

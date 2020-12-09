@@ -636,6 +636,19 @@ struct Call : public ExprNode<Call> {
         return is_intrinsic() && this->name == get_intrinsic_name(op);
     }
 
+    /** Returns a pointer to a call node if the expression is a call to
+     * one of the requested intrinsics. */
+    static const Call *as_intrinsic(const Expr &e, std::initializer_list<IntrinsicOp> intrinsics) {
+        if (const Call *c = e.as<Call>()) {
+            for (IntrinsicOp i : intrinsics) {
+                if (c->is_intrinsic(i)) {
+                    return c;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     bool is_extern() const {
         return (call_type == Extern ||
                 call_type == ExternCPlusPlus ||
