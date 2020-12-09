@@ -1011,7 +1011,7 @@ void IRPrinter::visit(const VectorReduce *op) {
            << op->op
            << ", "
            << op->value
-           << ")\n";
+           << ")";
 }
 
 void IRPrinter::visit(const Atomic *op) {
