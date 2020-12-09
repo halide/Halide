@@ -205,7 +205,7 @@ foreach (i IN LISTS RUNTIME_CPP)
 					set(TARGET "i386-unknown-windows-unknown")
 				else ()
                     set(fpic "")
-                    set(TARGET "le64-unknown-unknown-unknown")
+                    set(TARGET "le64-unknown-windows-msvc")
 				endif ()
 			endif()
 		# Everything else
