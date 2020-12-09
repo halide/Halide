@@ -1106,6 +1106,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     }
 
     struct Pattern {
+        VectorReduce::Operator reduce_op;
         int factor;
         Expr pattern;
         const char *intrin;
@@ -1113,16 +1114,16 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     };
     // clang-format off
     static const Pattern patterns[] = {
-        {4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
-        {4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
-        {4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
+        {VectorReduce::Add, 4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
     };
     // clang-format on
 
     int factor = op->value.type().lanes() / op->type.lanes();
     std::vector<Expr> matches;
     for (const Pattern &p : patterns) {
-        if (factor % p.factor != 0) {
+        if (op->op != p.reduce_op || factor % p.factor != 0) {
             continue;
         }
         if (!target.has_feature(p.required_feature)) {
