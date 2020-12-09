@@ -172,6 +172,8 @@ foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
         # -fpic needs special treatment; see below on windows 64bits
         set(fpic -fpic)
+        # for the generic windows 64-bit target, we need -fshort-wchar
+        set(fshort-wchar "")
 		# Windows
 		if (i MATCHES "windows_.*")
 			# Windows x86/x64
@@ -205,6 +207,9 @@ foreach (i IN LISTS RUNTIME_CPP)
 					set(TARGET "i386-unknown-windows-unknown")
 				else ()
                     set(fpic "")
+                    # unfortunately, clang doesn't automatically set this flag even though the
+                    # ABI is msvc on windows
+                    set(fshort-wchar -fshort-wchar)
                     set(TARGET "le64-unknown-windows-msvc")
 				endif ()
 			endif()
@@ -231,7 +236,7 @@ foreach (i IN LISTS RUNTIME_CPP)
             set(INITMOD "_initmod_${i}_${j}${SUFFIX}.cpp")
             set(SYMBOL "halide_internal_initmod_${i}_${j}${SUFFIX}")
 
-            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S)
+            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S)
 
             # Dep-files are subtle and require clang to run using *just* the right
             # relative paths to the build root, NOT the Halide build root. This is
@@ -251,7 +256,7 @@ foreach (i IN LISTS RUNTIME_CPP)
                 # that it can use for tidy-checking. (This branch should never be taken by 'normal'
                 # compilations.)
                 add_library(${basename} STATIC "${SOURCE}")
-                target_compile_options(${basename} PRIVATE ${RUNTIME_CXX_FLAGS} ${fpic} -m${j} -target ${TARGET})
+                target_compile_options(${basename} PRIVATE ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} -m${j} -target ${TARGET})
                 target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
             else()
                 add_custom_command(OUTPUT "${LL}"
