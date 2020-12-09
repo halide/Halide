@@ -74,8 +74,14 @@ public:
 
     void visit(const Variable *var) override {
         if (var->param.defined()) {
-            record(var->param);
+            if (var->param.is_buffer() &&
+                var->type.is_int_or_uint()) {
+                record(memoize_tag(var));
+            } else {
+                record(var->param);
+            }
         }
+
         IRGraphVisitor::visit(var);
     }
 
