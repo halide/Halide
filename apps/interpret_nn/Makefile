@@ -47,7 +47,8 @@ TFLITE_VERSION_MAJOR ?= 2
 TFLITE_VERSION_MINOR ?= 3
 TFLITE_VERSION_PATCH ?= 0
 
-TFLITE_TAG = v$(TFLITE_VERSION_MAJOR).$(TFLITE_VERSION_MINOR).$(TFLITE_VERSION_PATCH)
+TFLITE_VERSION = $(TFLITE_VERSION_MAJOR).$(TFLITE_VERSION_MINOR).$(TFLITE_VERSION_PATCH)
+TFLITE_TAG = v$(TFLITE_VERSION)
 
 # Define `TFLITE_VERSION` here to allow for code that compiles against multiple versions of
 # TFLite (both the C API and the Schema). This deliberately ignores the 'patch' version so
@@ -147,7 +148,7 @@ INTERPRETER_DEPS = \
 $(BIN)/schema/tflite_schema.fbs:
 	@echo Fetching tflite_schema.fbs...
 	@mkdir -p $(@D)
-	@wget --quiet -O $@ https://github.com/tensorflow/tensorflow/raw/$(TFLITE_TAG)/tensorflow/lite/schema/schema.fbs
+	@wget --quiet -O $@ https://github.com/tensorflow/tensorflow/raw/$(TFLITE_TAG)/tensorflow/lite/schema/schema.fbs || rm -f $@
 
 # This is a very minimal .h file that allows only for reading a flatbuffer...
 # which is all tflite_parser needs.
@@ -260,6 +261,10 @@ $(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/schema/tflite_schema_direct
 # `//tensorflow/lite:libtensorflowlite.so` will only provide the C++ API. To
 # get the C API version, use `bazel build -c opt //tensorflow/lite/c:tensorflowlite_c`
 # instead.
+#
+# It's inexplicably painful to build TFLite in library form for Android (either in
+# static or shared form), so we pull a prebuilt version (which is what they recommend
+# anyway). For Android we pull the libtensorflowlite_jni.so build.
 
 ifneq (,$(findstring host,$(HL_TARGET)))
 
@@ -280,6 +285,23 @@ ifneq (,$(findstring host,$(HL_TARGET)))
 TENSORFLOW_BASE ?= $(HOME)/GitHub/tensorflow
 TFLITE_INCLUDES ?= $(TENSORFLOW_BASE)
 TFLITE_SHARED_LIBRARY ?= $(TENSORFLOW_BASE)/bazel-bin/tensorflow/lite/c/libtensorflowlite_c.$(SHARED_EXT)
+TFLITE_LDFLAGS=-Wl,-rpath,$(dir $(TFLITE_SHARED_LIBRARY))
+
+else ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
+
+# See https://www.tensorflow.org/lite/guide/android for details of what we're doing here
+# to get an Android prebuilt tflite library.
+$(BIN)/tflite-android/jni/arm64-v8a/libtensorflowlite_jni.so:
+	@echo Fetching tensorflow-lite-android.zip...
+	@mkdir -p $(@D)
+	@wget --quiet -O $(BIN)/tflite-android.zip https://google.bintray.com/tensorflow/org/tensorflow/tensorflow-lite/$(TFLITE_VERSION)/tensorflow-lite-$(TFLITE_VERSION).aar || rm -f $@
+	@echo Unzipping tensorflow-lite-android.zip...
+	@unzip -q -o $(BIN)/tflite-android.zip -d $(BIN)/tflite-android
+
+TFLITE_INCLUDES=$(BIN)/tflite-android/headers
+TFLITE_SHARED_LIBRARY=$(BIN)/tflite-android/jni/arm64-v8a/libtensorflowlite_jni.so
+# Set the rpath to . on Android since run_compare_on_device.sh will push the .so to the same dir as the app
+TFLITE_LDFLAGS=-Wl,-rpath,.
 
 else
 
@@ -290,7 +312,12 @@ TFLITE_SHARED_LIBRARY ?= ERROR_TODO
 
 endif
 
+# To build for Android, use `HL_TARGET=arm-64-android make compare_vs_tflite`
 $(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) $(TFLITE_SHARED_LIBRARY)
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(TFLITE_INCLUDES) -Wl,-rpath,$(dir $(TFLITE_SHARED_LIBRARY)) $(filter %.cpp %.o %.a %.$(SHARED_EXT),$^) -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(TFLITE_INCLUDES) $(TFLITE_LDFLAGS) $(filter %.cpp %.o %.a %.so %.$(SHARED_EXT),$^) -o $@ $(LDFLAGS-$*)
+
+.PHONY: compare_vs_tflite
+
+compare_vs_tflite: $(BIN)/$(HL_TARGET)/compare_vs_tflite
 
