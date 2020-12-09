@@ -40,16 +40,17 @@ inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {
 }
 
 // Note: all severity values output to stderr, not stdout.
-// Note: ERROR does *not* trigger an exit()/abort() call.
+// Note: ERROR does *not* trigger an exit()/abort() call. FATAL does.
 enum LogSeverity {
     INFO = 0,
     WARNING = 1,
     ERROR = 2,
+    FATAL = 3,
 };
 
 namespace internal {
 
-struct Logger {
+struct Logger final {
     std::ostringstream msg;
     const LogSeverity severity;
 
@@ -64,10 +65,6 @@ struct Logger {
         return *this;
     }
 
-    Logger &ref() {
-        return *this;
-    }
-
     Logger() = delete;
     Logger(const Logger &) = delete;
     Logger &operator=(const Logger &) = delete;
@@ -75,17 +72,30 @@ struct Logger {
     Logger &operator=(Logger &&) = delete;
 };
 
-struct CheckLogger : public Logger {
-    CheckLogger(LogSeverity severity, const char *condition_string);
-    CheckLogger(LogSeverity severity, const char *file, int line, const char *condition_string);
+struct Checker final {
+    Logger logger;
 
-    [[noreturn]] ~CheckLogger() noexcept(false);
+    Checker(const char *condition_string);
+    Checker(const char *file, int line, const char *condition_string);
 
-    CheckLogger() = delete;
-    CheckLogger(const CheckLogger &) = delete;
-    CheckLogger &operator=(const CheckLogger &) = delete;
-    CheckLogger(CheckLogger &&) = delete;
-    CheckLogger &operator=(CheckLogger &&) = delete;
+    template<typename T>
+    Checker &operator<<(const T &x) {
+        logger << x;
+        ;
+        return *this;
+    }
+
+    Checker &ref() {
+        return *this;
+    }
+
+    [[noreturn]] ~Checker() noexcept(false) = default;
+
+    Checker() = delete;
+    Checker(const Checker &) = delete;
+    Checker &operator=(const Checker &) = delete;
+    Checker(Checker &&) = delete;
+    Checker &operator=(Checker &&) = delete;
 };
 
 // This uses operator precedence as a trick to avoid argument evaluation if
@@ -102,7 +112,7 @@ public:
 
     // This has to be an operator with a precedence lower than << but
     // higher than ?:
-    void operator&(Logger &) {
+    void operator&(Checker &) {
     }
 };
 
@@ -126,7 +136,7 @@ public:
  * Note that this macro intentionally has no parens internally; in actual
  * use, the implicit grouping will end up being
  *
- *   condition ? (void) : (Voidifier() & (Logger << arg1 << arg2 ... << argN))
+ *   condition ? (void) : (Voidifier() & (Checker << arg1 << arg2 ... << argN))
  *
  * This (regrettably) requires a macro to work, but has the highly desirable
  * effect that all assertion parameters are totally skipped (not ever evaluated)
@@ -135,11 +145,11 @@ public:
 #ifndef NDEBUG
 // In debug builds, include file-and-line
 #define CHECK(condition) \
-    (condition) ? (void)0 : ::interpret_nn::internal::Voidifier() & ::interpret_nn::internal::CheckLogger(::interpret_nn::ERROR, __FILE__, __LINE__, #condition).ref()
+    (condition) ? (void)0 : ::interpret_nn::internal::Voidifier() & ::interpret_nn::internal::Checker(__FILE__, __LINE__, #condition).ref()
 #else
 // In nondebug builds, don't include file-and-line
 #define CHECK(condition) \
-    (condition) ? (void)0 : ::interpret_nn::internal::Voidifier() & ::interpret_nn::internal::CheckLogger(::interpret_nn::ERROR, #condition).ref()
+    (condition) ? (void)0 : ::interpret_nn::internal::Voidifier() & ::interpret_nn::internal::Checker(#condition).ref()
 #endif
 }  // namespace interpret_nn
 
