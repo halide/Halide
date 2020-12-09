@@ -359,7 +359,7 @@ protected:
 
         int shift_amount;
         if (is_const_power_of_two_integer(b, &shift_amount) && op->type.is_int_or_uint()) {
-            return a >> make_const(UInt(a.type().bits()), shift_amount);
+            return mutate(a >> make_const(UInt(a.type().bits()), shift_amount));
         }
 
         if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -369,25 +369,8 @@ protected:
         }
     }
 
-    Expr visit(const Mod *op) override {
-        if (!find_intrinsics_for_type(op->type)) {
-            return IRMutator::visit(op);
-        }
-
-        Expr a = mutate(op->a);
-        Expr b = mutate(op->b);
-
-        int shift_amount;
-        if (is_const_power_of_two_integer(b, &shift_amount) && op->type.is_int_or_uint()) {
-            return a & simplify(b - 1);
-        }
-
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return op;
-        } else {
-            return Mod::make(a, b);
-        }
-    }
+    // We don't handle Mod because we don't have any patterns that look for bitwise and vs.
+    // mod.
 
     template<class MinOrMax>
     Expr visit_min_or_max(const MinOrMax *op) {
