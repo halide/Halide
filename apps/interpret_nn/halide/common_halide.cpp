@@ -80,9 +80,9 @@ Expr round_shift_right(const Expr &x, const Expr &exponent) {
     Type t_unsigned = t.with_code(halide_type_uint);
     Expr uexponent = cast(t_unsigned, exponent);
     Expr one = cast(x.type(), 1);
-    // This is intended to pattern-match against rounding-shift-right instruction generation
+    // This is intended to pattern-match against rounding-shift-right instruction generation.
     Expr rounding = (one << uexponent) >> 1;
-    return ((x + rounding) >> uexponent);
+    return (saturating_cast(t, x + rounding) >> uexponent);
 }
 
 Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
