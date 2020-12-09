@@ -4,6 +4,17 @@ using namespace Halide;
 
 namespace interpret_nn {
 
+namespace {
+
+Expr saturating_add(const Expr &a, const Expr &b) {
+    const Type t = a.type();
+    assert(t == b.type());
+    const Type wt = t.widen();
+    return saturating_cast(t, cast(wt, a) + cast(wt, b));
+}
+
+}  // namespace
+
 void interpret_as_tensor(OutputImageParam p) {
     p.dim(0).set_stride(1).set_min(0);
 }
@@ -82,7 +93,7 @@ Expr round_shift_right(const Expr &x, const Expr &exponent) {
     Expr one = cast(x.type(), 1);
     // This is intended to pattern-match against rounding-shift-right instruction generation.
     Expr rounding = (one << uexponent) >> 1;
-    return (saturating_cast(t, x + rounding) >> uexponent);
+    return saturating_add(x, rounding) >> uexponent;
 }
 
 Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
