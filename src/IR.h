@@ -774,6 +774,14 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_interleave() const;
 
+    /** Check if this shuffle can be represented as a broadcast of Type t.
+     * For example:
+     * A uint8 shuffle of with 4*n lanes and indices:
+     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
+     * can be treated as a uint32 broadcast with n lanes.
+     * Return a Broadcast if possible, Expr() otherwise. */
+    Expr is_broadcast(Type t) const;
+
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */
     bool is_concat() const;

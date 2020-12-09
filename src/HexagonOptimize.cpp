@@ -130,10 +130,9 @@ Expr bc(Expr x) {
 }
 
 // Helpers to generate horizontally reducing multiply operations.
-Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v01, Expr c01, bool is_vdmpy) {
-    Expr call = Call::make(result_type, "halide.hexagon.add_2mpy" + suffix,
-                           {std::move(v01), std::move(c01)}, Call::PureExtern);
-    return (is_vdmpy) ? call : native_interleave(call);
+Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
+    return Call::make(result_type, "halide.hexagon.add_2mpy" + suffix,
+                      {std::move(v01), std::move(c01)}, Call::PureExtern);
 }
 
 Expr halide_hexagon_add_3mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
@@ -410,24 +409,13 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
             }
         }
         // Check if shuffle can be treated as a broadcast.
-        // For Eg: for inputs:
-        // ty -> uint32
-        // x  -> uint8 shuffle with indices:
-        //       0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
-        // Here, x can be reinterpreted as a broadcast of uint32.
         if (const Shuffle *shuff = x.as<Shuffle>()) {
-            int lanes = shuff->type.lanes();
-            int rep = ty.lanes();
-            int i = 0;
-            for (; i < lanes; i++) {
-                if (shuff->indices[i % rep] != shuff->indices[i]) {
-                    break;
+            int lanes = x.type().lanes() / ty.lanes();
+            if (lanes > 1) {
+                Expr e = shuff->is_broadcast(x.type().with_lanes(lanes));
+                if (e.defined()) {
+                    x = e.as<Broadcast>()->value;
                 }
-            }
-            if (i == lanes) {
-                x = Shuffle::make(shuff->vectors,
-                                  std::vector<int>(shuff->indices.begin(),
-                                                   shuff->indices.begin() + rep));
             }
         }
     }
@@ -763,7 +751,8 @@ private:
                 bool is_vdmpy = (!a01.as<Shuffle>() || vmpa_suffix.empty());
                 string suffix = (is_vdmpy) ? vdmpy_suffix : vmpa_suffix;
                 Expr new_expr = halide_hexagon_add_2mpy(op->type, suffix,
-                                                        a01, b0123, is_vdmpy);
+                                                        a01, b0123);
+                new_expr = (!is_vdmpy) ? native_interleave(new_expr) : new_expr;
                 if (rest.defined()) {
                     new_expr = Add::make(new_expr, rest);
                 }
@@ -773,10 +762,10 @@ private:
 
         static const vector<Pattern> adds = {
             // Use accumulating versions of vmpa, vdmpy, vrmpy instructions when possible.
-            {"halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0), ".vub.vub.b.b", wild_u8x, wild_i32, false), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b", wild_i32x + halide_hexagon_add_2mpy(Int(32, 0), ".vh.vh.b.b", wild_i16x, wild_i32, false), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.acc_add_2mpy.vh.vub.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0), ".vub.b", wild_u8x, wild_i32, true)},
-            {"halide.hexagon.acc_add_2mpy.vw.vh.b", wild_i32x + halide_hexagon_add_2mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i32, true)},
+            {"halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + native_interleave(halide_hexagon_add_2mpy(Int(16, 0), ".vub.vub.b.b", wild_u8x, wild_i32)), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b", wild_i32x + native_interleave(halide_hexagon_add_2mpy(Int(32, 0), ".vh.vh.b.b", wild_i16x, wild_i32)), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.acc_add_2mpy.vh.vub.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0), ".vub.b", wild_u8x, wild_i32)},
+            {"halide.hexagon.acc_add_2mpy.vw.vh.b", wild_i32x + halide_hexagon_add_2mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i32)},
             {"halide.hexagon.acc_add_3mpy.vh.vub.b", wild_i16x + halide_hexagon_add_3mpy(Int(16, 0), ".vub.b", wild_u8x, wild_i16), Pattern::ReinterleaveOp0},
             {"halide.hexagon.acc_add_3mpy.vh.vb.b", wild_i16x + halide_hexagon_add_3mpy(Int(16, 0), ".vb.b", wild_i8x, wild_i16), Pattern::ReinterleaveOp0},
             {"halide.hexagon.acc_add_3mpy.vw.vh.b", wild_i32x + halide_hexagon_add_3mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i16), Pattern::ReinterleaveOp0},
@@ -786,7 +775,7 @@ private:
             {"halide.hexagon.acc_add_4mpy.vw.vub.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.vb", wild_u8x, wild_i8x, false)},
             {"halide.hexagon.acc_add_4mpy.vw.vb.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vb.vb", wild_i8x, wild_i8x, false)},
             {"halide.hexagon.acc_add_4mpy_even.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), "_even.vub.b", wild_u8x, wild_i8, true), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.acc_add_4mpy_even.vuw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), "_odd.vub.ub", wild_u8x, wild_u8, true), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.acc_add_4mpy_even.vuw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), "_even.vub.ub", wild_u8x, wild_u8, true), Pattern::ReinterleaveOp0},
             {"halide.hexagon.acc_add_4mpy_odd.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), "_odd.vub.b", wild_u8x, wild_i8, true), Pattern::ReinterleaveOp0},
             {"halide.hexagon.acc_add_4mpy_odd.vuw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), "_odd.vub.ub", wild_u8x, wild_u8, true), Pattern::ReinterleaveOp0},
 
@@ -1204,14 +1193,14 @@ public:
 class VectorReducePatterns : public IRMutator {
     using IRMutator::visit;
 
-    // Match stencil patterns like reduction of a shuffle with below indices:
+    // Check for interleaves of vectors with stride 1 like shuffle with indices:
     // 0, 1, 2,..., window_size - 1,
     // 1, 2, 3,..., window_size,
-    // 2, 3, 4,..., window_size + 1
+    // 2, 3, 4,..., window_size + 1,
     // .....
     // window_size != lanes
     // TODO: Their could be other patterns as well which we should match
-    int is_stencil_reduction(const Expr &op, int window_size) {
+    static int is_stencil_interleave(const Expr &op, int window_size) {
         int lanes = op.type().lanes();
         internal_assert(lanes > window_size);
         if (const Shuffle *shuff = op.as<Shuffle>()) {
@@ -1326,7 +1315,7 @@ class VectorReducePatterns : public IRMutator {
             Expr b = simplify(mpys[0].second);
             Expr a0, a1;
             if (sig.flags & Signature::SlidingWindow) {
-                if (!is_stencil_reduction(a, rfac)) {
+                if (!is_stencil_interleave(a, rfac)) {
                     continue;
                 }
                 // Split a into a0, a1 to get the correct vector args
@@ -1408,7 +1397,7 @@ class VectorReducePatterns : public IRMutator {
                                                         Call::PureExtern));
                 } else {
                     // rfac == 3 has only sliding window reductions.
-                    return halide_hexagon_add_2mpy(op->type, suffix, a, b, true);
+                    return halide_hexagon_add_2mpy(op->type, suffix, a, b);
                 }
             }
         }
