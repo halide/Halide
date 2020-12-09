@@ -533,6 +533,17 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
             if (auto *module_flags = modules[i]->getModuleFlagsMetadata()) {
                 modules[i]->eraseNamedMetadata(module_flags);
             }
+
+        }
+        // Clang inserts metadata that may specialize to the target CPU.
+        // We remove that here to enable ARM64 on Windows without too much
+        // hassle.  We may wish to explore alternatives to this, such as compiling
+        // the modules with different triples to begin with.
+        if (t.os == Target::Windows && t.arch == Target::ARM && t.bits == 64) {
+            for (auto &f: modules[i]->functions()) {
+                f.removeFnAttr("target-cpu");
+                f.removeFnAttr("target-features");
+            }
         }
         modules[i]->setDataLayout(data_layout);
         modules[i]->setTargetTriple(triple.str());
