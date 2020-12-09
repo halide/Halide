@@ -245,6 +245,43 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         }
     }
 
+    if (op->is_slice() && (new_vectors.size() == 1)) {
+        if (const Shuffle *inner_shuffle = new_vectors[0].as<Shuffle>()) {
+            // Try to collapse a slice of slice.
+            if (inner_shuffle->is_slice() && (inner_shuffle->vectors.size() == 1)) {
+                // Indices of the slice are ramp, so nested slice is a1 * (a2 * x + b2) + b1 =
+                // = a1 * a2 * x + a1 * b2 + b1.
+                return Shuffle::make_slice(inner_shuffle->vectors[0],
+                                           op->slice_begin() * inner_shuffle->slice_stride() + inner_shuffle->slice_begin(),
+                                           op->slice_stride() * inner_shuffle->slice_stride(),
+                                           op->indices.size());
+            }
+            // Check if we really need to concat all vectors before slicing.
+            if (inner_shuffle->is_concat()) {
+                int slice_min = op->indices.front();
+                int slice_max = op->indices.back();
+                int concat_index = 0;
+                int new_slice_start = -1;
+                vector<Expr> new_concat_vectors;
+                for (const auto &v : inner_shuffle->vectors) {
+                    // Check if current concat vector overlaps with slice.
+                    if ((concat_index >= slice_min && concat_index <= slice_max) ||
+                        ((concat_index + v.type().lanes() - 1) >= slice_min && (concat_index + v.type().lanes() - 1) <= slice_max)) {
+                        if (new_slice_start < 0) {
+                            new_slice_start = concat_index;
+                        }
+                        new_concat_vectors.push_back(v);
+                    }
+
+                    concat_index += v.type().lanes();
+                }
+                if (new_concat_vectors.size() < inner_shuffle->vectors.size()) {
+                    return Shuffle::make_slice(Shuffle::make_concat(new_concat_vectors), op->slice_begin() - new_slice_start, op->slice_stride(), op->indices.size());
+                }
+            }
+        }
+    }
+
     if (!changed) {
         return op;
     } else {
