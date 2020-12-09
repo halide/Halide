@@ -206,10 +206,11 @@ void CodeGen_X86::visit(const Add *op) {
         Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
         Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
         value = call_overloaded_intrin(op->type, "pmaddwd", {ac, bd});
-        internal_assert(value);
-    } else {
-        CodeGen_Posix::visit(op);
+        if (value) {
+            return;
+        }
     }
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_X86::visit(const Sub *op) {
@@ -224,10 +225,11 @@ void CodeGen_X86::visit(const Sub *op) {
         Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
         Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
         value = call_overloaded_intrin(op->type, "pmaddwd", {ac, bd});
-        internal_assert(value);
-    } else {
-        CodeGen_Posix::visit(op);
+        if (value) {
+            return;
+        }
     }
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_X86::visit(const GT *op) {
@@ -366,7 +368,9 @@ void CodeGen_X86::visit(const Cast *op) {
         const Pattern &pattern = patterns[i];
         if (expr_match(pattern.pattern, op, matches)) {
             value = call_overloaded_intrin(op->type, pattern.intrin, matches);
-            return;
+            if (value) {
+                return;
+            }
         }
     }
 
