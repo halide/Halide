@@ -225,7 +225,20 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
             CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
             CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
         }
-        CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, CompareBuffersOptions());
+        CompareBuffersOptions options;
+#if defined(__arm__) || defined(__aarch64__)
+        // TFLite on Arm devices generally uses the rounding-shift instructions,
+        // which should match our results exactly (since we mimic the same result,
+        // whether or not we actually generate those specific instructions).
+        // So leave the options at their default.
+#else
+        // TFLite on x86 (on desktop platforms, at least) appears to mostly
+        // use the reference implementations, which don't have the same
+        // rounding-shift behavior. We'll bump up the 'close' value for these.
+        // This is a lttle hand-wavy but is a decent proxy for now.
+        options.close_thresh = 3.0;
+#endif
+        CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, options);
         if (r.ok) {
             if (verbose) {
                 std::cout << "MATCHING output " << i << " is:\n";
