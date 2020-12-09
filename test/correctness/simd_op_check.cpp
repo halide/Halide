@@ -107,7 +107,6 @@ public:
             check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> cast<unsigned>(16)));
             check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> cast<int>(16)));
             check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) << cast<int>(-16)));
-            check("pmulhrsw", 4 * w, i16((i32(i16_1) * i32(i16_2) + 16384) >> 15));
 
             // Add a test with a constant as there was a bug on this.
             check("pmulhw", 4 * w, i16((3 * i32(i16_2)) / (256 * 256)));
@@ -232,7 +231,7 @@ public:
 
         if (use_ssse3) {
             for (int w = 2; w <= 4; w++) {
-                check("pmulhrsw", 4 * w, i16((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
+                check("pmulhrsw", 4 * w, i16((i32(i16_1) * i32(i16_2) + 16384) >> 15));
                 check("pabsb", 8 * w, abs(i8_1));
                 check("pabsw", 4 * w, abs(i16_1));
                 check("pabsd", 2 * w, abs(i32_1));
