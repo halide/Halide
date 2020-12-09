@@ -21,6 +21,9 @@ public:
 protected:
     using CodeGen_Posix::visit;
 
+    /** Assuming 'inner' is a function that takes two vector arguments, define a wrapper that
+     * takes one vector argument and splits it into two to call inner. */
+    llvm::Function *define_concat_args_wrapper(llvm::Function *inner, const std::string &name);
     void init_module() override;
 
     /** Nodes for which we want to emit specific neon intrinsics */

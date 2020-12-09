@@ -180,6 +180,7 @@ struct ArmIntrinsic {
         MangleArgs = 1 << 3,         // Most intrinsics only mangle the return type. Some mangle the arguments instead.
         MangleRetArgs = 1 << 4,      // Most intrinsics only mangle the return type. Some mangle the return type and arguments instead.
         ScalarsAreVectors = 1 << 5,  // Some intrinsics have scalar arguments that are vector parameters :(
+        SplitArg0 = 1 << 6,          // This intrinsic requires splitting the argument into the low and high halves.
     };
 };
 
@@ -425,14 +426,14 @@ const ArmIntrinsic intrinsic_defs[] = {
 
     // PADD - Pairwise add.
     // TODO: It seems like there should be full width versions of these, but there seem not to be?
-    {"vpadd", "addp", Int(8, 8), "pairwise_concat_add", {Int(8, 8), Int(8, 8)}},
-    {"vpadd", "addp", UInt(8, 8), "pairwise_concat_add", {UInt(8, 8), UInt(8, 8)}},
-    {"vpadd", "addp", Int(16, 4), "pairwise_concat_add", {Int(16, 4), Int(16, 4)}},
-    {"vpadd", "addp", UInt(16, 4), "pairwise_concat_add", {UInt(16, 4), UInt(16, 4)}},
-    {"vpadd", "addp", Int(32, 2), "pairwise_concat_add", {Int(32, 2), Int(32, 2)}},
-    {"vpadd", "addp", UInt(32, 2), "pairwise_concat_add", {UInt(32, 2), UInt(32, 2)}},
-    {"vpadd", "addp", Float(32, 2), "pairwise_concat_add", {Float(32, 2), Float(32, 2)}},
-    {nullptr, "addp", Float(64, 2), "pairwise_concat_add", {Float(64, 2), Float(64, 2)}},
+    {"vpadd", "addp", Int(8, 8), "pairwise_add", {Int(8, 16)}, ArmIntrinsic::SplitArg0},
+    {"vpadd", "addp", UInt(8, 8), "pairwise_add", {UInt(8, 16)}, ArmIntrinsic::SplitArg0},
+    {"vpadd", "addp", Int(16, 4), "pairwise_add", {Int(16, 8)}, ArmIntrinsic::SplitArg0},
+    {"vpadd", "addp", UInt(16, 4), "pairwise_add", {UInt(16, 8)}, ArmIntrinsic::SplitArg0},
+    {"vpadd", "addp", Int(32, 2), "pairwise_add", {Int(32, 4)}, ArmIntrinsic::SplitArg0},
+    {"vpadd", "addp", UInt(32, 2), "pairwise_add", {UInt(32, 4)}, ArmIntrinsic::SplitArg0},
+    {"vpadd", "addp", Float(32, 2), "pairwise_add", {Float(32, 4)}, ArmIntrinsic::SplitArg0},
+    {nullptr, "addp", Float(64, 2), "pairwise_add", {Float(64, 4)}, ArmIntrinsic::SplitArg0},
 
     // SADDLP, UADDLP - Pairwise add long.
     {"vpaddls", "saddlp", Int(16, 4), "pairwise_widening_add", {Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
@@ -457,40 +458,40 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vpadalu", nullptr, Int(64, 1), "pairwise_widening_add_accumulate", {Int(64, 1), UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::ScalarsAreVectors},
 
     // SMAXP, UMAXP, FMAXP - Pairwise max.
-    {nullptr, "smaxp", Int(8, 8), "pairwise_concat_max", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "umaxp", UInt(8, 8), "pairwise_concat_max", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "smaxp", Int(16, 4), "pairwise_concat_max", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "umaxp", UInt(16, 4), "pairwise_concat_max", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "smaxp", Int(32, 2), "pairwise_concat_max", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "umaxp", UInt(32, 2), "pairwise_concat_max", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "fmaxp", Float(32, 2), "pairwise_concat_max", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "smaxp", Int(8, 8), "pairwise_max", {Int(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "umaxp", UInt(8, 8), "pairwise_max", {UInt(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "smaxp", Int(16, 4), "pairwise_max", {Int(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "umaxp", UInt(16, 4), "pairwise_max", {UInt(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "smaxp", Int(32, 2), "pairwise_max", {Int(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "umaxp", UInt(32, 2), "pairwise_max", {UInt(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "fmaxp", Float(32, 2), "pairwise_max", {Float(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
 
     // On arm32, we only have half-width versions of these.
-    {"vpmaxs", nullptr, Int(8, 8), "pairwise_concat_max", {Int(8, 8), Int(8, 8)}},
-    {"vpmaxu", nullptr, UInt(8, 8), "pairwise_concat_max", {UInt(8, 8), UInt(8, 8)}},
-    {"vpmaxs", nullptr, Int(16, 4), "pairwise_concat_max", {Int(16, 4), Int(16, 4)}},
-    {"vpmaxu", nullptr, UInt(16, 4), "pairwise_concat_max", {UInt(16, 4), UInt(16, 4)}},
-    {"vpmaxs", nullptr, Int(32, 2), "pairwise_concat_max", {Int(32, 2), Int(32, 2)}},
-    {"vpmaxu", nullptr, UInt(32, 2), "pairwise_concat_max", {UInt(32, 2), UInt(32, 2)}},
-    {"vpmaxs", nullptr, Float(32, 2), "pairwise_concat_max", {Float(32, 2), Float(32, 2)}},
+    {"vpmaxs", nullptr, Int(8, 8), "pairwise_max", {Int(8, 16)}, ArmIntrinsic::SplitArg0},
+    {"vpmaxu", nullptr, UInt(8, 8), "pairwise_max", {UInt(8, 16)}, ArmIntrinsic::SplitArg0},
+    {"vpmaxs", nullptr, Int(16, 4), "pairwise_max", {Int(16, 8)}, ArmIntrinsic::SplitArg0},
+    {"vpmaxu", nullptr, UInt(16, 4), "pairwise_max", {UInt(16, 8)}, ArmIntrinsic::SplitArg0},
+    {"vpmaxs", nullptr, Int(32, 2), "pairwise_max", {Int(32, 4)}, ArmIntrinsic::SplitArg0},
+    {"vpmaxu", nullptr, UInt(32, 2), "pairwise_max", {UInt(32, 4)}, ArmIntrinsic::SplitArg0},
+    {"vpmaxs", nullptr, Float(32, 2), "pairwise_max", {Float(32, 4)}, ArmIntrinsic::SplitArg0},
 
     // SMINP, UMINP, FMINP - Pairwise min.
-    {nullptr, "sminp", Int(8, 8), "pairwise_concat_min", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "uminp", UInt(8, 8), "pairwise_concat_min", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "sminp", Int(16, 4), "pairwise_concat_min", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "uminp", UInt(16, 4), "pairwise_concat_min", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "sminp", Int(32, 2), "pairwise_concat_min", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "uminp", UInt(32, 2), "pairwise_concat_min", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
-    {nullptr, "fminp", Float(32, 2), "pairwise_concat_min", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "sminp", Int(8, 8), "pairwise_min", {Int(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "uminp", UInt(8, 8), "pairwise_min", {UInt(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "sminp", Int(16, 4), "pairwise_min", {Int(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "uminp", UInt(16, 4), "pairwise_min", {UInt(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "sminp", Int(32, 2), "pairwise_min", {Int(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "uminp", UInt(32, 2), "pairwise_min", {UInt(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "fminp", Float(32, 2), "pairwise_min", {Float(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
 
     // On arm32, we only have half-width versions of these.
-    {"vpmins", nullptr, Int(8, 8), "pairwise_concat_min", {Int(8, 8), Int(8, 8)}},
-    {"vpminu", nullptr, UInt(8, 8), "pairwise_concat_min", {UInt(8, 8), UInt(8, 8)}},
-    {"vpmins", nullptr, Int(16, 4), "pairwise_concat_min", {Int(16, 4), Int(16, 4)}},
-    {"vpminu", nullptr, UInt(16, 4), "pairwise_concat_min", {UInt(16, 4), UInt(16, 4)}},
-    {"vpmins", nullptr, Int(32, 2), "pairwise_concat_min", {Int(32, 2), Int(32, 2)}},
-    {"vpminu", nullptr, UInt(32, 2), "pairwise_concat_min", {UInt(32, 2), UInt(32, 2)}},
-    {"vpmins", nullptr, Float(32, 2), "pairwise_concat_min", {Float(32, 2), Float(32, 2)}},
+    {"vpmins", nullptr, Int(8, 8), "pairwise_min", {Int(8, 16)}, ArmIntrinsic::SplitArg0},
+    {"vpminu", nullptr, UInt(8, 8), "pairwise_min", {UInt(8, 16)}, ArmIntrinsic::SplitArg0},
+    {"vpmins", nullptr, Int(16, 4), "pairwise_min", {Int(16, 8)}, ArmIntrinsic::SplitArg0},
+    {"vpminu", nullptr, UInt(16, 4), "pairwise_min", {UInt(16, 8)}, ArmIntrinsic::SplitArg0},
+    {"vpmins", nullptr, Int(32, 2), "pairwise_min", {Int(32, 4)}, ArmIntrinsic::SplitArg0},
+    {"vpminu", nullptr, UInt(32, 2), "pairwise_min", {UInt(32, 4)}, ArmIntrinsic::SplitArg0},
+    {"vpmins", nullptr, Float(32, 2), "pairwise_min", {Float(32, 4)}, ArmIntrinsic::SplitArg0},
 
     // SDOT, UDOT - Dot products.
     // Mangle this one manually, there aren't that many and it is a special case.
@@ -504,6 +505,43 @@ const ArmIntrinsic intrinsic_defs[] = {
 // clang-format on
 
 }  // namespace
+
+llvm::Function *CodeGen_ARM::define_concat_args_wrapper(llvm::Function *inner, const std::string &name) {
+    llvm::FunctionType *inner_ty = inner->getFunctionType();
+
+    internal_assert(inner_ty->getNumParams() == 2);
+    llvm::Type *inner_arg0_ty = inner_ty->getParamType(0);
+    llvm::Type *inner_arg1_ty = inner_ty->getParamType(1);
+    int inner_arg0_lanes = get_vector_num_elements(inner_arg0_ty);
+    int inner_arg1_lanes = get_vector_num_elements(inner_arg1_ty);
+
+    llvm::Type *concat_arg_ty =
+        get_vector_type(inner_arg0_ty->getScalarType(), inner_arg0_lanes + inner_arg1_lanes);
+
+    // Make a wrapper.
+    llvm::FunctionType *wrapper_ty =
+        llvm::FunctionType::get(inner_ty->getReturnType(), {concat_arg_ty}, false);
+    llvm::Function *wrapper =
+        llvm::Function::Create(wrapper_ty, llvm::GlobalValue::InternalLinkage, name, module.get());
+    llvm::BasicBlock *block =
+        llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
+    IRBuilderBase::InsertPoint here = builder->saveIP();
+    builder->SetInsertPoint(block);
+
+    // Call the real intrinsic.
+    Value *low = slice_vector(wrapper->getArg(0), 0, inner_arg0_lanes);
+    Value *high = slice_vector(wrapper->getArg(0), inner_arg0_lanes, inner_arg1_lanes);
+    Value *ret = builder->CreateCall(inner, {low, high});
+    builder->CreateRet(ret);
+
+    // Always inline these wrappers.
+    wrapper->addFnAttr(llvm::Attribute::AlwaysInline);
+
+    builder->restoreIP(here);
+
+    llvm::verifyFunction(*wrapper);
+    return wrapper;
+}
 
 void CodeGen_ARM::init_module() {
     CodeGen_Posix::init_module();
@@ -549,13 +587,12 @@ void CodeGen_ARM::init_module() {
                 if (arg_type.is_vector()) {
                     arg_type = arg_type.with_lanes(arg_type.lanes() * width_factor);
                 }
-                internal_assert(arg_type.bits() * arg_type.lanes() <= 128) << full_name << "\n";
                 arg_types.emplace_back(arg_type);
             }
 
             // Generate the LLVM mangled name.
-            std::stringstream mangled_name;
-            mangled_name << full_name;
+            std::stringstream mangled_name_builder;
+            mangled_name_builder << full_name;
             if (starts_with(full_name, "llvm.") && (intrin.flags & ArmIntrinsic::NoMangle) == 0) {
                 // Append LLVM name mangling for either the return type or the arguments, or both.
                 std::vector<Type> types;
@@ -568,22 +605,34 @@ void CodeGen_ARM::init_module() {
                     types = {ret_type};
                 }
                 for (const Type &t : types) {
-                    mangled_name << ".v" << t.lanes();
+                    mangled_name_builder << ".v" << t.lanes();
                     if (t.is_int() || t.is_uint()) {
-                        mangled_name << "i";
+                        mangled_name_builder << "i";
                     } else if (t.is_float()) {
-                        mangled_name << "f";
+                        mangled_name_builder << "f";
                     }
-                    mangled_name << t.bits();
+                    mangled_name_builder << t.bits();
                 }
             }
+            std::string mangled_name = mangled_name_builder.str();
 
-            bool scalars_are_vectors = intrin.flags & ArmIntrinsic::ScalarsAreVectors;
-            declare_intrin_overload(intrin.name, ret_type, mangled_name.str(), arg_types, scalars_are_vectors);
+            llvm::Function *intrin_impl = nullptr;
+            if (intrin.flags & ArmIntrinsic::SplitArg0) {
+                // This intrinsic needs a wrapper to split the argument.
+                std::string wrapper_name = intrin.name + unique_name("_wrapper");
+                Type split_arg_type = arg_types[0].with_lanes(arg_types[0].lanes() / 2);
+                llvm::Function *to_wrap = get_llvm_intrin(ret_type, mangled_name, {split_arg_type, split_arg_type});
+                intrin_impl = define_concat_args_wrapper(to_wrap, wrapper_name);
+            } else {
+                bool scalars_are_vectors = intrin.flags & ArmIntrinsic::ScalarsAreVectors;
+                intrin_impl = get_llvm_intrin(ret_type, mangled_name, arg_types, scalars_are_vectors);
+            }
+
+            declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
             if (intrin.flags & ArmIntrinsic::AllowUnsignedOp1) {
                 // Also generate a version of this intrinsic where the second operand is unsigned.
                 arg_types[1] = arg_types[1].with_code(halide_type_uint);
-                declare_intrin_overload(intrin.name, ret_type, mangled_name.str(), arg_types, scalars_are_vectors);
+                declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
             }
         }
     }
@@ -1085,17 +1134,6 @@ void CodeGen_ARM::visit(const LE *op) {
     CodeGen_Posix::visit(op);
 }
 
-namespace {
-
-std::vector<Expr> split_vector(const Expr &e) {
-    return {
-        Shuffle::make_slice(e, 0, 1, e.type().lanes() / 2),
-        Shuffle::make_slice(e, e.type().lanes() / 2, 1, e.type().lanes() / 2),
-    };
-}
-
-}  // namespace
-
 void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     if (neon_intrinsics_disabled() ||
         op->op == VectorReduce::Or ||
@@ -1175,15 +1213,15 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 intrin_args = {narrow};
             }
         } else {
-            intrin = "pairwise_concat_add";
-            intrin_args = split_vector(op->value);
+            intrin = "pairwise_add";
+            intrin_args = {op->value};
         }
     } else if (op->op == VectorReduce::Min && factor == 2) {
-        intrin = "pairwise_concat_min";
-        intrin_args = split_vector(op->value);
+        intrin = "pairwise_min";
+            intrin_args = {op->value};
     } else if (op->op == VectorReduce::Max && factor == 2) {
-        intrin = "pairwise_concat_max";
-        intrin_args = split_vector(op->value);
+        intrin = "pairwise_max";
+            intrin_args = {op->value};
     }
 
     if (intrin) {

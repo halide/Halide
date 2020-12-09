@@ -4717,26 +4717,44 @@ Value *CodeGen_LLVM::get_user_context() const {
     return ctx;
 }
 
-void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors) {
-    llvm::Function *intrin = module->getFunction(impl_name);
+llvm::Function *CodeGen_LLVM::get_llvm_intrin(llvm::Type *ret_type, const std::string &name, const std::vector<llvm::Type*> &arg_types) {
+    llvm::Function *intrin = module->getFunction(name);
     if (!intrin) {
-        vector<llvm::Type *> llvm_arg_types(arg_types.size());
-        for (size_t i = 0; i < arg_types.size(); i++) {
-            llvm_arg_types[i] = llvm_type_of(arg_types[i]);
-            if (arg_types[i].is_scalar() && scalars_are_vectors) {
-                llvm_arg_types[i] = get_vector_type(llvm_arg_types[i], 1);
-            }
-        }
-
-        llvm::Type *llvm_ret_type = llvm_type_of(ret_type);
-        if (ret_type.is_scalar() && scalars_are_vectors) {
-            llvm_ret_type = get_vector_type(llvm_ret_type, 1);
-        }
-        FunctionType *func_t = FunctionType::get(llvm_ret_type, llvm_arg_types, false);
-        intrin = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, impl_name, module.get());
+        FunctionType *func_t = FunctionType::get(ret_type, arg_types, false);
+        intrin = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
         intrin->setCallingConv(CallingConv::C);
     }
+    return intrin;
+}
+
+llvm::Function *CodeGen_LLVM::get_llvm_intrin(const Type &ret_type, const std::string &name, const std::vector<Type> &arg_types, bool scalars_are_vectors) {
+    llvm::Function *intrin = module->getFunction(name);
+    if (intrin) {
+        return intrin;
+    }
+
+    vector<llvm::Type *> llvm_arg_types(arg_types.size());
+    for (size_t i = 0; i < arg_types.size(); i++) {
+        llvm_arg_types[i] = llvm_type_of(arg_types[i]);
+        if (arg_types[i].is_scalar() && scalars_are_vectors) {
+            llvm_arg_types[i] = get_vector_type(llvm_arg_types[i], 1);
+        }
+    }
+
+    llvm::Type *llvm_ret_type = llvm_type_of(ret_type);
+    if (ret_type.is_scalar() && scalars_are_vectors) {
+        llvm_ret_type = get_vector_type(llvm_ret_type, 1);
+    }
+    return get_llvm_intrin(llvm_ret_type, name, llvm_arg_types);
+}
+
+void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors) {
+    llvm::Function *intrin = module->getFunction(impl_name);
     intrinsics[name].emplace_back(ret_type, std::move(arg_types), intrin);
+}
+
+void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, llvm::Function *impl, std::vector<Type> arg_types) {
+    intrinsics[name].emplace_back(ret_type, std::move(arg_types), impl);
 }
 
 Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args) {
@@ -4876,7 +4894,6 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
 Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
                                  const string &name, vector<Value *> arg_values) {
     llvm::Function *fn = module->getFunction(name);
-
     if (!fn) {
         vector<llvm::Type *> arg_types(arg_values.size());
         for (size_t i = 0; i < arg_values.size(); i++) {
@@ -4897,6 +4914,7 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
 
 Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
                                  llvm::Function *intrin, vector<Value *> arg_values) {
+    internal_assert(intrin);
     int arg_lanes = 1;
     if (result_type->isVectorTy()) {
         arg_lanes = get_vector_num_elements(result_type);
