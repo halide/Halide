@@ -560,6 +560,25 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     const std::set<string> retain = {"__stack_chk_guard",
                                      "__stack_chk_fail"};
 
+    // COMDAT is not supported in MachO object files, hence it does
+    // not work on Mac OS or iOS. These sometimes show up in the
+    // runtime since we compile for an abstract target that is based
+    // on ELF. This code removes all Comdat items and leaves the
+    // symbols they were attached to as regular definitions, which
+    // only works if there is a single instance, which is generally
+    // the case for the runtime. Presumably if this isn't true,
+    // linking the module will fail.
+    //
+    // Comdats are left in for other platforms as they are required
+    // for certain things on Windows and they are useful in general in
+    // ELF based formats.
+    if (t.os == Target::IOS || t.os == Target::OSX) {
+        for (auto &global_obj : modules[0]->global_objects()) {
+            global_obj.setComdat(nullptr);
+        }
+        modules[0]->getComdatSymbolTable().clear();
+    }
+
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
