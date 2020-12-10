@@ -285,26 +285,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // Determine the arguments that must be passed into the halide function
         vector<DeviceArgument> closure_args = c.arguments();
 
-        // Sort the args by the size of the underlying type. This is
-        // helpful for avoiding struct-packing ambiguities in metal,
-        // which passes the scalar args as a struct.
-        std::sort(closure_args.begin(), closure_args.end(),
-                  [](const DeviceArgument &a, const DeviceArgument &b) {
-                      if (a.is_buffer == b.is_buffer) {
-                          return a.type.bits() > b.type.bits();
-                      } else {
-                          // Ensure that buffer arguments come first:
-                          // for many OpenGL/Compute systems, the
-                          // legal indices for buffer args are much
-                          // more restrictive than for scalar args,
-                          // and scalar args can be 'grown' by
-                          // LICM. Putting buffers first makes it much
-                          // more likely we won't fail on some
-                          // hardware.
-                          return a.is_buffer > b.is_buffer;
-                      }
-                  });
-
         // Halide allows passing of scalar float and integer arguments. For
         // OpenGL, pack these into vec4 uniforms and varying attributes
         if (loop->device_api == DeviceAPI::GLSL) {
@@ -328,6 +308,26 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                     closure_args[i].packed_index = num_uniform_ints++;
                 }
             }
+        } else {
+            // Sort the args by the size of the underlying type. This is
+            // helpful for avoiding struct-packing ambiguities in metal,
+            // which passes the scalar args as a struct.
+            std::sort(closure_args.begin(), closure_args.end(),
+                      [](const DeviceArgument &a, const DeviceArgument &b) {
+                          if (a.is_buffer == b.is_buffer) {
+                              return a.type.bits() > b.type.bits();
+                          } else {
+                              // Ensure that buffer arguments come first:
+                              // for many OpenGL/Compute systems, the
+                              // legal indices for buffer args are much
+                              // more restrictive than for scalar args,
+                              // and scalar args can be 'grown' by
+                              // LICM. Putting buffers first makes it much
+                              // more likely we won't fail on some
+                              // hardware.
+                              return a.is_buffer > b.is_buffer;
+                          }
+                      });
         }
 
         for (size_t i = 0; i < closure_args.size(); i++) {
