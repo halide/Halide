@@ -141,10 +141,9 @@ Expr halide_hexagon_add_3mpy(Type result_type, const string &suffix, Expr v01, E
     return native_interleave(call);
 }
 
-Expr halide_hexagon_add_4mpy(Type result_type, const string &suffix, Expr v01, Expr c01, bool is_dv) {
-    Expr call = Call::make(result_type, "halide.hexagon.add_4mpy" + suffix,
+Expr halide_hexagon_add_4mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
+    return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix,
                            {std::move(v01), std::move(c01)}, Call::PureExtern);
-    return (is_dv) ? native_interleave(call) : call;
 }
 
 // This mutator rewrites patterns with an unknown number of lanes to
@@ -650,7 +649,7 @@ private:
                     Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                     b0123 = simplify(b0123);
                     b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
-                    Expr new_expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123, false);
+                    Expr new_expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
                     if (op->type.bits() == 16) {
                         // It's actually safe to use this op on 16 bit
                         // results, we just need to narrow the
@@ -693,7 +692,7 @@ private:
                 // We can generate this op for 16 bits, but, it's only
                 // faster to do so if the interleave simplifies away.
                 if (op->type.bits() == 32 || (!a0123.as<Shuffle>() && !b0123.as<Shuffle>())) {
-                    Expr new_expr = halide_hexagon_add_4mpy(op->type.with_bits(32), suffix, a0123, b0123, false);
+                    Expr new_expr = halide_hexagon_add_4mpy(op->type.with_bits(32), suffix, a0123, b0123);
                     if (op->type.bits() == 16) {
                         // It's actually safe to use this op on 16 bit
                         // results, we just need to narrow the
@@ -769,15 +768,11 @@ private:
             {"halide.hexagon.acc_add_3mpy.vh.vub.b", wild_i16x + halide_hexagon_add_3mpy(Int(16, 0), ".vub.b", wild_u8x, wild_i16), Pattern::ReinterleaveOp0},
             {"halide.hexagon.acc_add_3mpy.vh.vb.b", wild_i16x + halide_hexagon_add_3mpy(Int(16, 0), ".vb.b", wild_i8x, wild_i16), Pattern::ReinterleaveOp0},
             {"halide.hexagon.acc_add_3mpy.vw.vh.b", wild_i32x + halide_hexagon_add_3mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i16), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.acc_add_4mpy.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.b", wild_u8x, wild_i32, false)},
-            {"halide.hexagon.acc_add_4mpy.vuw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.ub", wild_u8x, wild_u32, false)},
-            {"halide.hexagon.acc_add_4mpy.vuw.vub.vub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.vub", wild_u8x, wild_u8x, false)},
-            {"halide.hexagon.acc_add_4mpy.vw.vub.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.vb", wild_u8x, wild_i8x, false)},
-            {"halide.hexagon.acc_add_4mpy.vw.vb.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vb.vb", wild_i8x, wild_i8x, false)},
-            {"halide.hexagon.acc_add_4mpy_even.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), "_even.vub.b", wild_u8x, wild_i8, true), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.acc_add_4mpy_even.vuw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), "_even.vub.ub", wild_u8x, wild_u8, true), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.acc_add_4mpy_odd.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), "_odd.vub.b", wild_u8x, wild_i8, true), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.acc_add_4mpy_odd.vuw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), "_odd.vub.ub", wild_u8x, wild_u8, true), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.acc_add_4mpy.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.b", wild_u8x, wild_i32)},
+            {"halide.hexagon.acc_add_4mpy.vuw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.ub", wild_u8x, wild_u32)},
+            {"halide.hexagon.acc_add_4mpy.vuw.vub.vub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.vub", wild_u8x, wild_u8x)},
+            {"halide.hexagon.acc_add_4mpy.vw.vub.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.vb", wild_u8x, wild_i8x)},
+            {"halide.hexagon.acc_add_4mpy.vw.vb.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vb.vb", wild_i8x, wild_i8x)},
 
             // Widening adds. There are other instructions that add two vub and two vuh but do not widen.
             // To differentiate those from the widening ones, we encode the return type in the name here.
@@ -1375,13 +1370,10 @@ class VectorReducePatterns : public IRMutator {
 
             if (rfac == 4) {
                 if (sig.flags & Signature::SlidingWindow) {
-                    Type arg_ty = op->type.with_lanes(op->type.lanes() / 2);
-                    Expr even = halide_hexagon_add_4mpy(arg_ty, "_even" + suffix, a, b, true);
-                    Expr odd = halide_hexagon_add_4mpy(arg_ty, "_odd" + suffix, a, b, true);
-                    return Shuffle::make_interleave({even, odd});
+                    return halide_hexagon_add_4mpy(op->type, suffix + ".dv", a, b);
                 } else {
                     Expr new_expr = halide_hexagon_add_4mpy(op->type.with_bits(32),
-                                                            suffix, a, b, false);
+                                                            suffix, a, b);
                     if (op->type.bits() == 16) {
                         new_expr = Call::make(op->type, "halide.hexagon.pack.vw",
                                               {new_expr}, Call::PureExtern);
