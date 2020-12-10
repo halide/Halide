@@ -86,7 +86,7 @@ set(RUNTIME_CPP
     windows_clock
     windows_cuda
     windows_d3d12compute_x86
-	windows_d3d12compute_arm
+    windows_d3d12compute_arm
     windows_get_symbol
     windows_io
     windows_opencl
@@ -171,55 +171,55 @@ foreach (i IN LISTS RUNTIME_CPP)
         set(fpic -fpic)
         # for the generic windows 64-bit target, we need -fshort-wchar
         set(fshort-wchar "")
-		# Windows
-		if (i MATCHES "windows_.*")
-			# Windows x86/x64
-			if (i MATCHES "windows_.*_x86$")
-				if (j EQUAL 32)
-					# win32 uses the stdcall calling convention, which is x86-specific
-					set(fpic "")
-					set(TARGET "i386-unknown-windows-unknown")
-				else ()
-					# must omit -fpic, otherwise clang will complain with the following:
-					# clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
-					set(fpic "")
-					set(TARGET "x86_64-unknown-windows-unknown")
-				endif ()
-			# Windows on ARM
-			elseif (i MATCHES "windows_.*_arm$")
-				if (j EQUAL 32)
-					set(fpic "")
-					set(TARGET "arm-unknown-windows-unknown")
-				else ()
-					set(fpic "")
-					set(TARGET "aarch64-unknown-windows-unknown")
-				endif ()
-			# Windows Generic
-			else()
-				if (j EQUAL 32)
+        # Windows
+        if (i MATCHES "windows_.*")
+            # Windows x86/x64
+            if (i MATCHES "windows_.*_x86$")
+                if (j EQUAL 32)
+                    # win32 uses the stdcall calling convention, which is x86-specific
+                    set(fpic "")
+                    set(TARGET "i386-unknown-windows-unknown")
+                else ()
+                    # must omit -fpic, otherwise clang will complain with the following:
+                    # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
+                    set(fpic "")
+                    set(TARGET "x86_64-unknown-windows-unknown")
+                endif ()
+            # Windows on ARM
+            elseif (i MATCHES "windows_.*_arm$")
+                if (j EQUAL 32)
+                    set(fpic "")
+                    set(TARGET "arm-unknown-windows-unknown")
+                else ()
+                    set(fpic "")
+                    set(TARGET "aarch64-unknown-windows-unknown")
+                endif ()
+            # Windows Generic
+            else()
+                if (j EQUAL 32)
                     # TODO(marcos): generic code won't hold for ARM32... If ARM32 support becomes necessary,
                     # all windows-related runtime modules will have to be wrapped in windows_*_arm.cpp files
                     # for now, generic Windows 32bit code just assumes x86 (i386)
-					set(fpic "")
-					set(TARGET "i386-unknown-windows-unknown")
-				else ()
+                    set(fpic "")
+                    set(TARGET "i386-unknown-windows-unknown")
+                else ()
                     set(fpic "")
                     # unfortunately, clang doesn't automatically set this flag even though the
                     # ABI is msvc on windows
                     set(fshort-wchar -fshort-wchar)
                     set(TARGET "le64-unknown-windows-msvc")
-				endif ()
-			endif()
-		# Everything else
-		else()
-			if (j EQUAL 32)
-				# (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
-				set(TARGET "le32-unknown-nacl-unknown")
-			else ()
-				# generic 64-bit code
-				set(TARGET "le64-unknown-unknown-unknown")
-			endif ()
-		endif ()
+                endif ()
+            endif()
+        # Everything else
+        else()
+            if (j EQUAL 32)
+                # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
+                set(TARGET "le32-unknown-nacl-unknown")
+            else ()
+                # generic 64-bit code
+                set(TARGET "le64-unknown-unknown-unknown")
+            endif ()
+        endif ()
 
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
 
