@@ -4749,11 +4749,13 @@ llvm::Function *CodeGen_LLVM::get_llvm_intrin(const Type &ret_type, const std::s
 }
 
 void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors) {
-    llvm::Function *intrin = module->getFunction(impl_name);
+    llvm::Function *intrin = get_llvm_intrin(ret_type, impl_name, arg_types, scalars_are_vectors);
+    internal_assert(intrin);
     intrinsics[name].emplace_back(ret_type, std::move(arg_types), intrin);
 }
 
 void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, llvm::Function *impl, std::vector<Type> arg_types) {
+    internal_assert(impl);
     intrinsics[name].emplace_back(ret_type, std::move(arg_types), impl);
 }
 
