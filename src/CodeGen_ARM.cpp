@@ -1218,10 +1218,10 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         }
     } else if (op->op == VectorReduce::Min && factor == 2) {
         intrin = "pairwise_min";
-            intrin_args = {op->value};
+        intrin_args = {op->value};
     } else if (op->op == VectorReduce::Max && factor == 2) {
         intrin = "pairwise_max";
-            intrin_args = {op->value};
+        intrin_args = {op->value};
     }
 
     if (intrin) {
