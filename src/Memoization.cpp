@@ -75,7 +75,7 @@ public:
     void visit(const Variable *var) override {
         if (var->param.defined()) {
             if (var->param.is_buffer() &&
-                var->type.is_int_or_uint()) {
+                !var->type.is_handle()) {
                 record(memoize_tag(var));
             } else {
                 record(var->param);
