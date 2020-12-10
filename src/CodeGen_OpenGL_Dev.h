@@ -6,6 +6,7 @@
  */
 
 #include <map>
+#include <set>
 #include <sstream>
 
 #include "CodeGen_C.h"
@@ -87,6 +88,25 @@ protected:
     Type map_type(const Type &);
 
     std::map<std::string, std::string> builtin;
+
+    // empty for GL 3.x and GLCompute which do not care about this (due to implicit conversion)
+    // while GL 2.0 only support a small subset of builtin functions with ivec arguments
+    std::set<std::string> support_non_float_type_builtin;
+
+    // true for GL 3.x (GLSL >= 130 or ESSL >= 300) and GLCompute
+    // false for GL 2.x which does not support uint/uvec
+    bool support_native_uint = true;
+
+    // true for GL 2.1 and 3.x (GLSL == 120, >= 130) and GLCompute
+    // true for GL ES 3.1 with EXT_shader_implicit_conversions
+    // false for GL 2.0 and GL ES 3.0
+    bool support_int_to_float_implicit_conversion = true;
+
+    // it seems that only GLSL ES implicitly does not support rounding of integer division
+    // while GLSL specification does not talk about this issue
+    // see GLSL ES Specification 1.00, issues 10.28, Rounding of Integer Division
+    // see GLSL ES Specification 3.00, issues 12.33, Rounding of Integer Division
+    bool support_integer_division_rounding = true;
 };
 
 /** Compile one statement into GLSL. */
@@ -102,6 +122,8 @@ public:
 
 protected:
     using CodeGen_GLSLBase::visit;
+
+    void visit(const Div *) override;
 
     void visit(const Let *) override;
     void visit(const For *) override;
