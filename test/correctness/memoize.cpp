@@ -648,6 +648,40 @@ int main(int argc, char **argv) {
         printf("In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
     }
 
+    {
+        call_count = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
+
+        ImageParam input(UInt(8), 1);
+        Func f, f_memoized;
+        f_memoized() = count_calls(0, 0) + cast<uint8_t>(input.dim(0).extent());
+        f_memoized.compute_root().memoize();
+        f() = f_memoized();
+
+        Buffer<uint8_t> in_one(1);
+        input.set(in_one);
+
+        Buffer<uint8_t> result1 = f.realize();
+        Buffer<uint8_t> result2 = f.realize();
+
+        assert(result1(0) == 43);
+        assert(result2(0) == 43);
+
+        assert(call_count == 1);
+
+        Buffer<uint8_t> in_ten(10);
+        input.set(in_ten);
+
+        result1 = f.realize();
+        result2 = f.realize();
+
+        assert(result1(0) == 52);
+        assert(result2(0) == 52);
+
+        assert(call_count == 2);
+    }
+
     printf("Success!\n");
     return 0;
 }
