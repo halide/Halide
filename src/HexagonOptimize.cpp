@@ -1232,7 +1232,6 @@ class VectorReducePatterns : public IRMutator {
         return IRMutator::visit(op);
     }
 
-
     Expr visit(const VectorReduce *op) override {
         struct Signature {
             enum Flags {
