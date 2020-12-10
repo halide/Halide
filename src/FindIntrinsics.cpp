@@ -56,61 +56,6 @@ bool no_overflow(Type t) {
     return t.is_float() || no_overflow_int(t);
 }
 
-// Add helpers to let us (mostly) use intrinsics without the boilerplate in patterns.
-// These only work if the first argument is a wildcard.
-template<int A, typename B>
-auto widening_add(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::widening_add, a, b);
-}
-template<int A, typename B>
-auto widening_sub(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::widening_sub, a, b);
-}
-template<int A, typename B>
-auto widening_mul(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::widening_mul, a, b);
-}
-template<int A, typename B>
-auto saturating_add(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::saturating_add, a, b);
-}
-template<int A, typename B>
-auto saturating_sub(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::saturating_sub, a, b);
-}
-template<int A, typename B>
-auto halving_add(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::halving_add, a, b);
-}
-template<int A, typename B>
-auto halving_sub(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::halving_sub, a, b);
-}
-template<int A, typename B>
-auto rounding_halving_add(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::rounding_halving_add, a, b);
-}
-template<int A, typename B>
-auto rounding_halving_sub(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::rounding_halving_sub, a, b);
-}
-template<int A, typename B>
-auto shift_left(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::shift_left, a, b);
-}
-template<int A, typename B>
-auto shift_right(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::shift_right, a, b);
-}
-template<int A, typename B>
-auto rounding_shift_left(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::rounding_shift_left, a, b);
-}
-template<int A, typename B>
-auto rounding_shift_right(IRMatcher::Wild<A> a, B b) {
-    return IRMatcher::intrin(Call::rounding_shift_right, a, b);
-}
-
 // If there's a widening add or subtract in the first e.type().bits() / 2 - 1
 // levels down a tree of adds or subtracts, we know there's enough headroom for
 // another add without overflow.
@@ -438,18 +383,18 @@ protected:
                 rewrite(min(widening_add(x, y), upper), saturating_add(x, y), op->type.is_uint() && is_x_same_uint) ||
                 rewrite(max(widening_sub(x, y), lower), saturating_sub(x, y), op->type.is_uint() && is_x_same_uint) ||
 
-                rewrite(intrin(Call::shift_right, widening_add(x, y), 1), halving_add(x, y), is_x_same_int_or_uint) ||
-                rewrite(intrin(Call::shift_right, widening_sub(x, y), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
+                rewrite(shift_right(widening_add(x, y), 1), halving_add(x, y), is_x_same_int_or_uint) ||
+                rewrite(shift_right(widening_sub(x, y), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
 
-                rewrite(intrin(Call::halving_add, widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
-                rewrite(intrin(Call::halving_add, widening_add(x, 1), y), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
-                rewrite(intrin(Call::halving_add, widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
-                rewrite(intrin(Call::rounding_shift_right, widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
-                rewrite(intrin(Call::rounding_shift_right, widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
+                rewrite(halving_add(widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
+                rewrite(halving_add(widening_add(x, 1), y), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
+                rewrite(halving_add(widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
+                rewrite(rounding_shift_right(widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
+                rewrite(rounding_shift_right(widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
 
                 // We can ignore the sign of the widening subtract for halving subtracts.
-                rewrite(intrin(Call::shift_right, cast(op_type_wide, widening_sub(x, y)), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
-                rewrite(intrin(Call::rounding_shift_right, cast(op_type_wide, widening_sub(x, y)), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
+                rewrite(shift_right(cast(op_type_wide, widening_sub(x, y)), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
+                rewrite(rounding_shift_right(cast(op_type_wide, widening_sub(x, y)), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
 
                 false) {
                 return mutate(rewrite.result);
@@ -508,15 +453,15 @@ protected:
 
         if (no_overflow(op->type)) {
             // clang-format off
-            if (rewrite(intrin(Call::halving_add, x + y, 1), rounding_halving_add(x, y)) ||
-                rewrite(intrin(Call::halving_add, x, y + 1), rounding_halving_add(x, y)) ||
-                rewrite(intrin(Call::halving_add, x + 1, y), rounding_halving_add(x, y)) ||
-                rewrite(intrin(Call::halving_add, x - y, 1), rounding_halving_sub(x, y)) ||
-                rewrite(intrin(Call::halving_sub, x + 1, y), rounding_halving_sub(x, y)) ||
-                rewrite(intrin(Call::shift_right, x + y, 1), halving_add(x, y)) ||
-                rewrite(intrin(Call::shift_right, x - y, 1), halving_sub(x, y)) ||
-                rewrite(intrin(Call::rounding_shift_right, x + y, 1), rounding_halving_add(x, y)) ||
-                rewrite(intrin(Call::rounding_shift_right, x - y, 1), rounding_halving_sub(x, y)) ||
+            if (rewrite(halving_add(x + y, 1), rounding_halving_add(x, y)) ||
+                rewrite(halving_add(x, y + 1), rounding_halving_add(x, y)) ||
+                rewrite(halving_add(x + 1, y), rounding_halving_add(x, y)) ||
+                rewrite(halving_add(x - y, 1), rounding_halving_sub(x, y)) ||
+                rewrite(halving_sub(x + 1, y), rounding_halving_sub(x, y)) ||
+                rewrite(shift_right(x + y, 1), halving_add(x, y)) ||
+                rewrite(shift_right(x - y, 1), halving_sub(x, y)) ||
+                rewrite(rounding_shift_right(x + y, 1), rounding_halving_add(x, y)) ||
+                rewrite(rounding_shift_right(x - y, 1), rounding_halving_sub(x, y)) ||
                 false) {
                 return mutate(rewrite.result);
             }

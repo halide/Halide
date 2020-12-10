@@ -1465,6 +1465,59 @@ HALIDE_ALWAYS_INLINE auto intrin(Call::IntrinsicOp intrinsic_op, Args... args) n
     return {intrinsic_op, pattern_arg(args)...};
 }
 
+template<typename A, typename B>
+auto widening_add(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widening_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widening_sub(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widening_sub, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widening_mul(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widening_mul, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto saturating_add(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::saturating_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto saturating_sub(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::saturating_sub, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto halving_add(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::halving_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto halving_sub(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::halving_sub, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto rounding_halving_add(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::rounding_halving_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto rounding_halving_sub(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::rounding_halving_sub, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto shift_left(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::shift_left, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto shift_right(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::shift_right, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto rounding_shift_left(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::rounding_shift_left, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto rounding_shift_right(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::rounding_shift_right, pattern_arg(a), pattern_arg(b)};
+}
+
 template<typename A>
 struct NotOp {
     struct pattern_tag {};
