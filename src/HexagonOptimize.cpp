@@ -409,12 +409,10 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
         }
         // Check if shuffle can be treated as a broadcast.
         if (const Shuffle *shuff = x.as<Shuffle>()) {
-            int lanes = x.type().lanes() / ty.lanes();
-            if (lanes > 1) {
-                Expr e = shuff->is_broadcast(x.type().with_lanes(lanes));
-                if (e.defined()) {
-                    x = e.as<Broadcast>()->value;
-                }
+            int factor = ty.lanes();
+            if (shuff->is_broadcast(factor)) {
+                x = Shuffle::make(shuff->vectors, std::vector<int>(shuff->indices.begin(),
+                                                                   shuff->indices.begin() + factor));
             }
         }
     }
@@ -1234,19 +1232,20 @@ class VectorReducePatterns : public IRMutator {
         return IRMutator::visit(op);
     }
 
-    typedef struct {
-        enum Flags {
-            SlidingWindow = 1,
-            ScalarB = 1 << 1
-        };
-        int rfac;
-        Type r_ty;
-        Type a_ty;
-        Type b_ty;
-        int flags;
-    } Signature;
 
     Expr visit(const VectorReduce *op) override {
+        struct Signature {
+            enum Flags {
+                SlidingWindow = 1,
+                ScalarB = 1 << 1
+            };
+            int rfac;
+            Type r_ty;
+            Type a_ty;
+            Type b_ty;
+            int flags;
+        };
+
         if (op->type.bits() == 8 || !op->type.is_vector() ||
             op->type.is_float() || op->op != VectorReduce::Add) {
             return IRMutator::visit(op);

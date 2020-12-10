@@ -791,20 +791,18 @@ Expr Shuffle::make_extract_element(Expr vector, int i) {
     return make_slice(std::move(vector), i, 1, 1);
 }
 
-Expr Shuffle::is_broadcast(Type t) const {
+bool Shuffle::is_broadcast(int factor) const {
     int lanes = indices.size();
-    int rep = lanes / t.lanes();
-    if (rep == 0) {
-        return Expr();
+    // Don't consider broadcast factor < 2
+    if (factor < 2 || factor > lanes) {
+        return false;
     }
     for (int i = 0; i < lanes; i++) {
-        if (indices[i % rep] != indices[i]) {
-            return Expr();
+        if (indices[i % factor] != indices[i]) {
+            return false;
         }
     }
-    return Broadcast::make(Shuffle::make(vectors, std::vector<int>(indices.begin(),
-                                                                   indices.begin() + rep)),
-                           t.lanes());
+    return true;
 }
 
 bool Shuffle::is_interleave() const {
