@@ -143,7 +143,7 @@ Expr halide_hexagon_add_3mpy(Type result_type, const string &suffix, Expr v01, E
 
 Expr halide_hexagon_add_4mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
     return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix,
-                           {std::move(v01), std::move(c01)}, Call::PureExtern);
+                      {std::move(v01), std::move(c01)}, Call::PureExtern);
 }
 
 // This mutator rewrites patterns with an unknown number of lanes to
