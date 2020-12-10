@@ -114,7 +114,7 @@ int main() {
     // The GLSL ES 1.0 spec does not define the precision of these operations
     // so a wide error bound is used in this test.
     Expr r = (256 * x + y) / ceilf(65536.f / (2 * 3.1415926536f));
-    if (!test_approx<float>(sin(r), cos(r), 0, 5e-2)) {
+    if (!test_approx<float>(sin(r), cos(r), 0.0f, 5e-2)) {
         errors++;
         printf("Failed trigonometric test\n");
     }
