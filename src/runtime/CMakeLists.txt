@@ -207,7 +207,7 @@ foreach (i IN LISTS RUNTIME_CPP)
                     # unfortunately, clang doesn't automatically set this flag even though the
                     # ABI is msvc on windows
                     set(fshort-wchar -fshort-wchar)
-                    set(TARGET "le64-unknown-windows-msvc")
+                    set(TARGET "le64-unknown-windows-unknown")
                 endif ()
             endif()
         # Everything else
