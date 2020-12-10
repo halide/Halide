@@ -84,8 +84,6 @@ set(RUNTIME_CPP
     tracing
     wasm_cpu_features
     windows_clock
-    #windows_clock_x86
-    #windows_clock_arm
     windows_cuda
     windows_d3d12compute_x86
 	windows_d3d12compute_arm
