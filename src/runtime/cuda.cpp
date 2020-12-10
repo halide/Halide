@@ -1058,12 +1058,11 @@ WEAK int halide_cuda_run(void *user_context,
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    halide_assert(user_context, state_ptr);
-    CUmodule mod = nullptr;
-    bool found_module = compilation_cache.lookup(ctx.context, state_ptr, mod);
-    halide_assert(user_context, found_module && mod != nullptr);
+    CUmodule mod{};
+    bool found = compilation_cache.lookup(ctx.context, state_ptr, mod);
+    halide_assert(user_context, found && mod != nullptr);
+
     debug(user_context) << "Got module " << mod << "\n";
-    halide_assert(user_context, mod);
     CUfunction f;
     err = cuModuleGetFunction(&f, mod, entry_name);
     debug(user_context) << "Got function " << f << "\n";

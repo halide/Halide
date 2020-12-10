@@ -562,6 +562,13 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
     return 0;
 }
 
+WEAK void halide_metal_finalize_kernels(void *user_context, void *state_ptr) {
+    MetalContextHolder metal_context(user_context, true);
+    if (metal_context.error == 0) {
+        compilation_cache.release_hold(user_context, metal_context.device, state_ptr);
+    }
+}
+
 namespace {
 
 WEAK void halide_metal_device_sync_internal(mtl_command_queue *queue, struct halide_buffer_t *buffer) {
@@ -612,10 +619,11 @@ WEAK int halide_metal_device_release(void *user_context) {
         return error;
     }
 
-    if (device) {
+    if (acquired_device) {
         halide_metal_device_sync_internal(queue, nullptr);
 
-        compilation_cache.delete_context(user_context, device, release_ns_object);
+	debug(user_context) << "Calling delete context on device " << acquired_device << "\n";
+        compilation_cache.delete_context(user_context, acquired_device, release_ns_object);
 
         // Release the device itself, if we created it.
         if (acquired_device == device) {
@@ -740,9 +748,9 @@ WEAK int halide_metal_run(void *user_context,
         return -1;
     }
 
-    mtl_library *library;
-    bool found_library = compilation_cache.lookup(metal_context.device, state_ptr, library);
-    halide_assert(user_context, found_library && library != nullptr);
+    mtl_library *library{};
+    bool found = compilation_cache.lookup(metal_context.device, state_ptr, library);
+    halide_assert(user_context, found && library != nullptr);
 
     mtl_function *function = new_function_with_name(library, entry_name, strlen(entry_name));
     if (function == nullptr) {

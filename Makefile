@@ -333,7 +333,7 @@ TEST_CXX_FLAGS += -DTEST_OPENCL
 endif
 
 ifneq ($(TEST_METAL), )
-TEST_CXX_FLAGS += -DTEST_METAL
+TEST_CXX_FLAGS += -DTEST_METAL -ObjC++
 endif
 
 ifneq ($(TEST_CUDA), )

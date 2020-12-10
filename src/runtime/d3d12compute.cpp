@@ -2776,6 +2776,13 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
     return 0;
 }
 
+WEAK void halide_d3d12compute_finalize_kernels(void *user_context, void *state_ptr) {
+    D3D12ContextHolder d3d12_context(user_context, true);
+    if (d3d12_context.error == 0) {
+        compilation_cache.release_hold(user_context, d3d12_context.device, state_ptr);
+    }
+}
+
 namespace {
 
 void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
@@ -3005,9 +3012,9 @@ WEAK int halide_d3d12compute_run(void *user_context,
     StartCapturingGPUActivity();
 #endif
 
-    d3d12_library *library = nullptr;
-    bool found_module = compilation_cache.lookup(device, state_ptr, library);
-    halide_assert(user_context, found_module && library != nullptr);
+    d3d12_library *library{};
+    bool found = compilation_cache.lookup(device, state_ptr, library);
+    halide_assert(user_context, found && library != nullptr);
 
     d3d12_frame *frame = acquire_frame(device);
     d3d12_compute_command_list *cmdList = frame->cmd_list;

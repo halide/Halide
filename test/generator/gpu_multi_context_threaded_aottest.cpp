@@ -71,11 +71,11 @@ extern "C" int halide_release_cl_context(void *user_context) {
 
 typedef CUcontext gpu_context;
 
-bool init_context(CUcontext &cuda_ctx) {
+bool init_context(gpu_context &cuda_ctx) {
     return create_cuda_context(cuda_ctx);
 }
 
-void destroy_context(CUcontext &cuda_ctx) {
+void destroy_context(gpu_context &cuda_ctx) {
     destroy_cuda_context(cuda_ctx);
     cuda_ctx = nullptr;
 }
@@ -94,6 +94,44 @@ extern "C" int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, b
 }
 
 extern "C" int halide_cuda_release_context(void *user_context) {
+    return 0;
+}
+
+#define HAS_MULTIPLE_CONTEXTS true
+#elif defined(TEST_METAL)
+
+struct gpu_context {
+    id<MTLDevice> device;
+    id<MTLCommandQueue> queue;
+};
+
+bool init_context(gpu_context &context) {
+    create_metal_context(context.device, context.queue);
+    return 0;
+}
+
+void destroy_context(gpu_context &context) {
+    destroy_metal_context(context.device, context.queue);
+    context.device = nullptr;
+    context.queue = nullptr;
+}
+
+int halide_metal_acquire_context(void *user_context, id<MTLDevice> *device_ret,
+				 id<MTLCommandQueue> *queue_ret, bool create) {
+    if (user_context == nullptr) {
+        assert(!create);
+        *device_ret = nullptr;
+        *queue_ret = nullptr;
+    } else {
+        gpu_context *context = (gpu_context *)user_context;
+	*device_ret = context->device;
+	*queue_ret = context->queue;
+    }
+    return 0;
+
+}
+
+int halide_metal_release_context(void *user_context) {
     return 0;
 }
 

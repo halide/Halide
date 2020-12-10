@@ -323,6 +323,9 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     return result != 0 ? -1 : 0;
 }
 
+WEAK void halide_hexagon_finalize_kernels(void *user_context, void *state_ptr) {
+}
+
 namespace {
 
 // Prepare an array of remote_buffer arguments, mapping buffers if

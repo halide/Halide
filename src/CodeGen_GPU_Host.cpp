@@ -212,6 +212,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
         Value *result = builder->CreateCall(init, init_kernels_args);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32_t, 0));
         CodeGen_CPU::create_assertion(did_succeed, Expr(), result);
+
+	// Generate a finalizer call as well to relase any refcounts or other resource usage
+	// specific to this filter call.
+        std::string finalize_kernels_name = "halide_" + api_unique_name + "_finalize_kernels";
+        llvm::Function *finalize = module->getFunction(finalize_kernels_name);
+	Value *module_state_value = builder->CreateLoad(module_state);
+	register_destructor(finalize, module_state_value, CodeGen_CPU::Always);
     }
 
     // the init kernels block should branch to the post-entry block

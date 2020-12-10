@@ -731,7 +731,7 @@ WEAK int halide_opencl_compute_capability(void *user_context, int *major, int *m
 
 WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, const char *src, int size) {
     debug(user_context)
-        << "CL: halide_opencl_init_kernels (user_context: " << user_context
+        << "CL: halide_opencl_initialize_kernels (user_context: " << user_context
         << ", state_ptr: " << state_ptr
         << ", program: " << (void *)src
         << ", size: " << size << "\n";
@@ -758,6 +758,16 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
     return 0;
+}
+
+WEAK void halide_opencl_finalize_kernels(void *user_context, void *state_ptr) {
+    debug(user_context)
+        << "CL: halide_opencl_finalize_kernels (user_context: " << user_context
+        << ", state_ptr: " << state_ptr << "\n";;
+    ClContext ctx(user_context);
+    if (ctx.error_code == CL_SUCCESS) {
+        compilation_cache.release_hold(user_context, ctx.context, state_ptr);
+    }
 }
 
 // Used to generate correct timings when tracing
@@ -1049,10 +1059,11 @@ WEAK int halide_opencl_run(void *user_context,
 
     // Create kernel object for entry_name from the program for this module.
     halide_assert(user_context, state_ptr);
-    cl_program program;
-    bool found_program = compilation_cache.lookup(ctx.context, state_ptr, program);
+    
+    cl_program program{};
+    bool found = compilation_cache.lookup(ctx.context, state_ptr, program);
+    halide_assert(user_context, found && program != nullptr);
 
-    halide_assert(user_context, found_program && program != nullptr);
     debug(user_context) << "    clCreateKernel " << entry_name << " -> ";
     cl_kernel f = clCreateKernel(program, entry_name, &err);
     if (err != CL_SUCCESS) {
@@ -1339,6 +1350,7 @@ WEAK const struct halide_device_interface_t *halide_opencl_device_interface() {
 
 namespace {
 WEAK __attribute__((destructor)) void halide_opencl_cleanup() {
+      debug(nullptr) << "halide_opencl_cleanup\n";
     compilation_cache.release_all(nullptr, clReleaseProgram);
     halide_opencl_device_release(nullptr);
 }

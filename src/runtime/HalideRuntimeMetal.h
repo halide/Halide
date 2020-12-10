@@ -25,6 +25,7 @@ extern const struct halide_device_interface_t *halide_metal_device_interface();
 // @{
 extern int halide_metal_initialize_kernels(void *user_context, void **state_ptr,
                                            const char *src, int size);
+void halide_metal_finalize_kernels(void *user_context, void *state_ptr);
 
 extern int halide_metal_run(void *user_context,
                             void *state_ptr,

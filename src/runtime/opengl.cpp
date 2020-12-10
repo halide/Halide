@@ -1959,6 +1959,9 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
     return 0;
 }
 
+WEAK void halide_opengl_finalize_kernels(void *user_context, void *state_ptr) {
+}
+
 WEAK int halide_opengl_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_malloc(user_context, buf, &opengl_device_interface);
 }

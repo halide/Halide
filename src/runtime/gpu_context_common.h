@@ -10,6 +10,14 @@ class GPUCompilationCache {
         ContextT context{};
         ModuleStateT module_state{};
         uint32_t kernel_id{};
+        uint32_t use_count{0};
+
+        CachedCompilation(ContextT context, ModuleStateT module_state,
+                          uint32_t kernel_id, uint32_t use_count)
+            : context(context), module_state(module_state),
+              kernel_id(kernel_id), use_count(use_count) {
+        }
+
     };
 
     halide_mutex mutex;
@@ -37,7 +45,7 @@ public:
         }
     }
 
-    HALIDE_MUST_USE_RESULT bool insert(ContextT context, uint32_t id, ModuleStateT module_state) {
+  HALIDE_MUST_USE_RESULT bool insert(const CachedCompilation &entry) {
         if (log2_compilations_size == 0) {
             if (!resize_table(kInitialTableBits)) {
                 return false;
@@ -49,13 +57,11 @@ public:
             }
         }
         count += 1;
-        uintptr_t index = kernel_hash(context, id, log2_compilations_size);
+        uintptr_t index = kernel_hash(entry.context, entry.kernel_id, log2_compilations_size);
         for (int i = 0; i < (1 << log2_compilations_size); i++) {
             uintptr_t effective_index = (index + i) & ((1 << log2_compilations_size) - 1);
             if (compilations[effective_index].kernel_id <= kDeletedId) {
-                compilations[effective_index].context = context;
-                compilations[effective_index].module_state = module_state;
-                compilations[effective_index].kernel_id = id;
+                compilations[effective_index] = entry;
                 return true;
             }
         }
@@ -65,7 +71,8 @@ public:
         return false;
     }
 
-    HALIDE_MUST_USE_RESULT bool find_internal(ContextT context, uint32_t id, ModuleStateT *&module_state) {
+    HALIDE_MUST_USE_RESULT bool find_internal(ContextT context, uint32_t id,
+                                              ModuleStateT *&module_state, int increment) {
         if (log2_compilations_size == 0) {
             return false;
         }
@@ -79,6 +86,9 @@ public:
             if (compilations[effective_index].context == context &&
                 compilations[effective_index].kernel_id == id) {
                 module_state = &compilations[effective_index].module_state;
+                if (increment != 0) {
+                    compilations[effective_index].use_count += increment;
+                }
                 return true;
             }
         }
@@ -89,7 +99,7 @@ public:
         ScopedMutexLock lock_guard(&mutex);
         uint32_t id = (uint32_t)(uintptr_t)state_ptr;
         ModuleStateT *mod_ptr;
-        if (find_internal(context, id, mod_ptr)) {
+        if (find_internal(context, id, mod_ptr, 0)) {
             module_state = *mod_ptr;
             return true;
         }
@@ -114,8 +124,7 @@ public:
                 for (int32_t i = 0; i < old_size; i++) {
                     if (old_table[i].kernel_id != kInvalidId &&
                         old_table[i].kernel_id != kDeletedId) {
-                        bool result = insert(old_table[i].context, old_table[i].kernel_id,
-                                             old_table[i].module_state);
+                        bool result = insert(old_table[i]);
                         halide_assert(nullptr, result);  // Resizing the table while resizing the table is a logic error.
                     }
                 }
@@ -133,7 +142,11 @@ public:
 
         for (int i = 0; i < (1 << log2_compilations_size); i++) {
             if (compilations[i].kernel_id > kInvalidId &&
-                (all || (compilations[i].context == context))) {
+                (all || (compilations[i].context == context)) &&
+                compilations[i].use_count == 0) {
+                debug(user_context) << "Releasing cached compilation: " << compilations[i].module_state <<
+                                       " id " << compilations[i].kernel_id <<
+                                       " context " << compilations[i].context << "\n";
                 f(compilations[i].module_state);
                 compilations[i].module_state = nullptr;
                 compilations[i].kernel_id = kDeletedId;
@@ -154,9 +167,12 @@ public:
         ScopedMutexLock lock_guard(&mutex);
 
         release_context(user_context, true, nullptr, f);
-        free(compilations);
-        compilations = nullptr;
-        log2_compilations_size = 0;
+	// Some items may have been in use, so can't free.
+	if (count == 0) {
+	    free(compilations);
+	    compilations = nullptr;
+	    log2_compilations_size = 0;
+	}
     }
 
     template<typename CompileModuleT, typename... Args>
@@ -172,24 +188,33 @@ public:
         }
 
         ModuleStateT *mod;
-        if (find_internal(context, *id_ptr, mod)) {
+        if (find_internal(context, *id_ptr, mod, 1)) {
             result = *mod;
             return true;
         }
 
         // TODO(zvookin): figure out the calling signature here...
         ModuleStateT compiled_module = f(args...);
-        debug(user_context) << "Caching compiled kernel: " << compiled_module << " id " << *id_ptr << " context " << context << "\n";
+        debug(user_context) << "Caching compiled kernel: " << compiled_module <<
+                               " id " << *id_ptr << " context " << context << "\n";
         if (compiled_module == nullptr) {
             return false;
         }
 
-        if (!insert(context, *id_ptr, compiled_module)) {
+        
+        if (!insert({context, compiled_module, *id_ptr, 1})) {
             return false;
         }
         result = compiled_module;
 
         return true;
+    }
+
+    void release_hold(void *user_context, ContextT context, void *state_ptr) {
+        ModuleStateT *mod;
+        uint32_t id = (uint32_t)(uintptr_t)state_ptr;
+        bool result = find_internal(context, id, mod, -1);
+        halide_assert(user_context, result);  // Value must be in cache to be released
     }
 };
 
