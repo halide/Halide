@@ -694,19 +694,33 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vrmpybusv_acc), i32v1, "acc_add_4mpy.vw.vub.vb", {i32v1, i8v1, i8v1}},
 
     // Widening scalar multiplication, with horizontal reduction.
-    {INTRINSIC_128B(vdmpybus), i16v1, "add_2mpy.vub.b", {u8v1, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vdmpyhb), i32v1, "add_2mpy.vh.b", {i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vdmpybus_acc), i16v1, "acc_add_2mpy.vh.vub.b", {i16v1, u8v1, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vdmpyhb_acc), i32v1, "acc_add_2mpy.vw.vh.b", {i32v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-
-    // TODO: There are also saturating versions of vdmpy.
+    {INTRINSIC_128B(vdmpybus), i16v1, "add_2mpy.vub.b", {u8v1, i32}},
+    {INTRINSIC_128B(vdmpyhb), i32v1, "add_2mpy.vh.b", {i16v1, i32}},
+    {INTRINSIC_128B(vdmpybus_acc), i16v1, "acc_add_2mpy.vh.vub.b", {i16v1, u8v1, i32}},
+    {INTRINSIC_128B(vdmpyhb_acc), i32v1, "acc_add_2mpy.vw.vh.b", {i32v1, i16v1, i32}},
+    // Saturating versions of vdmpy.
+    {INTRINSIC_128B(vdmpyhsat), i32v1, "add_2mpy.vh.h", {i16v1, i32}},
+    {INTRINSIC_128B(vdmpyhsusat), i32v1, "add_2mpy.vh.uh", {i16v1, u32}},
+    {INTRINSIC_128B(vdmpyhvsat), i32v1, "add_2mpy.vh.vh", {i16v1, i16v1}},
+    {INTRINSIC_128B(vmpabus), i16v2, "add_2mpy.vub.vub.b.b", {i8v2, i32}},
+    {INTRINSIC_128B(vmpabus_acc), i16v2, "acc_add_2mpy.vh.vub.vub.b.b", {i16v2, i8v2, i32}},
+    {INTRINSIC_128B(vmpahb), i32v2, "add_2mpy.vh.vh.b.b", {i16v2, i32}},
+    {INTRINSIC_128B(vmpahb_acc), i32v2, "acc_add_2mpy.vw.vh.vh.b.b", {i32v2, i16v2, i32}},
 
     // TODO: These don't generate correctly because the vectors
     // aren't interleaved correctly.
-    //{ vdmpybus_dv, i16v2, //"add_2mpy.vub.b.dv", {u8v2, i32} },
-    //{ vdmpyhb_dv, i32v2, //"add_2mpy.vh.b.dv", {i16v2, i32} },
-    //{ vdmpybus_dv_acc, i16v2, //"acc_add_2mpy.vh.vub.b.dv", {i16v2, u8v2, i32} },
-    //{ vdmpyhb_dv_acc, i32v2, //"acc_add_2mpy.vw.vh.b.dv", {i32v2, i16v2, i32} },
+    //{ vdmpybus_dv, i16v2, "add_2mpy.vub.b.dv", {u8v2, i32} },
+    //{ vdmpyhb_dv, i32v2, "add_2mpy.vh.b.dv", {i16v2, i32} },
+    //{ vdmpybus_dv_acc, i16v2, "acc_add_2mpy.vh.vub.b.dv", {i16v2, u8v2, i32} },
+    //{ vdmpyhb_dv_acc, i32v2, "acc_add_2mpy.vw.vh.b.dv", {i32v2, i16v2, i32} },
+
+    // vtmpy
+    {INTRINSIC_128B(vtmpybus), i16v2, "add_3mpy.vub.b", {u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    {INTRINSIC_128B(vtmpyb), i16v2, "add_3mpy.vb.b", {i8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    {INTRINSIC_128B(vtmpyhb), i32v2, "add_3mpy.vh.b", {u16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    {INTRINSIC_128B(vtmpybus_acc), i16v2, "acc_add_3mpy.vh.vub.b", {i16v2, u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    {INTRINSIC_128B(vtmpyb_acc), i16v2, "acc_add_3mpy.vh.vb.b", {i16v2, i8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    {INTRINSIC_128B(vtmpyhb_acc), i32v2, "acc_add_3mpy.vw.vh.b", {i32v2, u16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
 
     {INTRINSIC_128B(vrmpybus), i32v1, "add_4mpy.vub.b", {u8v1, i32}},
     {INTRINSIC_128B(vrmpyub), u32v1, "add_4mpy.vub.ub", {u8v1, u32}},
@@ -759,6 +773,7 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vasrhubsat), u8v1, "trunc_satub_shr.vh.uh", {i16v2, u16}},
     {INTRINSIC_128B(vasrwuhsat), u16v1, "trunc_satuh_shr.vw.uw", {i32v2, u32}},
     {INTRINSIC_128B(vasrwhsat), i16v1, "trunc_sath_shr.vw.uw", {i32v2, u32}},
+    {INTRINSIC_128B(vror), u8v1, "vror",{u8v1, i32}},
 
     // Bit counting
     {INTRINSIC_128B(vnormamth), u16v1, "cls.vh", {u16v1}},
@@ -1669,54 +1684,6 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
 
     return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
 }
-
-namespace {
-
-string type_suffix(Type type, bool signed_variants = true) {
-    string prefix = type.is_vector() ? ".v" : ".";
-    if (type.is_int() || !signed_variants) {
-        switch (type.bits()) {
-        case 8:
-            return prefix + "b";
-        case 16:
-            return prefix + "h";
-        case 32:
-            return prefix + "w";
-        }
-    } else if (type.is_uint()) {
-        switch (type.bits()) {
-        case 8:
-            return prefix + "ub";
-        case 16:
-            return prefix + "uh";
-        case 32:
-            return prefix + "uw";
-        }
-    }
-    internal_error << "Unsupported HVX type: " << type << "\n";
-    return "";
-}
-
-string type_suffix(const Expr &a, bool signed_variants = true) {
-    return type_suffix(a.type(), signed_variants);
-}
-
-string type_suffix(const Expr &a, const Expr &b, bool signed_variants = true) {
-    return type_suffix(a, signed_variants) + type_suffix(b, signed_variants);
-}
-
-string type_suffix(const vector<Expr> &ops, bool signed_variants = true) {
-    if (ops.empty()) {
-        return "";
-    }
-    string suffix = type_suffix(ops.front(), signed_variants);
-    for (size_t i = 1; i < ops.size(); i++) {
-        suffix = suffix + type_suffix(ops[i], signed_variants);
-    }
-    return suffix;
-}
-
-}  // namespace
 
 Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
                                     vector<Expr> args, bool maybe) {
