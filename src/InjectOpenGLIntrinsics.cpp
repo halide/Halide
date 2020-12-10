@@ -40,12 +40,15 @@ private:
             //                   c - c_min, c_extent
             //                   )
             //
+            int dims = (call_args.size() - 2) / 2;
+            internal_assert(dims >= 1 && dims <= 3);
+
             vector<Expr> args(5);
             args[0] = call_args[0];  // "name"
             args[1] = call_args[1];  // name.buffer
 
             // Normalize first two coordinates.
-            for (size_t i = 0; i < 2; i++) {
+            for (size_t i = 0; i < std::min(dims, 2); i++) {
                 int to_index = 2 + i;
                 int from_index = 2 + i * 2;
                 args[to_index] =
@@ -53,20 +56,25 @@ private:
                     mutate(call_args[from_index + 1]);
             }
 
-            // Confirm that user explicitly specified constant value for min
-            // value of c dimension for ImageParams accessed by GLSL-based filters.
-            if (call->param.defined()) {
-                bool const_min_constraint =
-                    call->param.min_constraint(2).defined() &&
-                    is_const(call->param.min_constraint(2));
-                user_assert(const_min_constraint)
-                    << "GLSL: Requires minimum for c-dimension set to constant "
-                    << "for ImageParam '" << args[0] << "'. "
-                    << "Call set_min(2, min) or set_bounds(2, min, extent) to set.\n";
-            }
+            if (dims < 3) {
+                args[3] = FloatImm::make(Float(32), 0.5f);
+                args[4] = IntImm::make(Int(32), 0);
+            } else {
+                // Confirm that user explicitly specified constant value for min
+                // value of c dimension for ImageParams accessed by GLSL-based filters.
+                if (call->param.defined()) {
+                    bool const_min_constraint =
+                        call->param.min_constraint(2).defined() &&
+                        is_const(call->param.min_constraint(2));
+                    user_assert(const_min_constraint)
+                        << "GLSL: Requires minimum for c-dimension set to constant "
+                        << "for ImageParam '" << args[0] << "'. "
+                        << "Call set_min(2, min) or set_bounds(2, min, extent) to set.\n";
+                }
 
-            Expr c_coordinate = mutate(call_args[2 + 2 * 2]);
-            args[4] = c_coordinate;
+                Expr c_coordinate = mutate(call_args[2 + 2 * 2]);
+                args[4] = c_coordinate;
+            }
 
             return Call::make(call->type, Call::glsl_texture_load,
                               vector<Expr>(&args[0], &args[5]),
