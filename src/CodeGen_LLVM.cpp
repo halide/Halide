@@ -4717,7 +4717,7 @@ Value *CodeGen_LLVM::get_user_context() const {
     return ctx;
 }
 
-llvm::Function *CodeGen_LLVM::get_llvm_intrin(llvm::Type *ret_type, const std::string &name, const std::vector<llvm::Type*> &arg_types) {
+llvm::Function *CodeGen_LLVM::get_llvm_intrin(llvm::Type *ret_type, const std::string &name, const std::vector<llvm::Type *> &arg_types) {
     llvm::Function *intrin = module->getFunction(name);
     if (!intrin) {
         FunctionType *func_t = FunctionType::get(ret_type, arg_types, false);
