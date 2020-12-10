@@ -773,6 +773,10 @@ void CodeGen_GLSL::visit(const Call *op) {
         internal_assert((op->type.code() == Type::UInt || op->type.code() == Type::Float) &&
                         (op->type.lanes() >= 1 && op->type.lanes() <= 4));
 
+        if (op->type.is_uint()) {
+            rhs << print_type(op->type) << "(floor(";
+        }
+
         if (op->type.is_vector()) {
             // The channel argument must be a ramp or a broadcast of a constant.
             Expr c = op->args[4];
@@ -835,7 +839,7 @@ void CodeGen_GLSL::visit(const Call *op) {
         }
 
         if (op->type.is_uint()) {
-            rhs << " * " << print_expr(cast<float>(op->type.max()));
+            rhs << " * " << print_expr(cast<float>(op->type.max())) << " + 0.5))";
         }
 
     } else if (op->is_intrinsic(Call::glsl_texture_store)) {
