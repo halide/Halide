@@ -4,8 +4,6 @@ using namespace Halide;
 using namespace Halide::ConciseCasts;
 using namespace Halide::Internal;
 
-#define internal_assert _halide_user_assert
-
 void check(Expr test, Expr expected, Type required_type) {
     // Some of the below tests assume the simplifier has run.
     test = simplify(test);

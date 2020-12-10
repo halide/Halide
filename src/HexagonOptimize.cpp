@@ -513,7 +513,8 @@ private:
         }
     }
 
-    // We need to be able to
+    // Look for adds in an Add expression. This is factored out of visit(const Add*) to
+    // enable look in widening_adds too.
     Expr find_mpyadds(const Expr &op_add) {
         const Add *op = op_add.as<Add>();
         internal_assert(op);

@@ -486,7 +486,7 @@ protected:
     /** Mapping of intrinsic functions to the various overloads implementing it. */
     std::map<std::string, std::vector<Intrinsic>> intrinsics;
 
-    /** Get an LLVM intrinsic. */
+    /** Get an LLVM intrinsic declaration. If it doesn't exist, it will be created. */
     llvm::Function *get_llvm_intrin(const Type &ret_type, const std::string &name, const std::vector<Type> &arg_types, bool scalars_are_vectors = false);
     llvm::Function *get_llvm_intrin(llvm::Type *ret_type, const std::string &name, const std::vector<llvm::Type *> &arg_types);
     /** Declare an intrinsic function that participates in overload resolution. */

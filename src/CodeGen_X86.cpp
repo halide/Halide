@@ -168,7 +168,7 @@ bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
     Type t = a.type();
     internal_assert(b.type() == t);
 
-    if (!(t.is_int() && t.bits() == 32 && (t.lanes() >= 4))) {
+    if (!(t.is_int() && t.bits() == 32 && t.lanes() >= 4)) {
         return false;
     }
 
