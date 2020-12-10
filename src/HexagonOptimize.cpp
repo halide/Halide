@@ -1370,7 +1370,7 @@ class VectorReducePatterns : public IRMutator {
 
             if (rfac == 4) {
                 if (sig.flags & Signature::SlidingWindow) {
-                    return halide_hexagon_add_4mpy(op->type, suffix + ".dv", a, b);
+                    return halide_hexagon_add_4mpy(op->type, suffix + ".stencil", a, b);
                 } else {
                     Expr new_expr = halide_hexagon_add_4mpy(op->type.with_bits(32),
                                                             suffix, a, b);

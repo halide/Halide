@@ -402,7 +402,7 @@ declare <64 x i32> @llvm.hexagon.V6.vrmpybusi.acc.128B(<64 x i32>, <64 x i32>, i
 declare <64 x i32> @llvm.hexagon.V6.vrmpyubi.128B(<64 x i32>, i32, i32)
 declare <64 x i32> @llvm.hexagon.V6.vrmpyubi.acc.128B(<64 x i32>, <64 x i32>, i32, i32)
 
-define weak_odr <128 x i32> @halide.hexagon.add_4mpy.dv.helper(<64 x i32> %even_deinterleaved, <64 x i32> %odd_deinterleaved) nounwind uwtable readnone {
+define weak_odr <128 x i32> @halide.hexagon.add_4mpy.stencil.helper(<64 x i32> %even_deinterleaved, <64 x i32> %odd_deinterleaved) nounwind uwtable readnone {
   %even = call <64 x i32> @halide.hexagon.interleave.vw(<64 x i32> %even_deinterleaved)
   %odd = call <64 x i32> @halide.hexagon.interleave.vw(<64 x i32> %odd_deinterleaved)
   %ee = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %even)
@@ -415,18 +415,18 @@ define weak_odr <128 x i32> @halide.hexagon.add_4mpy.dv.helper(<64 x i32> %even_
   ret <128 x i32> %res
 }
 
-define weak_odr <128 x i32> @halide.hexagon.add_4mpy.vub.b.dv(<256 x i8> %dv, i32 %const) nounwind uwtable readnone {
+define weak_odr <128 x i32> @halide.hexagon.add_4mpy.vub.b.stencil(<256 x i8> %dv, i32 %const) nounwind uwtable readnone {
   %dv32 = bitcast <256 x i8> %dv to <64 x i32>
   %even_deinterleaved = call <64 x i32> @llvm.hexagon.V6.vrmpybusi.128B(<64 x i32> %dv32, i32 %const, i32 0)
   %odd_deinterleaved = call <64 x i32> @llvm.hexagon.V6.vrmpybusi.128B(<64 x i32> %dv32, i32 %const, i32 1)
-  %res = call <128 x i32> @halide.hexagon.add_4mpy.dv.helper(<64 x i32> %even_deinterleaved, <64 x i32> %odd_deinterleaved)
+  %res = call <128 x i32> @halide.hexagon.add_4mpy.stencil.helper(<64 x i32> %even_deinterleaved, <64 x i32> %odd_deinterleaved)
   ret <128 x i32> %res
 }
 
-define weak_odr <128 x i32> @halide.hexagon.add_4mpy.vub.ub.dv(<256 x i8> %dv, i32 %const) nounwind uwtable readnone {
+define weak_odr <128 x i32> @halide.hexagon.add_4mpy.vub.ub.stencil(<256 x i8> %dv, i32 %const) nounwind uwtable readnone {
   %dv32 = bitcast <256 x i8> %dv to <64 x i32>
   %even_deinterleaved = call <64 x i32> @llvm.hexagon.V6.vrmpyubi.128B(<64 x i32> %dv32, i32 %const, i32 0)
   %odd_deinterleaved = call <64 x i32> @llvm.hexagon.V6.vrmpyubi.128B(<64 x i32> %dv32, i32 %const, i32 1)
-  %res = call <128 x i32> @halide.hexagon.add_4mpy.dv.helper(<64 x i32> %even_deinterleaved, <64 x i32> %odd_deinterleaved)
+  %res = call <128 x i32> @halide.hexagon.add_4mpy.stencil.helper(<64 x i32> %even_deinterleaved, <64 x i32> %odd_deinterleaved)
   ret <128 x i32> %res
 }
