@@ -274,15 +274,15 @@ void CodeGen_GLSLBase::visit(const Call *op) {
             string b = print_expr(op->args[1]);
             base << "pow(abs(" << a << "), " << b << ")";
             string c = print_assignment(op->type, base.str());
-            Expr a_var = Variable::make(op->type, a);
-            Expr b_var = Variable::make(op->type, b);
+            Expr a_var = is_const(op->args[0]) ? op->args[0] : Variable::make(op->type, a);
+            Expr b_var = is_const(op->args[1]) ? op->args[1] : Variable::make(op->type, b);
             Expr c_var = Variable::make(op->type, c);
             // OpenGL isn't required to produce NaNs, so we return
             // zero in the undefined case.
             Expr equiv = select(a_var > 0 || b_var % 2 == 0, c_var,
                                 b_var % 2 == 1, -c_var,
                                 0.0f);
-            print_expr(equiv);
+            print_expr(simplify(equiv));
             return;
         }
     } else if (op->is_intrinsic(Call::shift_right)) {
