@@ -2219,7 +2219,7 @@ private:
                             vtmpy_indices[v2_idx] = true;
 
                             Expr dv = Shuffle::make_interleave({mpys[v0_idx].first, mpys[v2_idx].first});
-                            Expr constant = Shuffle::make_interleave({mpys[v0_idx].second, mpys[v1_idx].second});
+                            Expr constant = Shuffle::make_interleave({mpys[v0_idx].second, mpys[v1_idx].second, mpys[v0_idx].second, mpys[v1_idx].second});
                             Expr new_expr = halide_hexagon_add_3mpy(op->type, vtmpy_suffix, dv, constant);
                             new_expr = native_interleave(new_expr);
 

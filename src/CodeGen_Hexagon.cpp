@@ -714,12 +714,15 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     //{ vdmpyhb_dv_acc, i32v2, "acc_add_2mpy.vw.vh.b.dv", {i32v2, i16v2, i32} },
 
     // vtmpy
-    {INTRINSIC_128B(vtmpybus), i16v2, "add_3mpy.vub.b", {u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vtmpyb), i16v2, "add_3mpy.vb.b", {i8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vtmpyhb), i32v2, "add_3mpy.vh.b", {u16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vtmpybus_acc), i16v2, "acc_add_3mpy.vh.vub.b", {i16v2, u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vtmpyb_acc), i16v2, "acc_add_3mpy.vh.vb.b", {i16v2, i8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vtmpyhb_acc), i32v2, "acc_add_3mpy.vw.vh.b", {i32v2, u16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    // TODO: These (and many vdmpy variants) should have 16-bit scalars with BroadcastScalarsToWords, so
+    // we don't need to replicate the arguments in HexagonOptimize.cpp. However, this triggers opaque
+    // failures in LLVM.
+    {INTRINSIC_128B(vtmpybus), i16v2, "add_3mpy.vub.b", {u8v2, i32}},
+    {INTRINSIC_128B(vtmpyb), i16v2, "add_3mpy.vb.b", {i8v2, i32}},
+    {INTRINSIC_128B(vtmpyhb), i32v2, "add_3mpy.vh.b", {u16v2, i32}},
+    {INTRINSIC_128B(vtmpybus_acc), i16v2, "acc_add_3mpy.vh.vub.b", {i16v2, u8v2, i32}},
+    {INTRINSIC_128B(vtmpyb_acc), i16v2, "acc_add_3mpy.vh.vb.b", {i16v2, i8v2, i32}},
+    {INTRINSIC_128B(vtmpyhb_acc), i32v2, "acc_add_3mpy.vw.vh.b", {i32v2, u16v2, i32}},
 
     {INTRINSIC_128B(vrmpybus), i32v1, "add_4mpy.vub.b", {u8v1, i32}},
     {INTRINSIC_128B(vrmpyub), u32v1, "add_4mpy.vub.ub", {u8v1, u32}},
