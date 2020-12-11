@@ -117,18 +117,17 @@ void destroy_context(gpu_context &context) {
 }
 
 int halide_metal_acquire_context(void *user_context, id<MTLDevice> *device_ret,
-				 id<MTLCommandQueue> *queue_ret, bool create) {
+                                 id<MTLCommandQueue> *queue_ret, bool create) {
     if (user_context == nullptr) {
         assert(!create);
         *device_ret = nullptr;
         *queue_ret = nullptr;
     } else {
         gpu_context *context = (gpu_context *)user_context;
-	*device_ret = context->device;
-	*queue_ret = context->queue;
+        *device_ret = context->device;
+        *queue_ret = context->queue;
     }
     return 0;
-
 }
 
 int halide_metal_release_context(void *user_context) {

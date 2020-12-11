@@ -17,7 +17,6 @@ class GPUCompilationCache {
             : context(context), module_state(module_state),
               kernel_id(kernel_id), use_count(use_count) {
         }
-
     };
 
     halide_mutex mutex;
@@ -45,7 +44,7 @@ public:
         }
     }
 
-  HALIDE_MUST_USE_RESULT bool insert(const CachedCompilation &entry) {
+    HALIDE_MUST_USE_RESULT bool insert(const CachedCompilation &entry) {
         if (log2_compilations_size == 0) {
             if (!resize_table(kInitialTableBits)) {
                 return false;
@@ -144,9 +143,9 @@ public:
             if (compilations[i].kernel_id > kInvalidId &&
                 (all || (compilations[i].context == context)) &&
                 compilations[i].use_count == 0) {
-                debug(user_context) << "Releasing cached compilation: " << compilations[i].module_state <<
-                                       " id " << compilations[i].kernel_id <<
-                                       " context " << compilations[i].context << "\n";
+                debug(user_context) << "Releasing cached compilation: " << compilations[i].module_state
+                                    << " id " << compilations[i].kernel_id
+                                    << " context " << compilations[i].context << "\n";
                 f(compilations[i].module_state);
                 compilations[i].module_state = nullptr;
                 compilations[i].kernel_id = kDeletedId;
@@ -195,13 +194,12 @@ public:
 
         // TODO(zvookin): figure out the calling signature here...
         ModuleStateT compiled_module = f(args...);
-        debug(user_context) << "Caching compiled kernel: " << compiled_module <<
-                               " id " << *id_ptr << " context " << context << "\n";
+        debug(user_context) << "Caching compiled kernel: " << compiled_module
+                            << " id " << *id_ptr << " context " << context << "\n";
         if (compiled_module == nullptr) {
             return false;
         }
 
-        
         if (!insert({context, compiled_module, *id_ptr, 1})) {
             return false;
         }
