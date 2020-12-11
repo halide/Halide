@@ -324,16 +324,18 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
     static Expr wild_u8x = Variable::make(UInt(8, 0), "*");
     static Expr wild_i16x = Variable::make(Int(16, 0), "*");
     static Expr wild_u16x = Variable::make(UInt(16, 0), "*");
+    // clang-format off
     static const Pattern patterns[] = {
-        { VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_i8x)), "dp4a_s32_s32" },
-        { VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_u8x)), "dp4a_s32_u32" },
-        { VectorReduce::Add, 4, i32(widening_mul(wild_u8x, wild_i8x)), "dp4a_u32_s32" },
-        { VectorReduce::Add, 4, u32(widening_mul(wild_u8x, wild_u8x)), "dp4a_u32_u32" },
-        { VectorReduce::Add, 2, widening_mul(wild_i16x, wild_i16x), "dp2a_s32_s32" },
-        { VectorReduce::Add, 2, widening_mul(wild_i16x, wild_u16x), "dp2a_s32_u32" },
-        { VectorReduce::Add, 2, widening_mul(wild_u16x, wild_i16x), "dp2a_u32_s32" },
-        { VectorReduce::Add, 2, widening_mul(wild_u16x, wild_u16x), "dp2a_u32_u32" },
+        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_i8x)), "dp4a_s32_s32"},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_u8x)), "dp4a_s32_u32"},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x, wild_i8x)), "dp4a_u32_s32"},
+        {VectorReduce::Add, 4, u32(widening_mul(wild_u8x, wild_u8x)), "dp4a_u32_u32"},
+        {VectorReduce::Add, 2, widening_mul(wild_i16x, wild_i16x), "dp2a_s32_s32"},
+        {VectorReduce::Add, 2, widening_mul(wild_i16x, wild_u16x), "dp2a_s32_u32"},
+        {VectorReduce::Add, 2, widening_mul(wild_u16x, wild_i16x), "dp2a_u32_s32"},
+        {VectorReduce::Add, 2, widening_mul(wild_u16x, wild_u16x), "dp2a_u32_u32"},
     };
+    // clang-format on
 
     const int input_lanes = op->value.type().lanes();
     const int factor = input_lanes / op->type.lanes();
