@@ -217,11 +217,10 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     // significant bit), so we can check for them all in a loop.
     for (size_t i = 0; i < matches.size(); i++) {
         Type t = matches[i].type();
-        Type target_t = t.with_bits(t.bits() / 2);
         if (flags & (Pattern::NarrowOp0 << i)) {
-            matches[i] = lossless_cast(target_t, matches[i]);
+            matches[i] = lossless_cast(t.narrow(), matches[i]);
         } else if (flags & (Pattern::NarrowUnsignedOp0 << i)) {
-            matches[i] = lossless_cast(target_t.with_code(Type::UInt), matches[i]);
+            matches[i] = lossless_cast(t.narrow().with_code(Type::UInt), matches[i]);
         }
         if (!matches[i].defined()) {
             return false;
@@ -315,26 +314,6 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
     return x;
 }
 
-// Replace x with a negated version of x, if it can be done without
-// overflow.
-Expr lossless_negate(const Expr &x) {
-    const Mul *m = x.as<Mul>();
-    if (m) {
-        Expr a = lossless_negate(m->a);
-        if (a.defined()) {
-            return Mul::make(a, m->b);
-        }
-        Expr b = lossless_negate(m->b);
-        if (b.defined()) {
-            return Mul::make(m->a, b);
-        }
-    }
-    if (is_negative_negatable_const(x) || is_positive_const(x)) {
-        return simplify(-x);
-    }
-    return Expr();
-}
-
 template<typename T>
 Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, const Target &target, IRMutator *mutator) {
     Expr ret = apply_patterns(op, patterns, target, mutator);
@@ -413,20 +392,12 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
         return mpy_count;
     } else if (const Sub *sub = op.as<Sub>()) {
         // Try to rewrite subs as adds.
-        if (const Mul *mul_b = sub->b.as<Mul>()) {
-            if (is_positive_const(mul_b->a) || is_negative_negatable_const(mul_b->a)) {
-                Expr add_b = Mul::make(simplify(-mul_b->a), mul_b->b);
-                int mpy_count = 0;
-                mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-                mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
-                return mpy_count;
-            } else if (is_positive_const(mul_b->b) || is_negative_negatable_const(mul_b->b)) {
-                Expr add_b = Mul::make(mul_b->a, simplify(-mul_b->b));
-                int mpy_count = 0;
-                mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-                mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
-                return mpy_count;
-            }
+        Expr negative_b = lossless_negate(sub->b);
+        if (negative_b.defined()) {
+            int mpy_count = 0;
+            mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+            mpy_count += find_mpy_ops(negative_b, a_ty, b_ty, max_mpy_count, mpys, rest);
+            return mpy_count;
         }
     }
 
@@ -1129,14 +1100,14 @@ private:
 
     Expr visit(const Div *op) override {
         if (!op->type.is_float() && op->type.is_vector()) {
-            return mutate(simplify(lower_int_uint_div(op->a, op->b)));
+            return mutate(lower_int_uint_div(op->a, op->b));
         }
         return IRMutator::visit(op);
     }
 
     Expr visit(const Mod *op) override {
         if (!op->type.is_float() && op->type.is_vector()) {
-            return mutate(simplify(lower_int_uint_mod(op->a, op->b)));
+            return mutate(lower_int_uint_mod(op->a, op->b));
         }
         return IRMutator::visit(op);
     }
@@ -1600,7 +1571,7 @@ class EliminateInterleaves : public IRMutator {
         if (buffers.contains(op->name)) {
             // When inspecting the stores to a buffer, update the state.
             BufferState &state = buffers.ref(op->name);
-            if (!is_one(predicate) || !op->value.type().is_vector()) {
+            if (!is_const_one(predicate) || !op->value.type().is_vector()) {
                 // TODO(psuriana): This store is predicated. Mark the buffer as
                 // not interleaved for now.
                 state = BufferState::NotInterleaved;
@@ -1630,7 +1601,7 @@ class EliminateInterleaves : public IRMutator {
         if (deinterleave_buffers.contains(op->name)) {
             // We're deinterleaving this buffer, remove the interleave
             // from the store.
-            internal_assert(is_one(predicate)) << "The store shouldn't have been predicated.\n";
+            internal_assert(is_const_one(predicate)) << "The store shouldn't have been predicated.\n";
             value = remove_interleave(value);
         }
 
@@ -1778,7 +1749,7 @@ class OptimizeShuffles : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             // TODO(psuriana): We shouldn't mess with predicated load for now.
             return IRMutator::visit(op);
         }
@@ -2157,7 +2128,7 @@ class ScatterGatherGenerator : public IRMutator {
         }
         // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
         // supported yet.
-        if (op->index.as<Ramp>() || !is_one(op->predicate) || !ty.is_vector() ||
+        if (op->index.as<Ramp>() || !is_const_one(op->predicate) || !ty.is_vector() ||
             ty.bits() == 8) {
             return Expr();
         }
@@ -2206,7 +2177,7 @@ class ScatterGatherGenerator : public IRMutator {
         // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
         // supported yet.
         Type ty = op->value.type();
-        if (!is_one(op->predicate) || !ty.is_vector() || ty.bits() == 8) {
+        if (!is_const_one(op->predicate) || !ty.is_vector() || ty.bits() == 8) {
             return IRMutator::visit(op);
         }
         // To use vgathers, the destination address must be VTCM memory.

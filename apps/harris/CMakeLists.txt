@@ -36,7 +36,7 @@ if (EXISTS ${IMAGE})
     add_test(NAME harris_filter
              COMMAND harris_filter rgb.png out.png)
     set_tests_properties(harris_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS harris
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

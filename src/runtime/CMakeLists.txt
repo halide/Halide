@@ -111,7 +111,6 @@ set(RUNTIME_LL
     x86
     x86_avx
     x86_avx2
-    x86_avx512
     x86_sse41
     )
 
@@ -216,7 +215,7 @@ foreach (i IN LISTS RUNTIME_CPP)
                 set(dep_args "")
             endif ()
 
-            if (CMAKE_EXPORT_COMPILE_COMMANDS)
+            if (Halide_CLANG_TIDY_BUILD)
                 # Create a 'fake' entry just so that clang-tidy will see a C++ compilation command
                 # that it can use for tidy-checking. (This branch should never be taken by 'normal'
                 # compilations.)

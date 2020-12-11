@@ -76,7 +76,7 @@ private:
         on_stack = true;
 
         Expr cond = simplify(condition);
-        if (is_zero(cond)) {  // Condition always false
+        if (is_const_zero(cond)) {  // Condition always false
             return make_zero(UInt(64));
         }
 
@@ -120,7 +120,7 @@ private:
         // compute_allocation_size() might return a zero size, if the allocation is
         // always conditionally false. remove_dead_allocations() is called after
         // inject_profiling() so this is a possible scenario.
-        if (!is_zero(size) && on_stack) {
+        if (!is_const_zero(size) && on_stack) {
             const uint64_t *int_size = as_const_uint(size);
             internal_assert(int_size != nullptr);  // Stack size is always a const int
             func_stack_current[idx] += *int_size;
@@ -145,7 +145,7 @@ private:
                                   new_extents, condition, body, new_expr, op->free_function);
         }
 
-        if (!is_zero(size) && !on_stack && profiling_memory) {
+        if (!is_const_zero(size) && !on_stack && profiling_memory) {
             Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
             debug(3) << "  Allocation on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
             Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
@@ -164,7 +164,7 @@ private:
 
         Stmt stmt = IRMutator::visit(op);
 
-        if (!is_zero(alloc.size)) {
+        if (!is_const_zero(alloc.size)) {
             Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
 
             if (!alloc.on_stack) {
@@ -351,7 +351,7 @@ Stmt inject_profiling(Stmt s, const string &pipeline_name) {
                            MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
-    for (std::pair<string, int> p : profiling.indices) {
+    for (const auto &p : profiling.indices) {
         s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
     }
 
