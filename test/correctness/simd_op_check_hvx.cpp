@@ -651,7 +651,6 @@ public:
         int rfac = 4;
         RDom r(0, rfac);
         check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r))));
-        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * 34));
         check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * u8(r)));
         check("v*.w  += vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * i8(r)));
         check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
@@ -660,19 +659,14 @@ public:
         // Sliding window
         // TODO: We can generate accumulative versions of below instructions.
         check("v*:*.uw = vrmpy(v*:*.ub, r*.ub, #*)", hvx_width, sum(u32(in_u8(x + r))));
-        check("v*:*.uw = vrmpy(v*:*.ub, r*.ub, #*)", hvx_width, sum(u32(in_u8(x + r)) * 34));
         check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(u32(in_u8(x + r)) * i8(r)));
         check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(i32(in_u8(x + r)) * i8(-r)));
-        check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(i32(in_u8(x + r)) * (-1)));
 
         rfac = 2;
         RDom r2(0, rfac);
         check("v*.h += vdmpy(v*.ub, r*.b)", hvx_width / 2, sum(i16(in_u8(rfac * x + r2))));
-        check("v*.h += vdmpy(v*.ub, r*.b)", hvx_width / 2, sum(i16(in_u8(rfac * x + r2)) * 34));
         check("v*.w += vdmpy(v*.h, r*.b)", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * i8(r2)));
         check("v*.w += vdmpy(v*.h, r*.b)", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * i8(r2)));
-        check("v*.w = vdmpy(v*.h, r*.uh):sat", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * 15246));
-        check("v*.w = vdmpy(v*.h, r*.h):sat", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * (-1246)));
         // Sliding window
         // TODO: Check for the crash
         // check("v*:*.h = vdmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r2)) * i16(r2)));
@@ -682,6 +676,10 @@ public:
         check("v*:*.h += vtmpy(v*:*.b, r*.b)", hvx_width, sum(i16(in_i8(x + r3))));
         check("v*:*.h += vtmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r3))));
         check("v*:*.w += vtmpy(v*:*.h, r*.b)", hvx_width, sum(i32(in_i16(x + r3))));
+        // TODO: This should work, a common stencil
+        //check("v*:*.h += vtmpy(v*:*.b, r*.b)", hvx_width, sum(i16(in_i8(x + r3)) * mux(r3, {1, 2, 1})));
+        //check("v*:*.h += vtmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r3)) * mux(r3, {1, 2, 1})));
+        //check("v*:*.w += vtmpy(v*:*.h, r*.b)", hvx_width, sum(i32(in_i16(x + r3)) * mux(r3, {1, 2, 1})));
     }
 
 private:

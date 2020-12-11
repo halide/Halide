@@ -153,9 +153,8 @@ Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v01, E
 }
 
 Expr halide_hexagon_add_3mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
-    Expr call = Call::make(result_type, "halide.hexagon.add_3mpy" + suffix,
-                           {std::move(v01), std::move(c01)}, Call::PureExtern);
-    return native_interleave(call);
+    return Call::make(result_type, "halide.hexagon.add_3mpy" + suffix,
+                      {std::move(v01), std::move(c01)}, Call::PureExtern);
 }
 
 Expr halide_hexagon_add_4mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
@@ -336,7 +335,8 @@ bool is_double_vector(const Expr &x, const Target &target) {
 // matched operands. Prior to substitution, the matches are mutated
 // with op_mutator.
 Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &target, IRMutator *op_mutator) {
-    debug(3) << "apply_patterns " << x << "\n";
+    constexpr int debug_level = 3;
+    debug(debug_level) << "apply_patterns " << x << "\n";
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
         if (!check_pattern_target(p.flags, target)) {
@@ -344,10 +344,10 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
         }
 
         if (expr_match(p.pattern, x, matches)) {
-            debug(3) << "matched " << p.pattern << "\n";
-            debug(3) << "matches:\n";
+            debug(debug_level) << "matched " << p.pattern << "\n";
+            debug(debug_level) << "matches:\n";
             for (const Expr &i : matches) {
-                debug(3) << i << "\n";
+                debug(debug_level) << i << "\n";
             }
 
             if (!process_match_flags(matches, p.flags)) {
@@ -366,7 +366,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
             }
 
             x = replace_pattern(x, matches, p);
-            debug(3) << "rewrote to: " << x << "\n";
+            debug(debug_level) << "rewrote to: " << x << "\n";
             return x;
         }
     }
@@ -742,9 +742,9 @@ private:
             {"halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b", wild_i32x + native_interleave(halide_hexagon_add_2mpy(Int(32, 0), ".vh.vh.b.b", wild_i16x, wild_i32)), Pattern::ReinterleaveOp0},
             {"halide.hexagon.acc_add_2mpy.vh.vub.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0), ".vub.b", wild_u8x, wild_i32)},
             {"halide.hexagon.acc_add_2mpy.vw.vh.b", wild_i32x + halide_hexagon_add_2mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i32)},
-            {"halide.hexagon.acc_add_3mpy.vh.vub.b", wild_i16x + halide_hexagon_add_3mpy(Int(16, 0), ".vub.b", wild_u8x, wild_i16), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.acc_add_3mpy.vh.vb.b", wild_i16x + halide_hexagon_add_3mpy(Int(16, 0), ".vb.b", wild_i8x, wild_i16), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.acc_add_3mpy.vw.vh.b", wild_i32x + halide_hexagon_add_3mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i16), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.acc_add_3mpy.vh.vub.b", wild_i16x + native_interleave(halide_hexagon_add_3mpy(Int(16, 0), ".vub.b", wild_u8x, wild_i32)), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.acc_add_3mpy.vh.vb.b", wild_i16x + native_interleave(halide_hexagon_add_3mpy(Int(16, 0), ".vb.b", wild_i8x, wild_i32)), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.acc_add_3mpy.vw.vh.b", wild_i32x + native_interleave(halide_hexagon_add_3mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i32)), Pattern::ReinterleaveOp0},
             {"halide.hexagon.acc_add_4mpy.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.b", wild_u8x, wild_i32)},
             {"halide.hexagon.acc_add_4mpy.vuw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.ub", wild_u8x, wild_u32)},
             {"halide.hexagon.acc_add_4mpy.vuw.vub.vub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.vub", wild_u8x, wild_u8x)},
@@ -1145,135 +1145,163 @@ class VectorReducePatterns : public IRMutator {
         return false;
     }
 
-    Expr visit(const Mul *op) override {
-        if (const VectorReduce *vr = op->a.as<VectorReduce>()) {
-            int in_lanes = vr->value.type().lanes();
-            int out_lanes = vr->type.lanes();
-            int rfac = in_lanes / out_lanes;
-            if (vr->op == VectorReduce::Add && rfac <= 4) {
-                // Try Moving broadcasts inside the VectorReduce Node for
-                // vrmpy/vtmpy/vdmpy instructions.
-                const int lanes = vr->type.lanes();
-                const int arg_lanes = vr->value.type().lanes();
-                IRMatcher::Wild<0> x;
-                IRMatcher::Wild<1> y;
-                auto rewrite = IRMatcher::rewriter(IRMatcher::mul(op->a, op->b), op->type);
-                if (rewrite(h_add(x, lanes) * broadcast(y, lanes), h_add(x * broadcast(y, arg_lanes), lanes))) {
-                    Expr new_expr = mutate(rewrite.result);
-                    if (!new_expr.same_as(rewrite.result)) {
-                        return new_expr;
-                    }
-                }
-            }
-        }
-        return IRMutator::visit(op);
-    }
-
     Expr visit(const VectorReduce *op) override {
+        if (!op->type.is_vector() || op->type.is_float() || op->op != VectorReduce::Add) {
+            return IRMutator::visit(op);
+        }
+
         struct Signature {
             enum Flags {
                 SlidingWindow = 1,
-                ScalarB = 1 << 1
+                ScalarB = 1 << 1,
+                NarrowB = 1 << 2,
+                SwapOps = 1 << 3,  // Swapping ops is done before matching B to scalars.
             };
-            int rfac;
-            Type r_ty;
-            Type a_ty;
-            Type b_ty;
+            int factor;
+            Expr pattern;
             int flags;
         };
 
-        if (op->type.bits() == 8 || !op->type.is_vector() ||
-            op->type.is_float() || op->op != VectorReduce::Add) {
-            return IRMutator::visit(op);
-        }
         int in_lanes = op->value.type().lanes();
         int out_lanes = op->type.lanes();
-        int rfac = in_lanes / out_lanes;
+        int factor = in_lanes / out_lanes;
 
         // Map of instruction signatures
         static const vector<Signature> sigs = {
             // --------- vrmpy ---------
             // Sliding window
-            {4, UInt(32, 0), UInt(8, 0), UInt(8, 4), Signature::SlidingWindow | Signature::ScalarB},
-            {4, Int(32, 0), UInt(8, 0), Int(8, 4), Signature::SlidingWindow | Signature::ScalarB},
+            {4, u32(widening_mul(wild_u8x, wild_u8x)), Signature::SlidingWindow | Signature::ScalarB},
+            {4, i32(widening_mul(wild_u8x, wild_i8x)), Signature::SlidingWindow | Signature::ScalarB},
+            {4, i32(widening_mul(wild_i8x, wild_u8x)), Signature::SlidingWindow | Signature::ScalarB | Signature::SwapOps},
             // Vector * Scalar
-            {4, UInt(32, 0), UInt(8, 0), UInt(8, 4), Signature::ScalarB},
-            {4, Int(32, 0), Int(8, 0), UInt(8, 4), Signature::ScalarB},
-            {4, Int(32, 0), UInt(8, 0), Int(8, 4), Signature::ScalarB},
+            {4, u32(widening_mul(wild_u8x, wild_u8x)), Signature::ScalarB},
+            {4, i32(widening_mul(wild_i8x, wild_u8x)), Signature::ScalarB},
+            {4, i32(widening_mul(wild_u8x, wild_i8x)), Signature::ScalarB},
+            {4, i32(widening_mul(wild_i8x, wild_u8x)), Signature::ScalarB | Signature::SwapOps},
             // Vector * Vector
-            {4, UInt(32, 0), UInt(8, 0), UInt(8, 32)},
-            {4, Int(32, 0), UInt(8, 0), Int(8, 32)},
-            {4, Int(32, 0), Int(8, 0), Int(8, 32)},
+            {4, u32(widening_mul(wild_u8x, wild_u8x))},
+            {4, i32(widening_mul(wild_u8x, wild_i8x))},
+            {4, i32(widening_mul(wild_i8x, wild_u8x)), Signature::SwapOps},
+            {4, i32(widening_mul(wild_i8x, wild_i8x))},
+            // Sum
+            {4, u32(wild_u8x), Signature::SlidingWindow},
+            {4, i32(wild_u8x), Signature::SlidingWindow},
+            {4, i32(wild_i8x), Signature::SlidingWindow},
+            {4, u32(wild_u8x)},
+            {4, i32(wild_u8x)},
+            {4, i32(wild_i8x)},
 
             // --------- vtmpy ---------
             // Vtmpy has additional requirement that third coefficient b[2]
             // needs to be 1.
             // Sliding window
-            {3, Int(16, 0), Int(8, 0), Int(8, 3), Signature::SlidingWindow | Signature::ScalarB},
-            {3, Int(16, 0), UInt(8, 0), Int(8, 3), Signature::SlidingWindow | Signature::ScalarB},
-            {3, Int(32, 0), Int(16, 0), Int(8, 3), Signature::SlidingWindow | Signature::ScalarB},
+            {3, widening_mul(wild_i8x, wild_i8x), Signature::SlidingWindow | Signature::ScalarB},
+            {3, widening_mul(wild_u8x, wild_i8x), Signature::SlidingWindow | Signature::ScalarB},
+            {3, widening_mul(wild_i8x, wild_u8x), Signature::SlidingWindow | Signature::ScalarB | Signature::SwapOps},
+            {3, widening_mul(wild_i16x, wild_i16x), Signature::SlidingWindow | Signature::ScalarB},
+            // Sum
+            {3, i16(wild_i8x), Signature::SlidingWindow},
+            {3, i16(wild_u8x), Signature::SlidingWindow},
+            {3, i32(wild_i16x), Signature::SlidingWindow},
 
             // --------- vdmpy ---------
             // Sliding window
-            {2, Int(16, 0), UInt(8, 0), Int(8, 4), Signature::SlidingWindow | Signature::ScalarB},
-            {2, Int(32, 0), Int(16, 0), Int(8, 4), Signature::SlidingWindow | Signature::ScalarB},
+            {2, widening_mul(wild_u8x, wild_i8x), Signature::SlidingWindow | Signature::ScalarB},
+            {2, widening_mul(wild_i8x, wild_u8x), Signature::SlidingWindow | Signature::ScalarB | Signature::SwapOps},
+            {2, widening_mul(wild_i16x, wild_i16x), Signature::SlidingWindow | Signature::ScalarB},
             // Vector * Scalar
-            {2, Int(16, 0), UInt(8, 0), Int(8, 4), Signature::ScalarB},
-            {2, Int(32, 0), Int(16, 0), Int(8, 4), Signature::ScalarB},
-            {2, Int(32, 0), Int(16, 0), UInt(16, 2), Signature::ScalarB},  // Saturates
-            {2, Int(32, 0), Int(16, 0), Int(16, 2), Signature::ScalarB},   // Saturates
+            {2, widening_mul(wild_u8x, wild_i8x), Signature::ScalarB},
+            {2, widening_mul(wild_i8x, wild_u8x), Signature::ScalarB | Signature::SwapOps},
+            {2, widening_mul(wild_i16x, wild_i16x), Signature::ScalarB | Signature::NarrowB},
+            {2, widening_mul(wild_i16x, wild_u16x), Signature::ScalarB},  // Saturates
+            {2, widening_mul(wild_u16x, wild_i16x), Signature::ScalarB | Signature::SwapOps},  // Saturates
+            {2, widening_mul(wild_i16x, wild_i16x), Signature::ScalarB},   // Saturates
             // Vector * Vector
-            {2, Int(32, 0), Int(16, 0), Int(16, 32)},  // Saturates
+            {2, widening_mul(wild_i16x, wild_i16x)},  // Saturates
+            // Sum
+            {2, i16(wild_u8x), Signature::SlidingWindow},
+            {2, i32(wild_i16x), Signature::SlidingWindow},
+            {2, i16(wild_u8x)},
+            {2, i32(wild_i16x)},
         };
-
+        std::vector<Expr> matches;
         for (Signature sig : sigs) {
-            if (rfac != sig.rfac || op->type.code() != sig.r_ty.code() ||
-                op->type.bits() != sig.r_ty.bits()) {
+            if (factor != sig.factor) {
                 continue;
             }
-            vector<MulExpr> mpys;
-            Expr rest;
-            string suffix;
-            Type a_ty = sig.a_ty.with_lanes(in_lanes);
-            Type b_ty = (sig.flags & Signature::ScalarB) ? sig.b_ty : sig.b_ty.with_lanes(in_lanes);
-            find_mpy_ops(op->value, a_ty, b_ty, 1, mpys, rest);
+            if (!expr_match(sig.pattern, op->value, matches)) {
+                continue;
+            }
 
-            if (mpys.empty()) {
-                continue;
+            Expr a = matches[0];
+            Expr b = matches.size() > 1 ? matches[1] : make_const(Type(op->type.code(), 8, factor), 1);
+            if (sig.flags & Signature::SwapOps) {
+                std::swap(a, b);
             }
-            Expr a = simplify(mpys[0].first);
-            Expr b = simplify(mpys[0].second);
+
+            if (sig.flags & Signature::ScalarB) {
+                if (const Shuffle *shuff = b.as<Shuffle>()) {
+                    if (shuff->is_broadcast(factor)) {
+                        internal_assert(shuff->vectors.size() == 1);
+                        b = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
+                    }
+                } else if (const Shuffle *shuff = a.as<Shuffle>()) {
+                    // If the types are equal, we can commute the ops.
+                    if (a.type().element_of() == b.type().element_of() && shuff->is_broadcast(factor)) {
+                        internal_assert(shuff->vectors.size() == 1);
+                        a = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
+                        std::swap(a, b);
+                    }
+                }
+                if (b.type().lanes() != factor) {
+                    // This isn't a scalar, it doesn't match the pattern.
+                    continue;
+                }
+            }
+
+            if (sig.flags & Signature::NarrowB) {
+                b = lossless_cast(b.type().narrow(), b);
+                if (!b.defined()) {
+                    continue;
+                }
+            }
+
             Expr a0, a1;
             if (sig.flags & Signature::SlidingWindow) {
-                if (!is_stencil_interleave(a, rfac)) {
+                if (!is_stencil_interleave(a, factor)) {
                     continue;
                 }
                 // Split a into a0, a1 to get the correct vector args
                 // for sliding window reduction instructions. Below are
                 // required shuffle indices for a0 and a1:
-                // For rfac == 2:
+                // For factor == 2:
                 // If a  -> shuff[0, 1,...., out_lanes]
                 //    a0 -> shuff[0, 1,...., out_lanes - 1]
                 //    a1 -> shuff[2, 3,...., out_lanes + 1]
                 //          Last index of a1 is don't care
-                // For rfac == 3:
+                // For factor == 3:
                 // If a  -> shuff[0, 1,...., out_lanes + 1]
                 //    a0 -> shuff[0, 1,...., out_lanes - 1]
                 //    a1 -> shuff[2, 3,...., out_lanes + 1]
-                // For rfac == 4:
+                // For factor == 4:
                 // If a  -> shuff[0, 1,...., out_lanes + 3]
                 //    a0 -> shuff[0, 1,...., out_lanes - 1]
                 //    a1 -> shuff[4, 5,...., out_lanes + 4]
                 //          Last index of a1 is don't care
+                // TODO: Why does this require a to be a shuffle? Why isn't this just:
+                // a0 = Shuffle::make_slice(a, 0, factor, out_lanes);
+                // a1 = Shuffle::make_slice(a, factor - 1, factor, out_lanes);
+                // The current code probably also generates messier shuffles the backend
+                // may not recognize.
                 if (const Shuffle *shuff = a.as<Shuffle>()) {
                     vector<int> a0_indices(out_lanes), a1_indices(out_lanes);
                     for (int i = 0; i < out_lanes; i++) {
-                        a0_indices[i] = shuff->indices[i * rfac];
-                        a1_indices[i] = shuff->indices[(i + 1) * rfac - 1];
+                        a0_indices[i] = shuff->indices[i * factor];
+                        a1_indices[i] = shuff->indices[(i + 1) * factor - 1];
                     }
                     a0 = Shuffle::make(shuff->vectors, a0_indices);
                     a1 = Shuffle::make(shuff->vectors, a1_indices);
-                    if (rfac == 2 || rfac == 4) {
+                    if (factor == 2 || factor == 4) {
                         // We'll need to rotate the indices by one element
                         // to get the correct order.
                         Type ty = UInt(8).with_lanes(a1.type().lanes() * a1.type().bytes());
@@ -1288,42 +1316,41 @@ class VectorReducePatterns : public IRMutator {
                             continue;
                         }
                         b = Shuffle::make_slice(b, 0, 1, 2);
-                        b_ty = b.type();
                     }
                     a = Shuffle::make_concat({a0, a1});
                 } else {
                     continue;
                 }
             }
-            // Reinterpret scalar b arg to get correct type.
-            if (sig.flags & Signature::ScalarB) {
-                b = simplify(reinterpret(Type(b_ty.code(), b_ty.lanes() * b_ty.bits(), 1), b));
+
+            std::string suffix = type_suffix(a);
+            if (b.type().lanes() <= factor) {
+                suffix += type_suffix(b.type().element_of());
+                if (b.type().lanes() * b.type().bits() <= 16) {
+                    b = Shuffle::make({b}, {0, 1, 0, 1});
+                }
+                // Reinterpret scalar b arg to get correct type.
+                b = simplify(reinterpret(Type(b.type().code(), b.type().lanes() * b.type().bits(), 1), b));
+            } else {
+                suffix += type_suffix(b);
             }
 
-            suffix = type_suffix(a);
-            suffix += (b.type().is_scalar()) ? type_suffix(sig.b_ty.element_of()) : type_suffix(b);
-
-            if (rfac == 4) {
+            if (factor == 4) {
                 if (sig.flags & Signature::SlidingWindow) {
                     return halide_hexagon_add_4mpy(op->type, suffix + ".stencil", a, b);
                 } else {
-                    Expr new_expr = halide_hexagon_add_4mpy(op->type.with_bits(32),
-                                                            suffix, a, b);
+                    Expr new_expr = halide_hexagon_add_4mpy(op->type.with_bits(32), suffix, a, b);
                     if (op->type.bits() == 16) {
-                        new_expr = Call::make(op->type, "halide.hexagon.pack.vw",
-                                              {new_expr}, Call::PureExtern);
+                        new_expr = Call::make(op->type, "halide.hexagon.pack.vw", {new_expr}, Call::PureExtern);
                     }
                     return new_expr;
                 }
             } else {
                 if (sig.flags & Signature::SlidingWindow) {
-                    string name = "halide.hexagon.add_" + std::to_string(rfac) +
-                                  "mpy" + suffix;
-                    return native_interleave(Call::make(op->type, name,
-                                                        {a, b},
-                                                        Call::PureExtern));
+                    string name = "halide.hexagon.add_" + std::to_string(factor) + "mpy" + suffix;
+                    return native_interleave(Call::make(op->type, name, {a, b}, Call::PureExtern));
                 } else {
-                    // rfac == 3 has only sliding window reductions.
+                    // factor == 3 has only sliding window reductions.
                     return halide_hexagon_add_2mpy(op->type, suffix, a, b);
                 }
             }
@@ -2191,8 +2218,8 @@ private:
 
                             Expr dv = Shuffle::make_interleave({mpys[v0_idx].first, mpys[v2_idx].first});
                             Expr constant = Shuffle::make_interleave({mpys[v0_idx].second, mpys[v1_idx].second});
-                            Expr new_expr = halide_hexagon_add_3mpy(op->type, vtmpy_suffix,
-                                                                    dv, constant);
+                            Expr new_expr = halide_hexagon_add_3mpy(op->type, vtmpy_suffix, dv, constant);
+                            new_expr = native_interleave(new_expr);
 
                             vtmpy_exprs.emplace_back(new_expr);
                             // As we cannot test the same indices again

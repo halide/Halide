@@ -772,7 +772,7 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vasrhubsat), u8v1, "trunc_satub_shr.vh.uh", {i16v2, u16}},
     {INTRINSIC_128B(vasrwuhsat), u16v1, "trunc_satuh_shr.vw.uw", {i32v2, u32}},
     {INTRINSIC_128B(vasrwhsat), i16v1, "trunc_sath_shr.vw.uw", {i32v2, u32}},
-    {INTRINSIC_128B(vror), u8v1, "vror",{u8v1, i32}},
+    {INTRINSIC_128B(vror), u8v1, "vror", {u8v1, i32}},
 
     // Bit counting
     {INTRINSIC_128B(vnormamth), u16v1, "cls.vh", {u16v1}},
