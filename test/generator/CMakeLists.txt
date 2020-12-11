@@ -124,10 +124,12 @@ halide_define_aot_test(acquire_release)
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
     include(AddCudaToTarget)
     add_cuda_to_target(generator_aot_acquire_release PRIVATE)
+    add_cuda_to_target(generator_aot_multi_context_threaded PRIVATE)
 endif ()
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
     find_package(OpenCL REQUIRED)
     target_link_libraries(generator_aot_acquire_release PRIVATE OpenCL::OpenCL)
+    target_link_libraries(generator_aot_multi_context_threaded PRIVATE OpenCL::OpenCL)
 endif ()
 
 # TODO: what are these?
