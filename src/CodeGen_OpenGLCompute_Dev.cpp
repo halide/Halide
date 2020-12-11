@@ -1,6 +1,6 @@
+#include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
-#include "CodeGen_OpenGLCompute_Dev.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "IRMatch.h"
