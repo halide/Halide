@@ -136,7 +136,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> bc(wild_u64_)));
 
     // SRSHL, URSHL - Rounding shift left (by signed vector)
-    // TODO: We need to match rounding shift right, and negate the RHS.
+    // These are already written as rounding_shift_left
 
     // SRSHR, URSHR - Rounding shift right (by immediate in [1, LHS bits])
     // These patterns are almost identity, we just need to strip off the broadcast.

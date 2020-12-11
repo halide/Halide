@@ -713,8 +713,8 @@ int main(int argc, char **argv) {
         test_hvx.set_num_threads(1);
     }
 
-    if (getenv("FILTER")) {
-        test_hvx.filter = getenv("FILTER");
+    if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
+        test_hvx.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
     }
 
     // Remove some features like simd_op_check.cpp used to do.
