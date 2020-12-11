@@ -74,7 +74,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     casts.emplace_back("qrdmulh", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))));
     casts.emplace_back("qrdmulh", i32_sat(rounding_shift_right(widening_mul(wild_i32x_, wild_i32x_), u32(31))));
 
-    // RSHRN - Rounding shift right narrow (by immediate in [1, LHS bits])
+    // RSHRN - Rounding shift right narrow (by immediate in [1, output bits])
     casts.emplace_back("rounding_shift_right_narrow", i8(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
     casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_u16x_, bc(wild_u16_))));
     casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
@@ -85,7 +85,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_u64x_, bc(wild_u64_))));
     casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
 
-    // SHRN - Shift right narrow (by immediate in [1, LHS bits])
+    // SHRN - Shift right narrow (by immediate in [1, output bits])
     casts.emplace_back("shift_right_narrow", i8(wild_i16x_ >> bc(wild_u16_)));
     casts.emplace_back("shift_right_narrow", u8(wild_u16x_ >> bc(wild_u16_)));
     casts.emplace_back("shift_right_narrow", i16(wild_i32x_ >> bc(wild_u32_)));
@@ -363,15 +363,15 @@ const ArmIntrinsic intrinsic_defs[] = {
 
     // SQSHRN, UQSHRN, SQRSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
     // arm32 expects a vector RHS of the same type as the LHS.
-    {"vqshiftns", nullptr, Int(8, 8), "saturating_shift_right_narrow", {Int(16, 8), UInt(16, 8)}},
-    {"vqshiftnu", nullptr, UInt(8, 8), "saturating_shift_right_narrow", {UInt(16, 8), UInt(16, 8)}},
-    {"vqshiftns", nullptr, Int(16, 4), "saturating_shift_right_narrow", {Int(32, 4), UInt(32, 4)}},
-    {"vqshiftnu", nullptr, UInt(16, 4), "saturating_shift_right_narrow", {UInt(32, 4), UInt(32, 4)}},
-    {"vqshiftns", nullptr, Int(32, 2), "saturating_shift_right_narrow", {Int(64, 2), UInt(64, 2)}},
-    {"vqshiftnu", nullptr, UInt(32, 2), "saturating_shift_right_narrow", {UInt(64, 2), UInt(64, 2)}},
-    {"vqshiftnsu", nullptr, UInt(8, 8), "saturating_shift_right_narrow", {Int(16, 8), UInt(16, 8)}},
-    {"vqshiftnsu", nullptr, UInt(16, 4), "saturating_shift_right_narrow", {Int(32, 4), UInt(32, 4)}},
-    {"vqshiftnsu", nullptr, UInt(32, 2), "saturating_shift_right_narrow", {Int(64, 2), UInt(64, 2)}},
+    {"vqshiftns", nullptr, Int(8, 8), "saturating_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
+    {"vqshiftnu", nullptr, UInt(8, 8), "saturating_shift_right_narrow", {UInt(16, 8), Int(16, 8)}},
+    {"vqshiftns", nullptr, Int(16, 4), "saturating_shift_right_narrow", {Int(32, 4), Int(32, 4)}},
+    {"vqshiftnu", nullptr, UInt(16, 4), "saturating_shift_right_narrow", {UInt(32, 4), Int(32, 4)}},
+    {"vqshiftns", nullptr, Int(32, 2), "saturating_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
+    {"vqshiftnu", nullptr, UInt(32, 2), "saturating_shift_right_narrow", {UInt(64, 2), Int(64, 2)}},
+    {"vqshiftnsu", nullptr, UInt(8, 8), "saturating_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
+    {"vqshiftnsu", nullptr, UInt(16, 4), "saturating_shift_right_narrow", {Int(32, 4), Int(32, 4)}},
+    {"vqshiftnsu", nullptr, UInt(32, 2), "saturating_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
 
     // arm64 expects a 32-bit constant.
     {nullptr, "sqshrn", Int(8, 8), "saturating_shift_right_narrow", {Int(16, 8), UInt(32)}},
@@ -651,6 +651,10 @@ void CodeGen_ARM::visit(const Cast *op) {
         vector<Expr> matches;
         for (const Pattern &pattern : casts) {
             if (expr_match(pattern.pattern, op, matches)) {
+                if (target.bits == 32 && pattern.intrin.find("shift_right") != string::npos) {
+                    // The 32-bit ARM backend wants right shifts as negative values.
+                    matches[1] = simplify(-cast(matches[1].type().with_code(halide_type_int), matches[1]));
+                }
                 value = call_overloaded_intrin(op->type, pattern.intrin, matches);
                 if (value) {
                     return;
