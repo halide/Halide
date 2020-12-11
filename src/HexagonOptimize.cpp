@@ -1167,6 +1167,7 @@ class VectorReducePatterns : public IRMutator {
         int factor = in_lanes / out_lanes;
 
         // Map of instruction signatures
+        // clang-format off
         static const vector<Signature> sigs = {
             // --------- vrmpy ---------
             // Sliding window
@@ -1213,9 +1214,9 @@ class VectorReducePatterns : public IRMutator {
             {2, widening_mul(wild_u8x, wild_i8x), Signature::ScalarB},
             {2, widening_mul(wild_i8x, wild_u8x), Signature::ScalarB | Signature::SwapOps},
             {2, widening_mul(wild_i16x, wild_i16x), Signature::ScalarB | Signature::NarrowB},
-            {2, widening_mul(wild_i16x, wild_u16x), Signature::ScalarB},  // Saturates
+            {2, widening_mul(wild_i16x, wild_u16x), Signature::ScalarB},                       // Saturates
             {2, widening_mul(wild_u16x, wild_i16x), Signature::ScalarB | Signature::SwapOps},  // Saturates
-            {2, widening_mul(wild_i16x, wild_i16x), Signature::ScalarB},   // Saturates
+            {2, widening_mul(wild_i16x, wild_i16x), Signature::ScalarB},                       // Saturates
             // Vector * Vector
             {2, widening_mul(wild_i16x, wild_i16x)},  // Saturates
             // Sum
@@ -1224,6 +1225,7 @@ class VectorReducePatterns : public IRMutator {
             {2, i16(wild_u8x)},
             {2, i32(wild_i16x)},
         };
+        // clang-format on
         std::vector<Expr> matches;
         for (Signature sig : sigs) {
             if (factor != sig.factor) {

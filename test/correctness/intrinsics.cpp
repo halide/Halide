@@ -161,11 +161,6 @@ int main(int argc, char **argv) {
 
     check(i8(widening_add(i8x, (i8(1) << -min(i8y, 0)) / 2) << i8y), rounding_shift_left(i8x, i8y));
     check((i32x + (i32(1) << -min(i32y, 0)) / 2) << i32y, rounding_shift_left(i32x, i32y));
-
-    // These don't work because the max -> min (and then negative shift swapping)
-    // simplification is not valid for non-overflowing types.
-    //check(saturating_add(i8x, (i8(1) << max(-i8y, 0)) / 2) << i8y, rounding_shift_left(i8x, i8y));
-    //check(i8(widening_add(i8x, (i8(1) << max(-i8y, 0)) / 2) << i8y), i8(rounding_shift_left(widen(i8x), i8y)));
     check((i32x + (i32(1) << max(-i32y, 0)) / 2) << i32y, rounding_shift_left(i32x, i32y));
 
     // Test combinations of multiplies and adds with widening
