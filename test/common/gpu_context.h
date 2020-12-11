@@ -132,16 +132,16 @@ void destroy_cuda_context(CUcontext cuda_ctx) {
 }
 
 #elif defined(TEST_METAL) && defined(__OBJC__)
-#include <Metal/MTLDevice.h>
 #include <Metal/MTLCommandQueue.h>
+#include <Metal/MTLDevice.h>
 
 void create_metal_context(id<MTLDevice> &device, id<MTLCommandQueue> &queue) {
     device = MTLCreateSystemDefaultDevice();
     if (device == nullptr) {
         NSArray<id<MTLDevice>> *devices = MTLCopyAllDevices();
-	if (devices != nullptr) {
-	    device = devices[0];
-	}
+        if (devices != nullptr) {
+            device = devices[0];
+        }
     }
     assert(device != nullptr);
     queue = [device newCommandQueue];
