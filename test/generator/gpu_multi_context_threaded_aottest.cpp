@@ -98,7 +98,7 @@ extern "C" int halide_cuda_release_context(void *user_context) {
 }
 
 #define HAS_MULTIPLE_CONTEXTS true
-#elif defined(TEST_METAL)
+#elif defined(TEST_METAL) && defined(__OBJC__)
 
 struct gpu_context {
     id<MTLDevice> device;

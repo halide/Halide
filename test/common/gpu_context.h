@@ -131,7 +131,7 @@ void destroy_cuda_context(CUcontext cuda_ctx) {
     cuCtxDestroy(cuda_ctx);
 }
 
-#elif defined(TEST_METAL)
+#elif defined(TEST_METAL) && defined(__OBJC__)
 #include <Metal/MTLDevice.h>
 #include <Metal/MTLCommandQueue.h>
 
