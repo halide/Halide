@@ -48,7 +48,7 @@ private:
             args[1] = call_args[1];  // name.buffer
 
             // Normalize first two coordinates.
-            for (size_t i = 0; i < std::min(dims, 2); i++) {
+            for (size_t i = 0; i < (size_t) std::min(dims, 2); i++) {
                 int to_index = 2 + i;
                 int from_index = 2 + i * 2;
                 args[to_index] =
