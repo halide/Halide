@@ -133,8 +133,8 @@ Expr to_rounding_shift(const Call *c) {
             round = simplify((make_one(round_type) >> min(cast(b.type().with_bits(round_type.bits()), b), 0)) / 2);
         }
 
-        // We can always handle widening or saturating adds.
-        if (const Call *add = Call::as_intrinsic(a, {Call::widening_add, Call::saturating_add})) {
+        // We can always handle widening adds.
+        if (const Call *add = Call::as_intrinsic(a, {Call::widening_add})) {
             if (can_prove(lower_intrinsics(add->args[0]) == round)) {
                 return rounding_shift(cast(add->type, add->args[1]), b);
             } else if (can_prove(lower_intrinsics(add->args[1]) == round)) {
@@ -401,8 +401,9 @@ protected:
             }
             // clang-format on
 
-            // When the argument is a widened rounding shift, and we know the shift is a zero
-            // or right shift, we don't need the widening.
+            // When the argument is a widened rounding shift, we might not need the widening.
+            // When there is saturation, we can only avoid the widening if we know the shift is
+            // a right shift. Without saturation, we can ignore the widneing.
             auto is_x_wide_int = op->type.is_int() && is_int(x, bits * 2);
             auto is_x_wide_uint = op->type.is_uint() && is_uint(x, bits * 2);
             auto is_x_wide_int_or_uint = is_x_wide_int || is_x_wide_uint;
@@ -413,10 +414,12 @@ protected:
                 false) {
                 const Call *shift = Call::as_intrinsic(rewrite.result, {Call::rounding_shift_right, Call::rounding_shift_left});
                 internal_assert(shift);
+                bool is_saturated = op->value.as<Max>() || op->value.as<Min>();
                 Expr a = lossless_cast(op->type, shift->args[0]);
                 Expr b = lossless_cast(op->type.with_code(shift->args[1].type().code()), shift->args[1]);
                 if (a.defined() && b.defined()) {
-                    if ((shift->is_intrinsic(Call::rounding_shift_right) && can_prove(b >= 0)) ||
+                    if (!is_saturated ||
+                        (shift->is_intrinsic(Call::rounding_shift_right) && can_prove(b >= 0)) ||
                         (shift->is_intrinsic(Call::rounding_shift_left) && can_prove(b <= 0))) {
                         return mutate(Call::make(op->type, shift->name, {a, b}, Call::PureIntrinsic));
                     }
@@ -577,14 +580,22 @@ Expr lower_widening_shift_right(const Expr &a, const Expr &b) {
 
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
     Expr round = simplify(make_shift_right(make_one(a.type()) >> min(b, 0), 1));
-    Expr a_rounded = saturating_add(a, round);
-    return a_rounded << b;
+    if (a.type().bits() <= 32) {
+        return narrow(widening_add(a, round) << b);
+    } else {
+        // We can't widening_add with 64 bits.
+        return (a + round) << b;
+    }
 }
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
     Expr round = simplify(make_shift_right(make_one(a.type()) << max(b, 0), 1));
-    Expr a_rounded = saturating_add(a, round);
-    return a_rounded >> b;
+    if (a.type().bits() <= 32) {
+        return narrow(widening_add(a, round) >> b);
+    } else {
+        // We can't widening_add with 64 bits.
+        return (a + round) >> b;
+    }
 }
 
 Expr lower_saturating_add(const Expr &a, const Expr &b) {

@@ -142,7 +142,6 @@ int main(int argc, char **argv) {
     // With constants
     check(narrow((i16(i8x) + 8) / 16), rounding_shift_right(i8x, u8(4)));
     check(narrow(widening_add(i8x, i8(4)) / 8), rounding_shift_right(i8x, u8(3)));
-    check(saturating_add(i8x, i8(32)) / 64, rounding_shift_right(i8x, u8(6)));
     check(i8(widening_add(i8x, i8(32)) / 64), rounding_shift_right(i8x, u8(6)));
     check((i8x + i8(32)) / 64, (i8x + i8(32)) >> 6);  // Not a rounding_shift_right due to overflow.
     check((i32x + 16) / 32, rounding_shift_right(i32x, u32(5)));
@@ -151,20 +150,16 @@ int main(int argc, char **argv) {
     check(u16(min((u64(u32x) + 8) / 16, 65535)), u16(min(rounding_shift_right(u32x, u32(4)), 65535)));
 
     // And with variable shifts.
-    check(saturating_add(i8x, (i8(1) << u8y) / 2) >> u8y, rounding_shift_right(i8x, u8y));
     check(i8(widening_add(i8x, (i8(1) << u8y) / 2) >> u8y), rounding_shift_right(i8x, u8y));
     check((i32x + (i32(1) << u32y) / 2) >> u32y, rounding_shift_right(i32x, u32y));
 
-    check(saturating_add(i8x, (i8(1) << max(i8y, 0)) / 2) >> i8y, rounding_shift_right(i8x, i8y));
-    check(i8(widening_add(i8x, (i8(1) << max(i8y, 0)) / 2) >> i8y), i8(rounding_shift_right(widen(i8x), i8y)));
+    check(i8(widening_add(i8x, (i8(1) << max(i8y, 0)) / 2) >> i8y), rounding_shift_right(i8x, i8y));
     check((i32x + (i32(1) << max(i32y, 0)) / 2) >> i32y, rounding_shift_right(i32x, i32y));
 
-    check(saturating_add(i8x, (i8(1) >> min(i8y, 0)) / 2) << i8y, rounding_shift_left(i8x, i8y));
-    check(i8(widening_add(i8x, (i8(1) >> min(i8y, 0)) / 2) << i8y), i8(rounding_shift_left(widen(i8x), i8y)));
+    check(i8(widening_add(i8x, (i8(1) >> min(i8y, 0)) / 2) << i8y), rounding_shift_left(i8x, i8y));
     check((i32x + (i32(1) >> min(i32y, 0)) / 2) << i32y, rounding_shift_left(i32x, i32y));
 
-    check(saturating_add(i8x, (i8(1) << -min(i8y, 0)) / 2) << i8y, rounding_shift_left(i8x, i8y));
-    check(i8(widening_add(i8x, (i8(1) << -min(i8y, 0)) / 2) << i8y), i8(rounding_shift_left(widen(i8x), i8y)));
+    check(i8(widening_add(i8x, (i8(1) << -min(i8y, 0)) / 2) << i8y), rounding_shift_left(i8x, i8y));
     check((i32x + (i32(1) << -min(i32y, 0)) / 2) << i32y, rounding_shift_left(i32x, i32y));
 
     // These don't work because the max -> min (and then negative shift swapping)
