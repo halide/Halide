@@ -31,13 +31,13 @@ target_link_libraries(hist_filter
                       hist_auto_schedule)
 
 # Test that the app actually works!
-set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
+set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb.png COPYONLY)
+    configure_file(${IMAGE} rgba.png COPYONLY)
     add_test(NAME hist_filter
-             COMMAND hist_filter rgb.png out.png)
+             COMMAND hist_filter rgba.png out.png)
     set_tests_properties(hist_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS hist
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()
