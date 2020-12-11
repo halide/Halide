@@ -1227,7 +1227,7 @@ class VectorReducePatterns : public IRMutator {
         };
         // clang-format on
         std::vector<Expr> matches;
-        for (Signature sig : sigs) {
+        for (const Signature &sig : sigs) {
             if (factor != sig.factor) {
                 continue;
             }
