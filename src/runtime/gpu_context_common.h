@@ -167,12 +167,12 @@ public:
         ScopedMutexLock lock_guard(&mutex);
 
         release_context(user_context, true, nullptr, f);
-	// Some items may have been in use, so can't free.
-	if (count == 0) {
-	    free(compilations);
-	    compilations = nullptr;
-	    log2_compilations_size = 0;
-	}
+        // Some items may have been in use, so can't free.
+        if (count == 0) {
+            free(compilations);
+            compilations = nullptr;
+            log2_compilations_size = 0;
+        }
     }
 
     template<typename CompileModuleT, typename... Args>

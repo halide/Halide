@@ -622,7 +622,7 @@ WEAK int halide_metal_device_release(void *user_context) {
     if (acquired_device) {
         halide_metal_device_sync_internal(queue, nullptr);
 
-	debug(user_context) << "Calling delete context on device " << acquired_device << "\n";
+        debug(user_context) << "Calling delete context on device " << acquired_device << "\n";
         compilation_cache.delete_context(user_context, acquired_device, release_ns_object);
 
         // Release the device itself, if we created it.

@@ -1583,7 +1583,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         if (uses_gpu_for_loops) {
             stream << get_indent() << "halide_error("
-                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
                    << "this function will always fail at runtime\");\n";
             stream << get_indent() << "return halide_error_code_device_malloc_failed;\n";

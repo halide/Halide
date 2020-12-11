@@ -533,6 +533,13 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
     return 0;
 }
 
+WEAK void halide_cuda_finalize_kernels(void *user_context, void *state_ptr) {
+    Context ctx(user_context);
+    if (ctx.error == 0) {
+        compilation_cache.release_hold(user_context, ctx.context, state_ptr);
+    }
+}
+
 WEAK int halide_cuda_release_unused_device_allocations(void *user_context) {
     FreeListItem *to_free;
     {
