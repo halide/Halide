@@ -146,7 +146,7 @@ void create_metal_context(id<MTLDevice> &device, id<MTLCommandQueue> &queue) {
     assert(device != nullptr);
     queue = [device newCommandQueue];
     assert(queue != nullptr);
-}  
+}
 
 void destroy_metal_context(id<MTLDevice> device, id<MTLCommandQueue> queue) {
     [queue release];

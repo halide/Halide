@@ -128,7 +128,6 @@ int halide_metal_acquire_context(void *user_context, id<MTLDevice> *device_ret,
         *queue_ret = context->queue;
     }
     return 0;
-
 }
 
 int halide_metal_release_context(void *user_context) {
