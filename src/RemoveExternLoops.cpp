@@ -4,6 +4,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 class RemoveExternLoops : public IRMutator {
 private:
     using IRMutator::visit;
@@ -16,6 +18,8 @@ private:
         return LetStmt::make(op->name, op->min, mutate(op->body));
     }
 };
+
+}  // namespace
 
 Stmt remove_extern_loops(const Stmt &s) {
     return RemoveExternLoops().mutate(s);

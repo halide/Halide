@@ -14,6 +14,8 @@ using std::set;
 using std::string;
 using std::vector;
 
+namespace {
+
 /** A mutator which eagerly folds no-op stmts */
 class NoOpCollapsingMutator : public IRMutator {
 protected:
@@ -650,6 +652,8 @@ class TightenForkNodes : public IRMutator {
 };
 
 // TODO: merge semaphores?
+
+}  // namespace
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     s = TightenProducerConsumerNodes(env).mutate(s);

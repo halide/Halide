@@ -21,8 +21,6 @@ int64_t next_power_of_two(int64_t x) {
     return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
 }
 
-}  // namespace
-
 using std::map;
 using std::string;
 using std::vector;
@@ -997,6 +995,8 @@ public:
         : env(env) {
     }
 };
+
+}  // namespace
 
 Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env) {
     return StorageFolding(env).mutate(s);

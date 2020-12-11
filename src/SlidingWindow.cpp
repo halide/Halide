@@ -82,8 +82,6 @@ Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     return result;
 }
 
-}  // namespace
-
 // Perform sliding window optimization for a function over a
 // particular serial for loop
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
@@ -422,6 +420,8 @@ public:
         : env(e) {
     }
 };
+
+}  // namespace
 
 Stmt sliding_window(const Stmt &s, const map<string, Function> &env) {
     return SlidingWindow(env).mutate(s);

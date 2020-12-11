@@ -1,3 +1,5 @@
+#include "CodeGen_GPU_Dev.h"
+#include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -16,6 +18,67 @@ namespace Internal {
 using std::ostringstream;
 using std::string;
 using std::vector;
+
+namespace {
+
+class CodeGen_OpenGLCompute_Dev : public CodeGen_GPU_Dev {
+public:
+    CodeGen_OpenGLCompute_Dev(Target target);
+
+    // CodeGen_GPU_Dev interface
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args) override;
+
+    void init_module() override;
+
+    std::vector<char> compile_to_src() override;
+
+    std::string get_current_kernel_name() override;
+
+    void dump() override;
+
+    std::string print_gpu_name(const std::string &name) override;
+
+    std::string api_unique_name() override {
+        return "openglcompute";
+    }
+    bool kernel_run_takes_types() const override {
+        return true;
+    }
+
+protected:
+    class CodeGen_OpenGLCompute_C : public CodeGen_GLSLBase {
+    public:
+        CodeGen_OpenGLCompute_C(std::ostream &s, Target t);
+        void add_kernel(const Stmt &stmt,
+                        const std::string &name,
+                        const std::vector<DeviceArgument> &args);
+
+    protected:
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
+
+        using CodeGen_GLSLBase::visit;
+        void visit(const For *) override;
+        void visit(const Ramp *op) override;
+        void visit(const Broadcast *op) override;
+        void visit(const Load *op) override;
+        void visit(const Store *op) override;
+        void visit(const Call *op) override;
+        void visit(const Allocate *op) override;
+        void visit(const Free *op) override;
+        void visit(const Select *op) override;
+        void visit(const Evaluate *op) override;
+        void visit(const IntImm *op) override;
+
+    public:
+        int workgroup_size[3];
+    };
+
+    std::ostringstream src_stream;
+    std::string cur_kernel_name;
+    CodeGen_OpenGLCompute_C glc;
+};
 
 CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(Target target)
     : glc(src_stream, target) {
@@ -390,6 +453,12 @@ void CodeGen_OpenGLCompute_Dev::dump() {
 
 std::string CodeGen_OpenGLCompute_Dev::print_gpu_name(const std::string &name) {
     return name;
+}
+
+}  // namespace
+
+CodeGen_GPU_Dev *new_CodeGen_OpenGLCompute_Dev(const Target &target) {
+    return new CodeGen_OpenGLCompute_Dev(target);
 }
 
 }  // namespace Internal

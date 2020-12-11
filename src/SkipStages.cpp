@@ -39,8 +39,6 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
     return false;
 }
 
-}  // namespace
-
 class PredicateFinder : public IRVisitor {
 public:
     Expr predicate;
@@ -507,6 +505,8 @@ class MightBeSkippable : public IRVisitor {
 public:
     set<string> candidates;
 };
+
+}  // namespace
 
 Stmt skip_stages(Stmt stmt, const vector<string> &order) {
     // Don't consider the last stage, because it's the output, so it's
