@@ -754,7 +754,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Select *op) {
     print_assignment(op->type, rhs.str());
 }
 
-static bool is_shared_allocation(const Allocate *op) {
+bool is_shared_allocation(const Allocate *op) {
     return op->memory_type == MemoryType::GPUShared;
 }
 
