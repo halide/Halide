@@ -423,8 +423,8 @@ void CodeGen_X86::visit(const Call *op) {
             // scalarize.
             vector<Expr> result;
             for (int i = 0; i < lanes; i++) {
-                result.emplace_back(Shuffle::make_extract_element(op->args[0], i) *
-                                    Shuffle::make_extract_element(op->args[1], i));
+                result.emplace_back(Shuffle::make_extract_element(Cast::make(op->type, op->args[0]), i) *
+                                    Shuffle::make_extract_element(Cast::make(op->type, op->args[1]), i));
             }
             codegen(Shuffle::make_concat(result));
             return;
