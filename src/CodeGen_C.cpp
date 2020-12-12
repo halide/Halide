@@ -62,7 +62,6 @@ const string headers = R"INLINE_CODE(
 
 #include <assert.h>
 #include <float.h>
-#include <iostream>
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
@@ -257,8 +256,7 @@ private:
 
     void include_lerp_types(const Type &t) {
         if (t.is_vector() && t.is_int_or_uint() && (t.bits() >= 8 && t.bits() <= 32)) {
-            Type doubled = t.with_bits(t.bits() * 2);
-            include_type(doubled);
+            include_type(t.widen());
         }
     }
 
@@ -2062,9 +2060,8 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::alloca)) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->type.is_handle());
-        const Call *call = op->args[0].as<Call>();
         if (op->type == type_of<struct halide_buffer_t *>() &&
-            call && call->is_intrinsic(Call::size_of_halide_buffer_t)) {
+            Call::as_intrinsic(op->args[0], {Call::size_of_halide_buffer_t})) {
             stream << get_indent();
             string buf_name = unique_name('b');
             stream << "halide_buffer_t " << buf_name << ";\n";

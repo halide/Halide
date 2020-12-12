@@ -842,7 +842,6 @@ RUNTIME_LL_COMPONENTS = \
   x86 \
   x86_avx \
   x86_avx2 \
-  x86_avx512 \
   x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \

@@ -308,6 +308,27 @@ If you omit `-G Ninja`, a Makefile-based generator will likely be used instead.
 In either case, [`CMAKE_BUILD_TYPE`][cmake_build_type] must be set to one of the
 standard types: `Debug`, `RelWithDebInfo`, `MinSizeRel`, or `Release`.
 
+### CMake Presets
+
+If you are using CMake 3.19+, we provide several [presets][cmake_presets] to
+make the above commands more convenient. The following CMake preset commands
+correspond to the longer ones above.
+
+```
+> cmake --preset=msvc-release  # Ninja generator, MSVC compiler, Release build
+> cmake --preset=win64         # VS 2019 generator, 64-bit build
+> cmake --preset=win32         # VS 2019 generator, 32-bit build
+$ cmake --preset=gcc-release   # Ninja generator, GCC compiler, Release build
+
+$ cmake --list-presets         # Get full list of presets.
+```
+
+The Windows and MSVC presets assume that the environment variable `VCPKG_ROOT`
+is set and points to the root of the vcpkg installation.
+
+Note that the GCC presets do not define `NDEBUG` in release configurations,
+departing from the usual CMake behavior.
+
 ## Installing
 
 Once built, Halide will need to be installed somewhere before using it in a
@@ -768,6 +789,7 @@ signature follows:
 add_halide_library(<target> FROM <generator-target>
                    [GENERATOR generator-name]
                    [FUNCTION_NAME function-name]
+                   [NAMESPACE cpp-namespace]
                    [USE_RUNTIME hl-target]
                    [PARAMS param1 [param2 ...]]
                    [TARGETS target1 [target2 ...]]
@@ -790,6 +812,11 @@ one time, using command line arguments derived from the other parameters.
 
 The arguments `GENERATOR` and `FUNCTION_NAME` default to `<target>`. They
 correspond to the `-g` and `-f` command line flags, respectively.
+
+`NAMESPACE` is syntactic sugar to specify the C++ namespace (if any) of the
+generated function; you can also specify the C++ namespace (if any) directly
+in the `FUNCTION_NAME` argument, but for repeated declarations or very long
+namespaces, specifying this separately can provide more readable build files.
 
 If `USE_RUNTIME` is not specified, this function will create another target
 called `<target>.runtime` which corresponds to running the generator with `-r`
@@ -941,6 +968,14 @@ The following are some common mistakes that lead to subtly broken builds.
   `INTERFACE`, or both (aka `PUBLIC`). Pick the most conservative one for each
   scenario. Refer to the [transitive usage requirements][cmake-propagation] docs
   for more information.
+- **Needlessly expanding variables** The [`if`][cmake_if] and
+  [`foreach`][cmake_foreach] commands generally expand variables when provided by
+  name. Expanding such variables manually can unintentionally change the behavior
+  of the command. Use `foreach (item IN LISTS list)` instead of
+  `foreach (item ${list})`. Similarly, use `if (varA STREQUAL varB)` instead of
+  `if ("${varA}" STREQUAL "${varB}")` and _definitely_ don't use
+  `if (${varA} STREQUAL ${varB})` since that will fail (in the best case) if
+  either variable's value contains a semi-colon (due to argument expansion).
 
 ### Prohibited commands list
 
@@ -1136,6 +1171,10 @@ guidelines you should follow when writing a new app.
   https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_STANDARD.html
 [cmake_cxx_standard_required]:
   https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_STANDARD_REQUIRED.html
+[cmake_foreach]:
+  https://cmake.org/cmake/help/latest/command/foreach.html
+[cmake_if]:
+  https://cmake.org/cmake/help/latest/command/if.html
 [cmake_lang_compiler_id]:
   https://cmake.org/cmake/help/latest/variable/CMAKE_LANG_COMPILER_ID.html
 [cmake_make_program]:
@@ -1144,6 +1183,8 @@ guidelines you should follow when writing a new app.
   https://cmake.org/cmake/help/latest/command/cmake_minimum_required.html
 [cmake_prefix_path]:
   https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html
+[cmake_presets]:
+  https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html
 [cmake_sizeof_void_p]:
   https://cmake.org/cmake/help/latest/variable/CMAKE_SIZEOF_VOID_P.html
 [cmake_source_dir]:

@@ -56,20 +56,23 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
     };
 
     static Pattern patterns[] = {
-        {Target::WasmSimd128, true, Int(8, 16), 0, "llvm.sadd.sat.v16i8", i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::WasmSimd128, true, UInt(8, 16), 0, "llvm.uadd.sat.v16i8", u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::WasmSimd128, true, Int(16, 8), 0, "llvm.sadd.sat.v8i16", i16_sat(wild_i32x_ + wild_i32x_)},
-        {Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.uadd.sat.v8i16", u16_sat(wild_u32x_ + wild_u32x_)},
+        // TODO(srj): These were *maybe* passing before https://github.com/halide/Halide/pull/5527.
+        // They fail after that PR. However, the generated LLVM IR is *identical* before and after
+        // that PR, so whatever is going on here is very subtle and weird.
+        //{Target::WasmSimd128, true, Int(8, 16), 0, "llvm.sadd.sat.v16i8", i8_sat(wild_i16x_ + wild_i16x_)},
+        //{Target::WasmSimd128, true, UInt(8, 16), 0, "llvm.uadd.sat.v16i8", u8_sat(wild_u16x_ + wild_u16x_)},
+        //{Target::WasmSimd128, true, Int(16, 8), 0, "llvm.sadd.sat.v8i16", i16_sat(wild_i32x_ + wild_i32x_)},
+        //{Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.uadd.sat.v8i16", u16_sat(wild_u32x_ + wild_u32x_)},
         // N.B. Saturating subtracts are expressed by widening to a *signed* type
         {Target::WasmSimd128, true, Int(8, 16), 0, "llvm.wasm.sub.saturate.signed.v16i8", i8_sat(wild_i16x_ - wild_i16x_)},
         {Target::WasmSimd128, true, UInt(8, 16), 0, "llvm.wasm.sub.saturate.unsigned.v16i8", u8_sat(wild_i16x_ - wild_i16x_)},
         {Target::WasmSimd128, true, Int(16, 8), 0, "llvm.wasm.sub.saturate.signed.v8i16", i16_sat(wild_i32x_ - wild_i32x_)},
         {Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.wasm.sub.saturate.unsigned.v8i16", u16_sat(wild_i32x_ - wild_i32x_)},
 
-        {Target::WasmSimd128, true, UInt(8, 16), 0, "llvm.wasm.avgr.unsigned.v16i8", u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
-        {Target::WasmSimd128, true, UInt(8, 16), 0, "llvm.wasm.avgr.unsigned.v16i8", u8(((wild_u16x_ + wild_u16x_) + 1) >> 1)},
-        {Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.wasm.avgr.unsigned.v8i16", u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
-        {Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.wasm.avgr.unsigned.v8i16", u16(((wild_u32x_ + wild_u32x_) + 1) >> 1)},
+        //{Target::WasmSimd128, true, UInt(8, 16), 0, "llvm.wasm.avgr.unsigned.v16i8", u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
+        //{Target::WasmSimd128, true, UInt(8, 16), 0, "llvm.wasm.avgr.unsigned.v16i8", u8(((wild_u16x_ + wild_u16x_) + 1) >> 1)},
+        //{Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.wasm.avgr.unsigned.v8i16", u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
+        //{Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.wasm.avgr.unsigned.v8i16", u16(((wild_u32x_ + wild_u32x_) + 1) >> 1)},
 
         // TODO: LLVM should support this directly, but doesn't yet.
         // To make this work, we need to be able to call the intrinsics with two vecs.
