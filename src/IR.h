@@ -546,6 +546,7 @@ struct Call : public ExprNode<Call> {
         sorted_avg,  // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         strict_float,
         stringify,
+        tuple,
         undef,
         unsafe_promise_clamped,
         IntrinsicOpCount  // Sentinel: keep last.

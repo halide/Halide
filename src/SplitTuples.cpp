@@ -1,11 +1,13 @@
 #include "SplitTuples.h"
 
 #include "Bounds.h"
+#include "CSE.h"
 #include "ExprUsesVar.h"
 #include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -335,10 +337,126 @@ public:
     }
 };
 
+class SplitTupleExprs : public IRMutator {
+    using IRMutator::visit;
+
+    // TODO: worry about LetStmts that have tuple intrinsics in the RHS
+
+    Stmt visit(const Provide *op) override {
+        class GetTupleSize : public IRVisitor {
+            bool permitted = true;
+            using IRVisitor::visit;
+            void visit(const Call *op) override {
+                if (op->is_intrinsic(Call::tuple)) {
+                    user_assert(permitted)
+                        << "Can't nest an expression tuple inside another in definition of "
+                        << op->name << "\n";
+                    if (result == 0) {
+                        result = (int)op->args.size();
+                    } else {
+                        user_assert((int)op->args.size() == result)
+                            << "Expression tuples of mismatched sizes used in definition of "
+                            << op->name << ": " << result << " vs " << op->args.size();
+                    }
+                    // No nesting tuples
+                    permitted = false;
+                    IRVisitor::visit(op);
+                    permitted = true;
+                } else {
+                    IRVisitor::visit(op);
+                }
+            }
+
+        public:
+            int result = 0;
+        } get_tuple_size;
+
+        op->accept(&get_tuple_size);
+        int size = get_tuple_size.result;
+
+        if (size == 0) {
+            return IRMutator::visit(op);
+        }
+
+        // The LHS should contain at least one tuple, or our scatters
+        // all go to the same place. Is it worth asserting this? It
+        // could be a bug, or it could be some sort of degenerate base case.
+
+        // Fork the args and the RHS into their various versions
+        class ExtractTupleElement : public IRMutator {
+            using IRMutator::visit;
+            Expr visit(const Call *op) override {
+                if (op->is_intrinsic(Call::tuple)) {
+                    // No need to recursively mutate because we've
+                    // already asserted that these aren't nested.
+                    internal_assert(idx < (int)op->args.size());
+                    return op->args[idx];
+                } else {
+                    return IRMutator::visit(op);
+                }
+            }
+
+        public:
+            int idx;
+        } extractor;
+
+        vector<Stmt> provides;
+        vector<string> names;
+        vector<Expr> rhs_values;
+        for (extractor.idx = 0; extractor.idx < size; extractor.idx++) {
+            vector<Expr> args = op->args;
+            for (Expr &a : args) {
+                a = extractor.mutate(a);
+            }
+            vector<Expr> values = op->values;
+            for (Expr &v : values) {
+                v = extractor.mutate(v);
+                string name = unique_name('t');
+                rhs_values.push_back(extractor.mutate(v));
+                names.push_back(name);
+                v = Variable::make(v.type(), name);
+            }
+            provides.push_back(Provide::make(op->name, values, args));
+        }
+
+        Stmt s = Block::make(provides);
+
+        // We just duplicated all the non-tuple stuff on the RHS too,
+        // so do joint CSE on the rhs_values
+        Expr bundle = Call::make(Int(32), Call::bundle, rhs_values, Call::PureIntrinsic);
+        bundle = common_subexpression_elimination(bundle);
+
+        vector<pair<string, Expr>> lets;
+        while (const Let *let = bundle.as<Let>()) {
+            lets.emplace_back(let->name, let->value);
+            bundle = let->body;
+        }
+        const Call *c = bundle.as<Call>();
+        internal_assert(c && c->is_intrinsic(Call::bundle));
+        for (size_t i = 0; i < rhs_values.size(); i++) {
+            if (is_pure(c->args[i])) {
+                // names[i] is only used once, so if the value is pure
+                // it should be substituted in
+                s = substitute(names[i], c->args[i], s);
+            } else {
+                lets.emplace_back(names[i], c->args[i]);
+            }
+        }
+
+        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            s = LetStmt::make(it->first, it->second, s);
+        }
+
+        return s;
+    }
+};
+
 }  // namespace
 
-Stmt split_tuples(const Stmt &s, const map<string, Function> &env) {
-    return SplitTuples(env).mutate(s);
+Stmt split_tuples(const Stmt &stmt, const map<string, Function> &env) {
+    Stmt s = SplitTuples(env).mutate(stmt);
+    s = SplitTupleExprs().mutate(s);
+    return s;
 }
 
 }  // namespace Internal

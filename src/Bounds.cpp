@@ -1423,6 +1423,10 @@ private:
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(!op->args.empty());
             op->args[0].accept(this);
+        } else if (op->is_intrinsic(Call::tuple)) {
+            // A tuple could evaluate to any one of the args. The base
+            // class visitor is fine as it takes a union.
+            IRVisitor::visit(op);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {

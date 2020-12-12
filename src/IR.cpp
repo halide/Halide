@@ -634,6 +634,7 @@ const char *const intrinsic_op_names[] = {
     "sorted_avg",
     "strict_float",
     "stringify",
+    "tuple",
     "undef",
     "unsafe_promise_clamped",
 };
