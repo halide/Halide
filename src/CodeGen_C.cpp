@@ -62,7 +62,6 @@ const string headers = R"INLINE_CODE(
 
 #include <assert.h>
 #include <float.h>
-#include <iostream>
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
