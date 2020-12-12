@@ -1,5 +1,5 @@
-#include "interpreter.h"
-#include "error_util.h"
+#include "interpreter/interpreter.h"
+#include "util/error_util.h"
 
 #include <cmath>
 #include <list>

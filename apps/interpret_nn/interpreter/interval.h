@@ -96,22 +96,6 @@ inline std::ostream &operator<<(std::ostream &s, const Interval &i) {
     return s << "{" << i.min << ", " << i.max << "}";
 }
 
-inline std::ostream &operator<<(std::ostream &s, const halide_dimension_t &dim) {
-    return s << "{" << dim.min << ", " << dim.extent << ", " << dim.stride << "}";
-}
-
-template<typename T>
-inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {
-    s << "{";
-    for (size_t i = 0; i < v.size(); ++i) {
-        if (i > 0) {
-            s << ", ";
-        }
-        s << v[i];
-    }
-    return s << "}";
-}
-
 using Box = std::vector<Interval>;
 
 // Check if b fully contains a.

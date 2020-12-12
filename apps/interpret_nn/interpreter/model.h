@@ -7,8 +7,8 @@
 #include <vector>
 
 #include "HalideBuffer.h"
-#include "error_util.h"
 #include "interval.h"
+#include "util/error_util.h"
 
 namespace interpret_nn {
 
@@ -38,7 +38,6 @@ enum class TensorType {
     Int8 = 9,
     Float64 = 10,
     Complex128 = 11,
-    UInt64 = 12,
 };
 
 size_t sizeof_tensor_type(TensorType t);
@@ -50,7 +49,7 @@ inline TensorType to_tensor_type() {
     if (std::is_const<T>::value) {
         return to_tensor_type<typename std::remove_const<T>::type>();
     }
-    LOG_FATAL << "Type is not convertible to TensorType";
+    CHECK(0) << "Type is not convertible to TensorType";
     // unreachable
 }
 
@@ -65,10 +64,6 @@ inline TensorType to_tensor_type<int32_t>() {
 template<>
 inline TensorType to_tensor_type<uint8_t>() {
     return TensorType::UInt8;
-}
-template<>
-inline TensorType to_tensor_type<uint64_t>() {
-    return TensorType::UInt64;
 }
 template<>
 inline TensorType to_tensor_type<int64_t>() {
@@ -105,7 +100,7 @@ inline bool is_type(TensorType t) {
 struct QuantizationInfo {
     std::vector<float> scale;
     std::vector<int32_t> zero;
-    int32_t dimension;
+    int32_t dimension = -1;
 };
 
 inline std::ostream &operator<<(std::ostream &s, const QuantizationInfo &q) {
@@ -269,7 +264,7 @@ public:
         if (output_count() == 1) {
             return without_strides(output(0)->shape());
         } else {
-            LOG_FATAL << "More than one output requires get_full_crop override.";
+            CHECK(0) << "More than one output requires get_full_crop override.";
             return Box();
         }
     }

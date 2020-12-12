@@ -49,12 +49,14 @@ struct Add_ReferenceOp : public op_test::ReferenceOp {
     }
 };
 
-struct AddOpTestFactory {
-    std::vector<std::shared_ptr<Tensor>> tensors = op_test::build_tensors({
-        {"MobilenetV2/expanded_conv_2/project/add_fold", TensorType::UInt8, {1, 56, 56, 24}, 0.401493, 136},
-        {"MobilenetV2/expanded_conv_1/project/add_fold", TensorType::UInt8, {1, 56, 56, 24}, 0.275834, 119},
-        {"MobilenetV2/expanded_conv_2/add", TensorType::UInt8, {1, 56, 56, 24}, 0.432169, 133},
-    });
+struct AddOpTestFactory : public op_test::TestCaseFactory {
+    AddOpTestFactory() {
+        init_tensors({
+            {"MobilenetV2/expanded_conv_2/project/add_fold", TensorType::UInt8, {24, 56, 56, 1}, 0.401493, 136},
+            {"MobilenetV2/expanded_conv_1/project/add_fold", TensorType::UInt8, {24, 56, 56, 1}, 0.275834, 119},
+            {"MobilenetV2/expanded_conv_2/add", TensorType::UInt8, {24, 56, 56, 1}, 0.432169, 133},
+        });
+    }
 
     struct AddOpTestTemplate {
         int in1, in2, out;
@@ -72,7 +74,7 @@ struct AddOpTestFactory {
     };
     size_t test_index = 0;
 
-    std::unique_ptr<op_test::TestCase> operator()() {
+    std::unique_ptr<op_test::TestCase> get_next_test() override {
         if (test_index >= test_templates.size()) {
             return nullptr;
         }
@@ -105,5 +107,6 @@ struct AddOpTestFactory {
 }  // namespace interpret_nn
 
 int main(int argc, char **argv) {
-    return interpret_nn::op_test::op_test_main(argc, argv, interpret_nn::AddOpTestFactory());
+    interpret_nn::AddOpTestFactory factory;
+    return interpret_nn::op_test::op_test_main(argc, argv, factory);
 }

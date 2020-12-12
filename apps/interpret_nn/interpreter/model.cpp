@@ -1,5 +1,5 @@
-#include "model.h"
-#include "error_util.h"
+#include "interpreter/model.h"
+#include "util/error_util.h"
 
 #include <cmath>
 #include <list>
@@ -26,12 +26,14 @@ size_t sizeof_tensor_type(TensorType t) {
         return 1;
     case TensorType::Float64:
         return 8;
+#if TFLITE_VERSION >= 24
     case TensorType::Complex128:
         return 32;
+#endif
     // case TensorType::String:  fallthru
     // case TensorType::Bool:    fallthru
     default:
-        LOG_FATAL << "Unknown size of type";
+        CHECK(0) << "Unknown size of type";
         return 0;
     }
 }
@@ -46,8 +48,6 @@ const char *to_string(TensorType t) {
         return "int32";
     case TensorType::UInt8:
         return "uint8";
-    case TensorType::UInt64:
-        return "uint64";
     case TensorType::Int64:
         return "int64";
     case TensorType::Int16:
@@ -58,14 +58,16 @@ const char *to_string(TensorType t) {
         return "int8";
     case TensorType::Float64:
         return "float64";
+#if TFLITE_VERSION >= 24
     case TensorType::Complex128:
         return "complex128";
+#endif
     case TensorType::String:
         return "string";
     case TensorType::Bool:
         return "bool";
     default:
-        LOG_FATAL << "Unhandled interpret_nn::TensorType";
+        CHECK(0) << "Unhandled interpret_nn::TensorType";
         return "";
     }
 }
@@ -90,14 +92,14 @@ halide_type_t to_halide_type(TensorType t) {
         return halide_type_t(halide_type_int, 8);
     case TensorType::UInt8:
         return halide_type_t(halide_type_uint, 8);
-    case TensorType::UInt64:
-        return halide_type_t(halide_type_uint, 64);
 
     case TensorType::Complex64:
+#if TFLITE_VERSION >= 24
     case TensorType::Complex128:
+#endif
     case TensorType::String:
     default:
-        LOG_FATAL << "Unhandled type in to_halide_type";
+        CHECK(0) << "Unhandled type in to_halide_type";
         return halide_type_t();
     }
 }

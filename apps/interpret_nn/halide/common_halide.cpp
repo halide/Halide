@@ -4,6 +4,17 @@ using namespace Halide;
 
 namespace interpret_nn {
 
+namespace {
+
+Expr saturating_add(const Expr &a, const Expr &b) {
+    const Type t = a.type();
+    assert(t == b.type());
+    const Type wt = t.widen();
+    return saturating_cast(t, cast(wt, a) + cast(wt, b));
+}
+
+}  // namespace
+
 void interpret_as_tensor(OutputImageParam p) {
     p.dim(0).set_stride(1).set_min(0);
 }
@@ -61,6 +72,7 @@ Func constant_exterior_tensor(ImageParam p, Expr exterior) {
 }
 
 Expr multiply_2x_high(const Expr &a, const Expr &b) {
+    // Exponent must satisfy 0 <= exponent <= 31
     Type t = a.type();
     Type wider = t.with_bits(t.bits() * 2);
     Expr a_wide = cast(wider, a);
@@ -78,12 +90,10 @@ Expr round_shift_right(const Expr &x, const Expr &exponent) {
     Type t = x.type();
     Type t_unsigned = t.with_code(halide_type_uint);
     Expr uexponent = cast(t_unsigned, exponent);
-    // Exponent must satisfy 0 <= exponent <= 31
-    // TODO: Maybe this should be an offset added to x prior to shifting.
-    Expr mask = (cast(x.type(), 1) << uexponent) - 1;
-    Expr remainder = x & mask;
-    Expr threshold = (mask >> 1) + (x < 0);
-    return (x >> uexponent) + (remainder > threshold);
+    Expr one = cast(x.type(), 1);
+    // This is intended to pattern-match against rounding-shift-right instruction generation.
+    Expr rounding = (one << uexponent) >> 1;
+    return saturating_add(x, rounding) >> uexponent;
 }
 
 Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {

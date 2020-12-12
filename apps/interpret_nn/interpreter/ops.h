@@ -1,7 +1,7 @@
 #ifndef OPS_H_
 #define OPS_H_
 
-#include "model.h"
+#include "interpreter/model.h"
 
 namespace interpret_nn {
 
@@ -329,7 +329,8 @@ public:
 class QuantizeOp : public ElementwiseOp {
 public:
     QuantizeOp(Tensor *input, Tensor *output)
-        : ElementwiseOp({input}, output) {}
+        : ElementwiseOp({input}, output) {
+    }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
         return make_unique<QuantizeOp>(apply(map, input()), apply(map, output()));

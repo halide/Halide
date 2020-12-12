@@ -1,21 +1,25 @@
-#include "tflite_parser.h"
+#include "tflite/tflite_parser.h"
 
 #include <algorithm>
 #include <iostream>
 #include <memory>
 
-#include "error_util.h"
-#include "ops.h"
+#include "interpreter/ops.h"
 #include "tflite_schema_generated.h"
+#include "util/error_util.h"
 
 namespace interpret_nn {
 
 namespace {
 
 tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
+#if TFLITE_VERSION >= 24
     return std::max(
         op_code->builtin_code(),
         static_cast<tflite::BuiltinOperator>(op_code->deprecated_builtin_code()));
+#else
+    return op_code->builtin_code();
+#endif
 }
 
 class Parser {
@@ -43,7 +47,7 @@ public:
         case tflite::ActivationFunctionType_SIGN_BIT:
             return ActivationFunction::SignBit;
         default:
-            LOG_FATAL << "Unknown tflite::ActivationFunctionType";
+            CHECK(0) << "Unknown tflite::ActivationFunctionType";
         }
     }
 
@@ -71,12 +75,12 @@ public:
             return TensorType::Int8;
         case tflite::TensorType_FLOAT64:
             return TensorType::Float64;
+#if TFLITE_VERSION >= 24
         case tflite::TensorType_COMPLEX128:
             return TensorType::Complex128;
-        case tflite::TensorType_UINT64:
-            return TensorType::UInt64;
+#endif
         default:
-            LOG_FATAL << "Unknown tflite::TensorType";
+            CHECK(0) << "Unknown tflite::TensorType";
         }
     }
 
@@ -87,7 +91,7 @@ public:
         case tflite::Padding_VALID:
             return Padding::Valid;
         default:
-            LOG_FATAL << "Unknown tflite::Padding";
+            CHECK(0) << "Unknown tflite::Padding";
         }
     }
 
@@ -127,21 +131,22 @@ public:
             }
         }
 
-        if (type == TensorType::Int8) {
-            // Convert Int8 buffers to UInt8 buffers by adjusting the quantization info.
-            // TODO: Is this correct??
-            type = TensorType::UInt8;
-            if (quantization.scale.size() == 0) {
-                quantization.scale.push_back(1);
-            }
-            if (quantization.zero.size() == 0) {
-                quantization.zero.push_back(128);
-            } else {
-                for (int &i : quantization.zero) {
-                    i = 128 + i;
-                }
-            }
-        }
+        // TODO: revisit this to see if we can convince ourselves it's always correct.
+        // if (type == TensorType::Int8) {
+        //     // Convert Int8 buffers to UInt8 buffers by adjusting the quantization info.
+        //     // TODO: Is this correct??
+        //     type = TensorType::UInt8;
+        //     if (quantization.scale.size() == 0) {
+        //         quantization.scale.push_back(1);
+        //     }
+        //     if (quantization.zero.size() == 0) {
+        //         quantization.zero.push_back(128);
+        //     } else {
+        //         for (int &i : quantization.zero) {
+        //             i = 128 + i;
+        //         }
+        //     }
+        // }
 
         return make_unique<Tensor>(
             t->name()->str(), type, std::move(shape),
@@ -187,7 +192,15 @@ public:
             inputs.push_back(result_.tensors[*i].get());
         }
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return make_unique<ConcatenationOp>(inputs, output, options->axis(), activation);
+        int axis = options->axis();
+        // Handle negative values, which are legal
+        if (axis < 0) {
+            axis = (int)output->shape().size() + axis;
+        }
+        // Now 'flip' the axis so that it refers to the right dimension in
+        // the Tensor (since we reverse the dimension order)
+        axis = (int)output->shape().size() - axis - 1;
+        return make_unique<ConcatenationOp>(inputs, output, axis, activation);
     }
 
     std::unique_ptr<Op> parse_conv2D(const tflite::Operator *op) {
@@ -300,8 +313,8 @@ public:
         case tflite::BuiltinOperator_FULLY_CONNECTED:
             return parse_fully_connected(op);
         default:
-            LOG_FATAL << "Unsupported op "
-                      << tflite::EnumNameBuiltinOperator(builtin_code);
+            CHECK(0) << "Unsupported op "
+                     << tflite::EnumNameBuiltinOperator(builtin_code);
         }
     }
 

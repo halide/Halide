@@ -27,17 +27,17 @@
 */
 
 #include <fstream>
-#include <iostream>
-#include <sstream>
 #include <iomanip>
+#include <iostream>
 #include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
-#include "error_util.h"
-#include "file_util.h"
 #include "flatbuffers/flatbuffers.h"
 #include "tflite_schema_direct_generated.h"
+#include "util/error_util.h"
+#include "util/file_util.h"
 
 using interpret_nn::read_entire_file;
 using interpret_nn::write_entire_file;
@@ -54,9 +54,13 @@ using std::make_unique;
 #endif
 
 tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
+#if TFLITE_VERSION >= 24
     return std::max(
         op_code->builtin_code(),
         static_cast<tflite::BuiltinOperator>(op_code->deprecated_builtin_code()));
+#else
+    return op_code->builtin_code();
+#endif
 }
 
 }  // namespace
@@ -163,9 +167,11 @@ int main(int argc, char **argv) {
         // Blow away all the metadata (we'll just assume we can live without it).
         new_model->metadata_buffer.clear();
         new_model->metadata.clear();
+#if TFLITE_VERSION >= 24
         // signature_defs is optional -- not sure if we need it for out purposes.
         // TODO: might need to translate it.
         new_model->signature_defs.clear();
+#endif
 
         flatbuffers::FlatBufferBuilder fbb;
         auto model_offset = tflite::Model::Pack(fbb, new_model.get());

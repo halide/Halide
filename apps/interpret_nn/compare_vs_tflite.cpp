@@ -6,43 +6,22 @@
 #include <unistd.h>
 #endif
 
-#include "buffer_util.h"
-#include "error_util.h"
-#include "file_util.h"
 #include "halide_benchmark.h"
-#include "interpreter.h"
-#include "tflite_parser.h"
+#include "interpreter/interpreter.h"
+#include "tflite/tflite_parser.h"
+#include "util/buffer_util.h"
+#include "util/error_util.h"
+#include "util/file_util.h"
 
-#include "tensorflow/lite/interpreter.h"
-#include "tensorflow/lite/kernels/register.h"
-#include "tensorflow/lite/model.h"
+// IMPORTANT: use only the TFLite C API here.
+#include "tensorflow/lite/c/c_api.h"
+#include "tensorflow/lite/c/common.h"
 
 namespace interpret_nn {
 
 using Halide::Runtime::Buffer;
 
 namespace {
-
-struct TfLiteReporter : public tflite::ErrorReporter {
-    int Report(const char *format, va_list args) override {
-        vfprintf(stderr, format, args);
-        abort();
-    }
-};
-
-inline std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
-    if (type.code == halide_type_uint && type.bits == 1) {
-        stream << "bool";
-    } else {
-        assert(type.code >= 0 && type.code <= 3);
-        static const char *const names[4] = {"int", "uint", "float", "handle"};
-        stream << names[type.code] << (int)type.bits;
-    }
-    if (type.lanes > 1) {
-        stream << "x" << (int)type.lanes;
-    }
-    return stream;
-}
 
 std::chrono::duration<double> bench(std::function<void()> f) {
     auto result = Halide::Tools::benchmark(f);
@@ -69,19 +48,20 @@ halide_type_t tf_lite_type_to_halide_type(TfLiteType t) {
         return halide_type_t(halide_type_int, 8);
     case kTfLiteUInt8:
         return halide_type_t(halide_type_uint, 8);
-    case kTfLiteUInt64:
-        return halide_type_t(halide_type_uint, 64);
 
     case kTfLiteString:
     case kTfLiteNoType:
     case kTfLiteComplex64:
+#if TFLITE_VERSION >= 24
     case kTfLiteComplex128:
-        LOG_FATAL << "Unsupported TfLiteType: " << TfLiteTypeGetName(t);
+#endif
+    default:
+        CHECK(0) << "Unsupported TfLiteType: " << TfLiteTypeGetName(t);
         return halide_type_t();
     }
 }
 
-Buffer<void> wrap_tf_lite_tensor_with_halide_buffer(TfLiteTensor *t) {
+Buffer<void> wrap_tf_lite_tensor_with_halide_buffer(const TfLiteTensor *t) {
     // Wrap a Halide buffer around it.
     std::vector<halide_dimension_t> shape(t->dims->size);
     size_t shape_size = 1;
@@ -106,31 +86,35 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
 
     std::vector<char> buffer = read_entire_file(filename);
 
-    flatbuffers::Verifier verifier((const uint8_t *)buffer.data(), buffer.size());
-    CHECK(tflite::VerifyModelBuffer(verifier));
-
-    const tflite::Model *tf_model = tflite::GetModel(buffer.data());
-    CHECK(tf_model);
-
     std::vector<Buffer<const void>> tflite_outputs, halide_outputs;
     std::chrono::duration<double> tflite_time, halide_time;
     std::map<std::string, int> seeds;
 
     // ----- Run in TFLite
     {
-        TfLiteReporter tf_reporter;
-        tflite::ops::builtin::BuiltinOpResolver tf_resolver;
-        std::unique_ptr<tflite::Interpreter> tf_interpreter;
-        tflite::InterpreterBuilder builder(tf_model, tf_resolver, &tf_reporter);
+        TfLiteModel *tf_model = TfLiteModelCreate(buffer.data(), buffer.size());
+        CHECK(tf_model);
+
+        TfLiteInterpreterOptions *tf_options = TfLiteInterpreterOptionsCreate();
+        CHECK(tf_options);
+        TfLiteInterpreterOptionsSetNumThreads(tf_options, threads);
+
+        TfLiteInterpreter *tf_interpreter = TfLiteInterpreterCreate(tf_model, tf_options);
+
+        // The options/model can be deleted immediately after interpreter creation.
+        TfLiteInterpreterOptionsDelete(tf_options);
+        TfLiteModelDelete(tf_model);
+
         TfLiteStatus status;
-        CHECK((status = builder(&tf_interpreter)) == kTfLiteOk) << status;
-        CHECK((status = tf_interpreter->AllocateTensors()) == kTfLiteOk) << status;
-        CHECK((status = tf_interpreter->SetNumThreads(threads)) == kTfLiteOk) << status;
+        CHECK((status = TfLiteInterpreterAllocateTensors(tf_interpreter)) == kTfLiteOk) << status;
+
+        const int inputs = TfLiteInterpreterGetInputTensorCount(tf_interpreter);
+        const int outputs = TfLiteInterpreterGetOutputTensorCount(tf_interpreter);
 
         // Fill in the inputs with random data, remembering the seeds so we can do the
         // same for the Halide inputs.
-        for (int i : tf_interpreter->inputs()) {
-            TfLiteTensor *t = tf_interpreter->tensor(i);
+        for (int i = 0; i < inputs; i++) {
+            TfLiteTensor *t = TfLiteInterpreterGetInputTensor(tf_interpreter, i);
             if (t->allocation_type == kTfLiteMmapRo) {
                 // The Tensor references data from the flatbuffer and is read-only;
                 // presumably it is data we want to keep as-is
@@ -150,28 +134,30 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
         }
 
         // Execute once, to prime the pump
-        CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
+        CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
 
         // Now benchmark it
         tflite_time = bench([&tf_interpreter]() {
             TfLiteStatus status;
-            CHECK((status = tf_interpreter->Invoke()) == kTfLiteOk) << status;
+            CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
         });
 
         // Save the outputs
-        for (int i : tf_interpreter->outputs()) {
-            TfLiteTensor *t = tf_interpreter->tensor(i);
+        for (int i = 0; i < outputs; i++) {
+            const TfLiteTensor *t = TfLiteInterpreterGetOutputTensor(tf_interpreter, i);
             if (verbose) {
                 std::cout << "TFLITE output is " << t->name << " type " << TfLiteTypeGetName(t->type) << "\n";
             }
             // Make a copy since the Buffer might reference memory owned by the tf_interpreter
             tflite_outputs.emplace_back(wrap_tf_lite_tensor_with_halide_buffer(t).copy());
         }
+
+        TfLiteInterpreterDelete(tf_interpreter);
     }
 
     // ----- Run in Halide
     {
-        Model model = parse_tflite_model(tf_model);
+        Model model = parse_tflite_model_from_buffer(buffer.data());
         if (verbose) {
             model.dump(std::cout);
         }
@@ -232,15 +218,28 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
     for (size_t i = 0; i < tflite_outputs.size(); ++i) {
         const Buffer<const void> &tflite_buf = tflite_outputs[i];
         const Buffer<const void> &halide_buf = halide_outputs[i];
-        CHECK(tflite_buf.type() == halide_buf.type());
+        CHECK(tflite_buf.type() == halide_buf.type()) << "Expected type " << tflite_buf.type() << "; saw type " << halide_buf.type();
         CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
         for (int d = 0; d < tflite_buf.dimensions(); d++) {
             CHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
             CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
             CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
         }
-        uint64_t diffs = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf);
-        if (diffs == 0) {
+        CompareBuffersOptions options;
+#if defined(__arm__) || defined(__aarch64__)
+        // TFLite on Arm devices generally uses the rounding-shift instructions,
+        // which should match our results exactly (since we mimic the same result,
+        // whether or not we actually generate those specific instructions).
+        // So leave the options at their default.
+#else
+        // TFLite on x86 (on desktop platforms, at least) appears to mostly
+        // use the reference implementations, which don't have the same
+        // rounding-shift behavior. We'll bump up the 'close' value for these.
+        // This is a lttle hand-wavy but is a decent proxy for now.
+        options.close_thresh = 3.0;
+#endif
+        CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, options);
+        if (r.ok) {
             if (verbose) {
                 std::cout << "MATCHING output " << i << " is:\n";
                 dynamic_type_dispatch<DumpBuffer>(halide_buf.type(), halide_buf);

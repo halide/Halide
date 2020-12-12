@@ -1,9 +1,9 @@
-#include "ops.h"
-#include "error_util.h"
+#include "interpreter/ops.h"
+#include "util/error_util.h"
 
+#include <atomic>
 #include <cmath>
 #include <iostream>
-#include <atomic>
 
 #include "add_uint8_uint8.h"
 #include "average_pool_uint8.h"
@@ -411,10 +411,10 @@ void Conv2DOp::execute(const Box &crop) {
 
         CHECK(
             0 == convolution_uint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
-                                  (uint8_t)filter_offset, stride_[0], stride_[1],
-                                  dilation_[0], dilation_[1], output_multiplier,
-                                  output_shift, (uint8_t)output_offset,
-                                  output_range.min, output_range.max, guid_, output_buf));
+                                   (uint8_t)filter_offset, stride_[0], stride_[1],
+                                   dilation_[0], dilation_[1], output_multiplier,
+                                   output_shift, (uint8_t)output_offset,
+                                   output_range.min, output_range.max, guid_, output_buf));
     } else {
         CHECK(false);
     }
@@ -608,6 +608,8 @@ void FullyConnectedOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out);
 
+        CHECK(false) << "FullyConnectedOp isn't complete yet and probably isn't correct.";
+
         CHECK(
             0 == fully_connected_uint8(
                      input_buf, filter_buf, bias_buf,
@@ -703,6 +705,12 @@ void ReshapeOp::execute(const Box &crop) {
 
     auto input_buf = in->data<void>();
     auto output_buf = out->data<void>(crop);
+
+    // TODO: should reality-check that the output buf matches the shape we expect
+    // assert((int) new_shape_.size() == output_buf.dimensions());
+    // for (int d = 0; d < output_buf.dimensions(); d++) {
+    //     assert(new_shape_.at(d) == output_buf.dim(d).extent());
+    // }
 
     // TODO: This should probably just be implemented by aliasing two of the tensors.
     assert(input_buf.number_of_elements() == output_buf.number_of_elements());
