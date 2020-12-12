@@ -309,10 +309,10 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
 
     const Broadcast *b_index = index.as<Broadcast>();
     const Shuffle *s_index = index.as<Shuffle>();
-    if (is_zero(predicate)) {
+    if (is_const_zero(predicate)) {
         // Predicate is always false
         return undef(op->type);
-    } else if (b_index && is_one(predicate)) {
+    } else if (b_index && is_const_one(predicate)) {
         // Load of a broadcast should be broadcast of the load
         Expr new_index = b_index->value;
         int new_lanes = new_index.type().lanes();
@@ -320,7 +320,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
                                op->image, op->param, const_true(new_lanes), align);
         return Broadcast::make(load, b_index->lanes);
     } else if (s_index &&
-               is_one(predicate) &&
+               is_const_one(predicate) &&
                (s_index->is_concat() ||
                 s_index->is_interleave())) {
         // Loads of concats/interleaves should be concats/interleaves of loads

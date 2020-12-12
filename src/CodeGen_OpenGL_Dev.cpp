@@ -264,15 +264,15 @@ void CodeGen_GLSLBase::visit(const Call *op) {
             string b = print_expr(op->args[1]);
             base << "pow(abs(" << a << "), " << b << ")";
             string c = print_assignment(op->type, base.str());
-            Expr a_var = Variable::make(op->type, a);
-            Expr b_var = Variable::make(op->type, b);
+            Expr a_var = is_const(op->args[0]) ? op->args[0] : Variable::make(op->type, a);
+            Expr b_var = is_const(op->args[1]) ? op->args[1] : Variable::make(op->type, b);
             Expr c_var = Variable::make(op->type, c);
             // OpenGL isn't required to produce NaNs, so we return
             // zero in the undefined case.
             Expr equiv = select(a_var > 0 || b_var % 2 == 0, c_var,
                                 b_var % 2 == 1, -c_var,
                                 0.0f);
-            print_expr(equiv);
+            print_expr(simplify(equiv));
             return;
         }
     } else if (op->is_intrinsic(Call::shift_right)) {
@@ -508,7 +508,7 @@ vector<Expr> evaluate_vector_select(const Select *op) {
         Expr false_value = extract_lane(op->false_value, i);
 
         if (is_const(cond)) {
-            result[i] = is_one(cond) ? true_value : false_value;
+            result[i] = is_const_one(cond) ? true_value : false_value;
         } else {
             result[i] = Select::make(cond, true_value, false_value);
         }
@@ -566,12 +566,12 @@ string CodeGen_GLSL::get_vector_suffix(const Expr &e) {
 
     // The vectorize pass will insert a ramp in the color dimension argument.
     const Ramp *r = e.as<Ramp>();
-    if (r && is_zero(r->base) && is_one(r->stride) && r->lanes == 4) {
+    if (r && is_const_zero(r->base) && is_const_one(r->stride) && r->lanes == 4) {
         // No suffix is needed when accessing a full RGBA vector.
         return "";
-    } else if (r && is_zero(r->base) && is_one(r->stride) && r->lanes == 3) {
+    } else if (r && is_const_zero(r->base) && is_const_one(r->stride) && r->lanes == 3) {
         return ".rgb";
-    } else if (r && is_zero(r->base) && is_one(r->stride) && r->lanes == 2) {
+    } else if (r && is_const_zero(r->base) && is_const_one(r->stride) && r->lanes == 2) {
         return ".rg";
     } else {
         // GLSL 1.0 Section 5.5 supports subscript based vector indexing
@@ -607,9 +607,9 @@ vector<string> CodeGen_GLSL::print_lanes(const Expr &e) {
 }
 
 void CodeGen_GLSL::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
+    user_assert(is_const_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
     if (scalar_vars.contains(op->name)) {
-        internal_assert(is_zero(op->index));
+        internal_assert(is_const_zero(op->index));
         id = print_name(op->name);
     } else if (vector_vars.contains(op->name)) {
         id = print_name(op->name) + get_vector_suffix(op->index);
@@ -632,9 +632,9 @@ void CodeGen_GLSL::visit(const Load *op) {
 }
 
 void CodeGen_GLSL::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
+    user_assert(is_const_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
     if (scalar_vars.contains(op->name)) {
-        internal_assert(is_zero(op->index));
+        internal_assert(is_const_zero(op->index));
         string val = print_expr(op->value);
         stream << get_indent() << print_name(op->name) << " = " << val << ";\n";
     } else if (vector_vars.contains(op->name)) {
@@ -691,7 +691,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             const Ramp *rc = c.as<Ramp>();
             const Broadcast *bx = op->args[2].as<Broadcast>();
             const Broadcast *by = op->args[3].as<Broadcast>();
-            if (rc && is_zero(rc->base) && is_one(rc->stride) && bx && by) {
+            if (rc && is_const_zero(rc->base) && is_const_one(rc->stride) && bx && by) {
                 // If the x and y coordinates are broadcasts, and the c
                 // coordinate is a dense ramp, we can do a single
                 // texture2D call.

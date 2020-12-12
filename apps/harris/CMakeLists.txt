@@ -30,13 +30,13 @@ target_link_libraries(harris_filter
                       harris_auto_schedule)
 
 # Test that the app actually works!
-set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
+set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb.png COPYONLY)
+    configure_file(${IMAGE} rgba.png COPYONLY)
     add_test(NAME harris_filter
-             COMMAND harris_filter rgb.png out.png)
+             COMMAND harris_filter rgba.png out.png)
     set_tests_properties(harris_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS harris
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

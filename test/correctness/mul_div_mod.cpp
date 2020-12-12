@@ -322,7 +322,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
                 Expr be = cast<RT>(Expr(bi));
                 Expr re = simplify(ae * be);
 
-                if (re.as<Call>() && re.as<Call>()->is_intrinsic(Call::signed_integer_overflow)) {
+                if (Call::as_intrinsic(re, {Call::signed_integer_overflow})) {
                     // Don't check correctness of signed integer overflow.
                 } else {
                     if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
@@ -485,7 +485,7 @@ bool f_mod() {
             if (!Internal::equal(e, eout) && (ecount++) < 10) {
                 Expr diff = simplify(e - eout);
                 Expr smalldiff = simplify(diff < (float)(0.000001) && diff > (float)(-0.000001));
-                if (!Internal::is_one(smalldiff)) {
+                if (!Internal::is_const_one(smalldiff)) {
                     std::cerr << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
                     std::cerr << "          difference=" << diff << "\n";
                     success = false;

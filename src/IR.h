@@ -636,6 +636,19 @@ struct Call : public ExprNode<Call> {
         return is_intrinsic() && this->name == get_intrinsic_name(op);
     }
 
+    /** Returns a pointer to a call node if the expression is a call to
+     * one of the requested intrinsics. */
+    static const Call *as_intrinsic(const Expr &e, std::initializer_list<IntrinsicOp> intrinsics) {
+        if (const Call *c = e.as<Call>()) {
+            for (IntrinsicOp i : intrinsics) {
+                if (c->is_intrinsic(i)) {
+                    return c;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     bool is_extern() const {
         return (call_type == Extern ||
                 call_type == ExternCPlusPlus ||
@@ -731,7 +744,7 @@ struct Shuffle : public ExprNode<Shuffle> {
 
     /** Indices indicating which vector element to place into the
      * result. The elements are numbered by their position in the
-     * concatenation of the vector argumentss. */
+     * concatenation of the vector arguments. */
     std::vector<int> indices;
 
     static Expr make(const std::vector<Expr> &vectors,
@@ -760,6 +773,13 @@ struct Shuffle : public ExprNode<Shuffle> {
     /** Check if this shuffle is an interleaving of the vector
      * arguments. */
     bool is_interleave() const;
+
+    /** Check if this shuffle can be represented as a broadcast.
+     * For example:
+     * A uint8 shuffle of with 4*n lanes and indices:
+     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
+     * can be represented as a uint32 broadcast with n lanes (factor = 4). */
+    bool is_broadcast(int factor) const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */
