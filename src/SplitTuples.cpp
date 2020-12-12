@@ -340,6 +340,9 @@ public:
 class SplitTupleExprs : public IRMutator {
     using IRMutator::visit;
 
+    // The enclosing producer node. Used for error messages.
+    const ProducerConsumer *producer = nullptr;
+
     class GetTupleSize : public IRVisitor {
         bool permitted = true;
         using IRVisitor::visit;
@@ -347,13 +350,13 @@ class SplitTupleExprs : public IRMutator {
             if (op->is_intrinsic(Call::tuple)) {
                 user_assert(permitted)
                     << "Can't nest an expression tuple inside another in definition of "
-                    << op->name << "\n";
+                    << producer_name;
                 if (result == 0) {
                     result = (int)op->args.size();
                 } else {
                     user_assert((int)op->args.size() == result)
                         << "Expression tuples of mismatched sizes used in definition of "
-                        << op->name << ": " << result << " vs " << op->args.size();
+                        << producer_name << ": " << result << " vs " << op->args.size();
                 }
                 // No nesting tuples
                 permitted = false;
@@ -364,8 +367,17 @@ class SplitTupleExprs : public IRMutator {
             }
         }
 
+        // Just for error messages. The default value should not
+        // currently be possible to hit.
+        string producer_name = "(tuple expression not part of a Func definition)";
+
     public:
         int result = 0;
+        GetTupleSize(const ProducerConsumer *producer) {
+            if (producer) {
+                producer_name = producer->name;
+            }
+        }
     };
 
     class ExtractTupleElement : public IRMutator {
@@ -385,8 +397,13 @@ class SplitTupleExprs : public IRMutator {
         int idx;
     };
 
+    Stmt visit(const ProducerConsumer *op) override {
+        ScopedValue<const ProducerConsumer *> old(producer, op->is_producer ? op : producer);
+        return IRMutator::visit(op);
+    }
+
     Stmt visit(const LetStmt *op) override {
-        GetTupleSize get_tuple_size;
+        GetTupleSize get_tuple_size(producer);
         op->value.accept(&get_tuple_size);
         if (get_tuple_size.result == 0) {
             return IRMutator::visit(op);
@@ -416,7 +433,7 @@ class SplitTupleExprs : public IRMutator {
     }
 
     Stmt visit(const Provide *op) override {
-        GetTupleSize get_tuple_size;
+        GetTupleSize get_tuple_size(producer);
         op->accept(&get_tuple_size);
         int size = get_tuple_size.result;
 
