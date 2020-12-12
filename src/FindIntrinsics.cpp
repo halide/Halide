@@ -162,8 +162,6 @@ Expr to_rounding_shift(const Call *c) {
     return Expr();
 }
 
-// Perform peephole optimizations on the IR, adding appropriate
-// interleave and deinterleave calls.
 class FindIntrinsics : public IRMutator {
 protected:
     using IRMutator::visit;
