@@ -214,6 +214,7 @@ tests(GROUPS correctness
       multipass_constraints.cpp
       multiple_outputs.cpp
       multiple_outputs_extern.cpp
+      multiple_scatter.cpp
       mux.cpp
       named_updates.cpp
       nested_shiftinwards.cpp
