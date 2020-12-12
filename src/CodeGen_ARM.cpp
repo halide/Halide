@@ -138,10 +138,10 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     // SRSHL, URSHL - Rounding shift left (by signed vector)
     // These are already written as rounding_shift_left
 
-    // SRSHR, URSHR - Rounding shift right (by immediate in [1, LHS bits])
+    // SRSHR, URSHR - Rounding shift right (by immediate in [1, output bits])
     // These patterns are almost identity, we just need to strip off the broadcast.
 
-    // SSHLL, USHLL - Shift left long (by immediate in [0, LHS bits - 1])
+    // SSHLL, USHLL - Shift left long (by immediate in [0, output bits - 1])
     // These patterns are almost identity, we just need to strip off the broadcast.
 
     // SQXTN, UQXTN, SQXTUN - Saturating narrow.
@@ -293,7 +293,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vqmovnu", "uqxtn", UInt(32, 2), "saturating_narrow", {UInt(64, 2)}},
     {"vqmovnsu", "sqxtun", UInt(32, 2), "saturating_narrow", {Int(64, 2)}},
 
-    // RSHRN - Rounding shift right narrow (by immediate in [1, LHS bits])
+    // RSHRN - Rounding shift right narrow (by immediate in [1, output bits])
     // arm32 expects a vector RHS of the same type as the LHS except signed.
     {"vrshiftn", nullptr, Int(8, 8), "rounding_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
     {"vrshiftn", nullptr, UInt(8, 8), "rounding_shift_right_narrow", {UInt(16, 8), Int(16, 8)}},
@@ -310,7 +310,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "rshrn", Int(32, 2), "rounding_shift_right_narrow", {Int(64, 2), UInt(32)}},
     {nullptr, "rshrn", UInt(32, 2), "rounding_shift_right_narrow", {UInt(64, 2), UInt(32)}},
 
-    // SHRN - Shift right narrow (by immediate in [1, LHS bits])
+    // SHRN - Shift right narrow (by immediate in [1, output bits])
     // LLVM pattern matches these.
 
     // SQRSHL, UQRSHL - Saturating rounding shift left (by signed vector)
@@ -394,10 +394,10 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vrshifts", "srshl", Int(64, 2), "rounding_shift_left", {Int(64, 2), Int(64, 2)}},
     {"vrshiftu", "urshl", UInt(64, 2), "rounding_shift_left", {UInt(64, 2), Int(64, 2)}},
 
-    // SRSHR, URSHR - Rounding shift right (by immediate in [1, LHS bits])
+    // SRSHR, URSHR - Rounding shift right (by immediate in [1, output bits])
     // LLVM wants these expressed as SRSHL by negative amounts.
 
-    // SSHLL, USHLL - Shift left long (by immediate in [0, LHS bits - 1])
+    // SSHLL, USHLL - Shift left long (by immediate in [0, output bits - 1])
     // LLVM pattern matches these for us.
 
     // RADDHN - Add and narrow with rounding.
@@ -714,16 +714,16 @@ void CodeGen_ARM::visit(const Mul *op) {
     // shift is an immediate)
     // TODO: Verify this is still good codegen.
     if (is_const(op->b, 3)) {
-        value = codegen(op->a * 2 + op->a);
+        value = codegen((op->a << 1) + op->a);
         return;
     } else if (is_const(op->b, 5)) {
-        value = codegen(op->a * 4 + op->a);
+        value = codegen((op->a << 2) + op->a);
         return;
     } else if (is_const(op->b, 7)) {
-        value = codegen(op->a * 8 - op->a);
+        value = codegen((op->a << 3) - op->a);
         return;
     } else if (is_const(op->b, 9)) {
-        value = codegen(op->a * 8 + op->a);
+        value = codegen((op->a << 3) + op->a);
         return;
     }
 
