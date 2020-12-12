@@ -655,6 +655,13 @@ void CodeGen_ARM::visit(const Cast *op) {
                     // The 32-bit ARM backend wants right shifts as negative values.
                     matches[1] = simplify(-cast(matches[1].type().with_code(halide_type_int), matches[1]));
                 }
+                if (pattern.intrin.find("shift_right_narrow") != string::npos) {
+                    // The shift_right_narrow patterns need the shift to be constant in [1, output_bits].
+                    const uint64_t *const_b = as_const_uint(matches[1]);
+                    if (!const_b || *const_b == 0 || (int)*const_b > op->type.bits()) {
+                        continue;
+                    }
+                }
                 value = call_overloaded_intrin(op->type, pattern.intrin, matches);
                 if (value) {
                     return;
