@@ -340,37 +340,83 @@ public:
 class SplitTupleExprs : public IRMutator {
     using IRMutator::visit;
 
-    // TODO: worry about LetStmts that have tuple intrinsics in the RHS
+    class GetTupleSize : public IRVisitor {
+        bool permitted = true;
+        using IRVisitor::visit;
+        void visit(const Call *op) override {
+            if (op->is_intrinsic(Call::tuple)) {
+                user_assert(permitted)
+                    << "Can't nest an expression tuple inside another in definition of "
+                    << op->name << "\n";
+                if (result == 0) {
+                    result = (int)op->args.size();
+                } else {
+                    user_assert((int)op->args.size() == result)
+                        << "Expression tuples of mismatched sizes used in definition of "
+                        << op->name << ": " << result << " vs " << op->args.size();
+                }
+                // No nesting tuples
+                permitted = false;
+                IRVisitor::visit(op);
+                permitted = true;
+            } else {
+                IRVisitor::visit(op);
+            }
+        }
+
+    public:
+        int result = 0;
+    };
+
+    class ExtractTupleElement : public IRMutator {
+        using IRMutator::visit;
+        Expr visit(const Call *op) override {
+            if (op->is_intrinsic(Call::tuple)) {
+                // No need to recursively mutate because we've
+                // already asserted that these aren't nested.
+                internal_assert(idx < (int)op->args.size());
+                return op->args[idx];
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+    public:
+        int idx;
+    };
+
+    Stmt visit(const LetStmt *op) override {
+        GetTupleSize get_tuple_size;
+        op->value.accept(&get_tuple_size);
+        if (get_tuple_size.result == 0) {
+            return IRMutator::visit(op);
+        }
+
+        // Split this variable into the tuple components
+        ExtractTupleElement extractor;
+
+        vector<pair<string, Expr>> lets;
+        vector<Expr> vars;
+        for (extractor.idx = 0; extractor.idx < get_tuple_size.result; extractor.idx++) {
+            string name = unique_name(op->name + "." + std::to_string(extractor.idx));
+            lets.emplace_back(name, extractor.mutate(op->value));
+            vars.push_back(Variable::make(op->value.type(), name));
+        }
+
+        Stmt body = op->body;
+        Expr tuple_replacement = Call::make(op->value.type(), Call::tuple, vars, Call::PureIntrinsic);
+        body = substitute(op->name, tuple_replacement, body);
+        body = mutate(body);
+
+        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            body = LetStmt::make(it->first, it->second, body);
+        }
+
+        return body;
+    }
 
     Stmt visit(const Provide *op) override {
-        class GetTupleSize : public IRVisitor {
-            bool permitted = true;
-            using IRVisitor::visit;
-            void visit(const Call *op) override {
-                if (op->is_intrinsic(Call::tuple)) {
-                    user_assert(permitted)
-                        << "Can't nest an expression tuple inside another in definition of "
-                        << op->name << "\n";
-                    if (result == 0) {
-                        result = (int)op->args.size();
-                    } else {
-                        user_assert((int)op->args.size() == result)
-                            << "Expression tuples of mismatched sizes used in definition of "
-                            << op->name << ": " << result << " vs " << op->args.size();
-                    }
-                    // No nesting tuples
-                    permitted = false;
-                    IRVisitor::visit(op);
-                    permitted = true;
-                } else {
-                    IRVisitor::visit(op);
-                }
-            }
-
-        public:
-            int result = 0;
-        } get_tuple_size;
-
+        GetTupleSize get_tuple_size;
         op->accept(&get_tuple_size);
         int size = get_tuple_size.result;
 
@@ -378,28 +424,12 @@ class SplitTupleExprs : public IRMutator {
             return IRMutator::visit(op);
         }
 
+        ExtractTupleElement extractor;
         // The LHS should contain at least one tuple, or our scatters
         // all go to the same place. Is it worth asserting this? It
         // could be a bug, or it could be some sort of degenerate base case.
 
         // Fork the args and the RHS into their various versions
-        class ExtractTupleElement : public IRMutator {
-            using IRMutator::visit;
-            Expr visit(const Call *op) override {
-                if (op->is_intrinsic(Call::tuple)) {
-                    // No need to recursively mutate because we've
-                    // already asserted that these aren't nested.
-                    internal_assert(idx < (int)op->args.size());
-                    return op->args[idx];
-                } else {
-                    return IRMutator::visit(op);
-                }
-            }
-
-        public:
-            int idx;
-        } extractor;
-
         vector<Stmt> provides;
         vector<string> names;
         vector<Expr> rhs_values;

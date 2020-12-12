@@ -180,6 +180,43 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // Lexicographic bubble sort on tuples
+        Func f;
+        Var x, y;
+
+        f(x) = {13 - (x % 10), cast<uint8_t>(x * 17)};
+
+        RDom r(0, 99, 0, 99);
+        r.where(r.x < 99 - r.y);
+
+        Expr should_swap = (f(r.x)[0] > f(r.x + 1)[0] ||
+                            (f(r.x)[0] == f(r.x + 1)[0] &&
+                             f(r.x)[1] > f(r.x + 1)[1]));
+        r.where(should_swap);
+
+        // This update swaps adjacent pairs of elements whenever the
+        // second tuple component of the even-indexed element is odd.
+
+        f(make_expr_tuple({r.x, r.x + 1})) =
+            f(make_expr_tuple({r.x + 1, r.x}));
+
+        Buffer<int> out_0(100);
+        Buffer<uint8_t> out_1(100);
+        f.realize({out_0, out_1});
+
+        for (int i = 0; i < 99; i++) {
+            bool check = (out_0(i) < out_0(i + 1) ||
+                          (out_0(i) == out_0(i + 1) && out_1(i) < out_1(i + 1)));
+            if (!check) {
+                printf("Sort result is not correctly ordered at elements %d, %d:\n"
+                       "(%d, %d) vs (%d, %d)\n",
+                       i, i + 1, out_0(i), out_1(i), out_0(i + 1), out_1(i + 1));
+                return -1;
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
