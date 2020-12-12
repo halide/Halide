@@ -195,9 +195,7 @@ int main(int argc, char **argv) {
                              f(r.x)[1] > f(r.x + 1)[1]));
         r.where(should_swap);
 
-        // This update swaps adjacent pairs of elements whenever the
-        // second tuple component of the even-indexed element is odd.
-
+        // Swap elements that satisfy the RDom predicate
         f(make_expr_tuple({r.x, r.x + 1})) =
             f(make_expr_tuple({r.x + 1, r.x}));
 
