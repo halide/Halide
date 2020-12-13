@@ -9,6 +9,7 @@ tests(GROUPS correctness
       argmax.cpp
       assertion_failure_in_parallel_for.cpp
       async.cpp
+      async_compute_with.cpp
       async_copy_chain.cpp
       async_device_copy.cpp
       atomic_tuples.cpp
