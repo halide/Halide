@@ -337,17 +337,17 @@ public:
     }
 };
 
-class SplitTupleExprs : public IRMutator {
+class SplitScatterGather : public IRMutator {
     using IRMutator::visit;
 
     // The enclosing producer node. Used for error messages.
     const ProducerConsumer *producer = nullptr;
 
-    class GetTupleSize : public IRVisitor {
+    class GetScatterGatherSize : public IRVisitor {
         bool permitted = true;
         using IRVisitor::visit;
         void visit(const Call *op) override {
-            if (op->is_intrinsic(Call::tuple)) {
+            if (op->is_intrinsic(Call::scatter_gather)) {
                 user_assert(permitted)
                     << "Can't nest an expression tuple inside another in definition of "
                     << producer_name;
@@ -373,17 +373,17 @@ class SplitTupleExprs : public IRMutator {
 
     public:
         int result = 0;
-        GetTupleSize(const ProducerConsumer *producer) {
+        GetScatterGatherSize(const ProducerConsumer *producer) {
             if (producer) {
                 producer_name = producer->name;
             }
         }
     };
 
-    class ExtractTupleElement : public IRMutator {
+    class ExtractScatterGatherElement : public IRMutator {
         using IRMutator::visit;
         Expr visit(const Call *op) override {
-            if (op->is_intrinsic(Call::tuple)) {
+            if (op->is_intrinsic(Call::scatter_gather)) {
                 // No need to recursively mutate because we've
                 // already asserted that these aren't nested.
                 internal_assert(idx < (int)op->args.size());
@@ -403,25 +403,25 @@ class SplitTupleExprs : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        GetTupleSize get_tuple_size(producer);
-        op->value.accept(&get_tuple_size);
-        if (get_tuple_size.result == 0) {
+        GetScatterGatherSize get_scatter_gather_size(producer);
+        op->value.accept(&get_scatter_gather_size);
+        if (get_scatter_gather_size.result == 0) {
             return IRMutator::visit(op);
         }
 
         // Split this variable into the tuple components
-        ExtractTupleElement extractor;
+        ExtractScatterGatherElement extractor;
 
         vector<pair<string, Expr>> lets;
         vector<Expr> vars;
-        for (extractor.idx = 0; extractor.idx < get_tuple_size.result; extractor.idx++) {
+        for (extractor.idx = 0; extractor.idx < get_scatter_gather_size.result; extractor.idx++) {
             string name = unique_name(op->name + "." + std::to_string(extractor.idx));
             lets.emplace_back(name, extractor.mutate(op->value));
             vars.push_back(Variable::make(op->value.type(), name));
         }
 
         Stmt body = op->body;
-        Expr tuple_replacement = Call::make(op->value.type(), Call::tuple, vars, Call::PureIntrinsic);
+        Expr tuple_replacement = Call::make(op->value.type(), Call::scatter_gather, vars, Call::PureIntrinsic);
         body = substitute(op->name, tuple_replacement, body);
         body = mutate(body);
 
@@ -433,15 +433,15 @@ class SplitTupleExprs : public IRMutator {
     }
 
     Stmt visit(const Provide *op) override {
-        GetTupleSize get_tuple_size(producer);
-        op->accept(&get_tuple_size);
-        int size = get_tuple_size.result;
+        GetScatterGatherSize get_scatter_gather_size(producer);
+        op->accept(&get_scatter_gather_size);
+        int size = get_scatter_gather_size.result;
 
         if (size == 0) {
             return IRMutator::visit(op);
         }
 
-        ExtractTupleElement extractor;
+        ExtractScatterGatherElement extractor;
         // The LHS should contain at least one tuple, or our scatters
         // all go to the same place. Is it worth asserting this? It
         // could be a bug, or it could be some sort of degenerate base case.
@@ -502,7 +502,7 @@ class SplitTupleExprs : public IRMutator {
 
 Stmt split_tuples(const Stmt &stmt, const map<string, Function> &env) {
     Stmt s = SplitTuples(env).mutate(stmt);
-    s = SplitTupleExprs().mutate(s);
+    s = SplitScatterGather().mutate(s);
     return s;
 }
 

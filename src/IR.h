@@ -538,6 +538,7 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
+        scatter_gather,
         select_mask,
         shift_left,
         shift_right,
@@ -546,7 +547,6 @@ struct Call : public ExprNode<Call> {
         sorted_avg,  // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         strict_float,
         stringify,
-        tuple,
         undef,
         unsafe_promise_clamped,
         IntrinsicOpCount  // Sentinel: keep last.

@@ -4,8 +4,29 @@ using namespace Halide;
 
 using std::vector;
 
-Expr make_expr_tuple(const vector<Expr> &args) {
-    return Halide::Internal::Call::make(args[0].type(), Halide::Internal::Call::tuple, args, Halide::Internal::Call::PureIntrinsic);
+Expr make_scatter_gather(const vector<Expr> &args) {
+    return Halide::Internal::Call::make(args[0].type(),
+                                        Halide::Internal::Call::scatter_gather,
+                                        args,
+                                        Halide::Internal::Call::PureIntrinsic);
+}
+
+template<typename... Args>
+Expr scatter(Expr e, Args... args) {
+    return make_scatter_gather({e, args...});
+}
+
+template<typename... Args>
+Expr gather(Expr e, Args... args) {
+    return make_scatter_gather({e, args...});
+}
+
+Expr scatter(const vector<Expr> &args) {
+    return make_scatter_gather(args);
+}
+
+Expr gather(const vector<Expr> &args) {
+    return make_scatter_gather(args);
 }
 
 int main(int argc, char **argv) {
@@ -45,12 +66,16 @@ int main(int argc, char **argv) {
     // Run the sorting network with an RDom over the links
     sorted1(x, y) = input(x, y);
     RDom r(0, network.dim(1).extent());
+
+    // We know that the network we'll use caps out at 7, but the
+    // compiler doesn't know that because it's coming from an input
+    // buffer, so use unsafe_promise_clamped.
     Expr min_idx = unsafe_promise_clamped(network(0, r), 0, 7);
     Expr max_idx = unsafe_promise_clamped(network(1, r), 0, 7);
-    Expr dst = make_expr_tuple({min_idx, max_idx});
-    sorted1(x, dst) =
-        make_expr_tuple({min(sorted1(x, min_idx), sorted1(x, max_idx)),
-                         max(sorted1(x, min_idx), sorted1(x, max_idx))});
+
+    sorted1(x, scatter(min_idx, max_idx)) =
+        gather(min(sorted1(x, min_idx), sorted1(x, max_idx)),
+               max(sorted1(x, min_idx), sorted1(x, max_idx)));
 
     sorted1.vectorize(x, 8).update().vectorize(x, 8);
 
@@ -76,7 +101,7 @@ int main(int argc, char **argv) {
         rhs[max_idx] = max(tmp, rhs[max_idx]);
     }
 
-    sorted2(x, make_expr_tuple(lhs)) = make_expr_tuple(rhs);
+    sorted2(x, scatter(lhs)) = gather(rhs);
     sorted2.vectorize(x, 8).update().vectorize(x, 8);
 
     sorted2.realize(output2);
@@ -124,8 +149,8 @@ int main(int argc, char **argv) {
         std::rotate(dst_x.begin(), dst_x.begin() + 1, dst_x.end());
         std::rotate(dst_y.begin(), dst_y.begin() + 1, dst_y.end());
 
-        rot(make_expr_tuple(dst_x), make_expr_tuple(dst_y)) =
-            rot(make_expr_tuple(src_x), make_expr_tuple(src_y));
+        rot(scatter(dst_x), scatter(dst_y)) =
+            rot(gather(src_x), gather(src_y));
 
         Buffer<uint8_t> output = rot.realize(sz, sz);
 
@@ -152,11 +177,10 @@ int main(int argc, char **argv) {
         Func prod;
         Var x;
         RDom r(0, input.dim(1).extent());
-        Expr lhs = make_expr_tuple({0, 1});
         prod(x) = cast<uint8_t>(mux(x, {1, 0}));
-        prod(lhs) = make_expr_tuple(
-            {prod(0) * input(0, r) - prod(1) * input(1, r),
-             prod(0) * input(1, r) + prod(1) * input(0, r)});
+        prod(scatter(0, 1)) =
+            gather(prod(0) * input(0, r) - prod(1) * input(1, r),
+                   prod(0) * input(1, r) + prod(1) * input(0, r));
 
         // TODO: We don't currently recognize this as an
         // associative update, so for now we force it by passing
@@ -196,8 +220,7 @@ int main(int argc, char **argv) {
         r.where(should_swap);
 
         // Swap elements that satisfy the RDom predicate
-        f(make_expr_tuple({r.x, r.x + 1})) =
-            f(make_expr_tuple({r.x + 1, r.x}));
+        f(scatter(r.x, r.x + 1)) = f(gather(r.x + 1, r.x));
 
         Buffer<int> out_0(100);
         Buffer<uint8_t> out_1(100);

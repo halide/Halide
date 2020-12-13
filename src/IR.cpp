@@ -626,6 +626,7 @@ const char *const intrinsic_op_names[] = {
     "require_mask",
     "return_second",
     "rewrite_buffer",
+    "scatter_gather",
     "select_mask",
     "shift_left",
     "shift_right",
@@ -634,7 +635,6 @@ const char *const intrinsic_op_names[] = {
     "sorted_avg",
     "strict_float",
     "stringify",
-    "tuple",
     "undef",
     "unsafe_promise_clamped",
 };
