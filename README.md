@@ -82,7 +82,7 @@ repository (where this README is).
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, and trunk. At the time of writing,
-this means versions 10.0 and 9.0 are supported, but 8.0 is not. The commands
+this means versions 11.0 and 10.0 are supported, but 9.0 is not. The commands
 `llvm-config` and `clang` must be somewhere in the path.
 
 If your OS does not have packages for llvm, you can find binaries for it at
@@ -93,30 +93,30 @@ works well on OS X and Ubuntu.)
 If you want to build it yourself, first check it out from GitHub:
 
 ```
-% git clone --depth 1 --branch llvmorg-10.0.0 https://github.com/llvm/llvm-project.git
+% git clone --depth 1 --branch llvmorg-11.0.0 https://github.com/llvm/llvm-project.git
 ```
 
-(If you want to build LLVM 9.x, use branch `release/9.x`; for current trunk, use
-`master`)
+(If you want to build LLVM 10.x, use branch `llvmorg-10.0.1`; for current trunk,
+use `master`)
 
 Then build it like so:
 
 ```
-% mkdir llvm-build
-% cd llvm-build
-% cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../llvm-install \
+% cmake -DCMAKE_BUILD_TYPE=Release \
         -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
         -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;Hexagon" \
         -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_ASSERTIONS=ON \
         -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_BUILD_32_BITS=OFF \
-        ../llvm-project/llvm
-% cmake --build . --target install
+        -S llvm-project/llvm -B llvm-build
+% cmake --build llvm-build
+% cmake --install llvm-build --prefix llvm-install
 ```
 
 then to point Halide to it:
 
 ```
-export LLVM_CONFIG=<path to llvm>/llvm-install/bin/llvm-config
+% export LLVM_ROOT=$PWD/llvm-install
+% export LLVM_CONFIG=$LLVM_ROOT/bin/llvm-config
 ```
 
 Note that you _must_ add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to
@@ -150,28 +150,27 @@ If you wish to build Halide in a separate directory, you can do that like so:
 ### MacOS and Linux
 
 Follow the above instructions to build LLVM or acquire a suitable binary
-release. Then create a separate build folder for Halide and run CMake, pointing
-it to your LLVM installation.
+release. Then change directory to the Halide repository and run:
 
 ```
-% mkdir Halide-build
-% cd Halide-build
-% cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=/path/to/llvm-install/lib/cmake/llvm /path/to/Halide
-% cmake --build .
+% cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=$LLVM_ROOT/lib/cmake/llvm -S . -B build
+% cmake --build build
 ```
 
-`LLVM_DIR` should be the folder in the LLVM installation or build tree that
-contains `LLVMConfig.cmake`. It is not required if you have a suitable
-system-wide version installed. If you have multiple system-wide versions
-installed, you can specify the version with `HALIDE_REQUIRE_LLVM_VERSION`. Add
-`-G Ninja` if you prefer to build with the Ninja generator.
+`LLVM_DIR` is the folder in the LLVM installation tree (do not use the build
+tree by mistake) that contains `LLVMConfig.cmake`. It is not required to set
+this variable if you have a suitable system-wide version installed. If you have
+multiple system-wide versions installed, you can specify the version with
+`Halide_REQUIRE_LLVM_VERSION`. Add `-G Ninja` if you prefer to build with the
+Ninja generator.
 
 ### Windows
 
-We recommend building with MSVC 2019, but MSVC 2017 is also supported. Be sure
-to install the CMake Individual Component in the Visual Studio 2019 installer.
-For older versions of Visual Studio, do not install the CMake tools, but instead
-acquire CMake and Ninja from their respective project websites.
+We suggest building with Visual Studio 2019. Your mileage may vary with earlier
+versions. Be sure to install the "C++ CMake tools for Windows" in the Visual
+Studio installer. For older versions of Visual Studio, do not install the CMake
+tools, but instead acquire CMake and Ninja from their respective project
+websites.
 
 These instructions start from the `D:` drive. We assume this git repo is cloned
 to `D:\Halide`. We also assume that your shell environment is set up correctly.
@@ -220,12 +219,10 @@ build in either 32-bit or 64-bit depending on the environment script (`vcvars`)
 that was run earlier.
 
 ```
-D:\> md Halide-build
-D:\> cd Halide-build
-D:\Halide-build> cmake -G Ninja ^
-                       -DCMAKE_BUILD_TYPE=Release ^
-                       -DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
-                       ..\Halide
+D:\Halide> cmake -G Ninja ^
+                 -DCMAKE_BUILD_TYPE=Release ^
+                 -DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
+                 -S . -B build
 ```
 
 **Note:** If building with Python bindings on 32-bit (enabled by default), be
@@ -236,13 +233,14 @@ this by specifying, for example:
 Then run the build with:
 
 ```
-D:\Halide-build> cmake --build . --config Release -j %NUMBER_OF_PROCESSORS%
+D:\Halide> cmake --build build --config Release -j %NUMBER_OF_PROCESSORS%
 ```
 
 To run all the tests:
 
 ```
-D:\Halide-build> ctest -C Release
+D:\Halide> cd build
+D:\Halide\build> ctest -C Release
 ```
 
 Subsets of the tests can be selected with `-L` and include `correctness`,
@@ -251,52 +249,47 @@ Subsets of the tests can be selected with `-L` and include `correctness`,
 #### Building LLVM (optional)
 
 Follow these steps if you want to build LLVM yourself. First, download LLVM's
-sources (these instructions use the latest 10.0 release)
+sources (these instructions use the latest 11.0 release)
 
 ```
-D:\> git clone --depth 1 --branch llvmorg-10.0.0 https://github.com/llvm/llvm-project.git
+D:\> git clone --depth 1 --branch llvmorg-11.0.0 https://github.com/llvm/llvm-project.git
 ```
 
 For a 64-bit build, run:
 
 ```
-D:\> md llvm-build
-D:\> cd llvm-build
-D:\llvm-build> cmake -G Ninja ^
-                     -DCMAKE_BUILD_TYPE=Release ^
-                     -DCMAKE_INSTALL_PREFIX=../llvm-install ^
-                     -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
-                     -DLLVM_ENABLE_TERMINFO=OFF ^
-                     -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon ^
-                     -DLLVM_ENABLE_ASSERTIONS=ON ^
-                     -DLLVM_ENABLE_EH=ON ^
-                     -DLLVM_ENABLE_RTTI=ON ^
-                     -DLLVM_BUILD_32_BITS=OFF ^
-                     ..\llvm-project\llvm
+D:\> cmake -G Ninja ^
+           -DCMAKE_BUILD_TYPE=Release ^
+           -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
+           -DLLVM_ENABLE_TERMINFO=OFF ^
+           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon ^
+           -DLLVM_ENABLE_ASSERTIONS=ON ^
+           -DLLVM_ENABLE_EH=ON ^
+           -DLLVM_ENABLE_RTTI=ON ^
+           -DLLVM_BUILD_32_BITS=OFF ^
+           -S llvm-project\llvm -B llvm-build
 ```
 
 For a 32-bit build, run:
 
 ```
-D:\> md llvm32-build
-D:\> cd llvm32-build
-D:\llvm32-build> cmake -G Ninja ^
-                       -DCMAKE_BUILD_TYPE=Release ^
-                       -DCMAKE_INSTALL_PREFIX=../llvm32-install ^
-                       -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
-                       -DLLVM_ENABLE_TERMINFO=OFF ^
-                       -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon ^
-                       -DLLVM_ENABLE_ASSERTIONS=ON ^
-                       -DLLVM_ENABLE_EH=ON ^
-                       -DLLVM_ENABLE_RTTI=ON ^
-                       -DLLVM_BUILD_32_BITS=ON ^
-                       ..\llvm-project\llvm
+D:\> cmake -G Ninja ^
+           -DCMAKE_BUILD_TYPE=Release ^
+           -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
+           -DLLVM_ENABLE_TERMINFO=OFF ^
+           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon ^
+           -DLLVM_ENABLE_ASSERTIONS=ON ^
+           -DLLVM_ENABLE_EH=ON ^
+           -DLLVM_ENABLE_RTTI=ON ^
+           -DLLVM_BUILD_32_BITS=ON ^
+           -S llvm-project\llvm -B llvm32-build
 ```
 
 Finally, run:
 
 ```
-D:\llvm-build> cmake --build . --config Release --target install -j %NUMBER_OF_PROCESSORS%
+D:\> cmake --build llvm-build --config Release -j %NUMBER_OF_PROCESSORS%
+D:\> cmake --install llvm-build --prefix llvm-install
 ```
 
 You can substitute `Debug` for `Release` in the above `cmake` commands if you
