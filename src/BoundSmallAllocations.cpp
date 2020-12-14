@@ -8,6 +8,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 // Find a constant upper bound on the size of each thread-local allocation
 class BoundSmallAllocations : public IRMutator {
     using IRMutator::visit;
@@ -146,6 +148,8 @@ class BoundSmallAllocations : public IRMutator {
         }
     }
 };
+
+}  // namespace
 
 Stmt bound_small_allocations(const Stmt &s) {
     return BoundSmallAllocations().mutate(s);

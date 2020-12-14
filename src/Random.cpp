@@ -93,6 +93,8 @@ Expr random_float(const vector<Expr> &e) {
     return clamp(reinterpret(Float(32), result) - 1.0f, 0.0f, 1.0f);
 }
 
+namespace {
+
 class LowerRandom : public IRMutator {
     using IRMutator::visit;
 
@@ -129,6 +131,8 @@ public:
         }
     }
 };
+
+}  // namespace
 
 Expr lower_random(const Expr &e, const vector<VarOrRVar> &free_vars, int tag) {
     LowerRandom r(free_vars, tag);

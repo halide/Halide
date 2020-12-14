@@ -25,8 +25,6 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     return result;
 }
 
-}  // namespace
-
 #define DECLARE_INITMOD(mod)                                                              \
     extern "C" unsigned char halide_internal_initmod_##mod[];                             \
     extern "C" int halide_internal_initmod_##mod##_length;                                \
@@ -258,8 +256,6 @@ DECLARE_CPP_INITMOD(riscv_cpu_features)
 //DECLARE_NO_INITMOD(riscv)
 DECLARE_NO_INITMOD(riscv_cpu_features)
 #endif  // WITH_RISCV
-
-namespace {
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {

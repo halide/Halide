@@ -25,6 +25,8 @@ namespace Halide {
 namespace Internal {
 namespace Archive {
 
+namespace {
+
 // This is a bare-bones Windows .lib file writer, based on inspection
 // of the LLVM ArchiveWriter class and the documentation at
 // https://www.microsoft.com/msj/0498/hood0498.aspx and
@@ -299,6 +301,8 @@ void write_coff_archive(std::ostream &out,
         }
     }
 }
+
+}  // namespace
 
 }  // namespace Archive
 }  // namespace Internal
