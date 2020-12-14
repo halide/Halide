@@ -157,8 +157,8 @@ release. Then change directory to the Halide repository and run:
 % cmake --build build
 ```
 
-`LLVM_DIR` is the folder in the LLVM installation tree (do not use the build
-tree by mistake) that contains `LLVMConfig.cmake`. It is not required to set
+`LLVM_DIR` is the folder in the LLVM installation tree **(do not use the build
+tree by mistake)** that contains `LLVMConfig.cmake`. It is not required to set
 this variable if you have a suitable system-wide version installed. If you have
 multiple system-wide versions installed, you can specify the version with
 `Halide_REQUIRE_LLVM_VERSION`. Add `-G Ninja` if you prefer to build with the
