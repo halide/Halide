@@ -663,11 +663,11 @@ int main(int argc, char **argv) {
         memoized_one() = count_calls(0, 0);
         memoized_two() = count_calls(1, 1);
         memoized_three() = count_calls(3, 3);
-        memoized_one.compute_root().memoize(1);
-        memoized_two.compute_root().memoize(p);
+        memoized_one.compute_root().memoize(EvictionKey(1));
+        memoized_two.compute_root().memoize(EvictionKey(p));
         // The called extern here would usually take user_context and extact a value
         // from within, but JIT mostly subsumes user_context, so this is just an example.
-        memoized_three.compute_root().memoize(computed_eviction_key(5));
+        memoized_three.compute_root().memoize(EvictionKey(computed_eviction_key(5)));
         f() = memoized_one() + memoized_two() + memoized_three();
 
         p.set((void *)&call_count);
