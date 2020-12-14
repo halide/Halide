@@ -13,7 +13,9 @@ using std::ostream;
 using std::ostringstream;
 using std::string;
 
-static string sanitize_name(const string &name) {
+namespace {
+
+string sanitize_name(const string &name) {
     ostringstream oss;
     for (size_t i = 0; i < name.size(); i++) {
         if (name[i] == '.' || name[i] == '_') {
@@ -27,7 +29,7 @@ static string sanitize_name(const string &name) {
     return oss.str();
 }
 
-static string remove_namespaces(const string &name) {
+string remove_namespaces(const string &name) {
     size_t i = name.find_last_of(':');
     if (i == string::npos) {
         return name;
@@ -36,7 +38,7 @@ static string remove_namespaces(const string &name) {
     }
 }
 
-static bool can_convert(const LoweredArgument *arg) {
+bool can_convert(const LoweredArgument *arg) {
     if (arg->type.is_handle()) {
         if (arg->name == "__user_context") {
             /* __user_context is a void* pointer to a user supplied memory region.
@@ -94,6 +96,8 @@ std::pair<string, string> print_type(const LoweredArgument *arg) {
         return std::make_pair("E", "unknown type");
     }
 }
+
+}  // namespace
 
 void PythonExtensionGen::convert_buffer(const string &name, const LoweredArgument *arg) {
     internal_assert(arg->is_buffer());

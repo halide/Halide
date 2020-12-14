@@ -6,6 +6,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 class RemoveDeadAllocations : public IRMutator {
     using IRMutator::visit;
 
@@ -82,6 +84,8 @@ class RemoveDeadAllocations : public IRMutator {
         return IRMutator::visit(op);
     }
 };
+
+}  // namespace
 
 Stmt remove_dead_allocations(const Stmt &s) {
     return RemoveDeadAllocations().mutate(s);

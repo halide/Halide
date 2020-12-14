@@ -108,23 +108,23 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
     }
     if (target.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Constructing OpenGL Compute device codegen\n";
-        cgdev[DeviceAPI::OpenGLCompute] = new CodeGen_OpenGLCompute_Dev(target);
+        cgdev[DeviceAPI::OpenGLCompute] = new_CodeGen_OpenGLCompute_Dev(target);
     }
     if (target.has_feature(Target::CUDA)) {
         debug(1) << "Constructing CUDA device codegen\n";
-        cgdev[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(target);
+        cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(target);
     }
     if (target.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
-        cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
+        cgdev[DeviceAPI::OpenCL] = new_CodeGen_OpenCL_Dev(target);
     }
     if (target.has_feature(Target::Metal)) {
         debug(1) << "Constructing Metal device codegen\n";
-        cgdev[DeviceAPI::Metal] = new CodeGen_Metal_Dev(target);
+        cgdev[DeviceAPI::Metal] = new_CodeGen_Metal_Dev(target);
     }
     if (target.has_feature(Target::D3D12Compute)) {
         debug(1) << "Constructing Direct3D 12 Compute device codegen\n";
-        cgdev[DeviceAPI::D3D12Compute] = new CodeGen_D3D12Compute_Dev(target);
+        cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(target);
     }
 
     if (cgdev.empty()) {
