@@ -21,8 +21,9 @@ Expr lossless_narrow(const Expr &x) {
     return lossless_cast(x.type().narrow(), x);
 }
 
+// Remove a widening cast even if it changes the sign of the result.
 Expr strip_widening_cast(const Expr &x) {
-    Expr narrow = lossless_cast(x.type().narrow(), x);
+    Expr narrow = lossless_narrow(x);
     if (narrow.defined()) {
         return narrow;
     }
@@ -58,7 +59,8 @@ bool no_overflow(Type t) {
 
 // If there's a widening add or subtract in the first e.type().bits() / 2 - 1
 // levels down a tree of adds or subtracts, we know there's enough headroom for
-// another add without overflow.
+// another add without overflow. For example, it is safe to add to
+// (widening_add(x, y) - z) without overflow.
 bool is_safe_for_add(const Expr &e, int max_depth) {
     if (max_depth-- <= 0) {
         return false;
@@ -83,27 +85,29 @@ bool is_safe_for_add(const Expr &e) {
     return is_safe_for_add(e, e.type().bits() / 2 - 1);
 }
 
-// We want to find and remove an add of 'round' from e.
+// We want to find and remove an add of 'round' from e. This is not
+// the same thing as just subtracting round, we specifically want
+// to remove an addition of exactly round.
 Expr find_and_subtract(const Expr &e, const Expr &round) {
     if (const Add *add = e.as<Add>()) {
         Expr a = find_and_subtract(add->a, round);
-        if (!a.same_as(add->a)) {
+        if (a.defined()) {
             return Add::make(a, add->b);
         }
         Expr b = find_and_subtract(add->b, round);
-        if (!b.same_as(add->b)) {
+        if (b.defined()) {
             return Add::make(add->a, b);
         }
     } else if (const Sub *sub = e.as<Sub>()) {
         Expr a = find_and_subtract(sub->a, round);
-        if (!a.same_as(sub->a)) {
+        if (a.defined()) {
             return Sub::make(a, sub->b);
         }
         // We can't recurse into the negatve part of a subtract.
     } else if (can_prove(e == round)) {
         return make_zero(e.type());
     }
-    return e;
+    return Expr();
 }
 
 Expr to_rounding_shift(const Call *c) {
@@ -145,14 +149,15 @@ Expr to_rounding_shift(const Call *c) {
         // If it wasn't a widening or saturating add, we might still
         // be able to safely accept the rounding.
         Expr a_less_round = find_and_subtract(a, round);
-        if (!a_less_round.same_as(a)) {
+        if (a_less_round.defined()) {
             // We found and removed the rounding. However, we may have just changed
-            // behavior due to overflow. This is still save if the type is not
+            // behavior due to overflow. This is still safe if the type is not
             // overflowing, or we can find a widening add or subtract in the tree
             // of adds/subtracts. This is a common pattern, e.g.
             // rounding_halving_add(a, b) = shift_round(widening_add(a, b) + 1, 1).
             // TODO: This could be done with bounds inference instead of this hack
-            // if it supported intrinsics like widening_add.
+            // if it supported intrinsics like widening_add and tracked bounds for
+            // types other than int32.
             if (no_overflow(a.type()) || is_safe_for_add(a_less_round)) {
                 return rounding_shift(simplify(a_less_round), b);
             }
@@ -178,7 +183,7 @@ protected:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
-        // Try widening both from the same type as the result, and from uint.
+        // Try widening both from the same signedness as the result, and from uint.
         for (halide_type_code_t code : {op->type.code(), halide_type_uint}) {
             Type narrow = op->type.narrow().with_code(code);
             Expr narrow_a = lossless_cast(narrow, a);
@@ -273,11 +278,10 @@ protected:
         }
 
         // We're applying this to float, which seems OK? float16 * float16 -> float32 is a widening multiply?
+        // This uses strip_widening_cast to ignore the signedness of the narrow value.
         Expr narrow_a = strip_widening_cast(a);
         Expr narrow_b = strip_widening_cast(b);
-        if (narrow_a.defined() && narrow_b.defined() &&
-            (narrow_a.type().is_int_or_uint() == narrow_b.type().is_int_or_uint() ||
-             narrow_a.type().is_float() == narrow_b.type().is_float())) {
+        if (narrow_a.defined() && narrow_b.defined()) {
             Expr result = widening_mul(narrow_a, narrow_b);
             if (result.type() != op->type) {
                 result = Cast::make(op->type, result);
@@ -327,7 +331,7 @@ protected:
         if (const Cast *cast_a = a.as<Cast>()) {
             Expr cast_b = lossless_cast(cast_a->value.type(), b);
             if (cast_a->type.can_represent(cast_a->value.type()) && cast_b.defined()) {
-                // This cast can be moved outside the min.
+                // This is a widening cast that can be moved outside the min.
                 return mutate(Cast::make(cast_a->type, MinOrMax::make(cast_a->value, cast_b)));
             }
         }
@@ -401,10 +405,13 @@ protected:
 
             // When the argument is a widened rounding shift, we might not need the widening.
             // When there is saturation, we can only avoid the widening if we know the shift is
-            // a right shift. Without saturation, we can ignore the widneing.
+            // a right shift. Without saturation, we can ignore the widening.
             auto is_x_wide_int = op->type.is_int() && is_int(x, bits * 2);
             auto is_x_wide_uint = op->type.is_uint() && is_uint(x, bits * 2);
             auto is_x_wide_int_or_uint = is_x_wide_int || is_x_wide_uint;
+            // We can't do everything we want here with rewrite rules alone. So, we rewrite them
+            // to rounding_shifts with the widening still in place, and narrow it after the rewrite
+            // scuceeds.
             // clang-format off
             if (rewrite(max(min(rounding_shift_right(x, y), upper), lower), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_right(x, y), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
@@ -469,6 +476,8 @@ protected:
             // clang-format on
         }
 
+        // Move widening casts inside widening arithmetic outside the arithmetic,
+        // e.g. widening_mul(widen(u8), widen(i8)) -> widen(widening_mul(u8, i8)).
         if (op->is_intrinsic(Call::widening_mul)) {
             internal_assert(op->args.size() == 2);
             Expr narrow_a = strip_widening_cast(op->args[0]);

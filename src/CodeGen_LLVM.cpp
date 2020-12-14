@@ -4760,7 +4760,7 @@ void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &
 }
 
 Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args) {
-    constexpr int debug_level = 2;
+    constexpr int debug_level = 4;
 
     debug(debug_level) << "call_overloaded_intrin: " << result_type << " " << name << "(";
     for (const Expr &i : args) {

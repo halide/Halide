@@ -376,7 +376,10 @@ void CodeGen_X86::visit(const Cast *op) {
 
     if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
         if (op->value.type().bits() < op->type.bits() && op->type.bits() <= 32) {
-            // LLVM/x86 really doesn't like 8 -> 16 bit multiplication.
+            // LLVM/x86 really doesn't like 8 -> 16 bit multiplication. If we're
+            // widening to 32-bits after a widening multiply, LLVM prefers to see a
+            // widening multiply directly to 32-bits. This may result in extra
+            // casts, so simplify to remove them.
             value = codegen(simplify(Mul::make(Cast::make(op->type, mul->args[0]), Cast::make(op->type, mul->args[1]))));
             return;
         }
