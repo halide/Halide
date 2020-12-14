@@ -220,7 +220,6 @@ public:
 };
 } // namespace
 )INLINE_CODE";
-}  // namespace
 
 class TypeInfoGatherer : public IRGraphVisitor {
 private:
@@ -316,6 +315,8 @@ public:
     std::set<ForType> for_types_used;
     std::set<Type> vector_types_used;
 };
+
+}  // namespace
 
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
