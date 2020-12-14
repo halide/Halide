@@ -76,6 +76,41 @@ extern "C" int halide_cuda_release_context(void *user_context) {
     printf("Releasing CUDA context %p\n", cuda_ctx);
     return 0;
 }
+#elif defined(TEST_METAL) && defined(__OBJC__)
+
+struct gpu_context {
+    id<MTLDevice> device;
+    id<MTLCommandQueue> queue;
+};
+
+bool init_context(gpu_context &context) {
+    create_metal_context(context.device, context.queue);
+    return 0;
+}
+
+void destroy_context(gpu_context &context) {
+    destroy_metal_context(context.device, context.queue);
+    context.device = nullptr;
+    context.queue = nullptr;
+}
+
+int halide_metal_acquire_context(void *user_context, id<MTLDevice> *device_ret,
+                                 id<MTLCommandQueue> *queue_ret, bool create) {
+    if (user_context == nullptr) {
+        assert(!create);
+        *device_ret = nullptr;
+        *queue_ret = nullptr;
+    } else {
+        gpu_context *context = (gpu_context *)user_context;
+        *device_ret = context->device;
+        *queue_ret = context->queue;
+    }
+    return 0;
+}
+
+int halide_metal_release_context(void *user_context) {
+    return 0;
+}
 #else
 // Just use the default implementation of acquire/release.
 bool init_context() {
@@ -128,13 +163,12 @@ bool run_test() {
 
     if (interface != nullptr) {
         halide_device_release(nullptr, interface);
+
+        // Free the context we created.
+        destroy_context();
     } else {
         printf("Device interface is nullptr.\n");
-        return false;
     }
-
-    // Free the context we created.
-    destroy_context();
 
     printf("Success!\n");
     return true;
