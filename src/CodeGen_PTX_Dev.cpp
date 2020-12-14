@@ -418,7 +418,9 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
 
     std::vector<Expr> matches;
     for (const Pattern &p : patterns) {
-        if (p.op != op->op || factor % p.factor != 0) {
+        // TODO: This requirement probably could be relaxed to factor % p.factor,
+        // but some of the logic below needs fixing for that to work.
+        if (p.op != op->op || factor % 4 != 0) {
             continue;
         }
         if (!expr_match(p.pattern, op->value, matches)) {
