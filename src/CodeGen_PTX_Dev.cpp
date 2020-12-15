@@ -410,8 +410,8 @@ class RewriteLoadsAs32Bit : public IRMutator {
             if (op->type.lanes() > sub_lanes) {
                 new_idx = Ramp::make(new_idx, 1, load_lanes);
             }
-            return reinterpret(op->type,
-                Load::make(Int(32, load_lanes), op->name, new_idx, op->image, op->param, const_true(load_lanes), op->alignment / sub_lanes));
+            Expr new_load = Load::make(Int(32, load_lanes), op->name, new_idx, op->image, op->param, const_true(load_lanes), op->alignment / sub_lanes);
+            return reinterpret(op->type, new_load);
         } else if (index.same_as(op->index)) {
             return op;
         } else {
