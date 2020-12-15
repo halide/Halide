@@ -973,7 +973,13 @@ $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 RUNTIME_TRIPLE_32 = "le32-unknown-nacl-unknown"
 RUNTIME_TRIPLE_64 = "le64-unknown-unknown-unknown"
 
-# windows-specific modules use the __stdcall calling convention
+# Windows requires special handling.  The generic windows_* modules must have -fpic elided
+# and (for 64 bit) must set wchar to be 2 bytes.  The windows_*_x86 and windows_*_arm
+# modules need to interact with specific calling conventions related to D3D12.
+#
+# TODO(marcos): generic code won't hold for ARM32... If ARM32 support becomes necessary,
+# all windows-related runtime modules will have to be wrapped in windows_*_arm.cpp files
+# for now, generic Windows 32bit code just assumes x86 (i386)
 RUNTIME_TRIPLE_WIN_X86_32 = "i386-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_X86_64 = "x86_64-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_ARM_32 = "arm-unknown-windows-unknown"
