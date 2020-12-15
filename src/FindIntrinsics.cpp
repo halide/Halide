@@ -281,7 +281,9 @@ protected:
         // This uses strip_widening_cast to ignore the signedness of the narrow value.
         Expr narrow_a = strip_widening_cast(a);
         Expr narrow_b = strip_widening_cast(b);
-        if (narrow_a.defined() && narrow_b.defined()) {
+        if (narrow_a.defined() && narrow_b.defined() &&
+            (narrow_a.type().is_int_or_uint() == narrow_b.type().is_int_or_uint() ||
+             narrow_a.type().is_float() == narrow_b.type().is_float())) {
             Expr result = widening_mul(narrow_a, narrow_b);
             if (result.type() != op->type) {
                 result = Cast::make(op->type, result);
