@@ -161,7 +161,7 @@ test_function_dag: $(BIN)/test_function_dag
 	$^
 
 run_test: $(BIN)/$(HL_TARGET)/test
-	HL_WEIGHTS_DIR=$(SRC)/baseline.weights LD_LIBRARY_PATH=$(BIN) $< $(BIN)/libautoschedule_adams2019.$(SHARED_EXT)
+	HL_WEIGHTS_DIR=$(SRC)/baseline.weights LD_LIBRARY_PATH=$(BIN):$(LD_LIBRARY_PATH) $< $(BIN)/libautoschedule_adams2019.$(SHARED_EXT)
 
 .PHONY: test clean
 
