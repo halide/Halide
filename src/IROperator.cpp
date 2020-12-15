@@ -400,7 +400,7 @@ Expr lossless_cast(Type t, Expr e) {
     }
 
     if (const Cast *c = e.as<Cast>()) {
-        if (t.can_represent(c->value.type())) {
+        if (c->type.can_represent(c->value.type())) {
             // We can recurse into widening casts.
             return lossless_cast(t, c->value);
         } else {
@@ -491,6 +491,7 @@ Expr lossless_cast(Type t, Expr e) {
                     Type narrower = reduce->value.type().with_bits(t.bits() / 2);
                     Expr val = lossless_cast(narrower, reduce->value);
                     if (val.defined()) {
+                        val = cast(narrower.with_bits(t.bits()), val);
                         return VectorReduce::make(reduce->op, val, reduce->type.lanes());
                     }
                 }

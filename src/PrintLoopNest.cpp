@@ -27,6 +27,8 @@ using std::map;
 using std::string;
 using std::vector;
 
+namespace {
+
 class PrintLoopNest : public IRVisitor {
 public:
     PrintLoopNest(std::ostream &output, const map<string, Function> &e)
@@ -157,6 +159,8 @@ private:
         }
     }
 };
+
+}  // namespace
 
 string print_loop_nest(const vector<Function> &output_funcs) {
     // Do the first part of lowering:

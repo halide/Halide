@@ -12,6 +12,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 Stmt make_block(Stmt first, Stmt rest) {
     if (first.defined() && rest.defined()) {
         return Block::make(first, rest);
@@ -414,10 +416,14 @@ public:
     FindLinearExpressions() = default;
 };
 
+}  // namespace
+
 Stmt find_linear_expressions(const Stmt &s) {
 
     return FindLinearExpressions().mutate(s);
 }
+
+namespace {
 
 // This visitor produces a map containing name and expression pairs from varying
 // tagged intrinsics
@@ -455,9 +461,13 @@ public:
     }
 };
 
+}  // namespace
+
 Stmt remove_varying_attributes(const Stmt &s) {
     return RemoveVaryingAttributeTags().mutate(s);
 }
+
+namespace {
 
 // This visitor removes glsl_varying intrinsics and replaces them with
 // variables. After this visitor is called, the varying attribute expressions
@@ -482,9 +492,13 @@ public:
     }
 };
 
+}  // namespace
+
 Stmt replace_varying_attributes(const Stmt &s) {
     return ReplaceVaryingAttributeTags().mutate(s);
 }
+
+namespace {
 
 // This visitor produces a set of variable names that are tagged with
 // ".varying".
@@ -500,6 +514,8 @@ public:
 
     std::set<std::string> variables;
 };
+
+}  // namespace
 
 // Remove varying attributes from the varying's map if they do not appear in the
 // loop_stmt because they were simplified away.
@@ -521,6 +537,8 @@ void prune_varying_attributes(const Stmt &loop_stmt, std::map<std::string, Expr>
         varying.erase(i);
     }
 }
+
+namespace {
 
 // This visitor changes the type of variables tagged with .varying to float,
 // since GLSL will only interpolate floats. In the case that the type of the
@@ -808,7 +826,6 @@ Stmt IRFilter::mutate(const Stmt &s) {
     return stmt;
 }
 
-namespace {
 template<typename T, typename A>
 void mutate_operator(IRFilter *mutator, const T *op, const A op_a, Stmt *stmt) {
     Stmt a = mutator->mutate(op_a);
@@ -827,7 +844,6 @@ void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b,
     Stmt c = mutator->mutate(op_c);
     *stmt = make_block(make_block(a, b), c);
 }
-}  // namespace
 
 void IRFilter::visit(const IntImm *op) {
     stmt = Stmt();
@@ -1361,6 +1377,8 @@ public:
         }
     }
 };
+
+}  // namespace
 
 Stmt setup_gpu_vertex_buffer(const Stmt &s) {
     CreateVertexBufferHostLoops vb;
