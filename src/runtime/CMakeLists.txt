@@ -173,25 +173,22 @@ foreach (i IN LISTS RUNTIME_CPP)
         set(fshort-wchar "")
         # Windows
         if (i MATCHES "windows_.*")
+            # must omit -fpic, otherwise clang will complain with the following:
+            # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
+            set(fpic "")
             # Windows x86/x64
             if (i MATCHES "windows_.*_x86$")
                 if (j EQUAL 32)
                     # win32 uses the stdcall calling convention, which is x86-specific
-                    set(fpic "")
                     set(TARGET "i386-unknown-windows-unknown")
                 else ()
-                    # must omit -fpic, otherwise clang will complain with the following:
-                    # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
-                    set(fpic "")
                     set(TARGET "x86_64-unknown-windows-unknown")
                 endif ()
             # Windows on ARM
             elseif (i MATCHES "windows_.*_arm$")
                 if (j EQUAL 32)
-                    set(fpic "")
                     set(TARGET "arm-unknown-windows-unknown")
                 else ()
-                    set(fpic "")
                     set(TARGET "aarch64-unknown-windows-unknown")
                 endif ()
             # Windows Generic
@@ -200,10 +197,8 @@ foreach (i IN LISTS RUNTIME_CPP)
                     # TODO(marcos): generic code won't hold for ARM32... If ARM32 support becomes necessary,
                     # all windows-related runtime modules will have to be wrapped in windows_*_arm.cpp files
                     # for now, generic Windows 32bit code just assumes x86 (i386)
-                    set(fpic "")
                     set(TARGET "i386-unknown-windows-unknown")
                 else ()
-                    set(fpic "")
                     # unfortunately, clang doesn't automatically set this flag even though the
                     # ABI is msvc on windows
                     set(fshort-wchar -fshort-wchar)
