@@ -392,7 +392,7 @@ void CodeGen_PTX_Dev::visit(const Atomic *op) {
 class RewriteLoadsAs32Bit : public IRMutator {
     using IRMutator::visit;
 
-    Expr visit(const Load *op) {
+    Expr visit(const Load *op) override {
         if (op->type.is_scalar() || op->type.bits() * op->type.lanes() < 32) {
             return IRMutator::visit(op);
         }
