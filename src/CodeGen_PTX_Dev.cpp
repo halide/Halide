@@ -683,7 +683,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         function_pass_manager.run(*i);
     }
     function_pass_manager.doFinalization();
-    //module->print(llvm::dbgs(), nullptr);
     module_pass_manager.run(*module);
 
     if (debug::debug_level() >= 2) {
