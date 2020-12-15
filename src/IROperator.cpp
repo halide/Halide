@@ -11,6 +11,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -412,6 +413,17 @@ Expr lossless_cast(Type t, Expr e) {
         Expr v = lossless_cast(t.element_of(), b->value);
         if (v.defined()) {
             return Broadcast::make(v, b->lanes);
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const Ramp *ramp = e.as<Ramp>()) {
+        Expr base = lossless_cast(t.element_of(), ramp->base);
+        Expr stride = lossless_cast(t.element_of(), ramp->stride);
+        Expr last = lossless_cast(t.element_of(), simplify(ramp->base + ramp->stride * (ramp->type.lanes() - 1)));
+        if (base.defined() && stride.defined() && last.defined()) {
+            return Ramp::make(base, lossless_cast(t.element_of(), ramp->stride), ramp->type.lanes());
         } else {
             return Expr();
         }

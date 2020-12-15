@@ -164,6 +164,26 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
             }
         }
 
+        // Try to collapse an interleave of broadcasts into a broadcast of a concat.
+        if (const Broadcast *first_bc = new_vectors[0].as<Broadcast>()) {
+            bool can_collapse = true;
+            std::vector<Expr> scalars;
+            scalars.reserve(new_vectors.size());
+            for (size_t i = 0; i < new_vectors.size() && can_collapse; i++) {
+                const Broadcast *i_bc = new_vectors[i].as<Broadcast>();
+
+                if (i_bc) {
+                    scalars.push_back(i_bc->value);
+                } else {
+                    can_collapse = false;
+                    break;
+                }
+            }
+
+            Expr interleaved = Shuffle::make_concat(scalars);
+            return Shuffle::make_broadcast(interleaved, op->type.lanes() / interleaved.type().lanes());
+        }
+
         // Try to collapse an interleave of slices of vectors from
         // the same vector into a single vector.
         if (const Shuffle *first_shuffle = new_vectors[0].as<Shuffle>()) {
@@ -237,8 +257,15 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
 
         // Try to collapse a concat of scalars into a ramp.
         if (new_vectors[0].type().is_scalar() && new_vectors[1].type().is_scalar()) {
-            bool can_collapse = true;
-            Expr stride = mutate(new_vectors[1] - new_vectors[0], nullptr);
+            ExprInfo stride_bounds;
+            Expr stride = mutate(new_vectors[1] - new_vectors[0], &stride_bounds);
+            // We only want to do this for int32, which may be indices of loads. For other types,
+            // this may result in ramps that need bigger types than necessary. For example, {-128, 127}
+            // is a ramp with base -128 and stride 255, but 255 is not representable as an int8, while -128
+            // and 127 are.
+            bool can_collapse =
+                stride_bounds.min_defined && stride_bounds.max_defined &&
+                stride_bounds.min >= 0 && stride_bounds.max <= 127;
             for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
                 if (!new_vectors[i].type().is_scalar()) {
                     can_collapse = false;
