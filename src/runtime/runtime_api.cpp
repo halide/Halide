@@ -1,3 +1,6 @@
+// Ignore deprecation warnings inside our own runtime
+#define HALIDE_ALLOW_DEPRECATED 1
+
 #include "HalideRuntime.h"
 #include "HalideRuntimeCuda.h"
 #include "HalideRuntimeD3D12Compute.h"

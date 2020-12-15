@@ -12,6 +12,8 @@ using std::pair;
 using std::string;
 using std::vector;
 
+namespace {
+
 // Find all the externally referenced scalar parameters
 class FindParameters : public IRGraphVisitor {
 public:
@@ -25,6 +27,8 @@ public:
         }
     }
 };
+
+}  // namespace
 
 // Insert checks to make sure that parameters are within their
 // declared range.

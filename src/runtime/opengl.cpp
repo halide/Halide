@@ -1,3 +1,6 @@
+// Ignore deprecation warnings inside our own runtime
+#define HALIDE_ALLOW_DEPRECATED 1
+
 #include "HalideRuntimeOpenGL.h"
 #include "device_interface.h"
 #include "mini_opengl.h"
