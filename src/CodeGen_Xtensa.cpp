@@ -730,7 +730,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t int16x32_t_load(const void *
     return r;
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t int16x32_t_load(const void *base, const int32x32_t& offset) {
+HALIDE_ALWAYS_INLINE int16x32_t int16x32_t_gather_load(const void *base, const int32x32_t& offset) {
     int16_t tmp[32];
     int offsets[32];
     offset.store(&offsets[0], 0);
@@ -745,7 +745,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x32_t uint16x32_t_aligned_load(co
     return *((const uint16x32_t *)((uint16_t*)base + offset));
 }
 
-HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_load(const void *base, const int32x32_t& offset) {
+HALIDE_ALWAYS_INLINE uint16x32_t uint16x32_t_gather_load(const void *base, const int32x32_t& offset) {
     uint16_t tmp[32];
     int offsets[32];
     offset.store(&offsets[0], 0);
