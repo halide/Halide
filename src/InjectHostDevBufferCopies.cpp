@@ -2,12 +2,14 @@
 
 #include "CodeGen_GPU_Dev.h"
 #include "Debug.h"
+#include "ExternFuncArgument.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Substitute.h"
 
 #include <map>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -44,7 +46,7 @@ class FindBufferUsage : public IRVisitor {
         }
     }
 
-    bool is_buffer_var(Expr e) {
+    bool is_buffer_var(const Expr &e) {
         const Variable *var = e.as<Variable>();
         return var && (var->name == buffer + ".buffer");
     }
@@ -56,7 +58,9 @@ class FindBufferUsage : public IRVisitor {
                 devices_touched.insert(current_device_api);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (i == 1) continue;
+                if (i == 1) {
+                    continue;
+                }
                 op->args[i].accept(this);
             }
         } else if (op->is_intrinsic(Call::image_store)) {
@@ -66,7 +70,9 @@ class FindBufferUsage : public IRVisitor {
                 devices_writing.insert(current_device_api);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (i == 1) continue;
+                if (i == 1) {
+                    continue;
+                }
                 op->args[i].accept(this);
             }
         } else if (op->is_intrinsic(Call::debug_to_file)) {
@@ -139,9 +145,11 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     using IRMutator::visit;
 
     // The buffer being managed
-    string buffer;
+    const string buffer;
 
-    bool is_external;
+    const bool is_external;
+
+    MemoryType memory_type;
 
     enum FlagState {
         Unknown,
@@ -177,7 +185,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
     Stmt make_device_malloc(DeviceAPI target_device_api) {
-        Expr device_interface = make_device_interface_call(target_device_api);
+        Expr device_interface = make_device_interface_call(target_device_api, memory_type);
         Stmt device_malloc = call_extern_and_assert("halide_device_malloc",
                                                     {buffer_var(), device_interface});
         return device_malloc;
@@ -188,7 +196,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
     Stmt make_copy_to_device(DeviceAPI target_device_api) {
-        Expr device_interface = make_device_interface_call(target_device_api);
+        Expr device_interface = make_device_interface_call(target_device_api, memory_type);
         return call_extern_and_assert("halide_copy_to_device", {buffer_var(), device_interface});
     }
 
@@ -224,7 +232,9 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         for (DeviceAPI d : finder.devices_touched) {
             // TODO: looks dubious, but removing causes crashes in correctness_debug_to_file
             // with target=host-metal.
-            if (d == DeviceAPI::Host) continue;
+            if (d == DeviceAPI::Host) {
+                continue;
+            }
             internal_assert(touching_device == DeviceAPI::None)
                 << "Buffer " << buffer << " was touched on multiple devices within a single leaf Stmt!\n";
             touching_device = d;
@@ -399,8 +409,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
 public:
-    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e)
-        : buffer(b), is_external(e) {
+    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e, MemoryType m)
+        : buffer(b), is_external(e), memory_type(m) {
         if (is_external) {
             // The state of the buffer is totally unknown, which is
             // the default constructor for this->state
@@ -429,7 +439,7 @@ private:
 
     using IRVisitor::visit;
 
-    void check_and_record_last_use(Stmt s) {
+    void check_and_record_last_use(const Stmt &s) {
         // Sniff what happens to the buffer inside the stmt
         FindBufferUsage finder(buffer, DeviceAPI::Host);
         s.accept(&finder);
@@ -508,7 +518,7 @@ class InjectBufferCopies : public IRMutator {
 
     public:
         InjectDeviceDestructor(string b)
-            : buffer(b) {
+            : buffer(std::move(b)) {
         }
     };
 
@@ -537,10 +547,9 @@ class InjectBufferCopies : public IRMutator {
                 body = Block::make(destructor, body);
 
                 // Then the device_and_host malloc
-                Expr device_interface = make_device_interface_call(device_api);
                 Stmt device_malloc = call_extern_and_assert("halide_device_and_host_malloc",
                                                             {buf, device_interface});
-                if (!is_one(condition)) {
+                if (!is_const_one(condition)) {
                     device_malloc = IfThenElse::make(condition, device_malloc);
                 }
                 body = Block::make(device_malloc, body);
@@ -559,11 +568,12 @@ class InjectBufferCopies : public IRMutator {
         Type type;
         vector<Expr> extents;
         Expr condition;
-        DeviceAPI device_api;
+        Expr device_interface;
 
     public:
-        InjectCombinedAllocation(string b, Type t, vector<Expr> e, Expr c, DeviceAPI d)
-            : buffer(b), type(t), extents(e), condition(c), device_api(d) {
+        InjectCombinedAllocation(string b, Type t, vector<Expr> e, Expr c, Expr d)
+            : buffer(std::move(b)), type(t), extents(std::move(e)),
+              condition(std::move(c)), device_interface(std::move(d)) {
         }
     };
 
@@ -586,7 +596,7 @@ class InjectBufferCopies : public IRMutator {
         }
 
         FreeAfterLastUse(Stmt s, Stmt f)
-            : last_use(s), free_stmt(f) {
+            : last_use(std::move(s)), free_stmt(std::move(f)) {
         }
     };
 
@@ -604,7 +614,7 @@ class InjectBufferCopies : public IRMutator {
 
         Stmt body = mutate(op->body);
 
-        InjectBufferCopiesForSingleBuffer injector(op->name, false);
+        InjectBufferCopiesForSingleBuffer injector(op->name, false, op->memory_type);
         body = injector.mutate(body);
 
         string buffer_name = op->name + ".buffer";
@@ -632,8 +642,10 @@ class InjectBufferCopies : public IRMutator {
                 internal_assert(free_injecter.success);
             }
 
+            Expr device_interface = make_device_interface_call(touching_device, op->memory_type);
+
             return InjectCombinedAllocation(op->name, op->type, op->extents,
-                                            op->condition, touching_device)
+                                            op->condition, device_interface)
                 .mutate(body);
         } else {
             // Only touched on host but passed to an extern stage, or
@@ -720,12 +732,14 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
         void include(const Parameter &p) {
             if (p.defined()) {
                 result.insert(p.name());
+                result_storage[p.name()] = p.memory_type();
             }
         }
 
         void include(const Buffer<> &b) {
             if (b.defined()) {
                 result.insert(b.name());
+                result_storage[b.name()] = MemoryType::Auto;
             }
         }
 
@@ -745,8 +759,19 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
             IRVisitor::visit(op);
         }
 
+        void visit(const Call *op) override {
+            // We shouldn't need to look for Buffers here,
+            // since we expect this to be run after StorageFlattening.
+            // Add an assertion check just in case a change to lowering ever
+            // subverts this ordering expectation.
+            internal_assert(op->call_type != Call::Halide &&
+                            op->call_type != Call::Image);
+            IRVisitor::visit(op);
+        }
+
     public:
         set<string> result;
+        std::map<string, MemoryType> result_storage;
     };
 
 public:
@@ -758,7 +783,7 @@ public:
             s.accept(&finder);
             Stmt new_stmt = s;
             for (const string &buf : finder.result) {
-                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true).mutate(new_stmt);
+                new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_storage.at(buf)).mutate(new_stmt);
             }
             return new_stmt;
         } else {
@@ -767,7 +792,7 @@ public:
     }
 
     InjectBufferCopiesForInputsAndOutputs(Stmt s)
-        : site(s) {
+        : site(std::move(s)) {
     }
 };
 

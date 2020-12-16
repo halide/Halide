@@ -165,7 +165,7 @@ def test_basics4():
     f.compile_jit()
 
 def test_basics5():
-    # Test Func.inside()
+    # Test Func.in_()
     x, y = hl.Var('x'), hl.Var('y')
     f = hl.Func('f')
     g = hl.Func('g')
@@ -234,6 +234,58 @@ def test_operator_order():
     hl.Expr(1) + f[x]
     1 + f[x]
 
+def _check_is_u16(e):
+    assert e.type() == hl.UInt(16), e.type()
+
+def test_int_promotion():
+    # Verify that (Exprlike op literal) correctly matches the type
+    # of the literal to the Exprlike (rather than promoting the result to int32).
+    # All types that use add_binary_operators() should be tested here.
+
+    x = hl.Var('x')
+    # All the binary ops are handled the same, so + is good enough
+
+    # Exprlike = FuncRef
+    f = hl.Func('f')
+    f[x] = hl.u16(x)
+    _check_is_u16(f[x] + 2)
+    _check_is_u16(2 + f[x])
+
+    # Exprlike = Expr
+    e = hl.Expr(f[x])
+    _check_is_u16(e + 2)
+    _check_is_u16(2 + e)
+
+    # Exprlike = Param
+    p = hl.Param(hl.UInt(16))
+    _check_is_u16(p + 2)
+    _check_is_u16(2 + p)
+
+    # Exprlike = RDom/RVar
+    # Exprlike = Var
+    # (skipped, since these can never have values of any type other than int32)
+
+def test_vector_tile():
+    # Test Func.tile() and Stage.tile() with vector arguments
+    x,  y,  z  = [ hl.Var(c    ) for c in 'xyz' ]
+    xi, yi, zi = [ hl.Var(c+"i") for c in 'xyz' ]
+    xo, yo, zo = [ hl.Var(c+"o") for c in 'xyz' ]
+    f = hl.Func('f')
+    g = hl.Func('g')
+    h = hl.Func('h')
+    f[x, y] = y
+    f[x, y] += x
+    g[x, y, z] = x + y
+    g[x, y, z] += z
+    f.tile([x,y], [xo,yo], [x,y], [8,8])
+    f.update(0).tile([x,y], [xo,yo], [xi,yi], [8,8])
+    g.tile([x,y], [xo,yo], [x,y], [8,8], hl.TailStrategy.RoundUp)
+    g.update(0).tile([x,y], [xo,yo], [xi,yi], [8,8], hl.TailStrategy.GuardWithIf)
+    p = hl.Pipeline([f, g])
+    p.compile_jit()
+
+
+
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
@@ -241,6 +293,8 @@ if __name__ == "__main__":
     test_misused_or()
     test_float_or_int()
     test_operator_order()
+    test_int_promotion()
+    test_vector_tile()
     test_basics()
     test_basics2()
     test_basics3()

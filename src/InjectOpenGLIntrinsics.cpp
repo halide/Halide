@@ -12,14 +12,14 @@ namespace Internal {
 using std::string;
 using std::vector;
 
+namespace {
+
 /** Normalizes image loads/stores and produces glsl_texture_load/stores. */
 class InjectOpenGLIntrinsics : public IRMutator {
 public:
-    InjectOpenGLIntrinsics()
-        : inside_kernel_loop(false) {
-    }
+    InjectOpenGLIntrinsics() = default;
     Scope<int> scope;
-    bool inside_kernel_loop;
+    bool inside_kernel_loop = false;
 
 private:
     using IRMutator::visit;
@@ -92,7 +92,9 @@ private:
     }
 };
 
-Stmt inject_opengl_intrinsics(Stmt s) {
+}  // namespace
+
+Stmt inject_opengl_intrinsics(const Stmt &s) {
     InjectOpenGLIntrinsics gl;
     return gl.mutate(s);
 }

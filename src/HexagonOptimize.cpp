@@ -1,6 +1,7 @@
 #include "HexagonOptimize.h"
 #include "Bounds.h"
 #include "CSE.h"
+#include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
 #include "ExprUsesVar.h"
 #include "HexagonAlignment.h"
@@ -13,6 +14,7 @@
 #include "Simplify.h"
 #include "Substitute.h"
 #include <unordered_map>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -24,7 +26,7 @@ using std::vector;
 
 using namespace Halide::ConciseCasts;
 
-Expr native_interleave(Expr x) {
+Expr native_interleave(const Expr &x) {
     string fn;
     switch (x.type().bits()) {
     case 8:
@@ -42,7 +44,7 @@ Expr native_interleave(Expr x) {
     return Call::make(x.type(), fn, {x}, Call::PureExtern);
 }
 
-Expr native_deinterleave(Expr x) {
+Expr native_deinterleave(const Expr &x) {
     string fn;
     switch (x.type().bits()) {
     case 8:
@@ -60,25 +62,88 @@ Expr native_deinterleave(Expr x) {
     return Call::make(x.type(), fn, {x}, Call::PureExtern);
 }
 
-bool is_native_interleave_op(Expr x, const char *name) {
+bool is_native_interleave_op(const Expr &x, const char *name) {
     const Call *c = x.as<Call>();
-    if (!c || c->args.size() != 1) return false;
+    if (!c || c->args.size() != 1) {
+        return false;
+    }
     return starts_with(c->name, name);
 }
 
-bool is_native_interleave(Expr x) {
+bool is_native_interleave(const Expr &x) {
     return is_native_interleave_op(x, "halide.hexagon.interleave");
 }
 
-bool is_native_deinterleave(Expr x) {
+bool is_native_deinterleave(const Expr &x) {
     return is_native_interleave_op(x, "halide.hexagon.deinterleave");
+}
+
+string type_suffix(Type type, bool signed_variants) {
+    string prefix = type.is_vector() ? ".v" : ".";
+    if (type.is_int() || !signed_variants) {
+        switch (type.bits()) {
+        case 8:
+            return prefix + "b";
+        case 16:
+            return prefix + "h";
+        case 32:
+            return prefix + "w";
+        }
+    } else if (type.is_uint()) {
+        switch (type.bits()) {
+        case 8:
+            return prefix + "ub";
+        case 16:
+            return prefix + "uh";
+        case 32:
+            return prefix + "uw";
+        }
+    }
+    internal_error << "Unsupported HVX type: " << type << "\n";
+    return "";
+}
+
+string type_suffix(const Expr &a, bool signed_variants) {
+    return type_suffix(a.type(), signed_variants);
+}
+
+string type_suffix(const Expr &a, const Expr &b, bool signed_variants) {
+    return type_suffix(a, signed_variants) + type_suffix(b, signed_variants);
+}
+
+string type_suffix(const vector<Expr> &ops, bool signed_variants) {
+    if (ops.empty()) {
+        return "";
+    }
+    string suffix = type_suffix(ops.front(), signed_variants);
+    for (size_t i = 1; i < ops.size(); i++) {
+        suffix = suffix + type_suffix(ops[i], signed_variants);
+    }
+    return suffix;
 }
 
 namespace {
 
 // Broadcast to an unknown number of lanes, for making patterns.
 Expr bc(Expr x) {
-    return Broadcast::make(x, 0);
+    return Broadcast::make(std::move(x), 0);
+}
+
+// Helpers to generate horizontally reducing multiply operations.
+Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
+    return Call::make(result_type, "halide.hexagon.add_2mpy" + suffix,
+                      {std::move(v01), std::move(c01)}, Call::PureExtern);
+}
+
+Expr halide_hexagon_add_3mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
+    Expr call = Call::make(result_type, "halide.hexagon.add_3mpy" + suffix,
+                           {std::move(v01), std::move(c01)}, Call::PureExtern);
+    return native_interleave(call);
+}
+
+Expr halide_hexagon_add_4mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
+    return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix,
+                      {std::move(v01), std::move(c01)}, Call::PureExtern);
 }
 
 // This mutator rewrites patterns with an unknown number of lanes to
@@ -88,7 +153,7 @@ class WithLanes : public IRMutator {
 
     int lanes;
 
-    Type with_lanes(Type t) {
+    Type with_lanes(Type t) const {
         return t.with_lanes(lanes);
     }
 
@@ -122,7 +187,7 @@ public:
     }
 };
 
-Expr with_lanes(Expr x, int lanes) {
+Expr with_lanes(const Expr &x, int lanes) {
     return WithLanes(lanes).mutate(x);
 }
 
@@ -170,7 +235,7 @@ struct Pattern {
 
     Pattern() = default;
     Pattern(const string &intrin, Expr p, int flags = 0)
-        : intrin(intrin), pattern(p), flags(flags) {
+        : intrin(intrin), pattern(std::move(p)), flags(flags) {
     }
 };
 
@@ -213,13 +278,14 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     // significant bit), so we can check for them all in a loop.
     for (size_t i = 0; i < matches.size(); i++) {
         Type t = matches[i].type();
-        Type target_t = t.with_bits(t.bits() / 2);
         if (flags & (Pattern::NarrowOp0 << i)) {
-            matches[i] = lossless_cast(target_t, matches[i]);
+            matches[i] = lossless_cast(t.narrow(), matches[i]);
         } else if (flags & (Pattern::NarrowUnsignedOp0 << i)) {
-            matches[i] = lossless_cast(target_t.with_code(Type::UInt), matches[i]);
+            matches[i] = lossless_cast(t.narrow().with_code(Type::UInt), matches[i]);
         }
-        if (!matches[i].defined()) return false;
+        if (!matches[i].defined()) {
+            return false;
+        }
     }
 
     for (size_t i = Pattern::BeginExactLog2Op; i < Pattern::EndExactLog2Op; i++) {
@@ -262,7 +328,7 @@ Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
     return x;
 }
 
-bool is_double_vector(Expr x, const Target &target) {
+bool is_double_vector(const Expr &x, const Target &target) {
     int native_vector_lanes = target.natural_vector_size(x.type());
     return x.type().lanes() % (2 * native_vector_lanes) == 0;
 }
@@ -282,7 +348,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
         if (expr_match(p.pattern, x, matches)) {
             debug(3) << "matched " << p.pattern << "\n";
             debug(3) << "matches:\n";
-            for (Expr i : matches) {
+            for (const Expr &i : matches) {
                 debug(3) << i << "\n";
             }
 
@@ -309,47 +375,45 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
     return x;
 }
 
-// Replace x with a negated version of x, if it can be done without
-// overflow.
-Expr lossless_negate(Expr x) {
-    const Mul *m = x.as<Mul>();
-    if (m) {
-        Expr a = lossless_negate(m->a);
-        if (a.defined()) {
-            return Mul::make(a, m->b);
-        }
-        Expr b = lossless_negate(m->b);
-        if (b.defined()) {
-            return Mul::make(m->a, b);
-        }
-    }
-    if (is_negative_negatable_const(x) || is_positive_const(x)) {
-        return simplify(-x);
-    }
-    return Expr();
-}
-
 template<typename T>
 Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, const Target &target, IRMutator *mutator) {
     Expr ret = apply_patterns(op, patterns, target, mutator);
-    if (!ret.same_as(op)) return ret;
+    if (!ret.same_as(op)) {
+        return ret;
+    }
 
     // Try commuting the op
     Expr commuted = T::make(op->b, op->a);
     ret = apply_patterns(commuted, patterns, target, mutator);
-    if (!ret.same_as(commuted)) return ret;
+    if (!ret.same_as(commuted)) {
+        return ret;
+    }
 
     return op;
 }
 
 typedef pair<Expr, Expr> MulExpr;
 
-// If ty is scalar, and x is a vector, try to remove a broadcast
-// from x prior to using lossless_cast on it.
+// If ty is scalar or a vector with different lanes count,
+// and x is a vector, try to remove a broadcast or adjust
+// the number of lanes in Broadcast or indices in a Shuffle
+// to match the ty lanes before using lossless_cast on it.
 Expr unbroadcast_lossless_cast(Type ty, Expr x) {
-    if (ty.lanes() == 1 && x.type().lanes() > 1) {
+    if (x.type().is_vector()) {
         if (const Broadcast *bc = x.as<Broadcast>()) {
-            x = bc->value;
+            if (ty.is_scalar()) {
+                x = bc->value;
+            } else {
+                x = Broadcast::make(bc->value, ty.lanes());
+            }
+        }
+        // Check if shuffle can be treated as a broadcast.
+        if (const Shuffle *shuff = x.as<Shuffle>()) {
+            int factor = ty.lanes();
+            if (shuff->is_broadcast(factor)) {
+                x = Shuffle::make(shuff->vectors, std::vector<int>(shuff->indices.begin(),
+                                                                   shuff->indices.begin() + factor));
+            }
         }
     }
     if (ty.lanes() != x.type().lanes()) {
@@ -363,7 +427,7 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
 // multiplies in 'mpys', added to 'rest'.
 // Difference in mpys.size() - return indicates the number of
 // expressions where we pretend the op to be multiplied by 1.
-int find_mpy_ops(Expr op, Type a_ty, Type b_ty, int max_mpy_count,
+int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
                  vector<MulExpr> &mpys, Expr &rest) {
     if ((int)mpys.size() >= max_mpy_count) {
         rest = rest.defined() ? Add::make(rest, op) : op;
@@ -403,20 +467,12 @@ int find_mpy_ops(Expr op, Type a_ty, Type b_ty, int max_mpy_count,
         return mpy_count;
     } else if (const Sub *sub = op.as<Sub>()) {
         // Try to rewrite subs as adds.
-        if (const Mul *mul_b = sub->b.as<Mul>()) {
-            if (is_positive_const(mul_b->a) || is_negative_negatable_const(mul_b->a)) {
-                Expr add_b = Mul::make(simplify(-mul_b->a), mul_b->b);
-                int mpy_count = 0;
-                mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-                mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
-                return mpy_count;
-            } else if (is_positive_const(mul_b->b) || is_negative_negatable_const(mul_b->b)) {
-                Expr add_b = Mul::make(mul_b->a, simplify(-mul_b->b));
-                int mpy_count = 0;
-                mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-                mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
-                return mpy_count;
-            }
+        Expr negative_b = lossless_negate(sub->b);
+        if (negative_b.defined()) {
+            int mpy_count = 0;
+            mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+            mpy_count += find_mpy_ops(negative_b, a_ty, b_ty, max_mpy_count, mpys, rest);
+            return mpy_count;
         }
     }
 
@@ -440,6 +496,7 @@ class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
 
+    Scope<Interval> bounds;
     Target target;
 
     Expr visit(const Mul *op) override {
@@ -504,19 +561,6 @@ private:
         return IRMutator::visit(op);
     }
 
-    // Helpers to generate horizontally reducing multiply operations.
-    static Expr halide_hexagon_add_2mpy(Type result_type, string suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
-        Expr call = Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {v0, v1, c0, c1}, Call::PureExtern);
-        return native_interleave(call);
-    }
-
-    static Expr halide_hexagon_add_2mpy(Type result_type, string suffix, Expr v01, Expr c01) {
-        return Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {v01, c01}, Call::PureExtern);
-    }
-
-    static Expr halide_hexagon_add_4mpy(Type result_type, string suffix, Expr v01, Expr c01) {
-        return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {v01, c01}, Call::PureExtern);
-    }
     // We'll try to sort the mpys based my mpys.first.
     // But, for this all the mpy.first exprs should either be
     // all loads or all slice_vectors.
@@ -646,7 +690,7 @@ private:
                 // We can generate this op for 16 bits, but, it's only
                 // faster to do so if the interleave simplifies away.
                 if (op->type.bits() == 32 || (!a0123.as<Shuffle>() && !b0123.as<Shuffle>())) {
-                    Expr new_expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
+                    Expr new_expr = halide_hexagon_add_4mpy(op->type.with_bits(32), suffix, a0123, b0123);
                     if (op->type.bits() == 16) {
                         // It's actually safe to use this op on 16 bit
                         // results, we just need to narrow the
@@ -697,15 +741,15 @@ private:
                 // particular order. It should be more robust... but
                 // this is pretty tough to do, other than simply
                 // trying all permutations.
-                Expr new_expr;
-                if (!a01.as<Shuffle>() || vmpa_suffix.empty()) {
-                    Expr b01 = Shuffle::make_interleave({mpys[0].second, mpys[1].second});
-                    b01 = simplify(b01);
-                    b01 = reinterpret(Type(b01.type().code(), 16, 1), b01);
-                    new_expr = halide_hexagon_add_2mpy(op->type, vdmpy_suffix, a01, b01);
-                } else {
-                    new_expr = halide_hexagon_add_2mpy(op->type, vmpa_suffix, mpys[0].first, mpys[1].first, mpys[0].second, mpys[1].second);
-                }
+                Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second,
+                                                       mpys[0].second, mpys[1].second});
+                b0123 = simplify(b0123);
+                b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
+                bool is_vdmpy = (!a01.as<Shuffle>() || vmpa_suffix.empty());
+                string suffix = (is_vdmpy) ? vdmpy_suffix : vmpa_suffix;
+                Expr new_expr = halide_hexagon_add_2mpy(op->type, suffix,
+                                                        a01, b0123);
+                new_expr = (!is_vdmpy) ? native_interleave(new_expr) : new_expr;
                 if (rest.defined()) {
                     new_expr = Add::make(new_expr, rest);
                 }
@@ -715,10 +759,13 @@ private:
 
         static const vector<Pattern> adds = {
             // Use accumulating versions of vmpa, vdmpy, vrmpy instructions when possible.
-            {"halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0), ".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b", wild_i32x + halide_hexagon_add_2mpy(Int(32, 0), ".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0},
-            {"halide.hexagon.acc_add_2mpy.vh.vub.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0), ".vub.b", wild_u8x, wild_i16)},
-            {"halide.hexagon.acc_add_2mpy.vw.vh.b", wild_i32x + halide_hexagon_add_2mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i16)},
+            {"halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + native_interleave(halide_hexagon_add_2mpy(Int(16, 0), ".vub.vub.b.b", wild_u8x, wild_i32)), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b", wild_i32x + native_interleave(halide_hexagon_add_2mpy(Int(32, 0), ".vh.vh.b.b", wild_i16x, wild_i32)), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.acc_add_2mpy.vh.vub.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0), ".vub.b", wild_u8x, wild_i32)},
+            {"halide.hexagon.acc_add_2mpy.vw.vh.b", wild_i32x + halide_hexagon_add_2mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i32)},
+            {"halide.hexagon.acc_add_3mpy.vh.vub.b", wild_i16x + halide_hexagon_add_3mpy(Int(16, 0), ".vub.b", wild_u8x, wild_i16), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.acc_add_3mpy.vh.vb.b", wild_i16x + halide_hexagon_add_3mpy(Int(16, 0), ".vb.b", wild_i8x, wild_i16), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.acc_add_3mpy.vw.vh.b", wild_i32x + halide_hexagon_add_3mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i16), Pattern::ReinterleaveOp0},
             {"halide.hexagon.acc_add_4mpy.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.b", wild_u8x, wild_i32)},
             {"halide.hexagon.acc_add_4mpy.vuw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.ub", wild_u8x, wild_u32)},
             {"halide.hexagon.acc_add_4mpy.vuw.vub.vub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.vub", wild_u8x, wild_u8x)},
@@ -1060,7 +1107,7 @@ private:
 
             // If we didn't find a pattern, try using one of the
             // rewrites above.
-            for (auto i : cast_rewrites) {
+            for (const auto &i : cast_rewrites) {
                 if (expr_match(i.first, cast, matches)) {
                     debug(3) << "rewriting cast to: " << i.first << " from " << cast << "\n";
                     Expr replacement = with_lanes(i.second, op->type.lanes());
@@ -1078,32 +1125,273 @@ private:
             // that they generate.
             internal_assert(op->args.size() == 3);
             return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
-        } else if (op->is_intrinsic(Call::cast_mask)) {
-            internal_assert(op->args.size() == 1);
-            Type src_type = op->args[0].type();
-            Type dst_type = op->type;
-            if (dst_type.bits() < src_type.bits()) {
-                // For narrowing, we can truncate
-                return mutate(Cast::make(dst_type, op->args[0]));
-            } else {
-                // Hexagon masks only use the bottom bit in each byte,
-                // so duplicate each lane until we're wide enough.
-                Expr e = op->args[0];
-                while (src_type.bits() < dst_type.bits()) {
-                    e = Shuffle::make_interleave({e, e});
-                    src_type = src_type.with_bits(src_type.bits() * 2);
-                    e = reinterpret(src_type, e);
-                }
-                return mutate(e);
+        } else if ((op->is_intrinsic(Call::div_round_to_zero) ||
+                    op->is_intrinsic(Call::mod_round_to_zero)) &&
+                   !op->type.is_float() && op->type.is_vector()) {
+            internal_assert(op->args.size() == 2);
+            Expr a = op->args[0];
+            Expr b = op->args[1];
+            // Run bounds analysis to estimate the range of result.
+            Expr abs_result = op->type.is_int() ? abs(a / b) : a / b;
+            Expr extent_upper = find_constant_bound(abs_result, Direction::Upper, bounds);
+            const uint64_t *upper_bound = as_const_uint(extent_upper);
+            a = mutate(a);
+            b = mutate(b);
+            std::pair<Expr, Expr> div_mod = long_div_mod_round_to_zero(a, b, upper_bound);
+            if (op->is_intrinsic(Call::div_round_to_zero)) {
+                return div_mod.first;
             }
+            return div_mod.second;
         } else {
             return IRMutator::visit(op);
         }
     }
 
+    template<typename NodeType, typename T>
+    NodeType visit_let(const T *op) {
+        bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        NodeType node = IRMutator::visit(op);
+        bounds.pop(op->name);
+        return node;
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let<Expr>(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let<Stmt>(op);
+    }
+
+    Expr visit(const Div *op) override {
+        if (!op->type.is_float() && op->type.is_vector()) {
+            return mutate(lower_int_uint_div(op->a, op->b));
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Mod *op) override {
+        if (!op->type.is_float() && op->type.is_vector()) {
+            return mutate(lower_int_uint_mod(op->a, op->b));
+        }
+        return IRMutator::visit(op);
+    }
+
 public:
     OptimizePatterns(Target t) {
         target = t;
+    }
+};
+
+class VectorReducePatterns : public IRMutator {
+    using IRMutator::visit;
+
+    // Check for interleaves of vectors with stride 1 like shuffle with indices:
+    // 0, 1, 2,..., window_size - 1,
+    // 1, 2, 3,..., window_size,
+    // 2, 3, 4,..., window_size + 1,
+    // .....
+    // window_size != lanes
+    // TODO: Their could be other patterns as well which we should match
+    static int is_stencil_interleave(const Expr &op, int window_size) {
+        int lanes = op.type().lanes();
+        internal_assert(lanes > window_size);
+        if (const Shuffle *shuff = op.as<Shuffle>()) {
+            for (int i = window_size; i < lanes; i++) {
+                if ((i % window_size != window_size - 1) &&
+                    (shuff->indices[i - window_size + 1] != shuff->indices[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    Expr visit(const Mul *op) override {
+        if (const VectorReduce *vr = op->a.as<VectorReduce>()) {
+            int in_lanes = vr->value.type().lanes();
+            int out_lanes = vr->type.lanes();
+            int rfac = in_lanes / out_lanes;
+            if (vr->op == VectorReduce::Add && rfac <= 4) {
+                // Try Moving broadcasts inside the VectorReduce Node for
+                // vrmpy/vtmpy/vdmpy instructions.
+                const int lanes = vr->type.lanes();
+                const int arg_lanes = vr->value.type().lanes();
+                IRMatcher::Wild<0> x;
+                IRMatcher::Wild<1> y;
+                auto rewrite = IRMatcher::rewriter(IRMatcher::mul(op->a, op->b), op->type);
+                if (rewrite(h_add(x, lanes) * broadcast(y, lanes), h_add(x * broadcast(y, arg_lanes), lanes))) {
+                    Expr new_expr = mutate(rewrite.result);
+                    if (!new_expr.same_as(rewrite.result)) {
+                        return new_expr;
+                    }
+                }
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const VectorReduce *op) override {
+        struct Signature {
+            enum Flags {
+                SlidingWindow = 1,
+                ScalarB = 1 << 1
+            };
+            int rfac;
+            Type r_ty;
+            Type a_ty;
+            Type b_ty;
+            int flags;
+        };
+
+        if (op->type.bits() == 8 || !op->type.is_vector() ||
+            op->type.is_float() || op->op != VectorReduce::Add) {
+            return IRMutator::visit(op);
+        }
+        int in_lanes = op->value.type().lanes();
+        int out_lanes = op->type.lanes();
+        int rfac = in_lanes / out_lanes;
+
+        // Map of instruction signatures
+        static const vector<Signature> sigs = {
+            // --------- vrmpy ---------
+            // Sliding window
+            {4, UInt(32, 0), UInt(8, 0), UInt(8, 4), Signature::SlidingWindow | Signature::ScalarB},
+            {4, Int(32, 0), UInt(8, 0), Int(8, 4), Signature::SlidingWindow | Signature::ScalarB},
+            // Vector * Scalar
+            {4, UInt(32, 0), UInt(8, 0), UInt(8, 4), Signature::ScalarB},
+            {4, Int(32, 0), Int(8, 0), UInt(8, 4), Signature::ScalarB},
+            {4, Int(32, 0), UInt(8, 0), Int(8, 4), Signature::ScalarB},
+            // Vector * Vector
+            {4, UInt(32, 0), UInt(8, 0), UInt(8, 32)},
+            {4, Int(32, 0), UInt(8, 0), Int(8, 32)},
+            {4, Int(32, 0), Int(8, 0), Int(8, 32)},
+
+            // --------- vtmpy ---------
+            // Vtmpy has additional requirement that third coefficient b[2]
+            // needs to be 1.
+            // Sliding window
+            {3, Int(16, 0), Int(8, 0), Int(8, 3), Signature::SlidingWindow | Signature::ScalarB},
+            {3, Int(16, 0), UInt(8, 0), Int(8, 3), Signature::SlidingWindow | Signature::ScalarB},
+            {3, Int(32, 0), Int(16, 0), Int(8, 3), Signature::SlidingWindow | Signature::ScalarB},
+
+            // --------- vdmpy ---------
+            // Sliding window
+            {2, Int(16, 0), UInt(8, 0), Int(8, 4), Signature::SlidingWindow | Signature::ScalarB},
+            {2, Int(32, 0), Int(16, 0), Int(8, 4), Signature::SlidingWindow | Signature::ScalarB},
+            // Vector * Scalar
+            {2, Int(16, 0), UInt(8, 0), Int(8, 4), Signature::ScalarB},
+            {2, Int(32, 0), Int(16, 0), Int(8, 4), Signature::ScalarB},
+            {2, Int(32, 0), Int(16, 0), UInt(16, 2), Signature::ScalarB},  // Saturates
+            {2, Int(32, 0), Int(16, 0), Int(16, 2), Signature::ScalarB},   // Saturates
+            // Vector * Vector
+            {2, Int(32, 0), Int(16, 0), Int(16, 32)},  // Saturates
+        };
+
+        for (Signature sig : sigs) {
+            if (rfac != sig.rfac || op->type.code() != sig.r_ty.code() ||
+                op->type.bits() != sig.r_ty.bits()) {
+                continue;
+            }
+            vector<MulExpr> mpys;
+            Expr rest;
+            string suffix;
+            Type a_ty = sig.a_ty.with_lanes(in_lanes);
+            Type b_ty = (sig.flags & Signature::ScalarB) ? sig.b_ty : sig.b_ty.with_lanes(in_lanes);
+            find_mpy_ops(op->value, a_ty, b_ty, 1, mpys, rest);
+
+            if (mpys.empty()) {
+                continue;
+            }
+            Expr a = simplify(mpys[0].first);
+            Expr b = simplify(mpys[0].second);
+            Expr a0, a1;
+            if (sig.flags & Signature::SlidingWindow) {
+                if (!is_stencil_interleave(a, rfac)) {
+                    continue;
+                }
+                // Split a into a0, a1 to get the correct vector args
+                // for sliding window reduction instructions. Below are
+                // required shuffle indices for a0 and a1:
+                // For rfac == 2:
+                // If a  -> shuff[0, 1,...., out_lanes]
+                //    a0 -> shuff[0, 1,...., out_lanes - 1]
+                //    a1 -> shuff[2, 3,...., out_lanes + 1]
+                //          Last index of a1 is don't care
+                // For rfac == 3:
+                // If a  -> shuff[0, 1,...., out_lanes + 1]
+                //    a0 -> shuff[0, 1,...., out_lanes - 1]
+                //    a1 -> shuff[2, 3,...., out_lanes + 1]
+                // For rfac == 4:
+                // If a  -> shuff[0, 1,...., out_lanes + 3]
+                //    a0 -> shuff[0, 1,...., out_lanes - 1]
+                //    a1 -> shuff[4, 5,...., out_lanes + 4]
+                //          Last index of a1 is don't care
+                if (const Shuffle *shuff = a.as<Shuffle>()) {
+                    vector<int> a0_indices(out_lanes), a1_indices(out_lanes);
+                    for (int i = 0; i < out_lanes; i++) {
+                        a0_indices[i] = shuff->indices[i * rfac];
+                        a1_indices[i] = shuff->indices[(i + 1) * rfac - 1];
+                    }
+                    a0 = Shuffle::make(shuff->vectors, a0_indices);
+                    a1 = Shuffle::make(shuff->vectors, a1_indices);
+                    if (rfac == 2 || rfac == 4) {
+                        // We'll need to rotate the indices by one element
+                        // to get the correct order.
+                        Type ty = UInt(8).with_lanes(a1.type().lanes() * a1.type().bytes());
+                        a1 = reinterpret(a1.type(),
+                                         Call::make(ty, "halide.hexagon.vror",
+                                                    {reinterpret(ty, a1), a1.type().bytes()},
+                                                    Call::PureExtern));
+                    } else {
+                        // Vtmpy has additional requirement that third
+                        // coefficient b[2] needs to be 1.
+                        if (!can_prove(Shuffle::make_extract_element(b, 2) == 1)) {
+                            continue;
+                        }
+                        b = Shuffle::make_slice(b, 0, 1, 2);
+                        b_ty = b.type();
+                    }
+                    a = Shuffle::make_concat({a0, a1});
+                } else {
+                    continue;
+                }
+            }
+            // Reinterpret scalar b arg to get correct type.
+            if (sig.flags & Signature::ScalarB) {
+                b = simplify(reinterpret(Type(b_ty.code(), b_ty.lanes() * b_ty.bits(), 1), b));
+            }
+
+            suffix = type_suffix(a);
+            suffix += (b.type().is_scalar()) ? type_suffix(sig.b_ty.element_of()) : type_suffix(b);
+
+            if (rfac == 4) {
+                if (sig.flags & Signature::SlidingWindow) {
+                    return halide_hexagon_add_4mpy(op->type, suffix + ".stencil", a, b);
+                } else {
+                    Expr new_expr = halide_hexagon_add_4mpy(op->type.with_bits(32),
+                                                            suffix, a, b);
+                    if (op->type.bits() == 16) {
+                        new_expr = Call::make(op->type, "halide.hexagon.pack.vw",
+                                              {new_expr}, Call::PureExtern);
+                    }
+                    return new_expr;
+                }
+            } else {
+                if (sig.flags & Signature::SlidingWindow) {
+                    string name = "halide.hexagon.add_" + std::to_string(rfac) +
+                                  "mpy" + suffix;
+                    return native_interleave(Call::make(op->type, name,
+                                                        {a, b},
+                                                        Call::PureExtern));
+                } else {
+                    // rfac == 3 has only sliding window reductions.
+                    return halide_hexagon_add_2mpy(op->type, suffix, a, b);
+                }
+            }
+        }
+        return IRMutator::visit(op);
     }
 };
 
@@ -1121,13 +1409,9 @@ class EliminateInterleaves : public IRMutator {
     // Alignment analyzer for loads and stores
     HexagonAlignmentAnalyzer alignment_analyzer;
 
-    // We can't interleave booleans, so we handle them specially.
-    bool in_bool_to_mask = false;
-    bool interleave_mask = false;
-
     // Check if x is an expression that is either an interleave, or
     // transitively is an interleave.
-    bool yields_removable_interleave(Expr x) {
+    bool yields_removable_interleave(const Expr &x) {
         if (is_native_interleave(x)) {
             return true;
         }
@@ -1146,7 +1430,7 @@ class EliminateInterleaves : public IRMutator {
 
     // Check if x either has a removable interleave, or it can pretend
     // to be an interleave at no cost (a scalar or a broadcast).
-    bool yields_interleave(Expr x) {
+    bool yields_interleave(const Expr &x) {
         if (yields_removable_interleave(x)) {
             return true;
         }
@@ -1226,12 +1510,7 @@ class EliminateInterleaves : public IRMutator {
             a = remove_interleave(a);
             b = remove_interleave(b);
             expr = T::make(a, b);
-            if (expr.type().bits() == 1) {
-                internal_assert(!interleave_mask);
-                interleave_mask = true;
-            } else {
-                expr = native_interleave(expr);
-            }
+            expr = native_interleave(expr);
         } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
             expr = T::make(a, b);
         } else {
@@ -1261,51 +1540,15 @@ class EliminateInterleaves : public IRMutator {
     Expr visit(const Max *op) override {
         return visit_binary(op);
     }
-    Expr visit(const EQ *op) override {
-        return visit_binary(op);
-    }
-    Expr visit(const NE *op) override {
-        return visit_binary(op);
-    }
-    Expr visit(const LT *op) override {
-        return visit_binary(op);
-    }
-    Expr visit(const LE *op) override {
-        return visit_binary(op);
-    }
-    Expr visit(const GT *op) override {
-        return visit_binary(op);
-    }
-    Expr visit(const GE *op) override {
-        return visit_binary(op);
-    }
-
-    // These next 3 nodes should not exist if we're vectorized, they
-    // should have been replaced with bitwise operations.
-    Expr visit(const And *op) override {
-        internal_assert(op->type.is_scalar());
-        return IRMutator::visit(op);
-    }
-    Expr visit(const Or *op) override {
-        internal_assert(op->type.is_scalar());
-        return IRMutator::visit(op);
-    }
-    Expr visit(const Not *op) override {
-        internal_assert(op->type.is_scalar());
-        return IRMutator::visit(op);
-    }
 
     Expr visit(const Select *op) override {
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
-
-        internal_assert(op->condition.type().is_scalar());
-
         Expr cond = mutate(op->condition);
 
         // The condition isn't a vector, so we can just check if we
         // should move an interleave from the true/false values.
-        if (yields_removable_interleave({true_value, false_value})) {
+        if (cond.type().is_scalar() && yields_removable_interleave({true_value, false_value})) {
             true_value = remove_interleave(true_value);
             false_value = remove_interleave(false_value);
             return native_interleave(Select::make(cond, true_value, false_value));
@@ -1316,14 +1559,6 @@ class EliminateInterleaves : public IRMutator {
         } else {
             return op;
         }
-    }
-
-    // Make overloads of stmt/expr uses var so we can use it in a template.
-    static bool uses_var(Stmt s, const string &var) {
-        return stmt_uses_var(s, var);
-    }
-    static bool uses_var(Expr e, const string &var) {
-        return expr_uses_var(e, var);
     }
 
     template<typename NodeType, typename LetType>
@@ -1363,8 +1598,8 @@ class EliminateInterleaves : public IRMutator {
         } else {
             // We need to rewrap the body with new lets.
             NodeType result = body;
-            bool deinterleaved_used = uses_var(result, deinterleaved_name);
-            bool interleaved_used = uses_var(result, op->name);
+            bool deinterleaved_used = stmt_or_expr_uses_var(result, deinterleaved_name);
+            bool interleaved_used = stmt_or_expr_uses_var(result, op->name);
             if (deinterleaved_used && interleaved_used) {
                 // The body uses both the interleaved and
                 // deinterleaved version of this let. Generate both
@@ -1390,7 +1625,8 @@ class EliminateInterleaves : public IRMutator {
                 return LetType::make(op->name, value, result);
             } else {
                 // The let must have been dead.
-                internal_assert(!uses_var(op->body, op->name)) << "EliminateInterleaves eliminated a non-dead let.\n";
+                internal_assert(!stmt_or_expr_uses_var(op->body, op->name))
+                    << "EliminateInterleaves eliminated a non-dead let.\n";
                 return NodeType();
             }
         }
@@ -1440,9 +1676,10 @@ class EliminateInterleaves : public IRMutator {
             Call::get_intrinsic_name(Call::shift_left),
             Call::get_intrinsic_name(Call::shift_right),
             Call::get_intrinsic_name(Call::abs),
-            Call::get_intrinsic_name(Call::absd),
-            Call::get_intrinsic_name(Call::select_mask)};
-        if (interleavable.count(op->name) != 0) return true;
+            Call::get_intrinsic_name(Call::absd)};
+        if (interleavable.count(op->name) != 0) {
+            return true;
+        }
 
         // ...these calls cannot. Furthermore, these calls have the
         // same return type as the arguments, which means our test
@@ -1454,18 +1691,22 @@ class EliminateInterleaves : public IRMutator {
             "halide.hexagon.deinterleave.vb",
             "halide.hexagon.deinterleave.vh",
             "halide.hexagon.deinterleave.vw",
-            "gather",
-            "scatter",
-            "scatter_acc",
+            Call::get_intrinsic_name(Call::hvx_gather),
+            Call::get_intrinsic_name(Call::hvx_scatter),
+            Call::get_intrinsic_name(Call::hvx_scatter_acc),
         };
-        if (not_interleavable.count(op->name) != 0) return false;
+        if (not_interleavable.count(op->name) != 0) {
+            return false;
+        }
 
         if (starts_with(op->name, "halide.hexagon.")) {
             // We assume that any hexagon intrinsic is interleavable
             // as long as all of the vector operands have the same
             // number of lanes and lane width as the return type.
-            for (Expr i : op->args) {
-                if (i.type().is_scalar()) continue;
+            for (const Expr &i : op->args) {
+                if (i.type().is_scalar()) {
+                    continue;
+                }
                 if (i.type().bits() != op->type.bits() || i.type().lanes() != op->type.lanes()) {
                     return false;
                 }
@@ -1474,28 +1715,7 @@ class EliminateInterleaves : public IRMutator {
         return true;
     }
 
-    Expr visit_bool_to_mask(const Call *op) {
-        Expr expr;
-        ScopedValue<bool> old_in_bool_to_mask(in_bool_to_mask, true);
-
-        Expr arg = mutate(op->args[0]);
-        if (!arg.same_as(op->args[0]) || interleave_mask) {
-            expr = Call::make(op->type, Call::bool_to_mask, {arg}, Call::PureIntrinsic);
-            if (interleave_mask) {
-                expr = native_interleave(expr);
-                interleave_mask = false;
-            }
-        } else {
-            expr = op;
-        }
-        return expr;
-    }
-
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::bool_to_mask)) {
-            return visit_bool_to_mask(op);
-        }
-
         vector<Expr> args(op->args);
 
         // mutate all the args.
@@ -1628,7 +1848,7 @@ class EliminateInterleaves : public IRMutator {
         if (buffers.contains(op->name)) {
             // When inspecting the stores to a buffer, update the state.
             BufferState &state = buffers.ref(op->name);
-            if (!is_one(predicate) || !op->value.type().is_vector()) {
+            if (!is_const_one(predicate) || !op->value.type().is_vector()) {
                 // TODO(psuriana): This store is predicated. Mark the buffer as
                 // not interleaved for now.
                 state = BufferState::NotInterleaved;
@@ -1658,7 +1878,7 @@ class EliminateInterleaves : public IRMutator {
         if (deinterleave_buffers.contains(op->name)) {
             // We're deinterleaving this buffer, remove the interleave
             // from the store.
-            internal_assert(is_one(predicate)) << "The store shouldn't have been predicated.\n";
+            internal_assert(is_const_one(predicate)) << "The store shouldn't have been predicated.\n";
             value = remove_interleave(value);
         }
 
@@ -1748,7 +1968,7 @@ class FuseInterleaves : public IRMutator {
 };
 
 // Find an upper bound of bounds.max - bounds.min.
-Expr span_of_bounds(Interval bounds) {
+Expr span_of_bounds(const Interval &bounds) {
     internal_assert(bounds.is_bounded());
 
     const Min *min_min = bounds.min.as<Min>();
@@ -1796,7 +2016,7 @@ class OptimizeShuffles : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        lets.push_back({op->name, op->value});
+        lets.emplace_back(op->name, op->value);
         Expr expr = visit_let<Expr>(op);
         lets.pop_back();
         return expr;
@@ -1806,7 +2026,7 @@ class OptimizeShuffles : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             // TODO(psuriana): We shouldn't mess with predicated load for now.
             return IRMutator::visit(op);
         }
@@ -1827,7 +2047,7 @@ class OptimizeShuffles : public IRMutator {
                 ((unaligned_index_bounds.max + align) / align) * align - 1};
             ModulusRemainder alignment(align, 0);
 
-            for (Interval index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
+            for (const Interval &index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
                 Expr index_span = span_of_bounds(index_bounds);
                 index_span = common_subexpression_elimination(index_span);
                 index_span = simplify(index_span);
@@ -1897,7 +2117,7 @@ private:
 
     // Return the load expression of first vector if all vector in exprs are
     // contiguous vectors pointing to the same buffer.
-    Expr are_contiguous_vectors(const vector<Expr> exprs) {
+    Expr are_contiguous_vectors(const vector<Expr> &exprs) {
         if (exprs.empty()) {
             return Expr();
         }
@@ -1942,7 +2162,7 @@ private:
     }
 
     // Loads comparator for sorting Load Expr of the same buffer.
-    static bool loads_comparator(LoadIndex a, LoadIndex b) {
+    static bool loads_comparator(const LoadIndex &a, const LoadIndex &b) {
         if (a.first.defined() && b.first.defined()) {
             const Load *load_a = a.first.as<Load>();
             const Load *load_b = b.first.as<Load>();
@@ -1978,16 +2198,16 @@ private:
             const int max_mpy_ops = 100;
             if (op->type.bits() == 16) {
                 find_mpy_ops(op, UInt(8, lanes), Int(8), max_mpy_ops, mpys, rest);
-                vtmpy_suffix = ".vub.vub.b.b";
+                vtmpy_suffix = ".vub.h";
                 if (mpys.size() < 3) {
                     mpys.clear();
                     rest = Expr();
                     find_mpy_ops(op, Int(8, lanes), Int(8), max_mpy_ops, mpys, rest);
-                    vtmpy_suffix = ".vb.vb.b.b";
+                    vtmpy_suffix = ".vb.h";
                 }
             } else if (op->type.bits() == 32) {
                 find_mpy_ops(op, Int(16, lanes), Int(8), max_mpy_ops, mpys, rest);
-                vtmpy_suffix = ".vh.vh.b.b";
+                vtmpy_suffix = ".vh.h";
             }
 
             if (mpys.size() >= 3) {
@@ -2012,7 +2232,10 @@ private:
                     // Sort the bucket and compare bases of 3 adjacent vectors
                     // at a time. If they differ by vector stride, we've
                     // found a vtmpy
-                    std::sort(iter->second.begin(), iter->second.end(), loads_comparator);
+                    // It doesn't see to be easy to write a comparator function that'll implement a
+                    // strict weak ordering. So, we use stable_sort instead of sort so at the very least, the relative order
+                    // of tied elements in the vector to be sorted is not changed.
+                    std::stable_sort(iter->second.begin(), iter->second.end(), loads_comparator);
                     size_t vec_size = iter->second.size();
                     for (size_t i = 0; i + 2 < vec_size; i++) {
                         Expr v0 = iter->second[i].first;
@@ -2029,11 +2252,12 @@ private:
                             vtmpy_indices[v1_idx] = true;
                             vtmpy_indices[v2_idx] = true;
 
-                            vtmpy_exprs.emplace_back(native_interleave(Call::make(op->type,
-                                                                                  "halide.hexagon.vtmpy" + vtmpy_suffix,
-                                                                                  {mpys[v0_idx].first, mpys[v2_idx].first,
-                                                                                   mpys[v0_idx].second, mpys[v1_idx].second},
-                                                                                  Call::PureExtern)));
+                            Expr dv = Shuffle::make_interleave({mpys[v0_idx].first, mpys[v2_idx].first});
+                            Expr constant = Shuffle::make_interleave({mpys[v0_idx].second, mpys[v1_idx].second});
+                            Expr new_expr = halide_hexagon_add_3mpy(op->type, vtmpy_suffix,
+                                                                    dv, constant);
+
+                            vtmpy_exprs.emplace_back(new_expr);
                             // As we cannot test the same indices again
                             i = i + 2;
                         }
@@ -2046,8 +2270,21 @@ private:
                         if (vtmpy_indices[i]) {
                             continue;
                         }
-                        Expr mpy_a = lossless_cast(op->type, mpys[i].first);
-                        Expr mpy_b = lossless_cast(op->type, mpys[i].second);
+                        // We put expressions in mpys after un-broadcasting them. So, first broadcast
+                        // then call lossless_cast.
+                        Expr a = mpys[i].first;
+                        Expr b = mpys[i].second;
+                        int lanes = op->type.lanes();
+
+                        if (a.type().is_scalar()) {
+                            a = Broadcast::make(a, lanes);
+                        }
+                        if (b.type().is_scalar()) {
+                            b = Broadcast::make(b, lanes);
+                        }
+
+                        Expr mpy_a = lossless_cast(op->type, a);
+                        Expr mpy_b = lossless_cast(op->type, b);
                         Expr mpy_res = mpy_a * mpy_b;
                         new_expr = new_expr.defined() ? new_expr + mpy_res : mpy_res;
                     }
@@ -2169,7 +2406,7 @@ class ScatterGatherGenerator : public IRMutator {
         }
         // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
         // supported yet.
-        if (op->index.as<Ramp>() || !is_one(op->predicate) || !ty.is_vector() ||
+        if (op->index.as<Ramp>() || !is_const_one(op->predicate) || !ty.is_vector() ||
             ty.bits() == 8) {
             return Expr();
         }
@@ -2194,7 +2431,7 @@ class ScatterGatherGenerator : public IRMutator {
         Expr new_index = mutate(cast(ty.with_code(Type::Int), index));
         dst_index = mutate(dst_index);
 
-        return Call::make(ty, "gather", {dst_base, dst_index, src, size - 1, new_index},
+        return Call::make(ty, "gather", {std::move(dst_base), dst_index, src, size - 1, new_index},
                           Call::Intrinsic);
     }
 
@@ -2218,7 +2455,7 @@ class ScatterGatherGenerator : public IRMutator {
         // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
         // supported yet.
         Type ty = op->value.type();
-        if (!is_one(op->predicate) || !ty.is_vector() || ty.bits() == 8) {
+        if (!is_const_one(op->predicate) || !ty.is_vector() || ty.bits() == 8) {
             return IRMutator::visit(op);
         }
         // To use vgathers, the destination address must be VTCM memory.
@@ -2250,10 +2487,10 @@ class ScatterGatherGenerator : public IRMutator {
         }
         // Check for scatter-acc.
         Expr value = is_scatter_acc(op);
-        string intrinsic = "scatter";
+        Call::IntrinsicOp intrinsic = Call::hvx_scatter;
         if (!value.same_as(op->value)) {
             // It's a scatter-accumulate
-            intrinsic = "scatter_acc";
+            intrinsic = Call::hvx_scatter_acc;
         }
         Expr buffer = Variable::make(Handle(), op->name);
         Expr index = mutate(cast(ty.with_code(Type::Int), ty.bytes() * op->index));
@@ -2276,14 +2513,16 @@ class SyncronizationBarriers : public IRMutator {
     // Trail of For Blocks to reach a stmt.
     vector<const Stmt *> curr_path;
     // Current Stmt being mutated.
-    const Stmt *curr = NULL;
+    const Stmt *curr = nullptr;
     // Track where the Stmt generated a scatter-release.
     std::map<const Stmt *, Expr> sync;
 
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->name == "scatter" || op->name == "scatter_acc" || op->name == "gather") {
+        if (op->is_intrinsic(Call::hvx_scatter) ||
+            op->is_intrinsic(Call::hvx_scatter_acc) ||
+            op->is_intrinsic(Call::hvx_gather)) {
             string name = op->args[0].as<Variable>()->name;
             // Check if the scatter-gather encountered conflicts with any
             // previous operation. If yes, insert a scatter-release.
@@ -2303,7 +2542,7 @@ class SyncronizationBarriers : public IRMutator {
 
     // Creates entry in sync map for the stmt requiring a
     // scatter-release instruction before it.
-    void check_hazard(string name) {
+    void check_hazard(const string &name) {
         if (in_flight.find(name) == in_flight.end()) {
             return;
         }
@@ -2347,8 +2586,8 @@ public:
         Stmt new_s = IRMutator::mutate(s);
         // Wrap the stmt with scatter-release if any hazard was detected.
         if (sync.find(&s) != sync.end()) {
-            Stmt scatter_sync = Evaluate::make(Call::make(Int(32), "scatter_release",
-                                                          {sync[&s]}, Call::Intrinsic));
+            Stmt scatter_sync =
+                Evaluate::make(Call::make(Int(32), Call::hvx_scatter_release, {sync[&s]}, Call::Intrinsic));
             return Block::make(scatter_sync, new_s);
         }
         return new_s;
@@ -2357,7 +2596,7 @@ public:
 
 }  // namespace
 
-Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
+Stmt optimize_hexagon_shuffles(const Stmt &s, int lut_alignment) {
     // Replace indirect and other complicated loads with
     // dynamic_shuffle (vlut) calls.
     return OptimizeShuffles(lut_alignment).mutate(s);
@@ -2384,6 +2623,10 @@ Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     // Convert some expressions to an equivalent form which get better
     // optimized in later stages for hexagon
     s = RearrangeExpressions().mutate(s);
+    // Pattern match VectorReduce IR node. Handle vector reduce instructions
+    // before OptimizePatterns to prevent being mutated by patterns like
+    // (v0 + v1 * c) -> add_mpy
+    s = VectorReducePatterns().mutate(s);
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
@@ -2395,7 +2638,6 @@ Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     // There may be interleaves left over that we can fuse with other
     // operations.
     s = FuseInterleaves().mutate(s);
-
     return s;
 }
 

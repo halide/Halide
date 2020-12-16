@@ -10,14 +10,13 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
     Expr value = mutate(op->value, nullptr);
 
     if (may_simplify(op->type) && may_simplify(op->value.type())) {
-        const Call *call = value.as<Call>();
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
         const Ramp *ramp_value = value.as<Ramp>();
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
-        if (call && call->is_intrinsic(Call::signed_integer_overflow)) {
+        if (Call::as_intrinsic(value, {Call::signed_integer_overflow})) {
             return make_signed_integer_overflow(op->type);
         } else if (value.type() == op->type) {
             return value;
@@ -26,42 +25,42 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
                    std::isfinite(f)) {
             // float -> int
             // Recursively call mutate just to set the bounds
-            return mutate(IntImm::make(op->type, safe_numeric_cast<int64_t>(f)), bounds);
+            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(f)), bounds);
         } else if (op->type.is_uint() &&
                    const_float(value, &f) &&
                    std::isfinite(f)) {
             // float -> uint
-            return UIntImm::make(op->type, safe_numeric_cast<uint64_t>(f));
+            return make_const(op->type, safe_numeric_cast<uint64_t>(f));
         } else if (op->type.is_float() &&
                    const_float(value, &f)) {
             // float -> float
-            return FloatImm::make(op->type, f);
+            return make_const(op->type, f);
         } else if (op->type.is_int() &&
                    const_int(value, &i)) {
             // int -> int
             // Recursively call mutate just to set the bounds
-            return mutate(IntImm::make(op->type, i), bounds);
+            return mutate(make_const(op->type, i), bounds);
         } else if (op->type.is_uint() &&
                    const_int(value, &i)) {
             // int -> uint
-            return UIntImm::make(op->type, safe_numeric_cast<uint64_t>(i));
+            return make_const(op->type, safe_numeric_cast<uint64_t>(i));
         } else if (op->type.is_float() &&
                    const_int(value, &i)) {
             // int -> float
-            return FloatImm::make(op->type, safe_numeric_cast<double>(i));
+            return make_const(op->type, safe_numeric_cast<double>(i));
         } else if (op->type.is_int() &&
                    const_uint(value, &u)) {
             // uint -> int
             // Recursively call mutate just to set the bounds
-            return mutate(IntImm::make(op->type, safe_numeric_cast<int64_t>(u)), bounds);
+            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), bounds);
         } else if (op->type.is_uint() &&
                    const_uint(value, &u)) {
             // uint -> uint
-            return UIntImm::make(op->type, u);
+            return make_const(op->type, u);
         } else if (op->type.is_float() &&
                    const_uint(value, &u)) {
             // uint -> float
-            return FloatImm::make(op->type, safe_numeric_cast<double>(u));
+            return make_const(op->type, safe_numeric_cast<double>(u));
         } else if (cast &&
                    op->type.code() == cast->type.code() &&
                    op->type.bits() < cast->type.bits()) {
@@ -82,13 +81,15 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
             return mutate(Cast::make(op->type, cast->value), bounds);
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
-            return mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->lanes), bounds);
+            return mutate(Broadcast::make(Cast::make(op->type.with_lanes(broadcast_value->value.type().lanes()), broadcast_value->value), broadcast_value->lanes), bounds);
         } else if (ramp_value &&
                    op->type.element_of() == Int(64) &&
                    op->value.type().element_of() == Int(32)) {
             // cast(ramp(a, b, w)) -> ramp(cast(a), cast(b), w)
-            return mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
-                                     Cast::make(op->type.element_of(), ramp_value->stride),
+            return mutate(Ramp::make(Cast::make(op->type.with_lanes(ramp_value->base.type().lanes()),
+                                                ramp_value->base),
+                                     Cast::make(op->type.with_lanes(ramp_value->stride.type().lanes()),
+                                                ramp_value->stride),
                                      ramp_value->lanes),
                           bounds);
         }

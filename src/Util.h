@@ -4,7 +4,7 @@
 #include <assert.h>
 #define NDEBUG
 #else
-#include <assert.h>
+#include <cassert>
 #endif
 
 #ifndef HALIDE_UTIL_H
@@ -22,7 +22,9 @@
 
 #include "runtime/HalideRuntime.h"
 
-#ifndef HALIDE_EXPORT
+#ifdef Halide_STATIC_DEFINE
+#define HALIDE_EXPORT
+#else
 #if defined(_MSC_VER)
 // Halide_EXPORTS is quietly defined by CMake when building a shared library
 #ifdef Halide_EXPORTS
@@ -31,7 +33,7 @@
 #define HALIDE_EXPORT __declspec(dllimport)
 #endif
 #else
-#define HALIDE_EXPORT
+#define HALIDE_EXPORT __attribute__((visibility("default")))
 #endif
 #endif
 
@@ -285,7 +287,7 @@ inline void write_entire_file(const std::string &pathname, const std::vector<cha
 class TemporaryFile final {
 public:
     TemporaryFile(const std::string &prefix, const std::string &suffix)
-        : temp_path(file_make_temp(prefix, suffix)), do_unlink(true) {
+        : temp_path(file_make_temp(prefix, suffix)) {
     }
     const std::string &pathname() const {
         return temp_path;
@@ -304,9 +306,13 @@ public:
 
 private:
     const std::string temp_path;
-    bool do_unlink;
+    bool do_unlink = true;
+
+public:
     TemporaryFile(const TemporaryFile &) = delete;
-    void operator=(const TemporaryFile &) = delete;
+    TemporaryFile &operator=(const TemporaryFile &) = delete;
+    TemporaryFile(TemporaryFile &&) = delete;
+    TemporaryFile &operator=(TemporaryFile &&) = delete;
 };
 
 /** Routines to test if math would overflow for signed integers with
@@ -322,7 +328,7 @@ bool mul_would_overflow(int bits, int64_t a, int64_t b);
 template<typename T>
 struct ScopedValue {
     T &var;
-    const T old_value;
+    T old_value;
     /** Preserve the old value, restored at dtor time */
     ScopedValue(T &var)
         : var(var), old_value(var) {
@@ -340,7 +346,7 @@ struct ScopedValue {
     }
     // allow move but not copy
     ScopedValue(const ScopedValue &that) = delete;
-    ScopedValue(ScopedValue &&that) = default;
+    ScopedValue(ScopedValue &&that) noexcept = default;
 };
 
 // Wrappers for some C++14-isms that are useful and trivially implementable
@@ -454,6 +460,11 @@ struct IsRoundtrippable {
 
 /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
 std::string c_print_name(const std::string &name);
+
+/** Return the LLVM_VERSION against which this libHalide is compiled. This is provided
+ * only for internal tests which need to verify behavior; please don't use this outside
+ * of Halide tests. */
+int get_llvm_version();
 
 }  // namespace Internal
 }  // namespace Halide

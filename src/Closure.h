@@ -5,13 +5,18 @@
  *
  * Provides Closure class.
  */
+#include <map>
+#include <string>
 
-#include "Buffer.h"
 #include "IR.h"
 #include "IRVisitor.h"
 #include "Scope.h"
 
 namespace Halide {
+
+template<typename T>
+class Buffer;
+
 namespace Internal {
 
 /** A helper class to manage closures. Walks over a statement and
@@ -42,25 +47,26 @@ public:
         Type type;
 
         /** The dimensionality of the buffer. */
-        uint8_t dimensions;
+        uint8_t dimensions = 0;
 
         /** The buffer is read from. */
-        bool read;
+        bool read = false;
 
         /** The buffer is written to. */
-        bool write;
+        bool write = false;
+
+        /** The buffer is a texture */
+        MemoryType memory_type = MemoryType::Auto;
 
         /** The size of the buffer if known, otherwise zero. */
-        size_t size;
+        size_t size = 0;
 
-        Buffer()
-            : dimensions(0), read(false), write(false), size(0) {
-        }
+        Buffer() = default;
     };
 
 protected:
     void found_buffer_ref(const std::string &name, Type type,
-                          bool read, bool written, Halide::Buffer<> image);
+                          bool read, bool written, const Halide::Buffer<void> &image);
 
 public:
     Closure() = default;
@@ -72,7 +78,7 @@ public:
      * assumes that the host pointer is found in the symbol table as
      * 'foo.host', and any halide_buffer_t pointer is found under
      * 'foo.buffer'. */
-    Closure(Stmt s, const std::string &loop_variable = "");
+    Closure(const Stmt &s, const std::string &loop_variable = "");
 
     /** External variables referenced. */
     std::map<std::string, Type> vars;

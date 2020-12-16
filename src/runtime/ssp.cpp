@@ -11,7 +11,7 @@ extern "C" {
 WEAK char *__stack_chk_guard = (char *)(0xdeadbeef);
 
 WEAK void __stack_chk_fail() {
-    halide_error(NULL, "Memory error: stack smashing protector changed!\n");
-    Halide::Runtime::Internal::halide_abort();
+    halide_error(nullptr, "Memory error: stack smashing protector changed!\n");
+    abort();
 }
 }

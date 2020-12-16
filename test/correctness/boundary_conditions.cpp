@@ -20,11 +20,16 @@ bool expect_eq(T actual, T expected) {
 
 void schedule_test(Func f, int vector_width, const Target &t) {
     if (vector_width != 1) {
-        f.vectorize(x, vector_width);
+        if (t.has_feature(Target::OpenGLCompute)) {
+            // Vector stores not yet supported in OpenGLCompute backend
+            f.unroll(x, vector_width);
+        } else {
+            f.vectorize(x, vector_width);
+        }
     }
     if (t.has_gpu_feature() && vector_width <= 16) {
         f.gpu_tile(x, y, xo, yo, xi, yi, 2, 2);
-    } else if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (t.has_feature(Target::HVX)) {
         // TODO: Non-native vector widths hang the compiler here.
         //f.hexagon();
     }
@@ -198,24 +203,24 @@ bool test_all(int vector_width, Target t) {
         // Func input.
         success &= check_repeat_edge(
             input,
-            repeat_edge(input_f, 0, W, 0, H),
+            repeat_edge(input_f, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Image input.
         success &= check_repeat_edge(
             input,
-            repeat_edge(input, 0, W, 0, H),
+            repeat_edge(input, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Undefined bounds.
         success &= check_repeat_edge(
             input,
-            repeat_edge(input, Expr(), Expr(), 0, H),
+            repeat_edge(input, {{Expr(), Expr()}, {0, H}}),
             0, W, test_min, test_extent,
             vector_width, t);
         success &= check_repeat_edge(
             input,
-            repeat_edge(input, 0, W, Expr(), Expr()),
+            repeat_edge(input, {{0, W}, {Expr(), Expr()}}),
             test_min, test_extent, 0, H,
             vector_width, t);
         // Implicitly determined bounds.
@@ -236,24 +241,24 @@ bool test_all(int vector_width, Target t) {
         // Func input.
         success &= check_constant_exterior(
             input, exterior,
-            constant_exterior(input_f, exterior, 0, W, 0, H),
+            constant_exterior(input_f, exterior, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Image input.
         success &= check_constant_exterior(
             input, exterior,
-            constant_exterior(input, exterior, 0, W, 0, H),
+            constant_exterior(input, exterior, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Undefined bounds.
         success &= check_constant_exterior(
             input, exterior,
-            constant_exterior(input, exterior, Expr(), Expr(), 0, H),
+            constant_exterior(input, exterior, {{Expr(), Expr()}, {0, H}}),
             0, W, test_min, test_extent,
             vector_width, t);
         success &= check_constant_exterior(
             input, exterior,
-            constant_exterior(input, exterior, 0, W, Expr(), Expr()),
+            constant_exterior(input, exterior, {{0, W}, {Expr(), Expr()}}),
             test_min, test_extent, 0, H,
             vector_width, t);
         // Implicitly determined bounds.
@@ -272,24 +277,24 @@ bool test_all(int vector_width, Target t) {
         // Func input.
         success &= check_repeat_image(
             input,
-            repeat_image(input_f, 0, W, 0, H),
+            repeat_image(input_f, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Image input.
         success &= check_repeat_image(
             input,
-            repeat_image(input, 0, W, 0, H),
+            repeat_image(input, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Undefined bounds.
         success &= check_repeat_image(
             input,
-            repeat_image(input, Expr(), Expr(), 0, H),
+            repeat_image(input, {{Expr(), Expr()}, {0, H}}),
             0, W, test_min, test_extent,
             vector_width, t);
         success &= check_repeat_image(
             input,
-            repeat_image(input, 0, W, Expr(), Expr()),
+            repeat_image(input, {{0, W}, {Expr(), Expr()}}),
             test_min, test_extent, 0, H,
             vector_width, t);
         // Implicitly determined bounds.
@@ -308,24 +313,24 @@ bool test_all(int vector_width, Target t) {
         // Func input.
         success &= check_mirror_image(
             input,
-            mirror_image(input_f, 0, W, 0, H),
+            mirror_image(input_f, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Image input.
         success &= check_mirror_image(
             input,
-            mirror_image(input, 0, W, 0, H),
+            mirror_image(input, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Undefined bounds.
         success &= check_mirror_image(
             input,
-            mirror_image(input, Expr(), Expr(), 0, H),
+            mirror_image(input, {{Expr(), Expr()}, {0, H}}),
             0, W, test_min, test_extent,
             vector_width, t);
         success &= check_mirror_image(
             input,
-            mirror_image(input, 0, W, Expr(), Expr()),
+            mirror_image(input, {{0, W}, {Expr(), Expr()}}),
             test_min, test_extent, 0, H,
             vector_width, t);
         // Implicitly determined bounds.
@@ -344,24 +349,24 @@ bool test_all(int vector_width, Target t) {
         // Func input.
         success &= check_mirror_interior(
             input,
-            mirror_interior(input_f, 0, W, 0, H),
+            mirror_interior(input_f, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Image input.
         success &= check_mirror_interior(
             input,
-            mirror_interior(input, 0, W, 0, H),
+            mirror_interior(input, {{0, W}, {0, H}}),
             test_min, test_extent, test_min, test_extent,
             vector_width, t);
         // Undefined bounds.
         success &= check_mirror_interior(
             input,
-            mirror_interior(input, Expr(), Expr(), 0, H),
+            mirror_interior(input, {{Expr(), Expr()}, {0, H}}),
             0, W, test_min, test_extent,
             vector_width, t);
         success &= check_mirror_interior(
             input,
-            mirror_interior(input, 0, W, Expr(), Expr()),
+            mirror_interior(input, {{0, W}, {Expr(), Expr()}}),
             test_min, test_extent, 0, H,
             vector_width, t);
         // Implicitly determined bounds.
@@ -382,13 +387,23 @@ int main(int argc, char **argv) {
     std::vector<std::future<bool>> futures;
     int vector_width_max = 32;
     if (target.has_feature(Target::Metal) ||
+        target.has_feature(Target::OpenGLCompute) ||
         target.has_feature(Target::D3D12Compute)) {
         // https://github.com/halide/Halide/issues/2148
         vector_width_max = 4;
     }
+    if (target.arch == Target::WebAssembly) {
+        // The wasm jit is very slow, so shorten this test here.
+        vector_width_max = 8;
+    }
     for (int vector_width = 1; vector_width <= vector_width_max; vector_width *= 2) {
         std::cout << "Testing vector_width: " << vector_width << "\n";
-        futures.push_back(pool.async(test_all, vector_width, target));
+        if (target.has_feature(Target::OpenGLCompute)) {
+            // GL can't be used from multiple threads at once
+            test_all(vector_width, target);
+        } else {
+            futures.push_back(pool.async(test_all, vector_width, target));
+        }
     }
 
     bool success = true;

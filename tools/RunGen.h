@@ -13,6 +13,8 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <utility>
+
 #include <vector>
 
 namespace Halide {
@@ -59,7 +61,7 @@ inline std::ostream &operator<<(std::ostream &stream, const Shape &shape) {
     bool need_comma = false;
     for (auto &d : shape) {
         if (need_comma) {
-            stream << ',';
+            stream << ",";
         }
         stream << d;
         need_comma = true;
@@ -78,7 +80,7 @@ struct Logger {
         : out(log_out), info(log_cerr), warn(log_cerr), fail(log_fail) {
     }
     Logger(LogFn o, LogFn i, LogFn w, LogFn f)
-        : out(o), info(i), warn(w), fail(f) {
+        : out(std::move(o)), info(std::move(i)), warn(std::move(w)), fail(std::move(f)) {
     }
 
 private:
@@ -110,13 +112,15 @@ struct LogEmitter {
 
     ~LogEmitter() {
         std::string s = msg.str();
-        if (s.back() != '\n') s += '\n';
+        if (s.back() != '\n') {
+            s += '\n';
+        }
         f(s);
     }
 
 protected:
     explicit LogEmitter(Logger::LogFn f)
-        : f(f) {
+        : f(std::move(f)) {
     }
 
 private:
@@ -385,6 +389,7 @@ inline Buffer<> allocate_buffer(const halide_type_t &type, const Shape &shape) {
     if (b.number_of_elements() > 0) {
         b.check_overflow();
         b.allocate();
+        b.set_host_dirty();
     }
     return b;
 }
@@ -731,13 +736,17 @@ struct ArgData {
 
         std::vector<std::string> v = split_string(raw_string, ":");
         if (v[0] == "zero") {
-            if (v.size() != 2) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 2) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             auto shape = parse_optional_extents(v[1]);
             Buffer<> b = allocate_buffer(metadata->type, shape);
             memset(b.data(), 0, b.size_in_bytes());
             return b;
         } else if (v[0] == "constant") {
-            if (v.size() != 3) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 3) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             halide_scalar_value_t value;
             if (!parse_scalar(metadata->type, v[1], &value)) {
                 fail() << "Invalid value for constant value";
@@ -747,7 +756,9 @@ struct ArgData {
             dynamic_type_dispatch<FillWithScalar>(metadata->type, b, value);
             return b;
         } else if (v[0] == "identity") {
-            if (v.size() != 2) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 2) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             auto shape = parse_optional_extents(v[1]);
             // Make a binary buffer with diagonal elements set to true. Diagonal
             // elements are those whose first two dimensions are equal.
@@ -758,7 +769,9 @@ struct ArgData {
             // Convert the binary buffer to the required type, so true becomes 1.
             return Halide::Tools::ImageTypeConversion::convert_image(b, metadata->type);
         } else if (v[0] == "random") {
-            if (v.size() != 3) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 3) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             int seed;
             if (!parse_scalar(v[1], &seed)) {
                 fail() << "Invalid value for seed";
@@ -772,7 +785,7 @@ struct ArgData {
         }
     }
 
-    Buffer<> load_buffer(Shape shape, const halide_filter_argument_t *argument_metadata) {
+    Buffer<> load_buffer(const Shape &shape, const halide_filter_argument_t *argument_metadata) {
         ShapePromise promise = [shape]() -> Shape { return shape; };
         return load_buffer(promise, argument_metadata);
     }
@@ -791,13 +804,15 @@ struct ArgData {
             fail() << "Dimension mismatch; expected " << constrained_shape.size() << "dimensions";
         }
         for (size_t i = 0; i < constrained_shape.size(); ++i) {
-            // min of nonzero means "largest value for min"
-            if (constrained_shape[i].min != 0 && new_shape[i].min > constrained_shape[i].min) {
+            // If the constrained shape is not in bounds of the
+            // buffer's current shape we need to use the constrained
+            // shape.
+            int current_min = new_shape[i].min;
+            int current_max = new_shape[i].min + new_shape[i].extent - 1;
+            int constrained_min = constrained_shape[i].min;
+            int constrained_max = constrained_shape[i].min + constrained_shape[i].extent - 1;
+            if (constrained_min < current_min || constrained_max > current_max) {
                 new_shape[i].min = constrained_shape[i].min;
-                updated = true;
-            }
-            // extent of nonzero means "largest value for extent"
-            if (constrained_shape[i].extent != 0 && new_shape[i].extent > constrained_shape[i].extent) {
                 new_shape[i].extent = constrained_shape[i].extent;
                 updated = true;
             }
@@ -870,6 +885,10 @@ struct ArgData {
         }
 
         buffer_value = allocate_buffer(metadata->type, new_shape);
+
+        // allocate_buffer conservatively sets host dirty. Don't waste
+        // time copying output buffers to device.
+        buffer_value.set_host_dirty(false);
 
         info() << "Output " << name << ": BoundsQuery result is " << constrained_shape;
         info() << "Output " << name << ": Shape is " << get_shape(buffer_value);
@@ -992,20 +1011,22 @@ public:
                 // If this gets any more complex, smarten it up, but for now,
                 // simpleminded code is fine.
                 if (arg.raw_string == "default") {
-                    values.push_back({arg.metadata->scalar_def, "default"});
+                    values.emplace_back(arg.metadata->scalar_def, "default");
                 } else if (arg.raw_string == "estimate") {
-                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
+                    values.emplace_back(arg.metadata->scalar_estimate, "estimate");
                 } else if (arg.raw_string == "default,estimate") {
-                    values.push_back({arg.metadata->scalar_def, "default"});
-                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
+                    values.emplace_back(arg.metadata->scalar_def, "default");
+                    values.emplace_back(arg.metadata->scalar_estimate, "estimate");
                 } else if (arg.raw_string == "estimate,default") {
-                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
-                    values.push_back({arg.metadata->scalar_def, "default"});
+                    values.emplace_back(arg.metadata->scalar_estimate, "estimate");
+                    values.emplace_back(arg.metadata->scalar_def, "default");
                 }
                 if (!values.empty()) {
                     bool set = false;
                     for (auto &v : values) {
-                        if (!v.first) continue;
+                        if (!v.first) {
+                            continue;
+                        }
                         info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata (" << v.second << ") as: "
                                << scalar_to_string(arg.metadata->type, *v.first);
                         arg.scalar_value = *v.first;

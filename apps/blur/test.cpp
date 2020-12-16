@@ -155,14 +155,13 @@ Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
 }
 
 int main(int argc, char **argv) {
-#ifndef HALIDE_RUNTIME_HEXAGON
-    const int width = 6408;
-    const int height = 4802;
-#else
+    const auto *md = halide_blur_metadata();
+    const bool is_hexagon = strstr(md->target, "hvx_128") || strstr(md->target, "hvx_64");
+
     // The Hexagon simulator can't allocate as much memory as the above wants.
-    const int width = 648;
-    const int height = 482;
-#endif
+    const int width = is_hexagon ? 648 : 6408;
+    const int height = is_hexagon ? 482 : 4802;
+
     Buffer<uint16_t> input(width, height);
 
     for (int y = 0; y < input.height(); y++) {
@@ -191,5 +190,6 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Success!\n");
     return 0;
 }

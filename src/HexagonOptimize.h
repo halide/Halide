@@ -5,15 +5,15 @@
  * Tools for optimizing IR for Hexagon.
  */
 
-#include "IR.h"
-#include "ModulusRemainder.h"
-#include "Scope.h"
+#include "Expr.h"
+#include "Target.h"
+
 namespace Halide {
 namespace Internal {
 
 /** Replace indirect and other loads with simple loads + vlut
  * calls. */
-Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment);
+Stmt optimize_hexagon_shuffles(const Stmt &s, int lut_alignment);
 
 /** Generate vtmpy instruction if possible */
 Stmt vtmpy_generator(Stmt s);
@@ -35,11 +35,19 @@ Stmt optimize_hexagon_instructions(Stmt s, Target t);
 /** Generate deinterleave or interleave operations, operating on
  * groups of vectors at a time. */
 //@{
-Expr native_deinterleave(Expr x);
-Expr native_interleave(Expr x);
-bool is_native_deinterleave(Expr x);
-bool is_native_interleave(Expr x);
+Expr native_deinterleave(const Expr &x);
+Expr native_interleave(const Expr &x);
+bool is_native_deinterleave(const Expr &x);
+bool is_native_interleave(const Expr &x);
 //@}
+
+std::string type_suffix(Type type, bool signed_variants = true);
+
+std::string type_suffix(const Expr &a, bool signed_variants = true);
+
+std::string type_suffix(const Expr &a, const Expr &b, bool signed_variants = true);
+
+std::string type_suffix(const std::vector<Expr> &ops, bool signed_variants = true);
 
 }  // namespace Internal
 }  // namespace Halide

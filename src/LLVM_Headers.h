@@ -1,14 +1,14 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 80
+#if LLVM_VERSION >= 100
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 8.0 or newer"
+#error "Compiling Halide requires LLVM 10.0 or newer"
 #endif
 
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
-#include <stddef.h>
+#include <cstddef>
 
 // No msvc warnings from llvm headers please
 #ifdef _MSC_VER
@@ -21,7 +21,7 @@
 #pragma clang system_header
 #endif
 
-#ifdef WITH_V8
+#if WITH_WABT
 #include <lld/Common/Driver.h>
 #endif
 
@@ -29,18 +29,23 @@
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <llvm/ADT/StringMap.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/PassTimingInfo.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
+#include <llvm/Object/ArchiveWriter.h>
+#include <llvm/Object/ObjectFile.h>
 #include <llvm/Passes/PassBuilder.h>
-#if LLVM_VERSION >= 100
 #include <llvm/Support/CodeGen.h>
-#endif
 #include <llvm/Support/DataExtractor.h>
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/FileSystem.h>
@@ -54,19 +59,10 @@
 #include <llvm/Transforms/IPO/Inliner.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Instrumentation.h>
+#include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
+#include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
-#if LLVM_VERSION >= 90
-#include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
-#endif
-#include "llvm/ADT/APFloat.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
-#include <llvm/ADT/StringMap.h>
-#include <llvm/IR/PassTimingInfo.h>
-#include <llvm/Object/ArchiveWriter.h>
-#include <llvm/Object/ObjectFile.h>
-#include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
 
 #include <llvm/Transforms/Scalar/GVN.h>
 
@@ -77,10 +73,8 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Intrinsics.h>
-#if LLVM_VERSION >= 100
 #ifdef WITH_HEXAGON
 #include <llvm/IR/IntrinsicsHexagon.h>
-#endif
 #endif
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Module.h>
@@ -119,6 +113,14 @@ inline std::string get_llvm_function_name(const llvm::Function &f) {
     return f.getName().str();
 #else
     return f.getName();
+#endif
+}
+
+inline llvm::StructType *get_llvm_struct_type_by_name(llvm::Module *module, const char *name) {
+#if LLVM_VERSION >= 120
+    return llvm::StructType::getTypeByName(module->getContext(), name);
+#else
+    return module->getTypeByName(name);
 #endif
 }
 

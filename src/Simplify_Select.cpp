@@ -20,6 +20,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
     }
 
     if (may_simplify(op->type)) {
+        int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type);
 
         // clang-format off
@@ -31,10 +32,10 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(1, x, y), x) ||
              rewrite(select(0, x, y), y) ||
              rewrite(select(x, y, y), y) ||
-             rewrite(select(x, intrin(Call::likely, y), y), true_value) ||
-             rewrite(select(x, y, intrin(Call::likely, y)), false_value) ||
-             rewrite(select(x, intrin(Call::likely_if_innermost, y), y), true_value) ||
-             rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), false_value) ||
+             rewrite(select(x, intrin(Call::likely, y), y), false_value) ||
+             rewrite(select(x, y, intrin(Call::likely, y)), true_value) ||
+             rewrite(select(x, intrin(Call::likely_if_innermost, y), y), false_value) ||
+             rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), true_value) ||
              false)) {
             return rewrite.result;
         }
@@ -42,7 +43,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(select(broadcast(x), y, z), select(x, y, z)) ||
+            (rewrite(select(broadcast(x, lanes), y, z), select(x, y, z)) ||
              rewrite(select(x != y, z, w), select(x == y, w, z)) ||
              rewrite(select(x <= y, z, w), select(y < x, w, z)) ||
              rewrite(select(x, select(y, z, w), z), select(x && !y, w, z)) ||
@@ -101,6 +102,13 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x < 0, x * y, 0), min(x, 0) * y) ||
              rewrite(select(x < 0, 0, x * y), max(x, 0) * y) ||
 
+             // Note that in the rules below we know y is not a
+             // constant because it appears on the LHS of an
+             // addition. These rules therefore trade a non-constant
+             // for a constant.
+             rewrite(select(x, y + z, y), y + select(x, z, 0)) ||
+             rewrite(select(x, y, y + z), y + select(x, 0, z)) ||
+
              (no_overflow_int(op->type) &&
               (rewrite(select(x, y * c0, c1), select(x, y, fold(c1 / c0)) * c0, c1 % c0 == 0) ||
                rewrite(select(x, c0, y * c1), select(x, fold(c0 / c1), y) * c1, c0 % c1 == 0) ||
@@ -123,7 +131,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
                rewrite(select(x, y, true), !x || y) ||
                rewrite(select(x, false, y), !x && y) ||
                rewrite(select(x, true, y), x || y))))) {
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         }
         // clang-format on
     }

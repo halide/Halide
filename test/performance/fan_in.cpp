@@ -5,8 +5,9 @@ using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as it does not support async() yet.\n");
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
 
@@ -60,5 +61,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    printf("Success!\n");
     return 0;
 }

@@ -23,8 +23,8 @@ namespace Internal {
  */
 class IRMutator {
 public:
-    IRMutator();
-    virtual ~IRMutator();
+    IRMutator() = default;
+    virtual ~IRMutator() = default;
 
     /** This is the main interface for using a mutator. Also call
      * these in your subclass to mutate sub-expressions and
@@ -69,6 +69,7 @@ protected:
     virtual Expr visit(const Call *);
     virtual Expr visit(const Let *);
     virtual Expr visit(const Shuffle *);
+    virtual Expr visit(const VectorReduce *);
 
     virtual Stmt visit(const LetStmt *);
     virtual Stmt visit(const AssertStmt *);

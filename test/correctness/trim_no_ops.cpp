@@ -52,12 +52,12 @@ int main(int argc, char **argv) {
         f(x) *= select(x > 20 && x < 30, 2, 1);
         f(x) = select(x >= 60 && x <= 100, 100 - f(x), f(x));
 
-        // There should be no selects after trim_no_ops runs
+        // There should be no selects or ifs after trim_no_ops runs
         Module m = f.compile_to_module({});
         CountConditionals s;
         m.functions().front().body.accept(&s);
         if (s.count != 0) {
-            std::cerr << "There were selects in the lowered code: \n"
+            std::cerr << "There were conditionals in the lowered code: \n"
                       << m.functions().front().body << "\n";
             return -1;
         }
@@ -179,10 +179,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Test tiled iteration on the gpuif there is support for GPU.
+    // Test tiled iteration on the gpu if there is support for GPU.
     // The gpu loop variable should not depend on outer gpu loop var.
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("Not running the GPU test because no gpu feature enabled in target.\n");
+        // TODO: split this test apart so the GPU pieces can be split appropriately
+        // printf("[SKIP] No GPU target enabled.\n");
         printf("Success!\n");
         return 0;
     }

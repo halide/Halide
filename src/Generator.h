@@ -266,6 +266,7 @@
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "ExternalCode.h"
@@ -326,7 +327,7 @@ std::vector<Expr> parameter_constraints(const Parameter &p);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE std::string enum_to_string(const std::map<std::string, T> &enum_map, const T &t) {
-    for (auto key_value : enum_map) {
+    for (const auto &key_value : enum_map) {
         if (t == key_value.second) {
             return key_value.first;
         }
@@ -464,19 +465,18 @@ protected:
     void fail_wrong_type(const char *type);
 
 private:
-    // No copy
-    GeneratorParamBase(const GeneratorParamBase &) = delete;
-    void operator=(const GeneratorParamBase &) = delete;
-    // No move
-    GeneratorParamBase(GeneratorParamBase &&) = delete;
-    void operator=(GeneratorParamBase &&) = delete;
-
     // Generator which owns this GeneratorParam. Note that this will be null
     // initially; the GeneratorBase itself will set this field when it initially
     // builds its info about params. However, since it (generally) isn't
     // appropriate for GeneratorParam<> to be declared outside of a Generator,
     // all reasonable non-testing code should expect this to be non-null.
     GeneratorBase *generator{nullptr};
+
+public:
+    GeneratorParamBase(const GeneratorParamBase &) = delete;
+    GeneratorParamBase &operator=(const GeneratorParamBase &) = delete;
+    GeneratorParamBase(GeneratorParamBase &&) = delete;
+    GeneratorParamBase &operator=(GeneratorParamBase &&) = delete;
 };
 
 // This is strictly some syntactic sugar to suppress certain compiler warnings.
@@ -766,7 +766,7 @@ public:
         if (std::is_same<T, float>::value) {
             // If the constant has no decimal point ("1")
             // we must append one before appending "f"
-            if (oss.str().find(".") == std::string::npos) {
+            if (oss.str().find('.') == std::string::npos) {
                 oss << ".";
             }
             oss << "f";
@@ -787,7 +787,9 @@ public:
         } else if (std::is_same<T, double>::value) {
             return "double";
         } else if (std::is_integral<T>::value) {
-            if (std::is_unsigned<T>::value) oss << 'u';
+            if (std::is_unsigned<T>::value) {
+                oss << "u";
+            }
             oss << "int" << (sizeof(T) * 8) << "_t";
             return oss.str();
         } else {
@@ -1010,11 +1012,11 @@ public:
  * Returns type of underlying operator+. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 + (T)0) operator+(const Other &a, const GeneratorParam<T> &b) {
+auto operator+(const Other &a, const GeneratorParam<T> &b) -> decltype(a + (T)b) {
     return a + (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, const Other &b) {
+auto operator+(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a + b) {
     return (T)a + b;
 }
 // @}
@@ -1023,11 +1025,11 @@ decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator-. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 - (T)0) operator-(const Other &a, const GeneratorParam<T> &b) {
+auto operator-(const Other &a, const GeneratorParam<T> &b) -> decltype(a - (T)b) {
     return a - (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 - (Other)0) operator-(const GeneratorParam<T> &a, const Other &b) {
+auto operator-(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a - b) {
     return (T)a - b;
 }
 // @}
@@ -1036,11 +1038,11 @@ decltype((T)0 - (Other)0) operator-(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator*. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 * (T)0) operator*(const Other &a, const GeneratorParam<T> &b) {
+auto operator*(const Other &a, const GeneratorParam<T> &b) -> decltype(a * (T)b) {
     return a * (T)b;
 }
 template<typename Other, typename T>
-decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, const Other &b) {
+auto operator*(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a * b) {
     return (T)a * b;
 }
 // @}
@@ -1049,11 +1051,11 @@ decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator/. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 / (T)1) operator/(const Other &a, const GeneratorParam<T> &b) {
+auto operator/(const Other &a, const GeneratorParam<T> &b) -> decltype(a / (T)b) {
     return a / (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, const Other &b) {
+auto operator/(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a / b) {
     return (T)a / b;
 }
 // @}
@@ -1062,11 +1064,11 @@ decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator%. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 % (T)1) operator%(const Other &a, const GeneratorParam<T> &b) {
+auto operator%(const Other &a, const GeneratorParam<T> &b) -> decltype(a % (T)b) {
     return a % (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, const Other &b) {
+auto operator%(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a % b) {
     return (T)a % b;
 }
 // @}
@@ -1075,11 +1077,11 @@ decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator>. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 > (T)1) operator>(const Other &a, const GeneratorParam<T> &b) {
+auto operator>(const Other &a, const GeneratorParam<T> &b) -> decltype(a > (T)b) {
     return a > (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, const Other &b) {
+auto operator>(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a > b) {
     return (T)a > b;
 }
 // @}
@@ -1088,11 +1090,11 @@ decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator<. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 < (T)1) operator<(const Other &a, const GeneratorParam<T> &b) {
+auto operator<(const Other &a, const GeneratorParam<T> &b) -> decltype(a < (T)b) {
     return a < (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, const Other &b) {
+auto operator<(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a < b) {
     return (T)a < b;
 }
 // @}
@@ -1101,11 +1103,11 @@ decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator>=. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 >= (T)1) operator>=(const Other &a, const GeneratorParam<T> &b) {
+auto operator>=(const Other &a, const GeneratorParam<T> &b) -> decltype(a >= (T)b) {
     return a >= (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, const Other &b) {
+auto operator>=(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a >= b) {
     return (T)a >= b;
 }
 // @}
@@ -1114,11 +1116,11 @@ decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator<=. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 <= (T)1) operator<=(const Other &a, const GeneratorParam<T> &b) {
+auto operator<=(const Other &a, const GeneratorParam<T> &b) -> decltype(a <= (T)b) {
     return a <= (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, const Other &b) {
+auto operator<=(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a <= b) {
     return (T)a <= b;
 }
 // @}
@@ -1127,11 +1129,11 @@ decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator==. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 == (T)1) operator==(const Other &a, const GeneratorParam<T> &b) {
+auto operator==(const Other &a, const GeneratorParam<T> &b) -> decltype(a == (T)b) {
     return a == (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, const Other &b) {
+auto operator==(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a == b) {
     return (T)a == b;
 }
 // @}
@@ -1140,11 +1142,11 @@ decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator!=. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 != (T)1) operator!=(const Other &a, const GeneratorParam<T> &b) {
+auto operator!=(const Other &a, const GeneratorParam<T> &b) -> decltype(a != (T)b) {
     return a != (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, const Other &b) {
+auto operator!=(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a != b) {
     return (T)a != b;
 }
 // @}
@@ -1153,15 +1155,15 @@ decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator&&. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 && (T)1) operator&&(const Other &a, const GeneratorParam<T> &b) {
+auto operator&&(const Other &a, const GeneratorParam<T> &b) -> decltype(a && (T)b) {
     return a && (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 && (Other)1) operator&&(const GeneratorParam<T> &a, const Other &b) {
+auto operator&&(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a && b) {
     return (T)a && b;
 }
 template<typename T>
-decltype((T)0 && (T)1) operator&&(const GeneratorParam<T> &a, const GeneratorParam<T> &b) {
+auto operator&&(const GeneratorParam<T> &a, const GeneratorParam<T> &b) -> decltype((T)a && (T)b) {
     return (T)a && (T)b;
 }
 // @}
@@ -1170,15 +1172,15 @@ decltype((T)0 && (T)1) operator&&(const GeneratorParam<T> &a, const GeneratorPar
  * Returns type of underlying operator||. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 || (T)1) operator||(const Other &a, const GeneratorParam<T> &b) {
+auto operator||(const Other &a, const GeneratorParam<T> &b) -> decltype(a || (T)b) {
     return a || (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 || (Other)1) operator||(const GeneratorParam<T> &a, const Other &b) {
+auto operator||(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a || b) {
     return (T)a || b;
 }
 template<typename T>
-decltype((T)0 || (T)1) operator||(const GeneratorParam<T> &a, const GeneratorParam<T> &b) {
+auto operator||(const GeneratorParam<T> &a, const GeneratorParam<T> &b) -> decltype((T)a || (T)b) {
     return (T)a || (T)b;
 }
 // @}
@@ -1194,20 +1196,20 @@ using std::max;
 using std::min;
 
 template<typename Other, typename T>
-decltype(min((Other)0, (T)1)) min_forward(const Other &a, const GeneratorParam<T> &b) {
+auto min_forward(const Other &a, const GeneratorParam<T> &b) -> decltype(min(a, (T)b)) {
     return min(a, (T)b);
 }
 template<typename Other, typename T>
-decltype(min((T)0, (Other)1)) min_forward(const GeneratorParam<T> &a, const Other &b) {
+auto min_forward(const GeneratorParam<T> &a, const Other &b) -> decltype(min((T)a, b)) {
     return min((T)a, b);
 }
 
 template<typename Other, typename T>
-decltype(max((Other)0, (T)1)) max_forward(const Other &a, const GeneratorParam<T> &b) {
+auto max_forward(const Other &a, const GeneratorParam<T> &b) -> decltype(max(a, (T)b)) {
     return max(a, (T)b);
 }
 template<typename Other, typename T>
-decltype(max((T)0, (Other)1)) max_forward(const GeneratorParam<T> &a, const Other &b) {
+auto max_forward(const GeneratorParam<T> &a, const Other &b) -> decltype(max((T)a, b)) {
     return max((T)a, b);
 }
 
@@ -1242,7 +1244,7 @@ auto max(const GeneratorParam<T> &a, const Other &b) -> decltype(Internal::Gener
 
 /** Not operator for GeneratorParam */
 template<typename T>
-decltype(!(T)0) operator!(const GeneratorParam<T> &a) {
+auto operator!(const GeneratorParam<T> &a) -> decltype(!(T)a) {
     return !(T)a;
 }
 
@@ -1311,14 +1313,14 @@ protected:
     Target get_target() const;
 
     explicit StubOutputBufferBase(const Func &f, std::shared_ptr<GeneratorBase> generator)
-        : f(f), generator(generator) {
+        : f(f), generator(std::move(generator)) {
     }
     StubOutputBufferBase() = default;
 
 public:
     Realization realize(std::vector<int32_t> sizes) {
         check_scheduled("realize");
-        return f.realize(sizes, get_target());
+        return f.realize(std::move(sizes), get_target());
     }
 
     template<typename... Args>
@@ -1351,7 +1353,7 @@ class StubOutputBuffer : public StubOutputBufferBase {
     template<typename T2>
     friend class GeneratorOutput_Buffer;
     friend class GeneratorStub;
-    explicit StubOutputBuffer(const Func &f, std::shared_ptr<GeneratorBase> generator)
+    explicit StubOutputBuffer(const Func &f, const std::shared_ptr<GeneratorBase> &generator)
         : StubOutputBufferBase(f, generator) {
     }
 
@@ -1374,13 +1376,13 @@ public:
     // *not* explicit.
     template<typename T2>
     StubInput(const StubInputBuffer<T2> &b)
-        : kind_(IOKind::Buffer), parameter_(b.parameter_) {
+        : kind_(IOKind::Buffer), parameter_(b.parameter_), func_(), expr_() {
     }
     StubInput(const Func &f)
-        : kind_(IOKind::Function), parameter_(), func_(f) {
+        : kind_(IOKind::Function), parameter_(), func_(f), expr_() {
     }
     StubInput(const Expr &e)
-        : kind_(IOKind::Scalar), parameter_(), expr_(e) {
+        : kind_(IOKind::Scalar), parameter_(), func_(), expr_(e) {
     }
 
 private:
@@ -1443,7 +1445,7 @@ public:
     const std::vector<Func> &funcs() const;
     const std::vector<Expr> &exprs() const;
 
-    virtual ~GIOBase();
+    virtual ~GIOBase() = default;
 
 protected:
     GIOBase(size_t array_size,
@@ -1495,12 +1497,11 @@ private:
     template<typename T>
     friend class GeneratorParam_Synthetic;
 
-    // No copy
+public:
     GIOBase(const GIOBase &) = delete;
-    void operator=(const GIOBase &) = delete;
-    // No move
+    GIOBase &operator=(const GIOBase &) = delete;
     GIOBase(GIOBase &&) = delete;
-    void operator=(GIOBase &&) = delete;
+    GIOBase &operator=(GIOBase &&) = delete;
 };
 
 template<>
@@ -1548,7 +1549,7 @@ protected:
         return "Input";
     }
 
-    void set_estimate_impl(Var var, Expr min, Expr extent);
+    void set_estimate_impl(const Var &var, const Expr &min, const Expr &extent);
     void set_estimates_impl(const Region &estimates);
 
 public:
@@ -1689,7 +1690,7 @@ public:
 
     Expr operator()(std::vector<Expr> args) const {
         this->check_gio_access();
-        return Func(*this)(args);
+        return Func(*this)(std::move(args));
     }
 
     template<typename T2>
@@ -1715,7 +1716,7 @@ public:
     }
 
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorInput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorInput_Buffer<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
         return set_estimate(var, min, extent);
     }
 
@@ -1730,7 +1731,7 @@ public:
         return Func(*this).in();
     }
 
-    Func in(Func other) {
+    Func in(const Func &other) {
         this->check_gio_access();
         return Func(*this).in(other);
     }
@@ -1782,6 +1783,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(ImageParam, dim)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, host_alignment)
     HALIDE_FORWARD_METHOD(ImageParam, set_host_alignment)
+    HALIDE_FORWARD_METHOD(ImageParam, store_in)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, dimensions)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, left)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, right)
@@ -1857,7 +1859,7 @@ public:
         return this->funcs().at(0)(std::forward<Args>(args)...);
     }
 
-    Expr operator()(std::vector<Expr> args) const {
+    Expr operator()(const std::vector<Expr> &args) const {
         this->check_gio_access();
         return this->funcs().at(0)(args);
     }
@@ -1879,7 +1881,7 @@ public:
     }
 
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorInput_Func<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
         return set_estimate(var, min, extent);
     }
 
@@ -1894,7 +1896,7 @@ public:
         return Func(*this).in();
     }
 
-    Func in(Func other) {
+    Func in(const Func &other) {
         this->check_gio_access();
         return Func(*this).in(other);
     }
@@ -1933,7 +1935,6 @@ protected:
     const TBase def_{TBase()};
     const Expr def_expr_;
 
-protected:
     Expr get_def_expr() const override {
         return def_expr_;
     }
@@ -2037,14 +2038,17 @@ protected:
 
     const Expr min_, max_;
 
-protected:
     void set_def_min_max() override {
         Super::set_def_min_max();
         // Don't set min/max for bool
         if (!std::is_same<TBase, bool>::value) {
             for (Parameter &p : this->parameters_) {
-                if (min_.defined()) p.set_min_value(min_);
-                if (max_.defined()) p.set_max_value(max_);
+                if (min_.defined()) {
+                    p.set_min_value(min_);
+                }
+                if (max_.defined()) {
+                    p.set_max_value(max_);
+                }
             }
         }
     }
@@ -2193,7 +2197,7 @@ protected:
 
 public:
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorOutputBase &estimate(Var var, Expr min, Expr extent) {
+    GeneratorOutputBase &estimate(const Var &var, const Expr &min, const Expr &extent) {
         this->as<Func>().set_estimate(var, min, extent);
         return *this;
     }
@@ -2396,25 +2400,34 @@ private:
 
         internal_assert(f.defined());
 
-        if (TBase::has_static_halide_type) {
-            Buffer<> other(f.output_types().at(0), nullptr, std::vector<int>(f.dimensions(), 1));
-            user_assert(T::can_convert_from(other))
-                << "Cannot assign to the Output \"" << this->name()
-                << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
-        }
-
         if (this->types_defined()) {
             const auto &my_types = this->types();
             user_assert(my_types.size() == f.output_types().size())
-                << "Output " << this->name() << " requires a Func with " << my_types.size() << " type(s) but tried to assign one with " << f.output_types().size() << " type(s)\n";
+                << "Cannot assign Func \"" << f.name()
+                << "\" to Output \"" << this->name() << "\"\n"
+                << "Output " << this->name()
+                << " is declared to have " << my_types.size() << " tuple elements"
+                << " but Func " << f.name()
+                << " has " << f.output_types().size() << " tuple elements.\n";
             for (size_t i = 0; i < my_types.size(); i++) {
                 user_assert(my_types[i] == f.output_types().at(i))
-                    << "Output " << this->name() << " should have type[" << i << "]=" << my_types[i] << " but saw type[" << i << "]=" << f.output_types().at(i) << "\n";
+                    << "Cannot assign Func \"" << f.name()
+                    << "\" to Output \"" << this->name() << "\"\n"
+                    << (my_types.size() > 1 ? "In tuple element " + std::to_string(i) + ", " : "")
+                    << "Output " << this->name()
+                    << " has declared type " << my_types[i]
+                    << " but Func " << f.name()
+                    << " has type " << f.output_types().at(i) << "\n";
             }
         }
         if (this->dims_defined()) {
             user_assert(f.dimensions() == this->dims())
-                << "Output " << this->name() << " should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
+                << "Cannot assign Func \"" << f.name()
+                << "\" to Output \"" << this->name() << "\"\n"
+                << "Output " << this->name()
+                << " has declared dimensionality " << this->dims()
+                << " but Func " << f.name()
+                << " has dimensionality " << f.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
@@ -2433,7 +2446,6 @@ protected:
         return t;
     }
 
-protected:
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t = {}, int d = -1)
         : Super(name, IOKind::Buffer, my_types(t), d) {
     }
@@ -2529,6 +2541,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, dim)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, host_alignment)
     HALIDE_FORWARD_METHOD(OutputImageParam, set_host_alignment)
+    HALIDE_FORWARD_METHOD(OutputImageParam, store_in)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, dimensions)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, left)
     HALIDE_FORWARD_METHOD_CONST(OutputImageParam, right)
@@ -2553,7 +2566,6 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-protected:
     GeneratorOutput_Func(const std::string &name)
         : Super(name, IOKind::Function, std::vector<Type>{}, -1) {
     }
@@ -2594,7 +2606,7 @@ public:
         return Super::operator[](i);
     }
 
-    GeneratorOutput_Func<T> &set_estimate(Var var, Expr min, Expr extent) {
+    GeneratorOutput_Func<T> &set_estimate(const Var &var, const Expr &min, const Expr &extent) {
         this->check_gio_access();
         internal_assert(this->exprs_.empty() && !this->funcs_.empty());
         for (Func &f : this->funcs_) {
@@ -2604,7 +2616,7 @@ public:
     }
 
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorOutput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorOutput_Func<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
         return set_estimate(var, min, extent);
     }
 
@@ -2626,7 +2638,6 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-protected:
     explicit GeneratorOutput_Arithmetic(const std::string &name)
         : Super(name, IOKind::Function, {type_of<TBase>()}, 0) {
     }
@@ -2848,7 +2859,7 @@ public:
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
                               const MachineParams &machine_params = MachineParams::generic());
-    virtual ~GeneratorContext();
+    virtual ~GeneratorContext() = default;
 
     inline Target get_target() const {
         return target;
@@ -2908,12 +2919,11 @@ protected:
         return value_tracker;
     }
 
-    // No copy
+public:
     GeneratorContext(const GeneratorContext &) = delete;
-    void operator=(const GeneratorContext &) = delete;
-    // No move
+    GeneratorContext &operator=(const GeneratorContext &) = delete;
     GeneratorContext(GeneratorContext &&) = delete;
-    void operator=(GeneratorContext &&) = delete;
+    GeneratorContext &operator=(GeneratorContext &&) = delete;
 };
 
 class NamesInterface {
@@ -2943,7 +2953,7 @@ protected:
         return Halide::cast<T>(e);
     }
     static inline Expr cast(Halide::Type t, Expr e) {
-        return Halide::cast(t, e);
+        return Halide::cast(t, std::move(e));
     }
     template<typename T>
     using GeneratorParam = Halide::GeneratorParam<T>;
@@ -3026,7 +3036,7 @@ class GeneratorParamInfo {
 public:
     friend class GeneratorBase;
 
-    GeneratorParamInfo(GeneratorBase *generator, const size_t size);
+    GeneratorParamInfo(GeneratorBase *generator, size_t size);
 
     const std::vector<Internal::GeneratorParamBase *> &generator_params() const {
         return filter_generator_params;
@@ -3041,7 +3051,7 @@ public:
 
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
-    virtual ~GeneratorBase();
+    ~GeneratorBase() override;
 
     void set_generator_param_values(const GeneratorParamsMap &params);
 
@@ -3063,7 +3073,7 @@ public:
     // Call build() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.
     Module build_module(const std::string &function_name = "",
-                        const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
+                        LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
     /**
      * Build a module that is suitable for using for gradient descent calculation in TensorFlow or PyTorch.
@@ -3103,7 +3113,7 @@ public:
 
     Realization realize(std::vector<int32_t> sizes) {
         this->check_scheduled("realize");
-        return get_pipeline().realize(sizes, get_target());
+        return get_pipeline().realize(std::move(sizes), get_target());
     }
 
     // Only enable if none of the args are Realization; otherwise we can incorrectly
@@ -3360,7 +3370,7 @@ private:
         auto *in = param_info().inputs().at(i);
         check_input_kind(in, Internal::IOKind::Function);
         check_input_is_singular(in);
-        Halide::Func f = arg;
+        const Halide::Func &f = arg;
         StubInput si(f);
         return {si};
     }
@@ -3438,12 +3448,11 @@ private:
         return {build_input(Indices, std::get<Indices>(t))...};
     }
 
-    // No copy
+public:
     GeneratorBase(const GeneratorBase &) = delete;
-    void operator=(const GeneratorBase &) = delete;
-    // No move
+    GeneratorBase &operator=(const GeneratorBase &) = delete;
     GeneratorBase(GeneratorBase &&that) = delete;
-    void operator=(GeneratorBase &&that) = delete;
+    GeneratorBase &operator=(GeneratorBase &&that) = delete;
 };
 
 class GeneratorRegistry {
@@ -3465,8 +3474,12 @@ private:
     static GeneratorRegistry &get_registry();
 
     GeneratorRegistry() = default;
+
+public:
     GeneratorRegistry(const GeneratorRegistry &) = delete;
-    void operator=(const GeneratorRegistry &) = delete;
+    GeneratorRegistry &operator=(const GeneratorRegistry &) = delete;
+    GeneratorRegistry(GeneratorRegistry &&that) = delete;
+    GeneratorRegistry &operator=(GeneratorRegistry &&that) = delete;
 };
 
 }  // namespace Internal
@@ -3665,12 +3678,11 @@ private:
     friend void ::Halide::Internal::generator_test();
     friend class ::Halide::GeneratorContext;
 
-    // No copy
+public:
     Generator(const Generator &) = delete;
-    void operator=(const Generator &) = delete;
-    // No move
+    Generator &operator=(const Generator &) = delete;
     Generator(Generator &&that) = delete;
-    void operator=(Generator &&that) = delete;
+    Generator &operator=(Generator &&that) = delete;
 };
 
 namespace Internal {
@@ -3678,17 +3690,17 @@ namespace Internal {
 class RegisterGenerator {
 public:
     RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
-        Internal::GeneratorRegistry::register_factory(registered_name, generator_factory);
+        Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
     }
 };
 
 class GeneratorStub : public NamesInterface {
 public:
     GeneratorStub(const GeneratorContext &context,
-                  GeneratorFactory generator_factory);
+                  const GeneratorFactory &generator_factory);
 
     GeneratorStub(const GeneratorContext &context,
-                  GeneratorFactory generator_factory,
+                  const GeneratorFactory &generator_factory,
                   const GeneratorParamsMap &generator_params,
                   const std::vector<std::vector<Internal::StubInput>> &inputs);
     std::vector<std::vector<Func>> generate(const GeneratorParamsMap &generator_params,

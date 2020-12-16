@@ -3,12 +3,12 @@
 // This lesson demonstrates how to use Halide to run code on a GPU using OpenCL.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_12*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_12
-// LD_LIBRARY_PATH=../bin ./lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_12
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_12
 
 // On os x:
-// g++ lesson_12*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_12
-// DYLD_LIBRARY_PATH=../bin ./lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_12
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_12
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -283,37 +283,35 @@ int main(int argc, char **argv) {
 
 // A helper function to check if OpenCL, Metal or D3D12 is present on the host machine.
 
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
 Target find_gpu_target() {
     // Start with a target suitable for the machine you're running this on.
     Target target = get_host_target();
 
-    // Uncomment the following lines to try CUDA instead:
-    // target.set_feature(Target::CUDA);
-    // return target;
+    std::vector<Target::Feature> features_to_try;
+    if (target.os == Target::Windows) {
+        // Try D3D12 first; if that fails, try OpenCL.
+        if (sizeof(void*) == 8) {
+            // D3D12Compute support is only available on 64-bit systems at present.
+            features_to_try.push_back(Target::D3D12Compute);
+        }
+        features_to_try.push_back(Target::OpenCL);
+    } else if (target.os == Target::OSX) {
+        // OS X doesn't update its OpenCL drivers, so they tend to be broken.
+        // CUDA would also be a fine choice on machines with NVidia GPUs.
+        features_to_try.push_back(Target::Metal);
+    } else {
+        features_to_try.push_back(Target::OpenCL);
+    }
+    // Uncomment the following lines to also try CUDA:
+    // features_to_try.push_back(Target::CUDA);
 
-#ifdef _WIN32
-    if (LoadLibraryA("d3d12.dll") != nullptr) {
-        target.set_feature(Target::D3D12Compute);
-    } else if (LoadLibraryA("OpenCL.dll") != nullptr) {
-        target.set_feature(Target::OpenCL);
+    for (Target::Feature f : features_to_try) {
+        Target new_target = target.with_feature(f);
+        if (host_supports_target_device(new_target)) {
+            return new_target;
+        }
     }
-#elif __APPLE__
-    // OS X doesn't update its OpenCL drivers, so they tend to be broken.
-    // CUDA would also be a fine choice on machines with NVidia GPUs.
-    if (dlopen("/System/Library/Frameworks/Metal.framework/Versions/Current/Metal", RTLD_LAZY) != NULL) {
-        target.set_feature(Target::Metal);
-    }
-#else
-    if (dlopen("libOpenCL.so", RTLD_LAZY) != NULL) {
-        target.set_feature(Target::OpenCL);
-    }
-#endif
 
+    printf("Requested GPU(s) are not supported. (Do you have the proper hardware and/or driver installed?)\n");
     return target;
 }

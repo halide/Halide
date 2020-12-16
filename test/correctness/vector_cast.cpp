@@ -26,7 +26,7 @@ template<typename T>
 bool is_type_supported(int vec_width, const Target &target) {
     DeviceAPI device = DeviceAPI::Default_GPU;
 
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (target.has_feature(Target::HVX)) {
         device = DeviceAPI::Hexagon;
     }
     return target.supports_type(type_of<T>().with_lanes(vec_width), device);
@@ -60,7 +60,7 @@ bool test(int vec_width, const Target &target) {
         Var xo, xi;
         f.gpu_tile(x, xo, xi, 64);
     } else {
-        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (target.has_feature(Target::HVX)) {
             // TODO: Non-native vector widths hang the compiler here.
             //f.hexagon();
         }
@@ -116,13 +116,13 @@ bool test_all(int vec_width, const Target &target) {
 }
 
 int main(int argc, char **argv) {
-
+// TODO: is this still relevant?
 // We don't test this on windows, because float-to-int conversions
 // on windows use _ftol2, which has its own unique calling
 // convention, and older LLVMs (e.g. pnacl) don't do it right so
 // you get clobbered registers.
 #ifdef WIN32
-    printf("Not testing on windows\n");
+    printf("[SKIP] float-to-int conversions don't work with older LLVMs on Windows\n");
     return 0;
 #endif
 
@@ -131,7 +131,12 @@ int main(int argc, char **argv) {
     // We only test power-of-two vector widths for now
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
-    for (int vec_width = 1; vec_width <= 64; vec_width *= 2) {
+    int vec_width_max = 64;
+    if (target.arch == Target::WebAssembly) {
+        // The wasm jit is very slow, so shorten this test here.
+        vec_width_max = 16;
+    }
+    for (int vec_width = 1; vec_width <= vec_width_max; vec_width *= 2) {
         futures.push_back(pool.async([=]() {
             bool success = true;
             success = success && test_all<float>(vec_width, target);

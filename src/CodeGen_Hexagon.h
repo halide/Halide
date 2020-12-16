@@ -33,7 +33,7 @@ protected:
                                          std::vector<Type> arg_types,
                                          int flags);
 
-    int is_hvx_v65_or_later() {
+    int is_hvx_v65_or_later() const {
         return (isa_version >= 65);
     }
 
@@ -41,21 +41,10 @@ protected:
 
     /** Nodes for which we want to emit specific hexagon intrinsics */
     ///@{
-    void visit(const Add *) override;
-    void visit(const Sub *) override;
-    void visit(const Broadcast *) override;
-    void visit(const Div *) override;
     void visit(const Max *) override;
     void visit(const Min *) override;
-    void visit(const Cast *) override;
     void visit(const Call *) override;
     void visit(const Mul *) override;
-    void visit(const GE *) override;
-    void visit(const LE *) override;
-    void visit(const LT *) override;
-    void visit(const NE *) override;
-    void visit(const GT *) override;
-    void visit(const EQ *) override;
     void visit(const Select *) override;
     void visit(const Allocate *) override;
     ///@}

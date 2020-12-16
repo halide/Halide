@@ -19,6 +19,12 @@ void simple_version(float *A, float *B, float *C, int width, int stride) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     const int matrix_size = 992;
 
     ImageParam A(type_of<float>(), 2);

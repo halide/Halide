@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     Buffer<double> result(100);
 
     const halide_filter_metadata_t *m = HalideTest::AnotherNamespace::cxx_mangling_metadata();
-    assert(m != NULL);
+    assert(m != nullptr);
     assert(m->version == halide_filter_metadata_t::VERSION);
     printf("Name is: %s\n", m->name);
     assert(strcmp(m->name, "cxx_mangling") == 0);
@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
 
     printf("HalideTest::cxx_mangling is at: %p\n", (void *)f);
 #else
+    // TODO: split this up and link CUDA
     printf("TEST_CUDA is disabled, skipping cxx_mangling_gpu test.\n");
 #endif
 

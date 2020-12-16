@@ -1,15 +1,41 @@
-add_executable(bgu_filter filter.cpp)
-halide_use_image_io(bgu_filter)
+cmake_minimum_required(VERSION 3.16)
+project(bgu)
 
-halide_generator(bgu.generator SRCS bgu_generator.cpp)
-foreach(AUTO_SCHEDULE false true)
-    if(${AUTO_SCHEDULE})
-        set(LIB bgu_auto_schedule)
-    else()
-        set(LIB bgu)
-    endif()
-    halide_library_from_generator(${LIB}
-                                  GENERATOR bgu.generator
-                                  GENERATOR_ARGS auto_schedule=${AUTO_SCHEDULE})
-    target_link_libraries(bgu_filter PRIVATE ${LIB})
-endforeach()
+enable_testing()
+
+# Set up language settings
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_CXX_EXTENSIONS NO)
+
+# Find Halide
+find_package(Halide REQUIRED)
+
+# Generator
+add_executable(bgu.generator bgu_generator.cpp)
+target_link_libraries(bgu.generator PRIVATE Halide::Generator Halide::Tools)
+
+# Filters
+add_halide_library(bgu FROM bgu.generator)
+add_halide_library(bgu_auto_schedule FROM bgu.generator
+                   GENERATOR bgu
+                   AUTOSCHEDULER Halide::Mullapudi2016)
+
+# Main executable
+add_executable(bgu_filter filter.cpp)
+target_link_libraries(bgu_filter
+                      PRIVATE
+                      Halide::ImageIO
+                      bgu
+                      bgu_auto_schedule)
+
+# Test that the app actually works!
+set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
+if (EXISTS ${IMAGE})
+    configure_file(${IMAGE} rgb.png COPYONLY)
+    add_test(NAME bgu_filter COMMAND bgu_filter rgb.png out.png)
+    set_tests_properties(bgu_filter PROPERTIES
+                         LABELS bgu
+                         PASS_REGULAR_EXPRESSION "Success!"
+                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+endif ()

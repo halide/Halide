@@ -1,7 +1,7 @@
 #ifndef HALIDE_SIMPLIFY_CORRELATED_DIFFERENCES
 #define HALIDE_SIMPLIFY_CORRELATED_DIFFERENCES
 
-#include "IR.h"
+#include "Expr.h"
 
 /** \file
  * Defines a simplification pass for handling differences of correlated expressions.
@@ -35,8 +35,16 @@ namespace Internal {
  * monotonicity it substitutes, solves, and attempts to generally
  * simplify as aggressively as possible to try to cancel out the
  * repeated dependence on the loop var. The same is done for addition
- * nodes with arguments of opposite monotonicity. Only index
- * expressions outside of Stores/Provides are considered.
+ * nodes with arguments of opposite monotonicity.
+ *
+ * Bounds inference is particularly sensitive to these false
+ * dependencies, but removing false dependencies also helps other
+ * lowering passes. E.g. if this simplification means a value no
+ * longer depends on a loop variable, it can remain scalar during
+ * vectorization of that loop, or we can lift it out as a loop
+ * invariant, or it might avoid some of the complex paths in GPU
+ * codegen that trigger when values depend on the block index
+ * (e.g. warp shuffles).
  *
  * This pass is safe to use on code with repeated instances of the
  * same variable name (it must be, because we want to run it before

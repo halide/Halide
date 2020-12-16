@@ -132,8 +132,54 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
         }
     } else {
         llvm::Type *element_type = llvm_type_of(c, t.element_of());
-        return VectorType::get(element_type, t.lanes());
+        return get_vector_type(element_type, t.lanes());
     }
+}
+
+#if LLVM_VERSION >= 120
+int get_vector_num_elements(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        auto *vt = dyn_cast<llvm::FixedVectorType>(t);
+        internal_assert(vt) << "Called get_vector_num_elements on a scalable vector type\n";
+        return vt->getNumElements();
+    } else {
+        return 1;
+    }
+}
+#else
+int get_vector_num_elements(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        return dyn_cast<llvm::VectorType>(t)->getNumElements();
+    } else {
+        return 1;
+    }
+}
+#endif
+
+llvm::Type *get_vector_element_type(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        return dyn_cast<llvm::VectorType>(t)->getElementType();
+    } else {
+        return t;
+    }
+}
+
+#if LLVM_VERSION >= 120
+const llvm::ElementCount element_count(int e) {
+    return llvm::ElementCount::getFixed(e);
+}
+#elif LLVM_VERSION >= 110
+const llvm::ElementCount element_count(int e) {
+    return llvm::ElementCount(e, /*scalable*/ false);
+}
+#else
+int element_count(int e) {
+    return e;
+}
+#endif
+
+llvm::Type *get_vector_type(llvm::Type *t, int n) {
+    return VectorType::get(t, element_count(n));
 }
 
 // Returns true if the given function name is one of the Halide runtime
@@ -225,8 +271,9 @@ bool can_allocation_fit_on_stack(int64_t size) {
     return (size <= 1024 * 16);
 }
 
-Expr lower_int_uint_div(Expr a, Expr b) {
+Expr lower_int_uint_div(const Expr &a, const Expr &b) {
     // Detect if it's a small int division
+    internal_assert(a.type() == b.type());
     const int64_t *const_int_divisor = as_const_int(b);
     const uint64_t *const_uint_divisor = as_const_uint(b);
 
@@ -298,7 +345,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
 
         internal_assert(method != 0)
             << "method 0 division is for powers of two and should have been handled elsewhere\n";
-        Expr num = a;
+        const Expr &num = a;
 
         // Widen, multiply, narrow
         Expr mult = make_const(num.type(), multiplier);
@@ -322,7 +369,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
     }
 }
 
-Expr lower_int_uint_mod(Expr a, Expr b) {
+Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
     // Detect if it's a small int modulus
     const int64_t *const_int_divisor = as_const_int(b);
     const uint64_t *const_uint_divisor = as_const_uint(b);
@@ -354,6 +401,65 @@ Expr lower_int_uint_mod(Expr a, Expr b) {
     }
 }
 
+std::pair<Expr, Expr> unsigned_long_div_mod_round_to_zero(Expr &num, const Expr &den,
+                                                          const uint64_t *upper_bound) {
+    internal_assert(num.type() == den.type());
+    internal_assert(num.type().is_uint());
+    Type ty = num.type();
+    Expr q = make_zero(ty);
+    Expr leading_zeros = cast(ty, count_leading_zeros(den));
+    // Each iteration of the loop below checks for a bit in the result.
+    const int times = ty.bits();
+    int start = 1;
+    if (upper_bound) {
+        // Set start to times - (index of most significant bit in max_val)
+        // as for each iteration:
+        //     (1 << shift) <= upper_bound
+        start = times;
+        uint64_t max_val = *upper_bound;
+        while (max_val >>= 1) {
+            --start;
+        }
+        debug(1) << "Max value for long division: " << *upper_bound
+                 << ". Evaluate only first " << 1 + times - start << " bits.\n";
+    }
+    Expr r = num;
+    for (int i = start; i <= times; i++) {
+        // Check if the bit at 'shift' index should be set in the result.
+        int shift = times - i;
+        Expr shift_expr = make_const(ty, shift);
+        Expr new_r = r - (den << shift_expr);
+        // Don't drop any set bits from den after shift. The bit is set if
+        // den << shift is no more than remainder.
+        Expr bit_set = ((shift_expr <= leading_zeros) && r >= (den << shift_expr));
+        // Update the  and the quotient.
+        r = select(bit_set, new_r, r);
+        q = select(bit_set, make_const(ty, uint64_t(1) << shift) | q, q);
+    }
+    return {q, r};
+}
+
+std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &num, const Expr &den,
+                                                 const uint64_t *max_abs) {
+    debug(1) << "Using long div: (num: " << num << "); (den: " << den << ")\n";
+    internal_assert(num.type() == den.type());
+    Expr abs_num = (num.type().is_int()) ? abs(num) : num;
+    Expr abs_den = (den.type().is_int()) ? abs(den) : den;
+    std::pair<Expr, Expr> qr = unsigned_long_div_mod_round_to_zero(abs_num, abs_den, max_abs);
+    Expr q = qr.first;
+    Expr r = qr.second;
+    // Correct the signs for quotient and remainder for signed integer division.
+    if (num.type().is_int()) {
+        Expr num_neg = num >> make_const(num.type(), (num.type().bits() - 1));
+        Expr den_neg = den >> make_const(num.type(), (num.type().bits() - 1));
+        q = cast(num.type(), q) * ((num_neg ^ den_neg) | 1);
+        r = cast(num.type(), r) * (num_neg | 1);
+    }
+    q = simplify(common_subexpression_elimination(q));
+    r = simplify(common_subexpression_elimination(r));
+    return {q, r};
+}
+
 Expr lower_euclidean_div(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
 
@@ -362,12 +468,12 @@ Expr lower_euclidean_div(Expr a, Expr b) {
     if (a.type().is_uint()) {
         // IROperator's div_round_to_zero will replace this with a / b for
         // unsigned ops, so create the intrinsic directly.
-        Expr b_is_zero = (b == 0);
-        if (!can_prove(!b_is_zero)) {
-            b = b | cast(a.type(), b_is_zero);
+        Expr b_is_const_zero = (b == 0);
+        if (!can_prove(!b_is_const_zero)) {
+            b = b | cast(a.type(), b_is_const_zero);
         }
         q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
-        q = select(b_is_zero, 0, q);
+        q = select(b_is_const_zero, 0, q);
     } else {
         internal_assert(a.type().is_int());
 
@@ -428,12 +534,12 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     Expr q;
 
     if (a.type().is_uint()) {
-        Expr b_is_zero = (b == 0);
-        if (!can_prove(!b_is_zero)) {
-            b = b | cast(a.type(), b_is_zero);
+        Expr b_is_const_zero = (b == 0);
+        if (!can_prove(!b_is_const_zero)) {
+            b = b | cast(a.type(), b_is_const_zero);
         }
         q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::Intrinsic);
-        q = select(b_is_zero, make_zero(a.type()), q);
+        q = select(b_is_const_zero, make_zero(a.type()), q);
     } else {
         internal_assert(a.type().is_int());
 
@@ -475,8 +581,8 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     return q;
 }
 
-Expr lower_signed_shift_left(Expr a, Expr b) {
-    assert(b.type().is_int());
+Expr lower_signed_shift_left(const Expr &a, const Expr &b) {
+    internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
         Type t = UInt(a.type().bits(), a.type().lanes());
@@ -497,8 +603,8 @@ Expr lower_signed_shift_left(Expr a, Expr b) {
     }
 }
 
-Expr lower_signed_shift_right(Expr a, Expr b) {
-    assert(b.type().is_int());
+Expr lower_signed_shift_right(const Expr &a, const Expr &b) {
+    internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
         Type t = UInt(a.type().bits(), a.type().lanes());
@@ -517,91 +623,6 @@ Expr lower_signed_shift_right(Expr a, Expr b) {
         Expr val = select(b >= 0, a >> b_unsigned, a << b_unsigned);
         return simplify(common_subexpression_elimination(val));
     }
-}
-
-namespace {
-
-// This mutator rewrites predicated loads and stores as unpredicated
-// loads/stores with explicit conditions, scalarizing if necessary.
-class UnpredicateLoadsStores : public IRMutator {
-    Expr visit(const Load *op) override {
-        if (is_one(op->predicate)) {
-            return IRMutator::visit(op);
-        }
-
-        Expr predicate = mutate(op->predicate);
-        Expr index = mutate(op->index);
-        Expr condition;
-
-        if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Expr unpredicated_load = Load::make(op->type, op->name, index, op->image, op->param,
-                                                const_true(op->type.lanes()), op->alignment);
-            return Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
-                              Call::PureIntrinsic);
-        } else {
-            string index_name = "scalarized_load_index";
-            Expr index_var = Variable::make(index.type(), index_name);
-            string predicate_name = "scalarized_load_predicate";
-            Expr predicate_var = Variable::make(predicate.type(), predicate_name);
-
-            vector<Expr> lanes;
-            vector<int> ramp;
-            for (int i = 0; i < op->type.lanes(); i++) {
-                Expr idx_i = Shuffle::make({index_var}, {i});
-                Expr pred_i = Shuffle::make({predicate_var}, {i});
-                Expr unpredicated_load = Load::make(op->type.element_of(), op->name, idx_i, op->image, op->param,
-                                                    const_true(), ModulusRemainder());
-                lanes.push_back(Call::make(op->type.element_of(), Call::if_then_else, {pred_i, unpredicated_load, make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
-                ramp.push_back(i);
-            }
-            Expr expr = Shuffle::make(lanes, ramp);
-            expr = Let::make(predicate_name, predicate, expr);
-            return Let::make(index_name, index, expr);
-        }
-    }
-
-    Stmt visit(const Store *op) override {
-        if (is_one(op->predicate)) {
-            return IRMutator::visit(op);
-        }
-
-        Expr predicate = mutate(op->predicate);
-        Expr value = mutate(op->value);
-        Expr index = mutate(op->index);
-
-        if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), op->alignment);
-            return IfThenElse::make(scalar_pred->value, unpredicated_store);
-        } else {
-            string value_name = "scalarized_store_value";
-            Expr value_var = Variable::make(value.type(), value_name);
-            string index_name = "scalarized_store_index";
-            Expr index_var = Variable::make(index.type(), index_name);
-            string predicate_name = "scalarized_store_predicate";
-            Expr predicate_var = Variable::make(predicate.type(), predicate_name);
-
-            vector<Stmt> lanes;
-            for (int i = 0; i < predicate.type().lanes(); i++) {
-                Expr pred_i = Shuffle::make({predicate_var}, {i});
-                Expr value_i = Shuffle::make({value_var}, {i});
-                Expr index_i = Shuffle::make({index_var}, {i});
-                Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true(), ModulusRemainder()));
-                lanes.push_back(lane);
-            }
-            Stmt stmt = Block::make(lanes);
-            stmt = LetStmt::make(predicate_name, predicate, stmt);
-            stmt = LetStmt::make(value_name, value, stmt);
-            return LetStmt::make(index_name, index, stmt);
-        }
-    }
-
-    using IRMutator::visit;
-};
-
-}  // namespace
-
-Stmt unpredicate_loads_stores(Stmt s) {
-    return UnpredicateLoadsStores().mutate(s);
 }
 
 bool get_md_bool(llvm::Metadata *value, bool &result) {
@@ -695,7 +716,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 
     const llvm::Target *llvm_target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
     if (!llvm_target) {
-        std::cout << error_string << std::endl;
+        std::cout << error_string << "\n";
         llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
     }
     auto triple = llvm::Triple(module.getTargetTriple());
@@ -709,15 +730,14 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
+    bool use_large_code_model = false;
+    get_md_bool(module.getModuleFlag("halide_use_large_code_model"), use_large_code_model);
+
     auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 mcpu, mattrs,
                                                 options,
                                                 use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
-#ifdef HALIDE_USE_CODEMODEL_LARGE
-                                                llvm::CodeModel::Large,
-#else
-                                                llvm::CodeModel::Small,
-#endif
+                                                use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
                                                 llvm::CodeGenOpt::Aggressive);
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
@@ -736,9 +756,10 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
         if (GV->getName() != "llvm.embedded.module" &&
-            GV->getName() != "llvm.cmdline")
+            GV->getName() != "llvm.cmdline") {
             used_array.push_back(
                 ConstantExpr::getPointerBitCastOrAddrSpaceCast(GV, used_element_type));
+        }
     }
     if (used) {
         used->eraseFromParent();

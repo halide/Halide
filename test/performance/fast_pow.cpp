@@ -19,6 +19,12 @@ extern "C" DLLEXPORT float pow_ref(float x, float y) {
 HalideExtern_2(float, pow_ref, float, float);
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     Func f, g, h;
     Var x, y;
 
@@ -94,6 +100,5 @@ int main(int argc, char **argv) {
     }
 
     printf("Success!\n");
-
     return 0;
 }

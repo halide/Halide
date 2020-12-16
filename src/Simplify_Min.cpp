@@ -25,9 +25,21 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
     // Early out when the bounds tells us one side or the other is smaller
     if (a_bounds.max_defined && b_bounds.min_defined && a_bounds.max <= b_bounds.min) {
+        if (const Call *call = a.as<Call>()) {
+            if (call->is_intrinsic(Call::likely) ||
+                call->is_intrinsic(Call::likely_if_innermost)) {
+                return call->args[0];
+            }
+        }
         return a;
     }
     if (b_bounds.max_defined && a_bounds.min_defined && b_bounds.max <= a_bounds.min) {
+        if (const Call *call = b.as<Call>()) {
+            if (call->is_intrinsic(Call::likely) ||
+                call->is_intrinsic(Call::likely_if_innermost)) {
+                return call->args[0];
+            }
+        }
         return b;
     }
 
@@ -69,14 +81,16 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(max(y, x), x), b) ||
              rewrite(min(max(x, c0), c1), b, c1 <= c0) ||
 
-             rewrite(min(intrin(Call::likely, x), x), a) ||
-             rewrite(min(x, intrin(Call::likely, x)), b) ||
-             rewrite(min(intrin(Call::likely_if_innermost, x), x), a) ||
-             rewrite(min(x, intrin(Call::likely_if_innermost, x)), b) ||
+             rewrite(min(intrin(Call::likely, x), x), b) ||
+             rewrite(min(x, intrin(Call::likely, x)), a) ||
+             rewrite(min(intrin(Call::likely_if_innermost, x), x), b) ||
+             rewrite(min(x, intrin(Call::likely_if_innermost, x)), a) ||
 
              (no_overflow(op->type) &&
-              (rewrite(min(ramp(x, y), broadcast(z)), a, can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
-               rewrite(min(ramp(x, y), broadcast(z)), b, can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
+              (rewrite(min(ramp(x, y, lanes), broadcast(z, lanes)), a,
+                       can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
+               rewrite(min(ramp(x, y, lanes), broadcast(z, lanes)), b,
+                       can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
                // Compare x to a stair-step function in x
                rewrite(min(((x + c0)/c1)*c1 + c2, x), b, c1 > 0 && c0 + c2 >= c1 - 1) ||
                rewrite(min(x, ((x + c0)/c1)*c1 + c2), a, c1 > 0 && c0 + c2 >= c1 - 1) ||
@@ -104,9 +118,8 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(min(x, y), min(z, x)), min(min(y, z), x)) ||
              rewrite(min(min(y, x), min(z, x)), min(min(y, z), x)) ||
              rewrite(min(min(x, y), min(z, w)), min(min(min(x, y), z), w)) ||
-             rewrite(min(broadcast(x), broadcast(y)), broadcast(min(x, y), lanes)) ||
-             rewrite(min(broadcast(x), ramp(y, z)), min(b, a)) ||
-             rewrite(min(min(x, broadcast(y)), broadcast(z)), min(x, broadcast(min(y, z), lanes))) ||
+             rewrite(min(broadcast(x, c0), broadcast(y, c0)), broadcast(min(x, y), c0)) ||
+             rewrite(min(min(x, broadcast(y, c0)), broadcast(z, c0)), min(x, broadcast(min(y, z), c0))) ||
              rewrite(min(max(x, y), max(x, z)), max(x, min(y, z))) ||
              rewrite(min(max(x, y), max(z, x)), max(x, min(y, z))) ||
              rewrite(min(max(y, x), max(x, z)), max(min(y, z), x)) ||
@@ -117,6 +130,12 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
              // Canonicalize a clamp
              rewrite(min(max(x, c0), c1), max(min(x, c1), c0), c0 <= c1) ||
+
+             rewrite(min(x, select(x == c0, c1, x)), select(x == c0, c1, x), c1 < c0) ||
+             rewrite(min(x, select(x == c0, c1, x)), x, c0 <= c1) ||
+             rewrite(min(select(x == c0, c1, x), c2), min(x, c2), (c2 <= c0) && (c2 <= c1)) ||
+             rewrite(min(select(x == c0, c1, x), x), select(x == c0, c1, x), c1 < c0) ||
+             rewrite(min(select(x == c0, c1, x), x), x, c0 <= c1) ||
 
              (no_overflow(op->type) &&
               (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
@@ -174,14 +193,14 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min(y - x, z - x), min(y, z) - x) ||
                rewrite(min(x - y, x - z), x - max(y, z)) ||
 
-               rewrite(min(x, x - y), x - max(0, y)) ||
-               rewrite(min(x - y, x), x - max(0, y)) ||
-               rewrite(min(x, (x - y) + z), x + min(0, z - y)) ||
-               rewrite(min(x, z + (x - y)), x + min(0, z - y)) ||
-               rewrite(min(x, (x - y) - z), x - max(0, y + z)) ||
-               rewrite(min((x - y) + z, x), min(0, z - y) + x) ||
-               rewrite(min(z + (x - y), x), min(0, z - y) + x) ||
-               rewrite(min((x - y) - z, x), x - max(0, y + z)) ||
+               rewrite(min(x, x - y), x - max(y, 0)) ||
+               rewrite(min(x - y, x), x - max(y, 0)) ||
+               rewrite(min(x, (x - y) + z), x + min(z - y, 0)) ||
+               rewrite(min(x, z + (x - y)), x + min(z - y, 0)) ||
+               rewrite(min(x, (x - y) - z), x - max(y + z, 0)) ||
+               rewrite(min((x - y) + z, x), min(z - y, 0) + x) ||
+               rewrite(min(z + (x - y), x), min(z - y, 0) + x) ||
+               rewrite(min((x - y) - z, x), x - max(y + z, 0)) ||
 
                rewrite(min(x * c0, c1), min(x, fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
                rewrite(min(x * c0, c1), max(x, fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
@@ -206,9 +225,15 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
                rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
 
-               rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))))))) {
+               rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))) ||
 
-            return mutate(std::move(rewrite.result), bounds);
+               // Required for nested GuardWithIf tilings
+               rewrite(min((min(((y + c0)/c1), x)*c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1) ||
+               rewrite(min((min(((y + c0)/c1), x)*c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1) ||
+
+               false )))) {
+
+            return mutate(rewrite.result, bounds);
         }
         // clang-format on
     }

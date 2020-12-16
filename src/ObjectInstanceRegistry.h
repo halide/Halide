@@ -9,8 +9,8 @@
  * if you are compiling with C++11 enabled.
  */
 
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 
 #include <map>
 #include <mutex>
@@ -69,14 +69,12 @@ private:
     static ObjectInstanceRegistry &get_registry();
 
     struct InstanceInfo {
-        void *subject_ptr;  // May be different from the this_ptr in the key
-        size_t size;        // May be 0 for params
-        Kind kind;
-        bool registered_for_introspection;
+        void *subject_ptr = nullptr;  // May be different from the this_ptr in the key
+        size_t size = 0;              // May be 0 for params
+        Kind kind = Invalid;
+        bool registered_for_introspection = false;
 
-        InstanceInfo()
-            : subject_ptr(nullptr), size(0), kind(Invalid), registered_for_introspection(false) {
-        }
+        InstanceInfo() = default;
         InstanceInfo(size_t size, Kind kind, void *subject_ptr, bool registered_for_introspection)
             : subject_ptr(subject_ptr), size(size), kind(kind), registered_for_introspection(registered_for_introspection) {
         }
@@ -86,7 +84,12 @@ private:
     std::map<uintptr_t, InstanceInfo> instances;
 
     ObjectInstanceRegistry() = default;
-    ObjectInstanceRegistry(ObjectInstanceRegistry &rhs) = delete;
+
+public:
+    ObjectInstanceRegistry(const ObjectInstanceRegistry &) = delete;
+    ObjectInstanceRegistry &operator=(const ObjectInstanceRegistry &) = delete;
+    ObjectInstanceRegistry(ObjectInstanceRegistry &&) = delete;
+    ObjectInstanceRegistry &operator=(ObjectInstanceRegistry &&) = delete;
 };
 
 }  // namespace Internal

@@ -37,7 +37,6 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
         }
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
-        const int lanes = op->type.lanes();
 
         if (rewrite(c0 + c1, fold(c0 + c1)) ||
             rewrite(IRMatcher::Overflow() + x, a) ||
@@ -50,21 +49,22 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
         // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(x + x, x * 2) ||
-             rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w, lanes)) ||
-             rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y, lanes)) ||
-             rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
+             rewrite(ramp(x, y, c0) + ramp(z, w, c0), ramp(x + z, y + w, c0)) ||
+             rewrite(ramp(x, y, c0) + broadcast(z, c0), ramp(x + z, y, c0)) ||
+             rewrite(broadcast(x, c0) + broadcast(y, c0), broadcast(x + y, c0)) ||
+             rewrite(broadcast(x, c0) + broadcast(y, c1), broadcast(x + broadcast(y, fold(c1/c0)), c0), c1 % c0 == 0) ||
+             rewrite(broadcast(y, c1) + broadcast(x, c0), broadcast(x + broadcast(y, fold(c1/c0)), c0), c1 % c0 == 0) ||
+
+             rewrite((x + broadcast(y, c0)) + broadcast(z, c0), x + broadcast(y + z, c0)) ||
+             rewrite((x - broadcast(y, c0)) + broadcast(z, c0), x + broadcast(z - y, c0)) ||
              rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
              rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
-             rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
-             rewrite(select(x, c0, y) + c2, select(x, fold(c0 + c2), y + c2)) ||
 
-             rewrite((select(x, y, z) + w) + select(x, u, v), select(x, y + u, z + v) + w) ||
-             rewrite((w + select(x, y, z)) + select(x, u, v), select(x, y + u, z + v) + w) ||
+             rewrite(ramp(broadcast(x, c0), y, c1) + broadcast(z, c2), ramp(broadcast(x + z, c0), y, c1), c2 == c0 * c1) ||
+             rewrite(ramp(ramp(x, y, c0), z, c1) + broadcast(w, c2), ramp(ramp(x + w, y, c0), z, c1), c2 == c0 * c1) ||
              rewrite(select(x, y, z) + (select(x, u, v) + w), select(x, y + u, z + v) + w) ||
              rewrite(select(x, y, z) + (w + select(x, u, v)), select(x, y + u, z + v) + w) ||
-             rewrite((select(x, y, z) - w) + select(x, u, v), select(x, y + u, z + v) - w) ||
              rewrite(select(x, y, z) + (select(x, u, v) - w), select(x, y + u, z + v) - w) ||
-             rewrite((w - select(x, y, z)) + select(x, u, v), select(x, u - y, v - z) + w) ||
              rewrite(select(x, y, z) + (w - select(x, u, v)), select(x, y - u, z - v) + w) ||
 
              rewrite((x + c0) + c1, x + fold(c0 + c1)) ||
@@ -84,12 +84,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(x + (c0 - y), (x - y) + c0) ||
              rewrite((x - y) + (y - z), x - z) ||
              rewrite((x - y) + (z - x), z - y) ||
-             rewrite(x + y*c0, x - y*(-c0), c0 < 0 && -c0 > 0) ||
 
-             rewrite(x + (y*c0 - z), x - y*(-c0) - z, c0 < 0 && -c0 > 0) ||
-             rewrite((y*c0 - z) + x, x - y*(-c0) - z, c0 < 0 && -c0 > 0) ||
-
-             rewrite(x*c0 + y, y - x*(-c0), c0 < 0 && -c0 > 0 && !is_const(y)) ||
              rewrite(x*y + z*y, (x + z)*y) ||
              rewrite(x*y + y*z, (x + z)*y) ||
              rewrite(y*x + z*y, y*(x + z)) ||
@@ -126,23 +121,49 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite(max(x, y + c0) + c1, max(x + c1, y), c0 + c1 == 0) ||
                rewrite(max(y + c0, x) + c1, max(y, x + c1), c0 + c1 == 0) ||
                rewrite(max(x, y) + min(x, y), x + y) ||
-               rewrite(max(x, y) + min(y, x), x + y))) ||
+               rewrite(max(x, y) + min(y, x), x + y) ||
+
+               rewrite(min(x, y + (z*c0)) + (z*c1), min(x + (z*c1), y), (c0 + c1) == 0) ||
+               rewrite(min(x, (y*c0) + z) + (y*c1), min(x + (y*c1), z), (c0 + c1) == 0) ||
+               rewrite(min(x, y*c0) + (y*c1), min(x + (y*c1), 0), (c0 + c1) == 0) ||
+               rewrite(min(x + (y*c0), z) + (y*c1), min((y*c1) + z, x), (c0 + c1) == 0) ||
+               rewrite(min((x*c0) + y, z) + (x*c1), min(y, (x*c1) + z), (c0 + c1) == 0) ||
+               rewrite(min(x*c0, y) + (x*c1), min((x*c1) + y, 0), (c0 + c1) == 0) ||
+               rewrite(max(x, y + (z*c0)) + (z*c1), max(x + (z*c1), y), (c0 + c1) == 0) ||
+               rewrite(max(x, (y*c0) + z) + (y*c1), max(x + (y*c1), z), (c0 + c1) == 0) ||
+               rewrite(max(x, y*c0) + (y*c1), max(x + (y*c1), 0), (c0 + c1) == 0) ||
+               rewrite(max(x + (y*c0), z) + (y*c1), max(x, (y*c1) + z), (c0 + c1) == 0) ||
+               rewrite(max((x*c0) + y, z) + (x*c1), max((x*c1) + z, y), (c0 + c1) == 0) ||
+               rewrite(max(x*c0, y) + (x*c1), max((x*c1) + y, 0), (c0 + c1) == 0) ||
+
+               false)) ||
              (no_overflow_int(op->type) &&
-              (rewrite((x/c0)*c0 + x%c0, x, c0 != 0) ||
-               rewrite((z + x/c0)*c0 + x%c0, z*c0 + x, c0 != 0) ||
-               rewrite((x/c0 + z)*c0 + x%c0, x + z*c0, c0 != 0) ||
-               rewrite(x%c0 + ((x/c0)*c0 + z), x + z, c0 != 0) ||
-               rewrite(x%c0 + ((x/c0)*c0 - z), x - z, c0 != 0) ||
-               rewrite(x%c0 + (z + (x/c0)*c0), x + z, c0 != 0) ||
-               rewrite((x/c0)*c0 + (x%c0 + z), x + z, c0 != 0) ||
-               rewrite((x/c0)*c0 + (x%c0 - z), x - z, c0 != 0) ||
-               rewrite((x/c0)*c0 + (z + x%c0), x + z, c0 != 0) ||
+              (rewrite((x*(y/x)) + (y % x), select(x == 0, 0, y)) ||
+               rewrite(((x/y)*y) + (x % y), select(y == 0, 0, x)) ||
+               rewrite(w*(z + x/w) + x%w, select(w == 0, 0, z*w + x)) ||
+               rewrite((z + x/w)*w + x%w, select(w == 0, 0, z*w + x)) ||
+               rewrite(w*(x/w + z) + x%w, select(w == 0, 0, x + z*w)) ||
+               rewrite((x/w + z)*w + x%w, select(w == 0, 0, x + z*w)) ||
+               rewrite(x%w + (w*(x/w) + z), select(w == 0, 0, x) + z) ||
+               rewrite(x%w + ((x/w)*w + z), select(w == 0, 0, x) + z) ||
+               rewrite(x%w + (w*(x/w) - z), select(w == 0, 0, x) - z) ||
+               rewrite(x%w + ((x/w)*w - z), select(w == 0, 0, x) - z) ||
+               rewrite(x%w + (z + w*(x/w)), select(w == 0, 0, x) + z) ||
+               rewrite(x%w + (z + (x/w)*w), select(w == 0, 0, x) + z) ||
+               rewrite(w*(x/w) + (x%w + z), select(w == 0, 0, x) + z) ||
+               rewrite((x/w)*w + (x%w + z), select(w == 0, 0, x) + z) ||
+               rewrite(w*(x/w) + (x%w - z), select(w == 0, 0, x) - z) ||
+               rewrite((x/w)*w + (x%w - z), select(w == 0, 0, x) - z) ||
+               rewrite(w*(x/w) + (z + x%w), select(w == 0, 0, x) + z) ||
+               rewrite((x/w)*w + (z + x%w), select(w == 0, 0, x) + z) ||
                rewrite(x/2 + x%2, (x + 1) / 2) ||
 
                rewrite(x + ((c0 - x)/c1)*c1, c0 - ((c0 - x) % c1), c1 > 0) ||
                rewrite(x + ((c0 - x)/c1 + y)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
-               rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0))))) {
-            return mutate(std::move(rewrite.result), bounds);
+               rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
+
+               false)))) {
+            return mutate(rewrite.result, bounds);
         }
         // clang-format on
 

@@ -9,7 +9,7 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-std::atomic<int32_t> call_count;
+std::atomic<int32_t> call_count{0};
 
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
@@ -70,7 +70,7 @@ Func make(Schedule schedule) {
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as it does not support async() yet.\n");
+        printf("[SKIP] Skipping test for WebAssembly as it does not support async() yet.\n");
         return 0;
     }
 

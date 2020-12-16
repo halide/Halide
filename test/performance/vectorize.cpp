@@ -93,6 +93,11 @@ bool test() {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
 
     bool ok = true;
 
@@ -106,7 +111,10 @@ int main(int argc, char **argv) {
     ok = ok && test<uint32_t>();
     ok = ok && test<int32_t>();
 
-    if (!ok) return -1;
+    if (!ok) {
+        return -1;
+    }
+
     printf("Success!\n");
     return 0;
 }

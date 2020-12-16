@@ -1,10 +1,12 @@
 #include "AddAtomicMutex.h"
+
 #include "ExprUsesVar.h"
 #include "Func.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "OutputImageParam.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -189,6 +191,8 @@ protected:
         // Search for let bindings that access the producers.
         FindAtomicLetBindings finder(collector.store_names);
         op->body.accept(&finder);
+        // Each individual Store that remains can be done as a CAS
+        // loop or an actual atomic RMW of some form.
         if (finder.found) {
             // Can't remove mutex lock. Leave the Stmt as is.
             return IRMutator::visit(op);
@@ -248,7 +252,7 @@ protected:
 class ReplaceStoreIndexWithVar : public IRMutator {
 public:
     ReplaceStoreIndexWithVar(const std::string &producer_name, Expr var)
-        : producer_name(producer_name), var(var) {
+        : producer_name(producer_name), var(std::move(var)) {
     }
 
 protected:
@@ -286,7 +290,7 @@ protected:
     Stmt allocate_mutex(const string &mutex_name, Expr extent, Stmt body) {
         Expr mutex_array = Call::make(type_of<halide_mutex_array *>(),
                                       "halide_mutex_array_create",
-                                      {extent},
+                                      {std::move(extent)},
                                       Call::Extern);
         // Allocate a scalar of halide_mutex_array.
         // This generates halide_mutex_array mutex[1];
@@ -323,7 +327,7 @@ protected:
         const string &mutex_name = finder.mutex_name;
         Stmt body = mutate(op->body);
         Expr extent = Expr(1);
-        for (Expr e : op->extents) {
+        for (const Expr &e : op->extents) {
             extent = extent * e;
         }
         body = allocate_mutex(mutex_name, extent, body);
@@ -360,7 +364,7 @@ protected:
         }
 
         set<string> store_names;
-        for (auto buffer : f.output_buffers()) {
+        for (const auto &buffer : f.output_buffers()) {
             store_names.insert(buffer.name());
         }
 

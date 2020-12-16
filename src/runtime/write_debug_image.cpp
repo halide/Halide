@@ -54,21 +54,21 @@ struct tiff_tag {
         int32_t i32;
     } value;
 
-    void assign16(uint16_t tag_code, int32_t count, int16_t value) __attribute__((always_inline)) {
+    ALWAYS_INLINE void assign16(uint16_t tag_code, int32_t count, int16_t value) {
         this->tag_code = tag_code;
         this->type_code = 3;
         this->count = count;
         this->value.i16 = value;
     }
 
-    void assign32(uint16_t tag_code, int32_t count, int32_t value) __attribute__((always_inline)) {
+    ALWAYS_INLINE void assign32(uint16_t tag_code, int32_t count, int32_t value) {
         this->tag_code = tag_code;
         this->type_code = 4;
         this->count = count;
         this->value.i32 = value;
     }
 
-    void assign32(uint16_t tag_code, int16_t type_code, int32_t count, int32_t value) __attribute__((always_inline)) {
+    ALWAYS_INLINE void assign32(uint16_t tag_code, int16_t type_code, int32_t count, int32_t value) {
         this->tag_code = tag_code;
         this->type_code = type_code;
         this->count = count;
@@ -98,7 +98,9 @@ WEAK bool ends_with(const char *filename, const char *suffix) {
         s++;
     }
     while (s != suffix && f != filename) {
-        if (*f != *s) return false;
+        if (*f != *s) {
+            return false;
+        }
         f--;
         s--;
     }
@@ -107,16 +109,16 @@ WEAK bool ends_with(const char *filename, const char *suffix) {
 
 struct ScopedFile {
     void *f;
-    ScopedFile(const char *filename, const char *mode) {
+    ALWAYS_INLINE ScopedFile(const char *filename, const char *mode) {
         f = fopen(filename, mode);
     }
-    ~ScopedFile() {
+    ALWAYS_INLINE ~ScopedFile() {
         fclose(f);
     }
-    bool write(const void *ptr, size_t bytes) {
+    ALWAYS_INLINE bool write(const void *ptr, size_t bytes) {
         return fwrite(ptr, bytes, 1, f);
     }
-    bool open() const {
+    ALWAYS_INLINE bool open() const {
         return f;
     }
 };
@@ -141,7 +143,9 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
     halide_copy_to_host(user_context, buf);
 
     ScopedFile f(filename, "wb");
-    if (!f.open()) return -2;
+    if (!f.open()) {
+        return -2;
+    }
 
     size_t elts = 1;
     halide_dimension_t shape[4];

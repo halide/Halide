@@ -7,20 +7,8 @@ using namespace Halide::Runtime::Internal::Qurt;
 
 extern "C" {
 
-WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
-    qurt_hvx_mode_t mode;
-    switch (size) {
-    case 64:
-        mode = QURT_HVX_MODE_64B;
-        break;
-    case 128:
-        mode = QURT_HVX_MODE_128B;
-        break;
-    default:
-        error(user_context) << "HVX lock size must be 64 or 128.\n";
-        return -1;
-    }
-
+WEAK int halide_qurt_hvx_lock(void *user_context) {
+    const qurt_hvx_mode_t mode = QURT_HVX_MODE_128B;
     debug(user_context) << "QuRT: qurt_hvx_lock(" << mode << ") ->\n";
     int result = qurt_hvx_lock(mode);
     debug(user_context) << "        " << result << "\n";
@@ -49,7 +37,7 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
 
 // These need to inline, otherwise the extern call with the ptr
 // parameter breaks a lot of optimizations.
-WEAK __attribute__((always_inline)) int _halide_prefetch_2d(const void *ptr, int width_bytes, int height, int stride_bytes) {
+WEAK_INLINE int _halide_prefetch_2d(const void *ptr, int width_bytes, int height, int stride_bytes) {
     // Notes:
     //  - Prefetches can be queued up to 3 deep (MAX_PREFETCH)
     //  - If 3 are already pending, the oldest request is dropped
@@ -69,7 +57,7 @@ WEAK __attribute__((always_inline)) int _halide_prefetch_2d(const void *ptr, int
     return 0;
 }
 
-WEAK __attribute__((always_inline)) int _halide_prefetch(const void *ptr, int size) {
+WEAK_INLINE int _halide_prefetch(const void *ptr, int size) {
     _halide_prefetch_2d(ptr, size, 1, 1);
     return 0;
 }
@@ -79,11 +67,11 @@ struct hexagon_buffer_t_arg {
     uint8_t *host;
 };
 
-WEAK __attribute__((always_inline)) uint8_t *_halide_hexagon_buffer_get_host(const hexagon_buffer_t_arg *buf) {
+WEAK_INLINE uint8_t *_halide_hexagon_buffer_get_host(const hexagon_buffer_t_arg *buf) {
     return buf->host;
 }
 
-WEAK __attribute__((always_inline)) uint64_t _halide_hexagon_buffer_get_device(const hexagon_buffer_t_arg *buf) {
+WEAK_INLINE uint64_t _halide_hexagon_buffer_get_device(const hexagon_buffer_t_arg *buf) {
     return buf->device;
 }
 }

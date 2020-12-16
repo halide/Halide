@@ -16,6 +16,12 @@ void my_print(void *, const char *msg) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     // Make a long chain of finely-interleaved Funcs, of which one is very expensive.
     Func f[30];
     Var c, x;

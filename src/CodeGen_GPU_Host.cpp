@@ -9,6 +9,7 @@
 #include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_PTX_Dev.h"
 #include "Debug.h"
+#include "DeviceArgument.h"
 #include "ExprUsesVar.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -37,20 +38,20 @@ public:
     Expr shared_mem_size;
 
     ExtractBounds()
-        : shared_mem_size(0), found_shared(false) {
+        : shared_mem_size(0) {
         for (int i = 0; i < 4; i++) {
             num_threads[i] = num_blocks[i] = 1;
         }
     }
 
 private:
-    bool found_shared;
+    bool found_shared = false;
 
     using IRVisitor::visit;
 
     void visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            internal_assert(is_zero(op->min));
+            internal_assert(is_const_zero(op->min));
         }
 
         if (ends_with(op->name, ".__thread_id_x")) {
@@ -85,9 +86,9 @@ private:
         user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n"
                                                    << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-        if (allocate->name == "__shared") {
-            internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
-            shared_mem_size = allocate->extents[0];
+        if (allocate->memory_type == MemoryType::GPUShared) {
+            internal_assert(allocate->extents.size() == 1);
+            shared_mem_size += allocate->extents[0] * allocate->type.bytes();
             found_shared = true;
         }
         allocate->body.accept(this);
@@ -107,23 +108,23 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
     }
     if (target.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Constructing OpenGL Compute device codegen\n";
-        cgdev[DeviceAPI::OpenGLCompute] = new CodeGen_OpenGLCompute_Dev(target);
+        cgdev[DeviceAPI::OpenGLCompute] = new_CodeGen_OpenGLCompute_Dev(target);
     }
     if (target.has_feature(Target::CUDA)) {
         debug(1) << "Constructing CUDA device codegen\n";
-        cgdev[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(target);
+        cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(target);
     }
     if (target.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
-        cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
+        cgdev[DeviceAPI::OpenCL] = new_CodeGen_OpenCL_Dev(target);
     }
     if (target.has_feature(Target::Metal)) {
         debug(1) << "Constructing Metal device codegen\n";
-        cgdev[DeviceAPI::Metal] = new CodeGen_Metal_Dev(target);
+        cgdev[DeviceAPI::Metal] = new_CodeGen_Metal_Dev(target);
     }
     if (target.has_feature(Target::D3D12Compute)) {
         debug(1) << "Constructing Direct3D 12 Compute device codegen\n";
-        cgdev[DeviceAPI::D3D12Compute] = new CodeGen_D3D12Compute_Dev(target);
+        cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(target);
     }
 
     if (cgdev.empty()) {
@@ -205,7 +206,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
         Value *user_context = get_user_context();
         Value *kernel_size = ConstantInt::get(i32_t, kernel_src.size());
         std::string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
-        Value *init = module->getFunction(init_kernels_name);
+        llvm::Function *init = module->getFunction(init_kernels_name);
         internal_assert(init) << "Could not find function " + init_kernels_name + " in initial module\n";
         vector<Value *> init_kernels_args = {user_context, module_state, kernel_src_ptr, kernel_size};
         Value *result = builder->CreateCall(init, init_kernels_args);
@@ -292,7 +293,15 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                       if (a.is_buffer == b.is_buffer) {
                           return a.type.bits() > b.type.bits();
                       } else {
-                          return a.is_buffer < b.is_buffer;
+                          // Ensure that buffer arguments come first:
+                          // for many OpenGL/Compute systems, the
+                          // legal indices for buffer args are much
+                          // more restrictive than for scalar args,
+                          // and scalar args can be 'grown' by
+                          // LICM. Putting buffers first makes it much
+                          // more likely we won't fail on some
+                          // hardware.
+                          return a.is_buffer > b.is_buffer;
                       }
                   });
 
@@ -349,7 +358,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_args_arr =
             create_alloca_at_entry(
                 gpu_args_arr_type,
-                num_args + 1, false,
+                1, false,
                 kernel_name + "_args");
 
         // nullptr-terminated list of size_t's
@@ -366,7 +375,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             gpu_arg_sizes_arr =
                 create_alloca_at_entry(
                     gpu_arg_sizes_arr_type,
-                    num_args + 1, false,
+                    1, false,
                     kernel_name + "_arg_sizes");
         }
 
@@ -374,7 +383,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_arg_is_buffer_arr =
             create_alloca_at_entry(
                 gpu_arg_is_buffer_arr_type,
-                num_args + 1, false,
+                1, false,
                 kernel_name + "_arg_is_buffer");
 
         for (int i = 0; i < num_args; i++) {
@@ -479,7 +488,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
-        internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]))
+        internal_assert(is_const_one(bounds.num_threads[3]) && is_const_one(bounds.num_blocks[3]))
             << bounds.num_threads[3] << ", " << bounds.num_blocks[3] << "\n";
         debug(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
         debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";

@@ -18,6 +18,7 @@
 #include "Monotonic.h"
 #include "Reduction.h"
 #include "Solve.h"
+#include "UniquifyVariableNames.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -40,6 +41,8 @@ int main(int argc, const char **argv) {
     associativity_test();
     generator_test();
     propagate_estimate_test();
+    uniquify_variable_names_test();
 
+    printf("Success!\n");
     return 0;
 }

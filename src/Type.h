@@ -5,7 +5,7 @@
 #include "Float16.h"
 #include "Util.h"
 #include "runtime/HalideRuntime.h"
-#include <stdint.h>
+#include <cstdint>
 
 /** \file
  * Defines halide types
@@ -122,7 +122,7 @@ struct halide_handle_cplusplus_type {
     }
 
     template<typename T>
-    static const halide_handle_cplusplus_type make();
+    static halide_handle_cplusplus_type make();
 };
 //@}
 
@@ -194,7 +194,7 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 //    };
 
 template<typename T>
-/*static*/ const halide_handle_cplusplus_type halide_handle_cplusplus_type::make() {
+/*static*/ halide_handle_cplusplus_type halide_handle_cplusplus_type::make() {
     constexpr bool is_ptr = std::is_pointer<T>::value;
     constexpr bool is_lvalue_reference = std::is_lvalue_reference<T>::value;
     constexpr bool is_rvalue_reference = std::is_rvalue_reference<T>::value;
@@ -207,10 +207,13 @@ template<typename T>
         (is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
         (is_const ? halide_handle_cplusplus_type::Const : 0) |
         (is_volatile ? halide_handle_cplusplus_type::Volatile : 0));
+
+    // clang-format off
     constexpr halide_handle_cplusplus_type::ReferenceType ref_type =
         (is_lvalue_reference ? halide_handle_cplusplus_type::LValueReference :
-                               is_rvalue_reference ? halide_handle_cplusplus_type::RValueReference :
-                                                     halide_handle_cplusplus_type::NotReference);
+         is_rvalue_reference ? halide_handle_cplusplus_type::RValueReference :
+                               halide_handle_cplusplus_type::NotReference);
+    // clang-format on
 
     using TNonCVBase = typename std::remove_cv<TBase>::type;
     constexpr bool known_type = halide_c_type_to_name<TNonCVBase>::known_type;
@@ -285,7 +288,7 @@ public:
 
     // Default ctor initializes everything to predictable-but-unlikely values
     Type()
-        : type(Handle, 0, 0), handle_type(nullptr) {
+        : type(Handle, 0, 0) {
     }
 
     /** Construct a runtime representation of a Halide type from:
@@ -353,8 +356,18 @@ public:
         return Type(code(), bits(), new_lanes, handle_type);
     }
 
+    /** Return Type with the same type code and number of lanes, but with twice as many bits. */
+    Type widen() const {
+        return with_bits(bits() * 2);
+    }
+
+    /** Return Type with the same type code and number of lanes, but with half as many bits. */
+    Type narrow() const {
+        return with_bits(bits() / 2);
+    }
+
     /** Type to be printed when declaring handles of this type. */
-    const halide_handle_cplusplus_type *handle_type;
+    const halide_handle_cplusplus_type *handle_type = nullptr;
 
     /** Is this type boolean (represented as UInt(1))? */
     HALIDE_ALWAYS_INLINE
@@ -427,8 +440,12 @@ public:
 
     /** Compare ordering of two types so they can be used in certain containers and algorithms */
     bool operator<(const Type &other) const {
-        if (type < other.type) return true;
-        if (code() == Handle) return handle_type < other.handle_type;
+        if (type < other.type) {
+            return true;
+        }
+        if (code() == Handle) {
+            return handle_type < other.handle_type;
+        }
         return false;
     }
 

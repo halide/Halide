@@ -9,10 +9,10 @@
 #include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
-#include <stdint.h>
-#include <string.h>
 #include <vector>
 
 #if defined(__has_feature)
@@ -24,6 +24,7 @@
 #include "HalideRuntime.h"
 
 #ifdef _MSC_VER
+#include <malloc.h>
 #define HALIDE_ALLOCA _alloca
 #else
 #define HALIDE_ALLOCA __builtin_alloca
@@ -68,7 +69,9 @@ namespace Internal {
 template<typename Container>
 bool any_zero(const Container &c) {
     for (int i : c) {
-        if (i == 0) return true;
+        if (i == 0) {
+            return true;
+        }
     }
     return false;
 }
@@ -660,7 +663,7 @@ public:
     }
 
     /** Move constructor */
-    Buffer(Buffer<T, D> &&other)
+    Buffer(Buffer<T, D> &&other) noexcept
         : buf(other.buf),
           alloc(other.alloc),
           dev_ref_count(other.dev_ref_count) {
@@ -706,7 +709,8 @@ public:
 
     /** Standard assignment operator */
     Buffer<T, D> &operator=(const Buffer<T, D> &other) {
-        if (this == &other) {
+        // The cast to void* here is just to satisfy clang-tidy
+        if ((const void *)this == (const void *)&other) {
             return *this;
         }
         other.incref();
@@ -738,7 +742,7 @@ public:
     }
 
     /** Standard move-assignment operator */
-    Buffer<T, D> &operator=(Buffer<T, D> &&other) {
+    Buffer<T, D> &operator=(Buffer<T, D> &&other) noexcept {
         decref();
         alloc = other.alloc;
         other.alloc = nullptr;
@@ -1570,7 +1574,7 @@ public:
     // access. Must be inlined so it can be hoisted out of loops.
     HALIDE_ALWAYS_INLINE
     void set_host_dirty(bool v = true) {
-        assert((!v || !device_dirty()) && "Cannot set host dirty when device is already dirty.");
+        assert((!v || !device_dirty()) && "Cannot set host dirty when device is already dirty. Call copy_to_host() before accessing the buffer from host.");
         buf.set_host_dirty(v);
     }
 
@@ -2009,6 +2013,19 @@ private:
     template<int N>
     HALIDE_NEVER_INLINE static bool for_each_value_prep(for_each_value_task_dim<N> *t,
                                                         const halide_buffer_t **buffers) {
+        // Check the buffers all have clean host allocations
+        for (int i = 0; i < N; i++) {
+            if (buffers[i]->device) {
+                assert(buffers[i]->host &&
+                       "Buffer passed to for_each_value has device allocation but no host allocation. Call allocate() and copy_to_host() first");
+                assert(!buffers[i]->device_dirty() &&
+                       "Buffer passed to for_each_value is dirty on device. Call copy_to_host() first");
+            } else {
+                assert(buffers[i]->host &&
+                       "Buffer passed to for_each_value has no host or device allocation");
+            }
+        }
+
         const int dimensions = buffers[0]->dimensions;
 
         // Extract the strides in all the dimensions

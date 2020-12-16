@@ -7,11 +7,12 @@
 
 #include <map>
 
-#include "Function.h"
 #include "Target.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Propagate strict_float intrinisics such that they immediately wrap
  * all floating-point expressions. This makes the IR nodes context

@@ -70,7 +70,7 @@ enum : uint32_t {
     STN_UNDEF = 0
 };
 
-static const char elf_magic[] = {0x7f, 'E', 'L', 'F'};
+const char elf_magic[] = {0x7f, 'E', 'L', 'F'};
 
 template<int bits>
 struct Types;
@@ -676,7 +676,9 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
         }
 
         auto i = symbols.find(sym);
-        if (i != symbols.end()) return i->second;
+        if (i != symbols.end()) {
+            return i->second;
+        }
         return sym;
     };
 
@@ -770,7 +772,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     // will vary in ordering from run to tun.
     std::vector<std::pair<const Symbol *, const Symbol *>> sorted_symbols;
     for (const auto &i : symbols) {
-        sorted_symbols.push_back(i);
+        sorted_symbols.emplace_back(i);
     }
     std::sort(sorted_symbols.begin(), sorted_symbols.end(),
               [&](const std::pair<const Symbol *, const Symbol *> &lhs, const std::pair<const Symbol *, const Symbol *> &rhs) {
@@ -782,7 +784,9 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     for (bool is_local : {true, false}) {
         for (const auto &i : sorted_symbols) {
             const Symbol *s = i.second;
-            if ((s->get_binding() == Symbol::STB_LOCAL) != is_local) continue;
+            if ((s->get_binding() == Symbol::STB_LOCAL) != is_local) {
+                continue;
+            }
 
             uint64_t value = s->get_offset();
             // In shared objects, the symbol value is a virtual address,

@@ -38,6 +38,9 @@ public:
         Var xi, yi, xio, xii, yii, xo, yo, x_pair, xiio, ty;
         RVar rxo, rxi;
 
+        // This schedule requires CUDA, due to use of gpu_lanes()
+        assert(get_target().has_feature(Target::CUDA));
+
         out.bound(x, 0, size)
             .bound(y, 0, size)
             .tile(x, y, xi, yi, x_tile * vec_size * warp_size, y_tile * y_unroll)

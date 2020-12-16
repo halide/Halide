@@ -3,22 +3,10 @@ all:
 
 include ../support/Makefile.inc
 
-# This app requires a separate toolchain to be built from the Android NDK,
-# using the make-standalone-toolchain.sh script:
-#$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
-#$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
-
 #to run the specialized tests optional arguments are
 #$(BIN)/$(HL_TARGET)/process_yuv_linear_basic  width height schedule {where pipeline schedule is: basic, fold, async, split, split_async} dma_direction {ro, rw}
-CXX-host ?= $(CXX)
-CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
-CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
 CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
 CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
-
-CXXFLAGS-host ?=
-CXXFLAGS-arm-64-android ?=
-CXXFLAGS-arm-32-android ?=
 
 # exclude RO tests by default, unless explicitly requested via commandline SCHEDULE_ALL=n, where n is number
 ifneq ($(SCHEDULE_ALL),)
@@ -41,11 +29,8 @@ $(info defined $(HEXAGON_DMA))
 $(info #################################)
 endif
 
-LDFLAGS-host ?= -lpthread -ldl -lm
-LDFLAGS-arm-64-android ?= -llog -fPIE -pie
-LDFLAGS-arm-32-android ?= -llog -fPIE -pie
-LDFLAGS-arm-64-profile-android ?= -llog -fPIE -pie
-LDFLAGS-arm-32-profile-android ?= -llog -fPIE -pie
+LDFLAGS-arm-64-profile-android ?= $(LDFLAGS-arm-64-android)
+LDFLAGS-arm-32-profile-android ?= $(LDFLAGS-arm-32-android)
 OPTION := none
 
 
@@ -54,10 +39,10 @@ all: $(BIN)/$(HL_TARGET)/process_yuv_linear_basic \
 
 $(BIN)/%/pipeline_yuv_linear_basic: pipeline_yuv_linear_basic.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 $(BIN)/%/pipeline_raw_linear_interleaved_basic: pipeline_raw_linear_interleaved_basic.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 INPUT_YUV_8BIT = input_y.type=uint8 input_uv.type=uint8
 INPUT_YUV_16BIT = input_y.type=uint16 input_uv.type=uint16

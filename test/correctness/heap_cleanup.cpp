@@ -6,8 +6,8 @@ using namespace Halide;
 
 // Check that assertion failures free allocations appropriately
 
-std::atomic<int> malloc_count;
-std::atomic<int> free_count;
+std::atomic<int> malloc_count{0};
+std::atomic<int> free_count{0};
 
 void *my_malloc(void *user_context, size_t x) {
     malloc_count++;
@@ -29,7 +29,7 @@ void my_error_handler(void *user_context, const char *) {
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
         return 0;
     }
 

@@ -7,7 +7,13 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
     if (!t.has_gpu_feature()) {
-        printf("This is a GPU-specific test\n");
+        printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
+
+    if (t.has_feature(Target::OpenGLCompute)) {
+        printf("[SKIP] No support for vector loads and stores in OpenGLCompute yet\n");
+        // https://github.com/halide/Halide/issues/4979
         return 0;
     }
 

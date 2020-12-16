@@ -1,12 +1,17 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <utility>
 
+#include "CodeGen_C.h"
 #include "CodeGen_D3D12Compute_Dev.h"
+#include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
+#include "DeviceArgument.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Simplify.h"
 
 #define DEBUG_TYPES (0)
 
@@ -19,6 +24,92 @@ using std::string;
 using std::vector;
 
 static ostringstream nil;
+
+namespace {
+
+class CodeGen_D3D12Compute_Dev : public CodeGen_GPU_Dev {
+public:
+    CodeGen_D3D12Compute_Dev(Target target);
+
+    /** Compile a GPU kernel into the module. This may be called many times
+     * with different kernels, which will all be accumulated into a single
+     * source module shared by a given Halide pipeline. */
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args) override;
+
+    /** (Re)initialize the GPU kernel module. This is separate from compile,
+     * since a GPU device module will often have many kernels compiled into it
+     * for a single pipeline. */
+    void init_module() override;
+
+    std::vector<char> compile_to_src() override;
+
+    std::string get_current_kernel_name() override;
+
+    void dump() override;
+
+    std::string print_gpu_name(const std::string &name) override;
+
+    std::string api_unique_name() override {
+        return "d3d12compute";
+    }
+
+protected:
+    friend struct StoragePackUnpack;
+
+    class CodeGen_D3D12Compute_C : public CodeGen_C {
+    public:
+        CodeGen_D3D12Compute_C(std::ostream &s, Target t)
+            : CodeGen_C(s, t) {
+            integer_suffix_style = IntegerSuffixStyle::HLSL;
+        }
+        void add_kernel(Stmt stmt,
+                        const std::string &name,
+                        const std::vector<DeviceArgument> &args);
+
+    protected:
+        friend struct StoragePackUnpack;
+
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
+        std::string print_storage_type(Type type);
+        std::string print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space);
+        std::string print_reinterpret(Type type, const Expr &e) override;
+        std::string print_extern_call(const Call *op) override;
+
+        std::string print_vanilla_cast(Type type, const std::string &value_expr);
+        std::string print_reinforced_cast(Type type, const std::string &value_expr);
+        std::string print_cast(Type target_type, Type source_type, const std::string &value_expr);
+        std::string print_reinterpret_cast(Type type, const std::string &value_expr);
+
+        std::string print_assignment(Type t, const std::string &rhs) override;
+
+        using CodeGen_C::visit;
+        void visit(const Evaluate *op) override;
+        void visit(const Min *) override;
+        void visit(const Max *) override;
+        void visit(const Div *) override;
+        void visit(const Mod *) override;
+        void visit(const For *) override;
+        void visit(const Ramp *op) override;
+        void visit(const Broadcast *op) override;
+        void visit(const Call *op) override;
+        void visit(const Load *op) override;
+        void visit(const Store *op) override;
+        void visit(const Select *op) override;
+        void visit(const Allocate *op) override;
+        void visit(const Free *op) override;
+        void visit(const Cast *op) override;
+        void visit(const Atomic *op) override;
+        void visit(const FloatImm *op) override;
+
+        Scope<> groupshared_allocations;
+    };
+
+    std::ostringstream src_stream;
+    std::string cur_kernel_name;
+    CodeGen_D3D12Compute_C d3d12compute_c;
+};
 
 CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_Dev(Target t)
     : d3d12compute_c(src_stream, t) {
@@ -65,7 +156,9 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
         case 8:
         case 16:
         case 32:
-            if (type.is_uint()) oss << 'u';
+            if (type.is_uint()) {
+                oss << "u";
+            }
             oss << "int";
 #if DEBUG_TYPES
             oss << type.bits();
@@ -101,7 +194,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
     }
 
     if (space == AppendSpace) {
-        oss << ' ';
+        oss << " ";
     }
 
     return oss.str();
@@ -115,8 +208,12 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_storage_type(Type
     return print_type_maybe_storage(type, true, DoNotAppendSpace);
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, Expr e) {
-    return print_reinterpret_cast(type, print_expr(e));
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, const Expr &e) {
+    if (type == e.type()) {
+        return print_expr(e);
+    } else {
+        return print_reinterpret_cast(type, print_expr(e));
+    }
 }
 
 namespace {
@@ -144,7 +241,9 @@ string simt_intrinsic(const string &name) {
 }  // namespace
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op) {
-    if (is_const(op->value)) return;
+    if (is_const(op->value)) {
+        return;
+    }
     print_expr(op->value);
 }
 
@@ -195,6 +294,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Mod *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
+    user_assert(loop->for_type != ForType::GPULane)
+        << "The D3D12Compute backend does not support the gpu_lanes() scheduling directive.";
+
     if (!is_gpu_var(loop->name)) {
         user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside D3D12Compute kernel\n";
         CodeGen_C::visit(loop);
@@ -204,7 +306,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
     internal_assert((loop->for_type == ForType::GPUBlock) ||
                     (loop->for_type == ForType::GPUThread))
         << "kernel loop must be either gpu block or gpu thread\n";
-    internal_assert(is_zero(loop->min));
+    internal_assert(is_const_zero(loop->min));
 
     stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
            << " = " << simt_intrinsic(loop->name) << ";\n";
@@ -239,8 +341,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
         << "(";
     for (int i = 0; i < op->lanes; ++i) {
         rhs << id_value;
-        if (i < op->lanes - 1)
+        if (i < op->lanes - 1) {
             rhs << ", ";
+        }
     }
     rhs << ")";
 
@@ -249,12 +352,29 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        // Halide only ever needs threadgroup memory fences:
-        // NOTE(marcos): using "WithGroupSync" here just to be safe, as a
-        // simple "GroupMemoryBarrier" is probably too relaxed for Halide
-        // (also note we need to return an integer)
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
+
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
+        internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
+        auto fence_type = *fence_type_ptr;
+
+        // By default, we'll just issue a Group (aka Shared) memory barrier,
+        // since it seems there isn't a sync without a memory barrier
+        // available
+        // NOTE(shoaibkamil): should we replace with AllMemoryBarrierWithGroupSync()
+        // if both are required?
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device &&
+            !(fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared)) {
+            stream << get_indent() << "DeviceMemoryBarrierWithGroupSync();\n";
+        } else if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
+            stream << get_indent() << "DeviceMemoryBarrier();\n";
+        }
         stream << get_indent() << "GroupMemoryBarrierWithGroupSync();\n";
         print_assignment(op->type, "0");
+    } else if (op->name == "pow_f32" && can_prove(op->args[0] > 0)) {
+        // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
+        // directly.
+        stream << "pow(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
     } else {
         CodeGen_C::visit(op);
     }
@@ -263,13 +383,13 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
 namespace {
 
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
-Expr is_ramp_one(Expr e) {
+Expr is_ramp_one(const Expr &e) {
     const Ramp *r = e.as<Ramp>();
     if (r == nullptr) {
         return Expr();
     }
 
-    if (is_one(r->stride)) {
+    if (is_const_one(r->stride)) {
         return r->base;
     }
 
@@ -286,41 +406,87 @@ string hex_literal(T value) {
 
 }  // namespace
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
+struct StoragePackUnpack {
+    using CodeGen = CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
 
-    // __shared[x] is always uint(32): must reinterpret/unpack bits...
-    if (op->name == "__shared") {
-        ostringstream rhs;
-        internal_assert(allocations.contains(op->name));
-        // no ramps when accessing shared memory...
-        Expr ramp_base = is_ramp_one(op->index);
-        internal_assert(!ramp_base.defined());
-        // shared memory in Halide is represented as a byte buffer
-        // but the 'op->index' is actually in terms of elements...
-        // to complicate things, HLSL (SM 5.1) only supports 32bit
-        // words (int/uint/float) as groupshared types...
-        internal_assert(allocations.get(op->name).type == UInt(8));
-        internal_assert(op->type.lanes() == 1);
+    // Shader Model 5.1: threadgroup shared memory is limited 32KB
+    static const size_t ThreadGroupSharedStorageLimit = 32 * 1024;
 
-        string id_index = print_expr(op->index);
-        internal_assert(op->type.bits() <= 32);
-        Type promoted = op->type.with_bits(32);
-        rhs << "as" << print_type(promoted)
-            << "("
-            << print_name(op->name)
-            << "[" << id_index << "]"
-            << ")";
-#if 0
+    void pack_storage(const Allocate *op, size_t elements, size_t size_in_bytes) {
+        // we could try to compact things for smaller types:
+        size_t packing_factor = 1;
+        while (size_in_bytes > ThreadGroupSharedStorageLimit) {
+            // must pack/unpack elements to/from shared memory...
+            elements = (elements + 1) & ~size_t(1);
+            elements /= 2;
+            size_in_bytes = (size_in_bytes + 1) & ~size_t(1);
+            size_in_bytes /= 2;
+            packing_factor *= 2;
+        }
+        // smallest possible pack type is a byte (no nibbles)
+        internal_assert(packing_factor <= 4);
+    }
+
+    std::ostringstream pack_store(CodeGen &cg, const Store *op) {
+        std::ostringstream lhs;
+        // NOTE(marcos): 8bit and 16bit word packing -- the smallest integer
+        // type granularity available in HLSL SM 5.1 is 32bit (int/uint):
+        Type value_type = op->value.type();
+        if (value_type.bits() == 32) {
+            // storing a 32bit word? great! just reinterpret value to uint32:
+            lhs << cg.print_name(op->name)
+                << "[" << cg.print_expr(op->index) << "]"
+                << " = "
+                << cg.print_reinterpret(UInt(32), op->value)
+                << ";\n";
+        } else {
+            // nightmare:
+            internal_assert(value_type.bits() < 32);
+            // must map element index to uint word array index:
+            ostringstream index;
+            auto bits = value_type.bits();
+            auto divisor = (32 / bits);
+            auto i = cg.print_expr(op->index);
+            index << i << " / " << divisor;
+            ostringstream word;
+            word << cg.print_name(op->name)
+                 << "[" + index.str() + "]";
+            // now mask the appropriate bits:
+            ostringstream mask;
+            mask << "("
+                 << hex_literal((1 << bits) - 1)
+                 << " << "
+                 << "(" << bits << "*(" << i << " % " << divisor << " ))"
+                 << ")";
+            // apply the mask to the rhs value:
+            ostringstream value;
+            value << "("
+                  << mask.str()
+                  << " & "
+                  << "(" << cg.print_expr(op->value) << ")"
+                  << ")";
+
+            // the performance impact of atomic operations on shared memory is
+            // not well documented... here is something:
+            // https://stackoverflow.com/a/19548723
+            lhs << cg.get_indent() << "InterlockedAnd(" << word.str() << ", "
+                << "~" << mask.str() << ");\n";
+            lhs << cg.get_indent() << "InterlockedXor(" << word.str() << ", " << value.str() << ");\n";
+        }
+        return lhs;
+    }
+
+    std::ostringstream unpack_load(CodeGen &cg, const Load *op) {
+        std::ostringstream rhs;
         // NOTE(marcos): let's keep this block of code here (disabled) in case
         // we need to "emulate" byte/short packing in shared memory (recall that
         // the smallest type granularity in HLSL SM 5.1 allows is 32bit types):
         if (op->type.bits() == 32) {
             // loading a 32bit word? great! just reinterpret as float/int/uint
-            rhs << "as" << print_type(op->type.element_of())
+            rhs << "as" << cg.print_type(op->type.element_of())
                 << "("
-                << print_name(op->name)
-                << "[" << print_expr(op->index) << "]"
+                << cg.print_name(op->name)
+                << "[" << cg.print_expr(op->index) << "]"
                 << ")";
         } else {
             // not a 32bit word? hell ensues:
@@ -329,10 +495,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
             ostringstream index;
             auto bits = op->type.bits();
             auto divisor = (32 / bits);
-            auto i = print_expr(op->index);
+            auto i = cg.print_expr(op->index);
             index << i << " / " << divisor;
             ostringstream word;
-            word << print_name(op->name)
+            word << cg.print_name(op->name)
                  << "[" + index.str() + "]";
             // now mask the appropriate bits:
             ostringstream mask;
@@ -364,9 +530,25 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
                 rhs << cut.str();
             }
         }
-#endif
-        print_assignment(op->type, rhs.str());
-        return;
+        return rhs;
+    }
+};
+
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
+    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
+
+    // elements in a threadgroup shared buffer are always 32bits:
+    // must reinterpret (and maybe unpack) bits.
+    bool shared_promotion_required = false;
+    string promotion_str = "";
+    if (groupshared_allocations.contains(op->name)) {
+        internal_assert(allocations.contains(op->name));
+        Type promoted_type = op->type.with_bits(32).with_lanes(1);
+        if (promoted_type != op->type) {
+            shared_promotion_required = true;
+            // NOTE(marcos): might need to resort to StoragePackUnpack::unpack_load() here
+            promotion_str = "as" + print_type(promoted_type);
+        }
     }
 
     // If we're loading a contiguous ramp, "unroll" the ramp into loads:
@@ -379,13 +561,20 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
             << "(";
         const int lanes = op->type.lanes();
         for (int i = 0; i < lanes; ++i) {
+            if (shared_promotion_required) {
+                rhs << promotion_str << "(";
+            }
             rhs << print_name(op->name)
                 << "["
                 << print_expr(ramp_base)
                 << "+" << i
                 << "]";
-            if (i < lanes - 1)
+            if (shared_promotion_required) {
+                rhs << ")";
+            }
+            if (i < lanes - 1) {
                 rhs << ", ";
+            }
         }
         rhs << ")";
 
@@ -403,14 +592,28 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     ostringstream rhs;
     if (type_cast_needed) {
         ostringstream element;
+        // Vector cases handled below
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            element << promotion_str << "(";
+        }
         element << print_name(op->name)
                 << "[" << id_index << "]";
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            element << ")";
+        }
         Type target_type = op->type;
         Type source_type = allocations.get(op->name).type;
         rhs << print_cast(target_type, source_type, element.str());
     } else {
+        // Vector cases handled below
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            rhs << promotion_str << "(";
+        }
         rhs << print_name(op->name);
         rhs << "[" << id_index << "]";
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            rhs << ")";
+        }
     }
 
     std::map<string, string>::iterator cached = cache.find(rhs.str());
@@ -435,10 +638,16 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
         for (int i = 0; i < op->type.lanes(); ++i) {
             stream << get_indent() << id << "[" << i << "] = "
                    << print_type(op->type.element_of())
-                   << "("
-                   << print_name(op->name)
-                   << "[" << id_index << "[" << i << "]]"
-                   << ");\n";
+                   << "(";
+            if (shared_promotion_required) {
+                stream << promotion_str << "(";
+            }
+            stream << print_name(op->name)
+                   << "[" << id_index << "[" << i << "]]";
+            if (shared_promotion_required) {
+                stream << ")";
+            }
+            stream << ");\n";
         }
     } else {
         print_assignment(op->type, rhs.str());
@@ -446,66 +655,22 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
 
     Type value_type = op->value.type();
 
-    // __shared[x] is always uint(32): must reinterpret/pack bits...
-    if (op->name == "__shared") {
-        internal_assert(value_type.bits() <= 32);
-        ostringstream rhs;
-        rhs << print_name(op->name)
-            << "[" << print_expr(op->index) << "]"
-            << " = "
-            << print_reinterpret(UInt(32), op->value)
-            << ";\n";
-        stream << get_indent() << rhs.str();
-#if 0
-        // NOTE(marcos): let's keep this block of code here (disabled) in case
-        // we need to "emulate" byte/short packing in shared memory (recall that
-        // the smallest type granularity in HLSL SM 5.1 allows is 32bit types):
-        if (value_type.bits() == 32) {
-            // storing a 32bit word? great! just reinterpret value to uint32:
-            stream << print_name(op->name)
-                    << "[" << print_expr(op->index) << "]"
-                    << " = "
-                    << print_reinterpret(UInt(32), op->value)
-                    << ";\n";
-        } else {
-            // nightmare:
-            internal_assert(value_type.bits() < 32);
-            // must map element index to uint word array index:
-            ostringstream index;
-            auto bits = value_type.bits();
-            auto divisor = (32 / bits);
-            auto i = print_expr(op->index);
-            index << i << " / " << divisor;
-            ostringstream word;
-            word << print_name(op->name)
-                 << "[" + index.str() + "]";
-            // now mask the appropriate bits:
-            ostringstream mask;
-            mask << "("
-                 << hex_literal((1 << bits) - 1)
-                 << " << "
-                 << "(" << bits << "*(" << i << " % " << divisor << " ))"
-                 << ")";
-            // apply the mask to the rhs value:
-            ostringstream value;
-            value << "("
-                  << mask.str()
-                  << " & "
-                  << "(" << print_expr(op->value) << ")"
-                  << ")";
-
-            // the performance impact of atomic operations on shared memory is
-            // not well documented... here is something:
-            // https://stackoverflow.com/a/19548723
-            stream << get_indent() << "InterlockedAnd(" << word.str() << ", " << "~" << mask.str() << ");\n";
-            stream << get_indent() << "InterlockedXor(" << word.str() << ", " << value.str() << ");\n";
+    // elements in a threadgroup shared buffer are always 32bits:
+    // must reinterpret (and maybe pack) bits.
+    bool shared_promotion_required = false;
+    string promotion_str = "";
+    if (groupshared_allocations.contains(op->name)) {
+        internal_assert(allocations.contains(op->name));
+        Type promoted_type = allocations.get(op->name).type;
+        if (promoted_type != op->value.type()) {
+            shared_promotion_required = true;
+            // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here
+            promotion_str = "as" + print_type(promoted_type);
         }
-#endif
-        return;
     }
 
     // If we're writing a contiguous ramp, "unroll" the ramp into stores:
@@ -522,12 +687,18 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
                 << print_expr(ramp_base)
                 << " + " << i
                 << "]"
-                << " = "
-                << print_expr(op->value)
+                << " = ";
+            if (shared_promotion_required) {
+                rhs << promotion_str << "(";
+            }
+            rhs << print_expr(op->value)
                 << "["
                 << i
-                << "]"
-                << ";\n";
+                << "]";
+            if (shared_promotion_required) {
+                rhs << ")";
+            }
+            rhs << ";\n";
             stream << get_indent() << rhs.str();
         }
     } else if (op->index.type().is_vector()) {
@@ -540,17 +711,30 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
                 << "["
                 << print_expr(op->index) << "[" << i << "]"
                 << "]"
-                << " = "
-                << print_expr(op->value) << "[" << i << "];\n";
+                << " = ";
+            if (shared_promotion_required) {
+                rhs << promotion_str << "(";
+            }
+            rhs << print_expr(op->value) << "[" << i << "]";
+            if (shared_promotion_required) {
+                rhs << ")";
+            }
+            rhs << ";\n";
             stream << get_indent() << rhs.str();
         }
     } else {
         ostringstream rhs;
         rhs << print_name(op->name)
             << "[" << print_expr(op->index) << "]"
-            << " = "
-            << print_expr(op->value)
-            << ";\n";
+            << " = ";
+        if (shared_promotion_required) {
+            rhs << promotion_str << "(";
+        }
+        rhs << print_expr(op->value);
+        if (shared_promotion_required) {
+            rhs << ")";
+        }
+        rhs << ";\n";
         stream << get_indent() << rhs.str();
     }
 
@@ -570,10 +754,16 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Select *op) {
     print_assignment(op->type, rhs.str());
 }
 
+bool is_shared_allocation(const Allocate *op) {
+    return op->memory_type == MemoryType::GPUShared;
+}
+
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op) {
 
-    if (op->name == "__shared") {
+    if (is_shared_allocation(op)) {
         // Already handled
+        internal_assert(!groupshared_allocations.contains(op->name));
+        groupshared_allocations.push(op->name);
         op->body.accept(this);
     } else {
         open_scope();
@@ -590,7 +780,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
-        stream << get_indent() << print_storage_type(op->type) << ' '
+        stream << get_indent() << print_storage_type(op->type) << " "
                << print_name(op->name) << "[" << size << "];\n";
         stream << get_indent();
 
@@ -608,7 +798,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
-    if (op->name == "__shared") {
+    if (groupshared_allocations.contains(op->name)) {
+        groupshared_allocations.pop(op->name);
         return;
     } else {
         // Should have been freed internally
@@ -623,23 +814,15 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type t
     return CodeGen_C::print_assignment(type, rhs_modified);
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, string value_expr) {
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, const string &value_expr) {
     ostringstream ss;
     ss << print_type(type) << "(" << value_expr << ")";
     return ss.str();
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(Type type, string value_expr) {
-    if (type.is_float()) {
-        return print_vanilla_cast(type, value_expr);
-    }
-
-    if (type.is_bool()) {
-        return print_vanilla_cast(type, value_expr);
-    }
-
-    if (type.bits() == 32) {
-        return print_reinterpret_cast(type, value_expr);
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(Type type, const string &value_expr) {
+    if (type.is_float() || type.is_bool() || type.bits() == 32) {
+        return value_expr;
     }
 
     // HLSL SM 5.1 only supports 32bit integer types; smaller integer types have
@@ -657,7 +840,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
     return rsr.str();
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(Type type, string value_expr) {
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(Type type, const string &value_expr) {
     type = type.element_of();
 
     string cast_expr;
@@ -682,7 +865,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(
     return cast_expr;
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_type, Type source_type, string value_expr) {
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_type, Type source_type, const string &value_expr) {
     // casting to or from a float type? just use the language cast:
     if (target_type.is_float() || source_type.is_float()) {
         return print_vanilla_cast(target_type, value_expr);
@@ -770,6 +953,16 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Atomic *op) {
     user_assert(false) << "Atomics operations are not supported inside D3D12Compute kernel.\n";
 }
 
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const FloatImm *op) {
+    // TODO(marcos): just a pass-through for now, but we might consider doing
+    // something different, such as adding the suffic 'u' to the integer that
+    // gets passed to float_from_bits() to eliminate HLSL shader warnings; we
+    // have seen division-by-zero shader warnings, and we postulated that it
+    // could be indirectly related to compiler assumptions on signed integer
+    // overflow when float_from_bits() is called, but we don't know for sure
+    return CodeGen_C::visit(op);
+}
+
 void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
                                           const string &name,
                                           const vector<DeviceArgument> &args) {
@@ -783,13 +976,11 @@ void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
 namespace {
 struct BufferSize {
     string name;
-    size_t size;
+    size_t size = 0;
 
-    BufferSize()
-        : size(0) {
-    }
+    BufferSize() = default;
     BufferSize(string name, size_t size)
-        : name(name), size(size) {
+        : name(std::move(name)), size(size) {
     }
 
     bool operator<(const BufferSize &r) const {
@@ -817,9 +1008,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     auto isConstantBuffer = [&s](const DeviceArgument &arg) {
         return arg.is_buffer && CodeGen_GPU_Dev::is_buffer_constant(s, arg.name) && arg.size > 0;
     };
-    for (auto &arg : args) {
+    for (const auto &arg : args) {
         if (isConstantBuffer(arg)) {
-            constants.push_back(BufferSize(arg.name, arg.size));
+            constants.emplace_back(arg.name, arg.size);
         }
     }
 
@@ -834,30 +1025,93 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         constants[i].size += constants[i - 1].size;
     }
 
-    // Find all the shared allocations and declare them at global scope.
-    class FindSharedAllocations : public IRVisitor {
-        using IRVisitor::visit;
-        void visit(const Allocate *op) override {
-            op->body.accept(this);
-            if (starts_with(op->name, "__shared")) {
-                allocs.push_back(op);
+    // Find all the shared allocations, uniquify their names,
+    // and declare them at global scope.
+    class FindSharedAllocationsAndUniquify : public IRMutator {
+        using IRMutator::visit;
+        Stmt visit(const Allocate *op) override {
+            if (is_shared_allocation(op)) {
+                // Because these will go in global scope,
+                // we need to ensure they have unique names.
+                std::string new_name = unique_name(op->name);
+                replacements[op->name] = new_name;
+
+                std::vector<Expr> new_extents;
+                for (size_t i = 0; i < op->extents.size(); i++) {
+                    new_extents.push_back(mutate(op->extents[i]));
+                }
+                Stmt new_body = mutate(op->body);
+                Expr new_condition = mutate(op->condition);
+                Expr new_new_expr;
+                if (op->new_expr.defined()) {
+                    new_new_expr = mutate(op->new_expr);
+                }
+
+                Stmt new_alloc = Allocate::make(new_name, op->type, op->memory_type, new_extents,
+                                                std::move(new_condition), std::move(new_body),
+                                                std::move(new_new_expr), op->free_function);
+
+                allocs.push_back(new_alloc);
+                replacements.erase(op->name);
+                return new_alloc;
+            } else {
+                return IRMutator::visit(op);
             }
         }
+
+        Stmt visit(const Free *op) override {
+            auto it = replacements.find(op->name);
+            if (it != replacements.end()) {
+                return Free::make(it->second);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        Expr visit(const Load *op) override {
+            auto it = replacements.find(op->name);
+            if (it != replacements.end()) {
+                return Load::make(op->type, it->second,
+                                  mutate(op->index), op->image, op->param,
+                                  mutate(op->predicate), op->alignment);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        Stmt visit(const Store *op) override {
+            auto it = replacements.find(op->name);
+            if (it != replacements.end()) {
+                return Store::make(it->second, mutate(op->value),
+                                   mutate(op->index), op->param,
+                                   mutate(op->predicate), op->alignment);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        std::map<string, string> replacements;
         friend class CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
-        vector<const Allocate *> allocs;
+        vector<Stmt> allocs;
     };
-    FindSharedAllocations fsa;
-    s.accept(&fsa);
-    for (const Allocate *op : fsa.allocs) {
+
+    FindSharedAllocationsAndUniquify fsa;
+    s = fsa.mutate(s);
+
+    uint32_t total_shared_bytes = 0;
+    for (const Stmt &sop : fsa.allocs) {
+        const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
-        // The 'op->type' of shared memory allocations is always uint8 in Halide
-        // since shared storaged is considered a "byte buffer"... In D3D12 there
-        // is no uint8 type, so we'll have to emulate it with some 32bit type...
+        internal_assert(op->type.lanes() == 1);
+        // In D3D12/HLSL, only 32bit types (int/uint/float) are suppoerted (even
+        // though things are changing with newer shader models). Since there is
+        // no uint8 type, we'll have to emulate it with 32bit types...
         // This will also require pack/unpack logic with bit-masking and aliased
         // type reinterpretation via asfloat()/asuint() in the shader code... :(
-        internal_assert(op->type == UInt(8));
+        Type smem_type = op->type;
+        smem_type.with_bits(32);
         stream << "groupshared"
-               << " " << print_type(op->type)  // print_type(uint8) -> uint32
+               << " " << print_type(smem_type)
                << " " << print_name(op->name);
         if (is_const(op->extents[0])) {
             std::stringstream ss;
@@ -865,102 +1119,37 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             size_t elements = 0;
             ss >> elements;
             size_t bytesize = elements * sizeof(uint32_t);
-            // SM 5.1: 32KB limit for shared memory...
-            size_t packing_factor = 1;
-            while (bytesize > 32 * 1024) {
-                // must pack/unpack elements to/from shared memory...
-                elements /= 2;
-                bytesize /= 2;
-                packing_factor *= 2;
-            }
+            // NOTE(marcos): might need to resort to StoragePackUnpack::pack_storage() here...
+            internal_assert(bytesize <= StoragePackUnpack::ThreadGroupSharedStorageLimit);
+            total_shared_bytes += bytesize;
             stream << " [" << elements << "];\n";
-            // smallest possible pack type is a byte (no nibbles)
-            internal_assert(packing_factor <= 4);
         } else {
             // fill-in __GROUPSHARED_SIZE_IN_BYTES later on when D3DCompile()
             // is invoked in halide_d3d12compute_run(); must get divided by 4
             // since groupshared memory elements have 32bit granularity:
             stream << " [ ( __GROUPSHARED_SIZE_IN_BYTES + 3 ) / 4 ];\n";
         }
+        if (total_shared_bytes > StoragePackUnpack::ThreadGroupSharedStorageLimit) {
+            debug(1) << "D3D12 CodeGen ERROR: Total thread group shared memory required for kernel '" << name
+                     << "' exceeds the SM 5.1 limit of 32KB: " << total_shared_bytes << " bytes required.\n";
+        }
         Allocation alloc;
         alloc.type = op->type;
         allocations.push(op->name, alloc);
     }
 
-    // Find and patch situations where the __shared buffer is read before having
-    // ever being initialized:
-
-    // NOTE(marcos): it would be cleaner if we could just use an IRVisitor here
-    // but in order to find the enclosing Stmt of a Load expression we need to
-    // to walk through base Stmt nodes, and only IRMutator has this overload:
-    struct FindUninitializedSharedLoads : public IRMutator {
-        using IRMutator::mutate;
-        using IRMutator::visit;
-        virtual Expr visit(const Load *op) override {
-            if (op->name == "__shared") {
-                if (!latest_store) {
-                    // attempting to read from __shared before anything has been
-                    // written to it yet!
-                    bad_load_expr = op;
-                }
-            }
-            return IRMutator::visit(op);
-        }
-        virtual Stmt visit(const Store *op) override {
-            Stmt store = IRMutator::visit(op);
-            if (op->name == "__shared") {
-                latest_store = op;
-            }
-            return store;
-        }
-        virtual Stmt mutate(const Stmt &stmt) override {
-            if (!bad_load_expr) {
-                current_stmt = &stmt;
-            }
-            return IRMutator::mutate(stmt);
-        }
-        const Stmt *current_stmt = nullptr;
-        const Load *bad_load_expr = nullptr;
-        const Store *latest_store = nullptr;
-    };
-    FindUninitializedSharedLoads fusl;
-    s = fusl.mutate(s);
-    if (fusl.bad_load_expr) {
-        debug(1) << "Found a potential load-before-initialization on __shared buffer!\n";
-        // use IRMutator to inject a zero-initialization before the load
-        struct ZeroInitializeSharedMemory : public IRMutator {
-            using IRMutator::mutate;
-            virtual Stmt mutate(const Stmt &op) override {
-                if (&op != uninitialized_load_stmt) {
-                    return IRMutator::mutate(op);
-                }
-
-                debug(1) << "Patching __shared buffer with zero-intialization...\n";
-
-                const Load *lop = uninitialized_load_expr;
-                Stmt initialization = Store::make(lop->name, Expr(0), lop->index, Parameter(), lop->predicate, ModulusRemainder());
-                return Block::make({initialization, op});
-            }
-            const Stmt *uninitialized_load_stmt = nullptr;
-            const Load *uninitialized_load_expr = nullptr;
-        };
-        ZeroInitializeSharedMemory zism;
-        zism.uninitialized_load_stmt = fusl.current_stmt;
-        zism.uninitialized_load_expr = fusl.bad_load_expr;
-        s = zism.mutate(s);
-    }
-
     // Emit the kernel function preamble (numtreads):
-
-    // Figure out the thread group size by traversing the stmt:
+    // must first figure out the thread group size by traversing the stmt:
     struct FindThreadGroupSize : public IRVisitor {
         using IRVisitor::visit;
         void visit(const For *loop) override {
-            if (!is_gpu_var(loop->name))
+            if (!is_gpu_var(loop->name)) {
                 return loop->body.accept(this);
-            if (loop->for_type != ForType::GPUThread)
+            }
+            if (loop->for_type != ForType::GPUThread) {
                 return loop->body.accept(this);
-            internal_assert(is_zero(loop->min));
+            }
+            internal_assert(is_const_zero(loop->min));
             int index = thread_loop_workgroup_index(loop->name);
             user_assert(index >= 0) << "Invalid 'numthreads' index for loop variable '" << loop->name << "'.\n";
             // if 'numthreads' for a given dimension can't be determined at code
@@ -1003,11 +1192,13 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     // Emit the kernel function prototype:
 
     stream << "void " << name << "(\n";
-    stream << ' ' << "uint3 tgroup_index  : SV_GroupID,\n"
-           << ' ' << "uint3 tid_in_tgroup : SV_GroupThreadID";
-    for (auto &arg : args) {
+    stream << " "
+           << "uint3 tgroup_index  : SV_GroupID,\n"
+           << " "
+           << "uint3 tid_in_tgroup : SV_GroupThreadID";
+    for (const auto &arg : args) {
         stream << ",\n";
-        stream << ' ';
+        stream << " ";
         if (arg.is_buffer) {
             // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
             // all buffers as UAVs since there is no way the runtime can know
@@ -1073,6 +1264,8 @@ void CodeGen_D3D12Compute_Dev::init_module() {
            "\n"
         << "\n";
 
+    src_stream << "#define halide_unused(x) (void)(x)\n";
+
     // Write out the Halide math functions.
     src_stream
     //<< "namespace {\n"   // HLSL does not support unnamed namespaces...
@@ -1099,6 +1292,9 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "float nan_f32()     { return  1.#IND; } \n"  // Quiet NaN with minimum fractional value.
         << "float neg_inf_f32() { return -1.#INF; } \n"
         << "float inf_f32()     { return +1.#INF; } \n"
+        << "#define is_inf_f32     isinf    \n"
+        << "#define is_finite_f32  isfinite \n"
+        << "#define is_nan_f32     isnan    \n"
         << "#define float_from_bits asfloat \n"
         << "#define sqrt_f32    sqrt   \n"
         << "#define sin_f32     sin    \n"
@@ -1110,7 +1306,25 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "#define ceil_f32    ceil   \n"
         << "#define round_f32   round  \n"
         << "#define trunc_f32   trunc  \n"
-        << "#define pow_f32     pow    \n"
+        // pow() in HLSL has the same semantics as C if
+        // x > 0.  Otherwise, we need to emulate C
+        // behavior.
+        // TODO(shoaibkamil): Can we simplify this?
+        << "float pow_f32(float x, float y) { \n"
+        << "  if (x > 0.0) {                  \n"
+        << "    return pow(x, y);             \n"
+        << "  } else if (y == 0.0) {          \n"
+        << "    return 1.0f;                  \n"
+        << "  } else if (trunc(y) == y) {     \n"
+        << "    if (fmod(y, 2) == 0) {        \n"
+        << "      return pow(abs(x), y);      \n"
+        << "    } else {                      \n"
+        << "      return -pow(abs(x), y);     \n"
+        << "    }                             \n"
+        << "  } else {                        \n"
+        << "    return nan_f32();             \n"
+        << "  }                               \n"
+        << "}                                 \n"
         << "#define asin_f32    asin   \n"
         << "#define acos_f32    acos   \n"
         << "#define tan_f32     tan    \n"
@@ -1127,9 +1341,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "\n";
     //<< "}\n"; // close namespace
 
-    src_stream << '\n';
-
-    d3d12compute_c.add_common_macros(src_stream);
+    src_stream << "\n";
 
     cur_kernel_name = "";
 }
@@ -1148,11 +1360,17 @@ string CodeGen_D3D12Compute_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_D3D12Compute_Dev::dump() {
-    std::cerr << src_stream.str() << std::endl;
+    std::cerr << src_stream.str() << "\n";
 }
 
 std::string CodeGen_D3D12Compute_Dev::print_gpu_name(const std::string &name) {
     return name;
+}
+
+}  // namespace
+
+CodeGen_GPU_Dev *new_CodeGen_D3D12Compute_Dev(const Target &target) {
+    return new CodeGen_D3D12Compute_Dev(target);
 }
 
 }  // namespace Internal

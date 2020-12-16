@@ -9,7 +9,7 @@
 
 #include <cmath>
 
-#include "IR.h"
+#include "Expr.h"
 #include "Tuple.h"
 
 namespace Halide {
@@ -49,28 +49,16 @@ bool is_positive_const(const Expr &e);
  * strictly less than zero (in all lanes, if a vector expression) */
 bool is_negative_const(const Expr &e);
 
-/** Is the expression a const (as defined by is_const), and also
- * strictly less than zero (in all lanes, if a vector expression) and
- * is its negative value representable. (This excludes the most
- * negative value of the Expr's type from inclusion. Intended to be
- * used when the value will be negated as part of simplification.)
- */
-bool is_negative_negatable_const(const Expr &e);
-
 /** Is the expression an undef */
 bool is_undef(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
-bool is_zero(const Expr &e);
+bool is_const_zero(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to one (in all lanes, if a vector expression) */
-bool is_one(const Expr &e);
-
-/** Is the expression a const (as defined by is_const), and also equal
- * to two (in all lanes, if a vector expression) */
-bool is_two(const Expr &e);
+bool is_const_one(const Expr &e);
 
 /** Is the statement a no-op (which we represent as either an
  * undefined Stmt, or as an Evaluate node of a constant) */
@@ -154,6 +142,10 @@ Expr const_false(int lanes = 1);
  * Expr. */
 Expr lossless_cast(Type t, Expr e);
 
+/** Attempt to negate x without introducing new IR and without overflow.
+ * If it can't be done, return an undefined Expr. */
+Expr lossless_negate(const Expr &x);
+
 /** Coerce the two expressions to have the same type, using C-style
  * casting rules. For the purposes of casting, a boolean type is
  * UInt(1). We use the following procedure:
@@ -189,9 +181,9 @@ void match_types_bitwise(Expr &a, Expr &b, const char *op_name);
 
 /** Halide's vectorizable transcendentals. */
 // @{
-Expr halide_log(Expr a);
-Expr halide_exp(Expr a);
-Expr halide_erf(Expr a);
+Expr halide_log(const Expr &a);
+Expr halide_exp(const Expr &a);
+Expr halide_erf(const Expr &a);
 // @}
 
 /** Raise an expression to an integer power by repeatedly multiplying
@@ -224,7 +216,7 @@ struct BufferBuilder {
 
 /** If e is a ramp expression with stride, default 1, return the base,
  * otherwise undefined. */
-Expr strided_ramp_base(Expr e, int stride = 1);
+Expr strided_ramp_base(const Expr &e, int stride = 1);
 
 /** Implementations of division and mod that are specific to Halide.
  * Use these implementations; do not use native C division or mod to
@@ -309,11 +301,11 @@ inline double div_imp<double>(double a, double b) {
 
 /** Return an Expr that is identical to the input Expr, but with
  * all calls to likely() and likely_if_innermost() removed. */
-Expr remove_likelies(Expr e);
+Expr remove_likelies(const Expr &e);
 
 /** Return a Stmt that is identical to the input Stmt, but with
  * all calls to likely() and likely_if_innermost() removed. */
-Stmt remove_likelies(Stmt s);
+Stmt remove_likelies(const Stmt &s);
 
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
@@ -321,7 +313,7 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &arg
 
 template<typename... Args>
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args &&... more_args) {
-    args.push_back(Expr(std::string(arg)));
+    args.emplace_back(std::string(arg));
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
 
@@ -399,7 +391,7 @@ Expr operator*(Expr a, Expr b);
 /** Multiply an expression and a constant integer. Coerces the type of the
  * integer to match the type of the expression. Errors if the integer
  * cannot be represented in the type of the expression. */
-Expr operator*(const Expr &a, int b);
+Expr operator*(Expr a, int b);
 
 /** Multiply a constant integer and an expression. Coerces the type of
  * the integer to match the type of the expression. Errors if the
@@ -470,7 +462,7 @@ Expr operator%(Expr a, int b);
 /** Mods a constant integer by an expression. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-Expr operator%(int a, const Expr &b);
+Expr operator%(int a, Expr b);
 
 /** Return a boolean expression that tests whether the first argument
  * is greater than the second, after doing any necessary type coercion
@@ -532,13 +524,13 @@ Expr operator>=(Expr a, Expr b);
  * greater than or equal to a constant integer. Coerces the integer to
  * the type of the expression. Errors if the integer is not
  * representable in that type. */
-Expr operator>=(Expr a, int b);
+Expr operator>=(const Expr &a, int b);
 
 /** Return a boolean expression that tests whether a constant integer
  * is greater than or equal to an expression. Coerces the integer to the
  * type of the expression. Errors if the integer is not representable
  * in that type. */
-Expr operator>=(int a, Expr b);
+Expr operator>=(int a, const Expr &b);
 
 /** Return a boolean expression that tests whether the first argument
  * is equal to the second, after doing any necessary type coercion
@@ -580,8 +572,8 @@ Expr operator&&(Expr a, Expr b);
 /** Logical and of an Expr and a bool. Either returns the Expr or an
  * Expr representing false, depending on the bool. */
 // @{
-Expr operator&&(const Expr &a, bool b);
-Expr operator&&(bool a, const Expr &b);
+Expr operator&&(Expr a, bool b);
+Expr operator&&(bool a, Expr b);
 // @}
 
 /** Returns the logical or of the two arguments */
@@ -590,8 +582,8 @@ Expr operator||(Expr a, Expr b);
 /** Logical or of an Expr and a bool. Either returns the Expr or an
  * Expr representing true, depending on the bool. */
 // @{
-Expr operator||(const Expr &a, bool b);
-Expr operator||(bool a, const Expr &b);
+Expr operator||(Expr a, bool b);
+Expr operator||(bool a, Expr b);
 // @}
 
 /** Returns the logical not the argument */
@@ -745,7 +737,7 @@ inline Expr operator!=(float a, Expr b) {
 
 /** Clamps an expression to lie within the given bounds. The bounds
  * are type-cast to match the expression. Vectorizes as well as min/max. */
-Expr clamp(Expr a, Expr min_val, Expr max_val);
+Expr clamp(Expr a, const Expr &min_val, const Expr &max_val);
 
 /** Returns the absolute value of a signed integer or floating-point
  * expression. Vectorizes cleanly. Unlike in C, abs of a signed
@@ -795,6 +787,21 @@ template<typename... Args>
 inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&... args) {
     return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
 }
+// @}
+
+/** Oftentimes we want to pack a list of expressions with the same type
+ * into a channel dimension, e.g.,
+ * img(x, y, c) = select(c == 0, 100, // Red
+ *                       c == 1, 50,  // Green
+ *                               25); // Blue
+ * This is tedious when the list is long. The following function
+ * provide convinent syntax that allow one to write:
+ * img(x, y, c) = mux(c, {100, 50, 25});
+ */
+// @{
+Expr mux(const Expr &id, const std::initializer_list<Expr> &values);
+Expr mux(const Expr &id, const std::vector<Expr> &values);
+Expr mux(const Expr &id, const Tuple &values);
 // @}
 
 /** Return the sine of a floating-point expression. If the argument is
@@ -870,7 +877,7 @@ Expr sqrt(Expr x);
 /** Return the square root of the sum of the squares of two
  * floating-point expressions. If the argument is not floating-point,
  * it is cast to Float(32). Vectorizes cleanly. */
-Expr hypot(Expr x, Expr y);
+Expr hypot(const Expr &x, const Expr &y);
 
 /** Return the exponential of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). For
@@ -901,25 +908,25 @@ Expr pow(Expr x, Expr y);
 /** Evaluate the error function erf. Only available for
  * Float(32). Accurate up to the last three bits of the
  * mantissa. Vectorizes cleanly. */
-Expr erf(Expr x);
+Expr erf(const Expr &x);
 
 /** Fast vectorizable approximation to some trigonometric functions for Float(32).
  * Absolute approximation error is less than 1e-5. */
 // @{
-Expr fast_sin(Expr x);
-Expr fast_cos(Expr x);
+Expr fast_sin(const Expr &x);
+Expr fast_cos(const Expr &x);
 // @}
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
  * mantissa. Vectorizes cleanly. */
-Expr fast_log(Expr x);
+Expr fast_log(const Expr &x);
 
 /** Fast approximate cleanly vectorizable exp for Float(32). Returns
  * nonsense for inputs that would overflow or underflow. Typically
  * accurate up to the last 5 bits of the mantissa. Gets worse when
  * approaching overflow. Vectorizes cleanly. */
-Expr fast_exp(Expr x);
+Expr fast_exp(const Expr &x);
 
 /** Fast approximate cleanly vectorizable pow for Float(32). Returns
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
@@ -986,7 +993,7 @@ Expr is_finite(Expr x);
 /** Return the fractional part of a floating-point expression. If the argument
  *  is not floating-point, it is cast to Float(32). The return value has the
  *  same sign as the original expression. Vectorizes cleanly. */
-Expr fract(Expr x);
+Expr fract(const Expr &x);
 
 /** Reinterpret the bits of one value as another type. */
 Expr reinterpret(Type t, Expr e);
@@ -1370,7 +1377,26 @@ Expr strict_float(Expr e);
  * Unsafe promises can be checked by turning on
  * Target::CheckUnsafePromises. This is intended for debugging only.
  */
-Expr unsafe_promise_clamped(Expr value, Expr min, Expr max);
+Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max);
+
+namespace Internal {
+/**
+ * FOR INTERNAL USE ONLY.
+ *
+ * An entirely unchecked version of unsafe_promise_clamped, used
+ * inside the compiler as an annotation of the known bounds of an Expr
+ * when it has proved something is bounded and wants to record that
+ * fact for later passes (notably bounds inference) to exploit. This
+ * gets introduced by GuardWithIf tail strategies, because the bounds
+ * machinery has a hard time exploiting if statement conditions.
+ *
+ * Unlike unsafe_promise_clamped, this expression is
+ * context-dependent, because 'value' might be statically bounded at
+ * some point in the IR (e.g. due to a containing if statement), but
+ * not elsewhere.
+ **/
+Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
+}  // namespace Internal
 
 }  // namespace Halide
 

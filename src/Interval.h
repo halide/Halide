@@ -6,7 +6,6 @@
  */
 
 #include "Expr.h"
-#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -41,71 +40,49 @@ struct Interval {
     }
 
     /** Construct an interval from a lower and upper bound. */
-    Interval(Expr min, Expr max)
+    Interval(const Expr &min, const Expr &max)
         : min(min), max(max) {
         internal_assert(min.defined() && max.defined());
     }
 
     /** The interval representing everything. */
-    static Interval everything() {
-        return Interval(neg_inf(), pos_inf());
-    }
+    static Interval everything();
 
     /** The interval representing nothing. */
-    static Interval nothing() {
-        return Interval(pos_inf(), neg_inf());
-    }
+    static Interval nothing();
 
     /** Construct an interval representing a single point */
-    static Interval single_point(Expr e) {
-        return Interval(e, e);
-    }
+    static Interval single_point(const Expr &e);
 
     /** Is the interval the empty set */
-    bool is_empty() const {
-        return min.same_as(pos_inf()) || max.same_as(neg_inf());
-    }
+    bool is_empty() const;
 
     /** Is the interval the entire range */
-    bool is_everything() const {
-        return min.same_as(neg_inf()) && max.same_as(pos_inf());
-    }
+    bool is_everything() const;
 
     /** Is the interval just a single value (min == max) */
-    bool is_single_point() const {
-        return min.same_as(max);
-    }
+    bool is_single_point() const;
 
     /** Is the interval a particular single value */
-    bool is_single_point(Expr e) const {
-        return min.same_as(e) && max.same_as(e);
-    }
+    bool is_single_point(const Expr &e) const;
 
     /** Does the interval have a finite least upper bound */
-    bool has_upper_bound() const {
-        return !max.same_as(pos_inf()) && !is_empty();
-    }
+    bool has_upper_bound() const;
 
     /** Does the interval have a finite greatest lower bound */
-    bool has_lower_bound() const {
-        return !min.same_as(neg_inf()) && !is_empty();
-    }
+    bool has_lower_bound() const;
 
     /** Does the interval have a finite upper and lower bound */
-    bool is_bounded() const {
-        return has_upper_bound() && has_lower_bound();
-    }
+    bool is_bounded() const;
 
     /** Is the interval the same as another interval */
-    bool same_as(const Interval &other) {
-        return min.same_as(other.min) && max.same_as(other.max);
-    }
+    bool same_as(const Interval &other) const;
 
     /** Expand the interval to include another Interval */
     void include(const Interval &i);
 
     /** Expand the interval to include an Expr */
-    void include(Expr e);
+    void include(const Expr &e);
 
     /** Construct the smallest interval containing two intervals. */
     static Interval make_union(const Interval &a, const Interval &b);
@@ -119,9 +96,10 @@ struct Interval {
     /** An eagerly-simplifying min of two Exprs that respects infinities. */
     static Expr make_min(const Expr &a, const Expr &b);
 
-    bool operator==(const Interval &other) const {
-        return (min.same_as(other.min)) && (max.same_as(other.max));
-    }
+    /** Equivalent to same_as. Exists so that the autoscheduler can
+     * compare two map<string, Interval> for equality in order to
+     * cache computations. */
+    bool operator==(const Interval &other) const;
 
 private:
     static Expr neg_inf_expr, pos_inf_expr;

@@ -1,82 +1,99 @@
-if(WIN32)
-    # Building this app for x86 in VS seems to have issues
-    # https://github.com/halide/Halide/pull/2740
-    return()
-endif()
+cmake_minimum_required(VERSION 3.16)
+project(resize)
 
+enable_testing()
+
+# Set up language settings
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_CXX_EXTENSIONS NO)
+
+# Find Halide
+find_package(Halide REQUIRED)
+
+# Generator
+add_executable(resize.generator resize_generator.cpp)
+target_link_libraries(resize.generator PRIVATE Halide::Generator)
+
+# Filters
 list(APPEND VARIANTS
-    box_float32_up
-    box_float32_down
-    box_uint16_up
-    box_uint16_down
-    box_uint8_up
-    box_uint8_down
-    linear_float32_up
-    linear_float32_down
-    linear_uint16_up
-    linear_uint16_down
-    linear_uint8_up
-    linear_uint8_down
-    cubic_float32_up
-    cubic_float32_down
-    cubic_uint16_up
-    cubic_uint16_down
-    cubic_uint8_up
-    cubic_uint8_down
-    lanczos_float32_up
-    lanczos_float32_down
-    lanczos_uint16_up
-    lanczos_uint16_down
-    lanczos_uint8_up
-    lanczos_uint8_down)
+     box_float32_up
+     box_float32_down
+     box_uint16_up
+     box_uint16_down
+     box_uint8_up
+     box_uint8_down
+     linear_float32_up
+     linear_float32_down
+     linear_uint16_up
+     linear_uint16_down
+     linear_uint8_up
+     linear_uint8_down
+     cubic_float32_up
+     cubic_float32_down
+     cubic_uint16_up
+     cubic_uint16_down
+     cubic_uint8_up
+     cubic_uint8_down
+     lanczos_float32_up
+     lanczos_float32_down
+     lanczos_uint16_up
+     lanczos_uint16_down
+     lanczos_uint8_up
+     lanczos_uint8_down)
 
-add_executable(resize resize.cpp)
-target_link_libraries(resize PRIVATE Halide::ImageIO)
-
-halide_generator(resize.generator SRCS resize_generator.cpp)
-foreach(VARIANT ${VARIANTS})
+foreach (VARIANT IN LISTS VARIANTS)
     string(REPLACE "_" ";" VLIST ${VARIANT})
     list(GET VLIST 0 INTERP)
     list(GET VLIST 1 TYPE)
     list(GET VLIST 2 DIR)
     string(REPLACE "up" "true" DIR ${DIR})
     string(REPLACE "down" "false" DIR ${DIR})
-    halide_library_from_generator(resize_${VARIANT}
-                                  GENERATOR resize.generator
-                                  GENERATOR_ARGS interpolation_type=${INTERP} input.type=${TYPE} upsample=${DIR})
-    target_link_libraries(resize PRIVATE resize_${VARIANT})
-endforeach()
+    add_halide_library(resize_${VARIANT} FROM resize.generator
+                       GENERATOR resize
+                       PARAMS interpolation_type=${INTERP} input.type=${TYPE} upsample=${DIR})
+endforeach ()
 
-# Make the small input used to test upsampling with our highest-quality downsampling method
-set(RGBORIG "${CMAKE_CURRENT_SOURCE_DIR}/../images/rgb.png")
-set(RGBSMALL "${CMAKE_BINARY_DIR}/rgb_small.png")
-add_custom_command(
-    OUTPUT "${RGBSMALL}"
-    DEPENDS resize
-    COMMAND resize "${RGBORIG}" "${RGBSMALL}" -i lanczos -t float32 -f 0.125
-)
-add_custom_target(rgbsmall DEPENDS "${RGBSMALL}")
+# Main executable
+add_executable(resize resize.cpp)
+list(TRANSFORM VARIANTS PREPEND "resize_" OUTPUT_VARIABLE FILTERS)
+target_link_libraries(resize
+                      PRIVATE
+                      Halide::ImageIO
+                      ${FILTERS})
 
-# Make a resize_all target that will run resize for each variant
-add_custom_target(resize_all)
-foreach(VARIANT ${VARIANTS})
-    string(REPLACE "_" ";" VLIST ${VARIANT})
-    list(GET VLIST 0 INTERP)
-    list(GET VLIST 1 TYPE)
-    list(GET VLIST 2 DIR)
-    if("${DIR}" STREQUAL "up")
-        set(F 4.0)
-        set(INPUT "${RGBSMALL}")
-    else()
-        set(F 0.5)
-        set(INPUT "${RGBORIG}")
-    endif()
-    set(OUT "${CMAKE_BINARY_DIR}/out_${VARIANT}.png")
-    add_custom_command(
-        OUTPUT "${OUT}"
-        DEPENDS rgbsmall
-        COMMAND resize "${INPUT}" "${OUT}" -i ${INTERP} -t ${TYPE} -f ${F}
-    )
-    add_custom_target(out_${VARIANT} DEPENDS "${OUT}")
-    add_dependencies(resize_all out_${VARIANT})
-endforeach()
+# Test that the app actually works!
+set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
+if (EXISTS ${IMAGE})
+    configure_file(${IMAGE} rgb.png COPYONLY)
+
+    add_test(NAME resize_initial_downsample
+             COMMAND resize rgb.png rgb_small.png -i lanczos -t float32 -f 0.125)
+
+    set_tests_properties(resize_initial_downsample PROPERTIES
+                         FIXTURES_SETUP rgb_small
+                         LABELS resize
+                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+
+
+    foreach (VARIANT IN LISTS VARIANTS)
+        string(REPLACE "_" ";" VLIST ${VARIANT})
+        list(GET VLIST 0 INTERP)
+        list(GET VLIST 1 TYPE)
+        list(GET VLIST 2 DIR)
+        if ("${DIR}" STREQUAL "up")
+            set(F 4.0)
+            set(INPUT rgb_small.png)
+        else ()
+            set(F 0.5)
+            set(INPUT rgb.png)
+        endif ()
+        add_test(NAME resize_${VARIANT}
+                 COMMAND resize ${INPUT} out_${VARIANT}.png -i ${INTERP} -t ${TYPE} -f ${F})
+        set_tests_properties(resize_${VARIANT}
+                             PROPERTIES FIXTURES_REQUIRED rgb_small
+                             LABELS resize
+                             PASS_REGULAR_EXPRESSION "Success!"
+                             SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+    endforeach ()
+endif ()

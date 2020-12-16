@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "Buffer.h"
+#include "Util.h"  // for all_are_convertible
 
 /** \file
  *
@@ -13,29 +13,24 @@
 
 namespace Halide {
 
+template<typename T>
+class Buffer;
+
 /** A Realization is a vector of references to existing Buffer objects.
  *  A pipeline with multiple outputs realize to a Realization.  */
 class Realization {
 private:
-    std::vector<Buffer<>> images;
+    std::vector<Buffer<void>> images;
 
 public:
     /** The number of images in the Realization. */
-    size_t size() const {
-        return images.size();
-    }
+    size_t size() const;
 
     /** Get a const reference to one of the images. */
-    const Buffer<> &operator[](size_t x) const {
-        user_assert(x < images.size()) << "Realization access out of bounds\n";
-        return images[x];
-    }
+    const Buffer<void> &operator[](size_t x) const;
 
     /** Get a reference to one of the images. */
-    Buffer<> &operator[](size_t x) {
-        user_assert(x < images.size()) << "Realization access out of bounds\n";
-        return images[x];
-    }
+    Buffer<void> &operator[](size_t x);
 
     /** Single-element realizations are implicitly castable to Buffers. */
     template<typename T>
@@ -48,17 +43,14 @@ public:
      * const. */
     template<typename T,
              typename... Args,
-             typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
+             typename = typename std::enable_if<Internal::all_are_convertible<Buffer<void>, Args...>::value>::type>
     Realization(Buffer<T> &a, Args &&... args) {
-        images = std::vector<Buffer<>>({a, args...});
+        images = std::vector<Buffer<void>>({a, args...});
     }
 
     /** Construct a Realization that refers to the buffers in an
      * existing vector of Buffer<> */
-    explicit Realization(std::vector<Buffer<>> &e)
-        : images(e) {
-        user_assert(!e.empty()) << "Realizations must have at least one element\n";
-    }
+    explicit Realization(std::vector<Buffer<void>> &e);
 
     /** Call device_sync() for all Buffers in the Realization.
      * If one of the calls returns an error, subsequent Buffers won't have
@@ -66,15 +58,7 @@ public:
      * code to mean that potentially all of the Buffers are in an indeterminate
      * state of sync.
      * Calling this explicitly should rarely be necessary, except for profiling. */
-    int device_sync(void *ctx = nullptr) {
-        for (auto &b : images) {
-            int result = b.device_sync(ctx);
-            if (result != 0) {
-                return result;
-            }
-        }
-        return 0;
-    }
+    int device_sync(void *ctx = nullptr);
 };
 
 }  // namespace Halide

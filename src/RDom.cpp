@@ -1,10 +1,12 @@
+#include <array>
+#include <utility>
 
-#include "RDom.h"
 #include "Generator.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ImageParam.h"
+#include "RDom.h"
 #include "Simplify.h"
 #include "Util.h"
 
@@ -17,7 +19,7 @@ using std::vector;
 
 namespace {
 
-static const char *const dom_var_names[] = {"$x", "$y", "$z", "$w"};
+const char *const dom_var_names[] = {"$x", "$y", "$z", "$w"};
 
 // T is an ImageParam, Buffer<>, Input<Buffer<>>
 template<typename T>
@@ -75,9 +77,9 @@ ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
 // This just initializes the predefined x, y, z, w members of RDom.
 void RDom::init_vars(const string &name) {
     const std::vector<ReductionVariable> &dom_vars = dom.domain();
-    RVar *vars[] = {&x, &y, &z, &w};
+    std::array<RVar *, 4> vars = {{&x, &y, &z, &w}};
 
-    for (size_t i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
+    for (size_t i = 0; i < vars.size(); i++) {
         if (i < dom_vars.size()) {
             *(vars[i]) = RVar(dom, i);
         } else {
@@ -86,7 +88,7 @@ void RDom::init_vars(const string &name) {
     }
 }
 
-RDom::RDom(ReductionDomain d)
+RDom::RDom(const ReductionDomain &d)
     : dom(d) {
     if (d.defined()) {
         init_vars("");
@@ -187,7 +189,7 @@ RDom::RDom(const Buffer<> &b) {
 }
 
 RDom::RDom(const OutputImageParam &p) {
-    std::string name = p.name();
+    const std::string &name = p.name();
     dom = make_dom_from_dimensions(p, name);
     init_vars(name);
 }
@@ -197,15 +199,23 @@ int RDom::dimensions() const {
 }
 
 RVar RDom::operator[](int i) const {
-    if (i == 0) return x;
-    if (i == 1) return y;
-    if (i == 2) return z;
-    if (i == 3) return w;
-    if (i < dimensions()) {
-        return RVar(dom, i);
+    switch (i) {
+    case 0:
+        return x;
+    case 1:
+        return y;
+    case 2:
+        return z;
+    case 3:
+        return w;
+    default:
+        if (i < dimensions()) {
+            return RVar(dom, i);
+        } else {
+            user_error << "Reduction domain index out of bounds: " << i << "\n";
+            return x;  // Keep the compiler happy
+        }
     }
-    user_error << "Reduction domain index out of bounds: " << i << "\n";
-    return x;  // Keep the compiler happy
 }
 
 RDom::operator Expr() const {
@@ -231,17 +241,17 @@ void RDom::where(Expr predicate) {
         << (*this) << " cannot be given a new predicate, because it has already"
         << " been used in the update definition of some function.\n";
     user_assert(dom.defined()) << "Error: Can't add predicate to undefined RDom.\n";
-    dom.where(predicate);
+    dom.where(std::move(predicate));
 }
 
 /** Emit an RVar in a human-readable form */
-std::ostream &operator<<(std::ostream &stream, RVar v) {
+std::ostream &operator<<(std::ostream &stream, const RVar &v) {
     stream << v.name() << "(" << v.min() << ", " << v.extent() << ")";
     return stream;
 }
 
 /** Emit an RDom in a human-readable form. */
-std::ostream &operator<<(std::ostream &stream, RDom dom) {
+std::ostream &operator<<(std::ostream &stream, const RDom &dom) {
     stream << "RDom(\n";
     for (int i = 0; i < dom.dimensions(); i++) {
         stream << "  " << dom[i] << "\n";

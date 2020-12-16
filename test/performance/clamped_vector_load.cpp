@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
-#include "test/common/halide_test_dirs.h"
+#include "halide_test_dirs.h"
+
 #include <algorithm>
 #include <cstdio>
 
@@ -37,6 +38,12 @@ double test(Func f, bool test_correctness = true) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     // Try doing vector loads with a boundary condition in various
     // ways and compare the performance.
 

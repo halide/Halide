@@ -6,7 +6,7 @@ namespace Internal {
 
 using std::string;
 
-Closure::Closure(Stmt s, const string &loop_variable) {
+Closure::Closure(const Stmt &s, const string &loop_variable) {
     if (!loop_variable.empty()) {
         ignore.push(loop_variable);
     }
@@ -33,7 +33,7 @@ void Closure::visit(const For *op) {
 }
 
 void Closure::found_buffer_ref(const string &name, Type type,
-                               bool read, bool written, Halide::Buffer<> image) {
+                               bool read, bool written, const Halide::Buffer<> &image) {
     if (!ignore.contains(name)) {
         debug(3) << "Adding buffer " << name << " to closure\n";
         Buffer &ref = buffers[name];
@@ -86,7 +86,7 @@ void Closure::visit(const Variable *op) {
 }
 
 void Closure::visit(const Atomic *op) {
-    if (op->mutex_name != "") {
+    if (!op->mutex_name.empty()) {
         found_buffer_ref(op->mutex_name, type_of<void *>(), true, true, Halide::Buffer<>());
     }
     op->body.accept(this);

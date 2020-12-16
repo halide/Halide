@@ -8,9 +8,9 @@
  */
 
 #include <atomic>
-#include <stdlib.h>
+#include <cstdlib>
 
-#include "Util.h"
+#include "runtime/HalideRuntime.h"  // for HALIDE_ALWAYS_INLINE
 
 namespace Halide {
 namespace Internal {
@@ -29,7 +29,7 @@ public:
     int decrement() {
         return --count;
     }  // Decrement and return new value
-    bool is_zero() const {
+    bool is_const_zero() const {
         return count == 0;
     }
 };
@@ -134,8 +134,13 @@ public:
         other.ptr = nullptr;
     }
 
+    // NOLINTNEXTLINE(bugprone-unhandled-self-assignment)
     IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {
-        if (other.ptr == ptr) return *this;
+        // Same-ptr but different-this happens frequently enough
+        // to check for (see https://github.com/halide/Halide/pull/5412)
+        if (other.ptr == ptr) {
+            return *this;
+        }
         // Other can be inside of something owned by this, so we
         // should be careful to incref other before we decref
         // ourselves.

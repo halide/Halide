@@ -76,8 +76,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
     }
     // clang-format on
 
-    if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y, op->type.lanes())) ||
-
+    if (rewrite(broadcast(x, c0) && broadcast(y, c0), broadcast(x && y, c0)) ||
         rewrite((x || (y && z)) && y, (x || z) && y) ||
         rewrite((x || (z && y)) && y, (x || z) && y) ||
         rewrite(y && (x || (y && z)), y && (x || z)) ||
@@ -108,7 +107,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
         rewrite(x <= y && x <= z, x <= min(y, z)) ||
         rewrite(y <= x && z <= x, max(y, z) <= x)) {
 
-        return mutate(std::move(rewrite.result), bounds);
+        return mutate(rewrite.result, bounds);
     }
 
     if (a.same_as(op->a) &&

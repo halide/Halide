@@ -1,16 +1,17 @@
 #include "Halide.h"
-#include <cassert>
+#include "halide_test_dirs.h"
+
 #include <fstream>
 #include <iostream>
-#include <stdio.h>
 
-#include "test/common/halide_test_dirs.h"
+#include <cassert>
+#include <cstdio>
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as it does not support ExternalCode::bitcode_wrapper().\n");
+        printf("[SKIP] Skipping test for WebAssembly as it does not support ExternalCode::bitcode_wrapper().\n");
         return 0;
     }
 

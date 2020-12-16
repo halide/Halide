@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "CSE.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "Lerp.h"
 #include "Simplify.h"
@@ -9,7 +10,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
+Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight) {
 
     Expr result;
 
@@ -40,9 +41,9 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
 
     if (result_type.is_bool()) {
         Expr half_weight;
-        if (weight.type().is_float())
+        if (weight.type().is_float()) {
             half_weight = 0.5f;
-        else {
+        } else {
             half_weight = weight.type().max() / 2;
         }
 
@@ -159,7 +160,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
             }
         }
 
-        if (!is_zero(bias_value)) {
+        if (!is_const_zero(bias_value)) {
             result = Cast::make(result_type, result + bias_value);
         }
     }

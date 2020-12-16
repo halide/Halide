@@ -4,12 +4,12 @@
 // values.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_13*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_13 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_13
+// g++ lesson_13*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_13 -std=c++11
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_13
 
 // On os x:
-// g++ lesson_13*.cpp -g -I ../include -L ../bin -lHalide -o lesson_13 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_13
+// g++ lesson_13*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_13 -std=c++11
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_13
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -40,6 +40,11 @@ int main(int argc, char **argv) {
     color_image(x, y, c) = select(c == 0, 245,  // Red value
                                   c == 1, 42,   // Green value
                                   132);         // Blue value
+
+    // Since this pattern appears quite often, Halide provides a
+    // syntatic sugar to write the code above as the following,
+    // using the "mux" function.
+    // color_image(x, y, c) = mux(c, {245, 42, 132});
 
     // This method is often convenient because it makes it easy to
     // operate on this Func in a way that treats each item in the

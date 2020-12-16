@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "gpu_object_lifetime_tracker.h"
 
-#include "test/common/gpu_object_lifetime_tracker.h"
+#include <cstdio>
 
 using namespace Halide;
 
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
             if (target.has_gpu_feature()) {
                 Var xi, yi;
                 f.gpu_tile(x, y, xi, yi, 8, 8);
-            } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            } else if (target.has_feature(Target::HVX)) {
                 f.hexagon();
             }
 

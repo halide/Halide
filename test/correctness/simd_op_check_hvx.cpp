@@ -4,8 +4,8 @@
 // simd_op_check is not an 'offload' test. In other words, it runs SIMD tests
 // for the architecture that is the host architecture in HL_TARGET.
 // However, the buildbots are configured to test for HVX as an offload device
-// i.e HL_TARGET and HL_JIT_TARGET, for instance, are host-hvx_128. This works
-// fine for all the tests except simd_op_check because with HL_TARGET=host-hvx_128
+// i.e HL_TARGET and HL_JIT_TARGET, for instance, are host-hvx. This works
+// fine for all the tests except simd_op_check because with HL_TARGET=host-hvx
 // we end up running host tests and not HVX tests.
 //
 // One way of fixing this is to change the buildbot recipe. However, this would
@@ -13,7 +13,7 @@
 // simd_op_check into two tests, simd_op_check.cpp and simd_op_check_hvx.cpp
 // so that the latter is free to do its own thing - for simd_op_check_hvx.cpp
 // to run any tests, all that is needed is that HL_TARGET have a HVX related
-// target feature, i.e. one of HVX_64, HVX_128, HVX_v62, HVX_v65 and HVX_v66.
+// target feature, i.e. one of HVX, HVX_v62, HVX_v65 and HVX_v66.
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -47,12 +47,7 @@ public:
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
         Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
 
-        int hvx_width = 0;
-        if (target.has_feature(Target::HVX_64)) {
-            hvx_width = 64;
-        } else if (target.has_feature(Target::HVX_128)) {
-            hvx_width = 128;
-        }
+        constexpr int hvx_width = 128;
 
         int isa_version;
         if (target.has_feature(Halide::Target::HVX_v66)) {
@@ -304,6 +299,11 @@ public:
         check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u32(u8_1));
         check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u32(clamp(u16_1, 0, 15)));
 
+        // This tests the case of vlut with > 256 elements (thus forcing us to split into
+        // multiple vluts)
+        check("vlut16(v*.b,v*.h,r*)", hvx_width * 3, in_u16(x * 3));
+        check("vlut32(v*.b,v*.b,r*)", hvx_width * 3, in_u8(x * 3));
+
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width / 1, u8_sat(i16_1));
         check("v*.b = vpack(v*.h,v*.h):sat", hvx_width / 1, i8_sat(i16_1));
         check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width / 2, u16_sat(i32_1));
@@ -357,47 +357,47 @@ public:
         check("vmin(v*.h,v*.h)", hvx_width / 2, min(i16_1, i16_2));
         check("vmin(v*.w,v*.w)", hvx_width / 4, min(i32_1, i32_2));
 
-        check("vcmp.gt(v*.b,v*.b)", hvx_width / 1, select(i8_1 < i8_2, i8_1, i8_2));
+        check("vcmp.gt(v*.b,v*.b)", hvx_width / 1, select(i8_1 < i8_2, i8_3, i8_2));
         check("vcmp.gt(v*.ub,v*.ub)", hvx_width / 1, select(u8_1 < u8_2, u8_3, u8_2));
         check("vcmp.gt(v*.h,v*.h)", hvx_width / 2, select(i16_1 < i16_2, i16_3, i16_2));
         check("vcmp.gt(v*.uh,v*.uh)", hvx_width / 2, select(u16_1 < u16_2, u16_3, u16_2));
         check("vcmp.gt(v*.w,v*.w)", hvx_width / 4, select(i32_1 < i32_2, i32_3, i32_2));
-        check("vcmp.gt(v*.uw,v*.uw)", hvx_width / 4, select(u32_1 < u32_2, u32_1, u32_2));
+        check("vcmp.gt(v*.uw,v*.uw)", hvx_width / 4, select(u32_1 < u32_2, u32_3, u32_2));
 
-        check("vcmp.gt(v*.b,v*.b)", hvx_width / 1, select(i8_1 > i8_2, i8_1, i8_2));
+        check("vcmp.gt(v*.b,v*.b)", hvx_width / 1, select(i8_1 > i8_2, i8_3, i8_2));
         check("vcmp.gt(v*.ub,v*.ub)", hvx_width / 1, select(u8_1 > u8_2, u8_3, u8_2));
         check("vcmp.gt(v*.h,v*.h)", hvx_width / 2, select(i16_1 > i16_2, i16_3, i16_2));
         check("vcmp.gt(v*.uh,v*.uh)", hvx_width / 2, select(u16_1 > u16_2, u16_3, u16_2));
         check("vcmp.gt(v*.w,v*.w)", hvx_width / 4, select(i32_1 > i32_2, i32_3, i32_2));
-        check("vcmp.gt(v*.uw,v*.uw)", hvx_width / 4, select(u32_1 > u32_2, u32_1, u32_2));
+        check("vcmp.gt(v*.uw,v*.uw)", hvx_width / 4, select(u32_1 > u32_2, u32_3, u32_2));
 
-        check("vcmp.gt(v*.b,v*.b)", hvx_width / 1, select(i8_1 <= i8_2, i8_1, i8_2));
+        check("vcmp.gt(v*.b,v*.b)", hvx_width / 1, select(i8_1 <= i8_2, i8_3, i8_2));
         check("vcmp.gt(v*.ub,v*.ub)", hvx_width / 1, select(u8_1 <= u8_2, u8_3, u8_2));
         check("vcmp.gt(v*.h,v*.h)", hvx_width / 2, select(i16_1 <= i16_2, i16_3, i16_2));
         check("vcmp.gt(v*.uh,v*.uh)", hvx_width / 2, select(u16_1 <= u16_2, u16_3, u16_2));
         check("vcmp.gt(v*.w,v*.w)", hvx_width / 4, select(i32_1 <= i32_2, i32_3, i32_2));
-        check("vcmp.gt(v*.uw,v*.uw)", hvx_width / 4, select(u32_1 <= u32_2, u32_1, u32_2));
+        check("vcmp.gt(v*.uw,v*.uw)", hvx_width / 4, select(u32_1 <= u32_2, u32_3, u32_2));
 
-        check("vcmp.gt(v*.b,v*.b)", hvx_width / 1, select(i8_1 >= i8_2, i8_1, i8_2));
+        check("vcmp.gt(v*.b,v*.b)", hvx_width / 1, select(i8_1 >= i8_2, i8_3, i8_2));
         check("vcmp.gt(v*.ub,v*.ub)", hvx_width / 1, select(u8_1 >= u8_2, u8_3, u8_2));
         check("vcmp.gt(v*.h,v*.h)", hvx_width / 2, select(i16_1 >= i16_2, i16_3, i16_2));
         check("vcmp.gt(v*.uh,v*.uh)", hvx_width / 2, select(u16_1 >= u16_2, u16_3, u16_2));
         check("vcmp.gt(v*.w,v*.w)", hvx_width / 4, select(i32_1 >= i32_2, i32_3, i32_2));
-        check("vcmp.gt(v*.uw,v*.uw)", hvx_width / 4, select(u32_1 >= u32_2, u32_1, u32_2));
+        check("vcmp.gt(v*.uw,v*.uw)", hvx_width / 4, select(u32_1 >= u32_2, u32_3, u32_2));
 
-        check("vcmp.eq(v*.b,v*.b)", hvx_width / 1, select(i8_1 == i8_2, i8_1, i8_2));
-        check("vcmp.eq(v*.b,v*.b)", hvx_width / 1, select(u8_1 == u8_2, u8_1, u8_2));
-        check("vcmp.eq(v*.h,v*.h)", hvx_width / 2, select(i16_1 == i16_2, i16_1, i16_2));
-        check("vcmp.eq(v*.h,v*.h)", hvx_width / 2, select(u16_1 == u16_2, u16_1, u16_2));
-        check("vcmp.eq(v*.w,v*.w)", hvx_width / 4, select(i32_1 == i32_2, i32_1, i32_2));
-        check("vcmp.eq(v*.w,v*.w)", hvx_width / 4, select(u32_1 == u32_2, u32_1, u32_2));
+        check("vcmp.eq(v*.b,v*.b)", hvx_width / 1, select(i8_1 == i8_2, i8_3, i8_2));
+        check("vcmp.eq(v*.b,v*.b)", hvx_width / 1, select(u8_1 == u8_2, u8_3, u8_2));
+        check("vcmp.eq(v*.h,v*.h)", hvx_width / 2, select(i16_1 == i16_2, i16_3, i16_2));
+        check("vcmp.eq(v*.h,v*.h)", hvx_width / 2, select(u16_1 == u16_2, u16_3, u16_2));
+        check("vcmp.eq(v*.w,v*.w)", hvx_width / 4, select(i32_1 == i32_2, i32_3, i32_2));
+        check("vcmp.eq(v*.w,v*.w)", hvx_width / 4, select(u32_1 == u32_2, u32_3, u32_2));
 
-        check("vcmp.eq(v*.b,v*.b)", hvx_width / 1, select(i8_1 != i8_2, i8_1, i8_2));
-        check("vcmp.eq(v*.b,v*.b)", hvx_width / 1, select(u8_1 != u8_2, u8_1, u8_2));
-        check("vcmp.eq(v*.h,v*.h)", hvx_width / 2, select(i16_1 != i16_2, i16_1, i16_2));
-        check("vcmp.eq(v*.h,v*.h)", hvx_width / 2, select(u16_1 != u16_2, u16_1, u16_2));
-        check("vcmp.eq(v*.w,v*.w)", hvx_width / 4, select(i32_1 != i32_2, i32_1, i32_2));
-        check("vcmp.eq(v*.w,v*.w)", hvx_width / 4, select(u32_1 != u32_2, u32_1, u32_2));
+        check("vcmp.eq(v*.b,v*.b)", hvx_width / 1, select(i8_1 != i8_2, i8_3, i8_2));
+        check("vcmp.eq(v*.b,v*.b)", hvx_width / 1, select(u8_1 != u8_2, u8_3, u8_2));
+        check("vcmp.eq(v*.h,v*.h)", hvx_width / 2, select(i16_1 != i16_2, i16_3, i16_2));
+        check("vcmp.eq(v*.h,v*.h)", hvx_width / 2, select(u16_1 != u16_2, u16_3, u16_2));
+        check("vcmp.eq(v*.w,v*.w)", hvx_width / 4, select(i32_1 != i32_2, i32_3, i32_2));
+        check("vcmp.eq(v*.w,v*.w)", hvx_width / 4, select(u32_1 != u32_2, u32_3, u32_2));
 
         check("vabsdiff(v*.ub,v*.ub)", hvx_width / 1, absd(u8_1, u8_2));
         check("vabsdiff(v*.uh,v*.uh)", hvx_width / 2, absd(u16_1, u16_2));
@@ -435,9 +435,9 @@ public:
         }
         check("vsplat(r*)", hvx_width / 4, in_u32(0));
 
-        check("vmux(q*,v*,v*)", hvx_width / 1, select(i8_1 == i8_2, i8_1, i8_2));
-        check("vmux(q*,v*,v*)", hvx_width / 2, select(i16_1 == i16_2, i16_1, i16_2));
-        check("vmux(q*,v*,v*)", hvx_width / 4, select(i32_1 == i32_2, i32_1, i32_2));
+        check("vmux(q*,v*,v*)", hvx_width / 1, select(i8_1 == i8_2, i8_3, i8_2));
+        check("vmux(q*,v*,v*)", hvx_width / 2, select(i16_1 == i16_2, i16_3, i16_2));
+        check("vmux(q*,v*,v*)", hvx_width / 4, select(i32_1 == i32_2, i32_3, i32_2));
 
         check("vabs(v*.h)", hvx_width / 2, abs(i16_1));
         check("vabs(v*.w)", hvx_width / 4, abs(i32_1));
@@ -645,6 +645,41 @@ public:
         check("vnormamt(v*.h)", hvx_width / 2, max(count_leading_zeros(i16_1), count_leading_zeros(~i16_1)));
         check("vnormamt(v*.w)", hvx_width / 4, max(count_leading_zeros(i32_1), count_leading_zeros(~i32_1)));
         check("vpopcount(v*.h)", hvx_width / 2, popcount(u16_1));
+
+        int rfac = 4;
+        RDom r(0, rfac);
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r))));
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * 34));
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * u8(r)));
+        check("v*.w  += vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * i8(r)));
+        check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
+        check("v*.w  += vrmpy(v*.ub,v*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
+        check("v*.w  += vrmpy(v*.b,v*.b)", hvx_width / 4, sum(i32(in_i8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
+        // Sliding window
+        // TODO: We can generate accumulative versions of below instructions.
+        check("v*:*.uw = vrmpy(v*:*.ub, r*.ub, #*)", hvx_width, sum(u32(in_u8(x + r))));
+        check("v*:*.uw = vrmpy(v*:*.ub, r*.ub, #*)", hvx_width, sum(u32(in_u8(x + r)) * 34));
+        check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(u32(in_u8(x + r)) * i8(r)));
+        check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(i32(in_u8(x + r)) * i8(-r)));
+        check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(i32(in_u8(x + r)) * (-1)));
+
+        rfac = 2;
+        RDom r2(0, rfac);
+        check("v*.h += vdmpy(v*.ub, r*.b)", hvx_width / 2, sum(i16(in_u8(rfac * x + r2))));
+        check("v*.h += vdmpy(v*.ub, r*.b)", hvx_width / 2, sum(i16(in_u8(rfac * x + r2)) * 34));
+        check("v*.w += vdmpy(v*.h, r*.b)", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * i8(r2)));
+        check("v*.w += vdmpy(v*.h, r*.b)", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * i8(r2)));
+        check("v*.w = vdmpy(v*.h, r*.uh):sat", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * 15246));
+        check("v*.w = vdmpy(v*.h, r*.h):sat", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * (-1246)));
+        // Sliding window
+        // TODO: Check for the crash
+        // check("v*:*.h = vdmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r2)) * i16(r2)));
+
+        rfac = 3;
+        RDom r3(0, rfac);
+        check("v*:*.h += vtmpy(v*:*.b, r*.b)", hvx_width, sum(i16(in_i8(x + r3))));
+        check("v*:*.h += vtmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r3))));
+        check("v*:*.w += vtmpy(v*:*.h, r*.b)", hvx_width, sum(i32(in_i16(x + r3))));
     }
 
 private:
@@ -658,8 +693,7 @@ int main(int argc, char **argv) {
     printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
 
     Target t(Target::NoOS, Target::Hexagon, 32);
-    for (const auto &f : {Target::HVX_64,
-                          Target::HVX_128,
+    for (const auto &f : {Target::HVX,
                           Target::HVX_v62,
                           Target::HVX_v65,
                           Target::HVX_v66}) {
@@ -668,7 +702,7 @@ int main(int argc, char **argv) {
         }
     }
     if (t == Target("hexagon-32-noos")) {
-        std::cerr << "Warning: correctness_simd_op_hvx called with an HL_TARGET value that has no HVX related feature. Testing nothing.\n";
+        printf("[SKIP] No HVX target enabled.\n");
         return 0;
     }
 

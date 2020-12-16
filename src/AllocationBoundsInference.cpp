@@ -1,5 +1,7 @@
 #include "AllocationBoundsInference.h"
 #include "Bounds.h"
+#include "ExternFuncArgument.h"
+#include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
@@ -11,6 +13,8 @@ using std::map;
 using std::set;
 using std::string;
 using std::vector;
+
+namespace {
 
 // Figure out the region touched of each buffer, and deposit them as
 // let statements outside of each realize node, or at the top level if
@@ -31,24 +35,17 @@ class AllocationInference : public IRMutator {
 
         Scope<Interval> empty_scope;
         Box b = box_touched(op->body, op->name, empty_scope, func_bounds);
-        if (touched_by_extern.count(f.name())) {
-            // The region touched is at least the region required at this
-            // loop level of the first stage (this is important for inputs
-            // and outputs to extern stages).
-            Box required(op->bounds.size());
-            for (size_t i = 0; i < required.size(); i++) {
-                string prefix = op->name + ".s0." + f_args[i];
-                required[i] = Interval(Variable::make(Int(32), prefix + ".min"),
-                                       Variable::make(Int(32), prefix + ".max"));
-            }
-
-            merge_boxes(b, required);
-        }
 
         Stmt new_body = mutate(op->body);
         Stmt stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
 
-        internal_assert(b.size() == op->bounds.size()) << b.size() << " " << op->bounds.size() << "\n";
+        // If the realization is dead and there's is no access to the
+        // buffer (e.g. because we're in a specialization), then
+        // b.size() may be zero. In this case just drop the realize
+        // node.
+        if (b.empty() && !op->bounds.empty()) {
+            return new_body;
+        }
 
         for (size_t i = 0; i < b.size(); i++) {
             // Get any applicable bound on this dimension
@@ -131,7 +128,9 @@ public:
                 touched_by_extern.insert(f.name());
                 for (size_t i = 0; i < f.extern_arguments().size(); i++) {
                     ExternFuncArgument arg = f.extern_arguments()[i];
-                    if (!arg.is_func()) continue;
+                    if (!arg.is_func()) {
+                        continue;
+                    }
                     Function input(arg.func);
                     touched_by_extern.insert(input.name());
                 }
@@ -140,11 +139,30 @@ public:
     }
 };
 
+// We can strip box_touched declarations here. We're done with
+// them. Reconsider this decision if we want to use
+// box_touched on extern stages later in lowering. Storage
+// folding currently does box_touched too, but it handles extern
+// stages specially already.
+class StripDeclareBoxTouched : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::declare_box_touched)) {
+            return 0;
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
+}  // namespace
+
 Stmt allocation_bounds_inference(Stmt s,
                                  const map<string, Function> &env,
                                  const FuncValueBounds &fb) {
-    AllocationInference inf(env, fb);
-    s = inf.mutate(s);
+    s = AllocationInference(env, fb).mutate(s);
+    s = StripDeclareBoxTouched().mutate(s);
     return s;
 }
 

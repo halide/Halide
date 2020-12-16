@@ -1,5 +1,9 @@
 include ../support/Makefile.inc
 
+# Some older arm64 compilers will choke on our C backend code at -O3;
+# we'll just use -O2 for this app since performance here isn't critical
+OPTIMIZE = -O2
+
 .PHONY: build clean test
 build: $(BIN)/$(HL_TARGET)/run $(BIN)/$(HL_TARGET)/run_cpp
 test: build
@@ -8,7 +12,7 @@ test: build
 
 $(GENERATOR_BIN)/pipeline.generator: pipeline_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/pipeline_native.a: $(GENERATOR_BIN)/pipeline.generator
 	@mkdir -p $(@D)
@@ -23,7 +27,7 @@ $(BIN)/%/run: run.cpp $(BIN)/%/pipeline_c.halide_generated.cpp $(BIN)/%/pipeline
 
 $(GENERATOR_BIN)/pipeline_cpp.generator: pipeline_cpp_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/pipeline_cpp_cpp.halide_generated.cpp: $(GENERATOR_BIN)/pipeline_cpp.generator
 	@mkdir -p $(@D)

@@ -1,4 +1,5 @@
 #include "UnrollLoops.h"
+#include "Bounds.h"
 #include "CSE.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -10,6 +11,8 @@ using std::vector;
 
 namespace Halide {
 namespace Internal {
+
+namespace {
 
 class UnrollLoops : public IRMutator {
     using IRMutator::visit;
@@ -112,7 +115,9 @@ public:
     }
 };
 
-Stmt unroll_loops(Stmt s) {
+}  // namespace
+
+Stmt unroll_loops(const Stmt &s) {
     return UnrollLoops().mutate(s);
 }
 

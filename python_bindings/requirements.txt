@@ -1,11 +1,15 @@
-# This file lists the python dependencies, 
+# This file lists the python dependencies,
 # it is meant to be used with pip (and/or possibly virtualenv, pbundler, etc)
 # See http://pip.readthedocs.org/en/latest/user_guide.html#requirements-files
-# You will probably want to run 
+# You will probably want to run
 # something similar to `pip3 install --user -r requirements.txt`
 
 # science packages
 numpy
 scipy
 pillow
-imageio
+
+# Keep versions of these requirements equal to the versions in Ubuntu 20.04 LTS
+# because newer versions fix bugs we work around.
+imageio==2.4.1
+pybind11==2.5.0

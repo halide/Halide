@@ -208,18 +208,42 @@ struct FuncConfig {
     // -- if it has a well-defined value, replace the corresponding field in 'this'
     // -- if it does not have a well-defined value, leave untouched the corresponding field in 'this'
     void merge_from(const FuncConfig &from) {
-        if (from.zoom >= 0.f) this->zoom = from.zoom;
-        if (from.load_cost >= 0) this->load_cost = from.load_cost;
-        if (from.store_cost > 0) this->store_cost = from.store_cost;
-        if (from.pos.x > std::numeric_limits<int>::lowest()) this->pos.x = from.pos.x;
-        if (from.pos.y > std::numeric_limits<int>::lowest()) this->pos.y = from.pos.y;
-        if (!from.strides.empty()) this->strides = from.strides;
-        if (from.color_dim >= -1) this->color_dim = from.color_dim;
-        if (!std::isnan(from.min)) this->min = from.min;
-        if (!std::isnan(from.max)) this->max = from.max;
-        if (!from.labels.empty()) this->labels = from.labels;
-        if (from.blank_on_end_realization >= 0) this->blank_on_end_realization = from.blank_on_end_realization;
-        if (!(from.uninitialized_memory_color & 0xff000000)) this->uninitialized_memory_color = from.uninitialized_memory_color;
+        if (from.zoom >= 0.f) {
+            this->zoom = from.zoom;
+        }
+        if (from.load_cost >= 0) {
+            this->load_cost = from.load_cost;
+        }
+        if (from.store_cost > 0) {
+            this->store_cost = from.store_cost;
+        }
+        if (from.pos.x > std::numeric_limits<int>::lowest()) {
+            this->pos.x = from.pos.x;
+        }
+        if (from.pos.y > std::numeric_limits<int>::lowest()) {
+            this->pos.y = from.pos.y;
+        }
+        if (!from.strides.empty()) {
+            this->strides = from.strides;
+        }
+        if (from.color_dim >= -1) {
+            this->color_dim = from.color_dim;
+        }
+        if (!std::isnan(from.min)) {
+            this->min = from.min;
+        }
+        if (!std::isnan(from.max)) {
+            this->max = from.max;
+        }
+        if (!from.labels.empty()) {
+            this->labels = from.labels;
+        }
+        if (from.blank_on_end_realization >= 0) {
+            this->blank_on_end_realization = from.blank_on_end_realization;
+        }
+        if (!(from.uninitialized_memory_color & 0xff000000)) {
+            this->uninitialized_memory_color = from.uninitialized_memory_color;
+        }
     }
 
     static std::string tag_start_text() {
@@ -316,7 +340,7 @@ struct FuncConfig {
 
     FuncConfig() = default;
 
-    explicit FuncConfig(const std::string &trace_tag, ErrorFunc error = default_error) {
+    explicit FuncConfig(const std::string &trace_tag, const ErrorFunc &error = default_error) {
         std::istringstream is(trace_tag);
         is >> *this;
         if (is.fail() || is.get() != EOF) {
@@ -440,7 +464,7 @@ struct GlobalConfig {
 
     GlobalConfig() = default;
 
-    explicit GlobalConfig(const std::string &trace_tag, ErrorFunc error = default_error) {
+    explicit GlobalConfig(const std::string &trace_tag, const ErrorFunc &error = default_error) {
         std::istringstream is(trace_tag);
         is >> *this;
         if (is.fail() || is.get() != EOF) {
@@ -489,7 +513,7 @@ struct FuncTypeAndDim {
         for (const auto &type : types) {
             os << " " << type_name[type.code & 3] << (int)type.bits;
             if (type.lanes > 1) {
-                os << 'x' << type.lanes;
+                os << "x" << type.lanes;
             }
         }
         os << "\n";
@@ -520,7 +544,7 @@ struct FuncTypeAndDim {
 
     FuncTypeAndDim() = default;
 
-    explicit FuncTypeAndDim(const std::string &trace_tag, ErrorFunc error = default_error) {
+    explicit FuncTypeAndDim(const std::string &trace_tag, const ErrorFunc &error = default_error) {
         std::istringstream is(trace_tag);
         is >> *this;
         if (is.fail() || is.get() != EOF) {

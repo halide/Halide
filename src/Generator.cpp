@@ -1,8 +1,10 @@
 #include <cmath>
 #include <fstream>
 #include <unordered_map>
+#include <utility>
 
 #include "BoundaryConditions.h"
+#include "CompilerLogger.h"
 #include "Derivative.h"
 #include "Generator.h"
 #include "IRPrinter.h"
@@ -18,10 +20,6 @@ GeneratorContext::GeneratorContext(const Target &t, bool auto_schedule,
       machine_params("machine_params", machine_params),
       externs_map(std::make_shared<ExternsMap>()),
       value_tracker(std::make_shared<Internal::ValueTracker>()) {
-}
-
-GeneratorContext::~GeneratorContext() {
-    // nothing
 }
 
 void GeneratorContext::init_from_context(const Halide::GeneratorContext &context) {
@@ -54,11 +52,19 @@ bool is_alnum(char c) {
 // -- initial _ is forbidden (rather than merely "reserved")
 // -- two underscores in a row is also forbidden
 bool is_valid_name(const std::string &n) {
-    if (n.empty()) return false;
-    if (!is_alpha(n[0])) return false;
+    if (n.empty()) {
+        return false;
+    }
+    if (!is_alpha(n[0])) {
+        return false;
+    }
     for (size_t i = 1; i < n.size(); ++i) {
-        if (!is_alnum(n[i])) return false;
-        if (n[i] == '_' && n[i - 1] == '_') return false;
+        if (!is_alnum(n[i])) {
+            return false;
+        }
+        if (n[i] == '_' && n[i - 1] == '_') {
+            return false;
+        }
     }
     return true;
 }
@@ -75,7 +81,7 @@ std::string compute_base_path(const std::string &output_dir,
 std::map<Output, std::string> compute_output_files(const Target &target,
                                                    const std::string &base_path,
                                                    const std::set<Output> &outputs) {
-    std::map<Output, OutputInfo> output_info = get_output_info(target);
+    std::map<Output, const OutputInfo> output_info = get_output_info(target);
 
     std::map<Output, std::string> output_files;
     for (auto o : outputs) {
@@ -117,7 +123,7 @@ Func make_param_func(const Parameter &p, const std::string &name) {
 std::vector<Type> parse_halide_type_list(const std::string &types) {
     const auto &e = get_halide_type_enum_map();
     std::vector<Type> result;
-    for (auto t : split_string(types, ",")) {
+    for (const auto &t : split_string(types, ",")) {
         auto it = e.find(t);
         user_assert(it != e.end()) << "Type not found: " << t;
         result.push_back(it->second);
@@ -162,7 +168,7 @@ void ValueTracker::track_values(const std::string &name, const std::vector<Expr>
             std::ostringstream o;
             o << "Saw too many unique values in ValueTracker[" + std::to_string(i) + "]; "
               << "expected a maximum of " << max_unique_values << ":\n";
-            for (auto e : history[i]) {
+            for (const auto &e : history[i]) {
                 o << "    " << e << "\n";
             }
             user_error << o.str();
@@ -173,7 +179,7 @@ void ValueTracker::track_values(const std::string &name, const std::vector<Expr>
 std::vector<Expr> parameter_constraints(const Parameter &p) {
     internal_assert(p.defined());
     std::vector<Expr> values;
-    values.push_back(Expr(p.host_alignment()));
+    values.emplace_back(p.host_alignment());
     if (p.is_buffer()) {
         for (int i = 0; i < p.dimensions(); ++i) {
             values.push_back(p.min_constraint(i));
@@ -227,12 +233,16 @@ private:
 
     std::vector<Internal::GeneratorParamBase *> select_generator_params(const std::vector<Internal::GeneratorParamBase *> &in) {
         std::vector<Internal::GeneratorParamBase *> out;
-        for (auto p : in) {
+        for (auto *p : in) {
             // These are always propagated specially.
             if (p->name == "target" ||
                 p->name == "auto_schedule" ||
-                p->name == "machine_params") continue;
-            if (p->is_synthetic_param()) continue;
+                p->name == "machine_params") {
+                continue;
+            }
+            if (p->is_synthetic_param()) {
+                continue;
+            }
             out.push_back(p);
         }
         return out;
@@ -253,7 +263,7 @@ void StubEmitter::emit_generator_params_struct() {
     stream << get_indent() << "struct " << name << " final {\n";
     indent_level++;
     if (!v.empty()) {
-        for (auto p : v) {
+        for (auto *p : v) {
             stream << get_indent() << p->get_c_type() << " " << p->name << "{ " << p->get_default_value() << " };\n";
         }
         stream << "\n";
@@ -266,7 +276,7 @@ void StubEmitter::emit_generator_params_struct() {
         stream << get_indent() << name << "(\n";
         indent_level++;
         std::string comma = "";
-        for (auto p : v) {
+        for (auto *p : v) {
             stream << get_indent() << comma << p->get_c_type() << " " << p->name << "\n";
             comma = ", ";
         }
@@ -274,7 +284,7 @@ void StubEmitter::emit_generator_params_struct() {
         stream << get_indent() << ") : \n";
         indent_level++;
         comma = "";
-        for (auto p : v) {
+        for (auto *p : v) {
             stream << get_indent() << comma << p->name << "(" << p->name << ")\n";
             comma = ", ";
         }
@@ -289,7 +299,7 @@ void StubEmitter::emit_generator_params_struct() {
     stream << get_indent() << "return {\n";
     indent_level++;
     std::string comma = "";
-    for (auto p : v) {
+    for (auto *p : v) {
         stream << get_indent() << comma << "{\"" << p->name << "\", ";
         if (p->is_looplevel_param()) {
             stream << p->name << "}\n";
@@ -314,7 +324,7 @@ void StubEmitter::emit_inputs_struct() {
         std::string name;
     };
     std::vector<InInfo> in_info;
-    for (auto input : inputs) {
+    for (auto *input : inputs) {
         std::string c_type = input->get_c_type();
         if (input->is_array()) {
             c_type = "std::vector<" + c_type + ">";
@@ -325,7 +335,7 @@ void StubEmitter::emit_inputs_struct() {
     const std::string name = "Inputs";
     stream << get_indent() << "struct " << name << " final {\n";
     indent_level++;
-    for (auto in : in_info) {
+    for (const auto &in : in_info) {
         stream << get_indent() << in.c_type << " " << in.name << ";\n";
     }
     stream << "\n";
@@ -336,7 +346,7 @@ void StubEmitter::emit_inputs_struct() {
         stream << get_indent() << name << "(\n";
         indent_level++;
         std::string comma = "";
-        for (auto in : in_info) {
+        for (const auto &in : in_info) {
             stream << get_indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
             comma = ", ";
         }
@@ -344,7 +354,7 @@ void StubEmitter::emit_inputs_struct() {
         stream << get_indent() << ") : \n";
         indent_level++;
         comma = "";
-        for (auto in : in_info) {
+        for (const auto &in : in_info) {
             stream << get_indent() << comma << in.name << "(" << in.name << ")\n";
             comma = ", ";
         }
@@ -378,7 +388,7 @@ void StubEmitter::emit() {
     };
     bool all_outputs_are_func = true;
     std::vector<OutputInfo> out_info;
-    for (auto output : outputs) {
+    for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
         std::string getter;
         const bool is_func = (c_type == "Func");
@@ -433,7 +443,9 @@ void StubEmitter::emit() {
 
     for (auto *p : generator_params) {
         std::string decl = p->get_type_decls();
-        if (decl.empty()) continue;
+        if (decl.empty()) {
+            continue;
+        }
         stream << decl << "\n";
     }
 
@@ -459,7 +471,7 @@ void StubEmitter::emit() {
         stream << "\n";
         if (all_outputs_are_func) {
             std::string name = out_info.at(0).name;
-            auto output = outputs[0];
+            auto *output = outputs[0];
             if (output->is_array()) {
                 stream << get_indent() << "operator std::vector<Halide::Func>() const {\n";
                 indent_level++;
@@ -637,12 +649,12 @@ void StubEmitter::emit() {
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             GeneratorFactory generator_factory)
+                             const GeneratorFactory &generator_factory)
     : generator(generator_factory(context)) {
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             GeneratorFactory generator_factory,
+                             const GeneratorFactory &generator_factory,
                              const GeneratorParamsMap &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
     : GeneratorStub(context, generator_factory) {
@@ -673,7 +685,7 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
         }
     } else {
         // Generators with build() method can't have Output<>, hence can't have array outputs
-        for (auto output : p.outputs()) {
+        for (const auto &output : p.outputs()) {
             v.push_back(std::vector<Func>{output});
         }
     }
@@ -734,6 +746,8 @@ std::string halide_type_to_c_type(const Type &t) {
         {encode(UInt(16)), "uint16_t"},
         {encode(UInt(32)), "uint32_t"},
         {encode(UInt(64)), "uint64_t"},
+        {encode(BFloat(16)), "uint16_t"},  // TODO: see Issues #3709, #3967
+        {encode(Float(16)), "uint16_t"},   // TODO: see Issues #3709, #3967
         {encode(Float(32)), "float"},
         {encode(Float(64)), "double"},
         {encode(Handle(64)), "void*"}};
@@ -752,9 +766,10 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         "     in TensorFlow or PyTorch. See Generator::build_gradient_module() documentation.\n"
         "\n"
         " -e  A comma separated list of files to emit. Accepted values are:\n"
-        "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
-        "      stmt, cpp_stub, schedule, registration, featurization, pytorch_wrapper].\n"
-        "     If omitted, default value is [static_library, h, registration].\n"
+        "     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,\n"
+        "      llvm_assembly, object, python_extension, pytorch_wrapper, registration,\n"
+        "      schedule, static_library, stmt, stmt_html, compiler_log].\n"
+        "     If omitted, default value is [c_header, static_library, registration].\n"
         "\n"
         " -p  A comma-separated list of shared libraries that will be loaded before the\n"
         "     generator is run. Useful for custom auto-schedulers. The generator must\n"
@@ -852,6 +867,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
         return 1;
     }
+
     std::string function_name = flags_info["-f"];
     if (function_name.empty()) {
         // If -f isn't specified, assume function name = generator name.
@@ -864,8 +880,20 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
 
+    std::string emit_flags_string = flags_info["-e"];
+
+    // If HL_EXTRA_OUTPUTS is defined, assume it's extra outputs we want to generate
+    // (usually for temporary debugging purposes) and just tack it on to the -e contents.
+    std::string extra_outputs = get_env_variable("HL_EXTRA_OUTPUTS");
+    if (!extra_outputs.empty()) {
+        if (!emit_flags_string.empty()) {
+            emit_flags_string += ",";
+        }
+        emit_flags_string += extra_outputs;
+    }
+
     // It's ok to omit "target=" if we are generating *only* a cpp_stub
-    const std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
+    const std::vector<std::string> emit_flags = split_string(emit_flags_string, ",");
     const bool stub_only = (emit_flags.size() == 1 && emit_flags[0] == "cpp_stub");
     if (!stub_only) {
         if (generator_args.find("target") == generator_args.end()) {
@@ -885,7 +913,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     }
 
     // extensions won't vary across multitarget output
-    std::map<Output, OutputInfo> output_info = get_output_info(targets[0]);
+    std::map<Output, const OutputInfo> output_info = get_output_info(targets[0]);
 
     std::set<Output> outputs;
     if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
@@ -907,7 +935,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
             output_name_to_enum[it.second.name] = it.first;
         }
 
-        for (std::string opt : emit_flags) {
+        for (const std::string &opt : emit_flags) {
             auto it = output_name_to_enum.find(opt);
             if (it == output_name_to_enum.end()) {
                 cerr << "Unrecognized emit option: " << opt << " is not one of [";
@@ -916,7 +944,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 for (auto iter = output_info.cbegin(); iter != end; ++iter) {
                     cerr << iter->second.name;
                     if (iter != last) {
-                        cerr << ' ';
+                        cerr << " ";
                     }
                 }
                 cerr << "], ignoring.\n";
@@ -927,6 +955,44 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
     }
 
+    // Allow quick-n-dirty use of compiler logging via HL_DEBUG_COMPILER_LOGGER env var
+    const bool do_compiler_logging = outputs.count(Output::compiler_log) ||
+                                     (get_env_variable("HL_DEBUG_COMPILER_LOGGER") == "1");
+
+    const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
+
+    const CompilerLoggerFactory no_compiler_logger_factory =
+        [](const std::string &, const Target &) -> std::unique_ptr<CompilerLogger> {
+        return nullptr;
+    };
+
+    const CompilerLoggerFactory json_compiler_logger_factory =
+        [&](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
+        // rebuild generator_args from the map so that they are always canonical
+        std::string generator_args_string;
+        std::string sep;
+        for (const auto &it : generator_args) {
+            if (it.first == "target") {
+                continue;
+            }
+            std::string quote = it.second.string_value.find(' ') != std::string::npos ? "\\\"" : "";
+            generator_args_string += sep + it.first + "=" + quote + it.second.string_value + quote;
+            sep = " ";
+        }
+        std::unique_ptr<JSONCompilerLogger> t(new JSONCompilerLogger(
+            obfuscate_compiler_logging ? "" : generator_name,
+            obfuscate_compiler_logging ? "" : function_name,
+            obfuscate_compiler_logging ? "" : autoscheduler_name,
+            obfuscate_compiler_logging ? Target() : target,
+            obfuscate_compiler_logging ? "" : generator_args_string,
+            obfuscate_compiler_logging));
+        return t;
+    };
+
+    const CompilerLoggerFactory compiler_logger_factory = do_compiler_logging ?
+                                                              json_compiler_logger_factory :
+                                                              no_compiler_logger_factory;
+
     if (!runtime_name.empty()) {
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
 
@@ -936,7 +1002,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 user_error << "Failed to find compatible runtime target for "
                            << gcd_target.to_string()
                            << " and "
-                           << targets[i].to_string() << '\n';
+                           << targets[i].to_string() << "\n";
             }
         }
 
@@ -945,6 +1011,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
 
         auto output_files = compute_output_files(gcd_target, base_path, outputs);
+        // Runtime doesn't get to participate in the CompilerLogger party
         compile_standalone_runtime(output_files, gcd_target);
     }
 
@@ -953,6 +1020,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
         if (outputs.count(Output::cpp_stub)) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
+            // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
             auto stub_file_path = base_path + output_info[Output::cpp_stub].extension;
             gen->emit_cpp_stub(stub_file_path);
@@ -961,7 +1029,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             auto output_files = compute_output_files(targets[0], base_path, outputs);
-            auto module_producer = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
+            auto module_factory = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
                 auto sub_generator_args = generator_args;
                 sub_generator_args.erase("target");
                 // Must re-create each time since each instance will have a different Target.
@@ -969,20 +1037,14 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 gen->set_generator_param_values(sub_generator_args);
                 return build_gradient_module ? gen->build_gradient_module(name) : gen->build_module(name);
             };
-            if (targets.size() > 1) {
-                compile_multitarget(function_name, output_files, targets, module_producer);
-            } else {
-                // compile_multitarget() will fail if we request anything but library and/or header,
-                // so defer directly to Module::compile if there is a single target.
-                module_producer(function_name, targets[0]).compile(output_files);
-            }
+            compile_multitarget(function_name, output_files, targets, target_strings, module_factory, compiler_logger_factory);
         }
     }
 
     return 0;
 }
 
-#ifdef WITH_EXCEPTIONS
+#ifdef HALIDE_WITH_EXCEPTIONS
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     try {
         return generate_filter_main_inner(argc, argv, cerr);
@@ -1009,16 +1071,20 @@ GeneratorParamBase::~GeneratorParamBase() {
 
 void GeneratorParamBase::check_value_readable() const {
     // These are always readable.
-    if (name == "target") return;
-    if (name == "auto_schedule") return;
-    if (name == "machine_params") return;
+    if (name == "target" ||
+        name == "auto_schedule" ||
+        name == "machine_params") {
+        return;
+    }
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
         << "The GeneratorParam \"" << name << "\" cannot be read before build() or configure()/generate() is called.\n";
 }
 
 void GeneratorParamBase::check_value_writable() const {
     // Allow writing when no Generator is set, to avoid having to special-case ctor initing code
-    if (!generator) return;
+    if (!generator) {
+        return;
+    }
     user_assert(generator->phase < GeneratorBase::GenerateCalled) << "The GeneratorParam \"" << name << "\" cannot be written after build() or generate() is called.\n";
 }
 
@@ -1040,7 +1106,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
     std::lock_guard<std::mutex> lock(registry.mutex);
     internal_assert(registry.factories.find(name) == registry.factories.end())
         << "Duplicate Generator name: " << name;
-    registry.factories[name] = generator_factory;
+    registry.factories[name] = std::move(generator_factory);
 }
 
 /* static */
@@ -1116,8 +1182,8 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
 
     std::vector<void *> vi = ObjectInstanceRegistry::instances_in_range(
         generator, size, ObjectInstanceRegistry::GeneratorInput);
-    for (auto v : vi) {
-        auto input = static_cast<Internal::GeneratorInputBase *>(v);
+    for (auto *v : vi) {
+        auto *input = static_cast<Internal::GeneratorInputBase *>(v);
         internal_assert(input != nullptr);
         user_assert(is_valid_name(input->name())) << "Invalid Input name: (" << input->name() << ")\n";
         user_assert(!names.count(input->name())) << "Duplicate Input name: " << input->name();
@@ -1130,8 +1196,8 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
 
     std::vector<void *> vo = ObjectInstanceRegistry::instances_in_range(
         generator, size, ObjectInstanceRegistry::GeneratorOutput);
-    for (auto v : vo) {
-        auto output = static_cast<Internal::GeneratorOutputBase *>(v);
+    for (auto *v : vo) {
+        auto *output = static_cast<Internal::GeneratorOutputBase *>(v);
         internal_assert(output != nullptr);
         user_assert(is_valid_name(output->name())) << "Invalid Output name: (" << output->name() << ")\n";
         user_assert(!names.count(output->name())) << "Duplicate Output name: " << output->name();
@@ -1144,8 +1210,8 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
 
     std::vector<void *> vg = ObjectInstanceRegistry::instances_in_range(
         generator, size, ObjectInstanceRegistry::GeneratorParam);
-    for (auto v : vg) {
-        auto param = static_cast<GeneratorParamBase *>(v);
+    for (auto *v : vg) {
+        auto *param = static_cast<GeneratorParamBase *>(v);
         internal_assert(param != nullptr);
         user_assert(is_valid_name(param->name)) << "Invalid GeneratorParam name: " << param->name;
         user_assert(!names.count(param->name)) << "Duplicate GeneratorParam name: " << param->name;
@@ -1208,7 +1274,7 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
         generator_params_by_name[g->name] = g;
     }
 
-    for (auto &key_value : params) {
+    for (const auto &key_value : params) {
         auto gp = generator_params_by_name.find(key_value.first);
         user_assert(gp != generator_params_by_name.end())
             << "Generator " << generator_registered_name << " has no GeneratorParam named: " << key_value.first << "\n";
@@ -1254,7 +1320,7 @@ void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> 
 
 void GeneratorBase::track_parameter_values(bool include_outputs) {
     GeneratorParamInfo &pi = param_info();
-    for (auto input : pi.inputs()) {
+    for (auto *input : pi.inputs()) {
         if (input->kind() == IOKind::Buffer) {
             internal_assert(!input->parameters_.empty());
             for (auto &p : input->parameters_) {
@@ -1264,10 +1330,10 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
         }
     }
     if (include_outputs) {
-        for (auto output : pi.outputs()) {
+        for (auto *output : pi.outputs()) {
             if (output->kind() == IOKind::Buffer) {
                 internal_assert(!output->funcs().empty());
-                for (auto &f : output->funcs()) {
+                for (const auto &f : output->funcs()) {
                     user_assert(f.defined()) << "Output " << output->name() << " is not fully defined.";
                     auto output_buffers = f.output_buffers();
                     for (auto &o : output_buffers) {
@@ -1539,7 +1605,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
         Func adjoint_func = BoundaryConditions::constant_exterior(d_output, make_zero(d_output.type()));
         Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
 
-        const std::string output_name = original_output.name();
+        const std::string &output_name = original_output.name();
         for (const auto *input : pi.inputs()) {
             for (size_t i = 0; i < input->funcs_.size(); ++i) {
                 const std::string input_name = input->array_name(i);
@@ -1640,10 +1706,6 @@ GIOBase::GIOBase(size_t array_size,
                  const std::vector<Type> &types,
                  int dims)
     : array_size_(array_size), name_(name), kind_(kind), types_(types), dims_(dims) {
-}
-
-GIOBase::~GIOBase() {
-    // nothing
 }
 
 bool GIOBase::array_size_defined() const {
@@ -1780,7 +1842,9 @@ void GIOBase::check_matching_types(const std::vector<Type> &t) const {
 
 void GIOBase::check_gio_access() const {
     // // Allow reading when no Generator is set, to avoid having to special-case ctor initing code
-    if (!generator) return;
+    if (!generator) {
+        return;
+    }
     user_assert(generator->phase > GeneratorBase::InputsSet)
         << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before build() or generate() is called.\n";
 }
@@ -1911,7 +1975,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     verify_internals();
 }
 
-void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
+void GeneratorInputBase::set_estimate_impl(const Var &var, const Expr &min, const Expr &extent) {
     internal_assert(exprs_.empty() && !funcs_.empty() && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
@@ -1975,7 +2039,7 @@ void GeneratorOutputBase::init_internals() {
     funcs_.clear();
     if (array_size_defined()) {
         for (size_t i = 0; i < array_size(); ++i) {
-            funcs_.push_back(Func(array_name(i)));
+            funcs_.emplace_back(array_name(i));
         }
     }
 }

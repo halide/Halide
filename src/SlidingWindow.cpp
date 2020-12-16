@@ -1,5 +1,7 @@
 #include "SlidingWindow.h"
+
 #include "Bounds.h"
+#include "CompilerLogger.h"
 #include "Debug.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -8,6 +10,7 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -22,7 +25,9 @@ class ExprDependsOnVar : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Variable *op) override {
-        if (op->name == var) result = true;
+        if (op->name == var) {
+            result = true;
+        }
     }
 
     void visit(const Let *op) override {
@@ -39,12 +44,12 @@ public:
     string var;
 
     ExprDependsOnVar(string v)
-        : result(false), var(v) {
+        : result(false), var(std::move(v)) {
     }
 };
 
-bool expr_depends_on_var(Expr e, string v) {
-    ExprDependsOnVar depends(v);
+bool expr_depends_on_var(const Expr &e, string v) {
+    ExprDependsOnVar depends(std::move(v));
     e.accept(&depends);
     return depends.result;
 }
@@ -70,14 +75,12 @@ public:
 };
 
 // Perform all the substitutions in a scope
-Expr expand_expr(Expr e, const Scope<Expr> &scope) {
+Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
     Expr result = ee.mutate(e);
     debug(3) << "Expanded " << e << " into " << result << "\n";
     return result;
 }
-
-}  // namespace
 
 // Perform sliding window optimization for a function over a
 // particular serial for loop
@@ -194,11 +197,19 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             if (monotonic_min == Monotonic::Increasing ||
                 monotonic_min == Monotonic::Constant) {
                 can_slide_up = true;
+            } else if (monotonic_min == Monotonic::Unknown) {
+                if (get_compiler_logger()) {
+                    get_compiler_logger()->record_non_monotonic_loop_var(loop_var, min_required);
+                }
             }
 
             if (monotonic_max == Monotonic::Decreasing ||
                 monotonic_max == Monotonic::Constant) {
                 can_slide_down = true;
+            } else if (monotonic_max == Monotonic::Unknown) {
+                if (get_compiler_logger()) {
+                    get_compiler_logger()->record_non_monotonic_loop_var(loop_var, max_required);
+                }
             }
 
             if (!can_slide_up && !can_slide_down) {
@@ -290,7 +301,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         // the var we're sliding over.
         Expr min = expand_expr(op->min, scope);
         Expr extent = expand_expr(op->extent, scope);
-        if (is_one(extent)) {
+        if (is_const_one(extent)) {
             // Just treat it like a let
             Stmt s = LetStmt::make(op->name, min, op->body);
             s = mutate(s);
@@ -330,7 +341,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
 public:
     SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min)
-        : func(f), loop_var(v), loop_min(v_min) {
+        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)) {
     }
 };
 
@@ -361,7 +372,7 @@ class SlidingWindowOnFunction : public IRMutator {
 
 public:
     SlidingWindowOnFunction(Function f)
-        : func(f) {
+        : func(std::move(f)) {
     }
 };
 
@@ -410,7 +421,9 @@ public:
     }
 };
 
-Stmt sliding_window(Stmt s, const map<string, Function> &env) {
+}  // namespace
+
+Stmt sliding_window(const Stmt &s, const map<string, Function> &env) {
     return SlidingWindow(env).mutate(s);
 }
 

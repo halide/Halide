@@ -27,5 +27,6 @@ int main(int argc, char **argv) {
 
     g.realize(425);
 
+    printf("Success!\n");
     return 0;
 }

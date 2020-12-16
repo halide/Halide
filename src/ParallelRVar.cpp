@@ -34,7 +34,7 @@ class FindLoads : public IRVisitor {
         IRVisitor::visit(op);
         for (size_t i = 0; i < loads.size(); i++) {
             for (size_t j = 0; j < loads[i].size(); j++) {
-                loads[i][j] = substitute(op->name, op->value, loads[i][j]);
+                loads[i][j] = graph_substitute(op->name, op->value, loads[i][j]);
             }
         }
     }
@@ -161,7 +161,7 @@ bool can_parallelize_rvar(const string &v,
         hazard = l->body;
     }
 
-    return is_zero(hazard);
+    return is_const_zero(hazard);
 }
 
 }  // namespace Internal

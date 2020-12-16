@@ -1,12 +1,12 @@
 // Halide tutorial lesson 9: Multi-pass Funcs, update definitions, and reductions
 
 // On linux, you can compile and run it like so:
-// g++ lesson_09*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -fopenmp -o lesson_09
-// LD_LIBRARY_PATH=../bin ./lesson_09
+// g++ lesson_09*.cpp -g -std=c++11 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -fopenmp -o lesson_09
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_09
 
 // On os x (will only work if you actually have g++, not Apple's pretend g++ which is actually clang):
-// g++ lesson_09*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -ljpeg -fopenmp -o lesson_09
-// DYLD_LIBRARY_PATH=../bin ./lesson_09
+// g++ lesson_09*.cpp -g -std=c++11 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -fopenmp -o lesson_09
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_09
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -515,8 +515,8 @@ int main(int argc, char **argv) {
         Func producer, consumer;
         producer(x, y) = (x * y) / 10 + 8;
         consumer(x, y) = x + y;
-        consumer(x, 0) = producer(x, x);
-        consumer(0, y) = producer(y, 9 - y);
+        consumer(x, 0) += producer(x, x);
+        consumer(0, y) += producer(y, 9 - y);
 
         // In this case neither producer.compute_at(consumer, x)
         // nor producer.compute_at(consumer, y) will work, because

@@ -58,11 +58,11 @@ LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name,
     : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar, stage_index, locked)) {
 }
 
-LoopLevel::LoopLevel(const Internal::Function &f, VarOrRVar v, int stage_index)
+LoopLevel::LoopLevel(const Internal::Function &f, const VarOrRVar &v, int stage_index)
     : LoopLevel(f.name(), v.name(), v.is_rvar, stage_index, false) {
 }
 
-LoopLevel::LoopLevel(const Func &f, VarOrRVar v, int stage_index)
+LoopLevel::LoopLevel(const Func &f, const VarOrRVar &v, int stage_index)
     : LoopLevel(f.function().name(), v.name(), v.is_rvar, stage_index, false) {
 }
 
@@ -218,12 +218,11 @@ struct FuncScheduleContents {
     std::vector<Bound> bounds;
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
-    MemoryType memory_type;
-    bool memoized, async;
+    MemoryType memory_type = MemoryType::Auto;
+    bool memoized = false, async = false;
 
     FuncScheduleContents()
-        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
-          memory_type(MemoryType::Auto), memoized(false), async(false){};
+        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()){};
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator *mutator) {
@@ -279,15 +278,13 @@ struct StageScheduleContents {
     std::vector<PrefetchDirective> prefetches;
     FuseLoopLevel fuse_level;
     std::vector<FusedPair> fused_pairs;
-    bool touched;
-    bool allow_race_conditions;
-    bool atomic;
-    bool override_atomic_associativity_test;
+    bool touched = false;
+    bool allow_race_conditions = false;
+    bool atomic = false;
+    bool override_atomic_associativity_test = false;
 
     StageScheduleContents()
-        : fuse_level(FuseLoopLevel()), touched(false),
-          allow_race_conditions(false), atomic(false),
-          override_atomic_associativity_test(false) {
+        : fuse_level(FuseLoopLevel()) {
     }
 
     // Pass an IRMutator through to all Exprs referenced in the StageScheduleContents

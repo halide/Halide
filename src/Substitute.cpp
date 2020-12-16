@@ -9,6 +9,8 @@ namespace Internal {
 using std::map;
 using std::string;
 
+namespace {
+
 class Substitute : public IRMutator {
     const map<string, Expr> &replace;
     Scope<> hidden;
@@ -83,6 +85,8 @@ public:
     }
 };
 
+}  // namespace
+
 Expr substitute(const string &name, const Expr &replacement, const Expr &expr) {
     map<string, Expr> m;
     m[name] = replacement;
@@ -107,6 +111,8 @@ Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
     return s.mutate(stmt);
 }
 
+namespace {
+
 class SubstituteExpr : public IRMutator {
 public:
     Expr find, replacement;
@@ -122,6 +128,8 @@ public:
     }
 };
 
+}  // namespace
+
 Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
     SubstituteExpr s;
     s.find = find;
@@ -135,6 +143,8 @@ Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
     s.replacement = replacement;
     return s.mutate(stmt);
 }
+
+namespace {
 
 /** Substitute an expr for a var in a graph. */
 class GraphSubstitute : public IRGraphMutator {
@@ -187,6 +197,8 @@ public:
     }
 };
 
+}  // namespace
+
 Expr graph_substitute(const string &name, const Expr &replacement, const Expr &expr) {
     return GraphSubstitute(name, replacement).mutate(expr);
 }
@@ -203,6 +215,8 @@ Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stm
     return GraphSubstituteExpr(find, replacement).mutate(stmt);
 }
 
+namespace {
+
 class SubstituteInAllLets : public IRGraphMutator {
 
     using IRGraphMutator::visit;
@@ -213,6 +227,8 @@ class SubstituteInAllLets : public IRGraphMutator {
         return graph_substitute(op->name, value, body);
     }
 };
+
+}  // namespace
 
 Expr substitute_in_all_lets(const Expr &expr) {
     return SubstituteInAllLets().mutate(expr);

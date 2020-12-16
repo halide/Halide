@@ -1,5 +1,6 @@
 #include "AsyncProducers.h"
 #include "ExprUsesVar.h"
+#include "Function.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -12,6 +13,8 @@ using std::pair;
 using std::set;
 using std::string;
 using std::vector;
+
+namespace {
 
 /** A mutator which eagerly folds no-op stmts */
 class NoOpCollapsingMutator : public IRMutator {
@@ -216,7 +219,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
                 return Acquire::make(acquire_sema, 1, op);
             }
         } else {
-            return IRMutator::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
@@ -225,7 +228,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return mutate(op->body);
         } else {
-            return IRMutator::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
@@ -233,7 +236,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return Evaluate::make(0);
         } else {
-            return IRMutator::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
@@ -245,7 +248,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(var->name, func + ".folding_semaphore.")) {
             return mutate(op->body);
         } else {
-            return IRMutator::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
@@ -452,7 +455,7 @@ class InitializeSemaphores : public IRMutator {
 class TightenProducerConsumerNodes : public IRMutator {
     using IRMutator::visit;
 
-    Stmt make_producer_consumer(string name, bool is_producer, Stmt body, const Scope<int> &scope) {
+    Stmt make_producer_consumer(const string &name, bool is_producer, Stmt body, const Scope<int> &scope) {
         if (const LetStmt *let = body.as<LetStmt>()) {
             if (expr_uses_vars(let->value, scope)) {
                 return ProducerConsumer::make(name, is_producer, body);
@@ -584,7 +587,7 @@ class ExpandAcquireNodes : public IRMutator {
 class TightenForkNodes : public IRMutator {
     using IRMutator::visit;
 
-    Stmt make_fork(Stmt first, Stmt rest) {
+    Stmt make_fork(const Stmt &first, const Stmt &rest) {
         const LetStmt *lf = first.as<LetStmt>();
         const LetStmt *lr = rest.as<LetStmt>();
         const Realize *rf = first.as<Realize>();
@@ -649,6 +652,8 @@ class TightenForkNodes : public IRMutator {
 };
 
 // TODO: merge semaphores?
+
+}  // namespace
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     s = TightenProducerConsumerNodes(env).mutate(s);

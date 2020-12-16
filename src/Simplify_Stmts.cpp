@@ -13,13 +13,22 @@ using std::vector;
 Stmt Simplify::visit(const IfThenElse *op) {
     Expr condition = mutate(op->condition, nullptr);
 
+    // If (likely(true)) ...
+    const Call *call = condition.as<Call>();
+    Expr unwrapped_condition = condition;
+    if (call &&
+        (call->is_intrinsic(Call::likely) ||
+         call->is_intrinsic(Call::likely_if_innermost))) {
+        unwrapped_condition = call->args[0];
+    }
+
     // If (true) ...
-    if (is_one(condition)) {
+    if (is_const_one(unwrapped_condition)) {
         return mutate(op->then_case);
     }
 
     // If (false) ...
-    if (is_zero(condition)) {
+    if (is_const_zero(unwrapped_condition)) {
         if (op->else_case.defined()) {
             return mutate(op->else_case);
         } else {
@@ -29,13 +38,13 @@ Stmt Simplify::visit(const IfThenElse *op) {
 
     Stmt then_case, else_case;
     {
-        auto f = scoped_truth(condition);
+        auto f = scoped_truth(unwrapped_condition);
         // Also substitute the entire condition
         then_case = substitute(op->condition, const_true(condition.type().lanes()), op->then_case);
         then_case = mutate(then_case);
     }
     {
-        auto f = scoped_falsehood(condition);
+        auto f = scoped_falsehood(unwrapped_condition);
         else_case = substitute(op->condition, const_false(condition.type().lanes()), op->else_case);
         else_case = mutate(else_case);
     }
@@ -55,6 +64,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
     const ProducerConsumer *else_pc = else_case.as<ProducerConsumer>();
     const Block *then_block = then_case.as<Block>();
     const Block *else_block = else_case.as<Block>();
+    const For *then_for = then_case.as<For>();
     if (then_acquire &&
         else_acquire &&
         equal(then_acquire->semaphore, else_acquire->semaphore) &&
@@ -89,6 +99,11 @@ Stmt Simplify::visit(const IfThenElse *op) {
     } else if (else_block && equal(then_case, else_block->rest)) {
         return Block::make(mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->first)),
                            then_case);
+    } else if (then_for &&
+               !else_case.defined() &&
+               equal(unwrapped_condition, 0 < then_for->extent)) {
+        // This guard is redundant
+        return then_case;
     } else if (condition.same_as(op->condition) &&
                then_case.same_as(op->then_case) &&
                else_case.same_as(op->else_case)) {
@@ -108,7 +123,7 @@ Stmt Simplify::visit(const AssertStmt *op) {
         message = mutate(op->message, nullptr);
     }
 
-    if (is_zero(cond)) {
+    if (is_const_zero(cond)) {
         // Usually, assert(const-false) should generate a warning;
         // in at least one case (specialize_fail()), we want to suppress
         // the warning, because the assertion is generated internally
@@ -120,7 +135,7 @@ Stmt Simplify::visit(const AssertStmt *op) {
             user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
                          << message << "\n";
         }
-    } else if (is_one(cond)) {
+    } else if (is_const_one(cond)) {
         return Evaluate::make(0);
     }
 
@@ -135,6 +150,10 @@ Stmt Simplify::visit(const For *op) {
     ExprInfo min_bounds, extent_bounds;
     Expr new_min = mutate(op->min, &min_bounds);
     Expr new_extent = mutate(op->extent, &extent_bounds);
+
+    ScopedValue<bool> old_in_vector_loop(in_vector_loop,
+                                         (in_vector_loop ||
+                                          op->for_type == ForType::Vectorized));
 
     bool bounds_tracked = false;
     if (min_bounds.min_defined || (min_bounds.max_defined && extent_bounds.max_defined)) {
@@ -154,17 +173,24 @@ Stmt Simplify::visit(const For *op) {
     if (is_no_op(new_body)) {
         return new_body;
     } else if (extent_bounds.max_defined &&
-               extent_bounds.max == 0) {
+               extent_bounds.max <= 0) {
         return Evaluate::make(0);
-    } else if (extent_bounds.max_defined &&
-               extent_bounds.max == 1 &&
+    } else if (is_const_one(new_extent) &&
                op->device_api == DeviceAPI::None) {
         Stmt s = LetStmt::make(op->name, new_min, new_body);
-        if (extent_bounds.min_defined && extent_bounds.min == 1) {
-            return mutate(s);
-        } else {
-            return mutate(IfThenElse::make(new_extent > 0, s));
-        }
+        return mutate(s);
+    } else if (extent_bounds.max_defined &&
+               extent_bounds.max == 1 &&
+               !in_vector_loop &&
+               op->device_api == DeviceAPI::None) {
+        // If we're inside a vector loop we don't want to rewrite a
+        // for loop of extent at most one into an if, because the
+        // vectorization pass deals with those differently to an
+        // if. If the extent depends on the vectorized variable, the
+        // for loop gets an all-true vectorized case, but an if
+        // statement just gets scalarized.
+        Stmt s = LetStmt::make(op->name, new_min, new_body);
+        return mutate(IfThenElse::make(0 < new_extent, s));
     } else if (op->min.same_as(new_min) &&
                op->extent.same_as(new_extent) &&
                op->body.same_as(new_body)) {
@@ -185,14 +211,18 @@ Stmt Simplify::visit(const Provide *op) {
     for (size_t i = 0; i < op->args.size(); i++) {
         const Expr &old_arg = op->args[i];
         Expr new_arg = mutate(old_arg, nullptr);
-        if (!new_arg.same_as(old_arg)) changed = true;
+        if (!new_arg.same_as(old_arg)) {
+            changed = true;
+        }
         new_args[i] = new_arg;
     }
 
     for (size_t i = 0; i < op->values.size(); i++) {
         const Expr &old_value = op->values[i];
         Expr new_value = mutate(old_value, nullptr);
-        if (!new_value.same_as(old_value)) changed = true;
+        if (!new_value.same_as(old_value)) {
+            changed = true;
+        }
         new_values[i] = new_value;
     }
 
@@ -223,10 +253,10 @@ Stmt Simplify::visit(const Store *op) {
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
-    if (is_zero(predicate)) {
+    if (is_const_zero(predicate)) {
         // Predicate is always false
         return Evaluate::make(0);
-    } else if (scalar_pred && !is_one(scalar_pred->value)) {
+    } else if (scalar_pred && !is_const_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
                                 Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), align));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
@@ -280,7 +310,7 @@ Stmt Simplify::visit(const Evaluate *op) {
     // Rewrite Lets inside an evaluate as LetStmts outside the Evaluate.
     vector<pair<string, Expr>> lets;
     while (const Let *let = value.as<Let>()) {
-        lets.push_back({let->name, let->value});
+        lets.emplace_back(let->name, let->value);
         value = let->body;
     }
 
@@ -406,7 +436,7 @@ Stmt Simplify::visit(const Block *op) {
                !if_next->else_case.defined() &&
                is_pure(if_first->condition) &&
                is_pure(if_next->condition) &&
-               is_one(mutate((if_first->condition && if_next->condition) == if_next->condition, nullptr))) {
+               is_const_one(mutate((if_first->condition && if_next->condition) == if_next->condition, nullptr))) {
         // Two ifs where the second condition is tighter than
         // the first condition.  The second if can be nested
         // inside the first one, because if it's true the
@@ -448,7 +478,7 @@ Stmt Simplify::visit(const Prefetch *op) {
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition, nullptr);
 
-    if (is_zero(op->condition)) {
+    if (is_const_zero(op->condition)) {
         // Predicate is always false
         return body;
     }

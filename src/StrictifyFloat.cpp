@@ -1,10 +1,13 @@
 #include "StrictifyFloat.h"
 
+#include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
+
+namespace {
 
 class StrictifyFloat : public IRMutator {
     enum Strictness {
@@ -57,6 +60,8 @@ public:
         any_strict_float |= (mode == Forced);
     }
 };
+
+}  // namespace
 
 bool strictify_float(std::map<std::string, Function> &env, const Target &t) {
     bool any_strict_float = false;

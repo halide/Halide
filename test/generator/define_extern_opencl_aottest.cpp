@@ -8,9 +8,9 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
     return 0;
 }
 
-// OpenCL headers/libs are not properly setup yet for minGW.
 int main(int argc, char **argv) {
-    printf("Skipping test on windows\n");
+    // TODO: is this true?
+    printf("[SKIP] OpenCL headers/libs are not properly setup yet for Windows.\n");
     return 0;
 }
 
@@ -22,7 +22,7 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
 }
 
 int main(int argc, char **argv) {
-    printf("Skipping since TEST_OPENCL is not enabled\n");
+    printf("[SKIP] Test requires OpenCL.\n");
     return 0;
 }
 
@@ -72,7 +72,7 @@ cl_int init_extern_program() {
 
     const char *ocl_source = "__kernel void add42(__global const int *in, __global int *out) { out[get_global_id(0)] = in[get_global_id(0)] + 42; }";
     const char *sources[] = {ocl_source};
-    ocl_program = clCreateProgramWithSource(ocl_ctx, 1, &sources[0], NULL, &error);
+    ocl_program = clCreateProgramWithSource(ocl_ctx, 1, &sources[0], nullptr, &error);
     if (error != CL_SUCCESS) {
         halide_release_cl_context(nullptr);
         printf("clCreateProgramWithSource failed (%d).\n", error);
@@ -89,16 +89,16 @@ cl_int init_extern_program() {
         return error;
     }
 
-    error = clBuildProgram(ocl_program, actual_size / sizeof(devices[0]), devices, NULL, NULL, NULL);
+    error = clBuildProgram(ocl_program, actual_size / sizeof(devices[0]), devices, nullptr, nullptr, nullptr);
 
     halide_release_cl_context(nullptr);
 
     if (error != CL_SUCCESS) {
         if (error == CL_BUILD_PROGRAM_FAILURE) {
             size_t msg_size;
-            clGetProgramBuildInfo(ocl_program, devices[0], CL_PROGRAM_BUILD_LOG, 0, NULL, &msg_size);
+            clGetProgramBuildInfo(ocl_program, devices[0], CL_PROGRAM_BUILD_LOG, 0, nullptr, &msg_size);
             char *msg = (char *)malloc(msg_size);
-            clGetProgramBuildInfo(ocl_program, devices[0], CL_PROGRAM_BUILD_LOG, msg_size, msg, NULL);
+            clGetProgramBuildInfo(ocl_program, devices[0], CL_PROGRAM_BUILD_LOG, msg_size, msg, nullptr);
             printf("clBuildProgram failed. Error message %s\n", msg);
         } else {
             printf("clBuildProgram failed (%d).\n", error);

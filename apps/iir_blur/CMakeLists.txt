@@ -1,15 +1,42 @@
-add_executable(iir_blur_filter filter.cpp)
-target_link_libraries(iir_blur_filter PRIVATE Halide::ImageIO)
+cmake_minimum_required(VERSION 3.16)
+project(iir_blur)
 
-halide_generator(iir_blur.generator SRCS iir_blur_generator.cpp)
-foreach(AUTO_SCHEDULE false true)
-    if(${AUTO_SCHEDULE})
-        set(LIB iir_blur_auto_schedule)
-    else()
-        set(LIB iir_blur)
-    endif()
-    halide_library_from_generator(${LIB}
-                                  GENERATOR iir_blur.generator
-                                  GENERATOR_ARGS auto_schedule=${AUTO_SCHEDULE})
-    target_link_libraries(iir_blur_filter PRIVATE ${LIB})
-endforeach()
+enable_testing()
+
+# Set up language settings
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_CXX_EXTENSIONS NO)
+
+# Find Halide
+find_package(Halide REQUIRED)
+
+# Generator
+add_executable(iir_blur.generator iir_blur_generator.cpp)
+target_link_libraries(iir_blur.generator PRIVATE Halide::Generator)
+
+# Filters
+add_halide_library(iir_blur FROM iir_blur.generator)
+add_halide_library(iir_blur_auto_schedule FROM iir_blur.generator
+                   GENERATOR iir_blur
+                   AUTOSCHEDULER Halide::Mullapudi2016)
+
+# Main executable
+add_executable(iir_blur_filter filter.cpp)
+target_link_libraries(iir_blur_filter PRIVATE
+                      Halide::Tools
+                      Halide::ImageIO
+                      iir_blur
+                      iir_blur_auto_schedule)
+
+# Test that the app actually works!
+set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
+if (EXISTS ${IMAGE})
+    configure_file(${IMAGE} rgba.png COPYONLY)
+    add_test(NAME iir_blur_filter
+             COMMAND iir_blur_filter rgba.png out.png)
+    set_tests_properties(iir_blur_filter PROPERTIES
+                         LABELS iir_blur
+                         PASS_REGULAR_EXPRESSION "Success!"
+                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+endif ()

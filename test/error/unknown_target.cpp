@@ -10,6 +10,6 @@ int main(int argc, char **argv) {
     // should generate user_error.
     (void)t.natural_vector_size<float>();
 
-    printf("I should not have reached here\n");
+    printf("Success!\n");
     return 0;
 }

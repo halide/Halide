@@ -6,13 +6,11 @@
  */
 
 #include <bitset>
-#include <stdint.h>
+#include <cstdint>
 #include <string>
 
-#include "Error.h"
-#include "Expr.h"
+#include "DeviceAPI.h"
 #include "Type.h"
-#include "Util.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
@@ -33,7 +31,7 @@ struct Target {
         NoOS,
         Fuchsia,
         WebAssemblyRuntime
-    } os;
+    } os = OSUnknown;
 
     /** The architecture used by the target. Determines the
      * instruction set to use.
@@ -47,10 +45,10 @@ struct Target {
         POWERPC,
         WebAssembly,
         RISCV
-    } arch;
+    } arch = ArchUnknown;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
-    int bits;
+    int bits = 0;
 
     /** Optional features a target can have.
      * Corresponds to feature_name_map in Target.cpp.
@@ -77,11 +75,14 @@ struct Target {
         CUDACapability35 = halide_target_feature_cuda_capability35,
         CUDACapability50 = halide_target_feature_cuda_capability50,
         CUDACapability61 = halide_target_feature_cuda_capability61,
+        CUDACapability70 = halide_target_feature_cuda_capability70,
+        CUDACapability75 = halide_target_feature_cuda_capability75,
+        CUDACapability80 = halide_target_feature_cuda_capability80,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        OpenGL = halide_target_feature_opengl,
+        OpenGL = halide_target_feature_opengl,  // NOTE: this feature is deprecated and will be removed in Halide 12.
         OpenGLCompute = halide_target_feature_openglcompute,
         EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
@@ -89,12 +90,11 @@ struct Target {
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,
         Metal = halide_target_feature_metal,
-        MinGW = halide_target_feature_mingw,
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,
         HexagonDma = halide_target_feature_hexagon_dma,
-        HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
+        HVX = HVX_128,
         HVX_v62 = halide_target_feature_hvx_v62,
         HVX_v65 = halide_target_feature_hvx_v65,
         HVX_v66 = halide_target_feature_hvx_v66,
@@ -120,13 +120,15 @@ struct Target {
         DisableLLVMLoopOpt = halide_target_feature_disable_llvm_loop_opt,
         WasmSimd128 = halide_target_feature_wasm_simd128,
         WasmSignExt = halide_target_feature_wasm_signext,
+        WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
+        WasmThreads = halide_target_feature_wasm_threads,
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
+        ARMDotProd = halide_target_feature_arm_dot_prod,
+        LLVMLargeCodeModel = halide_llvm_large_code_model,
         FeatureEnd = halide_target_feature_end
     };
-    Target()
-        : os(OSUnknown), arch(ArchUnknown), bits(0) {
-    }
+    Target() = default;
     Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
         for (const auto &f : initial_features) {
@@ -152,9 +154,13 @@ struct Target {
     /** Check if a target string is valid. */
     static bool validate_target_string(const std::string &s);
 
+    /** Return true if any of the arch/bits/os fields are "unknown"/0;
+        return false otherwise. */
+    bool has_unknowns() const;
+
     void set_feature(Feature f, bool value = true);
 
-    void set_features(std::vector<Feature> features_to_set, bool value = true);
+    void set_features(const std::vector<Feature> &features_to_set, bool value = true);
 
     bool has_feature(Feature f) const;
 
@@ -162,9 +168,9 @@ struct Target {
         return has_feature((Feature)f);
     }
 
-    bool features_any_of(std::vector<Feature> test_features) const;
+    bool features_any_of(const std::vector<Feature> &test_features) const;
 
-    bool features_all_of(std::vector<Feature> test_features) const;
+    bool features_all_of(const std::vector<Feature> &test_features) const;
 
     /** Return a copy of the target with the given feature set.
      * This is convenient when enabling certain features (e.g. NoBoundsQuery)
@@ -202,6 +208,12 @@ struct Target {
     /** Returns whether a particular device API can be used with this
      * Target. */
     bool supports_device_api(DeviceAPI api) const;
+
+    /** If this Target (including all Features) requires a specific DeviceAPI,
+     * return it. If it doesn't, return DeviceAPI::None.  If the Target has
+     * features with multiple (different) DeviceAPI requirements, the result
+     * will be an arbitrary DeviceAPI. */
+    DeviceAPI get_required_device_api() const;
 
     bool operator==(const Target &other) const {
         return os == other.os &&
@@ -264,6 +276,11 @@ struct Target {
             return (((uint64_t)1) << 31) - 1;
         }
     }
+
+    /** Get the minimum cuda capability found as an integer. Returns
+     * 20 (our minimum supported cuda compute capability) if no cuda
+     * features are set. */
+    int get_cuda_capability_lower_bound() const;
 
     /** Was libHalide compiled with support for this target? */
     bool supported() const;

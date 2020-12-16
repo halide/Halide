@@ -1,8 +1,8 @@
 #include "Halide.h"
-#include "test/common/check_call_graphs.h"
+#include "check_call_graphs.h"
 
+#include <cstdio>
 #include <map>
-#include <stdio.h>
 
 namespace {
 
@@ -274,10 +274,13 @@ int rdom_wrapper_test() {
     Func f("f"), g("g"), result("result");
     Var x("x"), y("y");
 
+    constexpr int W = 32;
+    constexpr int H = 32;
+
     f(x, y) = x + y;
     g(x, y) = 10;
     g(x, y) += 2 * f(x, x);
-    RDom r(0, 200, 0, 200);
+    RDom r(0, W, 0, H);
     g(r.x, r.y) += 3 * f(r.y, r.y);
 
     // Make a global wrapper on 'g', so that we can schedule initialization
@@ -302,7 +305,7 @@ int rdom_wrapper_test() {
         return -1;
     }
 
-    Buffer<int> im = wrapper.realize(200, 200);
+    Buffer<int> im = wrapper.realize(W, H);
     auto func = [](int x, int y) { return 4 * x + 6 * y + 10; };
     if (check_image(im, func)) {
         return -1;

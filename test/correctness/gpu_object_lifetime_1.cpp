@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <iostream>
+#include "gpu_object_lifetime_tracker.h"
 
-#include "test/common/gpu_object_lifetime_tracker.h"
+#include <iostream>
 
 using namespace Halide;
 
@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
 
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, xi, 32);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.has_feature(Target::HVX)) {
             f.hexagon();
         }
         f.set_custom_print(halide_print);
@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
         Buffer<int32_t> result = f.realize(256, target);
         for (int i = 0; i < 256; i++) {
             if (result(i) != i) {
-                std::cout << "Error! " << result(i) << " != " << i << std::endl;
+                std::cout << "Error! " << result(i) << " != " << i << "\n";
                 return -1;
             }
         }
@@ -52,6 +52,6 @@ int main(int argc, char *argv[]) {
         return ret;
     }
 
-    std::cout << "Success!" << std::endl;
+    printf("Success!\n");
     return 0;
 }

@@ -46,8 +46,9 @@ struct device_copy {
 
 WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
     // Skip size-1 dimensions
-    while (d >= 0 && copy.extent[d] == 1)
+    while (d >= 0 && copy.extent[d] == 1) {
         d--;
+    }
 
     if (d == -1) {
         const void *from = (void *)(copy.src + src_off);
@@ -130,7 +131,7 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
             c.src_stride_bytes[j] = c.src_stride_bytes[j - 1];
         }
         c.extent[insert] = dst->dim[i].extent;
-        // debug(NULL) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
+        // debug(nullptr) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
         c.dst_stride_bytes[insert] = dst_stride_bytes;
         c.src_stride_bytes[insert] = src_stride_bytes;
     };
@@ -168,7 +169,7 @@ WEAK device_copy make_device_to_host_copy(const halide_buffer_t *buf) {
 }
 
 // Caller is expected to verify that src->dimensions == dst->dimensions
-inline __attribute__((always_inline)) int64_t calc_device_crop_byte_offset(const struct halide_buffer_t *src, struct halide_buffer_t *dst) {
+ALWAYS_INLINE int64_t calc_device_crop_byte_offset(const struct halide_buffer_t *src, struct halide_buffer_t *dst) {
     int64_t offset = 0;
     for (int i = 0; i < src->dimensions; i++) {
         offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
@@ -179,7 +180,7 @@ inline __attribute__((always_inline)) int64_t calc_device_crop_byte_offset(const
 
 // Caller is expected to verify that src->dimensions == dst->dimensions + 1,
 // and that slice_dim and slice_pos are valid within src
-inline __attribute__((always_inline)) int64_t calc_device_slice_byte_offset(const struct halide_buffer_t *src, int slice_dim, int slice_pos) {
+ALWAYS_INLINE int64_t calc_device_slice_byte_offset(const struct halide_buffer_t *src, int slice_dim, int slice_pos) {
     int64_t offset = (slice_pos - src->dim[slice_dim].min) * src->dim[slice_dim].stride;
     offset *= src->type.bytes();
     return offset;

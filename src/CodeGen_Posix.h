@@ -86,7 +86,7 @@ private:
      * list of its extents and its size. Fires a runtime assert
      * (halide_error) if the size overflows 2^31 -1, the maximum
      * positive number an int32_t can hold. */
-    llvm::Value *codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, Expr condition);
+    llvm::Value *codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, const Expr &condition);
 
     /** Allocates some memory on either the stack or the heap, and
      * returns an Allocation object describing it. For heap
@@ -103,7 +103,7 @@ private:
      * when it goes out of scope call 'destroy_allocation'. */
     Allocation create_allocation(const std::string &name, Type type, MemoryType memory_type,
                                  const std::vector<Expr> &extents,
-                                 Expr condition, Expr new_expr, std::string free_function);
+                                 const Expr &condition, const Expr &new_expr, std::string free_function);
 
     /** Free an allocation previously allocated with
      * create_allocation */

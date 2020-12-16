@@ -1,6 +1,8 @@
 #include "Error.h"
+#include "Introspection.h"
+#include "Util.h"  // for get_env_variable
 
-#include <signal.h>
+#include <csignal>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -17,24 +19,6 @@ namespace {
 
 CompileTimeErrorReporter *custom_error_reporter = nullptr;
 
-void error_abort() {
-#ifdef _MSC_VER
-    const std::string s = Internal::get_env_variable("HL_DISABLE_WINDOWS_ABORT_DIALOG");
-    const int disable = !s.empty() ? atoi(s.c_str()) : 0;
-    if (disable) {
-        // Debug variants of the MSVC runtime will present an "Abort, Retry, Ignore"
-        // dialog in response to a call to abort(); we want to be able to disable this
-        // for (e.g.) buildbots, where we never want that behavior. This is a close approximation
-        // that will kill the process in a similar way.
-        // (Note that 3 is the exit code for the "abort" button.)
-        raise(SIGABRT);
-        exit(1);
-    }
-#endif
-
-    abort();
-}
-
 }  // namespace
 
 void set_custom_compile_time_error_reporter(CompileTimeErrorReporter *error_reporter) {
@@ -42,7 +26,7 @@ void set_custom_compile_time_error_reporter(CompileTimeErrorReporter *error_repo
 }
 
 bool exceptions_enabled() {
-#ifdef WITH_EXCEPTIONS
+#ifdef HALIDE_WITH_EXCEPTIONS
     return true;
 #else
     return false;
@@ -80,7 +64,7 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
 // (aside from newlines inserted by user code) to make it easy to filter
 // specific warnings or messages via (e.g.) grep.... unless we are likely to be
 // outputting to a proper terminal, in which case newlines are used to improve readability.
-#if defined(WITH_EXCEPTIONS)
+#if defined(HALIDE_WITH_EXCEPTIONS)
     const bool use_newlines = false;
 #else
     const bool use_newlines = (custom_error_reporter == nullptr) && isatty(2);
@@ -118,7 +102,7 @@ ErrorReport::~ErrorReport()
 #endif
 {
     if (!msg.str().empty() && msg.str().back() != '\n') {
-        msg << '\n';
+        msg << "\n";
     }
 
     if (custom_error_reporter != nullptr) {
@@ -129,7 +113,7 @@ ErrorReport::~ErrorReport()
             custom_error_reporter->error(msg.str().c_str());
             // error() should not have returned to us, but just in case
             // it does, make sure we don't continue.
-            error_abort();
+            abort();
         }
     }
 
@@ -139,7 +123,7 @@ ErrorReport::~ErrorReport()
         return;
     }
 
-#ifdef WITH_EXCEPTIONS
+#ifdef HALIDE_WITH_EXCEPTIONS
     if (std::uncaught_exception()) {
         // This should never happen - evaluating one of the arguments
         // to the error message would have to throw an
@@ -147,18 +131,15 @@ ErrorReport::~ErrorReport()
         // exception already in flight and suppress this one.
         return;
     } else if (flags & Runtime) {
-        RuntimeError err(msg.str());
-        throw err;
+        throw RuntimeError(msg.str());
     } else if (flags & User) {
-        CompileError err(msg.str());
-        throw err;
+        throw CompileError(msg.str());
     } else {
-        InternalError err(msg.str());
-        throw err;
+        throw InternalError(msg.str());
     }
 #else
     std::cerr << msg.str();
-    error_abort();
+    abort();
 #endif
 }
 }  // namespace Internal

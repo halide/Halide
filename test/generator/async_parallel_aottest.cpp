@@ -4,6 +4,7 @@
 #include <mutex>
 #include <random>
 #include <stdio.h>
+#include <string>
 #include <thread>
 
 #include "HalideBuffer.h"
@@ -11,7 +12,7 @@
 
 #include "async_parallel.h"
 
-std::atomic<uint64_t> last_update;
+std::atomic<uint64_t> last_update{0};
 
 uint64_t sleeps;
 

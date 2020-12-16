@@ -9,15 +9,16 @@
  */
 
 #include <memory>
+#include <string>
 
 #include "Closure.h"
-#include "IR.h"
-#include "IRVisitor.h"
+#include "Expr.h"
 #include "Scope.h"
 #include "Target.h"
 
 namespace llvm {
 class ConstantFolder;
+class ElementCount;
 class Function;
 class IRBuilderDefaultInserter;
 class LLVMContext;
@@ -61,6 +62,22 @@ void unpack_closure(const Closure &closure,
 /** Get the llvm type equivalent to a given halide type */
 llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
 
+/** Get the number of elements in an llvm vector type, or return 1 if
+ * it's not a vector type. */
+int get_vector_num_elements(llvm::Type *);
+
+/** Get the scalar type of an llvm vector type. Returns the argument
+ * if it's not a vector type. */
+llvm::Type *get_vector_element_type(llvm::Type *);
+
+#if LLVM_VERSION >= 110
+const llvm::ElementCount element_count(int e);
+#else
+int element_count(int e);
+#endif
+
+llvm::Type *get_vector_type(llvm::Type *, int);
+
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
 
@@ -69,13 +86,19 @@ bool function_takes_user_context(const std::string &name);
  * non-positive. */
 bool can_allocation_fit_on_stack(int64_t size);
 
+/** Does a {div/mod}_round_to_zero using binary long division for int/uint.
+ *  max_abs is the maximum absolute value of (a/b).
+ *  Returns the pair {div_round_to_zero, mod_round_to_zero}. */
+std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &a, const Expr &b,
+                                                 const uint64_t *max_abs = nullptr);
+
 /** Given a Halide Euclidean division/mod operation, do constant optimizations
  * and possibly call lower_euclidean_div/lower_euclidean_mod if necessary.
  * Can introduce mulhi_shr and sorted_avg intrinsics as well as those from the
  * lower_euclidean_ operation -- div_round_to_zero or mod_round_to_zero. */
 ///@{
-Expr lower_int_uint_div(Expr a, Expr b);
-Expr lower_int_uint_mod(Expr a, Expr b);
+Expr lower_int_uint_div(const Expr &a, const Expr &b);
+Expr lower_int_uint_mod(const Expr &a, const Expr &b);
 ///@}
 
 /** Given a Halide Euclidean division/mod operation, define it in terms of
@@ -88,13 +111,9 @@ Expr lower_euclidean_mod(Expr a, Expr b);
 /** Given a Halide shift operation with a signed shift amount (may be negative), define
  * an equivalent expression using only shifts by unsigned amounts. */
 ///@{
-Expr lower_signed_shift_left(Expr a, Expr b);
-Expr lower_signed_shift_right(Expr a, Expr b);
+Expr lower_signed_shift_left(const Expr &a, const Expr &b);
+Expr lower_signed_shift_right(const Expr &a, const Expr &b);
 ///@}
-
-/** Replace predicated loads/stores with unpredicated equivalents
- * inside branches. */
-Stmt unpredicate_loads_stores(Stmt s);
 
 /** Given an llvm::Module, set llvm:TargetOptions, cpu and attr information */
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);

@@ -84,29 +84,29 @@ namespace Synchronization {
 struct thread_parker {
     qurt_mutex_t mutex;
     qurt_cond_t condvar;
-    bool should_park;
+    bool should_park = false;
 
-#if __cplusplus >= 201103L
     thread_parker(const thread_parker &) = delete;
-#endif
+    thread_parker &operator=(const thread_parker &) = delete;
+    thread_parker(thread_parker &&) = delete;
+    thread_parker &operator=(thread_parker &&) = delete;
 
-    __attribute__((always_inline)) thread_parker()
-        : should_park(false) {
+    ALWAYS_INLINE thread_parker() {
         qurt_mutex_init(&mutex);
         qurt_cond_init(&condvar);
         should_park = false;
     }
 
-    __attribute__((always_inline)) ~thread_parker() {
+    ALWAYS_INLINE ~thread_parker() {
         qurt_cond_destroy(&condvar);
         qurt_mutex_destroy(&mutex);
     }
 
-    __attribute__((always_inline)) void prepare_park() {
+    ALWAYS_INLINE void prepare_park() {
         should_park = true;
     }
 
-    __attribute__((always_inline)) void park() {
+    ALWAYS_INLINE void park() {
         qurt_mutex_lock(&mutex);
         while (should_park) {
             qurt_cond_wait(&condvar, &mutex);
@@ -114,16 +114,16 @@ struct thread_parker {
         qurt_mutex_unlock(&mutex);
     }
 
-    __attribute__((always_inline)) void unpark_start() {
+    ALWAYS_INLINE void unpark_start() {
         qurt_mutex_lock(&mutex);
     }
 
-    __attribute__((always_inline)) void unpark() {
+    ALWAYS_INLINE void unpark() {
         should_park = false;
         qurt_cond_signal(&condvar);
     }
 
-    __attribute__((always_inline)) void unpark_finish() {
+    ALWAYS_INLINE void unpark_finish() {
         qurt_mutex_unlock(&mutex);
     }
 };

@@ -6,6 +6,7 @@
  */
 
 #include <map>
+#include <string>
 
 #include "CodeGen_ARM.h"
 #include "CodeGen_MIPS.h"
@@ -13,7 +14,6 @@
 #include "CodeGen_RISCV.h"
 #include "CodeGen_WebAssembly.h"
 #include "CodeGen_X86.h"
-
 #include "IR.h"
 
 namespace Halide {
@@ -31,7 +31,7 @@ public:
      * appropriate flags from Target */
     CodeGen_GPU_Host(Target);
 
-    virtual ~CodeGen_GPU_Host();
+    ~CodeGen_GPU_Host() override;
 
 protected:
     void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name) override;

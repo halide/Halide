@@ -17,6 +17,8 @@ using std::set;
 using std::string;
 using std::vector;
 
+namespace {
+
 // Is it safe to lift an Expr out of a loop (and potentially across a device boundary)
 class CanLift : public IRVisitor {
     using IRVisitor::visit;
@@ -63,18 +65,47 @@ class LiftLoopInvariants : public IRMutator {
     }
 
     bool should_lift(const Expr &e) {
-        if (!can_lift(e)) return false;
-        if (e.as<Variable>()) return false;
-        if (e.as<Broadcast>()) return false;
-        if (is_const(e)) return false;
+        if (!can_lift(e)) {
+            return false;
+        }
+        if (e.as<Variable>()) {
+            return false;
+        }
+        if (e.as<Broadcast>()) {
+            return false;
+        }
+        if (is_const(e)) {
+            return false;
+        }
         // bool vectors are buggy enough in LLVM that lifting them is a bad idea.
         // (We just skip all vectors on the principle that we don't want them
         // on the stack anyway.)
-        if (e.type().is_vector()) return false;
+        if (e.type().is_vector()) {
+            return false;
+        }
         if (const Cast *cast = e.as<Cast>()) {
             if (cast->type.bytes() > cast->value.type().bytes()) {
                 // Don't lift widening casts.
                 return false;
+            }
+        }
+        if (const Add *add = e.as<Add>()) {
+            if (add->type == Int(32) &&
+                is_const(add->b)) {
+                // Don't lift constant integer offsets. They're often free.
+                return false;
+            }
+        }
+        if (const Call *call = e.as<Call>()) {
+            if (call->is_intrinsic(Call::strict_float) ||
+                call->is_intrinsic(Call::likely) ||
+                call->is_intrinsic(Call::likely_if_innermost) ||
+                call->is_intrinsic(Call::reinterpret)) {
+                // Don't lift these intrinsics. They're free.
+                return should_lift(call->args[0]);
+            }
+            if (call->is_intrinsic(Call::size_of_halide_buffer_t)) {
+                return true;
             }
         }
         return true;
@@ -215,9 +246,8 @@ class LICM : public IRMutator {
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
             return IRMutator::visit(op);
-        } else if (op->device_api == DeviceAPI::GLSL ||
-                   op->device_api == DeviceAPI::OpenGLCompute) {
-            // Don't lift anything out of OpenGL loops
+        } else if (op->device_api == DeviceAPI::GLSL) {
+            // GLSL uses magic names for varying things. Just skip LICM.
             return IRMutator::visit(op);
         } else {
 
@@ -244,13 +274,13 @@ class LICM : public IRMutator {
             }
 
             // Jointly CSE the lifted exprs put putting them together into a dummy Expr
-            Expr dummy_call = Call::make(Int(32), "dummy", exprs, Call::Extern);
+            Expr dummy_call = Call::make(Int(32), Call::bundle, exprs, Call::PureIntrinsic);
             dummy_call = common_subexpression_elimination(dummy_call, true);
 
             // Peel off containing lets. These will be lifted.
             vector<pair<string, Expr>> lets;
             while (const Let *let = dummy_call.as<Let>()) {
-                lets.push_back({let->name, let->value});
+                lets.emplace_back(let->name, let->value);
                 dummy_call = let->body;
             }
 
@@ -268,12 +298,14 @@ class LICM : public IRMutator {
 
             // Now consider substituting back in each use
             const Call *call = dummy_call.as<Call>();
-            internal_assert(call);
+            internal_assert(call->is_intrinsic(Call::bundle));
             bool converged;
             do {
                 converged = true;
                 for (size_t i = 0; i < exprs.size(); i++) {
-                    if (!exprs[i].defined()) continue;
+                    if (!exprs[i].defined()) {
+                        continue;
+                    }
                     Expr e = call->args[i];
                     if (cost(e, vars.vars) <= 1) {
                         // Just subs it back in - computing it is as cheap
@@ -415,24 +447,26 @@ class GroupLoopInvariants : public IRMutator {
         return result;
     }
 
-    Expr visit(const Sub *op) override {
-        if (op->type.is_float()) {
-            // Don't reassociate float exprs.
-            // (If strict_float is off, we're allowed to reassociate,
-            // and we do reassociate elsewhere, but there's no benefit to it
+    Expr visit(const Add *op) override {
+        if (op->type.is_float() || (op->type == Int(32) && is_const(op->b))) {
+            // Don't reassociate float exprs.  (If strict_float is
+            // off, we're allowed to reassociate, and we do
+            // reassociate elsewhere, but there's no benefit to it
             // here and it's friendlier not to.)
+            //
+            // Also don't reassociate trailing integer constants. They're the
+            // ultimate loop invariant, but doing this to stencils
+            // causes inner loops to track N different pointers
+            // instead of one pointer with constant offsets, and that
+            // complicates aliasing analysis.
             return IRMutator::visit(op);
         }
 
         return reassociate_summation(op);
     }
 
-    Expr visit(const Add *op) override {
-        if (op->type.is_float()) {
-            // Don't reassociate float exprs.
-            // (If strict_float is off, we're allowed to reassociate,
-            // and we do reassociate elsewhere, but there's no benefit to it
-            // here and it's friendlier not to.)
+    Expr visit(const Sub *op) override {
+        if (op->type.is_float() || (op->type == Int(32) && is_const(op->b))) {
             return IRMutator::visit(op);
         }
 
@@ -495,11 +529,124 @@ class GroupLoopInvariants : public IRMutator {
     }
 };
 
-Stmt loop_invariant_code_motion(Stmt s) {
+}  // namespace
+
+Stmt hoist_loop_invariant_values(Stmt s) {
     s = GroupLoopInvariants().mutate(s);
     s = common_subexpression_elimination(s);
     s = LICM().mutate(s);
     s = simplify_exprs(s);
+    return s;
+}
+
+namespace {
+
+// Move IfThenElse nodes from the inside of a piece of Stmt IR to the
+// outside when legal.
+class HoistIfStatements : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const LetStmt *op) override {
+        Stmt body = mutate(op->body);
+        if (const IfThenElse *i = body.as<IfThenElse>()) {
+            if (!i->else_case.defined() &&
+                is_pure(op->value) &&
+                is_pure(i->condition) &&
+                !expr_uses_var(i->condition, op->name)) {
+                Stmt s = LetStmt::make(op->name, op->value, i->then_case);
+                return IfThenElse::make(i->condition, s);
+            }
+        }
+        return LetStmt::make(op->name, op->value, body);
+    }
+
+    Stmt visit(const For *op) override {
+        Stmt body = mutate(op->body);
+        if (const IfThenElse *i = body.as<IfThenElse>()) {
+            if (!i->else_case.defined() &&
+                is_pure(i->condition) &&
+                !expr_uses_var(i->condition, op->name)) {
+                Stmt s = For::make(op->name, op->min, op->extent,
+                                   op->for_type, op->device_api, i->then_case);
+                return IfThenElse::make(i->condition, s);
+            }
+        }
+        return For::make(op->name, op->min, op->extent,
+                         op->for_type, op->device_api, body);
+    }
+
+    Stmt visit(const ProducerConsumer *op) override {
+        Stmt body = mutate(op->body);
+        if (const IfThenElse *i = body.as<IfThenElse>()) {
+            if (!i->else_case.defined() &&
+                is_pure(i->condition)) {
+                Stmt s = ProducerConsumer::make(op->name, op->is_producer, i->then_case);
+                return IfThenElse::make(i->condition, s);
+            }
+        }
+        return ProducerConsumer::make(op->name, op->is_producer, body);
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        Stmt then_case = mutate(op->then_case);
+        if (!op->else_case.defined() &&
+            is_pure(op->condition)) {
+            if (const IfThenElse *i = then_case.as<IfThenElse>()) {
+                if (!i->else_case.defined() &&
+                    is_pure(i->condition)) {
+                    return IfThenElse::make(op->condition && i->condition, then_case);
+                }
+            }
+        }
+        return IfThenElse::make(op->condition, then_case, mutate(op->else_case));
+    }
+
+    Stmt visit(const Allocate *op) override {
+        Stmt body = mutate(op->body);
+        if (const IfThenElse *i = body.as<IfThenElse>()) {
+            if (!i->else_case.defined() &&
+                is_pure(i->condition)) {
+                Stmt s = Allocate::make(op->name, op->type, op->memory_type,
+                                        op->extents, op->condition, i->then_case,
+                                        op->new_expr, op->free_function);
+                return IfThenElse::make(i->condition, s);
+            }
+        }
+        return Allocate::make(op->name, op->type, op->memory_type,
+                              op->extents, op->condition, body,
+                              op->new_expr, op->free_function);
+    }
+
+    Stmt visit(const Block *op) override {
+        Stmt first = mutate(op->first);
+        Stmt rest = mutate(op->rest);
+
+        const IfThenElse *i1 = first.as<IfThenElse>();
+        const Block *b = rest.as<Block>();
+        const IfThenElse *i2 = b ? b->first.as<IfThenElse>() : rest.as<IfThenElse>();
+
+        if (i1 &&
+            i2 &&
+            !i1->else_case.defined() &&
+            !i2->else_case.defined() &&
+            is_pure(i1->condition) &&
+            can_prove(i1->condition == i2->condition)) {
+            Stmt s = Block::make(i1->then_case, i2->then_case);
+            s = IfThenElse::make(i1->condition, s);
+            if (b) {
+                s = Block::make(s, b->rest);
+            }
+            return s;
+        } else {
+            return Block::make(first, rest);
+        }
+    }
+};
+
+}  // namespace
+
+Stmt hoist_loop_invariant_if_statements(Stmt s) {
+    s = HoistIfStatements().mutate(s);
     return s;
 }
 

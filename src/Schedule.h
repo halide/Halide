@@ -5,11 +5,16 @@
  * Defines the internal representation of the schedule for a function
  */
 
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "DeviceAPI.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
 #include "Parameter.h"
-
-#include <map>
+#include "PrefetchDirective.h"
 
 namespace Halide {
 
@@ -84,26 +89,6 @@ enum class LoopAlignStrategy {
     Auto
 };
 
-/** Different ways to handle accesses outside the original extents in a prefetch. */
-enum class PrefetchBoundStrategy {
-    /** Clamp the prefetched exprs by intersecting the prefetched region with
-     * the original extents. This may make the exprs of the prefetched region
-     * more complicated. */
-    Clamp,
-
-    /** Guard the prefetch with if-guards that ignores the prefetch if
-     * any of the prefetched region ever goes beyond the original extents
-     * (i.e. all or nothing). */
-    GuardWithIf,
-
-    /** Leave the prefetched exprs as are (no if-guards around the prefetch
-     * and no intersecting with the original extents). This makes the prefetch
-     * exprs simpler but this may cause prefetching of region outside the original
-     * extents. This is good if prefetch won't fault when accessing region
-     * outside the original extents. */
-    NonFaulting
-};
-
 /** A reference to a site in a Halide statement at the top of the
  * body of a particular for loop. Evaluating a region of a halide
  * function is done by generating a loop nest that spans its
@@ -159,7 +144,7 @@ class LoopLevel {
     Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
     explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c)
-        : contents(c) {
+        : contents(std::move(c)) {
     }
     LoopLevel(const std::string &func_name, const std::string &var_name,
               bool is_rvar, int stage_index, bool locked = false);
@@ -171,8 +156,8 @@ public:
 
     /** Identify the loop nest corresponding to some dimension of some function */
     // @{
-    LoopLevel(const Internal::Function &f, VarOrRVar v, int stage_index = -1);
-    LoopLevel(const Func &f, VarOrRVar v, int stage_index = -1);
+    LoopLevel(const Internal::Function &f, const VarOrRVar &v, int stage_index = -1);
+    LoopLevel(const Func &f, const VarOrRVar &v, int stage_index = -1);
     // @}
 
     /** Construct an undefined LoopLevel. Calling any method on an undefined
@@ -301,46 +286,179 @@ struct Split {
     }
 };
 
+/** Each Dim below has a dim_type, which tells you what
+ * transformations are legal on it. When you combine two Dims of
+ * distinct DimTypes (e.g. with Stage::fuse), the combined result has
+ * the greater enum value of the two types. */
+enum class DimType {
+    /** This dim originated from a Var. You can evaluate a Func at
+     * distinct values of this Var in any order over an interval
+     * that's at least as large as the interval required. In pure
+     * definitions you can even redundantly re-evaluate points. */
+    PureVar = 0,
+
+    /** The dim originated from an RVar. You can evaluate a Func at
+     * distinct values of this RVar in any order (including in
+     * parallel) over exactly the interval specified in the
+     * RDom. PureRVars can also be reordered arbitrarily in the dims
+     * list, as there are no data hazards between the evaluation of
+     * the Func at distinct values of the RVar.
+     *
+     * The most common case where an RVar is considered pure is RVars
+     * that are used in a way which obeys all the syntactic
+     * constraints that a Var does, e.g:
+     *
+     \code
+     RDom r(0, 100);
+     f(r.x) = f(r.x) + 5;
+     \endcode
+     *
+     * Other cases where RVars are pure are where the sites being
+     * written to by the Func evaluated at one value of the RVar
+     * couldn't possibly collide with the sites being written or read
+     * by the Func at a distinct value of the RVar. For example, r.x
+     * is pure in the following three definitions:
+     *
+     \code
+
+     // This definition writes to even coordinates and reads from the
+     // same site (which no other value of r.x is writing to) and odd
+     // sites (which no other value of r.x is writing to):
+     f(2*r.x) = max(f(2*r.x), f(2*r.x + 7));
+
+     // This definition writes to scanline zero and reads from the the
+     // same site and scanline one:
+     f(r.x, 0) += f(r.x, 1);
+
+     // This definition reads and writes over non-overlapping ranges:
+     f(r.x + 100) += f(r.x);
+     \endcode
+     *
+     * To give two counterexamples, r.x is not pure in the following
+     * definitions:
+     *
+     \code
+     // The same site is written by distinct values of the RVar
+     // (write-after-write hazard):
+     f(r.x / 2) += f(r.x);
+
+     // One value of r.x reads from a site that another value of r.x
+     // is writing to (read-after-write hazard):
+     f(r.x) += f(r.x + 1);
+     \endcode
+     */
+    PureRVar,
+
+    /** The dim originated from an RVar. You must evaluate a Func at
+     * distinct values of this RVar in increasing order over precisely
+     * the interval specified in the RDom. ImpureRVars may not be
+     * reordered with respect to other ImpureRVars.
+     *
+     * All RVars are impure by default. Those for which we can prove
+     * no data hazards exist get promoted to PureRVar. There are two
+     * instances in which ImpureRVars may be parallelized or reordered
+     * even in the presence of hazards:
+     *
+     * 1) In the case of an update definition that has been proven to be
+     * an associative and commutative reduction, reordering of
+     * ImpureRVars is allowed, and parallelizing them is allowed if
+     * the update has been made atomic.
+     *
+     * 2) ImpureRVars can also be reordered and parallelized if
+     * Func::allow_race_conditions() has been set. This is the escape
+     * hatch for when there are no hazards but the checks above failed
+     * to prove that (RDom::where can encode arbitrary facts about
+     * non-linear integer arithmetic, which is undecidable), or for
+     * when you don't actually care about the non-determinism
+     * introduced by data hazards (e.g. in the algorithm HOGWILD!).
+     */
+    ImpureRVar,
+};
+
+/** The Dim struct represents one loop in the schedule's
+ * representation of a loop nest. */
 struct Dim {
+    /** Name of the loop variable */
     std::string var;
+
+    /** How are the loop values traversed (e.g. unrolled, vectorized, parallel) */
     ForType for_type;
+
+    /** On what device does the body of the loop execute (e.g. Host, GPU, Hexagon) */
     DeviceAPI device_api;
 
-    enum Type { PureVar = 0,
-                PureRVar,
-                ImpureRVar };
-    Type dim_type;
+    /** The DimType tells us what transformations are legal on this
+     * loop (see the DimType enum above). */
+    DimType dim_type;
 
+    /** Can this loop be evaluated in any order (including in
+     * parallel)? Equivalently, are there no data hazards between
+     * evaluations of the Func at distinct values of this var? */
     bool is_pure() const {
-        return (dim_type == PureVar) || (dim_type == PureRVar);
+        return (dim_type == DimType::PureVar) || (dim_type == DimType::PureRVar);
     }
+
+    /** Did this loop originate from an RVar (in which case the bounds
+     * of the loops are algorithmically meaningful)? */
     bool is_rvar() const {
-        return (dim_type == PureRVar) || (dim_type == ImpureRVar);
+        return (dim_type == DimType::PureRVar) || (dim_type == DimType::ImpureRVar);
     }
+
+    /** Could multiple iterations of this loop happen at the same
+     * time, with reads and writes interleaved in arbitrary ways
+     * according to the memory model of the underlying compiler and
+     * machine? */
     bool is_unordered_parallel() const {
         return Halide::Internal::is_unordered_parallel(for_type);
     }
+
+    /** Could multiple iterations of this loop happen at the same
+     * time? Vectorized and GPULanes loop types are parallel but not
+     * unordered, because the loop iterations proceed together in
+     * lockstep with some well-defined outcome if there are hazards. */
     bool is_parallel() const {
         return Halide::Internal::is_parallel(for_type);
     }
 };
 
+/** A bound on a loop, typically from Func::bound */
 struct Bound {
+    /** The loop var being bounded */
     std::string var;
-    Expr min, extent, modulus, remainder;
+
+    /** Declared min and extent of the loop. min may be undefined if
+     * Func::bound_extent was used. */
+    Expr min, extent;
+
+    /** If defined, the number of iterations will be a multiple of
+     * "modulus", and the first iteration will be at a value congruent
+     * to "remainder" modulo "modulus". Set by Func::align_bounds. */
+    Expr modulus, remainder;
 };
 
+/** Properties of one axis of the storage of a Func */
 struct StorageDim {
+    /** The var in the pure definition corresponding to this axis */
     std::string var;
+
+    /** The bounds allocated (not computed) must be a multiple of
+     * "alignment". Set by Func::align_storage. */
     Expr alignment;
+
+    /** If the Func is explicitly folded along this axis (with
+     * Func::fold_storage) this gives the extent of the circular
+     * buffer used, and whether it is used in increasing order
+     * (fold_forward = true) or decreasing order (fold_forward =
+     * false). */
     Expr fold_factor;
     bool fold_forward;
 };
 
-/** This represents two stages with fused loop nests from outermost to a specific
- * loop level. The loops to compute func_1(stage_1) are fused with the loops to
- * compute func_2(stage_2) from outermost to loop level var_name and the
- * computation from stage_1 of func_1 occurs first.
+/** This represents two stages with fused loop nests from outermost to
+ * a specific loop level. The loops to compute func_1(stage_1) are
+ * fused with the loops to compute func_2(stage_2) from outermost to
+ * loop level var_name and the computation from stage_1 of func_1
+ * occurs first.
  */
 struct FusedPair {
     std::string func_1;
@@ -377,15 +495,6 @@ struct FusedPair {
     }
 };
 
-struct PrefetchDirective {
-    std::string name;
-    std::string var;
-    Expr offset;
-    PrefetchBoundStrategy strategy;
-    // If it's a prefetch load from an image parameter, this points to that.
-    Parameter param;
-};
-
 struct FuncScheduleContents;
 struct StageScheduleContents;
 struct FunctionContents;
@@ -399,11 +508,9 @@ class FuncSchedule {
 
 public:
     FuncSchedule(IntrusivePtr<FuncScheduleContents> c)
-        : contents(c) {
+        : contents(std::move(c)) {
     }
-    FuncSchedule(const FuncSchedule &other)
-        : contents(other.contents) {
-    }
+    FuncSchedule(const FuncSchedule &other) = default;
     FuncSchedule();
 
     /** Return a deep copy of this FuncSchedule. It recursively deep copies all
@@ -497,11 +604,9 @@ class StageSchedule {
 
 public:
     StageSchedule(IntrusivePtr<StageScheduleContents> c)
-        : contents(c) {
+        : contents(std::move(c)) {
     }
-    StageSchedule(const StageSchedule &other)
-        : contents(other.contents) {
-    }
+    StageSchedule(const StageSchedule &other) = default;
     StageSchedule();
 
     /** Return a copy of this StageSchedule. */
@@ -552,7 +657,7 @@ public:
     /** Innermost loop level of fused loop nest for this function stage.
      * Fusion runs from outermost to this loop level. The stages being fused
      * should not have producer/consumer relationship. See \ref Func::compute_with
-     * and \ref Stage::compute_with */
+     * and \ref Func::compute_with */
     // @{
     const FuseLoopLevel &fuse_level() const;
     FuseLoopLevel &fuse_level();
@@ -562,7 +667,7 @@ public:
      * from the outermost loop to a certain loop level. Those function stages
      * are to be computed AFTER this function stage at the last fused loop level.
      * This list is populated when realization_order() is called. See
-     * \ref Func::compute_with and \ref Stage::compute_with */
+     * \ref Func::compute_with */
     // @{
     const std::vector<FusedPair> &fused_pairs() const;
     std::vector<FusedPair> &fused_pairs();

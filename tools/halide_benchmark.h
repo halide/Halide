@@ -14,7 +14,7 @@
 namespace Halide {
 namespace Tools {
 
-#if !defined(__EMSCRIPTEN__)
+#if !(defined(__EMSCRIPTEN__) && defined(HALIDE_BENCHMARK_USE_EMSCRIPTEN_GET_NOW))
 
 // Prefer high_resolution_clock, but only if it's steady...
 template<bool HighResIsSteady = std::chrono::high_resolution_clock::is_steady>
@@ -46,13 +46,20 @@ inline double benchmark_duration_seconds(
 // that emscripten_get_now() is the best bet, as it is milliseconds
 // (but returned as a double, with microseconds in the fractional portion),
 // using either performance.now() or performance.hrtime() depending on the
-// environment.
+// environment. Unfortunately, it's not guaranteed to be steady, and the
+// auto-benchmark algorithm reacts badly to negative times, so we'll leave this
+// disabled for now; you can opt-in to this by defining HALIDE_BENCHMARK_USE_EMSCRIPTEN_GET_NOW
+// if you need to build for a wasm runtime with the exception behavior above.
 inline double benchmark_now() {
     return emscripten_get_now();
 }
 
 inline double benchmark_duration_seconds(double start, double end) {
-    return (end - start) / 1000.0;
+    // emscripten_get_now is *not* guaranteed to be steady.
+    // Clamping to a positive value is arguably better than nothing,
+    // but still produces unpredictable results in the adaptive case
+    // (which is why this is disabled by default).
+    return std::max((end - start) / 1000.0, 1e-9);
 }
 
 #endif
@@ -74,7 +81,7 @@ inline double benchmark_duration_seconds(double start, double end) {
 // for real-world use. For now, callers using this to benchmark GPU
 // code should measure with extreme caution.
 
-inline double benchmark(uint64_t samples, uint64_t iterations, std::function<void()> op) {
+inline double benchmark(uint64_t samples, uint64_t iterations, const std::function<void()> &op) {
     double best = std::numeric_limits<double>::infinity();
     for (uint64_t i = 0; i < samples; i++) {
         auto start = benchmark_now();
@@ -145,7 +152,7 @@ struct BenchmarkResult {
     }
 };
 
-inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig &config = {}) {
+inline BenchmarkResult benchmark(const std::function<void()> &op, const BenchmarkConfig &config = {}) {
     BenchmarkResult result{0, 0, 0};
 
     const double min_time = std::max(10 * 1e-6, config.min_time);

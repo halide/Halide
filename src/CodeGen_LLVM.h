@@ -39,7 +39,6 @@ class GlobalVariable;
 
 #include "IRVisitor.h"
 #include "Module.h"
-#include "ModulusRemainder.h"
 #include "Scope.h"
 #include "Target.h"
 
@@ -62,7 +61,7 @@ public:
     static CodeGen_LLVM *new_for_target(const Target &target,
                                         llvm::LLVMContext &context);
 
-    virtual ~CodeGen_LLVM();
+    ~CodeGen_LLVM() override;
 
     /** Takes a halide Module and compiles it to an llvm Module. */
     virtual std::unique_ptr<llvm::Module> compile(const Module &module);
@@ -83,6 +82,10 @@ public:
         llvm::LLVMContext &context,
         const std::string &suffix,
         const std::vector<std::pair<std::string, ExternSignature>> &externs);
+
+    size_t get_requested_alloca_total() const {
+        return requested_alloca_total;
+    }
 
 protected:
     CodeGen_LLVM(Target t);
@@ -244,6 +247,12 @@ protected:
     Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
     Expr wild_i32x_, wild_u32x_, wild_i64x_, wild_u64x_;
     Expr wild_f32x_, wild_f64x_;
+
+    // Wildcards for scalars.
+    Expr wild_u1_, wild_i8_, wild_u8_, wild_i16_, wild_u16_;
+    Expr wild_i32_, wild_u32_, wild_i64_, wild_u64_;
+    Expr wild_f32_, wild_f64_;
+
     Expr min_i8, max_i8, max_u8;
     Expr min_i16, max_i16, max_u16;
     Expr min_i32, max_i32, max_u32;
@@ -253,13 +262,13 @@ protected:
 
     /** Emit code that evaluates an expression, and return the llvm
      * representation of the result of the expression. */
-    llvm::Value *codegen(Expr);
+    llvm::Value *codegen(const Expr &);
 
     /** Emit code that runs a statement. */
-    void codegen(Stmt);
+    void codegen(const Stmt &);
 
     /** Codegen a vector Expr by codegenning each lane and combining. */
-    void scalarize(Expr);
+    void scalarize(const Expr &);
 
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
@@ -291,7 +300,7 @@ protected:
      * null), or evaluates and returns the message, which must be an
      * Int(32) expression. */
     // @{
-    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
+    void create_assertion(llvm::Value *condition, const Expr &message, llvm::Value *error_code = nullptr);
     // @}
 
     /** Codegen a block of asserts with pure conditions */
@@ -311,9 +320,9 @@ protected:
         std::string name;
     };
     int task_depth;
-    void get_parallel_tasks(Stmt s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
+    void get_parallel_tasks(const Stmt &s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
     void do_parallel_tasks(const std::vector<ParallelTask> &tasks);
-    void do_as_parallel_task(Stmt s);
+    void do_as_parallel_task(const Stmt &s);
 
     /** Return the the pipeline with the given error code. Will run
      * the destructor block. */
@@ -332,8 +341,8 @@ protected:
      * given type. The index counts according to the scalar type of
      * the type passed in. */
     // @{
-    llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
-    llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, Expr index);
+    llvm::Value *codegen_buffer_pointer(const std::string &buffer, Type type, llvm::Value *index);
+    llvm::Value *codegen_buffer_pointer(const std::string &buffer, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
@@ -344,7 +353,7 @@ protected:
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
      * different buffers */
-    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, Expr index);
+    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, const Expr &index);
 
     /** Get a unique name for the actual block of memory that an
      * allocate node uses. Used so that alias analysis understands
@@ -398,6 +407,7 @@ protected:
     void visit(const IfThenElse *) override;
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
+    void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
     // @}
@@ -434,6 +444,20 @@ protected:
                                         bool zero_initialize = false,
                                         const std::string &name = "");
 
+    /** A (very) conservative guess at the size of all alloca() storage requested
+     * (including alignment padding). It's currently meant only to be used as
+     * a very coarse way to ensure there is enough stack space when testing
+     * on the WebAssembly backend.
+     *
+     * It is *not* meant to be a useful proxy for "stack space needed", for a
+     * number of reasons:
+     * - allocas with non-overlapping lifetimes will share space
+     * - on some backends, LLVM may promote register-sized allocas into registers
+     * - while this accounts for alloca() calls we know about, it doesn't attempt
+     *   to account for stack spills, function call overhead, etc.
+     */
+    size_t requested_alloca_total = 0;
+
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */
     std::set<std::string> external_buffer;
@@ -447,6 +471,26 @@ protected:
      * an arbitrary number of vectors.*/
     virtual llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
 
+    /** Description of an intrinsic function overload. Overloads are resolved
+     * using both argument and return types. The scalar types of the arguments
+     * and return type must match exactly for an overload resolution to succeed. */
+    struct Intrinsic {
+        Type result_type;
+        std::vector<Type> arg_types;
+        llvm::Function *impl;
+
+        Intrinsic(Type result_type, std::vector<Type> arg_types, llvm::Function *impl)
+            : result_type(result_type), arg_types(std::move(arg_types)), impl(impl) {
+        }
+    };
+    /** Mapping of intrinsic functions to the various overloads implementing it. */
+    std::map<std::string, std::vector<Intrinsic>> intrinsics;
+
+    /** Declare an intrinsic function that participates in overload resolution. */
+    void declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types);
+    /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found. */
+    llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
+
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
      * given by 'intrin_lanes', the intrinsic is called on each
@@ -458,8 +502,12 @@ protected:
     // @{
     llvm::Value *call_intrin(const Type &t, int intrin_lanes,
                              const std::string &name, std::vector<Expr>);
+    llvm::Value *call_intrin(const Type &t, int intrin_lanes,
+                             llvm::Function *intrin, std::vector<Expr>);
     llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
                              const std::string &name, std::vector<llvm::Value *>);
+    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
+                             llvm::Function *intrin, std::vector<llvm::Value *>);
     // @}
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs
@@ -495,6 +543,13 @@ protected:
 
     virtual bool supports_atomic_add(const Type &t) const;
 
+    /** Compile a horizontal reduction that starts with an explicit
+     * initial value. There are lots of complex ways to peephole
+     * optimize this pattern, especially with the proliferation of
+     * dot-product instructions, and they can usefully share logic
+     * across backends. */
+    virtual void codegen_vector_reduce(const VectorReduce *op, const Expr &init);
+
     /** Are we inside an atomic node that uses mutex locks?
         This is used for detecting deadlocks from nested atomics & illegal vectorization. */
     bool inside_atomic_mutex_node;
@@ -519,6 +574,9 @@ private:
     /** Turn off all unsafe math flags in scopes while this is set. */
     bool strict_float;
 
+    /** Use the LLVM large code model when this is set. */
+    bool llvm_large_code_model;
+
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
      * as extern "C" linkage. Note that the return value is a function-returning-
@@ -530,7 +588,7 @@ private:
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
-    llvm::Constant *embed_constant_scalar_value_t(Expr e);
+    llvm::Constant *embed_constant_scalar_value_t(const Expr &e);
 
     llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
 
@@ -543,6 +601,10 @@ private:
 
     void init_codegen(const std::string &name, bool any_strict_float = false);
     std::unique_ptr<llvm::Module> finish_codegen();
+
+    /** A helper routine for generating folded vector reductions. */
+    template<typename Op>
+    bool try_to_fold_vector_reduce(const Op *op);
 };
 
 }  // namespace Internal

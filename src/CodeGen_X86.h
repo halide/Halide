@@ -30,9 +30,11 @@ protected:
 
     int vector_lanes_for_slice(const Type &t) const;
 
-    virtual llvm::Type *llvm_type_of(const Type &t) const override;
+    llvm::Type *llvm_type_of(const Type &t) const override;
 
     using CodeGen_Posix::visit;
+
+    void init_module() override;
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     // @{
@@ -47,6 +49,8 @@ protected:
     void visit(const EQ *) override;
     void visit(const NE *) override;
     void visit(const Select *) override;
+    void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
+    void visit(const Mul *) override;
     // @}
 };
 

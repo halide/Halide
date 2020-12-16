@@ -111,8 +111,13 @@ Func build_wrap() {
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     if (!target.has_gpu_feature()) {
-        printf("Not running test because no gpu target enabled\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 
@@ -172,5 +177,6 @@ int main(int argc, char **argv) {
            "using wrap for shared: %f\n",
            shared_time, l1_time, wrap_time);
 
+    printf("Success!\n");
     return 0;
 }

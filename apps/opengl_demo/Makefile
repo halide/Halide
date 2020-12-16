@@ -26,7 +26,7 @@ ifeq ($(UNAME),Darwin)
 
   # These are for OS X:
   DTX_FONT       = /Library/Fonts/Arial.ttf
-  OPENGL_LIBS    = -lglfw3 -framework OpenGL -framework GLUT
+  OPENGL_LIBS    = -lglfw -framework OpenGL -framework GLUT
   GENERATOR_LIBS = -lHalide -lz -lcurses
 
 else

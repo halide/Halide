@@ -1,4 +1,6 @@
 #include "DebugArguments.h"
+#include "Function.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "Module.h"
 
@@ -12,22 +14,22 @@ void debug_arguments(LoweredFunc *func, const Target &t) {
     vector<Stmt> stmts;
     stmts.push_back(Evaluate::make(print("Entering Pipeline " + func->name)));
     stmts.push_back(Evaluate::make(print("Target: " + t.to_string())));
-    for (LoweredArgument arg : func->args) {
+    for (const LoweredArgument &arg : func->args) {
         std::ostringstream name;
         Expr scalar_var = Variable::make(arg.type, arg.name);
         Expr buffer_var = Variable::make(type_of<halide_buffer_t *>(), arg.name + ".buffer");
         Expr value;
         switch (arg.kind) {
         case Argument::InputScalar:
-            name << " Input " << arg.type << ' ' << arg.name << ':';
+            name << " Input " << arg.type << " " << arg.name << ":";
             value = scalar_var;
             break;
         case Argument::InputBuffer:
-            name << " Input Buffer " << arg.name << ':';
+            name << " Input Buffer " << arg.name << ":";
             value = buffer_var;
             break;
         case Argument::OutputBuffer:
-            name << " Output Buffer " << arg.name << ':';
+            name << " Output Buffer " << arg.name << ":";
             value = buffer_var;
             break;
         }

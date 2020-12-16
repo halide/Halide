@@ -1,22 +1,10 @@
 #ifndef HALIDE_FAST_INTEGER_DIVIDE_H
 #define HALIDE_FAST_INTEGER_DIVIDE_H
 
-#include "IR.h"
+#include "Buffer.h"
+#include "Expr.h"
 
 namespace Halide {
-
-/** Built-in images used for fast_integer_divide below. Use of
- * fast_integer_divide will automatically embed the appropriate tables
- * in your object file. They are declared here in case you want to do
- * something non-default with them. */
-namespace IntegerDivideTable {
-Buffer<uint8_t> integer_divide_table_u8();
-Buffer<uint8_t> integer_divide_table_s8();
-Buffer<uint16_t> integer_divide_table_u16();
-Buffer<uint16_t> integer_divide_table_s16();
-Buffer<uint32_t> integer_divide_table_u32();
-Buffer<uint32_t> integer_divide_table_s32();
-}  // namespace IntegerDivideTable
 
 /** Integer division by small values can be done exactly as multiplies
  * and shifts. This function does integer division for numerators of

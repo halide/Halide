@@ -25,10 +25,15 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     bool hexagon_rpc = (target.arch != Target::Hexagon) &&
-                       target.features_any_of({Target::HVX_64, Target::HVX_128});
+                       target.has_feature(Target::HVX);
 
     if (!hexagon_rpc && !target.has_gpu_feature()) {
-        printf("This is a gpu-specific test. Skipping it.\n");
+        printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
+
+    if (target.has_feature(Target::OpenGLCompute)) {
+        printf("Skipping test for OpenGLCompute, as it does not support device crops, slices, or copies\n");
         return 0;
     }
 

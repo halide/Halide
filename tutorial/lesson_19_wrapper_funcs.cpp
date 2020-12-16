@@ -5,12 +5,12 @@
 // from a Func or an ImageParam.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_19*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_19 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_19
+// g++ lesson_19*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_19 -std=c++11
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_19
 
 // On os x:
-// g++ lesson_19*.cpp -g -I ../include -L ../bin -lHalide -o lesson_19 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_19
+// g++ lesson_19*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_19 -std=c++11
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_19
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -295,6 +295,14 @@ int main(int argc, char **argv) {
             target.set_feature(Target::Metal);
         } else {
             target.set_feature(Target::OpenCL);
+        }
+
+        // This check isn't strictly necessary, but it allows a more graceful
+        // exit if running on a system that doesn't have the expected drivers
+        // and/or hardware present.
+        if (!host_supports_target_device(target)) {
+            printf("Requested GPU is not supported; skipping this test. (Do you have the proper hardware and/or driver installed?)\n");
+            return 0;
         }
 
         // Create an interesting input image to use.

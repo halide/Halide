@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <numeric>
+#include <utility>
 
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
@@ -232,7 +233,7 @@ public:
 };
 
 /** Check if any references to buffers in an expression is invalid. */
-bool expr_uses_invalid_buffers(Expr e, const Scope<> &invalid_buffers) {
+bool expr_uses_invalid_buffers(const Expr &e, const Scope<> &invalid_buffers) {
     ExprUsesInvalidBuffers uses(invalid_buffers);
     e.accept(&uses);
     return uses.invalid;
@@ -262,7 +263,7 @@ class FindSimplifications : public IRVisitor {
             return;
         }
         condition = remove_likelies(condition);
-        Simplification s = {condition, old, likely_val, unlikely_val, true};
+        Simplification s = {condition, std::move(old), std::move(likely_val), std::move(unlikely_val), true};
         if (s.condition.type().is_vector()) {
             s.condition = simplify(s.condition);
             if (const Broadcast *b = s.condition.as<Broadcast>()) {
@@ -281,20 +282,21 @@ class FindSimplifications : public IRVisitor {
         bool likely_a = has_uncaptured_likely_tag(op->a);
         bool likely_b = has_uncaptured_likely_tag(op->b);
 
+        // If one side has an uncaptured likely, don't hunt for
+        // simplifications in the other side.
+        if (!likely_a) {
+            op->b.accept(this);
+        }
+        if (!likely_b) {
+            op->a.accept(this);
+        }
+
         // Prefer the side that has an uncaptured top-level likely
         // call. If neither does, prefer the side that contains any
         // likely call at all.
         if (!likely_a && !likely_b) {
             likely_a = has_likely_tag(op->a);
             likely_b = has_likely_tag(op->b);
-        }
-
-        // Don't hunt for simplifications in unlikely paths
-        if (!likely_a) {
-            op->b.accept(this);
-        }
-        if (!likely_b) {
-            op->a.accept(this);
         }
 
         if (likely_b && !likely_a) {
@@ -308,16 +310,16 @@ class FindSimplifications : public IRVisitor {
         bool likely_a = has_uncaptured_likely_tag(op->a);
         bool likely_b = has_uncaptured_likely_tag(op->b);
 
-        if (!likely_a && !likely_b) {
-            likely_a = has_likely_tag(op->a);
-            likely_b = has_likely_tag(op->b);
-        }
-
         if (!likely_a) {
             op->b.accept(this);
         }
         if (!likely_b) {
             op->a.accept(this);
+        }
+
+        if (!likely_a && !likely_b) {
+            likely_a = has_likely_tag(op->a);
+            likely_b = has_likely_tag(op->b);
         }
 
         if (likely_b && !likely_a) {
@@ -359,8 +361,7 @@ class FindSimplifications : public IRVisitor {
         // statement is marked as likely, treat it as likely true and
         // partition accordingly.
         IRVisitor::visit(op);
-        const Call *call = op->condition.as<Call>();
-        if (call && call->is_intrinsic(Call::likely)) {
+        if (has_uncaptured_likely_tag(op->condition)) {
             new_simplification(op->condition, op->condition, const_true(), const_false());
         }
     }
@@ -472,7 +473,7 @@ protected:
     }
 };
 
-bool contains_warp_synchronous_logic(Stmt s) {
+bool contains_warp_synchronous_logic(const Stmt &s) {
     ContainsWarpSynchronousLogic c;
     s.accept(&c);
     return c.result;
@@ -490,7 +491,7 @@ class PartitionLoops : public IRMutator {
                                                            CodeGen_GPU_Dev::is_gpu_var(op->name));
 
         // If we're inside GPU kernel, and the body contains thread
-        // barriers or warp shuffles, it's not safe to duplicate code.
+        // barriers or warp shuffles, it's not safe to partition loops.
         if (in_gpu_loop && contains_warp_synchronous_logic(op)) {
             return IRMutator::visit(op);
         }
@@ -576,10 +577,10 @@ class PartitionLoops : public IRMutator {
         // we can prove the epilogue starts after the prologue ends,
         // we're OK.
         bool can_simplify_prologue = true;
-        for (Expr min_val : min_vals) {
-            for (Expr max_val : max_vals) {
+        for (const Expr &min_val : min_vals) {
+            for (const Expr &max_val : max_vals) {
                 Expr test = simplify(common_subexpression_elimination(min_val - 1 < max_val + 1));
-                if (!is_one(test)) {
+                if (!is_const_one(test)) {
                     can_simplify_prologue = false;
                 }
             }
@@ -757,7 +758,7 @@ public:
     bool result = false;
 };
 
-bool expr_contains_load(Expr e) {
+bool expr_contains_load(const Expr &e) {
     ExprContainsLoad l;
     e.accept(&l);
     return l.result;
@@ -800,7 +801,7 @@ class RenormalizeGPULoops : public IRMutator {
 
         if (in_gpu_loop && !old_in_gpu_loop) {
             // This was the outermost GPU loop. Dump any lifted lets here.
-            while (lifted_lets.size()) {
+            while (!lifted_lets.empty()) {
                 stmt = LetStmt::make(lifted_lets.back().first,
                                      lifted_lets.back().second,
                                      stmt);
@@ -824,7 +825,7 @@ class RenormalizeGPULoops : public IRMutator {
             // we'd better give it a new name.
             string new_name = unique_name('t');
             Expr new_var = Variable::make(op->value.type(), new_name);
-            lifted_lets.push_back({new_name, op->value});
+            lifted_lets.emplace_back(new_name, op->value);
             return mutate(substitute(op->name, new_var, op->body));
         }
 
@@ -932,7 +933,7 @@ class RenormalizeGPULoops : public IRMutator {
 class ExpandSelects : public IRMutator {
     using IRMutator::visit;
 
-    bool is_trivial(Expr e) {
+    bool is_trivial(const Expr &e) {
         return e.as<Variable>() || is_const(e);
     }
 
@@ -1030,13 +1031,13 @@ class LowerLikelyIfInnermost : public IRMutator {
 
 }  // namespace
 
-bool has_uncaptured_likely_tag(Expr e) {
+bool has_uncaptured_likely_tag(const Expr &e) {
     HasUncapturedLikelyTag h;
     e.accept(&h);
     return h.result;
 }
 
-bool has_likely_tag(Expr e) {
+bool has_likely_tag(const Expr &e) {
     HasLikelyTag h;
     e.accept(&h);
     return h.result;

@@ -6,6 +6,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 class EliminateBoolVectors : public IRMutator {
 private:
     using IRMutator::visit;
@@ -136,7 +138,7 @@ private:
 
     Stmt visit(const Store *op) override {
         Expr predicate = op->predicate;
-        if (!is_one(predicate)) {
+        if (!is_const_one(predicate)) {
             predicate = mutate(predicate);
         }
         Expr value = op->value;
@@ -158,7 +160,7 @@ private:
 
     Expr visit(const Load *op) override {
         Expr predicate = op->predicate;
-        if (!is_one(predicate)) {
+        if (!is_const_one(predicate)) {
             predicate = mutate(predicate);
         }
         Expr index = mutate(op->index);
@@ -314,11 +316,13 @@ private:
     }
 };
 
-Stmt eliminate_bool_vectors(Stmt s) {
+}  // namespace
+
+Stmt eliminate_bool_vectors(const Stmt &s) {
     return EliminateBoolVectors().mutate(s);
 }
 
-Expr eliminate_bool_vectors(Expr e) {
+Expr eliminate_bool_vectors(const Expr &e) {
     return EliminateBoolVectors().mutate(e);
 }
 

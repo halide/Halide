@@ -1,3 +1,6 @@
+// Ignore deprecation warnings inside our own runtime
+#define HALIDE_ALLOW_DEPRECATED 1
+
 #include "HalideRuntime.h"
 #include "HalideRuntimeCuda.h"
 #include "HalideRuntimeD3D12Compute.h"
@@ -136,6 +139,8 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_opencl_get_device_type,
     (void *)&halide_opencl_get_platform_name,
     (void *)&halide_opencl_get_crop_offset,
+    (void *)&halide_opencl_image_device_interface,
+    (void *)&halide_opencl_image_wrap_cl_mem,
     (void *)&halide_opencl_initialize_kernels,
     (void *)&halide_opencl_run,
     (void *)&halide_opencl_set_build_options,

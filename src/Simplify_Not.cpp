@@ -11,18 +11,16 @@ Expr Simplify::visit(const Not *op, ExprInfo *bounds) {
     if (rewrite(!c0, fold(!c0)) ||
         rewrite(!(x < y), y <= x) ||
         rewrite(!(x <= y), y < x) ||
-        rewrite(!(x > y), y >= x) ||
-        rewrite(!(x >= y), y > x) ||
         rewrite(!(x == y), x != y) ||
         rewrite(!(x != y), x == y) ||
         rewrite(!!x, x)) {
         return rewrite.result;
     }
 
-    if (rewrite(!broadcast(x), broadcast(!x, op->type.lanes())) ||
+    if (rewrite(!broadcast(x, c0), broadcast(!x, c0)) ||
         rewrite(!intrin(Call::likely, x), intrin(Call::likely, !x)) ||
         rewrite(!intrin(Call::likely_if_innermost, x), intrin(Call::likely_if_innermost, !x))) {
-        return mutate(std::move(rewrite.result), bounds);
+        return mutate(rewrite.result, bounds);
     }
 
     if (a.same_as(op->a)) {

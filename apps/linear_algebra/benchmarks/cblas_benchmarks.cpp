@@ -7,36 +7,20 @@
 // Accepted values for subroutine are:
 //    L1: scal, copy, axpy, dot, nrm2
 //    L2: gemv_notrans, gemv_trans
-//    L3: gemm_notrans, gemm_trans_A, gemm_trans_B, gemm_trans_AB
+//    L3: gemm_notrans, gemm_transA, gemm_transB, gemm_transAB
 //
 
+#include "cblas.h"
 #include "clock.h"
+#include "macros.h"
 #include <iomanip>
 #include <iostream>
 #include <random>
 #include <string>
 
-#if defined(USE_HALIDE)
-#define BLAS_NAME "halide"
-#include "Halide.h"
-#elif defined(USE_ATLAS)
-#define BLAS_NAME "Atlas"
-extern "C" {
-#include <cblas.h>
-}
-#elif defined(USE_OPENBLAS)
-#define BLAS_NAME "OpenBLAS"
-#include <cblas.h>
-#elif defined(USE_CBLAS)
-#define BLAS_NAME "CBlas"
-extern "C" {
-#include <cblas.h>
-}
-#else
-#error "unknown blas"
+#ifndef BLAS_NAME
+#define BLAS_NAME "Unknown"
 #endif
-
-#include "macros.h"
 
 template<class T>
 struct BenchmarksBase {

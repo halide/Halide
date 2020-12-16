@@ -50,10 +50,7 @@ public:
 
         // Add an alpha channel
         Func clamped_with_alpha("clamped_with_alpha");
-        clamped_with_alpha(x, y, c) = select(c == 0, clamped(x, y, 0),
-                                             c == 1, clamped(x, y, 1),
-                                             c == 2, clamped(x, y, 2),
-                                             1.0f);
+        clamped_with_alpha(x, y, c) = mux(c, {clamped(x, y, 0), clamped(x, y, 1), clamped(x, y, 2), 1.0f});
 
         // Define a reduction domain for the search area
         RDom s_dom(-(search_area / 2), search_area, -(search_area / 2), search_area);
@@ -76,13 +73,13 @@ public:
         // (This can be useful in conjunction with RunGen and benchmarks as well
         // as auto-schedule, so we do it in all cases.)
         // Provide estimates on the input image
-        input.set_estimates({{0, 614}, {0, 1024}, {0, 3}});
+        input.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
         // Provide estimates on the parameters
         patch_size.set_estimate(7);
         search_area.set_estimate(7);
         sigma.set_estimate(0.12f);
         // Provide estimates on the output pipeline
-        non_local_means.set_estimates({{0, 614}, {0, 1024}, {0, 3}});
+        non_local_means.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
 
         if (auto_schedule) {
             // nothing

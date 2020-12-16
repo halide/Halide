@@ -1,4 +1,6 @@
 #include "CodeGen_OpenGLCompute_Dev.h"
+#include "CodeGen_GPU_Dev.h"
+#include "CodeGen_OpenGL_Dev.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "IRMatch.h"
@@ -17,42 +19,70 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
+namespace {
+
+class CodeGen_OpenGLCompute_Dev : public CodeGen_GPU_Dev {
+public:
+    CodeGen_OpenGLCompute_Dev(Target target);
+
+    // CodeGen_GPU_Dev interface
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args) override;
+
+    void init_module() override;
+
+    std::vector<char> compile_to_src() override;
+
+    std::string get_current_kernel_name() override;
+
+    void dump() override;
+
+    std::string print_gpu_name(const std::string &name) override;
+
+    std::string api_unique_name() override {
+        return "openglcompute";
+    }
+    bool kernel_run_takes_types() const override {
+        return true;
+    }
+
+protected:
+    class CodeGen_OpenGLCompute_C : public CodeGen_GLSLBase {
+    public:
+        CodeGen_OpenGLCompute_C(std::ostream &s, Target t);
+        void add_kernel(const Stmt &stmt,
+                        const std::string &name,
+                        const std::vector<DeviceArgument> &args);
+
+    protected:
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
+
+        using CodeGen_GLSLBase::visit;
+        void visit(const For *) override;
+        void visit(const Ramp *op) override;
+        void visit(const Broadcast *op) override;
+        void visit(const Load *op) override;
+        void visit(const Store *op) override;
+        void visit(const Call *op) override;
+        void visit(const Allocate *op) override;
+        void visit(const Free *op) override;
+        void visit(const Select *op) override;
+        void visit(const Evaluate *op) override;
+        void visit(const IntImm *op) override;
+
+    public:
+        int workgroup_size[3];
+    };
+
+    std::ostringstream src_stream;
+    std::string cur_kernel_name;
+    CodeGen_OpenGLCompute_C glc;
+};
+
 CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(Target target)
     : glc(src_stream, target) {
 }
-
-namespace {
-// Maps Halide types to appropriate GLSL types or emit error if no equivalent
-// type is available.
-Type map_type(const Type &type) {
-    Type result = type;
-    if (type.is_scalar()) {
-        if (type.is_float()) {
-            user_assert(type.bits() <= 32)
-                << "GLSL: Can't represent a float with " << type.bits() << " bits.\n";
-            result = Float(32);
-        } else if (type.bits() == 1) {
-            result = Bool();
-        } else if (type == Int(32) || type == UInt(32)) {
-            // Keep unchanged
-        } else if (type.bits() <= 16) {
-            // Embed all other ints in a GLSL float. Probably not actually
-            // valid for uint16 on systems with low float precision.
-            result = Float(32);
-        } else {
-            user_error << "GLSL: Can't represent type '" << type << "'.\n";
-        }
-    } else {
-        user_assert(type.lanes() <= 4)
-            << "GLSL: vector types wider than 4 aren't supported\n";
-        user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
-            << "GLSL: Can't represent vector type '" << type << "'.\n";
-        Type scalar_type = type.element_of();
-        result = map_type(scalar_type).with_lanes(type.lanes());
-    }
-    return result;
-}
-}  // namespace
 
 CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::CodeGen_OpenGLCompute_C(std::ostream &s, Target t)
     : CodeGen_GLSLBase(s, t) {
@@ -109,34 +139,23 @@ int thread_loop_workgroup_index(const string &name) {
 }
 }  // namespace
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
-    Type value_type = op->value.type();
-    // If both types are represented by the same GLSL type, no explicit cast
-    // is necessary.
-    if (map_type(op->type) == map_type(value_type)) {
-        Expr value = op->value;
-        if (value_type.code() == Type::Float) {
-            // float->int conversions may need explicit truncation if an
-            // integer type is embedded into a float. (Note: overflows are
-            // considered undefined behavior, so we do nothing about values
-            // that are out of range of the target type.)
-            if (op->type.code() == Type::UInt) {
-                value = simplify(floor(value));
-            } else if (op->type.code() == Type::Int) {
-                value = simplify(trunc(value));
-            }
-        }
-        value.accept(this);
-        return;
-    } else {
-        Type target_type = map_type(op->type);
-        print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
-    }
-}
-
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
+
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
+        internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
+        auto fence_type = *fence_type_ptr;
+
         stream << get_indent() << "barrier();\n";
+
+        // barrier() is an execution barrier; for memory behavior, we'll use the
+        // least-common-denominator groupMemoryBarrier(), because other fence types
+        // require extensions or GL 4.3 as a minumum.
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device ||
+            fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
+            stream << "groupMemoryBarrier();\n";
+        }
         print_assignment(op->type, "0");
     } else {
         CodeGen_GLSLBase::visit(op);
@@ -144,11 +163,14 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) {
+    user_assert(loop->for_type != ForType::GPULane)
+        << "The OpenGLCompute backend does not support the gpu_lanes() scheduling directive.";
+
     if (is_gpu_var(loop->name)) {
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))
             << "kernel loop must be either gpu block or gpu thread\n";
-        internal_assert(is_zero(loop->min));
+        internal_assert(is_const_zero(loop->min));
 
         debug(4) << "loop extent is " << loop->extent << "\n";
         //
@@ -185,8 +207,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
     ostringstream rhs;
     rhs << print_type(op->type) << "(";
 
-    if (op->lanes > 4)
+    if (op->lanes > 4) {
         internal_error << "GLSL: ramp lanes " << op->lanes << " is not supported\n";
+    }
 
     rhs << print_expr(op->base);
 
@@ -206,8 +229,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
+    user_assert(is_const_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
     // TODO: support vectors
+    // https://github.com/halide/Halide/issues/4975
     internal_assert(op->type.is_scalar());
     string id_index = print_expr(op->index);
 
@@ -221,8 +245,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
+    user_assert(is_const_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
     // TODO: support vectors
+    // https://github.com/halide/Halide/issues/4975
     internal_assert(op->value.type().is_scalar());
     string id_index = print_expr(op->index);
 
@@ -268,7 +293,7 @@ class FindSharedAllocations : public IRVisitor {
 
     void visit(const Allocate *op) override {
         op->body.accept(this);
-        if (starts_with(op->name, "__shared_")) {
+        if (op->memory_type == MemoryType::GPUShared) {
             allocs.push_back(op);
         }
     }
@@ -278,7 +303,7 @@ public:
 };
 }  // namespace
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(const Stmt &s,
                                                                     const string &name,
                                                                     const vector<DeviceArgument> &args) {
 
@@ -293,8 +318,8 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
     } else {
         stream << "#version 430\n";
     }
-    add_common_macros(stream);
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
+    stream << "#define halide_unused(x) (void)(x)\n";
 
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
@@ -345,6 +370,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
         stream << ", local_size_z = " << workgroup_size[2];
     }
     stream << ") in;\n// end of kernel " << name << "\n";
+    indent -= 2;
 }
 
 void CodeGen_OpenGLCompute_Dev::init_module() {
@@ -363,13 +389,13 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
 
     internal_assert(!op->extents.empty());
     Expr extent = 1;
-    for (Expr e : op->extents) {
+    for (const Expr &e : op->extents) {
         extent *= e;
     }
     extent = simplify(extent);
     internal_assert(is_const(extent));
 
-    if (!starts_with(op->name, "__shared_")) {
+    if (op->memory_type != MemoryType::GPUShared) {
         stream << "{\n";
         indent += 2;
         stream << get_indent();
@@ -380,7 +406,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     }
     op->body.accept(this);
 
-    if (!starts_with(op->name, "__shared_")) {
+    if (op->memory_type != MemoryType::GPUShared) {
         indent -= 2;
         stream << get_indent() << "}\n";
     }
@@ -393,7 +419,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Free *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Evaluate *op) {
-    if (is_const(op->value)) return;
+    if (is_const(op->value)) {
+        return;
+    }
     print_expr(op->value);
 }
 
@@ -409,7 +437,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const IntImm *op)
 vector<char> CodeGen_OpenGLCompute_Dev::compile_to_src() {
     string str = src_stream.str();
     debug(1) << "GLSL Compute source:\n"
-             << str << '\n';
+             << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
@@ -420,11 +448,17 @@ string CodeGen_OpenGLCompute_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_OpenGLCompute_Dev::dump() {
-    std::cerr << src_stream.str() << std::endl;
+    std::cerr << src_stream.str() << "\n";
 }
 
 std::string CodeGen_OpenGLCompute_Dev::print_gpu_name(const std::string &name) {
     return name;
+}
+
+}  // namespace
+
+CodeGen_GPU_Dev *new_CodeGen_OpenGLCompute_Dev(const Target &target) {
+    return new CodeGen_OpenGLCompute_Dev(target);
 }
 
 }  // namespace Internal

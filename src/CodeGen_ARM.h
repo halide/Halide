@@ -5,6 +5,8 @@
  * Defines the code-generator for producing ARM machine code
  */
 
+#include <utility>
+
 #include "CodeGen_Posix.h"
 
 namespace Halide {
@@ -19,10 +21,11 @@ public:
 protected:
     using CodeGen_Posix::visit;
 
+    void init_module() override;
+
     /** Nodes for which we want to emit specific neon intrinsics */
     // @{
     void visit(const Cast *) override;
-    void visit(const Add *) override;
     void visit(const Sub *) override;
     void visit(const Div *) override;
     void visit(const Mul *) override;
@@ -31,13 +34,14 @@ protected:
     void visit(const Store *) override;
     void visit(const Load *) override;
     void visit(const Call *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
     // @}
 
     /** Various patterns to peephole match against */
     struct Pattern {
-        std::string intrin32;           ///< Name of the intrinsic for 32-bit arm
-        std::string intrin64;           ///< Name of the intrinsic for 64-bit arm
-        int intrin_lanes;               ///< The native vector width of the intrinsic
+        std::string intrin;             ///< Name of the intrinsic
         Expr pattern;                   ///< The pattern to match against
         enum PatternType { Simple = 0,  ///< Just match the pattern
                            LeftShift,   ///< Match the pattern if the RHS is a const power of two
@@ -46,20 +50,11 @@ protected:
         };
         PatternType type;
         Pattern() = default;
-        Pattern(const std::string &i32, const std::string &i64, int l, Expr p, PatternType t = Simple)
-            : intrin32("llvm.arm.neon." + i32),
-              intrin64("llvm.aarch64.neon." + i64),
-              intrin_lanes(l), pattern(p), type(t) {
+        Pattern(const std::string &intrin, Expr p, PatternType t = Simple)
+            : intrin(intrin), pattern(std::move(p)), type(t) {
         }
     };
     std::vector<Pattern> casts, averagings, negations, multiplies;
-
-    // Call an intrinsic as defined by a pattern. Dispatches to the
-    // 32- or 64-bit name depending on the target's bit width.
-    // @{
-    llvm::Value *call_pattern(const Pattern &p, Type t, const std::vector<Expr> &args);
-    llvm::Value *call_pattern(const Pattern &p, llvm::Type *t, const std::vector<llvm::Value *> &args);
-    // @}
 
     std::string mcpu() const override;
     std::string mattrs() const override;

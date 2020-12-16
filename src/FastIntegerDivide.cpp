@@ -8,7 +8,7 @@ namespace Halide {
 
 using namespace Halide::Internal::IntegerDivision;
 
-namespace IntegerDivideTable {
+namespace {
 
 Buffer<uint8_t> integer_divide_table_u8() {
     static std::mutex initialize_lock;
@@ -111,7 +111,7 @@ Buffer<uint32_t> integer_divide_table_s32() {
         return im;
     }
 }
-}  // namespace IntegerDivideTable
+}  // namespace
 
 Expr fast_integer_divide(Expr numerator, Expr denominator) {
     if (is_const(denominator)) {
@@ -126,27 +126,27 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
     user_assert(t.bits() == 8 || t.bits() == 16 || t.bits() == 32)
         << "Fast integer divide requires a numerator with 8, 16, or 32 bits\n";
 
-    Type wide = t.with_bits(t.bits() * 2);
+    Type wide = t.widen();
 
     Expr result;
     if (t.is_uint()) {
         Expr mul, shift;
         switch (t.bits()) {
         case 8: {
-            Buffer<uint8_t> table = IntegerDivideTable::integer_divide_table_u8();
+            Buffer<uint8_t> table = integer_divide_table_u8();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
         case 16: {
-            Buffer<uint16_t> table = IntegerDivideTable::integer_divide_table_u16();
+            Buffer<uint16_t> table = integer_divide_table_u16();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
         default:  // 32
         {
-            Buffer<uint32_t> table = IntegerDivideTable::integer_divide_table_u32();
+            Buffer<uint32_t> table = integer_divide_table_u32();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
@@ -175,20 +175,20 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
         Expr mul, shift;
         switch (t.bits()) {
         case 8: {
-            Buffer<uint8_t> table = IntegerDivideTable::integer_divide_table_s8();
+            Buffer<uint8_t> table = integer_divide_table_s8();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
         case 16: {
-            Buffer<uint16_t> table = IntegerDivideTable::integer_divide_table_s16();
+            Buffer<uint16_t> table = integer_divide_table_s16();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
         default:  // 32
         {
-            Buffer<uint32_t> table = IntegerDivideTable::integer_divide_table_s32();
+            Buffer<uint32_t> table = integer_divide_table_s32();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
@@ -221,7 +221,7 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
     }
 
     // The tables don't work for denominator == 1
-    result = select(denominator == 1, numerator, result);
+    result = select(std::move(denominator) == 1, std::move(numerator), result);
 
     internal_assert(result.type() == t);
 
@@ -229,7 +229,8 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
 }
 
 Expr fast_integer_modulo(Expr numerator, Expr denominator) {
-    return numerator - fast_integer_divide(numerator, denominator) * denominator;
+    Expr ratio = fast_integer_divide(numerator, denominator);
+    return std::move(numerator) - ratio * std::move(denominator);
 }
 
 }  // namespace Halide

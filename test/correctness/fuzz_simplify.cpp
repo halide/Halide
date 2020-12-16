@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <array>
 #include <random>
 #include <stdio.h>
 #include <time.h>
@@ -30,10 +31,22 @@ Expr random_var() {
 
 Type random_type(int width) {
     Type T = fuzz_types[rng() % fuzz_type_count];
+
     if (width > 1) {
         T = T.with_lanes(width);
     }
     return T;
+}
+
+int get_random_divisor(Type t) {
+    std::vector<int> divisors = {t.lanes()};
+    for (int dd = 2; dd < t.lanes(); dd++) {
+        if (t.lanes() % dd == 0) {
+            divisors.push_back(dd);
+        }
+    }
+
+    return divisors[rng() % divisors.size()];
 }
 
 Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
@@ -56,13 +69,14 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
             }
         }
     } else {
+        int lanes = get_random_divisor(T);
         if (rng() % 2 == 0) {
-            auto e1 = random_leaf(T.element_of(), overflow_undef);
-            auto e2 = random_leaf(T.element_of(), overflow_undef);
-            return Ramp::make(e1, e2, T.lanes());
+            auto e1 = random_leaf(T.with_lanes(T.lanes() / lanes), overflow_undef);
+            auto e2 = random_leaf(T.with_lanes(T.lanes() / lanes), overflow_undef);
+            return Ramp::make(e1, e2, lanes);
         } else {
-            auto e1 = random_leaf(T.element_of(), overflow_undef);
-            return Broadcast::make(e1, T.lanes());
+            auto e1 = random_leaf(T.with_lanes(T.lanes() / lanes), overflow_undef);
+            return Broadcast::make(e1, lanes);
         }
     }
 }
@@ -139,15 +153,17 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     }
     case 2:
         if (T.lanes() != 1) {
-            auto e1 = random_expr(T.element_of(), depth, overflow_undef);
-            return Broadcast::make(e1, T.lanes());
+            int lanes = get_random_divisor(T);
+            auto e1 = random_expr(T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
+            return Broadcast::make(e1, lanes);
         }
         break;
     case 3:
         if (T.lanes() != 1) {
-            auto e1 = random_expr(T.element_of(), depth, overflow_undef);
-            auto e2 = random_expr(T.element_of(), depth, overflow_undef);
-            return Ramp::make(e1, e2, T.lanes());
+            int lanes = get_random_divisor(T);
+            auto e1 = random_expr(T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
+            auto e2 = random_expr(T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
+            return Ramp::make(e1, e2, lanes);
         }
         break;
 
@@ -161,7 +177,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     case 5:
         // When generating boolean expressions, maybe throw in a condition on non-bool types.
         if (T.is_bool()) {
-            return random_condition(T, depth, false);
+            return random_condition(random_type(T.lanes()), depth, false);
         }
         break;
 
@@ -208,14 +224,14 @@ bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) 
         }
         if (!equal(a_j_v, b_j_v)) {
             for (map<string, Expr>::const_iterator i = vars.begin(); i != vars.end(); i++) {
-                std::cout << i->first << " = " << i->second << '\n';
+                std::cout << i->first << " = " << i->second << "\n";
             }
 
-            std::cout << a << '\n';
-            std::cout << b << '\n';
+            std::cout << a << "\n";
+            std::cout << b << "\n";
             std::cout << "In vector lane " << j << ":\n";
-            std::cout << a_j << " -> " << a_j_v << '\n';
-            std::cout << b_j << " -> " << b_j_v << '\n';
+            std::cout << a_j << " -> " << a_j_v << "\n";
+            std::cout << b_j << " -> " << b_j_v << "\n";
             return false;
         }
     }
@@ -242,6 +258,7 @@ bool test_expression(Expr test, int samples) {
     return true;
 }
 
+// These are here to enable copy of failed output expressions and pasting them into the test for debugging.
 Expr ramp(Expr b, Expr s, int w) {
     return Ramp::make(b, s, w);
 }
@@ -251,8 +268,17 @@ Expr x1(Expr x) {
 Expr x2(Expr x) {
     return Broadcast::make(x, 2);
 }
+Expr x3(Expr x) {
+    return Broadcast::make(x, 3);
+}
 Expr x4(Expr x) {
     return Broadcast::make(x, 2);
+}
+Expr x6(Expr x) {
+    return Broadcast::make(x, 6);
+}
+Expr x8(Expr x) {
+    return Broadcast::make(x, 8);
 }
 Expr uint1(Expr x) {
     return Cast::make(UInt(1), x);
@@ -307,7 +333,7 @@ Expr e(Variable::make(Int(0), fuzz_var(4)));
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.
-    const int count = 1000;
+    const int count = 10000;
     // Depth of the randomly generated expression trees.
     const int depth = 5;
     // Number of samples to test the generated expressions for.
@@ -317,23 +343,19 @@ int main(int argc, char **argv) {
     // We also report the seed to enable reproducing failures.
     int fuzz_seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
     rng.seed(fuzz_seed);
-    std::cout << "Simplify fuzz test seed: " << fuzz_seed << std::endl;
+    std::cout << "Simplify fuzz test seed: " << fuzz_seed << "\n";
 
-    int max_fuzz_vector_width = 4;
-
-    for (int i = 0; i < fuzz_type_count; i++) {
-        Type T = fuzz_types[i];
-        for (int w = 1; w < max_fuzz_vector_width; w *= 2) {
-            Type VT = T.with_lanes(w);
-            for (int n = 0; n < count; n++) {
-                // Generate a random expr...
-                Expr test = random_expr(VT, depth);
-                if (!test_expression(test, samples)) {
-                    return -1;
-                }
-            }
+    std::array<int, 6> vector_widths = {1, 2, 3, 4, 6, 8};
+    for (int n = 0; n < count; n++) {
+        int width = vector_widths[rng() % vector_widths.size()];
+        Type VT = random_type(width);
+        // Generate a random expr...
+        Expr test = random_expr(VT, depth);
+        if (!test_expression(test, samples)) {
+            return -1;
         }
     }
-    std::cout << "Success!" << std::endl;
+
+    std::cout << "Success!\n";
     return 0;
 }

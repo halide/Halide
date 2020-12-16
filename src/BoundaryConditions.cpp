@@ -37,7 +37,7 @@ Func repeat_edge(const Func &source,
     return bounded;
 }
 
-Func constant_exterior(const Func &source, Tuple value,
+Func constant_exterior(const Func &source, const Tuple &value,
                        const Region &bounds) {
     std::vector<Var> source_args = source.args();
     std::vector<Var> args(source_args);
@@ -76,7 +76,7 @@ Func constant_exterior(const Func &source, Tuple value,
     return bounded;
 }
 
-Func constant_exterior(const Func &source, Expr value,
+Func constant_exterior(const Func &source, const Expr &value,
                        const Region &bounds) {
     return constant_exterior(source, Tuple(value), bounds);
 }

@@ -1,13 +1,10 @@
 #include "IRVisitor.h"
 
+#include "ExternFuncArgument.h"
+#include "Function.h"
+
 namespace Halide {
 namespace Internal {
-
-IRVisitor::~IRVisitor() {
-}
-
-IRVisitor::IRVisitor() {
-}
 
 void IRVisitor::visit(const IntImm *) {
 }
@@ -251,9 +248,13 @@ void IRVisitor::visit(const Evaluate *op) {
 }
 
 void IRVisitor::visit(const Shuffle *op) {
-    for (Expr i : op->vectors) {
+    for (const Expr &i : op->vectors) {
         i.accept(this);
     }
+}
+
+void IRVisitor::visit(const VectorReduce *op) {
+    op->value.accept(this);
 }
 
 void IRVisitor::visit(const Atomic *op) {
@@ -501,9 +502,13 @@ void IRGraphVisitor::visit(const Evaluate *op) {
 }
 
 void IRGraphVisitor::visit(const Shuffle *op) {
-    for (Expr i : op->vectors) {
+    for (const Expr &i : op->vectors) {
         include(i);
     }
+}
+
+void IRGraphVisitor::visit(const VectorReduce *op) {
+    include(op->value);
 }
 
 void IRGraphVisitor::visit(const Atomic *op) {

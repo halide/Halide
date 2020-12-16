@@ -9,6 +9,8 @@ namespace Internal {
 using std::map;
 using std::string;
 
+namespace {
+
 class UnifyDuplicateLets : public IRMutator {
     using IRMutator::visit;
 
@@ -112,7 +114,9 @@ protected:
     }
 };
 
-Stmt unify_duplicate_lets(Stmt s) {
+}  // namespace
+
+Stmt unify_duplicate_lets(const Stmt &s) {
     return UnifyDuplicateLets().mutate(s);
 }
 

@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
         for (int z = 0; z < input.channels(); z++) {
             for (int y = 0; y < input.height(); y++) {
                 for (int x = 0; x < input.width(); x++) {
-                    input(x, y) = rand();
+                    input(x, y, z, c) = rand();
                 }
             }
         }
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
         for (int z = 0; z < filter.channels(); z++) {
             for (int y = 0; y < filter.height(); y++) {
                 for (int x = 0; x < filter.width(); x++) {
-                    filter(x, y) = rand();
+                    filter(x, y, z, c) = rand();
                 }
             }
         }
@@ -70,5 +70,6 @@ int main(int argc, char **argv) {
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
 
+    printf("Success!\n");
     return 0;
 }

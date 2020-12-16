@@ -2,7 +2,7 @@
 #define HALIDE_CPU_FEATURES_H
 
 #include "HalideRuntime.h"
-#include "cpu_features.h"
+#include "runtime_internal.h"
 
 namespace Halide {
 namespace Runtime {
@@ -14,23 +14,23 @@ namespace Internal {
 struct CpuFeatures {
     static const int kWordCount = (halide_target_feature_end + 63) / (sizeof(uint64_t) * 8);
 
-    __attribute__((always_inline)) void set_known(int i) {
+    ALWAYS_INLINE void set_known(int i) {
         known[i >> 6] |= ((uint64_t)1) << (i & 63);
     }
 
-    __attribute__((always_inline)) void set_available(int i) {
+    ALWAYS_INLINE void set_available(int i) {
         available[i >> 6] |= ((uint64_t)1) << (i & 63);
     }
 
-    __attribute__((always_inline)) bool test_known(int i) const {
+    ALWAYS_INLINE bool test_known(int i) const {
         return (known[i >> 6] & ((uint64_t)1) << (i & 63)) != 0;
     }
 
-    __attribute__((always_inline)) bool test_available(int i) const {
+    ALWAYS_INLINE bool test_available(int i) const {
         return (available[i >> 6] & ((uint64_t)1) << (i & 63)) != 0;
     }
 
-    __attribute__((always_inline))
+    ALWAYS_INLINE
     CpuFeatures() {
         // Can't use in-class initing of these without C++11 enabled,
         // which isn't the case for all runtime builds

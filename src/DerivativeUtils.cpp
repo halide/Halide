@@ -2,6 +2,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "CSE.h"
@@ -27,6 +28,8 @@ using std::set;
 using std::string;
 using std::vector;
 
+namespace {
+
 class StripLets : public IRGraphMutator {
 public:
     using IRGraphMutator::visit;
@@ -34,6 +37,8 @@ public:
         return mutate(op->body);
     }
 };
+
+}  // namespace
 
 vector<int> gather_variables(const Expr &expr,
                              const vector<string> &filter) {
@@ -72,7 +77,7 @@ vector<int> gather_variables(const Expr &expr,
     return gather_variables(expr, str_filter);
 }
 
-map<string, ReductionVariableInfo> gather_rvariables(Tuple tuple) {
+map<string, ReductionVariableInfo> gather_rvariables(const Tuple &tuple) {
 
     class GatherRVars : public IRGraphVisitor {
     public:
@@ -103,7 +108,7 @@ map<string, ReductionVariableInfo> gather_rvariables(Tuple tuple) {
     return gatherer.rvar_map;
 }
 
-map<string, ReductionVariableInfo> gather_rvariables(Expr expr) {
+map<string, ReductionVariableInfo> gather_rvariables(const Expr &expr) {
     return gather_rvariables(Tuple(expr));
 }
 
@@ -128,6 +133,8 @@ Expr add_let_expression(const Expr &expr,
     }
     return ret;
 }
+
+namespace {
 
 /** Gather the expression DAG and sort them in topological order
  */
@@ -196,6 +203,8 @@ void ExpressionSorter::include(const Expr &e) {
         expr_list.push_back(e);
     }
 }
+
+}  // namespace
 
 vector<Expr> sort_expressions(const Expr &expr) {
     ExpressionSorter sorter;
@@ -302,7 +311,7 @@ vector<pair<Expr, Expr>> box_to_vector(const Box &bounds) {
     vector<pair<Expr, Expr>> ret;
     ret.reserve(bounds.size());
     for (const auto &b : bounds.bounds) {
-        ret.push_back({b.min, b.max - b.min + 1});
+        ret.emplace_back(b.min, b.max - b.min + 1);
     }
     return ret;
 }
@@ -329,6 +338,8 @@ vector<string> vars_to_strings(const vector<Var> &vars) {
     return ret;
 }
 
+namespace {
+
 class RDomExtractor : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
@@ -346,6 +357,8 @@ public:
 private:
     ReductionDomain rdom;
 };
+
+}  // namespace
 
 ReductionDomain extract_rdom(const Expr &expr) {
     RDomExtractor extractor;
@@ -382,18 +395,20 @@ pair<bool, Expr> solve_inverse(Expr expr,
     return {true, rmin + r.x};
 }
 
+namespace {
+
 struct BufferDimensionsFinder : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
     map<string, BufferInfo> find(const Func &func) {
         buffer_calls.clear();
         vector<Expr> vals = func.values().as_vector();
-        for (Expr val : vals) {
+        for (const Expr &val : vals) {
             val.accept(this);
         }
         for (int update_id = 0; update_id < func.num_update_definitions(); update_id++) {
             vals = func.update_values(update_id).as_vector();
-            for (Expr val : vals) {
+            for (const Expr &val : vals) {
                 val.accept(this);
             }
         }
@@ -428,15 +443,19 @@ public:
     map<string, BufferInfo> buffer_calls;
 };
 
+}  // namespace
+
 map<string, BufferInfo> find_buffer_param_calls(const Func &func) {
     BufferDimensionsFinder finder;
     return finder.find(func);
 }
 
+namespace {
+
 struct ImplicitVariablesFinder : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
-    set<string> find(Expr expr) {
+    set<string> find(const Expr &expr) {
         implicit_variables.clear();
         expr.accept(this);
         return implicit_variables;
@@ -452,7 +471,9 @@ public:
     set<string> implicit_variables;
 };
 
-set<string> find_implicit_variables(Expr expr) {
+}  // namespace
+
+set<string> find_implicit_variables(const Expr &expr) {
     ImplicitVariablesFinder finder;
     return finder.find(expr);
 }
@@ -475,6 +496,8 @@ Expr substitute_rdom_predicate(
     }
     return substituted;
 }
+
+namespace {
 
 struct FunctionCallFinder : public IRGraphVisitor {
 public:
@@ -509,7 +532,7 @@ public:
 
     void visit(const Call *op) override {
         if (op->call_type == Call::Image || op->call_type == Call::Halide) {
-            if (func_name == "" || op->name == func_name) {
+            if (func_name.empty() || op->name == func_name) {
                 found = true;
             }
         }
@@ -523,24 +546,28 @@ public:
     bool found;
 };
 
+}  // namespace
+
 bool is_calling_function(
-    const string &func_name, Expr expr,
+    const string &func_name, const Expr &expr,
     const map<string, Expr> &let_var_mapping) {
     FunctionCallFinder finder;
     return finder.find(func_name, expr, let_var_mapping);
 }
 
 bool is_calling_function(
-    Expr expr,
+    const Expr &expr,
     const map<string, Expr> &let_var_mapping) {
     FunctionCallFinder finder;
     return finder.find(expr, let_var_mapping);
 }
 
+namespace {
+
 struct SubstituteCallArgWithPureArg : public IRMutator {
 public:
     SubstituteCallArgWithPureArg(Func f, int variable_id)
-        : f(f), variable_id(variable_id) {
+        : f(std::move(f)), variable_id(variable_id) {
     }
 
 protected:
@@ -559,8 +586,10 @@ protected:
     int variable_id;
 };
 
-Expr substitute_call_arg_with_pure_arg(Func f, int variable_id, Expr e) {
-    return simplify(SubstituteCallArgWithPureArg(f, variable_id).mutate(e));
+}  // namespace
+
+Expr substitute_call_arg_with_pure_arg(Func f, int variable_id, const Expr &e) {
+    return simplify(SubstituteCallArgWithPureArg(std::move(f), variable_id).mutate(e));
 }
 
 }  // namespace Internal

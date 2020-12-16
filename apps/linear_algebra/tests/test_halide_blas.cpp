@@ -11,6 +11,8 @@
     std::cout << std::setw(30) << ("Testing " #method ": ") << std::flush; \
     if (test_##method(N)) {                                                \
         std::cout << "PASSED\n";                                           \
+    } else {                                                               \
+        std::cout << "FAILED\n";                                           \
     }
 
 #define L1_VECTOR_TEST(method, code)      \
@@ -145,7 +147,7 @@ struct BLASTestBase {
         return buff;
     }
 
-    bool compareScalars(Scalar x, Scalar y, Scalar epsilon = 4 * std::numeric_limits<Scalar>::epsilon()) {
+    bool compareScalars(Scalar x, Scalar y, Scalar epsilon = 32 * std::numeric_limits<Scalar>::epsilon()) {
         if (x == y) {
             return true;
         } else {
@@ -303,9 +305,11 @@ int main(int argc, char *argv[]) {
             d.run_tests(size);
         }
     } else {
-        int size = 64 * 7;
+        int size = 768;
         std::cout << "Testing halide_blas with N = " << size << ":\n";
         s.run_tests(size);
         d.run_tests(size);
     }
+
+    std::cout << "Success!\n";
 }

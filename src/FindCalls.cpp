@@ -1,11 +1,14 @@
 #include "FindCalls.h"
+
+#include "ExternFuncArgument.h"
+#include "Function.h"
 #include "IRVisitor.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::pair;
 using std::string;
 
 namespace {
@@ -16,7 +19,7 @@ public:
 
     using IRVisitor::visit;
 
-    void include_function(Function f) {
+    void include_function(const Function &f) {
         map<string, Function>::iterator iter = calls.find(f.name());
         if (iter == calls.end()) {
             calls[f.name()] = f;
@@ -50,7 +53,7 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     FindCalls calls;
     f.accept(&calls);
     if (f.has_extern_definition()) {
-        for (ExternFuncArgument arg : f.extern_arguments()) {
+        for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
                 Function g(arg.func);
                 calls.calls[g.name()] = g;
@@ -59,7 +62,7 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     }
 
     if (include_wrappers) {
-        for (auto it : f.schedule().wrappers()) {
+        for (const auto &it : f.schedule().wrappers()) {
             Function g(it.second);
             calls.calls[g.name()] = g;
         }
@@ -70,7 +73,7 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     } else {
         env[f.name()] = f;
 
-        for (pair<string, Function> i : calls.calls) {
+        for (const auto &i : calls.calls) {
             populate_environment_helper(i.second, env, recursive, include_wrappers);
         }
     }
@@ -79,18 +82,18 @@ void populate_environment_helper(Function f, map<string, Function> &env,
 }  // namespace
 
 void populate_environment(Function f, map<string, Function> &env) {
-    populate_environment_helper(f, env, true, true);
+    populate_environment_helper(std::move(f), env, true, true);
 }
 
 map<string, Function> find_transitive_calls(Function f) {
     map<string, Function> res;
-    populate_environment_helper(f, res, true, false);
+    populate_environment_helper(std::move(f), res, true, false);
     return res;
 }
 
 map<string, Function> find_direct_calls(Function f) {
     map<string, Function> res;
-    populate_environment_helper(f, res, false, false);
+    populate_environment_helper(std::move(f), res, false, false);
     return res;
 }
 

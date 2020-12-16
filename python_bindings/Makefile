@@ -9,19 +9,11 @@ BIN ?= $(ROOT_DIR)/bin
 PYTHON ?= python3
 TEST_TMP ?= $(BIN)/tmp
 
-ifeq ($(OS), Windows_NT)
-    # assume we are building for the MinGW environment
-    FPIC=
-    SHARED_EXT=dll
-else
-    FPIC=-fPIC
+FPIC=-fPIC
 ifeq ($(UNAME), Darwin)
     SHARED_EXT=dylib
-	# Note that Python on OSX won't load .dylib; it requires .so
-    SUFFIX=.so
 else
     SHARED_EXT=so
-endif
 endif
 
 ifeq ($(UNAME), Linux)
@@ -34,21 +26,12 @@ USE_EXPORT_DYNAMIC=
 endif
 endif
 
-LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
+LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/lib/libHalide.$(SHARED_EXT)
 
 SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
 
 # Discover PyBind path from `python3 -m pybind11 --includes`
-# if it is pip/conda installed, which is a common case.
-# Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
 PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes)
-ifeq ($(PYBIND11_CFLAGS),)
-    ifndef PYBIND11_PATH
-        $(error PYBIND11_PATH is undefined)
-    endif
-    PYBIND11_PATH ?= /path/to/pybind11
-    PYBIND11_CFLAGS = -I $(PYBIND11_PATH)/include
-endif
 
 OPTIMIZE ?= -O3
 
@@ -63,6 +46,7 @@ CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 # DON'T link libpython* - leave those symbols to lazily resolve at load time
 # Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
 LDFLAGS += -lz $(USE_EXPORT_DYNAMIC)
+LDFLAGS += -Wl,-rpath,$(dir $(LIBHALIDE))
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/src/%.cpp=$(BIN)/src/%.o)
@@ -125,21 +109,19 @@ target_features_bit=-no_runtime
 target_features_user_context=-user_context-no_runtime
 
 # Make the generator generate a Python extension:
-$(BIN)/%.py.cpp $(BIN)/%.halide_generated.cpp $(BIN)/%.h: $(BIN)/%.gen
-	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e c_header,c_source,python_extension \
+$(BIN)/%.py.cpp $(BIN)/%.a $(BIN)/%.h: $(BIN)/%.gen
+	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e static_library,c_header,python_extension \
 	    -g $(notdir $(basename $<)) -o $(BIN) \
 	    target=host$(target_features_$(notdir $(basename $<)))
 
 # Compile the generated Python extension(s):
-$(BIN)/%.o: $(BIN)/%.halide_generated.cpp
-	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
 $(BIN)/%.py.o: $(BIN)/%.py.cpp
 	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
 
 # The Python extension of the generator is already in $(BIN), and is named
 # the same, so put the Python extension of the function into ext/.
 # TODO: Python extensions of generators should have a _generator suffix.
-$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(BIN)/runtime.a
+$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.a $(BIN)/runtime.a
 	@mkdir -p $(BIN)/ext
 	$(CXX) $(LDFLAGS) $^ -shared -o $@
 

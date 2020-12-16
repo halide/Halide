@@ -491,6 +491,44 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Test multiple argument memoize_tag. This can be unsafe but
+        // models cases where one uses a hash of image data as part of
+        // a tag to memoize an expensive computation.
+        ImageParam input(UInt(8), 1);
+        Param<int> key;
+        Func f, g;
+        RDom extent(input);
+
+        g() = memoize_tag(sum(input(extent)), key);
+        f() = g() + 42;
+        g.compute_root().memoize();
+
+        Buffer<uint8_t> in(10);
+        input.set(in);
+
+        in.fill(42);
+
+        key.set(0);
+        Buffer<uint8_t> result = f.realize();
+        assert(result() == (462 % 256));
+
+        // Change image data without channging tag
+        in(0) = 41;
+        result = f.realize();
+
+        // Result is likely stale. This is not strictly guaranteed due to e.g.
+        // cache size. Hence allow correct value to make test express the
+        // contract.
+        assert((result() == (462 % 256)) ||
+               (result() == (461 % 256)));
+
+        // Change tag, thus ensuring correct result.
+        key.set(1);
+        result = f.realize();
+        assert(result() == (461 % 256));
+    }
+
+    {
         Param<float> val;
 
         Func f;
@@ -544,7 +582,7 @@ int main(int argc, char **argv) {
     }
 
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping out of memory handling for WebAssembly as the wasm JIT cannot support set_custom_allocator.\n");
+        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
         return 0;
     } else {
         // Test out of memory handling.
@@ -608,6 +646,40 @@ int main(int argc, char **argv) {
         }
 
         printf("In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
+    }
+
+    {
+        call_count = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
+
+        ImageParam input(UInt(8), 1);
+        Func f, f_memoized;
+        f_memoized() = count_calls(0, 0) + cast<uint8_t>(input.dim(0).extent());
+        f_memoized.compute_root().memoize();
+        f() = f_memoized();
+
+        Buffer<uint8_t> in_one(1);
+        input.set(in_one);
+
+        Buffer<uint8_t> result1 = f.realize();
+        Buffer<uint8_t> result2 = f.realize();
+
+        assert(result1(0) == 43);
+        assert(result2(0) == 43);
+
+        assert(call_count == 1);
+
+        Buffer<uint8_t> in_ten(10);
+        input.set(in_ten);
+
+        result1 = f.realize();
+        result2 = f.realize();
+
+        assert(result1(0) == 52);
+        assert(result2(0) == 52);
+
+        assert(call_count == 2);
     }
 
     printf("Success!\n");

@@ -5,6 +5,20 @@ using namespace Halide;
 
 // The check has to go in the Halide namespace, because get_source_location looks for the first thing outside of it
 namespace Halide {
+bool paths_equal(const std::string &path1, const std::string &path2) {
+    bool one_is_first = path1.size() >= path2.size();
+    const std::string &first(one_is_first ? path1 : path2);
+    const std::string &second(one_is_first ? path2 : path1);
+
+    if (first.empty() || first.size() == second.size()) {
+        return first == second;
+    }
+    size_t length_delta = first.size() - second.size();
+    char sep = first[length_delta - 1];
+    return (sep == '/' || sep == '\\') &&
+           first.substr(length_delta) == second;
+}
+
 void check(const void *var, const std::string &type,
            const std::string &correct_name,
            const std::string &correct_file, int line) {
@@ -12,13 +26,13 @@ void check(const void *var, const std::string &type,
     std::string loc = Halide::Internal::Introspection::get_source_location();
     std::string name = Halide::Internal::Introspection::get_variable_name(var, type);
 
-    if (name != correct_name) {
+    if (!paths_equal(correct_name, name)) {
         printf("Mispredicted name: %s vs %s\n",
                name.c_str(), correct_name.c_str());
         exit(-1);
     }
 
-    if (loc != correct_loc) {
+    if (!paths_equal(loc, correct_loc)) {
         printf("Mispredicted source location: %s vs %s\n",
                loc.c_str(), correct_loc.c_str());
         exit(-1);
@@ -110,7 +124,7 @@ int main(int argc, char **argv) {
     if (result) {
         printf("Halide C++ introspection claims to be working with this build config\n");
     } else {
-        printf("Halide C++ introspection doesn't claim to work with this build config. Not continuing.\n");
+        printf("[SKIP] Halide C++ introspection doesn't claim to work with this build config.\n");
         return 0;
     }
 
@@ -193,11 +207,11 @@ int main(int argc, char **argv) {
         Var x;
         f(x) = x;
         loc = std::string(__FILE__) + ":" + std::to_string(__LINE__ - 1);
-        assert(f.source_location() == loc);
+        assert(paths_equal(f.source_location(), loc));
 
         f(x) += 1;
         loc = std::string(__FILE__) + ":" + std::to_string(__LINE__ - 1);
-        assert(f.update().source_location() == loc);
+        assert(paths_equal(f.update().source_location(), loc));
     }
 
     printf("Success!\n");

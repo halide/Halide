@@ -1,12 +1,11 @@
 #ifndef HALIDE_IR_VISITOR_H
 #define HALIDE_IR_VISITOR_H
 
-#include "IR.h"
-#include "Util.h"
-
 #include <map>
 #include <set>
 #include <string>
+
+#include "IR.h"
 
 /** \file
  * Defines the base class for things that recursively walk over the IR
@@ -21,8 +20,8 @@ namespace Internal {
  */
 class IRVisitor {
 public:
-    IRVisitor();
-    virtual ~IRVisitor();
+    IRVisitor() = default;
+    virtual ~IRVisitor() = default;
 
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement accept())
@@ -73,6 +72,7 @@ protected:
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
     virtual void visit(const Shuffle *);
+    virtual void visit(const VectorReduce *);
     virtual void visit(const Prefetch *);
     virtual void visit(const Fork *);
     virtual void visit(const Acquire *);
@@ -142,6 +142,7 @@ protected:
     void visit(const IfThenElse *) override;
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
+    void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Acquire *) override;
     void visit(const Fork *) override;
@@ -159,7 +160,9 @@ class VariadicVisitor {
 private:
     template<typename... Args>
     ExprRet dispatch_expr(const BaseExprNode *node, Args &&... args) {
-        if (node == nullptr) return ExprRet{};
+        if (node == nullptr) {
+            return ExprRet{};
+        };
         switch (node->node_type) {
         case IRNodeType::IntImm:
             return ((T *)this)->visit((const IntImm *)node, std::forward<Args>(args)...);
@@ -219,6 +222,8 @@ private:
             return ((T *)this)->visit((const Let *)node, std::forward<Args>(args)...);
         case IRNodeType::Shuffle:
             return ((T *)this)->visit((const Shuffle *)node, std::forward<Args>(args)...);
+        case IRNodeType::VectorReduce:
+            return ((T *)this)->visit((const VectorReduce *)node, std::forward<Args>(args)...);
             // Explicitly list the Stmt types rather than using a
             // default case so that when new IR nodes are added we
             // don't miss them here.
@@ -245,7 +250,9 @@ private:
 
     template<typename... Args>
     StmtRet dispatch_stmt(const BaseStmtNode *node, Args &&... args) {
-        if (node == nullptr) return StmtRet{};
+        if (node == nullptr) {
+            return StmtRet{};
+        };
         switch (node->node_type) {
         case IRNodeType::IntImm:
         case IRNodeType::UIntImm:
@@ -276,6 +283,7 @@ private:
         case IRNodeType::Call:
         case IRNodeType::Let:
         case IRNodeType::Shuffle:
+        case IRNodeType::VectorReduce:
             internal_error << "Unreachable";
             break;
         case IRNodeType::LetStmt:

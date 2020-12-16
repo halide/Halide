@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -15,12 +16,14 @@
 #include "BoundsInference.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
+#include "CompilerLogger.h"
 #include "Debug.h"
 #include "DebugArguments.h"
 #include "DebugToFile.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
+#include "FlattenNestedRamps.h"
 #include "Func.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
@@ -85,6 +88,8 @@ Module lower(const vector<Function> &output_funcs,
              const vector<Stmt> &requirements,
              bool trace_pipeline,
              const vector<IRMutator *> &custom_passes) {
+    auto time_start = std::chrono::high_resolution_clock::now();
+
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
 
@@ -92,7 +97,7 @@ Module lower(const vector<Function> &output_funcs,
 
     // Compute an environment
     map<string, Function> env;
-    for (Function f : output_funcs) {
+    for (const Function &f : output_funcs) {
         populate_environment(f, env);
     }
 
@@ -104,7 +109,7 @@ Module lower(const vector<Function> &output_funcs,
     result_module.set_any_strict_float(any_strict_float);
 
     // Output functions should all be computed and stored at root.
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         Func(f).compute_root().store_root();
     }
 
@@ -130,13 +135,13 @@ Module lower(const vector<Function> &output_funcs,
     bool any_memoized = false;
     Stmt s = schedule_functions(outputs, fused_groups, env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n"
-             << s << '\n';
+             << s << "\n";
 
     if (any_memoized) {
         debug(1) << "Injecting memoization...\n";
         s = inject_memoization(s, env, pipeline_name, outputs);
         debug(2) << "Lowering after injecting memoization:\n"
-                 << s << '\n';
+                 << s << "\n";
     } else {
         debug(1) << "Skipping injecting memoization...\n";
     }
@@ -144,31 +149,17 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, trace_pipeline, env, outputs, t);
     debug(2) << "Lowering after injecting tracing:\n"
-             << s << '\n';
+             << s << "\n";
 
     debug(1) << "Adding checks for parameters\n";
     s = add_parameter_checks(requirements, s, t);
     debug(2) << "Lowering after injecting parameter checks:\n"
-             << s << '\n';
+             << s << "\n";
 
     // Compute the maximum and minimum possible value of each
     // function. Used in later bounds inference passes.
     debug(1) << "Computing bounds of each function's value\n";
     FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
-
-    bool will_inject_host_copies =
-        (t.has_gpu_feature() ||
-         t.has_feature(Target::OpenGLCompute) ||
-         t.has_feature(Target::OpenGL) ||
-         t.has_feature(Target::HexagonDma) ||
-         (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))));
-
-    // The checks will be in terms of the symbols defined by bounds
-    // inference.
-    debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
-    debug(2) << "Lowering after injecting image checks:\n"
-             << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
@@ -176,32 +167,17 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Performing computation bounds inference...\n";
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
     debug(2) << "Lowering after computation bounds inference:\n"
-             << s << '\n';
+             << s << "\n";
 
     debug(1) << "Removing extern loops...\n";
     s = remove_extern_loops(s);
     debug(2) << "Lowering after removing extern loops:\n"
-             << s << '\n';
+             << s << "\n";
 
     debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
     debug(2) << "Lowering after sliding window:\n"
-             << s << '\n';
-
-    debug(1) << "Simplifying correlated differences...\n";
-    s = simplify_correlated_differences(s);
-    debug(2) << "Lowering after simplifying correlated differences:\n"
-             << s << '\n';
-
-    debug(1) << "Performing allocation bounds inference...\n";
-    s = allocation_bounds_inference(s, env, func_bounds);
-    debug(2) << "Lowering after allocation bounds inference:\n"
-             << s << '\n';
-
-    debug(1) << "Removing code that depends on undef values...\n";
-    s = remove_undef(s);
-    debug(2) << "Lowering after removing code that depends on undef values:\n"
-             << s << "\n\n";
+             << s << "\n";
 
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic
@@ -212,23 +188,55 @@ Module lower(const vector<Function> &output_funcs,
              << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
-    s = simplify(s, false);  // Storage folding needs .loop_max symbols
+    s = simplify(s, false);  // Storage folding and allocation bounds inference needs .loop_max symbols
     debug(2) << "Lowering after first simplification:\n"
+             << s << "\n\n";
+
+    debug(1) << "Simplifying correlated differences...\n";
+    s = simplify_correlated_differences(s);
+    debug(2) << "Lowering after simplifying correlated differences:\n"
+             << s << "\n";
+
+    debug(1) << "Performing allocation bounds inference...\n";
+    s = allocation_bounds_inference(s, env, func_bounds);
+    debug(2) << "Lowering after allocation bounds inference:\n"
+             << s << "\n";
+
+    bool will_inject_host_copies =
+        (t.has_gpu_feature() ||
+         t.has_feature(Target::OpenGLCompute) ||
+         t.has_feature(Target::OpenGL) ||
+         t.has_feature(Target::HexagonDma) ||
+         (t.arch != Target::Hexagon && (t.has_feature(Target::HVX))));
+
+    debug(1) << "Adding checks for images\n";
+    s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
+    debug(2) << "Lowering after injecting image checks:\n"
+             << s << '\n';
+
+    debug(1) << "Removing code that depends on undef values...\n";
+    s = remove_undef(s);
+    debug(2) << "Lowering after removing code that depends on undef values:\n"
              << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s, env);
     debug(2) << "Lowering after storage folding:\n"
-             << s << '\n';
+             << s << "\n";
 
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, outputs, env);
     debug(2) << "Lowering after injecting debug_to_file calls:\n"
-             << s << '\n';
+             << s << "\n";
 
     debug(1) << "Injecting prefetches...\n";
     s = inject_prefetch(s, env);
     debug(2) << "Lowering after injecting prefetches:\n"
+             << s << "\n\n";
+
+    debug(1) << "Discarding safe promises...\n";
+    s = lower_safe_promises(s);
+    debug(2) << "Lowering after discarding safe promises:\n"
              << s << "\n\n";
 
     debug(1) << "Dynamically skipping stages...\n";
@@ -239,7 +247,7 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Forking asynchronous producers...\n";
     s = fork_async_producers(s, env);
     debug(2) << "Lowering after forking asynchronous producers:\n"
-             << s << '\n';
+             << s << "\n";
 
     debug(1) << "Destructuring tuple-valued realizations...\n";
     s = split_tuples(s, env);
@@ -254,8 +262,14 @@ Module lower(const vector<Function> &output_funcs,
         debug(1) << "Canonicalizing GPU var names...\n";
         s = canonicalize_gpu_vars(s);
         debug(2) << "Lowering after canonicalizing GPU var names:\n"
-                 << s << '\n';
+                 << s << "\n";
     }
+
+    debug(1) << "Bounding small realizations...\n";
+    s = simplify_correlated_differences(s);
+    s = bound_small_allocations(s);
+    debug(2) << "Lowering after bounding small realizations:\n"
+             << s << "\n\n";
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
@@ -319,7 +333,7 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
     debug(2) << "Lowering after simplifying correlated differences:\n"
-             << s << '\n';
+             << s << "\n";
 
     debug(1) << "Unrolling...\n";
     s = unroll_loops(s);
@@ -328,7 +342,7 @@ Module lower(const vector<Function> &output_funcs,
              << s << "\n\n";
 
     debug(1) << "Vectorizing...\n";
-    s = vectorize_loops(s, t);
+    s = vectorize_loops(s, env, t);
     s = simplify(s);
     debug(2) << "Lowering after vectorizing:\n"
              << s << "\n\n";
@@ -358,6 +372,11 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after loop trimming:\n"
              << s << "\n\n";
 
+    debug(1) << "Hoisting loop invariant if statements...\n";
+    s = hoist_loop_invariant_if_statements(s);
+    debug(2) << "Lowering after hoisting loop invariant if statements:\n"
+             << s << "\n\n";
+
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n"
@@ -373,7 +392,7 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
     debug(2) << "Lowering after simplifying correlated differences:\n"
-             << s << '\n';
+             << s << "\n";
 
     debug(1) << "Bounding small allocations...\n";
     s = bound_small_allocations(s);
@@ -414,17 +433,26 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after lowering unsafe promises:\n"
              << s << "\n\n";
 
+    debug(1) << "Flattening nested ramps...\n";
+    s = flatten_nested_ramps(s);
+    debug(2) << "Lowering after flattening nested ramps:\n"
+             << s << "\n\n";
+
+    debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);
     s = simplify(s);
-    s = loop_invariant_code_motion(s);
+    s = hoist_loop_invariant_values(s);
+    debug(2) << "Lowering after removing dead allocations and hoisting loop invariant values:\n"
+             << s << "\n\n";
+
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 
-    if (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))) {
+    if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
         debug(1) << "Splitting off Hexagon offload...\n";
         s = inject_hexagon_rpc(s, t, result_module);
         debug(2) << "Lowering after splitting off Hexagon offload:\n"
-                 << s << '\n';
+                 << s << "\n";
     } else {
         debug(1) << "Skipping Hexagon offload...\n";
     }
@@ -440,10 +468,10 @@ Module lower(const vector<Function> &output_funcs,
 
     vector<Argument> public_args = args;
     for (const auto &out : outputs) {
-        for (Parameter buf : out.output_buffers()) {
-            public_args.push_back(Argument(buf.name(),
-                                           Argument::OutputBuffer,
-                                           buf.type(), buf.dimensions(), buf.get_argument_estimates()));
+        for (const Parameter &buf : out.output_buffers()) {
+            public_args.emplace_back(buf.name(),
+                                     Argument::OutputBuffer,
+                                     buf.type(), buf.dimensions(), buf.get_argument_estimates());
         }
     }
 
@@ -458,7 +486,7 @@ Module lower(const vector<Function> &output_funcs,
         internal_assert(arg.arg.is_input()) << "Expected only input Arguments here";
 
         bool found = false;
-        for (Argument a : args) {
+        for (const Argument &a : args) {
             found |= (a.name == arg.arg.name);
         }
 
@@ -520,6 +548,13 @@ Module lower(const vector<Function> &output_funcs,
     }
 
     result_module.append(main_func);
+
+    auto *logger = get_compiler_logger();
+    if (logger) {
+        auto time_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = time_end - time_start;
+        logger->record_compilation_time(CompilerLogger::Phase::HalideLowering, diff.count());
+    }
 
     return result_module;
 }
