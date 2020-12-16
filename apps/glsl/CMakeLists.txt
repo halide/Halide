@@ -16,7 +16,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 # Find Halide
 find_package(Halide REQUIRED)
 
-find_package(OpenGL QUIET)
+find_package(OpenGL QUIET OPTIONAL_COMPONENTS EGL)
 if (OpenGL_EGL_FOUND)
     set(TARGET_FEATURES opengl egl)
 else ()
