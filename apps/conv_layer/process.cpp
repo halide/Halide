@@ -12,7 +12,7 @@ using namespace Halide::Tools;
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    const int N = 1, CI = 128, CO = 128, W = 25, H = 20;
+    const int N = 5, CI = 128, CO = 128, W = 100, H = 80;
 
     Buffer<float> input(CI, W + 2, H + 2, N);
     Buffer<float> filter(CO, 3, 3, CI);
