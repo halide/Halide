@@ -10,6 +10,9 @@ int main(int argc, char **argv) {
     // targets. This provides early warning that you may have broken
     // Halide on some other platform.
 
+    // We test -d3d12compute for 64-bit Windows platforms
+    // due to the peculiar required mixture of calling conventions.
+
     Func f("f");
     Var x;
     f(x) = x;
@@ -21,12 +24,15 @@ int main(int argc, char **argv) {
         "arm-64-android",
         "arm-64-ios",
         "arm-64-linux",
+        "arm-64-windows",
+        "arm-64-windows-d3d12compute",
         "x86-32-linux",
         "x86-32-osx",
         "x86-32-windows",
         "x86-64-linux",
         "x86-64-osx",
         "x86-64-windows",
+        "x86-64-windows-d3d12compute",
         "wasm-32-wasmrt",
     };
 
