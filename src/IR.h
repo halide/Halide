@@ -760,7 +760,7 @@ struct Shuffle : public ExprNode<Shuffle> {
 
     /** Convenience constructor for making a shuffle representing a
      * broadcast of a vector. */
-    static Expr make_broadcast(Expr vector, int lanes);
+    static Expr make_broadcast(Expr vector, int factor);
 
     /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */
@@ -779,7 +779,8 @@ struct Shuffle : public ExprNode<Shuffle> {
      * A uint8 shuffle of with 4*n lanes and indices:
      *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
      * can be represented as a uint32 broadcast with n lanes (factor = 4). */
-    bool is_broadcast(int factor) const;
+    bool is_broadcast() const;
+    int broadcast_factor() const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */
