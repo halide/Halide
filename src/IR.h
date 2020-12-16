@@ -744,7 +744,7 @@ struct Shuffle : public ExprNode<Shuffle> {
 
     /** Indices indicating which vector element to place into the
      * result. The elements are numbered by their position in the
-     * concatenation of the vector argumentss. */
+     * concatenation of the vector arguments. */
     std::vector<int> indices;
 
     static Expr make(const std::vector<Expr> &vectors,
@@ -760,7 +760,7 @@ struct Shuffle : public ExprNode<Shuffle> {
 
     /** Convenience constructor for making a shuffle representing a
      * broadcast of a vector. */
-    static Expr make_broadcast(Expr vector, int lanes);
+    static Expr make_broadcast(Expr vector, int factor);
 
     /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */
@@ -773,6 +773,14 @@ struct Shuffle : public ExprNode<Shuffle> {
     /** Check if this shuffle is an interleaving of the vector
      * arguments. */
     bool is_interleave() const;
+
+    /** Check if this shuffle can be represented as a broadcast.
+     * For example:
+     * A uint8 shuffle of with 4*n lanes and indices:
+     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
+     * can be represented as a uint32 broadcast with n lanes (factor = 4). */
+    bool is_broadcast() const;
+    int broadcast_factor() const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */

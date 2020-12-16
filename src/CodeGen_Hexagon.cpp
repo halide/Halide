@@ -62,6 +62,7 @@ Stmt call_halide_qurt_hvx_lock(const Target &target) {
         AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
     return check_hvx_lock;
 }
+
 Stmt call_halide_qurt_hvx_unlock() {
     Expr hvx_unlock =
         Call::make(Int(32), "halide_qurt_hvx_unlock", {}, Call::Extern);
@@ -73,6 +74,7 @@ Stmt call_halide_qurt_hvx_unlock() {
                                        hvx_unlock_result_var));
     return check_hvx_unlock;
 }
+
 // Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
 // as a destructor if successful.
 Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
@@ -89,6 +91,7 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
     stmt = Block::make(check_hvx_lock, stmt);
     return stmt;
 }
+
 bool is_dense_ramp(const Expr &x) {
     const Ramp *r = x.as<Ramp>();
     if (!r) {
@@ -494,7 +497,7 @@ struct HvxIntrinsic {
                                            // broadcasted up to 32 bits.
         v65OrLater = 1 << 1,
     };
-    Intrinsic::ID id;
+    llvm::Intrinsic::ID id;
     halide_type_t ret_type;
     const char *name;
     halide_type_t arg_types[4];
@@ -535,7 +538,7 @@ halide_type_t u16v2 = u16v1.with_lanes(u16v1.lanes * 2);
 halide_type_t u32v2 = u32v1.with_lanes(u32v1.lanes * 2);
 
 // clang-format off
-#define INTRINSIC_128B(id) Intrinsic::hexagon_V6_##id##_128B
+#define INTRINSIC_128B(id) llvm::Intrinsic::hexagon_V6_##id##_128B
 const HvxIntrinsic intrinsic_wrappers[] = {
     // Zero/sign extension:
     {INTRINSIC_128B(vzb), u16v2, "zxt.vub", {u8v1}},
@@ -694,19 +697,33 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vrmpybusv_acc), i32v1, "acc_add_4mpy.vw.vub.vb", {i32v1, i8v1, i8v1}},
 
     // Widening scalar multiplication, with horizontal reduction.
-    {INTRINSIC_128B(vdmpybus), i16v1, "add_2mpy.vub.b", {u8v1, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vdmpyhb), i32v1, "add_2mpy.vh.b", {i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vdmpybus_acc), i16v1, "acc_add_2mpy.vh.vub.b", {i16v1, u8v1, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vdmpyhb_acc), i32v1, "acc_add_2mpy.vw.vh.b", {i32v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-
-    // TODO: There are also saturating versions of vdmpy.
+    {INTRINSIC_128B(vdmpybus), i16v1, "add_2mpy.vub.b", {u8v1, i32}},
+    {INTRINSIC_128B(vdmpyhb), i32v1, "add_2mpy.vh.b", {i16v1, i32}},
+    {INTRINSIC_128B(vdmpybus_acc), i16v1, "acc_add_2mpy.vh.vub.b", {i16v1, u8v1, i32}},
+    {INTRINSIC_128B(vdmpyhb_acc), i32v1, "acc_add_2mpy.vw.vh.b", {i32v1, i16v1, i32}},
+    // Saturating versions of vdmpy.
+    {INTRINSIC_128B(vdmpyhsat), i32v1, "add_2mpy.vh.h", {i16v1, i32}},
+    {INTRINSIC_128B(vdmpyhsusat), i32v1, "add_2mpy.vh.uh", {i16v1, u32}},
+    {INTRINSIC_128B(vdmpyhvsat), i32v1, "add_2mpy.vh.vh", {i16v1, i16v1}},
+    {INTRINSIC_128B(vmpabus), i16v2, "add_2mpy.vub.vub.b.b", {i8v2, i32}},
+    {INTRINSIC_128B(vmpabus_acc), i16v2, "acc_add_2mpy.vh.vub.vub.b.b", {i16v2, i8v2, i32}},
+    {INTRINSIC_128B(vmpahb), i32v2, "add_2mpy.vh.vh.b.b", {i16v2, i32}},
+    {INTRINSIC_128B(vmpahb_acc), i32v2, "acc_add_2mpy.vw.vh.vh.b.b", {i32v2, i16v2, i32}},
 
     // TODO: These don't generate correctly because the vectors
     // aren't interleaved correctly.
-    //{ vdmpybus_dv, i16v2, //"add_2mpy.vub.b.dv", {u8v2, i32} },
-    //{ vdmpyhb_dv, i32v2, //"add_2mpy.vh.b.dv", {i16v2, i32} },
-    //{ vdmpybus_dv_acc, i16v2, //"acc_add_2mpy.vh.vub.b.dv", {i16v2, u8v2, i32} },
-    //{ vdmpyhb_dv_acc, i32v2, //"acc_add_2mpy.vw.vh.b.dv", {i32v2, i16v2, i32} },
+    //{ vdmpybus_dv, i16v2, "add_2mpy.vub.b.dv", {u8v2, i32} },
+    //{ vdmpyhb_dv, i32v2, "add_2mpy.vh.b.dv", {i16v2, i32} },
+    //{ vdmpybus_dv_acc, i16v2, "acc_add_2mpy.vh.vub.b.dv", {i16v2, u8v2, i32} },
+    //{ vdmpyhb_dv_acc, i32v2, "acc_add_2mpy.vw.vh.b.dv", {i32v2, i16v2, i32} },
+
+    // vtmpy
+    {INTRINSIC_128B(vtmpybus), i16v2, "add_3mpy.vub.b", {u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    {INTRINSIC_128B(vtmpyb), i16v2, "add_3mpy.vb.b", {i8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    {INTRINSIC_128B(vtmpyhb), i32v2, "add_3mpy.vh.b", {u16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    {INTRINSIC_128B(vtmpybus_acc), i16v2, "acc_add_3mpy.vh.vub.b", {i16v2, u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    {INTRINSIC_128B(vtmpyb_acc), i16v2, "acc_add_3mpy.vh.vb.b", {i16v2, i8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    {INTRINSIC_128B(vtmpyhb_acc), i32v2, "acc_add_3mpy.vw.vh.b", {i32v2, u16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
 
     {INTRINSIC_128B(vrmpybus), i32v1, "add_4mpy.vub.b", {u8v1, i32}},
     {INTRINSIC_128B(vrmpyub), u32v1, "add_4mpy.vub.ub", {u8v1, u32}},
@@ -759,6 +776,7 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vasrhubsat), u8v1, "trunc_satub_shr.vh.uh", {i16v2, u16}},
     {INTRINSIC_128B(vasrwuhsat), u16v1, "trunc_satuh_shr.vw.uw", {i32v2, u32}},
     {INTRINSIC_128B(vasrwhsat), i16v1, "trunc_sath_shr.vw.uw", {i32v2, u32}},
+    {INTRINSIC_128B(vror), u8v1, "vror",{u8v1, i32}},
 
     // Bit counting
     {INTRINSIC_128B(vnormamth), u16v1, "cls.vh", {u16v1}},
@@ -789,10 +807,10 @@ void CodeGen_Hexagon::init_module() {
 
     vector<Type> arg_types;
     for (const HvxIntrinsic &i : intrinsic_wrappers) {
-        Intrinsic::ID id = i.id;
-        internal_assert(id != Intrinsic::not_intrinsic);
+        llvm::Intrinsic::ID id = i.id;
+        internal_assert(id != llvm::Intrinsic::not_intrinsic);
         // Get the real intrinsic.
-        llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), id);
+        llvm::Function *intrin = llvm::Intrinsic::getDeclaration(module.get(), id);
         halide_type_t ret_type = fix_lanes(i.ret_type);
         arg_types.clear();
         for (const auto &a : i.arg_types) {
@@ -941,7 +959,7 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty, llvm::Function *F,
 Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty, int id,
                                          vector<Value *> Ops) {
     llvm::Function *intrin =
-        Intrinsic::getDeclaration(module.get(), (llvm::Intrinsic::ID)id);
+        llvm::Intrinsic::getDeclaration(module.get(), (llvm::Intrinsic::ID)id);
     return call_intrin_cast(ret_ty, intrin, std::move(Ops));
 }
 
@@ -962,7 +980,7 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
             llvm::Type *native_ty = get_vector_type(element_ty, native_elements);
             // This is an interleave of two half native vectors, use
             // vshuff.
-            Intrinsic::ID vshuff = element_bits == 8 ? INTRINSIC_128B(vshuffb) : INTRINSIC_128B(vshuffh);
+            llvm::Intrinsic::ID vshuff = element_bits == 8 ? INTRINSIC_128B(vshuffb) : INTRINSIC_128B(vshuffh);
             return call_intrin_cast(native_ty, vshuff,
                                     {concat_vectors({a, b})});
         } else {
@@ -1111,7 +1129,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     if (max < a_elements) {
         BitCastInst *a_cast = dyn_cast<BitCastInst>(a);
         CallInst *a_call = dyn_cast<CallInst>(a_cast ? a_cast->getOperand(0) : a);
-        llvm::Function *vcombine = Intrinsic::getDeclaration(
+        llvm::Function *vcombine = llvm::Intrinsic::getDeclaration(
             module.get(),
             INTRINSIC_128B(vcombine));
         if (a_call && a_call->getCalledFunction() == vcombine) {
@@ -1170,7 +1188,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             // and b.
             int bytes_off = start * (element_bits / 8);
             int reverse_bytes = (native_vector_bits() / 8) - bytes_off;
-            Intrinsic::ID intrin_id =
+            llvm::Intrinsic::ID intrin_id =
                 INTRINSIC_128B(valignb);
             // v(l)align is a bit more efficient if the offset fits in
             // 3 bits, so if the offset is with in 3 bits from the
@@ -1196,11 +1214,11 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             Value *ab_i1 = slice_vector(ab, i * 2 + native_elements, native_elements);
             Value *ret_i;
             if (element_bits == 8) {
-                Intrinsic::ID intrin = start == 0 ? INTRINSIC_128B(vpackeb) : INTRINSIC_128B(vpackob);
+                llvm::Intrinsic::ID intrin = start == 0 ? INTRINSIC_128B(vpackeb) : INTRINSIC_128B(vpackob);
                 ret_i =
                     call_intrin_cast(native_ty, intrin, {ab_i1, ab_i0});
             } else if (element_bits == 16) {
-                Intrinsic::ID intrin = start == 0 ? INTRINSIC_128B(vpackeh) : INTRINSIC_128B(vpackoh);
+                llvm::Intrinsic::ID intrin = start == 0 ? INTRINSIC_128B(vpackeh) : INTRINSIC_128B(vpackoh);
                 ret_i =
                     call_intrin_cast(native_ty, intrin, {ab_i1, ab_i0});
             } else if (element_bits % 8 == 0) {
@@ -1212,7 +1230,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                     native2_ty,
                     INTRINSIC_128B(vdealvdd),
                     {ab_i1, ab_i0, ConstantInt::get(i32_t, -element_bytes)});
-                Intrinsic::ID intrin = start == 0 ? INTRINSIC_128B(lo) : INTRINSIC_128B(hi);
+                llvm::Intrinsic::ID intrin = start == 0 ? INTRINSIC_128B(lo) : INTRINSIC_128B(hi);
                 ret_i = call_intrin_cast(native_ty, intrin, {packed});
             } else {
                 return CodeGen_Posix::shuffle_vectors(a, b, indices);
@@ -1244,7 +1262,7 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
     internal_assert(min_index >= 0);
     internal_assert(max_index < 256);
 
-    Intrinsic::ID vlut, vlut_acc, vshuff;
+    llvm::Intrinsic::ID vlut, vlut_acc, vshuff;
     if (lut_ty->getScalarSizeInBits() == 8) {
         // We can use vlut32.
         vlut = INTRINSIC_128B(vlutvvb);
@@ -1527,7 +1545,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
                 control_elements[i] = ConstantInt::get(i8_t, switches[i]);
             }
             Value *control = ConstantVector::get(control_elements);
-            Intrinsic::ID vdelta = reverse ? INTRINSIC_128B(vrdelta) : INTRINSIC_128B(vdelta);
+            llvm::Intrinsic::ID vdelta = reverse ? INTRINSIC_128B(vrdelta) : INTRINSIC_128B(vdelta);
             return call_intrin_cast(lut_ty, vdelta, {lut, control});
         }
     }
@@ -1669,54 +1687,6 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
 
     return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
 }
-
-namespace {
-
-string type_suffix(Type type, bool signed_variants = true) {
-    string prefix = type.is_vector() ? ".v" : ".";
-    if (type.is_int() || !signed_variants) {
-        switch (type.bits()) {
-        case 8:
-            return prefix + "b";
-        case 16:
-            return prefix + "h";
-        case 32:
-            return prefix + "w";
-        }
-    } else if (type.is_uint()) {
-        switch (type.bits()) {
-        case 8:
-            return prefix + "ub";
-        case 16:
-            return prefix + "uh";
-        case 32:
-            return prefix + "uw";
-        }
-    }
-    internal_error << "Unsupported HVX type: " << type << "\n";
-    return "";
-}
-
-string type_suffix(const Expr &a, bool signed_variants = true) {
-    return type_suffix(a.type(), signed_variants);
-}
-
-string type_suffix(const Expr &a, const Expr &b, bool signed_variants = true) {
-    return type_suffix(a, signed_variants) + type_suffix(b, signed_variants);
-}
-
-string type_suffix(const vector<Expr> &ops, bool signed_variants = true) {
-    if (ops.empty()) {
-        return "";
-    }
-    string suffix = type_suffix(ops.front(), signed_variants);
-    for (size_t i = 1; i < ops.size(); i++) {
-        suffix = suffix + type_suffix(ops[i], signed_variants);
-    }
-    return suffix;
-}
-
-}  // namespace
 
 Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
                                     vector<Expr> args, bool maybe) {

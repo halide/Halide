@@ -74,8 +74,14 @@ public:
 
     void visit(const Variable *var) override {
         if (var->param.defined()) {
-            record(var->param);
+            if (var->param.is_buffer() &&
+                !var->type.is_handle()) {
+                record(memoize_tag(var));
+            } else {
+                record(var->param);
+            }
         }
+
         IRGraphVisitor::visit(var);
     }
 
@@ -311,8 +317,6 @@ public:
     }
 };
 
-}  // namespace
-
 // Inject caching structure around memoized realizations.
 class InjectMemoization : public IRMutator {
 public:
@@ -451,6 +455,8 @@ private:
     }
 };
 
+}  // namespace
+
 Stmt inject_memoization(const Stmt &s, const std::map<std::string, Function> &env,
                         const std::string &name,
                         const std::vector<Function> &outputs) {
@@ -464,6 +470,8 @@ Stmt inject_memoization(const Stmt &s, const std::map<std::string, Function> &en
 
     return injector.mutate(s);
 }
+
+namespace {
 
 class RewriteMemoizedAllocations : public IRMutator {
 public:
@@ -552,6 +560,8 @@ private:
         }
     }
 };
+
+}  // namespace
 
 Stmt rewrite_memoized_allocations(const Stmt &s, const std::map<std::string, Function> &env) {
 
