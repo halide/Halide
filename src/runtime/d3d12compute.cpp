@@ -3048,7 +3048,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         TRACE_SCOPE("kernel argument setup");
 
         size_t num_kernel_args = 0;
-        size_t* arg_sizes = nullptr;
+        size_t *arg_sizes = nullptr;
         size_t total_uniform_args_size = 0;
         {
             TRACE_SCOPE("kernel args introspection");
@@ -3058,10 +3058,10 @@ WEAK int halide_d3d12compute_run(void *user_context,
             }
 
             buffer_args = (d3d12_buffer **)__builtin_alloca(num_kernel_args * sizeof(d3d12_buffer *));
-            arg_sizes = (size_t*)__builtin_alloca(num_kernel_args * sizeof(size_t));
+            arg_sizes = (size_t *)__builtin_alloca(num_kernel_args * sizeof(size_t));
             for (size_t i = 0; i < num_kernel_args; i++) {
                 if (arg_is_buffer[i]) {
-                    arg_sizes[i] = sizeof(void*);
+                    arg_sizes[i] = sizeof(void *);
                     halide_buffer_t *hbuffer = (halide_buffer_t *)args[i];
                     d3d12_buffer *buffer = peel_buffer(hbuffer);
                     buffer_args[num_buffer_args] = buffer;
@@ -3113,36 +3113,36 @@ WEAK int halide_d3d12compute_run(void *user_context,
                 const halide_type_t arg_type = arg_types[i];
                 if (arg_type.code == halide_type_float) {
                     halide_assert(user_context, (arg_type.bits == 32));
-                    float& uniform_value = ((float&)uniform_word);
-                    uniform_value = *((float*)args[i]);
+                    float &uniform_value = ((float &)uniform_word);
+                    uniform_value = *((float *)args[i]);
                     TRACELEVEL(3, "args[" << i << "] -> float32 = " << uniform_value << "\n");
                 } else if (arg_type.code == halide_type_int) {
-                    int32_t& uniform_value = ((int32_t&)uniform_word);
+                    int32_t &uniform_value = ((int32_t &)uniform_word);
                     if (arg_type.bits == 8) {
-                        uniform_value = *((int8_t*)args[i]);
+                        uniform_value = *((int8_t *)args[i]);
                     } else if (arg_type.bits == 16) {
-                        uniform_value = *((int16_t*)args[i]);
+                        uniform_value = *((int16_t *)args[i]);
                     } else if (arg_type.bits == 32) {
-                        uniform_value = *((int32_t*)args[i]);
+                        uniform_value = *((int32_t *)args[i]);
                     } else {
                         halide_assert(user_context, false);
                     }
                     TRACELEVEL(3, "args[" << i << "] -> int32 = " << uniform_value << "\n");
                 } else if (arg_type.code == halide_type_uint) {
-                    uint32_t& uniform_value = ((uint32_t&)uniform_word);
+                    uint32_t &uniform_value = ((uint32_t &)uniform_word);
                     if (arg_type.bits == 8) {
-                        uniform_value = *((uint8_t*)args[i]);
+                        uniform_value = *((uint8_t *)args[i]);
                     } else if (arg_type.bits == 16) {
-                        uniform_value = *((uint16_t*)args[i]);
+                        uniform_value = *((uint16_t *)args[i]);
                     } else if (arg_type.bits == 32) {
-                        uniform_value = *((uint32_t*)args[i]);
+                        uniform_value = *((uint32_t *)args[i]);
                     } else {
                         halide_assert(user_context, false);
                     }
                     TRACELEVEL(3, "args[" << i << "] -> uint32 = " << uniform_value << "\n");
                 } else {
                     halide_assert(user_context, false);
-                }               
+                }
                 memcpy(&uniform_bytes[offset], &uniform_word, uniform_size);
                 offset = (offset + uniform_size - 1) & ~(uniform_size - 1);
                 offset += uniform_size;
