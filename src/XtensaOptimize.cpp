@@ -1273,7 +1273,6 @@ public:
 Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
     s = align_loads(s, 64);
-    debug(0) << s << "\n";
     // NOTE(vksnk): CSE seemed to break loop carry
     // s = common_subexpression_elimination(s);
 
