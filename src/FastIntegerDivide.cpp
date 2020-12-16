@@ -8,7 +8,7 @@ namespace Halide {
 
 using namespace Halide::Internal::IntegerDivision;
 
-namespace IntegerDivideTable {
+namespace {
 
 Buffer<uint8_t> integer_divide_table_u8() {
     static std::mutex initialize_lock;
@@ -111,7 +111,7 @@ Buffer<uint32_t> integer_divide_table_s32() {
         return im;
     }
 }
-}  // namespace IntegerDivideTable
+}  // namespace
 
 Expr fast_integer_divide(Expr numerator, Expr denominator) {
     if (is_const(denominator)) {
@@ -133,20 +133,20 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
         Expr mul, shift;
         switch (t.bits()) {
         case 8: {
-            Buffer<uint8_t> table = IntegerDivideTable::integer_divide_table_u8();
+            Buffer<uint8_t> table = integer_divide_table_u8();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
         case 16: {
-            Buffer<uint16_t> table = IntegerDivideTable::integer_divide_table_u16();
+            Buffer<uint16_t> table = integer_divide_table_u16();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
         default:  // 32
         {
-            Buffer<uint32_t> table = IntegerDivideTable::integer_divide_table_u32();
+            Buffer<uint32_t> table = integer_divide_table_u32();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
@@ -175,20 +175,20 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
         Expr mul, shift;
         switch (t.bits()) {
         case 8: {
-            Buffer<uint8_t> table = IntegerDivideTable::integer_divide_table_s8();
+            Buffer<uint8_t> table = integer_divide_table_s8();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
         case 16: {
-            Buffer<uint16_t> table = IntegerDivideTable::integer_divide_table_s16();
+            Buffer<uint16_t> table = integer_divide_table_s16();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;
         }
         default:  // 32
         {
-            Buffer<uint32_t> table = IntegerDivideTable::integer_divide_table_s32();
+            Buffer<uint32_t> table = integer_divide_table_s32();
             mul = table(denominator, 0);
             shift = table(denominator, 1);
             break;

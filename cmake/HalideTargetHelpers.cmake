@@ -18,7 +18,7 @@ function(_Halide_cmake_target OUTVAR)
     list(TRANSFORM arch REPLACE "^.*(x86|arm|mips|powerpc|hexagon|wasm|riscv).*$" "\\1")
     list(TRANSFORM arch REPLACE "^i.?86.+$" "x86")
     list(TRANSFORM arch REPLACE "^(amd|ia|em)64t?$" "x86")
-    list(TRANSFORM arch REPLACE "^ppc(64)?$" "powerpc")
+    list(TRANSFORM arch REPLACE "^ppc(64(le)?)?$" "powerpc")
     list(TRANSFORM arch REPLACE "^aarch(64)?$" "arm")
 
     # Get bits from CMake

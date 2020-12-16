@@ -17,6 +17,8 @@ using std::set;
 using std::string;
 using std::vector;
 
+namespace {
+
 // Is it safe to lift an Expr out of a loop (and potentially across a device boundary)
 class CanLift : public IRVisitor {
     using IRVisitor::visit;
@@ -526,6 +528,8 @@ class GroupLoopInvariants : public IRMutator {
         return visit_let<LetStmt, Stmt>(op);
     }
 };
+
+}  // namespace
 
 Stmt hoist_loop_invariant_values(Stmt s) {
     s = GroupLoopInvariants().mutate(s);
