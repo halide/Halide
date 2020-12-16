@@ -1648,7 +1648,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     return vlut(lut, indices);
 }
 
-static Value *create_vector(llvm::Type *ty, int val) {
+Value *create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
     Constant *value = ConstantInt::get(scalar_ty, val);
     return ConstantVector::getSplat(element_count(get_vector_num_elements(ty)), value);
