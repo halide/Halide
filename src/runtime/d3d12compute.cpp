@@ -3002,9 +3002,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
                                  int blocksX, int blocksY, int blocksZ,
                                  int threadsX, int threadsY, int threadsZ,
                                  int shared_mem_bytes,
-                                 size_t arg_sizes[],
-                                 void *args[],
-                                 int8_t arg_is_buffer[],
+                                 halide_type_t arg_types[], void *args[], int8_t arg_is_buffer[],
                                  int num_attributes,
                                  float *vertex_buffer,
                                  int num_coords_dim0,
@@ -3049,36 +3047,42 @@ WEAK int halide_d3d12compute_run(void *user_context,
     {
         TRACE_SCOPE("kernel argument setup");
 
+        size_t num_kernel_args = 0;
+        size_t* arg_sizes = nullptr;
         size_t total_uniform_args_size = 0;
         {
             TRACE_SCOPE("kernel args introspection");
 
-            size_t num_kernel_args = 0;
-            for (size_t i = 0; arg_sizes[i] != 0; i++) {
+            for (int i = 0; args[i] != nullptr; i++) {
                 ++num_kernel_args;
             }
 
             buffer_args = (d3d12_buffer **)__builtin_alloca(num_kernel_args * sizeof(d3d12_buffer *));
-            for (size_t i = 0; arg_sizes[i] != 0; i++) {
+            arg_sizes = (size_t*)__builtin_alloca(num_kernel_args * sizeof(size_t));
+            for (size_t i = 0; i < num_kernel_args; i++) {
                 if (arg_is_buffer[i]) {
-                    halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
+                    arg_sizes[i] = sizeof(void*);
                     halide_buffer_t *hbuffer = (halide_buffer_t *)args[i];
                     d3d12_buffer *buffer = peel_buffer(hbuffer);
                     buffer_args[num_buffer_args] = buffer;
                     ++num_buffer_args;
                 } else {
                     // Here, it's safe to mimic the Metal back-end behavior which enforces
-                    // natural alignment for all types in structures: each arg_sizes[i] has
+                    // natural alignment for all types in structures: each uniform arg has
                     // to be a power-of-two and have the subsequent field start on the next
                     // multiple of that power-of-two.
+                    halide_type_t arg_type = arg_types[i];
+                    arg_sizes[i] = arg_type.bytes();
                     halide_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
                     // We can ignore vector arguments since they never show up in constant
                     // blocks. Having to worry about scalar parameters only is convenient
                     // since in HLSL SM 5.1 all scalar types are 32bit:
+                    halide_assert(user_context, arg_type.lanes == 1);
+                    halide_assert(user_context, arg_sizes[i] > 0);
                     halide_assert(user_context, arg_sizes[i] <= 4);
-                    size_t argsize = 4;  // force argument to 32bit
-                    total_uniform_args_size = (total_uniform_args_size + argsize - 1) & ~(argsize - 1);
-                    total_uniform_args_size += argsize;
+                    size_t packed_size = 4;  // force the final "packed" argument to be 32bit
+                    total_uniform_args_size = (total_uniform_args_size + packed_size - 1) & ~(packed_size - 1);
+                    total_uniform_args_size += packed_size;
                 }
             }
         }
@@ -3100,44 +3104,48 @@ WEAK int halide_d3d12compute_run(void *user_context,
             }
             uint8_t *uniform_bytes = (uint8_t *)buffer_contents(&uniform_buffer);
             size_t offset = 0;
-            for (size_t i = 0; arg_sizes[i] != 0; i++) {
+            int32_t uniform_word = 0;
+            const size_t uniform_size = 4;
+            for (size_t i = 0; i < num_kernel_args; i++) {
                 if (arg_is_buffer[i]) {
                     continue;
                 }
-                halide_assert(user_context, arg_sizes[i] <= 4);
-                union {
-                    void *p;
-                    float *f;
-                    uint8_t *b;
-                    uint16_t *s;
-                    uint32_t *i;
-                } arg;
-                arg.p = args[i];
-                uint32_t val = 0;
-                switch (arg_sizes[i]) {
-                case 1:
-                    val = *arg.b;
-                    break;
-                case 2:
-                    val = *arg.s;
-                    break;
-                case 4:
-                    val = *arg.i;
-                    break;
-                default:
+                const halide_type_t arg_type = arg_types[i];
+                if (arg_type.code == halide_type_float) {
+                    halide_assert(user_context, (arg_type.bits == 32));
+                    float& uniform_value = ((float&)uniform_word);
+                    uniform_value = *((float*)args[i]);
+                    TRACELEVEL(3, "args[" << i << "] -> float32 = " << uniform_value << "\n");
+                } else if (arg_type.code == halide_type_int) {
+                    int32_t& uniform_value = ((int32_t&)uniform_word);
+                    if (arg_type.bits == 8) {
+                        uniform_value = *((int8_t*)args[i]);
+                    } else if (arg_type.bits == 16) {
+                        uniform_value = *((int16_t*)args[i]);
+                    } else if (arg_type.bits == 32) {
+                        uniform_value = *((int32_t*)args[i]);
+                    } else {
+                        halide_assert(user_context, false);
+                    }
+                    TRACELEVEL(3, "args[" << i << "] -> int32 = " << uniform_value << "\n");
+                } else if (arg_type.code == halide_type_uint) {
+                    uint32_t& uniform_value = ((uint32_t&)uniform_word);
+                    if (arg_type.bits == 8) {
+                        uniform_value = *((uint8_t*)args[i]);
+                    } else if (arg_type.bits == 16) {
+                        uniform_value = *((uint16_t*)args[i]);
+                    } else if (arg_type.bits == 32) {
+                        uniform_value = *((uint32_t*)args[i]);
+                    } else {
+                        halide_assert(user_context, false);
+                    }
+                    TRACELEVEL(3, "args[" << i << "] -> uint32 = " << uniform_value << "\n");
+                } else {
                     halide_assert(user_context, false);
-                    break;
-                }
-                size_t val_size = 4;
-                memcpy(&uniform_bytes[offset], &val, val_size);
-                offset = (offset + val_size - 1) & ~(val_size - 1);
-                offset += val_size;
-                TRACELEVEL(3,
-                           "args[" << i << "] is " << arg_sizes[i] << " bytes"
-                                   << " : float(" << *arg.f << ")"
-                                   << " or uint32(" << *arg.i << ")"
-                                   << " or int32(" << (int32_t &)*arg.i << ")"
-                                   << "\n");
+                }               
+                memcpy(&uniform_bytes[offset], &uniform_word, uniform_size);
+                offset = (offset + uniform_size - 1) & ~(uniform_size - 1);
+                offset += uniform_size;
             }
             halide_assert(user_context, offset == total_uniform_args_size);
         }
