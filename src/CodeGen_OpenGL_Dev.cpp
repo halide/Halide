@@ -138,8 +138,13 @@ Type CodeGen_GLSLBase::map_type(const Type &type) {
                 result = UInt(32);
             } else {
                 if (type.bits() == 32) {
+                    // GLSL <= 120 doesn't have unsigned types, simply use int.
+                    // WARNING: Using int to represent unsigned int may result in
+                    // overflows and undefined behavior.
                     result = Int(32);
                 } else {
+                    // Embed all other uints in a GLSL float. Probably not actually
+                    // valid for uint16 on systems with low float precision.
                     result = Float(32);
                 }
             }
@@ -311,6 +316,9 @@ void CodeGen_GLSLBase::visit(const Call *op) {
         const Type float_type = Float(32, op->type.lanes());
         vector<Expr> new_args(op->args.size());
 
+        // For GL 2.0, Most GLSL builtins are only defined for float arguments,
+        // so we may have to introduce type casts around the arguments and the
+        // entire function call.
         if (!support_int_to_float_implicit_conversion &&
             !support_non_float_type_builtin.count(op->name)) {
             need_cast = !op->type.is_float();
@@ -1218,7 +1226,7 @@ void CodeGen_GLSL::test() {
     check(Halide::print(3.0f), "float $ = 3.0;\n");
 
     // Test rounding behavior of integer division.
-    // The latest version of integer division it too complicated to list here
+    // The latest version of integer division is too complicated to list here
     // check(Variable::make(Int(32), "x") / Variable::make(Int(32), "y"),
     //       "float $ = float($x);\n"
     //       "float $ = float($y);\n"
