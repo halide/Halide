@@ -373,7 +373,7 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
     } else if (target.arch == Target::POWERPC) {
         return make_codegen<CodeGen_PowerPC>(target, context);
     } else if (target.arch == Target::Hexagon) {
-        return make_codegen<CodeGen_Hexagon>(target, context);
+        return new_CodeGen_Hexagon(target, context);
     } else if (target.arch == Target::WebAssembly) {
         return make_codegen<CodeGen_WebAssembly>(target, context);
     } else if (target.arch == Target::RISCV) {
