@@ -169,6 +169,9 @@ function(add_wasm_halide_test TARGET)
     if (Halide_TARGET MATCHES "wasm_simd128")
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
     endif ()
+    if (Halide_TARGET MATCHES "wasm_threads")
+        list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-threads")
+    endif ()
 
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
