@@ -669,9 +669,11 @@ protected:
     friend class Func;
 
 public:
-    explicit EvictionKey(const Expr &expr = Expr()) : key(expr) { }
+    explicit EvictionKey(const Expr &expr = Expr())
+        : key(expr) {
+    }
 };
-  
+
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
  * they are aggressively inlined, so you are encouraged to make lots

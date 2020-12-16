@@ -2088,7 +2088,8 @@ Func &Func::memoize(const EvictionKey &eviction_key) {
         } else {
             // Ditto above re: memoize_tag
             new_eviction_key = memoize_tag(reinterpret(UInt(64), cast(t.with_bits(64),
-                                                                      eviction_key.key)), 0);
+                                                                      eviction_key.key)),
+                                           0);
         }
 
         if (func.schedule().memoize_eviction_key().defined() &&
