@@ -28,6 +28,11 @@
 namespace Halide {
 namespace Internal {
 
+using std::string;
+using std::vector;
+
+using namespace llvm;
+
 #ifdef WITH_HEXAGON
 
 namespace {
@@ -130,11 +135,6 @@ private:
     /** Generate a LUT (8/16 bit, max_index < 256) lookup using vlut instructions. */
     llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
 };
-
-using std::string;
-using std::vector;
-
-using namespace llvm;
 
 CodeGen_Hexagon::CodeGen_Hexagon(Target t)
     : CodeGen_Posix(t) {
