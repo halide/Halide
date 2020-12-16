@@ -35,7 +35,7 @@ public:
 
             matmul.update(0)
                 .split(k, k, ki, 4)
-                .reorder(x, ki, k, y)
+                .reorder(x, ki, y, k)
                 .vectorize(x, 64)
                 .unroll(y)
                 .unroll(k)
@@ -54,21 +54,28 @@ public:
         C.set_host_alignment(64);
 
         A.dim(0)
-            .set_min((A.dim(0).min() / 64) * 64)
+            .set_min(0)
             .set_extent((A.dim(0).extent() / 64) * 64);
+        A.dim(1)
+            .set_min(0);
 
         B.dim(0)
-            .set_min((B.dim(0).min() / 64) * 64)
+            .set_min(0)
             .set_extent((B.dim(0).extent() / 64) * 64);
+        B.dim(1)
+            .set_min(0);
+
 
         C.dim(0)
-            .set_min((C.dim(0).min() / 64) * 64)
+            .set_min(0)
             .set_extent((C.dim(0).extent() / 64) * 64);
+        C.dim(1)
+            .set_min(0);
 
-        A.dim(1).set_stride((A.dim(1).stride() / 64) * 64);
-        B.dim(1).set_stride((B.dim(1).stride() / 64) * 64);
+        A.dim(1).set_stride(64);
+        B.dim(1).set_stride(64);
 
-        C.dim(1).set_stride((C.dim(1).stride() / 64) * 64);
+        C.dim(1).set_stride(64);
 
 
         C.bound(x, 0, 64).bound(y, 0, 64);

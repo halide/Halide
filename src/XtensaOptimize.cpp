@@ -497,6 +497,7 @@ private:
                 {"halide_xtensa_widen_mul_vu8_si16_i24", wild_i16x * bc(wild_i16x), Pattern::NarrowUnsignedOp0 | Pattern::AccumulatorOutput24},
 
                 {"halide_xtensa_widen_zzzzz", i24(concat({wild_i8x64, wild_i8x64, wild_i8x64, wild_i8x64})) * i24(repeat_each_element(wild_i8x4, 64))},
+                {"halide_xtensa_widen_zzzzz", i24(wild_i8x256) * i24(repeat_each_element(wild_i8x4, 64))},
 
                 // Widening multiplication
                 // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
@@ -835,6 +836,16 @@ private:
                             wild_i24x,  call("halide_xtensa_qqqq", wild_i24x, {
                                     call("halide_xtensa_widen_zzzzz", wild_i24x, {
                                         wild_i8x, wild_i8x, wild_i8x, wild_i8x, wild_i8x
+                                    })
+                                })
+                            })
+            },
+
+            {"halide_xtensa_widen_quad_mul_add_i24", 
+                        call("halide_xtensa_yyyy", wild_i24x, {
+                            wild_i24x,  call("halide_xtensa_qqqq", wild_i24x, {
+                                    call("halide_xtensa_widen_zzzzz", wild_i24x, {
+                                        wild_i8x256, wild_i8x4
                                     })
                                 })
                             })
@@ -1412,7 +1423,6 @@ public:
 Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
     s = align_loads(s, 64);
-    debug(0) << s << "\n";
 
     // NOTE(vksnk): CSE seemed to break loop carry
     // s = common_subexpression_elimination(s);
@@ -1436,6 +1446,8 @@ Stmt match_xtensa_patterns(Stmt s) {
     // NOTE(vksnk): looks like we shouldn't do simplification in the end.
     // s = simplify(common_subexpression_elimination(s));
     s = common_subexpression_elimination(s);
+
+    debug(0) << s << "\n";
 
     return s;
 }

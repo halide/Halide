@@ -215,19 +215,21 @@ inline int GetCycleCount() {
 // NOTE(vksnk): we can use clang native vectors in place of Xtensa
 // data types, and while they should be much more convinient, there is
 // a slight performance degradation, which needs to be investigated.
-//typedef int16_t int16x32_t __attribute__((ext_vector_type(32)));
-//typedef uint16_t uint16x32_t __attribute__((ext_vector_type(32)));
-//typedef int32_t int32x16_t __attribute__((ext_vector_type(16)));
-//typedef uint32_t uint32x16_t __attribute__((ext_vector_type(16)));
+typedef int8_t int8x64_t __attribute__((ext_vector_type(64)));
+typedef uint8_t uint8x64_t __attribute__((ext_vector_type(64)));
+typedef int16_t int16x32_t __attribute__((ext_vector_type(32)));
+typedef uint16_t uint16x32_t __attribute__((ext_vector_type(32)));
+typedef int32_t int32x16_t __attribute__((ext_vector_type(16)));
+typedef uint32_t uint32x16_t __attribute__((ext_vector_type(16)));
 
-using int8x64_t = xb_vec2Nx8;
-using uint8x64_t = xb_vec2Nx8U;
-using int16x32_t = xb_vecNx16;
-using uint16x32_t = xb_vecNx16U;
+//using int8x64_t = xb_vec2Nx8;
+//using uint8x64_t = xb_vec2Nx8U;
+//using int16x32_t = xb_vecNx16;
+//using uint16x32_t = xb_vecNx16U;
 using int24_t = xb_int24;
 using int24x64_t = xb_vec2Nx24;
-using int32x16_t = xb_vecN_2x32v;
-using uint32x16_t = xb_vecN_2x32Uv;
+//using int32x16_t = xb_vecN_2x32v;
+//using uint32x16_t = xb_vecN_2x32Uv;
 using int48x32_t = xb_vecNx48;
 using int64x16_t = xb_vecN_2x64w;
 using uint1x16_t = vboolN_2;
@@ -610,6 +612,15 @@ public:
     }
 };
 
+class int8x256_t {
+  typedef int8_t ElementType;
+  typedef xb_vec2Nx8 CppVectorType;
+  static const int Lanes = 256;
+public:
+
+    CppVectorType native_vector[4];
+};
+
 class uint8x128_t {
   typedef uint8_t ElementType;
   typedef xb_vec2Nx8U CppVectorType;
@@ -695,7 +706,21 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x64_t int8x64_t_aligned_load(const 
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x128_t int8x128_t_aligned_load(const void *base, int32_t offset) {
-    return *((const int8x128_t *)((uint8_t*)base + offset));
+    return *((const int8x128_t *)((const int8_t*)base + offset));
+}
+
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x256_t int8x256_t_aligned_load(const void *base, int32_t offset) {
+    const int8x64_t * __restrict ptr = ((const int8x64_t *)((const int8_t*)base + offset));
+    int8x256_t r;
+    r.native_vector[0] = *ptr;
+    ptr++;
+    r.native_vector[1] = *ptr;
+    ptr++;
+    r.native_vector[2] = *ptr;
+    ptr++;
+    r.native_vector[3] = *ptr;
+    return r;
+    //return *((const int8x256_t *)((const int8_t*)base + offset));
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x128_t uint8x128_t_aligned_load(const void *base, int32_t offset) {
@@ -967,9 +992,9 @@ HALIDE_ALWAYS_INLINE uint8x128_t halide_xtensa_interleave_u8(const uint8x64_t& a
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_extract_0_off_3_u8(const uint8x64_t& a0, const uint8x64_t& a1, const uint8x64_t& a2) {
   // TODO(vksnk): there is likely a better way to do it.
   uint8x64_t vR, vG, vB, vRG0, vRG1;
-  IVP_DSEL2NX8I(vB, vRG0, a1, a0, IVP_DSELI_8B_DEINTERLEAVE_C3_STEP_0);
-  IVP_DSEL2NX8I_H(vB, vRG1, a2, a1, IVP_DSELI_8B_DEINTERLEAVE_C3_STEP_1);
-  IVP_DSEL2NX8I (vG,vR, vRG1,vRG0, IVP_DSELI_8B_DEINTERLEAVE_1);
+  IVP_DSEL2NX8UI(vB, vRG0, a1, a0, IVP_DSELI_8B_DEINTERLEAVE_C3_STEP_0);
+  IVP_DSEL2NX8UI_H(vB, vRG1, a2, a1, IVP_DSELI_8B_DEINTERLEAVE_C3_STEP_1);
+  IVP_DSEL2NX8UI (vG,vR, vRG1,vRG0, IVP_DSELI_8B_DEINTERLEAVE_1);
   return vR;
 }
 
@@ -1013,23 +1038,23 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_i16(const int16x64_t& a, int
   return IVP_SELNX16(a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_1_u16(const uint16x64_t& a) {
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_start_1_u16(const uint16x64_t& a) {
   return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_1);
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_2_u16(const uint16x64_t& a) {
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_start_2_u16(const uint16x64_t& a) {
   return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_2);
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_3_u16(const uint16x64_t& a) {
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_start_3_u16(const uint16x64_t& a) {
   return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_3);
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_4_u16(const uint16x64_t& a) {
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_start_4_u16(const uint16x64_t& a) {
   return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_4);
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_u16(const uint16x64_t& a, int start) {
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_u16(const uint16x64_t& a, int start) {
   return IVP_SELNX16U(a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
 }
 
@@ -1063,7 +1088,7 @@ HALIDE_ALWAYS_INLINE float16 halide_xtensa_slice_f32(const float32& a, int start
 }
 
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_dynamic_shuffle(const uint8x64_t& a, const int8x64_t& b) {
-  return IVP_SHFL2NX8(a, b);
+  return IVP_SHFL2NX8U(a, b);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_dynamic_shuffle(const int16x32_t& a, const int16x32_t& b) {
@@ -1229,6 +1254,16 @@ HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_quad_mul_add_i24(
   return r;
 }
 
+HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_quad_mul_add_i24(
+                                            const int24x64_t& acc, 
+                                            const int8x256_t& a,
+                                            const int8x4_t& s
+                                            ) {
+  int24x64_t r = acc;
+  IVP_MULQA2N8XR8(r, a.native_vector[3], a.native_vector[2], a.native_vector[1], a.native_vector[0], s);
+  return r;
+}
+
 HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_i48(const int16x32_t& a, const int16x32_t& b,
                                                                   const int16x32_t& c, const int16x32_t& d) {
   return IVP_MULPNX16(a, b, c, d);
@@ -1277,12 +1312,14 @@ HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_add_u48(const int48x32_
   IVP_ADDWUANX16U(r, b, c);
   return r;
 }
-
+/*
+Disabled for now.
 HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_mul_vu8_si16_i24(const uint8x64_t& a, const int16_t& b) {
   return IVP_MULUS2N8XR16(a, b);
 }
 
 // TODO(vksnk):The one below is incorrect:
+
 HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_pair_mul_vu8_si16_i24(
                                                                   const uint8x64_t& a, const int16_t& b,
                                                                   const uint8x64_t& c, const int16_t& d) {
@@ -1294,7 +1331,7 @@ HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_mul_add_vu8_si16_i24(const i
   IVP_MULUSA2N8XR16(r, b, c);
   return r;
 }
-
+*/
 HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_add_i24(const int24x64_t& a, const int8x64_t& b) {
   int24x64_t r = a;
   IVP_ADDWA2NX8(r, b, int8x64_t(0));
@@ -1310,8 +1347,8 @@ HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_sat_narrow_i24x_with_shift_u8(cons
 }
 
 HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_narrow_i24_with_shift_i16(const int24x64_t& a, int shift) {
-    int16x32_t even = IVP_PACKVRNR2NX24_0(a, shift);
-    int16x32_t odd = IVP_PACKVRNR2NX24_1(a, shift);
+    int16x32_t even = xb_vecNx16U_rtor_xb_vecNx16(IVP_PACKVRNR2NX24_0(a, shift));
+    int16x32_t odd = xb_vecNx16U_rtor_xb_vecNx16(IVP_PACKVRNR2NX24_1(a, shift));
     int16x64_t r(int16x64_t::empty);
     IVP_DSELNX16I(r.native_vector[1], r.native_vector[0], odd, even, IVP_DSELI_INTERLEAVE_1);
     return r;
@@ -1389,7 +1426,8 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_avg121_round_i16(const int16x32_t&
   xb_vecNx48 result = IVP_MULQN16XR16(xb_vecNx16(1), c, b, a, coef[0]);
   return IVP_PACKVRNRNX48(result, 2);
 }
-
+/*
+Disabled for now
 HALIDE_ALWAYS_INLINE uint16x64_t convert_to_uint16x64_t_from_uint8x64_t(const uint8x64_t& src) {
   xb_vec2Nx24 wide = src * uint8x64_t(1);
   return uint16x64_t(uint16x64_t::from_native_vector,
@@ -1401,7 +1439,7 @@ HALIDE_ALWAYS_INLINE int16x64_t convert_to_int16x64_t_from_uint8x64_t(const uint
   return int16x64_t(int16x64_t::from_native_vector,
                         IVP_CVT16S2NX24L(wide), IVP_CVT16S2NX24H(wide));
 }
-
+*/
 HALIDE_ALWAYS_INLINE int16x64_t convert_to_int16x64_t_from_int24x64_t(const int24x64_t& wide) {
   return int16x64_t(int16x64_t::from_native_vector,
                         IVP_CVT16S2NX24L(wide), IVP_CVT16S2NX24H(wide));
@@ -1414,7 +1452,7 @@ HALIDE_ALWAYS_INLINE int8x64_t convert_to_int8x64_t_from_int16x64_t(const int16x
 
 HALIDE_ALWAYS_INLINE uint8x64_t convert_to_uint8x64_t_from_int16x64_t(const int16x64_t& src) {
   xb_vec2Nx24 wide = IVP_CVT24S2NX16(src.native_vector[1], src.native_vector[0]);
-  return IVP_PACKL2NX24(wide);
+  return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));
 }
 
 HALIDE_ALWAYS_INLINE int8x64_t convert_to_int8x64_t_from_int32x64_t(const int32x64_t& src) {
@@ -1426,12 +1464,12 @@ HALIDE_ALWAYS_INLINE int8x64_t convert_to_int8x64_t_from_int32x64_t(const int32x
 HALIDE_ALWAYS_INLINE uint8x64_t convert_to_uint8x64_t_from_int32x64_t(const int32x64_t& src) {
   xb_vec2Nx24 wide = IVP_CVT24UNX32L(src.native_vector[1], src.native_vector[0]);
   IVP_CVT24UNX32H(wide, src.native_vector[3], src.native_vector[2]);
-  return IVP_PACKL2NX24(wide);
+  return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));
 }
 
 HALIDE_ALWAYS_INLINE uint8x64_t convert_to_uint8x64_t_from_uint16x64_t(const uint16x64_t& src) {
   xb_vec2Nx24 wide = IVP_CVT24U2NX16(src.native_vector[1], src.native_vector[0]);
-  return IVP_PACKL2NX24(wide);
+  return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t convert_to_int16x32_t_from_int32x32_t(const int32x32_t& src) {
@@ -1607,7 +1645,7 @@ HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_convert_concat_i16_to_i8(const int1
 
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_convert_concat_i16_to_u8(const int16x32_t& a, const int16x32_t& b) {
   xb_vec2Nx24 wide = IVP_CVT24S2NX16(b, a);
-  return IVP_PACKL2NX24(wide);
+  return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));
 }
 
 HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_convert_concat_u16_to_i8(const uint16x32_t& a, const uint16x32_t& b) {
@@ -1617,9 +1655,10 @@ HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_convert_concat_u16_to_i8(const uint
 
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_convert_concat_u16_to_u8(const uint16x32_t& a, const uint16x32_t& b) {
   xb_vec2Nx24 wide = IVP_CVT24U2NX16(xb_vecNx16U_rtor_xb_vecNx16(b), xb_vecNx16U_rtor_xb_vecNx16(a));
-  return IVP_PACKL2NX24(wide);
+  return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));
 }
-
+/*
+Disabled for now
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_convert_u8_low_u16(const uint8x64_t& src, int native_lanes, int total_lines) {
     xb_vec2Nx24 wide = src * uint8x64_t(1);
     return xb_vecNx16_rtor_xb_vecNx16U(IVP_CVT16U2NX24L(wide));
@@ -1629,13 +1668,13 @@ HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_convert_u8_high_u16(const uint8x6
     xb_vec2Nx24 wide = src * uint8x64_t(1);
     return xb_vecNx16_rtor_xb_vecNx16U(IVP_CVT16U2NX24H(wide));
 }
-
+*/
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_u8_low_i16(const uint8x64_t& src, int native_lanes, int total_lines) {
-    return IVP_MOVNX16_FROM2NX8(IVP_SEL2NX8I(int8x64_t(0), src, IVP_SELI_8B_INTERLEAVE_1_LO));
+    return IVP_MOVNX16_FROM2NX8U(IVP_SEL2NX8UI(uint8x64_t(0), src, IVP_SELI_8B_INTERLEAVE_1_LO));
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_u8_high_i16(const uint8x64_t& src, int native_lanes, int total_lines) {
-    return IVP_MOVNX16_FROM2NX8(IVP_SEL2NX8I(int8x64_t(0), src, IVP_SELI_8B_INTERLEAVE_1_HI));
+    return IVP_MOVNX16_FROM2NX8U(IVP_SEL2NX8UI(uint8x64_t(0), src, IVP_SELI_8B_INTERLEAVE_1_HI));
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_concat_i32_to_i16(const int32x16_t& a, const int32x16_t& b) {
