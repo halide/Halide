@@ -87,8 +87,8 @@ int main(int argc, char **argv) {
     convert_and_save_image(output, argv[7]);
 
     camera_pipe_c(input, matrix_3200, matrix_7000,
-                color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
-                output);
+                  color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
+                  output);
 
     fprintf(stderr, "output: %s\n", argv[7]);
     convert_and_save_image(output, "bin/host/out_c.png");

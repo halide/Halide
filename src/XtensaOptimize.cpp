@@ -600,7 +600,7 @@ private:
                                   Call::PureExtern);
             }
         } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-            string suffix = op->type.is_int()?"_i16":"_u16";
+            string suffix = op->type.is_int() ? "_i16" : "_u16";
             if (op->slice_begin() < 5) {
                 return Call::make(op->type, "halide_xtensa_slice_start_" + std::to_string(op->slice_begin()) + suffix,
                                   {mutate(op->vectors[0])},

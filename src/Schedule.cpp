@@ -225,7 +225,7 @@ struct FuncScheduleContents {
 
     FuncScheduleContents()
         : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
-          memory_type(MemoryType::Auto) {};
+          memory_type(MemoryType::Auto){};
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator *mutator) {

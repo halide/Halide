@@ -1642,7 +1642,6 @@ HALIDE_ALWAYS_INLINE int32_t halide_xtensa_wait_for_copy(int32_t id) {
     }
 }
 
-
 // TODO(vksnk): condense this code.
 bool CodeGen_Xtensa::is_native_vector_type(Type t) {
     if (t.is_int_or_uint() && (t.lanes() == 64) && (t.bits() == 8)) {
@@ -2447,8 +2446,8 @@ void CodeGen_Xtensa::visit(const For *op) {
 
     // NOTE(vksnk): poor man's profiling below.
     if (current_loop_level == 1) {
-      stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
-      stream << get_indent() << "cycles_start = GetCycleCount();\n";
+        stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
+        stream << get_indent() << "cycles_start = GetCycleCount();\n";
     }
     // if (current_loop_level == 1) {
     //   stream << get_indent() << "cycles_start = GetCycleCount();\n";
@@ -2471,9 +2470,9 @@ void CodeGen_Xtensa::visit(const For *op) {
     close_scope("for " + print_name(op->name));
     // NOTE(vksnk): Second part of the poor man's profiling below.
     if (current_loop_level == 1) {
-      stream << get_indent() << "cycles_stop = GetCycleCount();\n";
-      stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
-      stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
+        stream << get_indent() << "cycles_stop = GetCycleCount();\n";
+        stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
+        stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
     }
     current_loop_level--;
 }
