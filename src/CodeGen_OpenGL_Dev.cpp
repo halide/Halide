@@ -25,7 +25,8 @@ bool is_opengl_es(const Target &target) {
     // versions (desktop GL, GLES2, GLES3, ...), probably by making it part of
     // Target.
     return (target.os == Target::Android ||
-            target.os == Target::IOS);
+            target.os == Target::IOS) ||
+           target.has_feature(Target::EGL);
 }
 
 char get_lane_suffix(int i) {
