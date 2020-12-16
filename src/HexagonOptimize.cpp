@@ -409,10 +409,10 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
         }
         // Check if shuffle can be treated as a broadcast.
         if (const Shuffle *shuff = x.as<Shuffle>()) {
-            int factor = ty.lanes();
-            if (shuff->is_broadcast(factor)) {
+            int factor = x.type().lanes() / ty.lanes();
+            if (shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
                 x = Shuffle::make(shuff->vectors, std::vector<int>(shuff->indices.begin(),
-                                                                   shuff->indices.begin() + factor));
+                                                                   shuff->indices.begin() + ty.lanes()));
             }
         }
     }
