@@ -35,6 +35,11 @@ if (WITH_WABT)
 
     set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+    # Disable this very-noisy warning in GCC
+    target_compile_options(wabt
+                           PRIVATE
+                           $<$<CXX_COMPILER_ID:GNU>:-Wno-alloca-larger-than>)
+
     # TODO: we want to require unique prefixes to include these files, to avoid ambiguity;
     # this means we have to prefix with "wabt-src/...", which is less bad than other alternatives,
     # but perhaps we could do better (esp. if wabt was smarter about what it exposed?)
@@ -168,6 +173,9 @@ function(add_wasm_halide_test TARGET)
     set(WASM_SHELL_FLAGS)
     if (Halide_TARGET MATCHES "wasm_simd128")
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
+    endif ()
+    if (Halide_TARGET MATCHES "wasm_threads")
+        list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-threads")
     endif ()
 
     add_halide_test("${TARGET}"

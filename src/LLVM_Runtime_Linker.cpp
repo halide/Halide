@@ -199,8 +199,10 @@ DECLARE_LL_INITMOD(ptx_compute_35)
 
 #ifdef WITH_D3D12
 DECLARE_CPP_INITMOD(windows_d3d12compute_x86)
+DECLARE_CPP_INITMOD(windows_d3d12compute_arm)
 #else
 DECLARE_NO_INITMOD(windows_d3d12compute_x86)
+DECLARE_NO_INITMOD(windows_d3d12compute_arm)
 #endif
 
 #ifdef WITH_X86
@@ -1133,7 +1135,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (t.has_feature(Target::D3D12Compute)) {
             user_assert(bits_64) << "D3D12Compute target only available on 64-bit targets for now.\n";
             user_assert(t.os == Target::Windows) << "D3D12Compute target only available on Windows targets.\n";
-            modules.push_back(get_initmod_windows_d3d12compute_x86(c, bits_64, debug));
+            if (t.arch == Target::X86) {
+                modules.push_back(get_initmod_windows_d3d12compute_x86(c, bits_64, debug));
+            } else if (t.arch == Target::ARM) {
+                modules.push_back(get_initmod_windows_d3d12compute_arm(c, bits_64, debug));
+            } else {
+                user_error << "Direct3D 12 can only be used on ARM or X86 architectures.\n";
+            }
         }
         if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
