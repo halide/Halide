@@ -3118,7 +3118,10 @@ WEAK int halide_d3d12compute_run(void *user_context,
                     TRACELEVEL(3, "args[" << i << "] -> float32 = " << uniform_value << "\n");
                 } else if (arg_type.code == halide_type_int) {
                     int32_t &uniform_value = ((int32_t &)uniform_word);
-                    if (arg_type.bits == 8) {
+                    if (arg_type.bits == 1) {
+                        uniform_value = *((int8_t *)args[i]);
+                        uniform_value = (uniform_value == 0) ? 0 : 1;
+                    } else if (arg_type.bits == 8) {
                         uniform_value = *((int8_t *)args[i]);
                     } else if (arg_type.bits == 16) {
                         uniform_value = *((int16_t *)args[i]);
@@ -3130,7 +3133,10 @@ WEAK int halide_d3d12compute_run(void *user_context,
                     TRACELEVEL(3, "args[" << i << "] -> int32 = " << uniform_value << "\n");
                 } else if (arg_type.code == halide_type_uint) {
                     uint32_t &uniform_value = ((uint32_t &)uniform_word);
-                    if (arg_type.bits == 8) {
+                    if (arg_type.bits == 1) {
+                        uniform_value = *((uint8_t *)args[i]);
+                        uniform_value = (uniform_value == 0) ? 0 : 1;
+                    } else if (arg_type.bits == 8) {
                         uniform_value = *((uint8_t *)args[i]);
                     } else if (arg_type.bits == 16) {
                         uniform_value = *((uint16_t *)args[i]);
