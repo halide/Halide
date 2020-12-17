@@ -546,7 +546,7 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    mtl_library *library;
+    mtl_library *library{};
     if (!compilation_cache.kernel_state_setup(user_context, state_ptr, metal_context.device, library,
                                               new_library_with_source, metal_context.device,
                                               source, source_size)) {

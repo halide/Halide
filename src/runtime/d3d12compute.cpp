@@ -2766,7 +2766,7 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
     D3D12ContextHolder d3d12_context(user_context, true);
 
     int error = halide_error_code_generic_error;
-    d3d12_library *library;
+    d3d12_library *library{};
     if (!compilation_cache.kernel_state_setup(user_context, state_ptr, d3d12_context.device,
                                               library, compile_kernel, user_context,
                                               source, source_size, &error)) {
