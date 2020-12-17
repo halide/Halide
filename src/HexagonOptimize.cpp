@@ -749,8 +749,7 @@ private:
                 // trying all permutations.
                 Expr new_expr;
                 if (!a01.as<Shuffle>() || vmpa_suffix.empty()) {
-                    Expr b01 = Shuffle::make_interleave({mpys[0].second, mpys[1].second,
- -                                                       mpys[0].second, mpys[1].second});
+                    Expr b01 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[0].second, mpys[1].second});
                     b01 = simplify(b01);
                     b01 = reinterpret(Type(b01.type().code(), 32, 1), b01);
                     new_expr = halide_hexagon_add_2mpy(op->type, vdmpy_suffix, a01, b01);
