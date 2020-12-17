@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
     check(i8_sat(i16(i8x) + i8y), saturating_add(i8x, i8y));
     check(u8_sat(u16(u8x) + u8y), saturating_add(u8x, u8y));
     check(u8(min(u16(u8x) + u16(u8y), 255)), saturating_add(u8x, u8y));
-    //check(u8(min(i16(u8x) + i16(u8y), 255)), saturating_add(u8x, u8y));
+    check(u8(min(i16(u8x) + i16(u8y), 255)), saturating_add(u8x, u8y));
 
     check(i8_sat(i16(i8x) - i8y), saturating_sub(i8x, i8y));
     check(u8(max(i16(u8x) - i16(u8y), 0)), saturating_sub(u8x, u8y));

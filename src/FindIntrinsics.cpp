@@ -376,6 +376,7 @@ protected:
             auto rewrite = IRMatcher::rewriter(value, op->type);
 
             Type op_type_wide = op->type.widen();
+            Type signed_type_wide = op_type_wide.with_code(halide_type_int);
 
             int bits = op->type.bits();
             auto is_x_same_int = op->type.is_int() && is_int(x, bits);
@@ -384,6 +385,7 @@ protected:
             // clang-format off
             if (rewrite(max(min(widening_add(x, y), upper), lower), saturating_add(x, y), is_x_same_int_or_uint) ||
                 rewrite(max(min(widening_sub(x, y), upper), lower), saturating_sub(x, y), is_x_same_int_or_uint) ||
+                rewrite(min(cast(signed_type_wide, widening_add(x, y)), upper), saturating_add(x, y), is_x_same_uint) ||
                 rewrite(min(widening_add(x, y), upper), saturating_add(x, y), op->type.is_uint() && is_x_same_uint) ||
                 rewrite(max(widening_sub(x, y), lower), saturating_sub(x, y), op->type.is_uint() && is_x_same_uint) ||
 
