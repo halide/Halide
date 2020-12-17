@@ -129,6 +129,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     case MemoryType::GPUShared:
         out << "GPUShared";
         break;
+    case MemoryType::GPUTexture:
+        out << "GPUTexture";
+        break;
     case MemoryType::LockedCache:
         out << "LockedCache";
         break;
@@ -630,7 +633,7 @@ void IRPrinter::visit(const Select *op) {
 }
 
 void IRPrinter::visit(const Load *op) {
-    const bool has_pred = !is_one(op->predicate);
+    const bool has_pred = !is_const_one(op->predicate);
     const bool show_alignment = op->type.is_vector() && op->alignment.modulus > 1;
     if (has_pred) {
         open();
@@ -764,7 +767,7 @@ void IRPrinter::print_lets(const Let *let) {
 
 void IRPrinter::visit(const Store *op) {
     stream << get_indent();
-    const bool has_pred = !is_one(op->predicate);
+    const bool has_pred = !is_const_one(op->predicate);
     const bool show_alignment = op->value.type().is_vector() && (op->alignment.modulus > 1);
     if (has_pred) {
         stream << "predicate (";
@@ -824,7 +827,7 @@ void IRPrinter::visit(const Allocate *op) {
     if (op->memory_type != MemoryType::Auto) {
         stream << " in " << op->memory_type;
     }
-    if (!is_one(op->condition)) {
+    if (!is_const_one(op->condition)) {
         stream << " if ";
         print(op->condition);
     }
@@ -856,13 +859,15 @@ void IRPrinter::visit(const Realize *op) {
         stream << ", ";
         print_no_parens(op->bounds[i].extent);
         stream << "]";
-        if (i < op->bounds.size() - 1) stream << ", ";
+        if (i < op->bounds.size() - 1) {
+            stream << ", ";
+        }
     }
     stream << ")";
     if (op->memory_type != MemoryType::Auto) {
         stream << " in " << op->memory_type;
     }
-    if (!is_one(op->condition)) {
+    if (!is_const_one(op->condition)) {
         stream << " if ";
         print(op->condition);
     }
@@ -877,7 +882,7 @@ void IRPrinter::visit(const Realize *op) {
 
 void IRPrinter::visit(const Prefetch *op) {
     stream << get_indent();
-    const bool has_cond = !is_one(op->condition);
+    const bool has_cond = !is_const_one(op->condition);
     if (has_cond) {
         stream << "if (";
         print_no_parens(op->condition);
@@ -892,7 +897,9 @@ void IRPrinter::visit(const Prefetch *op) {
         stream << ", ";
         print_no_parens(op->bounds[i].extent);
         stream << "]";
-        if (i < op->bounds.size() - 1) stream << ", ";
+        if (i < op->bounds.size() - 1) {
+            stream << ", ";
+        }
     }
     stream << ")\n";
     if (has_cond) {
@@ -918,7 +925,7 @@ void IRPrinter::visit(const Fork *op) {
     stmts.push_back(rest);
 
     stream << get_indent() << "fork ";
-    for (Stmt s : stmts) {
+    for (const Stmt &s : stmts) {
         stream << "{\n";
         indent++;
         print(s);
@@ -983,6 +990,10 @@ void IRPrinter::visit(const Shuffle *op) {
                << ", " << op->slice_stride()
                << ", " << op->indices.size()
                << ")";
+    } else if (op->is_broadcast()) {
+        stream << "broadcast(";
+        print_list(op->vectors);
+        stream << ", " << op->broadcast_factor() << ")";
     } else {
         stream << "shuffle(";
         print_list(op->vectors);

@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
 
     // Schedule.
     Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (target.has_feature(Target::HVX)) {
         // Vectorize by one vector width.
         // Since the operations are widening ops,
         // the operands are effectively half-vector width.

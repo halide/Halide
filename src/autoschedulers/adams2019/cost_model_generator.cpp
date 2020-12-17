@@ -2,6 +2,8 @@
 // templated such that it can be compiled in either forward or
 // backwards mode, for inference or training respectively.
 
+#include <utility>
+
 #include "Halide.h"
 
 #include "NetworkSize.h"
@@ -21,12 +23,18 @@ struct ModelWeight<false> : public GeneratorInput<Buffer<float>> {
     ModelWeight(const std::string &name, int dim)
         : GeneratorInput<Buffer<float>>(name, dim) {
     }
-    void backprop(const Derivative &d, Expr learning_rate, Expr timestep) {
+    void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) {
     }
     void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) {
-        if (s0) dim(0).set_bounds(0, s0);
-        if (s1) dim(1).set_bounds(0, s1);
-        if (s2) dim(2).set_bounds(0, s2);
+        if (s0) {
+            dim(0).set_bounds(0, s0);
+        }
+        if (s1) {
+            dim(1).set_bounds(0, s1);
+        }
+        if (s2) {
+            dim(2).set_bounds(0, s2);
+        }
     }
 };
 
@@ -37,10 +45,11 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
     ModelWeight(const std::string &name, int dim)
         : GeneratorInput<Buffer<float>>(name, dim), grad("updated_" + name, dim + 1) {
     }
-    void backprop(const Derivative &d, Expr learning_rate, Expr timestep) {
+    void backprop(const Derivative &d, Expr learning_rate, const Expr &timestep) {
         std::vector<Expr> args(dimensions() + 1);
-        for (auto &e : args)
+        for (auto &e : args) {
             e = Var();
+        }
         grad(args) = undef<float>();
 
         // We'll report back the new weights and the loss gradients,
@@ -162,7 +171,7 @@ public:
     Output<Buffer<float>> loss_output{"loss_output", 0};
 
     // Zero pad alone the last dimension of a Func
-    Func pad_stages(Func f, Expr stages) {
+    Func pad_stages(const Func &f, Expr stages) {
         Halide::Region bounds(f.dimensions());
         bounds[1].min = 0;
         bounds[1].extent = stages;
@@ -489,7 +498,7 @@ public:
             const int vec = 8;
 
             // A helper function for scheduling conv layers
-            auto schedule_conv = [&](Func conv, Func relu, RVar r_channels) {
+            auto schedule_conv = [&](Func conv, Func relu, const RVar &r_channels) {
                 Var ci, wi;
                 if (!training) {
                     relu

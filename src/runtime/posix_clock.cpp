@@ -31,7 +31,7 @@ extern int gettimeofday(timeval *tv, void *);
 WEAK int halide_start_clock(void *user_context) {
     // Guard against multiple calls
     if (!halide_reference_clock_inited) {
-        gettimeofday(&halide_reference_clock, NULL);
+        gettimeofday(&halide_reference_clock, nullptr);
         halide_reference_clock_inited = true;
     }
     return 0;
@@ -42,7 +42,7 @@ WEAK int halide_start_clock(void *user_context) {
 // which will provide actual nanosecond accuracy.)
 WEAK int64_t halide_current_time_ns(void *user_context) {
     timeval now;
-    gettimeofday(&now, NULL);
+    gettimeofday(&now, nullptr);
     int64_t d = int64_t(now.tv_sec - halide_reference_clock.tv_sec) * 1000000;
     int64_t ud = int64_t(now.tv_usec) - int64_t(halide_reference_clock.tv_usec);
     return (d + ud) * 1000;

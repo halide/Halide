@@ -70,8 +70,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
     }
     // clang-format on
 
-    if (rewrite(broadcast(x) || broadcast(y), broadcast(x || y), is_same_type(x, y)) ||
-
+    if (rewrite(broadcast(x, c0) || broadcast(y, c0), broadcast(x || y, c0)) ||
         rewrite((x && (y || z)) || y, (x && z) || y) ||
         rewrite((x && (z || y)) || y, (x && z) || y) ||
         rewrite(y || (x && (y || z)), y || (x && z)) ||

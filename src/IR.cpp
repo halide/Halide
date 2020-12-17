@@ -707,7 +707,7 @@ Expr Shuffle::make(const std::vector<Expr> &vectors,
     internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
     Type element_ty = vectors.front().type().element_of();
     int input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         internal_assert(i.type().element_of() == element_ty) << "Shuffle of vectors of mismatched types.\n";
         input_lanes += i.type().lanes();
     }
@@ -731,7 +731,7 @@ Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
 
     int lanes = vectors.front().type().lanes();
 
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         internal_assert(i.type().lanes() == lanes)
             << "Interleave of vectors with different sizes.\n";
     }
@@ -764,9 +764,9 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
     return make(vectors, indices);
 }
 
-Expr Shuffle::make_broadcast(Expr vector, int lanes) {
-    std::vector<int> indices(lanes * vector.type().lanes());
-    for (int ix = 0; ix < lanes; ix++) {
+Expr Shuffle::make_broadcast(Expr vector, int factor) {
+    std::vector<int> indices(factor * vector.type().lanes());
+    for (int ix = 0; ix < factor; ix++) {
         std::iota(indices.begin() + ix * vector.type().lanes(),
                   indices.begin() + (ix + 1) * vector.type().lanes(), 0);
     }
@@ -791,6 +791,40 @@ Expr Shuffle::make_extract_element(Expr vector, int i) {
     return make_slice(std::move(vector), i, 1, 1);
 }
 
+bool Shuffle::is_broadcast() const {
+    int lanes = indices.size();
+    int factor = broadcast_factor();
+    if (factor == 0 || factor >= lanes) {
+        return false;
+    }
+    int broadcasted_lanes = lanes / factor;
+
+    if (broadcasted_lanes < 2 || broadcasted_lanes >= lanes || lanes % broadcasted_lanes != 0) {
+        return false;
+    }
+    for (int i = 0; i < lanes; i++) {
+        if (indices[i % broadcasted_lanes] != indices[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int Shuffle::broadcast_factor() const {
+    int lanes = indices.size();
+    int broadcasted_lanes = 0;
+    for (; broadcasted_lanes < lanes; broadcasted_lanes++) {
+        if (indices[broadcasted_lanes] != broadcasted_lanes) {
+            break;
+        }
+    }
+    if (broadcasted_lanes > 0) {
+        return lanes / broadcasted_lanes;
+    } else {
+        return 0;
+    }
+}
+
 bool Shuffle::is_interleave() const {
     int lanes = vectors.front().type().lanes();
 
@@ -799,7 +833,7 @@ bool Shuffle::is_interleave() const {
         return false;
     }
 
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         if (i.type().lanes() != lanes) {
             return false;
         }
@@ -871,7 +905,7 @@ bool is_ramp(const std::vector<int> &indices, int stride = 1) {
 
 bool Shuffle::is_concat() const {
     size_t input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         input_lanes += i.type().lanes();
     }
 
@@ -882,7 +916,7 @@ bool Shuffle::is_concat() const {
 
 bool Shuffle::is_slice() const {
     size_t input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         input_lanes += i.type().lanes();
     }
 

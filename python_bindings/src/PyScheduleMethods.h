@@ -64,6 +64,8 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
         .def("gpu_threads", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, DeviceAPI)) & T::gpu_threads, py::arg("thread_x"), py::arg("thread_y"), py::arg("thread_z"), py::arg("device_api") = DeviceAPI::Default_GPU)
         .def("gpu_single_thread", (T & (T::*)(DeviceAPI)) & T::gpu_single_thread, py::arg("device_api") = DeviceAPI::Default_GPU)
 
+        .def("gpu_lanes", (T & (T::*)(const VarOrRVar &, DeviceAPI)) & T::gpu_lanes, py::arg("thread_x"), py::arg("device_api") = DeviceAPI::Default_GPU)
+
         .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("bx"), py::arg("tx"), py::arg("x_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
 
         .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("tx"), py::arg("x_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)

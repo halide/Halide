@@ -1,7 +1,55 @@
+# Note: if you make changes here, you may need to make changes in .clang-tidy
+# files elsewhere in the tree; clang-tidy-10 doesn't allow selective
+# inheritance of parent .clang-tidy files.
+
+# TODO: some of the blocklisted bugprone checks can/should be re-enabled
+# one at a time (with careful code fixes made as necessary).
+
 ---
-Checks: '-*,modernize-use-override,performance-move-const-arg,modernize-use-emplace,performance-noexcept-move-constructor,performance-unnecessary-value-param,performance-unnecessary-copy-initialization,performance-trivially-destructible,bugprone-parent-virtual-call,bugprone-macro-parenthesis,bugprone-string-constructor,bugprone-sizeof-expression'
+Checks: >
+    -*,
+    bugprone-*,
+    -bugprone-branch-clone,
+    -bugprone-exception-escape,
+    -bugprone-incorrect-roundings,
+    -bugprone-integer-division,
+    -bugprone-macro-parentheses,
+    -bugprone-narrowing-conversions,
+    -bugprone-signed-char-misuse,
+    misc-*,
+    -misc-non-private-member-variables-in-classes,
+    -misc-unconventional-assign-operator,
+    -misc-unused-parameters,
+    modernize-deprecated-headers,
+    modernize-use-default-member-init,
+    modernize-use-emplace,
+    modernize-use-equals-default,
+    modernize-use-equals-delete,
+    modernize-use-nullptr,
+    modernize-use-override,
+    performance-*,
+    -performance-inefficient-string-concatenation,
+    -performance-inefficient-vector-operation,
+    readability-avoid-const-params-in-decls,
+    readability-braces-around-statements,
+    readability-const-return-type,
+    readability-container-size-empty,
+    readability-misplaced-array-index,
+    readability-qualified-auto,
+    readability-redundant-access-specifiers,
+    readability-redundant-control-flow,
+    readability-redundant-function-ptr-dereference,
+    readability-redundant-preprocessor,
+    readability-redundant-smartptr-get,
+    readability-redundant-string-cstr,
+    readability-simplify-subscript-expr,
+    readability-static-accessed-through-instance,
+    readability-static-definition-in-anonymous-namespace,
+
 WarningsAsErrors: '*'
-HeaderFilterRegex: '(?!.*pybind11.*).*$'
-AnalyzeTemporaryDtors: false
+HeaderFilterRegex: '.*'
 FormatStyle: 'file'
+CheckOptions:
+    - key:   modernize-use-default-member-init.UseAssignment
+      value: 1
 ...

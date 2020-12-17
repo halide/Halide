@@ -28,6 +28,8 @@ std::ostream &operator<<(std::ostream &stream, const Monotonic &m) {
 
 using std::string;
 
+namespace {
+
 class MonotonicVisitor : public IRVisitor {
     const string &var;
 
@@ -462,8 +464,12 @@ public:
     }
 };
 
+}  // namespace
+
 Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monotonic> &scope) {
-    if (!e.defined()) return Monotonic::Unknown;
+    if (!e.defined()) {
+        return Monotonic::Unknown;
+    }
     MonotonicVisitor m(var, scope);
     e.accept(&m);
     return m.result;

@@ -173,13 +173,13 @@ private:
             *val = v;
             return &str[i];
         }
-        return NULL;
+        return nullptr;
     }
 
     const char *parse_opengl_version(const char *str, int *major, int *minor) {
         str = parse_int(str, major);
-        if (str == NULL || *str != '.') {
-            return NULL;
+        if (str == nullptr || *str != '.') {
+            return nullptr;
         }
         return parse_int(str + 1, minor);
     }

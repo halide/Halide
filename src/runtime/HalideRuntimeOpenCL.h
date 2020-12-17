@@ -19,6 +19,7 @@ extern "C" {
 #define HALIDE_RUNTIME_OPENCL
 
 extern const struct halide_device_interface_t *halide_opencl_device_interface();
+extern const struct halide_device_interface_t *halide_opencl_image_device_interface();
 
 /** These are forward declared here to allow clients to override the
  *  Halide OpenCL runtime. Do not call them. */
@@ -89,6 +90,11 @@ extern const char *halide_opencl_get_build_options(void *user_context);
  * or being passed an invalid device pointer. The device and host
  * dirty bits are left unmodified. */
 extern int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr);
+
+/** Same as halide_opencl_wrap_cl_mem but wraps a cl_mem created with
+ * clCreateImage
+ */
+extern int halide_opencl_image_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr);
 
 /** Disconnect a halide_buffer_t from the memory it was previously
  * wrapped around. Should only be called for a halide_buffer_t that

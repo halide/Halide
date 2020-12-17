@@ -6,7 +6,7 @@
  */
 
 #include <bitset>
-#include <stdint.h>
+#include <cstdint>
 #include <string>
 
 #include "DeviceAPI.h"
@@ -31,7 +31,7 @@ struct Target {
         NoOS,
         Fuchsia,
         WebAssemblyRuntime
-    } os;
+    } os = OSUnknown;
 
     /** The architecture used by the target. Determines the
      * instruction set to use.
@@ -45,15 +45,15 @@ struct Target {
         POWERPC,
         WebAssembly,
         RISCV
-    } arch;
+    } arch = ArchUnknown;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
-    int bits;
+    int bits = 0;
 
     /** The bit-width of a vector register for targets where this is configurable and
      * targeting a fixed size is desired. The default of 0 indicates no assumption of
      * fixed size is allowed. */
-    int vector_bits;
+    int vector_bits = 0;
 
     /** Optional features a target can have.
      * Corresponds to feature_name_map in Target.cpp.
@@ -87,7 +87,7 @@ struct Target {
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        OpenGL = halide_target_feature_opengl,
+        OpenGL = halide_target_feature_opengl,  // NOTE: this feature is deprecated and will be removed in Halide 12.
         OpenGLCompute = halide_target_feature_openglcompute,
         EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
@@ -98,8 +98,8 @@ struct Target {
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,
         HexagonDma = halide_target_feature_hexagon_dma,
-        HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
+        HVX = HVX_128,
         HVX_v62 = halide_target_feature_hvx_v62,
         HVX_v65 = halide_target_feature_hvx_v65,
         HVX_v66 = halide_target_feature_hvx_v66,
@@ -126,17 +126,17 @@ struct Target {
         WasmSimd128 = halide_target_feature_wasm_simd128,
         WasmSignExt = halide_target_feature_wasm_signext,
         WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
+        WasmThreads = halide_target_feature_wasm_threads,
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
         ARMDotProd = halide_target_feature_arm_dot_prod,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         FeatureEnd = halide_target_feature_end
     };
-    Target()
-      : os(OSUnknown), arch(ArchUnknown), bits(0), vector_bits(0) {
-    }
-  Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>(), int vb = 0)
-    : os(o), arch(a), bits(b), vector_bits(vb)  {
+    Target() = default;
+    Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>(),
+           int vb = 0)
+        : os(o), arch(a), bits(b), vector_bits(vb) {
         for (const auto &f : initial_features) {
             set_feature(f);
         }

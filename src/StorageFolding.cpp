@@ -21,8 +21,6 @@ int64_t next_power_of_two(int64_t x) {
     return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
 }
 
-}  // namespace
-
 using std::map;
 using std::string;
 using std::vector;
@@ -71,7 +69,7 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func && op->call_type == Call::Halide) {
             vector<Expr> args = op->args;
             internal_assert(dim < (int)args.size());
-            args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
+            args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else if (op->name == Call::buffer_crop) {
@@ -145,7 +143,7 @@ class FoldStorageOfFunction : public IRMutator {
         internal_assert(op);
         if (op->name == func) {
             vector<Expr> args = op->args;
-            args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
+            args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
             stmt = Provide::make(op->name, op->values, args);
         }
         return stmt;
@@ -997,6 +995,8 @@ public:
         : env(env) {
     }
 };
+
+}  // namespace
 
 Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env) {
     return StorageFolding(env).mutate(s);

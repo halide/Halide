@@ -82,8 +82,7 @@ public:
 
     /** Get a different dimension of the same buffer */
     // @{
-    Dimension dim(int i);
-    const Dimension dim(int i) const;
+    Dimension dim(int i) const;
     // @}
 
 private:

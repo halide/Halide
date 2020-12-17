@@ -2,7 +2,7 @@
 #define HALIDE_CPU_FEATURES_H
 
 #include "HalideRuntime.h"
-#include "cpu_features.h"
+#include "runtime_internal.h"
 
 namespace Halide {
 namespace Runtime {

@@ -2,7 +2,7 @@
 #include "Introspection.h"
 #include "Util.h"  // for get_env_variable
 
-#include <signal.h>
+#include <csignal>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -131,14 +131,11 @@ ErrorReport::~ErrorReport()
         // exception already in flight and suppress this one.
         return;
     } else if (flags & Runtime) {
-        RuntimeError err(msg.str());
-        throw err;
+        throw RuntimeError(msg.str());
     } else if (flags & User) {
-        CompileError err(msg.str());
-        throw err;
+        throw CompileError(msg.str());
     } else {
-        InternalError err(msg.str());
-        throw err;
+        throw InternalError(msg.str());
     }
 #else
     std::cerr << msg.str();

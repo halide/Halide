@@ -20,7 +20,7 @@ std::ostream &operator<<(std::ostream &stream, const halide_dimension_t &d) {
 std::ostream &operator<<(std::ostream &stream, const std::vector<halide_dimension_t> &shape) {
     stream << "[";
     bool need_comma = false;
-    for (auto &d : shape) {
+    for (const auto &d : shape) {
         if (need_comma) {
             stream << ",";
         }
@@ -286,8 +286,7 @@ public:
         this->set_host_dirty();
     }
 
-    ~PyBuffer() override {
-    }
+    ~PyBuffer() override = default;
 };
 
 }  // namespace

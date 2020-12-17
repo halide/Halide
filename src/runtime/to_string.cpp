@@ -3,7 +3,9 @@
 extern "C" {
 
 WEAK char *halide_string_to_string(char *dst, char *end, const char *arg) {
-    if (dst >= end) return dst;
+    if (dst >= end) {
+        return dst;
+    }
     while (1) {
         if (dst == end) {
             dst[-1] = 0;
@@ -235,7 +237,9 @@ WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg) {
     for (int i = 0; i < 16; i++) {
         *buf_ptr-- = hex_digits[bits & 15];
         bits >>= 4;
-        if (!bits) break;
+        if (!bits) {
+            break;
+        }
     }
     *buf_ptr-- = 'x';
     *buf_ptr = '0';
@@ -243,7 +247,7 @@ WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg) {
 }
 
 WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *t) {
-    const char *code_name = NULL;
+    const char *code_name = nullptr;
     switch (t->code) {
     case halide_type_int:
         code_name = "int";
@@ -271,8 +275,8 @@ WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *t) {
 }
 
 WEAK char *halide_buffer_to_string(char *dst, char *end, const halide_buffer_t *buf) {
-    if (buf == NULL) {
-        return halide_string_to_string(dst, end, "NULL");
+    if (buf == nullptr) {
+        return halide_string_to_string(dst, end, "nullptr");
     }
     dst = halide_string_to_string(dst, end, "buffer(");
     dst = halide_uint64_to_string(dst, end, buf->device, 1);

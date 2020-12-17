@@ -1,6 +1,6 @@
 #include <algorithm>
+#include <cstring>
 #include <iostream>
-#include <string.h>
 #include <utility>
 
 #ifdef _MSC_VER
@@ -204,7 +204,9 @@ const std::string &Func::extern_function_name() const {
 }
 
 int Func::dimensions() const {
-    if (!defined()) return 0;
+    if (!defined()) {
+        return 0;
+    }
     return func.dimensions();
 }
 
@@ -254,8 +256,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
-        if (var && var->name == Var(_).name())
+        if (var && var->name == Var(_).name()) {
             break;
+        }
         iter++;
     }
     if (iter != args.end()) {
@@ -283,7 +286,9 @@ bool var_name_match(const string &candidate, const string &var) {
     internal_assert(var.find('.') == string::npos)
         << "var_name_match expects unqualified names for the second argument. "
         << "Name passed: " << var << "\n";
-    if (candidate == var) return true;
+    if (candidate == var) {
+        return true;
+    }
     return Internal::ends_with(candidate, "." + var);
 }
 }  // namespace
@@ -1515,8 +1520,9 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
                    const std::vector<VarOrRVar> &inners,
                    const std::vector<Expr> &factors,
                    const std::vector<TailStrategy> &tails) {
-    if (previous.size() != outers.size() || previous.size() != inners.size() || previous.size() != factors.size() || previous.size() != tails.size())
+    if (previous.size() != outers.size() || previous.size() != inners.size() || previous.size() != factors.size() || previous.size() != tails.size()) {
         user_error << "Vectors passed to Stage::tile must all be the same length.\n";
+    }
     for (unsigned int i = 0; i < previous.size(); i++) {
         split(previous[i], outers[i], inners[i], factors[i], tails[i]);
     }
@@ -2152,8 +2158,12 @@ Func &Func::bound(const Var &var, Expr min, Expr extent) {
     func.schedule().bounds().push_back(b);
 
     // Propagate constant bounds into estimates as well.
-    if (!is_const(min)) min = Expr();
-    if (!is_const(extent)) extent = Expr();
+    if (!is_const(min)) {
+        min = Expr();
+    }
+    if (!is_const(extent)) {
+        extent = Expr();
+    }
     set_estimate(var, min, extent);
 
     return *this;
@@ -2473,7 +2483,9 @@ Func &Func::reorder_storage(const Var &x, const Var &y) {
             found_y = true;
             y_loc = i;
         } else if (var_name_match(dims[i].var, x.name())) {
-            if (found_y) std::swap(dims[i], dims[y_loc]);
+            if (found_y) {
+                std::swap(dims[i], dims[y_loc]);
+            }
             return *this;
         }
     }
@@ -2664,7 +2676,9 @@ public:
     void visit(const Variable *v) override {
         int index = Var::implicit_index(v->name);
         if (index != -1) {
-            if (index >= count) count = index + 1;
+            if (index >= count) {
+                count = index + 1;
+            }
         }
     }
 };
@@ -2791,7 +2805,9 @@ Stage FuncRef::operator=(const FuncRef &e) {
 Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Tuple &e) {
     Func f(func);
 
-    if (func.has_pure_definition()) return f;
+    if (func.has_pure_definition()) {
+        return f;
+    }
     vector<Var> pure_args(a.size());
 
     // Reuse names of existing pure args
@@ -3031,10 +3047,18 @@ void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
                               const Target &target,
                               const ParamMap &param_map) {
     vector<int32_t> sizes;
-    if (x_size) sizes.push_back(x_size);
-    if (y_size) sizes.push_back(y_size);
-    if (z_size) sizes.push_back(z_size);
-    if (w_size) sizes.push_back(w_size);
+    if (x_size) {
+        sizes.push_back(x_size);
+    }
+    if (y_size) {
+        sizes.push_back(y_size);
+    }
+    if (z_size) {
+        sizes.push_back(z_size);
+    }
+    if (w_size) {
+        sizes.push_back(w_size);
+    }
     infer_input_bounds(sizes, target, param_map);
 }
 

@@ -12,6 +12,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 Stmt make_block(Stmt first, Stmt rest) {
     if (first.defined() && rest.defined()) {
         return Block::make(first, rest);
@@ -34,7 +36,7 @@ class FindLinearExpressions : public IRMutator {
 protected:
     using IRMutator::visit;
 
-    bool in_glsl_loops;
+    bool in_glsl_loops = false;
 
     Expr tag_linear_expression(Expr e, const std::string &name = unique_name('a')) {
 
@@ -402,24 +404,26 @@ public:
     unsigned int order;
     bool found;
 
-    unsigned int total_found;
+    unsigned int total_found = 0;
 
     // This parameter controls the maximum number of linearly varying
     // expressions halide will pull out of the fragment shader and evaluate per
     // vertex, and allow the GPU to linearly interpolate across the domain. For
     // OpenGL ES 2.0 we can pass 16 vec4 varying attributes, or 64 scalars. Two
     // scalar slots are used by boilerplate code to pass pixel coordinates.
-    const unsigned int max_expressions;
+    const unsigned int max_expressions = 62;
 
-    FindLinearExpressions()
-        : in_glsl_loops(false), total_found(0), max_expressions(62) {
-    }
+    FindLinearExpressions() = default;
 };
+
+}  // namespace
 
 Stmt find_linear_expressions(const Stmt &s) {
 
     return FindLinearExpressions().mutate(s);
 }
+
+namespace {
 
 // This visitor produces a map containing name and expression pairs from varying
 // tagged intrinsics
@@ -457,9 +461,13 @@ public:
     }
 };
 
+}  // namespace
+
 Stmt remove_varying_attributes(const Stmt &s) {
     return RemoveVaryingAttributeTags().mutate(s);
 }
+
+namespace {
 
 // This visitor removes glsl_varying intrinsics and replaces them with
 // variables. After this visitor is called, the varying attribute expressions
@@ -484,9 +492,13 @@ public:
     }
 };
 
+}  // namespace
+
 Stmt replace_varying_attributes(const Stmt &s) {
     return ReplaceVaryingAttributeTags().mutate(s);
 }
+
+namespace {
 
 // This visitor produces a set of variable names that are tagged with
 // ".varying".
@@ -502,6 +514,8 @@ public:
 
     std::set<std::string> variables;
 };
+
+}  // namespace
 
 // Remove varying attributes from the varying's map if they do not appear in the
 // loop_stmt because they were simplified away.
@@ -523,6 +537,8 @@ void prune_varying_attributes(const Stmt &loop_stmt, std::map<std::string, Expr>
         varying.erase(i);
     }
 }
+
+namespace {
 
 // This visitor changes the type of variables tagged with .varying to float,
 // since GLSL will only interpolate floats. In the case that the type of the
@@ -810,7 +826,6 @@ Stmt IRFilter::mutate(const Stmt &s) {
     return stmt;
 }
 
-namespace {
 template<typename T, typename A>
 void mutate_operator(IRFilter *mutator, const T *op, const A op_a, Stmt *stmt) {
     Stmt a = mutator->mutate(op_a);
@@ -829,7 +844,6 @@ void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b,
     Stmt c = mutator->mutate(op_c);
     *stmt = make_block(make_block(a, b), c);
 }
-}  // namespace
 
 void IRFilter::visit(const IntImm *op) {
     stmt = Stmt();
@@ -974,17 +988,20 @@ void IRFilter::visit(const Allocate *op) {
     stmt = Stmt();
     for (size_t i = 0; i < op->extents.size(); i++) {
         Stmt new_extent = mutate(op->extents[i]);
-        if (new_extent.defined())
+        if (new_extent.defined()) {
             stmt = make_block(new_extent, stmt);
+        }
     }
 
     Stmt body = mutate(op->body);
-    if (body.defined())
+    if (body.defined()) {
         stmt = make_block(body, stmt);
+    }
 
     Stmt condition = mutate(op->condition);
-    if (condition.defined())
+    if (condition.defined()) {
         stmt = make_block(condition, stmt);
+    }
 }
 
 void IRFilter::visit(const Free *op) {
@@ -1000,19 +1017,23 @@ void IRFilter::visit(const Realize *op) {
         Stmt new_min = mutate(old_min);
         Stmt new_extent = mutate(old_extent);
 
-        if (new_min.defined())
+        if (new_min.defined()) {
             stmt = make_block(new_min, stmt);
-        if (new_extent.defined())
+        }
+        if (new_extent.defined()) {
             stmt = make_block(new_extent, stmt);
+        }
     }
 
     Stmt body = mutate(op->body);
-    if (body.defined())
+    if (body.defined()) {
         stmt = make_block(body, stmt);
+    }
 
     Stmt condition = mutate(op->condition);
-    if (condition.defined())
+    if (condition.defined()) {
         stmt = make_block(condition, stmt);
+    }
 }
 
 void IRFilter::visit(const Block *op) {
@@ -1356,6 +1377,8 @@ public:
         }
     }
 };
+
+}  // namespace
 
 Stmt setup_gpu_vertex_buffer(const Stmt &s) {
     CreateVertexBufferHostLoops vb;

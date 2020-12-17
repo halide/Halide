@@ -182,54 +182,73 @@ Interval bounds_of_lanes(const Expr &e) {
     }
 };
 
-// A ramp with the lanes repeated (e.g. <0 0 2 2 4 4 6 6>)
-// TODO(vksnk): With nested vectorization, this will be representable
-// as a ramp(broadcast(a, repetitions), broadcast(b, repetitions,
-// lanes)
+// A ramp with the lanes repeated inner_repetitions times, and then
+// the whole vector repeated outer_repetitions times.
+// E.g: <0 0 2 2 4 4 6 6 0 0 2 2 4 4 6 6>.
 struct InterleavedRamp {
     Expr base, stride;
-    int lanes, repetitions;
+    int lanes, inner_repetitions, outer_repetitions;
 };
+
+bool equal_or_zero(int a, int b) {
+    return a == 0 || b == 0 || a == b;
+}
 
 bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRamp *result) {
     if (const Ramp *r = e.as<Ramp>()) {
-        result->base = r->base;
-        result->stride = r->stride;
-        result->lanes = r->lanes;
-        result->repetitions = 1;
-        return true;
+        const Broadcast *b_base = r->base.as<Broadcast>();
+        const Broadcast *b_stride = r->stride.as<Broadcast>();
+        if (r->base.type().is_scalar()) {
+            result->base = r->base;
+            result->stride = r->stride;
+            result->lanes = r->lanes;
+            result->inner_repetitions = 1;
+            result->outer_repetitions = 1;
+            return true;
+        } else if (b_base && b_stride && b_base->lanes == b_stride->lanes) {
+            // Ramp of broadcast
+            result->base = b_base->value;
+            result->stride = b_stride->value;
+            result->lanes = r->lanes;
+            result->inner_repetitions = b_base->lanes;
+            result->outer_repetitions = 1;
+            return true;
+        }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
-        result->base = b->value;
-        result->stride = 0;
-        result->lanes = b->lanes;
-        result->repetitions = 0;
-        return true;
+        if (b->value.type().is_scalar()) {
+            result->base = b->value;
+            result->stride = 0;
+            result->lanes = b->lanes;
+            result->inner_repetitions = 0;
+            result->outer_repetitions = 0;
+            return true;
+        } else if (is_interleaved_ramp(b->value, scope, result)) {
+            // Broadcast of interleaved ramp
+            result->outer_repetitions *= b->lanes;
+            return true;
+        }
     } else if (const Add *add = e.as<Add>()) {
         InterleavedRamp ra;
         if (is_interleaved_ramp(add->a, scope, &ra) &&
             is_interleaved_ramp(add->b, scope, result) &&
-            (ra.repetitions == 0 ||
-             result->repetitions == 0 ||
-             ra.repetitions == result->repetitions)) {
+            equal_or_zero(ra.inner_repetitions, result->inner_repetitions) &&
+            equal_or_zero(ra.outer_repetitions, result->outer_repetitions)) {
             result->base = simplify(result->base + ra.base);
             result->stride = simplify(result->stride + ra.stride);
-            if (!result->repetitions) {
-                result->repetitions = ra.repetitions;
-            }
+            result->inner_repetitions = std::max(result->inner_repetitions, ra.inner_repetitions);
+            result->outer_repetitions = std::max(result->outer_repetitions, ra.outer_repetitions);
             return true;
         }
     } else if (const Sub *sub = e.as<Sub>()) {
         InterleavedRamp ra;
         if (is_interleaved_ramp(sub->a, scope, &ra) &&
             is_interleaved_ramp(sub->b, scope, result) &&
-            (ra.repetitions == 0 ||
-             result->repetitions == 0 ||
-             ra.repetitions == result->repetitions)) {
+            equal_or_zero(ra.inner_repetitions, result->inner_repetitions) &&
+            equal_or_zero(ra.outer_repetitions, result->outer_repetitions)) {
             result->base = simplify(ra.base - result->base);
             result->stride = simplify(ra.stride - result->stride);
-            if (!result->repetitions) {
-                result->repetitions = ra.repetitions;
-            }
+            result->inner_repetitions = std::max(result->inner_repetitions, ra.inner_repetitions);
+            result->outer_repetitions = std::max(result->outer_repetitions, ra.outer_repetitions);
             return true;
         }
     } else if (const Mul *mul = e.as<Mul>()) {
@@ -244,15 +263,28 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
         const int64_t *b = nullptr;
         if (is_interleaved_ramp(div->a, scope, result) &&
             (b = as_const_int(div->b)) &&
-            is_one(result->stride) &&
-            (result->repetitions == 1 ||
-             result->repetitions == 0) &&
+            is_const_one(result->stride) &&
+            (result->inner_repetitions == 1 ||
+             result->inner_repetitions == 0) &&
             can_prove((result->base % (int)(*b)) == 0)) {
             // TODO: Generalize this. Currently only matches
             // ramp(base*b, 1, lanes) / b
             // broadcast(base * b, lanes) / b
             result->base = simplify(result->base / (int)(*b));
-            result->repetitions *= (int)(*b);
+            result->inner_repetitions *= (int)(*b);
+            return true;
+        }
+    } else if (const Mod *mod = e.as<Mod>()) {
+        const int64_t *b = nullptr;
+        if (is_interleaved_ramp(mod->a, scope, result) &&
+            (b = as_const_int(mod->b)) &&
+            (result->outer_repetitions == 1 ||
+             result->outer_repetitions == 0) &&
+            can_prove(((int)(*b) % result->stride) == 0)) {
+            // ramp(base, 2, lanes) % 8
+            result->base = simplify(result->base % (int)(*b));
+            result->stride = simplify(result->stride % (int)(*b));
+            result->outer_repetitions *= (int)(*b);
             return true;
         }
     } else if (const Variable *var = e.as<Variable>()) {
@@ -354,7 +386,7 @@ class PredicateLoadStore : public IRMutator {
 
     bool should_predicate_store_load(int bit_size) {
         if (in_hexagon) {
-            internal_assert(target.features_any_of({Target::HVX_64, Target::HVX_128}))
+            internal_assert(target.has_feature(Target::HVX))
                 << "We are inside a hexagon loop, but the target doesn't have hexagon's features\n";
             return true;
         } else if (target.arch == Target::X86) {
@@ -629,7 +661,9 @@ class VectorSubs : public IRMutator {
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
             Expr new_arg = mutate(old_arg);
-            if (!new_arg.same_as(old_arg)) changed = true;
+            if (!new_arg.same_as(old_arg)) {
+                changed = true;
+            }
             new_args[i] = new_arg;
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);
         }
@@ -644,17 +678,17 @@ class VectorSubs : public IRMutator {
                 // for these are actually min/extent pairs; we need to maintain the proper dimensionality
                 // count and instead aggregate the widened values into a single pair.
                 for (size_t i = 1; i <= 2; i++) {
-                    const Call *call = new_args[i].as<Call>();
-                    internal_assert(call && call->is_intrinsic(Call::make_struct));
+                    const Call *make_struct = Call::as_intrinsic(new_args[i], {Call::make_struct});
+                    internal_assert(make_struct);
                     if (i == 1) {
                         // values should always be empty for these events
-                        internal_assert(call->args.empty());
+                        internal_assert(make_struct->args.empty());
                         continue;
                     }
-                    vector<Expr> call_args(call->args.size());
+                    vector<Expr> call_args(make_struct->args.size());
                     for (size_t j = 0; j < call_args.size(); j += 2) {
-                        Expr min_v = widen(call->args[j], max_lanes);
-                        Expr extent_v = widen(call->args[j + 1], max_lanes);
+                        Expr min_v = widen(make_struct->args[j], max_lanes);
+                        Expr extent_v = widen(make_struct->args[j + 1], max_lanes);
                         Expr min_scalar = extract_lane(min_v, 0);
                         Expr max_scalar = min_scalar + extract_lane(extent_v, 0);
                         for (int k = 1; k < max_lanes; ++k) {
@@ -666,7 +700,7 @@ class VectorSubs : public IRMutator {
                         call_args[j] = min_scalar;
                         call_args[j + 1] = max_scalar - min_scalar;
                     }
-                    new_args[i] = Call::make(call->type.element_of(), Call::make_struct, call_args, Call::Intrinsic);
+                    new_args[i] = Call::make(make_struct->type.element_of(), Call::make_struct, call_args, Call::Intrinsic);
                 }
             } else {
                 // Call::trace vectorizes uniquely, because we want a
@@ -675,14 +709,14 @@ class VectorSubs : public IRMutator {
                 for (size_t i = 1; i <= 2; i++) {
                     // Each struct should be a struct-of-vectors, not a
                     // vector of distinct structs.
-                    const Call *call = new_args[i].as<Call>();
-                    internal_assert(call && call->is_intrinsic(Call::make_struct));
+                    const Call *make_struct = Call::as_intrinsic(new_args[i], {Call::make_struct});
+                    internal_assert(make_struct);
                     // Widen the call args to have the same lanes as the max lanes found
-                    vector<Expr> call_args(call->args.size());
+                    vector<Expr> call_args(make_struct->args.size());
                     for (size_t j = 0; j < call_args.size(); j++) {
-                        call_args[j] = widen(call->args[j], max_lanes);
+                        call_args[j] = widen(make_struct->args[j], max_lanes);
                     }
-                    new_args[i] = Call::make(call->type.element_of(), Call::make_struct,
+                    new_args[i] = Call::make(make_struct->type.element_of(), Call::make_struct,
                                              call_args, Call::Intrinsic);
                 }
                 // One of the arguments to the trace helper
@@ -710,7 +744,7 @@ class VectorSubs : public IRMutator {
         // Vectorize the let value and check to see if it was vectorized by
         // this mutator. The type of the expression might already be vector
         // width.
-        Expr mutated_value = mutate(op->value);
+        Expr mutated_value = simplify(mutate(op->value));
         bool was_vectorized = (!op->value.type().is_vector() &&
                                mutated_value.type().is_vector());
 
@@ -779,7 +813,7 @@ class VectorSubs : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        Expr mutated_value = mutate(op->value);
+        Expr mutated_value = simplify(mutate(op->value));
         string vectorized_name = op->name;
 
         // Check if the value was vectorized by this mutator.
@@ -875,18 +909,16 @@ class VectorSubs : public IRMutator {
                      << predicated_stmt << "\n";
 
             // First check if the condition is marked as likely.
-            const Call *c = cond.as<Call>();
-            if (c && (c->is_intrinsic(Call::likely) ||
-                      c->is_intrinsic(Call::likely_if_innermost))) {
+            if (const Call *likely = Call::as_intrinsic(cond, {Call::likely, Call::likely_if_innermost})) {
 
                 // The meaning of the likely intrinsic is that
                 // Halide should optimize for the case in which
                 // *every* likely value is true. We can do that by
                 // generating a scalar condition that checks if
                 // the least-true lane is true.
-                Expr all_true = bounds_of_lanes(c->args[0]).min;
+                Expr all_true = bounds_of_lanes(likely->args[0]).min;
                 // Wrap it in the same flavor of likely
-                all_true = Call::make(Bool(), c->name,
+                all_true = Call::make(Bool(), likely->name,
                                       {all_true}, Call::PureIntrinsic);
 
                 if (!vectorize_predicate) {
@@ -1071,7 +1103,9 @@ class VectorSubs : public IRMutator {
 
             // f[x] = f[x] <op> y
             const Store *store = op->body.as<Store>();
-            if (!store) break;
+            if (!store) {
+                break;
+            }
 
             VectorReduce::Operator reduce_op = VectorReduce::Add;
             Expr a, b;
@@ -1137,8 +1171,8 @@ class VectorSubs : public IRMutator {
                 !scope.contains(var_b->name) ||
                 !load_a ||
                 load_a->name != store->name ||
-                !is_one(load_a->predicate) ||
-                !is_one(store->predicate)) {
+                !is_const_one(load_a->predicate) ||
+                !is_const_one(store->predicate)) {
                 break;
             }
 
@@ -1154,7 +1188,8 @@ class VectorSubs : public IRMutator {
                 test = simplify(load_index == store_index);
             } else if (is_interleaved_ramp(store_index, vector_scope, &store_ir) &&
                        is_interleaved_ramp(load_index, vector_scope, &load_ir) &&
-                       store_ir.repetitions == load_ir.repetitions &&
+                       store_ir.inner_repetitions == load_ir.inner_repetitions &&
+                       store_ir.outer_repetitions == load_ir.outer_repetitions &&
                        store_ir.lanes == load_ir.lanes) {
                 test = simplify(store_ir.base == load_ir.base &&
                                 store_ir.stride == load_ir.stride);
@@ -1164,12 +1199,30 @@ class VectorSubs : public IRMutator {
                 break;
             }
 
-            if (is_zero(test)) {
+            if (is_const_zero(test)) {
                 break;
-            } else if (!is_one(test)) {
+            } else if (!is_const_one(test)) {
                 // TODO: try harder by substituting in more things in scope
                 break;
             }
+
+            auto binop = [=](const Expr &a, const Expr &b) {
+                switch (reduce_op) {
+                case VectorReduce::Add:
+                    return a + b;
+                case VectorReduce::Mul:
+                    return a * b;
+                case VectorReduce::Min:
+                    return min(a, b);
+                case VectorReduce::Max:
+                    return max(a, b);
+                case VectorReduce::And:
+                    return a && b;
+                case VectorReduce::Or:
+                    return a || b;
+                }
+                return Expr();
+            };
 
             int output_lanes = 1;
             if (store_index.type().is_scalar()) {
@@ -1179,10 +1232,36 @@ class VectorSubs : public IRMutator {
                 b = VectorReduce::make(reduce_op, b, 1);
             } else {
 
-                output_lanes = store_index.type().lanes() / store_ir.repetitions;
+                output_lanes = store_index.type().lanes() / (store_ir.inner_repetitions * store_ir.outer_repetitions);
 
-                store_index = Ramp::make(store_ir.base, store_ir.stride, output_lanes);
-                b = VectorReduce::make(reduce_op, b, output_lanes);
+                store_index = Ramp::make(store_ir.base, store_ir.stride, output_lanes / store_ir.base.type().lanes());
+                if (store_ir.inner_repetitions > 1) {
+                    b = VectorReduce::make(reduce_op, b, output_lanes * store_ir.outer_repetitions);
+                }
+
+                // Handle outer repetitions by unrolling the reduction
+                // over slices.
+                if (store_ir.outer_repetitions > 1) {
+                    // First remove all powers of two with a binary reduction tree.
+                    int reps = store_ir.outer_repetitions;
+                    while (reps % 2 == 0) {
+                        int l = b.type().lanes() / 2;
+                        Expr b0 = Shuffle::make_slice(b, 0, 1, l);
+                        Expr b1 = Shuffle::make_slice(b, l, 1, l);
+                        b = binop(b0, b1);
+                        reps /= 2;
+                    }
+
+                    // Then reduce linearly over slices for the rest.
+                    if (reps > 1) {
+                        Expr v = Shuffle::make_slice(b, 0, 1, output_lanes);
+                        for (int i = 1; i < reps; i++) {
+                            Expr slice = simplify(Shuffle::make_slice(b, i * output_lanes, 1, output_lanes));
+                            v = binop(v, slice);
+                        }
+                        b = v;
+                    }
+                }
             }
 
             Expr new_load = Load::make(load_a->type.with_lanes(output_lanes),
@@ -1190,26 +1269,9 @@ class VectorSubs : public IRMutator {
                                        load_a->param, const_true(output_lanes),
                                        ModulusRemainder{});
 
-            switch (reduce_op) {
-            case VectorReduce::Add:
-                b = new_load + b;
-                break;
-            case VectorReduce::Mul:
-                b = new_load * b;
-                break;
-            case VectorReduce::Min:
-                b = min(new_load, b);
-                break;
-            case VectorReduce::Max:
-                b = max(new_load, b);
-                break;
-            case VectorReduce::And:
-                b = cast(new_load.type(), cast(b.type(), new_load) && b);
-                break;
-            case VectorReduce::Or:
-                b = cast(new_load.type(), cast(b.type(), new_load) || b);
-                break;
-            }
+            Expr lhs = cast(b.type(), new_load);
+            b = binop(lhs, b);
+            b = cast(new_load.type(), b);
 
             Stmt s = Store::make(store->name, b, store_index, store->param,
                                  const_true(b.type().lanes()), store->alignment);

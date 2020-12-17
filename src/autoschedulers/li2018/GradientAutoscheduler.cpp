@@ -13,7 +13,7 @@ std::map<std::string, Box> inference_bounds(const std::vector<Function> &functio
     std::vector<Func> funcs;
     funcs.reserve(functions.size());
     for (const auto &f : functions) {
-        funcs.push_back(Func(f));
+        funcs.emplace_back(f);
     }
     return inference_bounds(funcs, output_bounds);
 }
@@ -69,7 +69,7 @@ void reorder_storage(Func func,
     schedule_source << ")\n";
 }
 
-void reorder_storage(Stage stage,
+void reorder_storage(const Stage &stage,
                      const std::vector<Var> &all_vars,
                      std::ostringstream &schedule_source) {
     internal_error << "Can't reorder storage of a stage.";
@@ -251,8 +251,8 @@ void parallelize_vars_and_rvars_gpu(
     // Reorder: the order is rvars -> gpu_threads -> gpu_blocks
     std::vector<VarOrRVar> all_vars;
     all_vars.reserve(serial_rvars.size() + 4);
-    for (RVar v : serial_rvars) {
-        all_vars.push_back(v);
+    for (const RVar &v : serial_rvars) {
+        all_vars.emplace_back(v);
     }
     if (!r_gpu_threads.empty()) {
         all_vars.emplace_back(RVar(r_gpu_threads));
@@ -443,8 +443,8 @@ void parallelize_vars_and_rvars_cpu(
     //                       fused_rvars -> fused_vars
     std::vector<VarOrRVar> all_vars;
     all_vars.reserve(serial_rvars.size() + 4);
-    for (RVar v : serial_rvars) {
-        all_vars.push_back(v);
+    for (const RVar &v : serial_rvars) {
+        all_vars.emplace_back(v);
     }
     if (!vectorized_rvar.empty()) {
         all_vars.emplace_back(RVar(vectorized_rvar));
@@ -603,8 +603,8 @@ void apply_schedule(const MachineParams &params,
         std::vector<int> rvar_bounds = get_rvar_bounds(reduction_vars);
         std::vector<RVar> rvars;
         rvars.reserve(reduction_vars.size());
-        for (ReductionVariable r : reduction_vars) {
-            rvars.push_back(RVar(r.var));
+        for (const ReductionVariable &r : reduction_vars) {
+            rvars.emplace_back(r.var);
         }
         int rdomain_size = 1;
         for (int b : rvar_bounds) {
@@ -670,9 +670,9 @@ void apply_schedule(const MachineParams &params,
                         std::vector<Var> interim_vars;
                         preserved.reserve(outer_rvars.size());
                         interim_vars.reserve(outer_rvars.size());
-                        for (RVar r : outer_rvars) {
+                        for (const RVar &r : outer_rvars) {
                             Var v;
-                            preserved.push_back({r, v});
+                            preserved.emplace_back(r, v);
                             interim_vars.push_back(v);
                         }
 
@@ -741,7 +741,7 @@ void apply_schedule(const MachineParams &params,
                 !var->param.defined() &&
                 !var->image.defined() &&
                 !var->reduction_domain.defined()) {
-                pure_args.push_back(Var(var->name));
+                pure_args.emplace_back(var->name);
                 pure_arg_bounds.push_back(var_bounds[arg_id]);
                 parallelism *= pure_arg_bounds.back();
             }
@@ -846,7 +846,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (inline_all_trivial_functions(outputs, top_order, env)) {
         // Recompute env map since some functions are inlined.
         env.clear();
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             std::map<std::string, Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
@@ -857,7 +857,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     while (inline_all_element_wise_functions(outputs, order, env)) {
         // Recompute env map since some functions are inlined.
         env.clear();
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             std::map<std::string, Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
@@ -887,9 +887,9 @@ void generate_schedule(const std::vector<Function> &outputs,
             user_assert(found && est.min.type().is_int() && est.extent.type().is_int())
                 << "Please provide a valid estimate for dimension "
                 << arg << " of output \"" << output.name() << "\"\n";
-            b.push_back(Interval(est.min, simplify(est.min + est.extent - 1)));
+            b.emplace_back(est.min, simplify(est.min + est.extent - 1));
         }
-        output_bounds_expr.push_back(Box(b));
+        output_bounds_expr.emplace_back(b);
     }
 
     std::map<std::string, Box> func_bounds = inference_bounds(outputs, output_bounds_expr);
@@ -931,7 +931,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 struct Li2018 {
     void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
-        for (Func f : p.outputs()) {
+        for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
         generate_schedule(outputs, target, params, results);

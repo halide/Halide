@@ -29,8 +29,6 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 
 typedef ptrdiff_t ssize_t;
 
-#define NULL 0
-
 // --------------
 
 // In Halide runtime code, most functions should just be WEAK, whether or not
@@ -131,7 +129,7 @@ WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *arg)
 WEAK void *halide_get_symbol(const char *name);
 // Platform specific implementations of dlopen/dlsym.
 WEAK void *halide_load_library(const char *name);
-// If lib is NULL, this call should be equivalent to halide_get_symbol(name).
+// If lib is nullptr, this call should be equivalent to halide_get_symbol(name).
 WEAK void *halide_get_library_symbol(void *lib, const char *name);
 
 WEAK int halide_start_clock(void *user_context);

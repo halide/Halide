@@ -13,7 +13,6 @@ enable_testing()
 
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
-include(HalideTargetHelpers)
 include(HalideGeneratorHelpers)
 include(MakeShellPath)
 include(CMakeDependentOption)
@@ -61,7 +60,7 @@ add_subdirectory(src)
 add_subdirectory(tools)
 
 ##
-# Add tests, apps, tutorials, etc. if we're not being imported into another CMake project.
+# Add tests, tutorials, etc. if we're not being imported into another CMake project.
 ##
 
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -89,14 +88,6 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         endif ()
     else ()
         message(STATUS "Building Python bindings disabled")
-    endif ()
-
-    cmake_dependent_option(WITH_APPS "Build apps" ON "BUILD_SHARED_LIBS" OFF)
-    if (WITH_APPS)
-        message(STATUS "Building apps enabled")
-        add_subdirectory(apps)
-    else ()
-        message(STATUS "Building apps disabled")
     endif ()
 
     option(WITH_TUTORIALS "Build tutorials" ON)

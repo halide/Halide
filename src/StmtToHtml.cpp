@@ -3,11 +3,11 @@
 #include "IRVisitor.h"
 #include "Scope.h"
 
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <sstream>
-#include <stdio.h>
 
 namespace Halide {
 namespace Internal {
@@ -301,7 +301,7 @@ private:
         stream << close_span();
         print(op->index);
         stream << matched("]");
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             stream << " " << keyword("if") << " ";
             print(op->predicate);
         }
@@ -451,7 +451,7 @@ private:
         stream << " " << span("Operator Assign Matched", "=") << " ";
         stream << open_span("StoreValue");
         print(op->value);
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             stream << " " << keyword("if") << " ";
             print(op->predicate);
         }
@@ -490,7 +490,7 @@ private:
             print(op->extents[i]);
         }
         stream << matched("]");
-        if (!is_one(op->condition)) {
+        if (!is_const_one(op->condition)) {
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }
@@ -529,10 +529,12 @@ private:
         stream << matched("(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
             print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
-            if (i < op->bounds.size() - 1) stream << ", ";
+            if (i < op->bounds.size() - 1) {
+                stream << ", ";
+            }
         }
         stream << matched(")");
-        if (!is_one(op->condition)) {
+        if (!is_const_one(op->condition)) {
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }
@@ -554,10 +556,12 @@ private:
         stream << matched("(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
             print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
-            if (i < op->bounds.size() - 1) stream << ", ";
+            if (i < op->bounds.size() - 1) {
+                stream << ", ";
+            }
         }
         stream << matched(")");
-        if (!is_one(op->condition)) {
+        if (!is_const_one(op->condition)) {
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }

@@ -105,10 +105,14 @@ using std::vector;
 
 struct ProgressBar {
     void set(double progress) {
-        if (!draw_progress_bar) return;
+        if (!draw_progress_bar) {
+            return;
+        }
         counter++;
         const int bits = 11;
-        if (counter & ((1 << bits) - 1)) return;
+        if (counter & ((1 << bits) - 1)) {
+            return;
+        }
         const int pos = (int)(progress * 78);
         aslog(0) << "[";
         for (int j = 0; j < 78; j++) {
@@ -157,7 +161,9 @@ uint32_t get_dropout_threshold() {
 // training data.
 bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
     static double random_dropout_threshold = get_dropout_threshold();
-    if (random_dropout_threshold >= 100) return false;
+    if (random_dropout_threshold >= 100) {
+        return false;
+    }
 
     // The random dropout threshold is the chance that we operate
     // entirely greedily and never discard anything.
@@ -205,9 +211,15 @@ struct State {
 
     const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
                                             const LoopNest *a, const LoopNest *b) {
-        if (a->is_root()) return a;
-        if (b->is_root()) return b;
-        if (a == b) return a;
+        if (a->is_root()) {
+            return a;
+        }
+        if (b->is_root()) {
+            return b;
+        }
+        if (a == b) {
+            return a;
+        }
 
         // Walk the deeper one up until they're at the same depth
         auto it_a = parent.find(a);
@@ -226,7 +238,9 @@ struct State {
             // Walk each up one
             a = it_a->second.first;
             b = it_b->second.first;
-            if (a == b) return a;
+            if (a == b) {
+                return a;
+            }
             it_a = parent.find(a);
             it_b = parent.find(b);
             internal_assert(it_a != parent.end() && it_b != parent.end());
@@ -271,7 +285,9 @@ struct State {
             for (const auto *e : n.outgoing_edges) {
                 const auto &consumer_site = sites.get(e->consumer);
                 const LoopNest *l = consumer_site.innermost;
-                if (!l) l = consumer_site.compute;
+                if (!l) {
+                    l = consumer_site.compute;
+                }
                 if (!l) {
                     if (aslog::aslog_level() > 0) {
                         dump();
@@ -287,7 +303,7 @@ struct State {
             internal_assert(loop)
                 << "Could not compute plausible site for unscheduled Func: "
                 << n.func.name() << "\n";
-            for (auto &stage : n.stages) {
+            for (const auto &stage : n.stages) {
                 auto &site = sites.get_or_create(&stage);
                 site.compute = loop;
                 site.store = loop;
@@ -310,7 +326,9 @@ struct State {
         compute_featurization(dag, params, &features);
 
         for (const auto &n : dag.nodes) {
-            if (n.is_input) continue;
+            if (n.is_input) {
+                continue;
+            }
             for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
                 const auto &s = n.stages[stage_idx - 1];
                 const size_t num_schedule_features = ScheduleFeatures::num_features();
@@ -341,7 +359,7 @@ struct State {
 
         if (verbose) {
             for (auto it = features.begin(); it != features.end(); it++) {
-                auto &stage = *(it.key());
+                const auto &stage = *(it.key());
                 const auto &feat = it.value();
                 aslog(0) << "Schedule features for " << stage.stage.name() << "\n";
                 feat.dump();
@@ -569,7 +587,7 @@ struct State {
             bool should_parallelize = false;
             const vector<int64_t> *pure_size = nullptr;
             if (params.parallelism > 1) {
-                for (auto &c : root->children) {
+                for (const auto &c : root->children) {
                     if (c->node == node && node->dimensions > 0) {
                         if (c->stage->index == 0) {
                             pure_size = &(c->size);
@@ -631,7 +649,7 @@ struct State {
                     for (const auto &c : root->children) {
                         if (c->node == node) {
                             int64_t total = 1;
-                            for (auto &l : c->stage->loop) {
+                            for (const auto &l : c->stage->loop) {
                                 if (!l.rvar) {
                                     total *= o.tiling[l.pure_dim];
                                 }
@@ -654,7 +672,9 @@ struct State {
                         ((o.entire || min_total >= params.parallelism) &&
                          (max_total <= params.parallelism * 16));
 
-                    if (!ok) continue;
+                    if (!ok) {
+                        continue;
+                    }
 
                     options.emplace_back(std::move(o));
                 }
@@ -785,7 +805,9 @@ struct State {
         }
 
         for (auto &p : state_map) {
-            if (p.first->node->is_input) continue;
+            if (p.first->node->is_input) {
+                continue;
+            }
 
             Stage stage(p.first->stage);
 
@@ -796,8 +818,12 @@ struct State {
             vector<VarOrRVar> parallel_vars;
             bool any_parallel_vars = false, any_parallel_rvars = false;
             for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
-                if (!it->exists || it->extent == 1) continue;
-                if (!it->parallel) break;
+                if (!it->exists || it->extent == 1) {
+                    continue;
+                }
+                if (!it->parallel) {
+                    break;
+                }
                 any_parallel_rvars |= it->var.is_rvar;
                 any_parallel_vars |= !it->var.is_rvar;
                 parallel_tasks *= it->extent;
@@ -854,7 +880,7 @@ struct State {
                 }
                 p.second->schedule_source << "\n    .reorder_storage(";
                 bool first = true;
-                for (auto v : storage_vars) {
+                for (const auto &v : storage_vars) {
                     if (!first) {
                         p.second->schedule_source << ", ";
                     }
@@ -875,7 +901,9 @@ struct State {
         bool in_quotes = false;
         for (auto &c : schedule_source) {
             in_quotes ^= (c == '"');
-            if (!in_quotes && c == '$') c = '_';
+            if (!in_quotes && c == '$') {
+                c = '_';
+            }
         }
     }
 };
@@ -958,7 +986,7 @@ void configure_pipeline_features(const FunctionDAG &dag,
 
 // A single pass of coarse-to-fine beam search.
 IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
-                                          vector<Function> outputs,
+                                          const vector<Function> &outputs,
                                           const MachineParams &params,
                                           CostModel *cost_model,
                                           std::mt19937 &rng,
@@ -1103,7 +1131,9 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                             permitted_hashes.insert(h1);
                             s = s->parent.get();
                         }
-                        if (pending.empty()) break;
+                        if (pending.empty()) {
+                            break;
+                        }
                         state = pending.pop();
                         blessed++;
                     }
@@ -1156,7 +1186,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
 // Performance coarse-to-fine beam search and return the best state found.
 IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
-                                     vector<Function> outputs,
+                                     const vector<Function> &outputs,
                                      const MachineParams &params,
                                      CostModel *cost_model,
                                      std::mt19937 &rng,
@@ -1226,7 +1256,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     // Get the seed for random dropout
     string seed_str = get_env_variable("HL_SEED");
     // Or use the time, if not set.
-    int seed = (int)time(NULL);
+    int seed = (int)time(nullptr);
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
@@ -1323,7 +1353,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 struct Adams2019 {
     void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
-        for (Func f : p.outputs()) {
+        for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
         Autoscheduler::generate_schedule(outputs, target, params, results);

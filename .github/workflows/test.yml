@@ -58,15 +58,13 @@ jobs:
         target_os: [linux, osx, windows]
         llvm_version: [12]
         build_tool: [cmake_shared]
-        # llvm_version: [9, 10, 11, 12]  # TODO
+        # llvm_version: [10, 11, 12]  # TODO
         # build_tool: [cmake_shared, make]  # TODO
 
         # This section basically allows us to define additional values for
         # each matrix entry, e.g. to map an llvm version number to the specific
         # git branch that is needed.
         include:
-          # - llvm_version: 9
-          #   llvm_branch: release/9.x
           # - llvm_version: 10
           #   llvm_branch: release/10.x
           # - llvm_version: 11

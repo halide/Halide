@@ -12,9 +12,9 @@ WEAK void *halide_default_malloc(void *user_context, size_t x) {
     // Allocate enough space for aligning the pointer we return.
     const size_t alignment = halide_malloc_alignment();
     void *orig = malloc(x + alignment);
-    if (orig == NULL) {
+    if (orig == nullptr) {
         // Will result in a failed assertion and a call to halide_error
-        return NULL;
+        return nullptr;
     }
     // We want to store the original pointer prior to the pointer we return.
     void *ptr = (void *)(((size_t)orig + alignment + sizeof(void *) - 1) & ~(alignment - 1));

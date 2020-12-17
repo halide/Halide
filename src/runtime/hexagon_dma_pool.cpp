@@ -29,7 +29,7 @@ typedef struct {
     hexagon_dma_virtual_engine_t virtual_engine_list[MAX_NUMBER_OF_DMA_ENGINES];
 } hexagon_dma_pool_t;
 
-WEAK hexagon_dma_pool_t *hexagon_dma_pool = NULL;
+WEAK hexagon_dma_pool_t *hexagon_dma_pool = nullptr;
 WEAK halide_mutex hexagon_dma_pool_mutex;
 
 }  // namespace HexagonDma
@@ -74,7 +74,7 @@ inline void *hexagon_dma_pool_get(void *user_context, void *virtual_engine_id) {
         }
     }
     error(user_context) << "Hexagon: Error in assigning a dma engine to a virtual engine\n";
-    return NULL;
+    return nullptr;
 }
 
 // In this function we simply mark the dma engine as free
@@ -140,7 +140,7 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
             }
         }
         free(hexagon_dma_pool);
-        hexagon_dma_pool = NULL;
+        hexagon_dma_pool = nullptr;
 
         // Free cache pool
         int err = halide_hexagon_free_l2_pool(user_context);
@@ -160,7 +160,7 @@ WEAK void *halide_hexagon_allocate_dma_resource(void *user_context) {
         hexagon_dma_pool = (hexagon_dma_pool_t *)malloc(sizeof(hexagon_dma_pool_t));
         for (int i = 0; i < MAX_NUMBER_OF_DMA_ENGINES; i++) {
             hexagon_dma_pool->dma_engine_list[i].used = false;
-            hexagon_dma_pool->dma_engine_list[i].engine_addr = NULL;
+            hexagon_dma_pool->dma_engine_list[i].engine_addr = nullptr;
             hexagon_dma_pool->dma_engine_list[i].assigned = false;
             hexagon_dma_pool->virtual_engine_list[i].in_use = false;
             for (int j = 0; j < MAX_NUMBER_OF_WORK_UNITS; j++) {
@@ -179,7 +179,7 @@ WEAK void *halide_hexagon_allocate_dma_resource(void *user_context) {
     }
 
     error(user_context) << "Hexagon: Failed to allocate engine\n";
-    return NULL;
+    return nullptr;
 }
 
 WEAK void *halide_hexagon_allocate_from_dma_pool(void *user_context, void *virtual_engine_id) {

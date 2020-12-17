@@ -123,6 +123,7 @@ tests(GROUPS correctness
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
+      gpu_arg_types.cpp
       gpu_assertion_in_kernel.cpp
       gpu_bounds_inference_failure.cpp
       gpu_condition_lifting.cpp
@@ -147,6 +148,7 @@ tests(GROUPS correctness
       gpu_specialize.cpp
       gpu_store_in_register_with_no_lanes_loop.cpp
       gpu_sum_scan.cpp
+      gpu_texture.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
       gpu_vectorized_shared_memory.cpp
@@ -193,6 +195,7 @@ tests(GROUPS correctness
       logical.cpp
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
+      lossless_cast.cpp
       lots_of_dimensions.cpp
       lots_of_loop_invariants.cpp
       make_struct.cpp
@@ -240,6 +243,7 @@ tests(GROUPS correctness
       partial_realization.cpp
       partition_loops.cpp
       partition_loops_bug.cpp
+      partition_max_filter.cpp
       pipeline_set_jit_externs_func.cpp
       plain_c_includes.c
       popc_clz_ctz_bounds.cpp

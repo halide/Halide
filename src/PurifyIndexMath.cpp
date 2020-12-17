@@ -6,6 +6,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 class PurifyIndexMath : public IRMutator {
     using IRMutator::visit;
 
@@ -20,6 +22,8 @@ class PurifyIndexMath : public IRMutator {
         }
     }
 };
+
+}  // namespace
 
 Expr purify_index_math(const Expr &s) {
     return PurifyIndexMath().mutate(s);
