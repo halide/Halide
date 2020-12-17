@@ -333,6 +333,11 @@ TEST_CXX_FLAGS += -DTEST_OPENCL
 endif
 
 ifneq ($(TEST_METAL), )
+# Using Metal APIs requires writing Objective-C++ (or Swift). Add ObjC++
+# to allow tests to create and destroy Metal contexts, etc. This requires
+# tests to be valid Objective-C++, e.g. avoiding using the identifier "id"
+# in certain ways. In practice this is not enough of a problem to justify
+# the work to limit which files are compiled this way.
 TEST_CXX_FLAGS += -DTEST_METAL -ObjC++
 endif
 
