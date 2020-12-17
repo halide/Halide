@@ -10,7 +10,11 @@
 #include "Util.h"
 #include "WasmExecutor.h"
 
-#if defined(__powerpc__) && defined(__linux__)
+#if defined(__powerpc__)
+#if defined(__FreeBSD__)
+#include <machine/cpu.h>
+#include <sys/elf_common.h>
+#endif
 // This uses elf.h and must be included after "LLVM_Headers.h", which
 // uses llvm/support/Elf.h.
 #include <sys/auxv.h>
@@ -83,11 +87,17 @@ Target calculate_host_target() {
 #if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
 #else
-#if defined(__powerpc__) && defined(__linux__)
+#if defined(__powerpc__)
     Target::Arch arch = Target::POWERPC;
 
+#if defined(__linux__)
     unsigned long hwcap = getauxval(AT_HWCAP);
     unsigned long hwcap2 = getauxval(AT_HWCAP2);
+#elif defined(__FreeBSD__)
+    unsigned long hwcap, hwcap2;
+    elf_aux_info(AT_HWCAP, &hwcap, sizeof(hwcap));
+    elf_aux_info(AT_HWCAP2, &hwcap2, sizeof(hwcap2));
+#endif
     bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
     bool have_vsx = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
     bool arch_2_07 = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
