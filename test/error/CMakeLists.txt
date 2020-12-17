@@ -51,6 +51,7 @@ tests(GROUPS error
       lerp_mismatch.cpp
       lerp_signed_weight.cpp
       memoize_different_compute_store.cpp
+      memoize_redefine_eviction_key.cpp
       metal_vector_too_large.cpp
       missing_args.cpp
       no_default_device.cpp
