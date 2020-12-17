@@ -10,7 +10,7 @@
 #include "Util.h"
 #include "WasmExecutor.h"
 
-#if defined(__powerpc__)
+#if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
 #if defined(__FreeBSD__)
 #include <machine/cpu.h>
 #include <sys/elf_common.h>
