@@ -87,7 +87,7 @@ Target calculate_host_target() {
 #if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
 #else
-#if defined(__powerpc__)
+#if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
     Target::Arch arch = Target::POWERPC;
 
 #if defined(__linux__)
