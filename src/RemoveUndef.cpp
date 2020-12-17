@@ -10,6 +10,8 @@ namespace Internal {
 
 using std::vector;
 
+namespace {
+
 class RemoveUndef : public IRMutator {
 public:
     Expr predicate;
@@ -575,6 +577,8 @@ private:
         }
     }
 };
+
+}  // namespace
 
 Stmt remove_undef(Stmt s) {
     RemoveUndef r;

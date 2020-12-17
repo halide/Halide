@@ -764,9 +764,9 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
     return make(vectors, indices);
 }
 
-Expr Shuffle::make_broadcast(Expr vector, int lanes) {
-    std::vector<int> indices(lanes * vector.type().lanes());
-    for (int ix = 0; ix < lanes; ix++) {
+Expr Shuffle::make_broadcast(Expr vector, int factor) {
+    std::vector<int> indices(factor * vector.type().lanes());
+    for (int ix = 0; ix < factor; ix++) {
         std::iota(indices.begin() + ix * vector.type().lanes(),
                   indices.begin() + (ix + 1) * vector.type().lanes(), 0);
     }
@@ -791,18 +791,38 @@ Expr Shuffle::make_extract_element(Expr vector, int i) {
     return make_slice(std::move(vector), i, 1, 1);
 }
 
-bool Shuffle::is_broadcast(int factor) const {
+bool Shuffle::is_broadcast() const {
     int lanes = indices.size();
-    // Don't consider broadcast factor < 2
-    if (factor < 2 || factor > lanes) {
+    int factor = broadcast_factor();
+    if (factor == 0 || factor >= lanes) {
+        return false;
+    }
+    int broadcasted_lanes = lanes / factor;
+
+    if (broadcasted_lanes < 2 || broadcasted_lanes >= lanes || lanes % broadcasted_lanes != 0) {
         return false;
     }
     for (int i = 0; i < lanes; i++) {
-        if (indices[i % factor] != indices[i]) {
+        if (indices[i % broadcasted_lanes] != indices[i]) {
             return false;
         }
     }
     return true;
+}
+
+int Shuffle::broadcast_factor() const {
+    int lanes = indices.size();
+    int broadcasted_lanes = 0;
+    for (; broadcasted_lanes < lanes; broadcasted_lanes++) {
+        if (indices[broadcasted_lanes] != broadcasted_lanes) {
+            break;
+        }
+    }
+    if (broadcasted_lanes > 0) {
+        return lanes / broadcasted_lanes;
+    } else {
+        return 0;
+    }
 }
 
 bool Shuffle::is_interleave() const {

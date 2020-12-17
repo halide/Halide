@@ -602,14 +602,14 @@ enum RuntimeKind {
     OpenCL,
     Metal,
     CUDA,
-    OpenGL,
+    OpenGL,  // NOTE: this feature is deprecated and will be removed in Halide 12.
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
-    OpenGLDebug,
+    OpenGLDebug,  // NOTE: this feature is deprecated and will be removed in Halide 12.
     OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,

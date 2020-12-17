@@ -198,7 +198,6 @@ bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
     }
     return false;
 }
-}  // namespace
 
 class BoundsInference : public IRMutator {
 public:
@@ -1254,6 +1253,8 @@ public:
         return stmt;
     }
 };
+
+}  // namespace
 
 Stmt bounds_inference(Stmt s,
                       const vector<Function> &outputs,

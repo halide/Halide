@@ -76,7 +76,7 @@ enum class IRNodeType {
     Atomic
 };
 
-constexpr IRNodeType StrongestExprNodeType = IRNodeType::Shuffle;
+constexpr IRNodeType StrongestExprNodeType = IRNodeType::VectorReduce;
 
 /** The abstract base classes for a node in the Halide IR. */
 struct IRNode {

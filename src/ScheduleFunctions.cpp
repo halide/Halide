@@ -31,6 +31,7 @@ using std::string;
 using std::vector;
 
 namespace {
+
 // A structure representing a containing LetStmt, IfThenElse, or For
 // loop. Used in build_provide_loop_nest below. Both If and IfInner represent
 // IfThenElse stmts, however, IfInner should not be reordered to outside of
@@ -56,8 +57,6 @@ bool var_name_match(const string &v1, const string &v2) {
             Internal::ends_with(v1, "." + v2) ||
             Internal::ends_with(v2, "." + v1));
 }
-
-}  // anonymous namespace
 
 class ContainsImpureCall : public IRVisitor {
     using IRVisitor::visit;
@@ -2284,6 +2283,8 @@ bool group_should_be_inlined(const vector<Function> &funcs) {
             funcs[0].can_be_inlined() &&
             funcs[0].schedule().compute_level().is_inlined());
 }
+
+}  // namespace
 
 std::ostream &operator<<(std::ostream &out, const std::vector<Function> &v) {
     out << "{ ";

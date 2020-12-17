@@ -82,7 +82,7 @@ struct Target {
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        OpenGL = halide_target_feature_opengl,
+        OpenGL = halide_target_feature_opengl,  // NOTE: this feature is deprecated and will be removed in Halide 12.
         OpenGLCompute = halide_target_feature_openglcompute,
         EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
