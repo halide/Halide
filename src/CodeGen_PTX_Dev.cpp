@@ -431,6 +431,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         enum {
             SwapOps = 1 << 0,  // This happens before narrowing op 1 below.
             NarrowOp1 = 1 << 1,
+            NarrowUnsignedOp1 = 1 << 2,
         };
     };
     static Expr wild_i8x = Variable::make(Int(8, 0), "*");
@@ -447,13 +448,13 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         {VectorReduce::Add, 4, i32(widening_mul(wild_u8x, wild_i8x)), "dp4a_u32_s32"},
         {VectorReduce::Add, 4, u32(widening_mul(wild_u8x, wild_u8x)), "dp4a_u32_u32"},
         {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_i16x), "dp2a_s32_s32", Pattern::NarrowOp1},
-        {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_u16x), "dp2a_s32_u32", Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_i16x), "dp2a_s32_u32", Pattern::NarrowUnsignedOp1},
         {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_i16x), "dp2a_u32_s32", Pattern::NarrowOp1},
-        {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a_u32_u32", Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a_u32_u32", Pattern::NarrowUnsignedOp1},
         {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_i16x), "dp2a_s32_s32", Pattern::SwapOps | Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_i16x), "dp2a_s32_u32", Pattern::SwapOps | Pattern::NarrowUnsignedOp1},
         {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_u16x), "dp2a_u32_s32", Pattern::SwapOps | Pattern::NarrowOp1},
-        {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_i16x), "dp2a_s32_u32", Pattern::SwapOps | Pattern::NarrowOp1},
-        {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a_u32_u32", Pattern::SwapOps | Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a_u32_u32", Pattern::SwapOps | Pattern::NarrowUnsignedOp1},
     };
     // clang-format on
 
@@ -475,14 +476,16 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         }
         if (p.flags & Pattern::NarrowOp1) {
             // This pattern needs the second operand to be narrowed further.
-            Expr b_narrow = lossless_cast(b.type().narrow(), b);
-            if (!b_narrow.defined()) {
-                b_narrow = lossless_cast(b.type().narrow().with_code(halide_type_uint), b);
-                if (!b_narrow.defined()) {
-                    continue;
-                }
+            b = lossless_cast(b.type().narrow(), b);
+            if (!b.defined()) {
+                continue;
             }
-            b = b_narrow;
+        } else if (p.flags & Pattern::NarrowUnsignedOp1) {
+            // This pattern needs the second operand to be narrowed further.
+            b = lossless_cast(b.type().narrow().with_code(halide_type_uint), b);
+            if (!b.defined()) {
+                continue;
+            }
         }
         Expr i = init;
         if (!i.defined()) {
