@@ -2927,7 +2927,7 @@ Node convert_lrn_node(
     float bias = 1.0f;
     bool found_size = false;
     int size = 0;
-    for (const auto attr : node.attribute()) {
+    for (const auto &attr : node.attribute()) {
         if (attr.name() == "alpha") {
             alpha = attr.f();
         } else if (attr.name() == "beta") {

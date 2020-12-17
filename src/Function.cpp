@@ -175,6 +175,8 @@ void destroy<FunctionGroup>(const FunctionGroup *f) {
     delete f;
 }
 
+namespace {
+
 // All variables present in any part of a function definition must
 // either be pure args, elements of the reduction domain, parameters
 // (i.e. attached to some Parameter object), or part of a let node
@@ -280,9 +282,9 @@ public:
 };
 
 // A counter to use in tagging random variables
-namespace {
 std::atomic<int> rand_counter{0};
-}
+
+}  // namespace
 
 Function::Function(const FunctionPtr &ptr)
     : contents(ptr) {

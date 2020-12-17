@@ -16,6 +16,8 @@ using std::pair;
 using std::string;
 using std::vector;
 
+namespace {
+
 /* Find all the externally referenced buffers in a stmt */
 class FindBuffers : public IRGraphVisitor {
 public:
@@ -709,6 +711,8 @@ Stmt add_image_checks_inner(Stmt s,
 
     return s;
 }
+
+}  // namespace
 
 // The following function repeats the arguments list it just passes
 // through six times. Surely there is a better way?

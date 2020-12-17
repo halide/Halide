@@ -12,6 +12,8 @@ namespace Internal {
 using std::string;
 using std::vector;
 
+namespace {
+
 /** Normalizes image loads/stores and produces glsl_texture_load/stores. */
 class InjectOpenGLIntrinsics : public IRMutator {
 public:
@@ -89,6 +91,8 @@ private:
         }
     }
 };
+
+}  // namespace
 
 Stmt inject_opengl_intrinsics(const Stmt &s) {
     InjectOpenGLIntrinsics gl;
