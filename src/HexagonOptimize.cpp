@@ -855,6 +855,9 @@ private:
         };
 
         static const vector<Pattern> casts = {
+            // Halving unsigned subtract.
+            {"halide.hexagon.navg.vub.vub", i8(widening_sub(wild_u8x, wild_u8x) >> u16(1))},
+
             // Saturating narrowing casts with rounding
             {"halide.hexagon.trunc_satub_rnd.vh", u8_sat(rounding_shift_right(wild_i16x, u16(8))), Pattern::DeinterleaveOp0},
             {"halide.hexagon.trunc_satb_rnd.vh", i8_sat(rounding_shift_right(wild_i16x, u16(8))), Pattern::DeinterleaveOp0},
@@ -1158,6 +1161,7 @@ class VectorReducePatterns : public IRMutator {
                 SwapOps = 1 << 3,  // Swapping ops is done before matching B to scalars.
             };
             int factor;
+            int native_return_bits;
             Expr pattern;
             int flags;
         };
@@ -1171,59 +1175,59 @@ class VectorReducePatterns : public IRMutator {
         static const vector<Signature> sigs = {
             // --------- vrmpy ---------
             // Sliding window
-            {4, u32(widening_mul(wild_u8x, wild_u8x)), Signature::SlidingWindow | Signature::ScalarB},
-            {4, i32(widening_mul(wild_u8x, wild_i8x)), Signature::SlidingWindow | Signature::ScalarB},
-            {4, i32(widening_mul(wild_i8x, wild_u8x)), Signature::SlidingWindow | Signature::ScalarB | Signature::SwapOps},
+            {4, 32, widening_mul(wild_u8x, wild_u8x), Signature::SlidingWindow | Signature::ScalarB},
+            {4, 32, widening_mul(wild_u8x, wild_i8x), Signature::SlidingWindow | Signature::ScalarB},
+            {4, 32, widening_mul(wild_i8x, wild_u8x), Signature::SlidingWindow | Signature::ScalarB | Signature::SwapOps},
             // Vector * Scalar
-            {4, u32(widening_mul(wild_u8x, wild_u8x)), Signature::ScalarB},
-            {4, i32(widening_mul(wild_i8x, wild_u8x)), Signature::ScalarB},
-            {4, i32(widening_mul(wild_u8x, wild_i8x)), Signature::ScalarB},
-            {4, i32(widening_mul(wild_i8x, wild_u8x)), Signature::ScalarB | Signature::SwapOps},
+            {4, 32, widening_mul(wild_u8x, wild_u8x), Signature::ScalarB},
+            {4, 32, widening_mul(wild_i8x, wild_u8x), Signature::ScalarB},
+            {4, 32, widening_mul(wild_u8x, wild_i8x), Signature::ScalarB},
+            {4, 32, widening_mul(wild_i8x, wild_u8x), Signature::ScalarB | Signature::SwapOps},
             // Vector * Vector
-            {4, u32(widening_mul(wild_u8x, wild_u8x))},
-            {4, i32(widening_mul(wild_u8x, wild_i8x))},
-            {4, i32(widening_mul(wild_i8x, wild_u8x)), Signature::SwapOps},
-            {4, i32(widening_mul(wild_i8x, wild_i8x))},
+            {4, 32, widening_mul(wild_u8x, wild_u8x)},
+            {4, 32, widening_mul(wild_u8x, wild_i8x)},
+            {4, 32, widening_mul(wild_i8x, wild_u8x), Signature::SwapOps},
+            {4, 32, widening_mul(wild_i8x, wild_i8x)},
             // Sum
-            {4, u32(wild_u8x), Signature::SlidingWindow},
-            {4, i32(wild_u8x), Signature::SlidingWindow},
-            {4, i32(wild_i8x), Signature::SlidingWindow},
-            {4, u32(wild_u8x)},
-            {4, i32(wild_u8x)},
-            {4, i32(wild_i8x)},
+            {4, 32, wild_u8x, Signature::SlidingWindow},
+            {4, 32, wild_u8x, Signature::SlidingWindow},
+            {4, 32, wild_i8x, Signature::SlidingWindow},
+            {4, 32, wild_u8x},
+            {4, 32, wild_u8x},
+            {4, 32, wild_i8x},
 
             // --------- vtmpy ---------
             // Vtmpy has additional requirement that third coefficient b[2]
             // needs to be 1.
             // Sliding window
-            {3, widening_mul(wild_i8x, wild_i8x), Signature::SlidingWindow | Signature::ScalarB},
-            {3, widening_mul(wild_u8x, wild_i8x), Signature::SlidingWindow | Signature::ScalarB},
-            {3, widening_mul(wild_i8x, wild_u8x), Signature::SlidingWindow | Signature::ScalarB | Signature::SwapOps},
-            {3, widening_mul(wild_i16x, wild_i16x), Signature::SlidingWindow | Signature::ScalarB},
+            {3, 16, widening_mul(wild_i8x, wild_i8x), Signature::SlidingWindow | Signature::ScalarB},
+            {3, 16, widening_mul(wild_u8x, wild_i8x), Signature::SlidingWindow | Signature::ScalarB},
+            {3, 16, widening_mul(wild_i8x, wild_u8x), Signature::SlidingWindow | Signature::ScalarB | Signature::SwapOps},
+            {3, 32, widening_mul(wild_i16x, wild_i16x), Signature::SlidingWindow | Signature::ScalarB},
             // Sum
-            {3, i16(wild_i8x), Signature::SlidingWindow},
-            {3, i16(wild_u8x), Signature::SlidingWindow},
-            {3, i32(wild_i16x), Signature::SlidingWindow},
+            {3, 16, wild_i8x, Signature::SlidingWindow},
+            {3, 16, wild_u8x, Signature::SlidingWindow},
+            {3, 32, wild_i16x, Signature::SlidingWindow},
 
             // --------- vdmpy ---------
             // Sliding window
-            {2, widening_mul(wild_u8x, wild_i8x), Signature::SlidingWindow | Signature::ScalarB},
-            {2, widening_mul(wild_i8x, wild_u8x), Signature::SlidingWindow | Signature::ScalarB | Signature::SwapOps},
-            {2, widening_mul(wild_i16x, wild_i16x), Signature::SlidingWindow | Signature::ScalarB},
+            {2, 16, widening_mul(wild_u8x, wild_i8x), Signature::SlidingWindow | Signature::ScalarB},
+            {2, 16, widening_mul(wild_i8x, wild_u8x), Signature::SlidingWindow | Signature::ScalarB | Signature::SwapOps},
+            {2, 32, widening_mul(wild_i16x, wild_i16x), Signature::SlidingWindow | Signature::ScalarB},
             // Vector * Scalar
-            {2, widening_mul(wild_u8x, wild_i8x), Signature::ScalarB},
-            {2, widening_mul(wild_i8x, wild_u8x), Signature::ScalarB | Signature::SwapOps},
-            {2, widening_mul(wild_i16x, wild_i16x), Signature::ScalarB | Signature::NarrowB},
-            {2, widening_mul(wild_i16x, wild_u16x), Signature::ScalarB},                       // Saturates
-            {2, widening_mul(wild_u16x, wild_i16x), Signature::ScalarB | Signature::SwapOps},  // Saturates
-            {2, widening_mul(wild_i16x, wild_i16x), Signature::ScalarB},                       // Saturates
+            {2, 16, widening_mul(wild_u8x, wild_i8x), Signature::ScalarB},
+            {2, 16, widening_mul(wild_i8x, wild_u8x), Signature::ScalarB | Signature::SwapOps},
+            {2, 32, widening_mul(wild_i16x, wild_i16x), Signature::ScalarB | Signature::NarrowB},
+            {2, 32, widening_mul(wild_i16x, wild_u16x), Signature::ScalarB},                       // Saturates
+            {2, 32, widening_mul(wild_u16x, wild_i16x), Signature::ScalarB | Signature::SwapOps},  // Saturates
+            {2, 32, widening_mul(wild_i16x, wild_i16x), Signature::ScalarB},                       // Saturates
             // Vector * Vector
-            {2, widening_mul(wild_i16x, wild_i16x)},  // Saturates
+            {2, 32, widening_mul(wild_i16x, wild_i16x)},  // Saturates
             // Sum
-            {2, i16(wild_u8x), Signature::SlidingWindow},
-            {2, i32(wild_i16x), Signature::SlidingWindow},
-            {2, i16(wild_u8x)},
-            {2, i32(wild_i16x)},
+            {2, 16, wild_u8x, Signature::SlidingWindow},
+            {2, 32, wild_i16x, Signature::SlidingWindow},
+            {2, 16, wild_u8x},
+            {2, 32, wild_i16x},
         };
         // clang-format on
         std::vector<Expr> matches;
@@ -1231,7 +1235,20 @@ class VectorReducePatterns : public IRMutator {
             if (factor != sig.factor) {
                 continue;
             }
-            if (!expr_match(sig.pattern, op->value, matches)) {
+            // Try matching the pattern with any number of bits between the pattern type and the native result.
+            for (int bits = sig.pattern.type().bits(); bits <= sig.native_return_bits; bits *= 2) {
+                matches.clear();
+                Expr pattern = sig.pattern;
+                if (bits != pattern.type().bits()) {
+                    // Allow the widening cast to cast to the type of the result, which may
+                    // differ from the pattern.
+                    pattern = Cast::make(op->type.with_bits(bits).with_lanes(0), pattern);
+                }
+                if (expr_match(pattern, op->value, matches)) {
+                    break;
+                }
+            }
+            if (matches.empty()) {
                 continue;
             }
 
@@ -1243,13 +1260,14 @@ class VectorReducePatterns : public IRMutator {
 
             if (sig.flags & Signature::ScalarB) {
                 if (const Shuffle *shuff = b.as<Shuffle>()) {
-                    if (shuff->is_broadcast(factor)) {
+                    if (shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
                         internal_assert(shuff->vectors.size() == 1);
                         b = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
                     }
                 } else if (const Shuffle *shuff = a.as<Shuffle>()) {
                     // If the types are equal, we can commute the ops.
-                    if (a.type().element_of() == b.type().element_of() && shuff->is_broadcast(factor)) {
+                    if (a.type().element_of() == b.type().element_of() &&
+                        shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
                         internal_assert(shuff->vectors.size() == 1);
                         a = Shuffle::make_slice(shuff->vectors[0], 0, 1, factor);
                         std::swap(a, b);
@@ -1337,25 +1355,28 @@ class VectorReducePatterns : public IRMutator {
                 suffix += type_suffix(b);
             }
 
+            Type result_type = op->type.with_bits(sig.native_return_bits);
+
+            Expr result;
             if (factor == 4) {
                 if (sig.flags & Signature::SlidingWindow) {
-                    return halide_hexagon_add_4mpy(op->type, suffix + ".stencil", a, b);
+                    result = halide_hexagon_add_4mpy(result_type, suffix + ".stencil", a, b);
                 } else {
-                    Expr new_expr = halide_hexagon_add_4mpy(op->type.with_bits(32), suffix, a, b);
-                    if (op->type.bits() == 16) {
-                        new_expr = Call::make(op->type, "halide.hexagon.pack.vw", {new_expr}, Call::PureExtern);
-                    }
-                    return new_expr;
+                    result = halide_hexagon_add_4mpy(result_type, suffix, a, b);
                 }
             } else {
                 if (sig.flags & Signature::SlidingWindow) {
                     string name = "halide.hexagon.add_" + std::to_string(factor) + "mpy" + suffix;
-                    return native_interleave(Call::make(op->type, name, {a, b}, Call::PureExtern));
+                    result = native_interleave(Call::make(result_type, name, {a, b}, Call::PureExtern));
                 } else {
                     // factor == 3 has only sliding window reductions.
-                    return halide_hexagon_add_2mpy(op->type, suffix, a, b);
+                    result = halide_hexagon_add_2mpy(result_type, suffix, a, b);
                 }
             }
+            if (result.type() != op->type) {
+                result = Cast::make(op->type, result);
+            }
+            return result;
         }
         return IRMutator::visit(op);
     }

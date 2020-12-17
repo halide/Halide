@@ -735,7 +735,7 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vavgwrnd), i32v1, "avg_rnd.vw.vw", {i32v1, i32v1}},
 
      // This one is weird: i8_sat((u8 - u8)/2). It both saturates and averages.
-    //{INTRINSIC_128B(vnavgub), i8v1, "navg.vub.vub", {u8v1, u8v1}},
+    {INTRINSIC_128B(vnavgub), i8v1, "navg.vub.vub", {u8v1, u8v1}},
     {INTRINSIC_128B(vnavgh), i16v1, "navg.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vnavgw), i32v1, "navg.vw.vw", {i32v1, i32v1}},
     {INTRINSIC_128B(vavgb), i8v1, "avg.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
