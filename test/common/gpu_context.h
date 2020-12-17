@@ -9,10 +9,6 @@
 #include <CL/cl.h>
 #endif
 
-// Just use a global context and queue, created and destroyed by main.
-cl_context cl_ctx = nullptr;
-cl_command_queue cl_q = nullptr;
-
 // Create the global context. This is just a helper function not called by Halide.
 bool create_opencl_context(cl_context &cl_ctx, cl_command_queue &cl_q) {
     cl_int err = 0;
