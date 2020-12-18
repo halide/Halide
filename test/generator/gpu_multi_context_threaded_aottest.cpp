@@ -42,8 +42,8 @@ bool init_context(gpu_context &context) {
 
 void destroy_context(gpu_context &context) {
     destroy_opencl_context(context.cl_ctx, context.cl_q);
-    cl_q = nullptr;
-    cl_ctx = nullptr;
+    context.cl_q = nullptr;
+    context.cl_ctx = nullptr;
 }
 
 // These functions replace the acquire/release implementation in src/runtime/opencl.cpp.
