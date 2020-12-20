@@ -1398,6 +1398,77 @@ namespace Internal {
 Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 }  // namespace Internal
 
+/** Scatter and gather are used for update definition which must store
+ * multiple values to distinct locations at the same time. The
+ * multiple expressions on the right-hand-side are bundled together
+ * into a "gather", which must match a "scatter" the the same number
+ * of arguments on the left-hand-size. For example, to store the
+ * values 1 and 2 to the locations (x, y, 3) and (x, y, 4),
+ * respectively:
+ *
+\code
+f(x, y, scatter(3, 4)) = gather(1, 2);
+\endcode
+ *
+ * The result of gather or scatter can be treated as an
+ * expression. Any containing operations on it can be assumed to
+ * distribute over the elements. If two gather expressions are
+ * combined with an arithmetic operator (e.g. added), they combine
+ * element-wise. The following example stores the values 2 * x, 2 * y,
+ * and 2 * c to the locations (x + 1, y, c), (x, y + 3, c), and (x, y,
+ * c + 2) respectively:
+ *
+\code
+f(x + scatter(1, 0, 0), y + scatter(0, 3, 0), c + scatter(0, 0, 2)) = 2 * gather(x, y, c);
+\endcode
+*
+* Gathers are most useful for algorithms which require in-place
+* swapping or permutation of multiple elements, or other kinds of
+* in-place mutations that require loading multiple inputs, doing some
+* operations to them jointly, then storing them again. The following
+* update definition swaps the values of f at locations 3 and 5 if an
+* input parameter p is true:
+*
+\code
+f(scatter(3, 5)) = f(select(p, gather(5, 3), gather(3, 5)));
+\endcode
+*
+* For more examples of the use of scatter and gather, see
+* test/correctness/multiple_scatter.cpp
+*
+* It is not currently possible to use scatter and gather to write an
+* update definition in which the *number* of values loaded or stored
+* varies, as the size of the scatter/gather packet must be fixed a
+* compile-time. A workaround is to make the unwanted extra operations
+* a redundant copy of the last operation, which will be
+* dead-code-eliminated by the compiler. For example, the following
+* update definition swaps the values at locations 3 and 5 when the
+* parameter p is true, and rotates the values at locations 1, 2, and 3
+* when it is false. The load from 3 and store to 5 will be redundantly
+* repeated:
+*
+\code
+f(select(p, scatter(3, 5, 5), scatter(1, 2, 3))) = f(select(p, gather(5, 3, 3), gather(2, 3, 1)));
+\endcode
+*
+* Note that in the p == true case, we redudantly load from 3 and write
+* to 5 twice.
+*/
+//@{
+Expr scatter(const std::vector<Expr> &args);
+Expr gather(const std::vector<Expr> &args);
+
+template<typename... Args>
+Expr scatter(Expr e, Args... args) {
+    return scatter({e, args...});
+}
+
+template<typename... Args>
+Expr gather(Expr e, Args... args) {
+    return gather({e, args...});
+}
+// @}
+
 }  // namespace Halide
 
 #endif

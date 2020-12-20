@@ -4,31 +4,6 @@ using namespace Halide;
 
 using std::vector;
 
-Expr make_scatter_gather(const vector<Expr> &args) {
-    return Halide::Internal::Call::make(args[0].type(),
-                                        Halide::Internal::Call::scatter_gather,
-                                        args,
-                                        Halide::Internal::Call::PureIntrinsic);
-}
-
-template<typename... Args>
-Expr scatter(Expr e, Args... args) {
-    return make_scatter_gather({e, args...});
-}
-
-template<typename... Args>
-Expr gather(Expr e, Args... args) {
-    return make_scatter_gather({e, args...});
-}
-
-Expr scatter(const vector<Expr> &args) {
-    return make_scatter_gather(args);
-}
-
-Expr gather(const vector<Expr> &args) {
-    return make_scatter_gather(args);
-}
-
 int main(int argc, char **argv) {
     // Implement a sorting network using update definitions that write to multiple outputs
 
