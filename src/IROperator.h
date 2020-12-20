@@ -1459,13 +1459,13 @@ Expr scatter(const std::vector<Expr> &args);
 Expr gather(const std::vector<Expr> &args);
 
 template<typename... Args>
-Expr scatter(Expr e, Args... args) {
-    return scatter({e, args...});
+Expr scatter(const Expr &e, Args &&... args) {
+    return scatter({e, std::forward<Args>(args)...});
 }
 
 template<typename... Args>
-Expr gather(Expr e, Args... args) {
-    return gather({e, args...});
+Expr gather(const Expr &e, Args &&... args) {
+    return gather({e, std::forward<Args>(args)...});
 }
 // @}
 
