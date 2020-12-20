@@ -28,6 +28,8 @@ using std::set;
 using std::string;
 using std::vector;
 
+namespace {
+
 class StripLets : public IRGraphMutator {
 public:
     using IRGraphMutator::visit;
@@ -35,6 +37,8 @@ public:
         return mutate(op->body);
     }
 };
+
+}  // namespace
 
 vector<int> gather_variables(const Expr &expr,
                              const vector<string> &filter) {
@@ -130,6 +134,8 @@ Expr add_let_expression(const Expr &expr,
     return ret;
 }
 
+namespace {
+
 /** Gather the expression DAG and sort them in topological order
  */
 class ExpressionSorter : public IRGraphVisitor {
@@ -197,6 +203,8 @@ void ExpressionSorter::include(const Expr &e) {
         expr_list.push_back(e);
     }
 }
+
+}  // namespace
 
 vector<Expr> sort_expressions(const Expr &expr) {
     ExpressionSorter sorter;
@@ -330,6 +338,8 @@ vector<string> vars_to_strings(const vector<Var> &vars) {
     return ret;
 }
 
+namespace {
+
 class RDomExtractor : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
@@ -347,6 +357,8 @@ public:
 private:
     ReductionDomain rdom;
 };
+
+}  // namespace
 
 ReductionDomain extract_rdom(const Expr &expr) {
     RDomExtractor extractor;
@@ -382,6 +394,8 @@ pair<bool, Expr> solve_inverse(Expr expr,
     r.where(cond);
     return {true, rmin + r.x};
 }
+
+namespace {
 
 struct BufferDimensionsFinder : public IRGraphVisitor {
 public:
@@ -429,10 +443,14 @@ public:
     map<string, BufferInfo> buffer_calls;
 };
 
+}  // namespace
+
 map<string, BufferInfo> find_buffer_param_calls(const Func &func) {
     BufferDimensionsFinder finder;
     return finder.find(func);
 }
+
+namespace {
 
 struct ImplicitVariablesFinder : public IRGraphVisitor {
 public:
@@ -452,6 +470,8 @@ public:
 
     set<string> implicit_variables;
 };
+
+}  // namespace
 
 set<string> find_implicit_variables(const Expr &expr) {
     ImplicitVariablesFinder finder;
@@ -476,6 +496,8 @@ Expr substitute_rdom_predicate(
     }
     return substituted;
 }
+
+namespace {
 
 struct FunctionCallFinder : public IRGraphVisitor {
 public:
@@ -524,6 +546,8 @@ public:
     bool found;
 };
 
+}  // namespace
+
 bool is_calling_function(
     const string &func_name, const Expr &expr,
     const map<string, Expr> &let_var_mapping) {
@@ -537,6 +561,8 @@ bool is_calling_function(
     FunctionCallFinder finder;
     return finder.find(expr, let_var_mapping);
 }
+
+namespace {
 
 struct SubstituteCallArgWithPureArg : public IRMutator {
 public:
@@ -559,6 +585,8 @@ protected:
     Func f;
     int variable_id;
 };
+
+}  // namespace
 
 Expr substitute_call_arg_with_pure_arg(Func f, int variable_id, const Expr &e) {
     return simplify(SubstituteCallArgWithPureArg(std::move(f), variable_id).mutate(e));

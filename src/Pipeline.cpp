@@ -1075,6 +1075,10 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
+    if (t.has_feature(Target::OpenGL)) {
+        user_warning << "WARNING: OpenGL is deprecated in Halide 11 and will be removed in Halide 12.\n";
+    }
+
     debug(2) << "Realizing Pipeline for " << target << "\n";
 
     if (target.has_unknowns()) {

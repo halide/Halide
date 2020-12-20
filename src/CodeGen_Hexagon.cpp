@@ -62,6 +62,7 @@ Stmt call_halide_qurt_hvx_lock(const Target &target) {
         AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
     return check_hvx_lock;
 }
+
 Stmt call_halide_qurt_hvx_unlock() {
     Expr hvx_unlock =
         Call::make(Int(32), "halide_qurt_hvx_unlock", {}, Call::Extern);
@@ -73,6 +74,7 @@ Stmt call_halide_qurt_hvx_unlock() {
                                        hvx_unlock_result_var));
     return check_hvx_unlock;
 }
+
 // Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
 // as a destructor if successful.
 Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
@@ -89,6 +91,7 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
     stmt = Block::make(check_hvx_lock, stmt);
     return stmt;
 }
+
 bool is_dense_ramp(const Expr &x) {
     const Ramp *r = x.as<Ramp>();
     if (!r) {
