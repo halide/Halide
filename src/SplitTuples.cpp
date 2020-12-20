@@ -449,17 +449,20 @@ class SplitScatterGather : public IRMutator {
         // Fork the args and the RHS into their various versions
         vector<Stmt> provides;
         vector<string> names;
-        vector<Expr> rhs_values;
+        vector<Expr> exprs;
         for (extractor.idx = 0; extractor.idx < size; extractor.idx++) {
             vector<Expr> args = op->args;
             for (Expr &a : args) {
-                a = extractor.mutate(a);
+                string name = unique_name('t');
+                exprs.push_back(extractor.mutate(a));
+                names.push_back(name);
+                a = Variable::make(a.type(), name);
             }
             vector<Expr> values = op->values;
             for (Expr &v : values) {
                 v = extractor.mutate(v);
                 string name = unique_name('t');
-                rhs_values.push_back(extractor.mutate(v));
+                exprs.push_back(extractor.mutate(v));
                 names.push_back(name);
                 v = Variable::make(v.type(), name);
             }
@@ -467,10 +470,9 @@ class SplitScatterGather : public IRMutator {
         }
 
         Stmt s = Block::make(provides);
-
-        // We just duplicated all the non-tuple stuff on the RHS too,
-        // so do joint CSE on the rhs_values
-        Expr bundle = Call::make(Int(32), Call::bundle, rhs_values, Call::PureIntrinsic);
+        // We just duplicated all the non-tuple stuff too,
+        // so do joint CSE on the exprs
+        Expr bundle = Call::make(Int(32), Call::bundle, exprs, Call::PureIntrinsic);
         bundle = common_subexpression_elimination(bundle);
 
         vector<pair<string, Expr>> lets;
@@ -480,7 +482,7 @@ class SplitScatterGather : public IRMutator {
         }
         const Call *c = bundle.as<Call>();
         internal_assert(c && c->is_intrinsic(Call::bundle));
-        for (size_t i = 0; i < rhs_values.size(); i++) {
+        for (size_t i = 0; i < exprs.size(); i++) {
             if (is_pure(c->args[i])) {
                 // names[i] is only used once, so if the value is pure
                 // it should be substituted in
