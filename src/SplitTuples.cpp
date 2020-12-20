@@ -367,18 +367,25 @@ class SplitScatterGather : public IRMutator {
             }
         }
 
-        // Just for error messages. The default value should not
-        // currently be possible to hit.
-        string producer_name = "(tuple expression not part of a Func definition)";
-
     public:
+        string producer_name;
         int result = 0;
-        GetScatterGatherSize(const ProducerConsumer *producer) {
-            if (producer) {
-                producer_name = producer->name;
-            }
+    } get_scatter_gather_size_visitor;
+
+    int get_scatter_gather_size(const IRNode *op) {
+        if (producer) {
+            get_scatter_gather_size_visitor.producer_name = producer->name;
         }
-    };
+        get_scatter_gather_size_visitor.result = 0;
+        op->accept(&get_scatter_gather_size_visitor);
+
+        // Maybe the user did something like jam a gather op into a
+        // constraint or tile size, so this is a user_assert.
+        user_assert(producer || get_scatter_gather_size_visitor.result == 0)
+            << "scatter/gather expression used outside of a Func definition";
+
+        return get_scatter_gather_size_visitor.result;
+    }
 
     class ExtractScatterGatherElement : public IRMutator {
         using IRMutator::visit;
@@ -395,34 +402,29 @@ class SplitScatterGather : public IRMutator {
 
     public:
         int idx;
-    };
+    } extractor;
 
     Stmt visit(const ProducerConsumer *op) override {
         ScopedValue<const ProducerConsumer *> old(producer, op->is_producer ? op : producer);
         return IRMutator::visit(op);
     }
 
-    Stmt visit(const LetStmt *op) override {
-        GetScatterGatherSize get_scatter_gather_size(producer);
-        op->value.accept(&get_scatter_gather_size);
-        if (get_scatter_gather_size.result == 0) {
-            return IRMutator::visit(op);
-        }
-
-        // Split this variable into the tuple components
-        ExtractScatterGatherElement extractor;
-
+    Stmt visit_gather_let_stmt(const LetStmt *op, int size) {
+        // Split this variable into the gather components
         vector<pair<string, Expr>> lets;
         vector<Expr> vars;
-        for (extractor.idx = 0; extractor.idx < get_scatter_gather_size.result; extractor.idx++) {
+        for (extractor.idx = 0; extractor.idx < size; extractor.idx++) {
             string name = unique_name(op->name + "." + std::to_string(extractor.idx));
             lets.emplace_back(name, extractor.mutate(op->value));
             vars.push_back(Variable::make(op->value.type(), name));
         }
 
         Stmt body = op->body;
-        Expr tuple_replacement = Call::make(op->value.type(), Call::scatter_gather, vars, Call::PureIntrinsic);
-        body = substitute(op->name, tuple_replacement, body);
+        Expr gather_replacement = Call::make(op->value.type(),
+                                             Call::scatter_gather,
+                                             vars,
+                                             Call::PureIntrinsic);
+        body = substitute(op->name, gather_replacement, body);
         body = mutate(body);
 
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
@@ -432,17 +434,43 @@ class SplitScatterGather : public IRMutator {
         return body;
     }
 
+    Stmt visit(const LetStmt *op) override {
+        vector<pair<string, Expr>> lets;
+        int size = 0;
+        Stmt body;
+        do {
+            body = op->body;
+            size = get_scatter_gather_size(op->value.get());
+            if (size != 0) {
+                break;
+            }
+            lets.emplace_back(op->name, op->value);
+            op = body.as<LetStmt>();
+        } while (op);
+
+        if (size) {
+            internal_assert(op);
+            body = visit_gather_let_stmt(op, size);
+        } else {
+            internal_assert(op == nullptr);
+            body = mutate(body);
+        }
+
+        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            body = LetStmt::make(it->first, it->second, body);
+        }
+
+        return body;
+    }
+
     Stmt visit(const Provide *op) override {
-        GetScatterGatherSize get_scatter_gather_size(producer);
-        op->accept(&get_scatter_gather_size);
-        int size = get_scatter_gather_size.result;
+        int size = get_scatter_gather_size(op);
 
         if (size == 0) {
             return IRMutator::visit(op);
         }
 
-        ExtractScatterGatherElement extractor;
-        // The LHS should contain at least one tuple, or our scatters
+        // The LHS should contain at least one scatter op, or our scatters
         // all go to the same place. Is it worth asserting this? It
         // could be a bug, or it could be some sort of degenerate base case.
 
@@ -470,7 +498,7 @@ class SplitScatterGather : public IRMutator {
         }
 
         Stmt s = Block::make(provides);
-        // We just duplicated all the non-tuple stuff too,
+        // We just duplicated all the non-scatter/gather stuff too,
         // so do joint CSE on the exprs
         Expr bundle = Call::make(Int(32), Call::bundle, exprs, Call::PureIntrinsic);
         bundle = common_subexpression_elimination(bundle);
