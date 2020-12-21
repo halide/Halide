@@ -869,7 +869,9 @@ int Target::natural_vector_size(const Halide::Type &t) const {
     const bool is_integer = t.is_int() || t.is_uint();
     const int data_size = t.bytes();
 
-    if (arch == Target::Hexagon) {
+    if (has_feature(Halide::Target::Xtensa)) {
+        return 64 / data_size;
+    } else if (arch == Target::Hexagon) {
         if (is_integer) {
             if (has_feature(Halide::Target::HVX)) {
                 return 128 / data_size;
