@@ -17,7 +17,7 @@ MAKEFLAGS += --no-builtin-rules
 UNAME = $(shell uname)
 
 ifeq ($(OS), Windows_NT)
-	$(error Halide no longer supports the MinGW environment.)
+    $(error Halide no longer supports the MinGW environment.)
 else
     # let's assume "normal" UNIX such as linux
     COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread -lz
