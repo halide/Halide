@@ -34,6 +34,9 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <llvm/ADT/StringMap.h>
+#if LLVM_VERSION >= 12
+#include <llvm/Analysis/AliasAnalysis.h>
+#endif
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
@@ -46,6 +49,9 @@
 #include <llvm/Object/ObjectFile.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/CodeGen.h>
+#if LLVM_VERSION >= 12
+#include <llvm/Support/CommandLine.h>
+#endif
 #include <llvm/Support/DataExtractor.h>
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/FileSystem.h>
