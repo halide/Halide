@@ -76,7 +76,7 @@ protected:
 
 private:
     /** Child code generator for device kernels. */
-    std::map<DeviceAPI, CodeGen_GPU_Dev *> cgdev;
+    std::map<DeviceAPI, std::unique_ptr<CodeGen_GPU_Dev>> cgdev;
 };
 
 }  // namespace Internal

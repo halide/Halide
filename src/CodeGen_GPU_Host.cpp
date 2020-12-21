@@ -104,7 +104,7 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
     // earlier ones.
     if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
-        cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
+        cgdev[DeviceAPI::GLSL] = std::make_unique<CodeGen_OpenGL_Dev>(target);
     }
     if (target.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Constructing OpenGL Compute device codegen\n";
@@ -146,7 +146,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     function_name = simple_name;
 
     // Create a new module for all of the kernels we find in this function.
-    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+    for (pair<const DeviceAPI, std::unique_ptr<CodeGen_GPU_Dev>> &i : cgdev) {
         i.second->init_module();
     }
 
@@ -176,9 +176,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     // Fill out the init kernels block
     builder->SetInsertPoint(init_kernels_bb);
 
-    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+    for (pair<const DeviceAPI, std::unique_ptr<CodeGen_GPU_Dev>> &i : cgdev) {
 
-        CodeGen_GPU_Dev *gpu_codegen = i.second;
+        CodeGen_GPU_Dev *gpu_codegen = i.second.get();
         std::string api_unique_name = gpu_codegen->api_unique_name();
 
         // If the module state for this API/function did not get created, there were
@@ -336,7 +336,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             }
         }
 
-        CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api];
+        CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api].get();
         user_assert(gpu_codegen != nullptr)
             << "Loop is scheduled on device " << loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";

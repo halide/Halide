@@ -1373,8 +1373,8 @@ std::string CodeGen_D3D12Compute_Dev::print_gpu_name(const std::string &name) {
 
 }  // namespace
 
-CodeGen_GPU_Dev *new_CodeGen_D3D12Compute_Dev(const Target &target) {
-    return new CodeGen_D3D12Compute_Dev(target);
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_D3D12Compute_Dev(const Target &target) {
+    return std::make_unique<CodeGen_D3D12Compute_Dev>(target);
 }
 
 }  // namespace Internal
