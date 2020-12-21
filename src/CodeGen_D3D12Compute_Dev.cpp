@@ -55,6 +55,10 @@ public:
         return "d3d12compute";
     }
 
+    bool kernel_run_takes_types() const override {
+        return true;
+    }
+
 protected:
     friend struct StoragePackUnpack;
 
