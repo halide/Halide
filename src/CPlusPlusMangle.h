@@ -9,11 +9,11 @@
 #include <vector>
 
 #include "Expr.h"
-#include "Target.h"
 
 namespace Halide {
 
 struct ExternFuncArgument;
+struct Target;
 
 namespace Internal {
 

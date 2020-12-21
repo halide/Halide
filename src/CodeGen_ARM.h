@@ -10,13 +10,16 @@
 #include "CodeGen_Posix.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 /** A code generator that emits ARM code from a given Halide stmt. */
 class CodeGen_ARM : public CodeGen_Posix {
 public:
     /** Create an ARM code generator for the given arm target. */
-    CodeGen_ARM(Target);
+    CodeGen_ARM(const Target &);
 
 protected:
     using CodeGen_Posix::visit;

@@ -497,7 +497,7 @@ private:
     using IRMutator::visit;
 
     Scope<Interval> bounds;
-    Target target;
+    const Target &target;
 
     Expr visit(const Mul *op) override {
         static const vector<Pattern> scalar_muls = {
@@ -1178,9 +1178,7 @@ private:
     }
 
 public:
-    OptimizePatterns(Target t) {
-        target = t;
-    }
+    OptimizePatterns(const Target &t) : target(t) {}
 };
 
 class VectorReducePatterns : public IRMutator {
@@ -2619,7 +2617,7 @@ Stmt scatter_gather_generator(Stmt s) {
     return s;
 }
 
-Stmt optimize_hexagon_instructions(Stmt s, Target t) {
+Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
     // Convert some expressions to an equivalent form which get better
     // optimized in later stages for hexagon
     s = RearrangeExpressions().mutate(s);

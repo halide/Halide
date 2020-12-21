@@ -311,7 +311,7 @@ public:
 
 }  // namespace
 
-CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard)
+CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
       extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false), using_vector_typedefs(false) {
 

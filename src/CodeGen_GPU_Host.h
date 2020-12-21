@@ -8,15 +8,12 @@
 #include <map>
 #include <string>
 
-#include "CodeGen_ARM.h"
-#include "CodeGen_MIPS.h"
-#include "CodeGen_PowerPC.h"
-#include "CodeGen_RISCV.h"
-#include "CodeGen_WebAssembly.h"
-#include "CodeGen_X86.h"
 #include "IR.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 struct CodeGen_GPU_Dev;
@@ -29,7 +26,7 @@ public:
     /** Create a GPU code generator. GPU target is selected via
      * CodeGen_GPU_Options. Processor features can be enabled using the
      * appropriate flags from Target */
-    CodeGen_GPU_Host(Target);
+    CodeGen_GPU_Host(const Target &);
 
     ~CodeGen_GPU_Host() override;
 

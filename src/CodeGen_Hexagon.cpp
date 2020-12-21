@@ -41,7 +41,7 @@ namespace {
 class CodeGen_Hexagon : public CodeGen_Posix {
 public:
     /** Create a Hexagon code generator for the given Hexagon target. */
-    CodeGen_Hexagon(Target);
+    CodeGen_Hexagon(const Target &);
 
 protected:
     void compile_func(const LoweredFunc &f,
@@ -136,7 +136,7 @@ private:
     llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
 };
 
-CodeGen_Hexagon::CodeGen_Hexagon(Target t)
+CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
     : CodeGen_Posix(t) {
     user_assert(llvm_Hexagon_enabled)
         << "llvm build not configured with Hexagon target enabled.\n";

@@ -7,9 +7,10 @@
 
 #include <map>
 
-#include "Target.h"
-
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 class Function;

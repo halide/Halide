@@ -5,8 +5,8 @@
  * Support for linking LLVM modules that comprise the runtime.
  */
 
-#include "Target.h"
 #include <memory>
+#include <vector>
 
 namespace llvm {
 class GlobalValue;
@@ -16,6 +16,9 @@ class Triple;
 }  // namespace llvm
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 /** Return the llvm::Triple that corresponds to the given Halide Target */
