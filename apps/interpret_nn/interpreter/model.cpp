@@ -26,10 +26,8 @@ size_t sizeof_tensor_type(TensorType t) {
         return 1;
     case TensorType::Float64:
         return 8;
-#if TFLITE_VERSION >= 24
     case TensorType::Complex128:
         return 32;
-#endif
     // case TensorType::String:  fallthru
     // case TensorType::Bool:    fallthru
     default:
@@ -58,10 +56,8 @@ const char *to_string(TensorType t) {
         return "int8";
     case TensorType::Float64:
         return "float64";
-#if TFLITE_VERSION >= 24
     case TensorType::Complex128:
         return "complex128";
-#endif
     case TensorType::String:
         return "string";
     case TensorType::Bool:
@@ -94,9 +90,7 @@ halide_type_t to_halide_type(TensorType t) {
         return halide_type_t(halide_type_uint, 8);
 
     case TensorType::Complex64:
-#if TFLITE_VERSION >= 24
     case TensorType::Complex128:
-#endif
     case TensorType::String:
     default:
         CHECK(0) << "Unhandled type in to_halide_type";

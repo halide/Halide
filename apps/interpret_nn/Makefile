@@ -40,11 +40,9 @@ test: test_ops
 clean:
 	rm -rf $(BIN)
 
-# Choosing TFLite 2.3.0 because it's the most recent stable release with an Android AAR file available.
-# (Inexplicably, there doesn't seem to be an AAR for 2.3.1.)
-# Upgrade
+# Choosing TFLite 2.4.0 because it's the most recent stable release with an Android AAR file available.
 TFLITE_VERSION_MAJOR ?= 2
-TFLITE_VERSION_MINOR ?= 3
+TFLITE_VERSION_MINOR ?= 4
 TFLITE_VERSION_PATCH ?= 0
 
 TFLITE_VERSION = $(TFLITE_VERSION_MAJOR).$(TFLITE_VERSION_MINOR).$(TFLITE_VERSION_PATCH)
@@ -52,7 +50,7 @@ TFLITE_TAG = v$(TFLITE_VERSION)
 
 # Define `TFLITE_VERSION` here to allow for code that compiles against multiple versions of
 # TFLite (both the C API and the Schema). This deliberately ignores the 'patch' version so
-# 2.3.x is 23. (Yes, this is inadequate if a minor version ever goes above 9.)
+# 2.3.x is 23, 2.4.x is 24, etc. (Yes, this is inadequate if a minor version ever goes above 9.)
 APP_CXXFLAGS = -I$(MAKEFILE_DIR) -DTFLITE_VERSION=$(TFLITE_VERSION_MAJOR)$(TFLITE_VERSION_MINOR)
 
 # ---------------------- halide
