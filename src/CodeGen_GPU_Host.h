@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "CodeGen_GPU_Dev.h"
 #include "IR.h"
 
 namespace Halide {
@@ -15,9 +16,6 @@ namespace Halide {
 struct Target;
 
 namespace Internal {
-
-struct CodeGen_GPU_Dev;
-struct GPU_Argument;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 template<typename CodeGen_CPU>
@@ -27,8 +25,6 @@ public:
      * CodeGen_GPU_Options. Processor features can be enabled using the
      * appropriate flags from Target */
     CodeGen_GPU_Host(const Target &);
-
-    ~CodeGen_GPU_Host() override;
 
 protected:
     void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name) override;

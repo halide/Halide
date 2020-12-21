@@ -139,9 +139,6 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(const Target &target)
 }
 
 template<typename CodeGen_CPU>
-CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {}
-
-template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
                                                  const std::string &simple_name,
                                                  const std::string &extern_name) {
