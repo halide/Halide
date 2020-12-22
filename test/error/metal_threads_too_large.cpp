@@ -16,7 +16,8 @@ int main(int argc, char **argv) {
     im.set(input);
 
     Buffer<uint16_t> output(input.width(), input.height());
-    f.realize(output);
+    Target mac_target("x86-64-osx-metal-debug");
+    f.realize(output, mac_target);
     output.copy_to_host();
 
     for (int32_t i = 0; i < output.width(); i++) {

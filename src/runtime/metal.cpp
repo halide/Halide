@@ -803,6 +803,7 @@ WEAK int halide_metal_run(void *user_context,
         return -1;
     }
 
+#ifdef DEBUG_RUNTIME
     int64_t max_total_threads_per_threadgroup = get_max_total_threads_per_threadgroup(pipeline_state);
     if (max_total_threads_per_threadgroup < threadsX * threadsY * threadsZ) {
         error(user_context) << "Metal: threadsX(" << threadsX << ") * threadsY(" << threadsY << ") * threadsZ(" << threadsZ << ") (" << (threadsX * threadsY * threadsZ) << ") must be <= " << max_total_threads_per_threadgroup << ". (device threadgroup size limit)\n";
@@ -810,6 +811,7 @@ WEAK int halide_metal_run(void *user_context,
         release_ns_object(pipeline_state);
         return -1;
     }
+#endif
 
     set_compute_pipeline_state(encoder, pipeline_state);
 
