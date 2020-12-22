@@ -97,6 +97,12 @@ WEAK mtl_compute_pipeline_state *new_compute_pipeline_state_with_function(mtl_de
     return result;
 }
 
+WEAK unsigned long get_max_total_threads_per_threadgroup(mtl_compute_pipeline_state *pipeline_state) {
+    typedef unsigned long (*get_max_total_threads_per_threadgroup_method)(objc_id pipeline_state, objc_sel sel);
+    get_max_total_threads_per_threadgroup_method method = (get_max_total_threads_per_threadgroup_method)&objc_msgSend;
+    return (*method)(pipeline_state, sel_getUid("maxTotalThreadsPerThreadgroup"));
+}
+
 WEAK void set_compute_pipeline_state(mtl_compute_command_encoder *encoder, mtl_compute_pipeline_state *pipeline_state) {
     typedef void (*set_compute_pipeline_state_method)(objc_id encoder, objc_sel sel, objc_id pipeline_state);
     set_compute_pipeline_state_method method = (set_compute_pipeline_state_method)&objc_msgSend;
@@ -796,6 +802,15 @@ WEAK int halide_metal_run(void *user_context,
         error(user_context) << "Metal: Could not allocate pipeline state.\n";
         return -1;
     }
+
+    int64_t max_total_threads_per_threadgroup = get_max_total_threads_per_threadgroup(pipeline_state);
+    if (max_total_threads_per_threadgroup < threadsX * threadsY * threadsZ) {
+        error(user_context) << "Metal: threadsX(" << threadsX << ") * threadsY(" << threadsY << ") * threadsZ(" << threadsZ << ") (" << (threadsX * threadsY * threadsZ) << ") must be <= " << max_total_threads_per_threadgroup << ". (device threadgroup size limit)\n";
+        end_encoding(encoder);
+        release_ns_object(pipeline_state);
+        return -1;
+    }
+
     set_compute_pipeline_state(encoder, pipeline_state);
 
     size_t total_args_size = 0;
