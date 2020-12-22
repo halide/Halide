@@ -2932,6 +2932,7 @@ protected:
     // Import a consistent list of Halide names that can be used in
     // Halide generators without qualification.
     using Expr = Halide::Expr;
+    using EvictionKey = Halide::EvictionKey;
     using ExternFuncArgument = Halide::ExternFuncArgument;
     using Func = Halide::Func;
     using GeneratorContext = Halide::GeneratorContext;

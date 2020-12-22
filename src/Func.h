@@ -661,6 +661,19 @@ namespace Internal {
 class IRMutator;
 }  // namespace Internal
 
+/** Helper class for identifying purpose of an Expr passed to memoize.
+ */
+class EvictionKey {
+protected:
+    Expr key;
+    friend class Func;
+
+public:
+    explicit EvictionKey(const Expr &expr = Expr())
+        : key(expr) {
+    }
+};
+
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
  * they are aggressively inlined, so you are encouraged to make lots
@@ -2216,8 +2229,15 @@ public:
     /** Use the halide_memoization_cache_... interface to store a
      *  computed version of this function across invocations of the
      *  Func.
+     *
+     * If an eviction_key is provided, it must be constructed with
+     * Expr of integer or handle type. The key Expr will be promoted
+     * to a uint64_t and can be used with halide_memoization_cache_evict
+     * to remove memoized entries using this eviction key from the
+     * cache. Memoized computations that do not provide an eviction
+     * key will never be evicted by this mechanism.
      */
-    Func &memoize();
+    Func &memoize(const EvictionKey &eviction_key = EvictionKey());
 
     /** Produce this Func asynchronously in a separate
      * thread. Consumers will be run by the task system when the
