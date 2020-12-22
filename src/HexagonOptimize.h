@@ -15,9 +15,6 @@ namespace Internal {
  * calls. */
 Stmt optimize_hexagon_shuffles(const Stmt &s, int lut_alignment);
 
-/** Generate vtmpy instruction if possible */
-Stmt vtmpy_generator(Stmt s);
-
 /* Generate vscatter-vgather instructions on Hexagon using VTCM memory.
  * The pass should be run before generating shuffles.
  * Some expressions which generate vscatter-vgathers are:
