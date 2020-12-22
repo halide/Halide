@@ -266,8 +266,22 @@ public:
         const tflite::ReshapeOptions *options =
             op->builtin_options_as_ReshapeOptions();
         std::vector<int> new_shape;
-        if (options) {
-            new_shape.assign(options->new_shape()->cbegin(), options->new_shape()->cend());
+        // If there are two inputs, and the second is an int32 vector, it should
+        // be used to specify the new shape (instead of ReshapeOptions).
+        Tensor *shape_tensor = op->inputs()->size() == 2 ?
+                                   result_.tensors[op->inputs()->Get(1)].get() :
+                                   nullptr;
+        if (shape_tensor &&
+            shape_tensor->shape().size() == 1 &&
+            shape_tensor->type() == TensorType::Int32) {
+            auto data = shape_tensor->data<int32_t>();
+            for (int i = 0; i < data.dimensions(); i++) {
+                new_shape.push_back(data(i));
+            }
+        } else {
+            if (options) {
+                new_shape.assign(options->new_shape()->cbegin(), options->new_shape()->cend());
+            }
         }
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
