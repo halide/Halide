@@ -226,6 +226,8 @@ public:
             options->dilation_w_factor(),
             options->dilation_h_factor(),
         };
+        // TODO: depth_multiplier is considered redundant and semi-deprecated;
+        // see buildin_op_data.h in tflite source for more info.
         int depth_multiplier = options->depth_multiplier();
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());

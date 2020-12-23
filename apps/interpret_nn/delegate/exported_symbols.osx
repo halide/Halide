@@ -1,0 +1,2 @@
+_tflite_plugin_create_delegate
+_tflite_plugin_destroy_delegate
