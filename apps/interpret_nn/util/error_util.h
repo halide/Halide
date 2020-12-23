@@ -89,7 +89,7 @@ struct Checker final {
         return *this;
     }
 
-    [[noreturn]] ~Checker() noexcept(false) = default;
+    [[noreturn]] ~Checker() noexcept(false);
 
     Checker() = delete;
     Checker(const Checker &) = delete;

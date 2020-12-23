@@ -61,5 +61,9 @@ Checker::Checker(const char *file, int line, const char *condition_string)
     logger.msg << " Condition Failed: " << condition_string << '\n';
 }
 
+Checker::~Checker() noexcept(false) {
+    std::abort();
+}
+
 }  // namespace internal
 }  // namespace interpret_nn
