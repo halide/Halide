@@ -1684,9 +1684,15 @@ void CodeGen_Xtensa::visit(const Mul *op) {
         if (op->type.is_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
             string sa = print_expr(op->a);
             print_assignment(op->type, "uint16x32_t_shift_left(" + sa + ", " + std::to_string(bits) + ")");
+        } else if (op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
+            string sa = print_expr(op->a);
+            print_assignment(op->type, "IVP_SLANX16(" + sa + ", " + std::to_string(bits) + ")");
         } else if (op->type.is_uint() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
             string sa = print_expr(op->a);
             print_assignment(op->type, "uint32x16_t_shift_left(" + sa + ", " + std::to_string(bits) + ")");
+        } else if (op->type.is_uint() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
+            string sa = print_expr(op->a);
+            print_assignment(op->type, "IVP_SLAN_2X32(" + sa + ", " + std::to_string(bits) + ")");
         } else {
             visit_binop(op->type, op->a, make_const(op->a.type(), bits), "<<");
         }
@@ -1783,12 +1789,15 @@ void CodeGen_Xtensa::visit(const Div *op) {
         if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
             string sa = print_expr(op->a);
             print_assignment(op->type, "IVP_SRLNX16U(" + sa + ", " + std::to_string(bits) + ")");
+        } else if (op->type.is_int() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
+            string sa = print_expr(op->a);
+            print_assignment(op->type, "IVP_SRANX16(" + sa + ", " + std::to_string(bits) + ")");
         } else if (op->type.is_uint() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
             string sa = print_expr(op->a);
             print_assignment(op->type, "IVP_SRLN_2X32U(" + sa + ", " + std::to_string(bits) + ")");
         } else if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
             string sa = print_expr(op->a);
-            print_assignment(op->type, sa + " >> (int32x16_t)" + std::to_string(bits));
+            print_assignment(op->type, "IVP_SRAN_2X32(" + sa + ", (int32x16_t)" + std::to_string(bits) + ")");
         } else {
             visit_binop(op->type, op->a, make_const(op->a.type(), bits), ">>");
         }
@@ -2134,8 +2143,12 @@ void CodeGen_Xtensa::visit(const Call *op) {
         string a1 = print_expr(op->args[1]);
         if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
             rhs << "uint16x32_t_shift_left(" << a0 << ", " << a1 << ")";
+        } else if (op->type.is_int() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
+            rhs << "IVP_SLANX16(" << a0 << ", " << a1 << ")";
         } else if (op->type.is_uint() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
             rhs << "uint32x16_t_shift_left(" << a0 << ", " << a1 << ")";
+        } else if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
+            rhs << "IVP_SLAN_2X32(" << a0 << ", " << a1 << ")";
         } else {
             rhs << a0 << " << " << a1;
         }
@@ -2145,8 +2158,10 @@ void CodeGen_Xtensa::visit(const Call *op) {
         string a1 = print_expr(op->args[1]);
         if (op->type.is_uint() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
             rhs << "IVP_SRLNX16(" << a0 << ", " << a1 << ")";
+        } else if (op->type.is_int() && (op->type.lanes() == 32) && (op->type.bits() == 16)) {
+            rhs << "IVP_SRANX16(" << a0 << ", " << a1 << ")";
         } else if (op->type.is_int() && (op->type.lanes() == 16) && (op->type.bits() == 32)) {
-            rhs << a0 << " >> (int32x16_t)" << a1;
+            rhs << "IVP_SRAN_2X32(" << a0 << ", (int32x16_t)" << a1 << ")";
         } else {
             rhs << a0 << " >> " << a1;
         }
