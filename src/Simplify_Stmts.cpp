@@ -416,6 +416,7 @@ Stmt Simplify::visit(const Block *op) {
         return LetStmt::make(var_name, let_first->value, new_block);
     } else if (store_first &&
                store_next &&
+               store_first->name == store_next->name &&
                equal(store_first->index, store_next->index) &&
                equal(store_first->predicate, store_next->predicate) &&
                is_pure(store_first->index) &&
