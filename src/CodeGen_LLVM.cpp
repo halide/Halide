@@ -4243,7 +4243,7 @@ void CodeGen_LLVM::visit(const IfThenElse *op) {
 
         BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
 
-        for (auto p : blocks) {
+        for (const auto &p : blocks) {
             BasicBlock *then_bb = BasicBlock::Create(*context, "then_bb", function);
             BasicBlock *next_bb = BasicBlock::Create(*context, "next_bb", function);
             builder->CreateCondBr(codegen(p.first), then_bb, next_bb);
