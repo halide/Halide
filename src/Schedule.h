@@ -510,9 +510,7 @@ public:
     FuncSchedule(IntrusivePtr<FuncScheduleContents> c)
         : contents(std::move(c)) {
     }
-    FuncSchedule(const FuncSchedule &other)
-        : contents(other.contents) {
-    }
+    FuncSchedule(const FuncSchedule &other) = default;
     FuncSchedule();
 
     /** Return a deep copy of this FuncSchedule. It recursively deep copies all
@@ -529,6 +527,13 @@ public:
     // @{
     bool &memoized();
     bool memoized() const;
+    // @}
+
+    /** This flag is set to true if the schedule is memoized and has an attached
+     *  eviction key. */
+    // @{
+    Expr &memoize_eviction_key();
+    Expr memoize_eviction_key() const;
     // @}
 
     /** Is the production of this Function done asynchronously */
@@ -608,9 +613,7 @@ public:
     StageSchedule(IntrusivePtr<StageScheduleContents> c)
         : contents(std::move(c)) {
     }
-    StageSchedule(const StageSchedule &other)
-        : contents(other.contents) {
-    }
+    StageSchedule(const StageSchedule &other) = default;
     StageSchedule();
 
     /** Return a copy of this StageSchedule. */

@@ -53,9 +53,9 @@ void *halide_malloc_trace(void *user_context, size_t x) {
     // Additionally, we also need to align it to the natural vector
     // width.
     void *orig = malloc(x + 128);
-    if (orig == NULL) {
+    if (orig == nullptr) {
         // Will result in a failed assertion and a call to halide_error
-        return NULL;
+        return nullptr;
     }
     // Round up to next multiple of 128.
     void *ptr = (void *)((((size_t)orig + 128) >> 7) << 7);

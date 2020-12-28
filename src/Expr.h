@@ -76,7 +76,7 @@ enum class IRNodeType {
     Atomic
 };
 
-constexpr IRNodeType StrongestExprNodeType = IRNodeType::Shuffle;
+constexpr IRNodeType StrongestExprNodeType = IRNodeType::VectorReduce;
 
 /** The abstract base classes for a node in the Halide IR. */
 struct IRNode {
@@ -367,6 +367,10 @@ enum class MemoryType {
      * "local" in OpenCL, and "threadgroup" in metal. Can be shared
      * across GPU threads within the same block. */
     GPUShared,
+
+    /** Allocation is stored in GPU texture memory and accessed through
+     * hardware sampler */
+    GPUTexture,
 
     /** Allocate Locked Cache Memory to act as local memory */
     LockedCache,

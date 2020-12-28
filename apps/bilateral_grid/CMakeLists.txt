@@ -24,7 +24,7 @@ add_halide_library(bilateral_grid_auto_schedule FROM bilateral_grid.generator
                    GENERATOR bilateral_grid
                    STMT bilateral_grid_auto_schedule_STMT
                    SCHEDULE bilateral_grid_auto_schedule_SCHEDULE
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(bilateral_grid_process filter.cpp)
@@ -42,7 +42,7 @@ if (EXISTS ${IMAGE})
     add_test(NAME bilateral_grid_process
              COMMAND bilateral_grid_process gray.png out.png 0.1 10)
     set_tests_properties(bilateral_grid_process PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS bilateral_grid
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

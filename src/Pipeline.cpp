@@ -3,7 +3,6 @@
 #include <utility>
 
 #include "Argument.h"
-#include "AutoSchedule.h"
 #include "CodeGen_Internal.h"
 #include "FindCalls.h"
 #include "Func.h"
@@ -114,10 +113,10 @@ struct PipelineContents {
 
     std::vector<Stmt> requirements;
 
-    bool trace_pipeline;
+    bool trace_pipeline = false;
 
     PipelineContents()
-        : module("", Target()), trace_pipeline(false) {
+        : module("", Target()) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void *>(), 0, ArgumentEstimates{});
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context");
     }
@@ -165,7 +164,7 @@ Pipeline::Pipeline(const Func &output)
 
 Pipeline::Pipeline(const vector<Func> &outputs)
     : contents(new PipelineContents) {
-    for (Func f : outputs) {
+    for (const Func &f : outputs) {
         f.function().freeze();
         contents->outputs.push_back(f.function());
     }
@@ -180,32 +179,17 @@ vector<Func> Pipeline::outputs() const {
 }
 
 /* static */
-void Pipeline::auto_schedule_Mullapudi2016(const Pipeline &pipeline, const Target &target,
-                                           const MachineParams &arch_params, AutoSchedulerResults *outputs) {
-    AutoSchedulerResults results;
-    results.target = target;
-    results.machine_params_string = arch_params.to_string();
-
-    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "The Mullapudi2016 autoscheduler is not supported for the target: " << target;
-    results.scheduler_name = "Mullapudi2016";
-    results.schedule_source = generate_schedules(pipeline.contents->outputs, target, arch_params);
-    // this autoscheduler has no featurization
-
-    *outputs = results;
-}
-
-/* static */
 std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
-    static std::map<std::string, AutoSchedulerFn> autoschedulers = {
-        {"Mullapudi2016", auto_schedule_Mullapudi2016}};
+    static std::map<std::string, AutoSchedulerFn> autoschedulers = {};
     return autoschedulers;
 }
 
 /* static */
 std::string &Pipeline::get_default_autoscheduler_name() {
-    static std::string autoscheduler_name = "Mullapudi2016";
+    static std::string autoscheduler_name = "";
+    if (autoscheduler_name.empty() && !get_autoscheduler_map().empty()) {
+        autoscheduler_name = get_autoscheduler_map().begin()->first;
+    }
     return autoscheduler_name;
 }
 
@@ -226,7 +210,9 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
 
 AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) {
     auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
-    internal_assert(autoscheduler_fn != nullptr);
+    user_assert(autoscheduler_fn)
+        << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
+        << "Did you remember to load the plugin?";
 
     AutoSchedulerResults results;
     results.target = target;
@@ -256,7 +242,7 @@ void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_n
 Func Pipeline::get_func(size_t index) {
     // Compute an environment
     std::map<string, Function> env;
-    for (Function f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         std::map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
@@ -440,7 +426,7 @@ class FindExterns : public IRGraphVisitor {
                 if (function_takes_user_context(op->name)) {
                     arg_types.push_back(type_of<void *>());
                 }
-                for (Expr e : op->args) {
+                for (const Expr &e : op->args) {
                     arg_types.push_back(e.type().element_of());
                 }
                 bool is_void_return = op->type.bits() == 0 || op->name == "halide_print";
@@ -471,7 +457,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const LinkageType linkage_type) {
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";
 
-    for (Function f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         user_assert(f.has_pure_definition() || f.has_extern_definition())
             << "Can't compile Pipeline with undefined output Func: " << f.name() << ".\n";
     }
@@ -490,7 +476,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // explicitly).
     const bool requires_user_context = target.has_feature(Target::UserContext);
     bool has_user_context = false;
-    for (Argument arg : lowering_args) {
+    for (const Argument &arg : lowering_args) {
         if (arg.name == contents->user_context_arg.arg.name) {
             has_user_context = true;
         }
@@ -525,7 +511,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         debug(2) << "Reusing old module\n";
     } else {
         vector<IRMutator *> custom_passes;
-        for (CustomLoweringPass p : contents->custom_lowering_passes) {
+        for (const CustomLoweringPass &p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
 
@@ -705,7 +691,9 @@ void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> d
 }
 
 void Pipeline::clear_custom_lowering_passes() {
-    if (!defined()) return;
+    if (!defined()) {
+        return;
+    }
     contents->clear_custom_lowering_passes();
 }
 
@@ -943,9 +931,11 @@ private:
     using ConstVoidPtr = const void *;
     ConstVoidPtr fixed_store[kStoreSize];
 
-    JITCallArgs(const JITCallArgs &) = delete;
-    JITCallArgs(JITCallArgs &&) = delete;
-    void operator=(const JITCallArgs &) = delete;
+public:
+    JITCallArgs(const JITCallArgs &other) = delete;
+    JITCallArgs &operator=(const JITCallArgs &other) = delete;
+    JITCallArgs(JITCallArgs &&other) = delete;
+    JITCallArgs &operator=(JITCallArgs &&other) = delete;
 };
 
 // Make a vector of void *'s to pass to the jit call using the
@@ -1084,6 +1074,10 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
                        const ParamMap &param_map) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
+
+    if (t.has_feature(Target::OpenGL)) {
+        user_warning << "WARNING: OpenGL is deprecated in Halide 11 and will be removed in Halide 12.\n";
+    }
 
     debug(2) << "Realizing Pipeline for " << target << "\n";
 
@@ -1298,10 +1292,18 @@ void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size
                                   const Target &target,
                                   const ParamMap &param_map) {
     vector<int32_t> sizes;
-    if (x_size) sizes.push_back(x_size);
-    if (y_size) sizes.push_back(y_size);
-    if (z_size) sizes.push_back(z_size);
-    if (w_size) sizes.push_back(w_size);
+    if (x_size) {
+        sizes.push_back(x_size);
+    }
+    if (y_size) {
+        sizes.push_back(y_size);
+    }
+    if (z_size) {
+        sizes.push_back(z_size);
+    }
+    if (w_size) {
+        sizes.push_back(w_size);
+    }
     infer_input_bounds(sizes, target, param_map);
 }
 

@@ -14,6 +14,8 @@ using std::set;
 using std::string;
 using std::vector;
 
+namespace {
+
 // Figure out the region touched of each buffer, and deposit them as
 // let statements outside of each realize node, or at the top level if
 // they're not internal allocations.
@@ -126,7 +128,9 @@ public:
                 touched_by_extern.insert(f.name());
                 for (size_t i = 0; i < f.extern_arguments().size(); i++) {
                     ExternFuncArgument arg = f.extern_arguments()[i];
-                    if (!arg.is_func()) continue;
+                    if (!arg.is_func()) {
+                        continue;
+                    }
                     Function input(arg.func);
                     touched_by_extern.insert(input.name());
                 }
@@ -151,6 +155,8 @@ class StripDeclareBoxTouched : public IRMutator {
         }
     }
 };
+
+}  // namespace
 
 Stmt allocation_bounds_inference(Stmt s,
                                  const map<string, Function> &env,

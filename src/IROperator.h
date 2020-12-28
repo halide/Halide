@@ -49,28 +49,16 @@ bool is_positive_const(const Expr &e);
  * strictly less than zero (in all lanes, if a vector expression) */
 bool is_negative_const(const Expr &e);
 
-/** Is the expression a const (as defined by is_const), and also
- * strictly less than zero (in all lanes, if a vector expression) and
- * is its negative value representable. (This excludes the most
- * negative value of the Expr's type from inclusion. Intended to be
- * used when the value will be negated as part of simplification.)
- */
-bool is_negative_negatable_const(const Expr &e);
-
 /** Is the expression an undef */
 bool is_undef(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
-bool is_zero(const Expr &e);
+bool is_const_zero(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to one (in all lanes, if a vector expression) */
-bool is_one(const Expr &e);
-
-/** Is the expression a const (as defined by is_const), and also equal
- * to two (in all lanes, if a vector expression) */
-bool is_two(const Expr &e);
+bool is_const_one(const Expr &e);
 
 /** Is the statement a no-op (which we represent as either an
  * undefined Stmt, or as an Evaluate node of a constant) */
@@ -153,6 +141,10 @@ Expr const_false(int lanes = 1);
  * losing information. If it can't be done, return an undefined
  * Expr. */
 Expr lossless_cast(Type t, Expr e);
+
+/** Attempt to negate x without introducing new IR and without overflow.
+ * If it can't be done, return an undefined Expr. */
+Expr lossless_negate(const Expr &x);
 
 /** Coerce the two expressions to have the same type, using C-style
  * casting rules. For the purposes of casting, a boolean type is

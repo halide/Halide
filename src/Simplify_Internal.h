@@ -186,6 +186,8 @@ public:
     IRMatcher::WildConst<1> c1;
     IRMatcher::WildConst<2> c2;
     IRMatcher::WildConst<3> c3;
+    IRMatcher::WildConst<4> c4;
+    IRMatcher::WildConst<5> c5;
 
     // Tracks whether or not we're inside a vector loop. Certain
     // transformations are not a good idea if the code is to be
@@ -198,9 +200,7 @@ public:
     void found_buffer_reference(const std::string &name, size_t dimensions = 0);
 
     // Wrappers for as_const_foo that are more convenient to use in
-    // the large chains of conditions in the visit methods
-    // below. Unlike the versions in IROperator, these only match
-    // scalars.
+    // the large chains of conditions in the visit methods below.
     bool const_float(const Expr &e, double *f);
     bool const_int(const Expr &e, int64_t *i);
     bool const_uint(const Expr &e, uint64_t *u);
@@ -208,8 +208,12 @@ public:
     // Put the args to a commutative op in a canonical order
     HALIDE_ALWAYS_INLINE
     bool should_commute(const Expr &a, const Expr &b) {
-        if (a.node_type() < b.node_type()) return true;
-        if (a.node_type() > b.node_type()) return false;
+        if (a.node_type() < b.node_type()) {
+            return true;
+        }
+        if (a.node_type() > b.node_type()) {
+            return false;
+        }
 
         if (a.node_type() == IRNodeType::Variable) {
             const Variable *va = a.as<Variable>();

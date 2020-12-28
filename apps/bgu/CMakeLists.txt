@@ -19,7 +19,7 @@ target_link_libraries(bgu.generator PRIVATE Halide::Generator Halide::Tools)
 add_halide_library(bgu FROM bgu.generator)
 add_halide_library(bgu_auto_schedule FROM bgu.generator
                    GENERATOR bgu
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(bgu_filter filter.cpp)
@@ -35,7 +35,7 @@ if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb.png COPYONLY)
     add_test(NAME bgu_filter COMMAND bgu_filter rgb.png out.png)
     set_tests_properties(bgu_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS bgu
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

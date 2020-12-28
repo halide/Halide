@@ -48,7 +48,7 @@ function(add_halide_library TARGET)
     ##
 
     set(options C_BACKEND GRADIENT_DESCENT)
-    set(oneValueArgs FROM GENERATOR FUNCTION_NAME USE_RUNTIME AUTOSCHEDULER ${EXTRA_OUTPUT_NAMES})
+    set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER ${EXTRA_OUTPUT_NAMES})
     set(multiValueArgs TARGETS FEATURES PARAMS PLUGINS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -79,16 +79,31 @@ function(add_halide_library TARGET)
         set(ARG_FUNCTION_NAME "${TARGET}")
     endif ()
 
-    if (NOT ARG_TARGETS)
-        if (NOT "${Halide_TARGET}" STREQUAL "")
-            set(ARG_TARGETS "${Halide_TARGET}")
-        else ()
-            _Halide_auto_target(ARG_TARGETS)
-        endif ()
-    elseif (ARG_TARGETS MATCHES "cmake")
-        _Halide_auto_target(target)
-        list(TRANSFORM ARG_TARGETS REPLACE "cmake" "${target}")
+    if (ARG_NAMESPACE)
+        set(ARG_FUNCTION_NAME "${ARG_NAMESPACE}::${ARG_FUNCTION_NAME}")
     endif ()
+
+    # If no TARGETS argument, use Halide_TARGET instead
+    if (NOT ARG_TARGETS)
+        set(ARG_TARGETS "${Halide_TARGET}")
+    endif ()
+
+    # If still no TARGET, try to use host, but if that would
+    # cross-compile, then default to 'cmake' and warn.
+    if (NOT ARG_TARGETS)
+        if (Halide_HOST_TARGET STREQUAL Halide_CMAKE_TARGET)
+            set(ARG_TARGETS host)
+        else ()
+            message(AUTHOR_WARNING
+                    "Targets must be manually specified to add_halide_library when cross-compiling. "
+                    "The default 'host' target ${Halide_HOST_TARGET} differs from the active CMake "
+                    "target ${Halide_CMAKE_TARGET}. Using ${Halide_CMAKE_TARGET} to compile ${TARGET}. "
+                    "This might result in performance degradation from missing arch flags (eg. avx).")
+            set(ARG_TARGETS "${Halide_CMAKE_TARGET}")
+        endif ()
+    endif ()
+
+    list(TRANSFORM ARG_TARGETS REPLACE "cmake" "${Halide_CMAKE_TARGET}")
 
     list(APPEND ARG_FEATURES no_runtime)
     list(JOIN ARG_FEATURES "-" ARG_FEATURES)
@@ -104,8 +119,8 @@ function(add_halide_library TARGET)
     else ()
         # If we're not using an existing runtime, create one.
         if (NOT ARG_USE_RUNTIME)
-            add_halide_runtime("${TARGET}.runtime" FROM ${ARG_FROM}
-                               TARGETS ${ARG_TARGETS})
+            _Halide_add_halide_runtime("${TARGET}.runtime" FROM ${ARG_FROM}
+                                       TARGETS ${ARG_TARGETS})
             set(ARG_USE_RUNTIME "${TARGET}.runtime")
         elseif (NOT TARGET ${ARG_USE_RUNTIME})
             message(FATAL_ERROR "Invalid runtime target ${ARG_USE_RUNTIME}")
@@ -166,18 +181,22 @@ function(add_halide_library TARGET)
     # Attach an autoscheduler if the user requested it
     ##
 
-    unset(GEN_AUTOSCHEDULER)
+    set(GEN_AUTOSCHEDULER "")
     if (ARG_AUTOSCHEDULER)
-        if ("${ARG_AUTOSCHEDULER}" MATCHES "::" AND TARGET "${ARG_AUTOSCHEDULER}")
+        if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
+            if (NOT TARGET "${ARG_AUTOSCHEDULER}")
+                message(FATAL_ERROR "Autoscheduler ${ARG_AUTOSCHEDULER} does not exist.")
+            endif ()
+
             # Convention: if the argument names a target like "Namespace::Scheduler" then
             # it is assumed to be a MODULE target providing a scheduler named "Scheduler".
             list(APPEND ARG_PLUGINS "${ARG_AUTOSCHEDULER}")
             string(REGEX REPLACE ".*::(.*)" "\\1" ARG_AUTOSCHEDULER "${ARG_AUTOSCHEDULER}")
         elseif (NOT ARG_PLUGINS)
-            # TODO(#4053): this is spurious when the default autoscheduler is requested
             message(AUTHOR_WARNING "AUTOSCHEDULER set to a scheduler name but no plugins were loaded")
         endif ()
         set(GEN_AUTOSCHEDULER -s "${ARG_AUTOSCHEDULER}")
+        list(PREPEND ARG_PARAMS auto_schedule=true)
     endif ()
 
     ##
@@ -185,7 +204,7 @@ function(add_halide_library TARGET)
     ##
 
     if (crosscompiling)
-        add_library("${TARGET}" STATIC IMPORTED)
+        add_library("${TARGET}" STATIC IMPORTED GLOBAL)
         set_target_properties("${TARGET}" PROPERTIES
                               IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${GENERATOR_SOURCES}")
     else ()
@@ -196,7 +215,7 @@ function(add_halide_library TARGET)
     endif ()
 
     # Load the plugins and setup dependencies
-    unset(GEN_PLUGINS)
+    set(GEN_PLUGINS "")
     if (ARG_PLUGINS)
         foreach (p IN LISTS ARG_PLUGINS)
             list(APPEND GEN_PLUGINS "$<TARGET_FILE:${p}>")
@@ -232,7 +251,7 @@ endfunction()
 # Function for creating a standalone runtime from a generator.
 ##
 
-function(add_halide_runtime RT)
+function(_Halide_add_halide_runtime RT)
     cmake_parse_arguments(ARG "" "FROM" "TARGETS" ${ARGN})
     _Halide_get_platform_details(
             generator_cmd
@@ -243,7 +262,7 @@ function(add_halide_runtime RT)
 
     if (crosscompiling)
         set(GEN_OUTS "${RT}${static_library_suffix}")
-        unset(GEN_ARGS)
+        set(GEN_ARGS "")
     else ()
         set(GEN_OUTS "${RT}${object_suffix}")
         set(GEN_ARGS -e object)
@@ -260,7 +279,7 @@ function(add_halide_runtime RT)
     if (crosscompiling)
         add_custom_target("${RT}.update" DEPENDS "${GEN_OUTS}")
 
-        add_library("${RT}" STATIC IMPORTED)
+        add_library("${RT}" STATIC IMPORTED GLOBAL)
         add_dependencies("${RT}" "${RT}.update")
 
         set_target_properties("${RT}" PROPERTIES
@@ -298,9 +317,8 @@ function(_Halide_get_platform_details OUT_GEN OUT_XC OUT_OBJ OUT_STATIC)
         set(${OUT_GEN} ${ARG_FROM} PARENT_SCOPE)
     endif ()
 
-    _Halide_triple(halide_triple "${ARGN}")
-    _Halide_cmake_target(cmake_triple)
-    if (NOT cmake_triple STREQUAL halide_triple)
+    _Halide_get_triple(halide_triple "${ARGN}")
+    if (NOT Halide_CMAKE_TARGET STREQUAL halide_triple)
         set("${OUT_XC}" 1 PARENT_SCOPE)
     else ()
         set("${OUT_XC}" 0 PARENT_SCOPE)

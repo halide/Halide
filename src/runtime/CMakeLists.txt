@@ -1,3 +1,7 @@
+if (NOT CMAKE_GENERATOR MATCHES "Make|Ninja")
+    message(STATUS "Notice: ${CMAKE_GENERATOR} does not support depfile dependencies. Incremental builds may fail.")
+endif ()
+
 # Keep these lists in alphabetical order.
 set(RUNTIME_CPP
     aarch64_cpu_features
@@ -12,7 +16,6 @@ set(RUNTIME_CPP
     cache
     can_use_target
     cuda
-    d3d12compute
     destructors
     device_interface
     errors
@@ -53,7 +56,6 @@ set(RUNTIME_CPP
     osx_host_cpu_count
     osx_opengl_context
     osx_yield
-    posix_abort
     posix_allocator
     posix_clock
     posix_error_handler
@@ -81,9 +83,10 @@ set(RUNTIME_CPP
     trace_helper
     tracing
     wasm_cpu_features
-    windows_abort
     windows_clock
     windows_cuda
+    windows_d3d12compute_x86
+    windows_d3d12compute_arm
     windows_get_symbol
     windows_io
     windows_opencl
@@ -99,9 +102,7 @@ set(RUNTIME_LL
     aarch64
     arm
     arm_no_neon
-    d3d12_abi_patch_64
     hvx_128
-    hvx_64
     mips
     posix_math
     powerpc
@@ -142,56 +143,134 @@ set(RUNTIME_HEADER_FILES
 # by add_custom_command, as is the case in this directory.
 add_library(Halide_initmod OBJECT)
 
-set(CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
-set(RUNTIME_CXX_FLAGS -O3
-    -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fpic
+# Note: ensure that these flags match the flags in the Makefile.
+# Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
+set(RUNTIME_CXX_FLAGS
+    -O3
+    -ffreestanding
+    -fno-blocks
+    -fno-exceptions
+    -fno-unwind-tables
+    -fno-vectorize
     # Note: we don't want static locals to get thread synchronization stuff.
-    -fno-threadsafe-statics)
+    -fno-threadsafe-statics
+    -Wall
+    -Wcast-qual
+    -Werror
+    -Wignored-qualifiers
+    -Wno-comment
+    -Wno-psabi
+    -Wno-unknown-warning-option
+    -Wno-unused-function
+    -Wsign-compare
+)
 
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
-        if (${j} EQUAL 32)
-            if (${i} MATCHES "windows_.*")
-                # win32 uses the stdcall calling convention, which is x86-specific
-                set(TARGET "i386-unknown-unknown-unknown")
-            else ()
+        # -fpic needs special treatment; see below on windows 64bits
+        set(fpic -fpic)
+        # for the generic windows 64-bit target, we need -fshort-wchar
+        set(fshort-wchar "")
+        # Windows
+        if (i MATCHES "windows_.*")
+            # must omit -fpic, otherwise clang will complain with the following:
+            # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
+            set(fpic "")
+            # Windows x86/x64
+            if (i MATCHES "windows_.*_x86$")
+                if (j EQUAL 32)
+                    # win32 uses the stdcall calling convention, which is x86-specific
+                    set(TARGET "i386-unknown-windows-unknown")
+                else ()
+                    set(TARGET "x86_64-unknown-windows-unknown")
+                endif ()
+            # Windows on ARM
+            elseif (i MATCHES "windows_.*_arm$")
+                if (j EQUAL 32)
+                    set(TARGET "arm-unknown-windows-unknown")
+                else ()
+                    set(TARGET "aarch64-unknown-windows-unknown")
+                endif ()
+            # Windows Generic
+            else()
+                if (j EQUAL 32)
+                    # TODO(marcos): generic code won't hold for ARM32... If ARM32 support becomes necessary,
+                    # all windows-related runtime modules will have to be wrapped in windows_*_arm.cpp files
+                    # for now, generic Windows 32bit code just assumes x86 (i386)
+                    set(TARGET "i386-unknown-windows-unknown")
+                else ()
+                    # unfortunately, clang doesn't automatically set this flag even though the
+                    # ABI is msvc on windows
+                    set(fshort-wchar -fshort-wchar)
+                    set(TARGET "le64-unknown-windows-unknown")
+                endif ()
+            endif()
+        # Everything else
+        else()
+            if (j EQUAL 32)
                 # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
                 set(TARGET "le32-unknown-nacl-unknown")
+            else ()
+                # generic 64-bit code
+                set(TARGET "le64-unknown-unknown-unknown")
             endif ()
-        else ()
-            # generic 64-bit code
-            set(TARGET "le64-unknown-unknown-unknown")
         endif ()
 
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
 
-        set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DLLVM_VERSION=${LLVM_VERSION} -DBITS_${j})
+        set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DBITS_${j})
         set(RUNTIME_DEFINES_debug -g -DDEBUG_RUNTIME ${RUNTIME_DEFINES})
 
         foreach (SUFFIX IN ITEMS "" "_debug")
-            set(LL "initmod.${i}_${j}${SUFFIX}.ll")
-            set(BC "initmod.${i}_${j}${SUFFIX}.bc")
+            set(basename "initmod.${i}_${j}${SUFFIX}")
+            set(LL "${basename}.ll")
+            set(BC "${basename}.bc")
             set(INITMOD "_initmod_${i}_${j}${SUFFIX}.cpp")
             set(SYMBOL "halide_internal_initmod_${i}_${j}${SUFFIX}")
 
-            set(DEFINES ${RUNTIME_DEFINES${SUFFIX}})
+            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S)
 
-            add_custom_command(OUTPUT "${LL}"
-                               COMMAND clang ${RUNTIME_CXX_FLAGS} ${DEFINES} -m${j} -target ${TARGET} -emit-llvm -S "$<SHELL_PATH:${SOURCE}>" -o ${LL}
-                               DEPENDS "${SOURCE}"
-                               # Make sure that the output of this command also depends
-                               # on the header files that ${SOURCE} uses
-                               # Note: Only works for makefile generator
-                               IMPLICIT_DEPENDS CXX "${SOURCE}"
-                               VERBATIM)
+            # Dep-files are subtle and require clang to run using *just* the right
+            # relative paths to the build root, NOT the Halide build root. This is
+            # a perfect storm of bad behavior from CMake, Ninja, and Clang.
+            file(RELATIVE_PATH ll_path "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/${LL}")
+            file(TO_NATIVE_PATH "${ll_path}" ll_path)
+
+            if (CMAKE_GENERATOR MATCHES "Ninja")
+                list(APPEND clang_flags -MD -MF "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}/${basename}.d>")
+                set(dep_args DEPFILE "${CMAKE_CURRENT_BINARY_DIR}/${basename}.d")
+            elseif (NOT CMAKE_GENERATOR MATCHES "Make")
+                set(dep_args "")
+            endif ()
+
+            if (Halide_CLANG_TIDY_BUILD)
+                # Create a 'fake' entry just so that clang-tidy will see a C++ compilation command
+                # that it can use for tidy-checking. (This branch should never be taken by 'normal'
+                # compilations.)
+                add_library(${basename} STATIC "${SOURCE}")
+                target_compile_options(${basename} PRIVATE ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} -m${j} -target ${TARGET})
+                target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
+            else()
+                add_custom_command(OUTPUT "${LL}"
+                                   COMMAND clang ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
+                                   DEPENDS "${SOURCE}"
+                                   # Note: IMPLICIT_DEPENDS only works for Makefile generators, ${dep_args} handles Ninja.
+                                   IMPLICIT_DEPENDS CXX "${SOURCE}"
+                                   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+                                   ${dep_args}
+                                   VERBATIM)
+            endif()
+
             add_custom_command(OUTPUT "${BC}"
                                COMMAND llvm-as "${LL}" -o "${BC}"
                                DEPENDS "${LL}"
                                VERBATIM)
+
             add_custom_command(OUTPUT "${INITMOD}"
                                COMMAND binary2cpp ${SYMBOL} < "${BC}" > "${INITMOD}"
                                DEPENDS "${BC}" binary2cpp
                                VERBATIM)
+
             target_sources(Halide_initmod PRIVATE ${INITMOD})
         endforeach ()
     endforeach ()
@@ -199,14 +278,12 @@ endforeach ()
 
 
 foreach (i IN LISTS RUNTIME_LL)
-    set(LL "${CMAKE_CURRENT_SOURCE_DIR}/${i}.ll")
-
+    set(LL "${i}.ll")
     set(BC "initmod.${i}.bc")
-
     set(INITMOD "_initmod_${i}.cpp")
 
     add_custom_command(OUTPUT "${BC}"
-                       COMMAND llvm-as "$<SHELL_PATH:${LL}>" -o "${BC}"
+                       COMMAND llvm-as "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" -o "${BC}"
                        DEPENDS "${LL}"
                        VERBATIM)
     add_custom_command(OUTPUT "${INITMOD}"
@@ -228,7 +305,7 @@ foreach (i IN LISTS RUNTIME_BC)
 endforeach ()
 
 add_custom_command(OUTPUT "_initmod_inlined_c.cpp"
-                   COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "${CMAKE_CURRENT_SOURCE_DIR}/halide_buffer_t.cpp" > "_initmod_inlined_c.cpp"
+                   COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_buffer_t.cpp>" > "_initmod_inlined_c.cpp"
                    DEPENDS "halide_buffer_t.cpp" binary2cpp
                    VERBATIM)
 target_sources(Halide_initmod PRIVATE "_initmod_inlined_c.cpp")
@@ -236,7 +313,7 @@ target_sources(Halide_initmod PRIVATE "_initmod_inlined_c.cpp")
 foreach (i IN LISTS RUNTIME_HEADER_FILES)
     string(REPLACE "." "_" SYM_NAME "${i}")
     add_custom_command(OUTPUT "_initmod_${SYM_NAME}.cpp"
-                       COMMAND binary2cpp "halide_internal_runtime_header_${SYM_NAME}" < "${CMAKE_CURRENT_SOURCE_DIR}/${i}" > "_initmod_${SYM_NAME}.cpp"
+                       COMMAND binary2cpp "halide_internal_runtime_header_${SYM_NAME}" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${i}>" > "_initmod_${SYM_NAME}.cpp"
                        DEPENDS "${i}" binary2cpp
                        VERBATIM)
     target_sources(Halide_initmod PRIVATE "_initmod_${SYM_NAME}.cpp")

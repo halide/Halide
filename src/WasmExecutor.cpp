@@ -344,19 +344,11 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         std::signal(SIGABRT, old_abort_handler);
         internal_error << "lld::wasm::link failed\n";
     }
-#elif LLVM_VERSION >= 100
-    std::string lld_errs_string;
-    llvm::raw_string_ostream lld_errs(lld_errs_string);
-
-    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
-        std::signal(SIGABRT, old_abort_handler);
-        internal_error << "lld::wasm::link failed: (" << lld_errs.str() << ")\n";
-    }
 #else
     std::string lld_errs_string;
     llvm::raw_string_ostream lld_errs(lld_errs_string);
 
-    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, lld_errs)) {
+    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
         std::signal(SIGABRT, old_abort_handler);
         internal_error << "lld::wasm::link failed: (" << lld_errs.str() << ")\n";
     }
@@ -888,7 +880,9 @@ WABT_HOST_CALLBACK(free) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
     wasm32_ptr_t p = args[0].Get<int32_t>();
-    if (p) p -= kExtraMallocSlop;
+    if (p) {
+        p -= kExtraMallocSlop;
+    }
     wabt_free(wabt_context, p);
     return wabt::Result::Ok;
 }
@@ -925,7 +919,7 @@ WABT_HOST_CALLBACK(halide_print) {
     uint8_t *p = get_wasm_memory_base(wabt_context);
     const char *str = (const char *)p + str_address;
 
-    if (jit_user_context && jit_user_context->handlers.custom_print != NULL) {
+    if (jit_user_context && jit_user_context->handlers.custom_print != nullptr) {
         (*jit_user_context->handlers.custom_print)(jit_user_context, str);
     } else {
         std::cout << str;
@@ -970,7 +964,7 @@ WABT_HOST_CALLBACK(halide_trace_helper) {
     event.dimensions = dimensions;
 
     int32_t result = 0;
-    if (jit_user_context && jit_user_context->handlers.custom_trace != NULL) {
+    if (jit_user_context && jit_user_context->handlers.custom_trace != nullptr) {
         result = (*jit_user_context->handlers.custom_trace)(jit_user_context, &event);
     } else {
         debug(0) << "Dropping trace event due to lack of trace handler.\n";
@@ -991,7 +985,7 @@ WABT_HOST_CALLBACK(halide_error) {
     uint8_t *p = get_wasm_memory_base(wabt_context);
     const char *str = (const char *)p + str_address;
 
-    if (jit_user_context && jit_user_context->handlers.custom_error != NULL) {
+    if (jit_user_context && jit_user_context->handlers.custom_error != nullptr) {
         (*jit_user_context->handlers.custom_error)(jit_user_context, str);
     } else {
         halide_runtime_error << str;
@@ -1004,7 +998,9 @@ WABT_HOST_CALLBACK(malloc) {
 
     size_t size = args[0].Get<int32_t>() + kExtraMallocSlop;
     wasm32_ptr_t p = wabt_malloc(wabt_context, size);
-    if (p) p += kExtraMallocSlop;
+    if (p) {
+        p += kExtraMallocSlop;
+    }
     results[0] = wabt::interp::Value::Make(p);
     return wabt::Result::Ok;
 }
@@ -1335,7 +1331,7 @@ struct WasmModuleContents {
 
     int run(const void **args);
 
-    ~WasmModuleContents();
+    ~WasmModuleContents() = default;
 };
 
 WasmModuleContents::WasmModuleContents(
@@ -1541,12 +1537,6 @@ int WasmModuleContents::run(const void **args) {
 
     internal_error << "WasmExecutor is not configured correctly";
     return -1;
-}
-
-WasmModuleContents::~WasmModuleContents() {
-#if WITH_WABT
-    // nothing
-#endif
 }
 
 template<>

@@ -19,7 +19,7 @@ target_link_libraries(nl_means.generator PRIVATE Halide::Generator Halide::Tools
 add_halide_library(nl_means FROM nl_means.generator)
 add_halide_library(nl_means_auto_schedule FROM nl_means.generator
                    GENERATOR nl_means
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(nl_means_process process.cpp)
@@ -35,7 +35,7 @@ if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb.png COPYONLY)
     add_test(NAME nl_means_process COMMAND nl_means_process rgb.png 7 7 0.12 10 out.png)
     set_tests_properties(nl_means_process PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS nl_means
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

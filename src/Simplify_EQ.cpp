@@ -46,7 +46,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     const int lanes = op->type.lanes();
 
     // If the delta is 0, then it's just x == x
-    if (is_zero(delta)) {
+    if (is_const_zero(delta)) {
         return const_true(lanes);
     }
 
@@ -66,7 +66,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), op->type, delta.type());
 
-    if (rewrite(broadcast(x) == 0, broadcast(x == 0, lanes)) ||
+    if (rewrite(broadcast(x, c0) == 0, broadcast(x == 0, c0)) ||
         (no_overflow(delta.type()) && rewrite(x * y == 0, (x == 0) || (y == 0))) ||
 
         rewrite(select(x, 0, y) == 0, x || (y == 0)) ||

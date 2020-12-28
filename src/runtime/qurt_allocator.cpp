@@ -16,9 +16,9 @@ WEAK void *aligned_malloc(size_t alignment, size_t size) {
 
     // Allocate enough space for aligning the pointer we return.
     void *orig = malloc(size + alignment);
-    if (orig == NULL) {
+    if (orig == nullptr) {
         // Will result in a failed assertion and a call to halide_error
-        return NULL;
+        return nullptr;
     }
     // We want to store the original pointer prior to the pointer we return.
     void *ptr = (void *)(((size_t)orig + alignment + sizeof(void *) - 1) & ~(alignment - 1));
@@ -45,7 +45,7 @@ static const int buffer_size = 1024 * 64;
 
 WEAK int buf_is_used[num_buffers];
 WEAK void *mem_buf[num_buffers] = {
-    NULL,
+    nullptr,
 };
 
 WEAK __attribute__((destructor)) void halide_allocator_cleanup() {
@@ -65,7 +65,7 @@ WEAK void *halide_default_malloc(void *user_context, size_t x) {
     if (x <= buffer_size) {
         for (int i = 0; i < num_buffers; ++i) {
             if (__sync_val_compare_and_swap(buf_is_used + i, 0, 1) == 0) {
-                if (mem_buf[i] == NULL) {
+                if (mem_buf[i] == nullptr) {
                     mem_buf[i] = aligned_malloc(alignment, buffer_size);
                 }
                 return mem_buf[i];
@@ -102,7 +102,7 @@ extern "C" {
 
 WEAK halide_malloc_t halide_set_custom_malloc(halide_malloc_t user_malloc) {
     // See TODO below.
-    halide_print(NULL, "custom allocators not supported on Hexagon.\n");
+    halide_print(nullptr, "custom allocators not supported on Hexagon.\n");
     halide_malloc_t result = custom_malloc;
     custom_malloc = user_malloc;
     return result;
@@ -110,7 +110,7 @@ WEAK halide_malloc_t halide_set_custom_malloc(halide_malloc_t user_malloc) {
 
 WEAK halide_free_t halide_set_custom_free(halide_free_t user_free) {
     // See TODO below.
-    halide_print(NULL, "custom allocators not supported on Hexagon.\n");
+    halide_print(nullptr, "custom allocators not supported on Hexagon.\n");
     halide_free_t result = custom_free;
     custom_free = user_free;
     return result;

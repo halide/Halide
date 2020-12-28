@@ -1,4 +1,6 @@
 #include "CodeGen_OpenGLCompute_Dev.h"
+#include "CodeGen_GPU_Dev.h"
+#include "CodeGen_OpenGL_Dev.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "IRMatch.h"
@@ -16,6 +18,67 @@ namespace Internal {
 using std::ostringstream;
 using std::string;
 using std::vector;
+
+namespace {
+
+class CodeGen_OpenGLCompute_Dev : public CodeGen_GPU_Dev {
+public:
+    CodeGen_OpenGLCompute_Dev(Target target);
+
+    // CodeGen_GPU_Dev interface
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args) override;
+
+    void init_module() override;
+
+    std::vector<char> compile_to_src() override;
+
+    std::string get_current_kernel_name() override;
+
+    void dump() override;
+
+    std::string print_gpu_name(const std::string &name) override;
+
+    std::string api_unique_name() override {
+        return "openglcompute";
+    }
+    bool kernel_run_takes_types() const override {
+        return true;
+    }
+
+protected:
+    class CodeGen_OpenGLCompute_C : public CodeGen_GLSLBase {
+    public:
+        CodeGen_OpenGLCompute_C(std::ostream &s, Target t);
+        void add_kernel(const Stmt &stmt,
+                        const std::string &name,
+                        const std::vector<DeviceArgument> &args);
+
+    protected:
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
+
+        using CodeGen_GLSLBase::visit;
+        void visit(const For *) override;
+        void visit(const Ramp *op) override;
+        void visit(const Broadcast *op) override;
+        void visit(const Load *op) override;
+        void visit(const Store *op) override;
+        void visit(const Call *op) override;
+        void visit(const Allocate *op) override;
+        void visit(const Free *op) override;
+        void visit(const Select *op) override;
+        void visit(const Evaluate *op) override;
+        void visit(const IntImm *op) override;
+
+    public:
+        int workgroup_size[3];
+    };
+
+    std::ostringstream src_stream;
+    std::string cur_kernel_name;
+    CodeGen_OpenGLCompute_C glc;
+};
 
 CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(Target target)
     : glc(src_stream, target) {
@@ -80,7 +143,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        auto fence_type_ptr = as_const_int(op->args[0]);
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 
@@ -107,7 +170,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))
             << "kernel loop must be either gpu block or gpu thread\n";
-        internal_assert(is_zero(loop->min));
+        internal_assert(is_const_zero(loop->min));
 
         debug(4) << "loop extent is " << loop->extent << "\n";
         //
@@ -166,7 +229,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
+    user_assert(is_const_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
     // TODO: support vectors
     // https://github.com/halide/Halide/issues/4975
     internal_assert(op->type.is_scalar());
@@ -182,7 +245,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
+    user_assert(is_const_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
     // TODO: support vectors
     // https://github.com/halide/Halide/issues/4975
     internal_assert(op->value.type().is_scalar());
@@ -255,7 +318,6 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(const Stmt &
     } else {
         stream << "#version 430\n";
     }
-    add_common_macros(stream);
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
     stream << "#define halide_unused(x) (void)(x)\n";
 
@@ -327,7 +389,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
 
     internal_assert(!op->extents.empty());
     Expr extent = 1;
-    for (Expr e : op->extents) {
+    for (const Expr &e : op->extents) {
         extent *= e;
     }
     extent = simplify(extent);
@@ -357,7 +419,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Free *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Evaluate *op) {
-    if (is_const(op->value)) return;
+    if (is_const(op->value)) {
+        return;
+    }
     print_expr(op->value);
 }
 
@@ -389,6 +453,12 @@ void CodeGen_OpenGLCompute_Dev::dump() {
 
 std::string CodeGen_OpenGLCompute_Dev::print_gpu_name(const std::string &name) {
     return name;
+}
+
+}  // namespace
+
+CodeGen_GPU_Dev *new_CodeGen_OpenGLCompute_Dev(const Target &target) {
+    return new CodeGen_OpenGLCompute_Dev(target);
 }
 
 }  // namespace Internal

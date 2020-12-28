@@ -59,23 +59,21 @@ macro(_Halide_include TYPE CAUSE)
         return()
     endif ()
 
-    include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-${TYPE}.cmake")
+    # Load the namespaced targets
+    include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-ns-${TYPE}.cmake")
 
     if (NOT ${CMAKE_FIND_PACKAGE_NAME}_both)
-        # In CMake <= 3.17, ALIAS targets may not refer to non-global targets.
-        # this means that multiple different versions of Halide may not be used
-        # in a single project via find_package until 3.18
         if (CMAKE_VERSION VERSION_LESS 3.18)
-            set_target_properties(Halide::${TYPE}::Halide
-                                  Halide::${TYPE}::Generator
-                                  Halide::${TYPE}::RunGenMain
-                                  PROPERTIES
-                                  IMPORTED_GLOBAL TRUE)
+            # In CMake < 3.18, ALIAS targets may not refer to non-global targets, so we
+            # are forced to load copies of the targets in the plain Halide:: namespace
+            include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-${TYPE}.cmake")
+        else ()
+            foreach (target IN ITEMS Halide Generator RunGenMain Adams2019 Li2018 Mullapudi2016)
+                if (TARGET Halide::${TYPE}::${target})
+                    add_library(Halide::${target} ALIAS Halide::${TYPE}::${target})
+                endif ()
+            endforeach ()
         endif ()
-
-        add_library(Halide::Halide ALIAS Halide::${TYPE}::Halide)
-        add_library(Halide::Generator ALIAS Halide::${TYPE}::Generator)
-        add_library(Halide::RunGenMain ALIAS Halide::${TYPE}::RunGenMain)
     endif ()
 endmacro()
 
@@ -129,7 +127,7 @@ foreach (comp IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_comps)
 
     # ${comp} is either PNG or JPEG, and this works for both packages
     if (NOT TARGET ${comp}::${comp})
-        unset(extraArgs)
+        set(extraArgs "")
         if (${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
             list(APPEND extraArgs QUIET)
         endif ()

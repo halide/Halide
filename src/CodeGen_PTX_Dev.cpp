@@ -1,6 +1,8 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
@@ -32,6 +34,78 @@ using std::vector;
 
 using namespace llvm;
 
+namespace {
+
+/** A code generator that emits GPU code from a given Halide stmt. */
+class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
+public:
+    /** Create a PTX device code generator. */
+    CodeGen_PTX_Dev(Target host);
+    ~CodeGen_PTX_Dev() override;
+
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args) override;
+
+    static void test();
+
+    std::vector<char> compile_to_src() override;
+    std::string get_current_kernel_name() override;
+
+    void dump() override;
+
+    std::string print_gpu_name(const std::string &name) override;
+
+    std::string api_unique_name() override {
+        return "cuda";
+    }
+
+protected:
+    using CodeGen_LLVM::visit;
+
+    /** (Re)initialize the PTX module. This is separate from compile, since
+     * a PTX device module will often have many kernels compiled into it for
+     * a single pipeline. */
+    /* override */ void init_module() override;
+
+    /** We hold onto the basic block at the start of the device
+     * function in order to inject allocas */
+    llvm::BasicBlock *entry_block;
+
+    /** Nodes for which we need to override default behavior for the GPU runtime */
+    // @{
+    void visit(const Call *) override;
+    void visit(const For *) override;
+    void visit(const Allocate *) override;
+    void visit(const Free *) override;
+    void visit(const AssertStmt *) override;
+    void visit(const Load *) override;
+    void visit(const Store *) override;
+    void visit(const Atomic *) override;
+    void codegen_vector_reduce(const VectorReduce *op, const Expr &init) override;
+    // @}
+
+    std::string march() const;
+    std::string mcpu() const override;
+    std::string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
+    bool promote_indices() const override {
+        return false;
+    }
+
+    Type upgrade_type_for_arithmetic(const Type &t) const override {
+        return t;
+    }
+    Type upgrade_type_for_storage(const Type &t) const override;
+
+    /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
+     * ptx intrinsic functions to call to get them. */
+    std::string simt_intrinsic(const std::string &name);
+
+    bool supports_atomic_add(const Type &t) const override;
+};
+
 CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host)
     : CodeGen_LLVM(host) {
 #if !defined(WITH_NVPTX)
@@ -53,7 +127,9 @@ CodeGen_PTX_Dev::~CodeGen_PTX_Dev() {
 }
 
 Type CodeGen_PTX_Dev::upgrade_type_for_storage(const Type &t) const {
-    if (t.element_of() == Float(16)) return t;
+    if (t.element_of() == Float(16)) {
+        return t;
+    }
     return CodeGen_LLVM::upgrade_type_for_storage(t);
 }
 
@@ -163,7 +239,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         // arguments
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        auto fence_type_ptr = as_const_int(op->args[0]);
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
 
         llvm::Function *barrier0 = module->getFunction("llvm.nvvm.barrier0");
@@ -200,7 +276,7 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
 void CodeGen_PTX_Dev::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
         Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
-        internal_assert(is_zero(loop->min));
+        internal_assert(is_const_zero(loop->min));
         sym_push(loop->name, codegen(simt_idx));
         codegen(loop->body);
         sym_pop(loop->name);
@@ -257,7 +333,7 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
     // Do aligned 4-wide 32-bit loads as a single i128 load.
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
-    if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
+    if (is_const_one(op->predicate) && r && is_const_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
         ModulusRemainder align = op->alignment;
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
@@ -275,47 +351,14 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
 void CodeGen_PTX_Dev::visit(const Store *op) {
     // Issue atomic store if we are inside an Atomic node.
     if (emit_atomic_stores) {
-        user_assert(is_one(op->predicate)) << "Atomic update does not support predicated store.\n";
+        user_assert(is_const_one(op->predicate)) << "Atomic update does not support predicated store.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
-#if LLVM_VERSION < 90
-        user_assert(op->value.type().is_scalar())
-            << "CUDA atomic update does not support vectorization with LLVM version < 9.\n";
-        // Generate nvvm intrinsics for the atomics if this is a float atomicAdd.
-        // Otherwise defer to the llvm codegen. For llvm version >= 90, atomicrmw support floats so we
-        // can also refer to llvm.
-        // Half atomics are supported by compute capability 7.x or higher.
-        if (op->value.type().is_float() &&
-            (op->value.type().bits() == 32 ||
-             (op->value.type().bits() == 64 &&
-              (target.get_cuda_capability_lower_bound() >= 61)))) {
-            Expr val_expr = op->value;
-            Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
-            Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
-            // For atomicAdd, we check if op->value - store[index] is independent of store.
-            bool is_atomic_add = !expr_uses_var(delta, op->name);
-            if (is_atomic_add) {
-                Value *ptr = codegen_buffer_pointer(op->name, op->value.type(), op->index);
-                Value *val = codegen(delta);
-                llvm::Function *intrin = nullptr;
-                if (op->value.type().bits() == 32) {
-                    intrin = module->getFunction("llvm.nvvm.atomic.load.add.f32.p0f32");
-                    internal_assert(intrin) << "Could not find atomic intrinsics llvm.nvvm.atomic.load.add.f32.p0f32\n";
-                } else {
-                    internal_assert(op->value.type().bits() == 64);
-                    intrin = module->getFunction("llvm.nvvm.atomic.load.add.f64.p0f64");
-                    internal_assert(intrin) << "Could not find atomic intrinsics llvm.nvvm.atomic.load.add.f64.p0f64\n";
-                }
-                value = builder->CreateCall(intrin, {ptr, val});
-                return;
-            }
-        }
-#endif
     }
 
     // Do aligned 4-wide 32-bit stores as a single i128 store.
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
-    if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->value.type().bits() == 32) {
+    if (is_const_one(op->predicate) && r && is_const_one(r->stride) && r->lanes == 4 && op->value.type().bits() == 32) {
         ModulusRemainder align = op->alignment;
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
@@ -413,7 +456,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 const Load *load = e->as<Load>();
                 const Ramp *idx = load ? load->index.as<Ramp>() : nullptr;
                 if (idx &&
-                    is_one(idx->stride) &&
+                    is_const_one(idx->stride) &&
                     load->alignment.modulus % sub_lanes == 0 &&
                     load->alignment.remainder % sub_lanes == 0) {
                     Expr new_idx = simplify(idx->base / sub_lanes);
@@ -653,11 +696,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     // Ask the target to add backend passes as necessary.
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
-#if LLVM_VERSION >= 100
                                                     ::llvm::CGFT_AssemblyFile,
-#else
-                                                    TargetMachine::CGFT_AssemblyFile,
-#endif
                                                     true);
     if (fail) {
         internal_error << "Failed to set up passes to emit PTX source\n";
@@ -756,6 +795,12 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
         return target.get_cuda_capability_lower_bound() >= 61;
     }
     return false;
+}
+
+}  // namespace
+
+CodeGen_GPU_Dev *new_CodeGen_PTX_Dev(const Target &target) {
+    return new CodeGen_PTX_Dev(target);
 }
 
 }  // namespace Internal

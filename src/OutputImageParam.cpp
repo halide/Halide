@@ -27,7 +27,7 @@ Dimension OutputImageParam::dim(int i) {
     return Dimension(param, i, func);
 }
 
-const Dimension OutputImageParam::dim(int i) const {
+Dimension OutputImageParam::dim(int i) const {
     return Dimension(param, i, func);
 }
 
@@ -99,6 +99,11 @@ OutputImageParam &OutputImageParam::set_estimates(const Region &estimates) {
     for (int i = 0; i < d; i++) {
         dim(i).set_estimate(estimates[i].min, estimates[i].extent);
     }
+    return *this;
+}
+
+OutputImageParam &OutputImageParam::store_in(MemoryType type) {
+    param.store_in(type);
     return *this;
 }
 

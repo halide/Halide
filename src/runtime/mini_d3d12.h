@@ -4,7 +4,6 @@
 #ifdef __clang__
 //    #define __stdcall __attribute__ ((stdcall))
 #pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wignored-attributes"
 #pragma clang diagnostic ignored "-Wunknown-pragmas"
 #pragma clang diagnostic ignored "-Wunused-value"
 #define __export
@@ -156,7 +155,7 @@
 #endif  //__RPC__deref_out
 
 /* minwindef.h */
-/* 
+/*
  * On ARM and x64 processors, __stdcall is accepted and ignored by the compiler;
  * on ARM and x64 architectures, by convention, arguments are passed in registers
  * when possible, and subsequent arguments are passed on the stack.
@@ -867,10 +866,10 @@ interface IUnknown {
 #endif /* C style interface */
 
 #if 0
-HRESULT STDMETHODCALLTYPE IUnknown_QueryInterface_Proxy( 
+HRESULT STDMETHODCALLTYPE IUnknown_QueryInterface_Proxy(
     IUnknown * This,
     /* [in] */ REFIID riid,
-    /* [annotation][iid_is][out] */ 
+    /* [annotation][iid_is][out] */
     _COM_Outptr_  void **ppvObject);
 
 
@@ -881,7 +880,7 @@ void __RPC_STUB IUnknown_QueryInterface_Stub(
     DWORD *_pdwStubPhase);
 
 
-ULONG STDMETHODCALLTYPE IUnknown_AddRef_Proxy( 
+ULONG STDMETHODCALLTYPE IUnknown_AddRef_Proxy(
     IUnknown * This);
 
 
@@ -892,7 +891,7 @@ void __RPC_STUB IUnknown_AddRef_Stub(
     DWORD *_pdwStubPhase);
 
 
-ULONG STDMETHODCALLTYPE IUnknown_Release_Proxy( 
+ULONG STDMETHODCALLTYPE IUnknown_Release_Proxy(
     IUnknown * This);
 
 
@@ -6764,7 +6763,7 @@ typedef HRESULT(WINAPI *PFN_D3DCOMPILE)(
     _In_reads_bytes_(SrcDataSize) LPCVOID pSrcData,
     _In_ SIZE_T SrcDataSize,
     _In_opt_ LPCSTR pSourceName,
-    _In_reads_opt_(_Inexpressible_(pDefines->Name != NULL)) CONST D3D_SHADER_MACRO *pDefines,
+    _In_reads_opt_(_Inexpressible_(pDefines->Name != nullptr)) CONST D3D_SHADER_MACRO *pDefines,
     _In_opt_ ID3DInclude *pInclude,
     _In_opt_ LPCSTR pEntrypoint,
     _In_ LPCSTR pTarget,
@@ -6801,5 +6800,65 @@ typedef HRESULT(WINAPI *PFN_D3DCOMPILE)(
 #ifdef __clang__
 #pragma clang diagnostic pop
 #endif
+
+// Mini Win32 for D3D12
+
+#if !defined(WINBASEAPI)
+#if !defined(_KERNEL32_)
+#define WINBASEAPI DECLSPEC_IMPORT
+#else
+#define WINBASEAPI
+#endif
+#endif
+
+#define _Ret_maybenull_
+#define _Post_ptr_invalid_
+
+#define STATUS_WAIT_0 ((DWORD)0x00000000L)
+#define WAIT_OBJECT_0 ((STATUS_WAIT_0) + 0)
+
+extern "C" {
+
+WINBASEAPI
+BOOL
+    WINAPI
+    CloseHandle(
+        _In_ _Post_ptr_invalid_ HANDLE hObject);
+
+WINBASEAPI
+_Ret_maybenull_
+    HANDLE
+        WINAPI
+        CreateEventA(
+            _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
+            _In_ BOOL bManualReset,
+            _In_ BOOL bInitialState,
+            _In_opt_ LPCSTR lpName);
+
+WINBASEAPI
+_Ret_maybenull_
+    HANDLE
+        WINAPI
+        CreateEventW(
+            _In_opt_ LPSECURITY_ATTRIBUTES lpEventAttributes,
+            _In_ BOOL bManualReset,
+            _In_ BOOL bInitialState,
+            _In_opt_ LPCWSTR lpName);
+
+WINBASEAPI
+DWORD
+WINAPI
+WaitForSingleObject(
+    _In_ HANDLE hHandle,
+    _In_ DWORD dwMilliseconds);
+}
+
+#ifdef UNICODE
+#define CreateEvent CreateEventW
+#else
+#define CreateEvent CreateEventA
+#endif  // !UNICODE
+
+// end of Mini Win32 for D3D12
 
 #endif /*__mini_d3d12_h__*/

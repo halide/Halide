@@ -1,6 +1,6 @@
 #include <algorithm>
+#include <cstring>
 #include <iostream>
-#include <string.h>
 #include <utility>
 
 #ifdef _MSC_VER
@@ -39,6 +39,21 @@ using std::string;
 using std::vector;
 
 using namespace Internal;
+
+namespace {
+
+template<typename DimType>
+std::string dump_dim_list(const vector<DimType> &dims) {
+    std::ostringstream oss;
+    oss << "Vars:";
+    for (size_t i = 0; i < dims.size(); i++) {
+        oss << " " << dims[i].var;
+    }
+    oss << "\n";
+    return oss.str();
+}
+
+}  // namespace
 
 Func::Func(const string &name)
     : func(unique_name(name)) {
@@ -189,7 +204,9 @@ const std::string &Func::extern_function_name() const {
 }
 
 int Func::dimensions() const {
-    if (!defined()) return 0;
+    if (!defined()) {
+        return 0;
+    }
     return func.dimensions();
 }
 
@@ -239,8 +256,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
-        if (var && var->name == Var(_).name())
+        if (var && var->name == Var(_).name()) {
             break;
+        }
         iter++;
     }
     if (iter != args.end()) {
@@ -268,7 +286,9 @@ bool var_name_match(const string &candidate, const string &var) {
     internal_assert(var.find('.') == string::npos)
         << "var_name_match expects unqualified names for the second argument. "
         << "Name passed: " << var << "\n";
-    if (candidate == var) return true;
+    if (candidate == var) {
+        return true;
+    }
     return Internal::ends_with(candidate, "." + var);
 }
 }  // namespace
@@ -326,11 +346,6 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                     << " the output, or you can prove that there are actually"
                     << " no race conditions, and that Halide is being too cautious.\n";
             }
-        } else if (t == ForType::Vectorized) {
-            user_assert(dims[i].for_type != ForType::Vectorized)
-                << "In schedule for " << name()
-                << ", can't vectorize across " << var.name()
-                << " because Func is already vectorized across " << dims[i].var << "\n";
         }
     }
 
@@ -365,13 +380,7 @@ void Stage::set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api) {
 }
 
 std::string Stage::dump_argument_list() const {
-    std::ostringstream oss;
-    oss << "Vars:";
-    for (size_t i = 0; i < definition.schedule().dims().size(); i++) {
-        oss << " " << definition.schedule().dims()[i].var;
-    }
-    oss << "\n";
-    return oss.str();
+    return dump_dim_list(definition.schedule().dims());
 }
 
 namespace {
@@ -1511,8 +1520,9 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
                    const std::vector<VarOrRVar> &inners,
                    const std::vector<Expr> &factors,
                    const std::vector<TailStrategy> &tails) {
-    if (previous.size() != outers.size() || previous.size() != inners.size() || previous.size() != factors.size() || previous.size() != tails.size())
+    if (previous.size() != outers.size() || previous.size() != inners.size() || previous.size() != factors.size() || previous.size() != tails.size()) {
         user_error << "Vectors passed to Stage::tile must all be the same length.\n";
+    }
     for (unsigned int i = 0; i < previous.size(); i++) {
         split(previous[i], outers[i], inners[i], factors[i], tails[i]);
     }
@@ -2056,9 +2066,43 @@ Func &Func::atomic(bool override_associativity_test) {
     return *this;
 }
 
-Func &Func::memoize() {
+Func &Func::memoize(const EvictionKey &eviction_key) {
     invalidate_cache();
     func.schedule().memoized() = true;
+    if (eviction_key.key.defined()) {
+        Expr new_eviction_key;
+        const Type &t(eviction_key.key.type());
+        if (!t.is_scalar()) {
+            user_error << "Can't use a vector as a memoization eviction key. Expression is: "
+                       << eviction_key.key << "\n";
+        }
+        if (t.is_float()) {
+            user_error << "Can't use floating-point types as a memoization eviction key. Expression is: "
+                       << eviction_key.key << "\n";
+        } else if (t.is_handle()) {
+            // Wrap this in a memoize_tag so it does not get used in
+            // the cache key. Would be nice to have void version of
+            // memoize_tag that adds no bits to the key, but that is a
+            // small optimization.
+            new_eviction_key = memoize_tag(reinterpret(UInt(64), eviction_key.key), 0);
+        } else {
+            // Ditto above re: memoize_tag
+            new_eviction_key = memoize_tag(reinterpret(UInt(64), cast(t.with_bits(64),
+                                                                      eviction_key.key)),
+                                           0);
+        }
+
+        if (func.schedule().memoize_eviction_key().defined() &&
+            !graph_equal(func.schedule().memoize_eviction_key(), eviction_key.key)) {
+            user_error << "Can't redefine memoize eviction key. First definition is: "
+                       << func.schedule().memoize_eviction_key()
+                       << " new definition is: " << new_eviction_key << "\n";
+        }
+
+        func.schedule().memoize_eviction_key() = new_eviction_key;
+    } else {
+        func.schedule().memoize_eviction_key() = eviction_key.key;  // not defined.
+    }
     return *this;
 }
 
@@ -2148,8 +2192,12 @@ Func &Func::bound(const Var &var, Expr min, Expr extent) {
     func.schedule().bounds().push_back(b);
 
     // Propagate constant bounds into estimates as well.
-    if (!is_const(min)) min = Expr();
-    if (!is_const(extent)) extent = Expr();
+    if (!is_const(min)) {
+        min = Expr();
+    }
+    if (!is_const(extent)) {
+        extent = Expr();
+    }
     set_estimate(var, min, extent);
 
     return *this;
@@ -2469,12 +2517,16 @@ Func &Func::reorder_storage(const Var &x, const Var &y) {
             found_y = true;
             y_loc = i;
         } else if (var_name_match(dims[i].var, x.name())) {
-            if (found_y) std::swap(dims[i], dims[y_loc]);
+            if (found_y) {
+                std::swap(dims[i], dims[y_loc]);
+            }
             return *this;
         }
     }
-    user_error << "Could not find variables " << x.name()
-               << " and " << y.name() << " to reorder in schedule.\n";
+    user_error << "In schedule for " << name()
+               << ", could not find variables " << x.name()
+               << " and " << y.name() << " to reorder.\n"
+               << dump_dim_list(dims);
     return *this;
 }
 
@@ -2506,8 +2558,10 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
             return *this;
         }
     }
-    user_error << "Could not find variable " << dim.name()
-               << " to align the storage of.\n";
+    user_error << "In schedule for " << name()
+               << ", could not find var " << dim.name()
+               << " to align the storage of.\n"
+               << dump_dim_list(func.schedule().storage_dims());
     return *this;
 }
 
@@ -2522,8 +2576,10 @@ Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) 
             return *this;
         }
     }
-    user_error << "Could not find variable " << dim.name()
-               << " to fold the storage of.\n";
+    user_error << "In schedule for " << name()
+               << ", could not find var " << dim.name()
+               << " to fold the storage of.\n"
+               << dump_dim_list(func.schedule().storage_dims());
     return *this;
 }
 
@@ -2654,7 +2710,9 @@ public:
     void visit(const Variable *v) override {
         int index = Var::implicit_index(v->name);
         if (index != -1) {
-            if (index >= count) count = index + 1;
+            if (index >= count) {
+                count = index + 1;
+            }
         }
     }
 };
@@ -2781,7 +2839,9 @@ Stage FuncRef::operator=(const FuncRef &e) {
 Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Tuple &e) {
     Func f(func);
 
-    if (func.has_pure_definition()) return f;
+    if (func.has_pure_definition()) {
+        return f;
+    }
     vector<Var> pure_args(a.size());
 
     // Reuse names of existing pure args
@@ -3021,10 +3081,18 @@ void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
                               const Target &target,
                               const ParamMap &param_map) {
     vector<int32_t> sizes;
-    if (x_size) sizes.push_back(x_size);
-    if (y_size) sizes.push_back(y_size);
-    if (z_size) sizes.push_back(z_size);
-    if (w_size) sizes.push_back(w_size);
+    if (x_size) {
+        sizes.push_back(x_size);
+    }
+    if (y_size) {
+        sizes.push_back(y_size);
+    }
+    if (z_size) {
+        sizes.push_back(z_size);
+    }
+    if (w_size) {
+        sizes.push_back(w_size);
+    }
     infer_input_bounds(sizes, target, param_map);
 }
 

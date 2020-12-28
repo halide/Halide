@@ -2,6 +2,8 @@
 #include <sstream>
 #include <utility>
 
+#include "CodeGen_C.h"
+#include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
 #include "Debug.h"
@@ -16,6 +18,87 @@ using std::string;
 using std::vector;
 
 static ostringstream nil;
+
+namespace {
+
+class CodeGen_Metal_Dev : public CodeGen_GPU_Dev {
+public:
+    CodeGen_Metal_Dev(Target target);
+
+    /** Compile a GPU kernel into the module. This may be called many times
+     * with different kernels, which will all be accumulated into a single
+     * source module shared by a given Halide pipeline. */
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args) override;
+
+    /** (Re)initialize the GPU kernel module. This is separate from compile,
+     * since a GPU device module will often have many kernels compiled into it
+     * for a single pipeline. */
+    void init_module() override;
+
+    std::vector<char> compile_to_src() override;
+
+    std::string get_current_kernel_name() override;
+
+    void dump() override;
+
+    std::string print_gpu_name(const std::string &name) override;
+
+    std::string api_unique_name() override {
+        return "metal";
+    }
+
+protected:
+    class CodeGen_Metal_C : public CodeGen_C {
+    public:
+        CodeGen_Metal_C(std::ostream &s, Target t)
+            : CodeGen_C(s, t) {
+        }
+        void add_kernel(const Stmt &stmt,
+                        const std::string &name,
+                        const std::vector<DeviceArgument> &args);
+
+    protected:
+        using CodeGen_C::visit;
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
+        // Vectors in Metal come in two varieties, regular and packed.
+        // For storage allocations and pointers used in address arithmetic,
+        // packed types must be used. For temporaries, constructors, etc.
+        // regular types must be used.
+        // This concept also potentially applies to half types, which are
+        // often only supported for storage, not arithmetic,
+        // hence the method name.
+        std::string print_storage_type(Type type);
+        std::string print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space);
+        std::string print_reinterpret(Type type, const Expr &e) override;
+        std::string print_extern_call(const Call *op) override;
+
+        std::string get_memory_space(const std::string &);
+
+        std::string shared_name;
+
+        void visit(const Min *) override;
+        void visit(const Max *) override;
+        void visit(const Div *) override;
+        void visit(const Mod *) override;
+        void visit(const For *) override;
+        void visit(const Ramp *op) override;
+        void visit(const Broadcast *op) override;
+        void visit(const Call *op) override;
+        void visit(const Load *op) override;
+        void visit(const Store *op) override;
+        void visit(const Select *op) override;
+        void visit(const Allocate *op) override;
+        void visit(const Free *op) override;
+        void visit(const Cast *op) override;
+        void visit(const Atomic *op) override;
+    };
+
+    std::ostringstream src_stream;
+    std::string cur_kernel_name;
+    CodeGen_Metal_C metal_c;
+};
 
 CodeGen_Metal_Dev::CodeGen_Metal_Dev(Target t)
     : metal_c(src_stream, t) {
@@ -175,7 +258,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))
             << "kernel loop must be either gpu block or gpu thread\n";
-        internal_assert(is_zero(loop->min));
+        internal_assert(is_const_zero(loop->min));
 
         stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
                << " = " << simt_intrinsic(loop->name) << ";\n";
@@ -216,7 +299,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        auto fence_type_ptr = as_const_int(op->args[0]);
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 
@@ -251,7 +334,7 @@ Expr is_ramp_one(const Expr &e) {
         return Expr();
     }
 
-    if (is_one(r->stride)) {
+    if (is_const_one(r->stride)) {
         return r->base;
     }
 
@@ -268,7 +351,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside Metal kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside Metal kernel.\n";
     user_assert(op->type.lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->type << ".\n";
 
     // If we're loading a contiguous ramp, load from a vector type pointer.
@@ -336,7 +419,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "Predicated store is not supported inside Metal kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported inside Metal kernel.\n";
     user_assert(op->value.type().lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->value.type() << ".\n";
 
     string id_value = print_expr(op->value);
@@ -474,11 +557,9 @@ void CodeGen_Metal_Dev::add_kernel(Stmt s,
 namespace {
 struct BufferSize {
     string name;
-    size_t size;
+    size_t size = 0;
 
-    BufferSize()
-        : size(0) {
-    }
+    BufferSize() = default;
     BufferSize(string name, size_t size)
         : name(std::move(name)), size(size) {
     }
@@ -579,7 +660,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
         if (args[i].is_buffer) {
             stream << ",\n";
             stream << " " << get_memory_space(args[i].name) << " ";
-            if (!args[i].write) stream << "const ";
+            if (!args[i].write) {
+                stream << "const ";
+            }
             stream << print_storage_type(args[i].type) << " *"
                    << print_name(args[i].name) << " [[ buffer(" << buffer_index++ << ") ]]";
             Allocation alloc;
@@ -698,8 +781,6 @@ void CodeGen_Metal_Dev::init_module() {
                << "#endif\n"
                << "}\n";  // close namespace
 
-    metal_c.add_common_macros(src_stream);
-
     src_stream << "#define halide_unused(x) (void)(x)\n";
 
     src_stream << "\n";
@@ -726,6 +807,12 @@ void CodeGen_Metal_Dev::dump() {
 
 std::string CodeGen_Metal_Dev::print_gpu_name(const std::string &name) {
     return name;
+}
+
+}  // namespace
+
+CodeGen_GPU_Dev *new_CodeGen_Metal_Dev(const Target &target) {
+    return new CodeGen_Metal_Dev(target);
 }
 
 }  // namespace Internal

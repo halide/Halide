@@ -43,7 +43,7 @@ struct spawned_thread {
 WEAK void *spawn_thread_helper(void *arg) {
     spawned_thread *t = (spawned_thread *)arg;
     t->f(t->closure);
-    return NULL;
+    return nullptr;
 }
 
 }  // namespace Internal
@@ -66,7 +66,7 @@ WEAK halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
     t->closure = closure;
-    t->handle = CreateThread(NULL, 0, spawn_thread_helper, t, 0, NULL);
+    t->handle = CreateThread(nullptr, 0, spawn_thread_helper, t, 0, nullptr);
     return (halide_thread *)t;
 }
 
@@ -87,17 +87,16 @@ namespace Synchronization {
 struct thread_parker {
     CriticalSection critical_section;
     ConditionVariable condvar;
-    bool should_park;
+    bool should_park = false;
 
-#if __cplusplus >= 201103L
     thread_parker(const thread_parker &) = delete;
-#endif
+    thread_parker &operator=(const thread_parker &) = delete;
+    thread_parker(thread_parker &&) = delete;
+    thread_parker &operator=(thread_parker &&) = delete;
 
-    ALWAYS_INLINE thread_parker()
-        : should_park(false) {
+    ALWAYS_INLINE thread_parker() {
         InitializeCriticalSection(&critical_section);
         InitializeConditionVariable(&condvar);
-        should_park = false;
     }
 
     ALWAYS_INLINE ~thread_parker() {

@@ -68,7 +68,6 @@ private:
     const map<string, Box> &external_buffers;
     Scope<Box> buffer_bounds;
 
-private:
     using IRMutator::visit;
 
     Box get_buffer_bounds(const string &name, int dims) {
@@ -230,7 +229,7 @@ class ReducePrefetchDimension : public IRMutator {
         Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Evaluate>();
         internal_assert(op);
-        const Call *call = op->value.as<Call>();
+        const Call *prefetch = Call::as_intrinsic(op->value, {Call::prefetch});
 
         // TODO(psuriana): Ideally, we want to keep the loop size minimal to
         // minimize the number of prefetch calls. We probably want to lift
@@ -238,14 +237,14 @@ class ReducePrefetchDimension : public IRMutator {
         // the prefetch call.
 
         size_t max_arg_size = 2 + 2 * max_dim;  // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...}
-        if (call && call->is_intrinsic(Call::prefetch) && (call->args.size() > max_arg_size)) {
-            const Variable *base = call->args[0].as<Variable>();
+        if (prefetch && (prefetch->args.size() > max_arg_size)) {
+            const Variable *base = prefetch->args[0].as<Variable>();
             internal_assert(base && base->type.is_handle());
 
             vector<string> index_names;
-            Expr new_offset = call->args[1];
-            for (size_t i = max_arg_size; i < call->args.size(); i += 2) {
-                Expr stride = call->args[i + 1];
+            Expr new_offset = prefetch->args[1];
+            for (size_t i = max_arg_size; i < prefetch->args.size(); i += 2) {
+                Expr stride = prefetch->args[i + 1];
                 string index_name = "prefetch_reduce_" + base->name + "." + std::to_string((i - 1) / 2);
                 index_names.push_back(index_name);
                 new_offset += Variable::make(Int(32), index_name) * stride;
@@ -253,17 +252,17 @@ class ReducePrefetchDimension : public IRMutator {
 
             vector<Expr> args = {base, new_offset};
             for (size_t i = 2; i < max_arg_size; ++i) {
-                args.push_back(call->args[i]);
+                args.push_back(prefetch->args[i]);
             }
 
-            stmt = Evaluate::make(Call::make(call->type, Call::prefetch, args, Call::Intrinsic));
+            stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
-                stmt = For::make(index_names[i], 0, call->args[(i + max_dim) * 2 + 2],
+                stmt = For::make(index_names[i], 0, prefetch->args[(i + max_dim) * 2 + 2],
                                  ForType::Serial, DeviceAPI::None, stmt);
             }
             debug(5) << "\nReduce prefetch to " << max_dim << " dim:\n"
                      << "Before:\n"
-                     << Expr(call) << "\nAfter:\n"
+                     << Expr(prefetch) << "\nAfter:\n"
                      << stmt << "\n";
         }
         return stmt;
@@ -287,20 +286,18 @@ class SplitPrefetch : public IRMutator {
         Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Evaluate>();
         internal_assert(op);
-        const Call *call = op->value.as<Call>();
-
-        if (call && call->is_intrinsic(Call::prefetch)) {
-            const Variable *base = call->args[0].as<Variable>();
+        if (const Call *prefetch = Call::as_intrinsic(op->value, {Call::prefetch})) {
+            const Variable *base = prefetch->args[0].as<Variable>();
             internal_assert(base && base->type.is_handle());
 
-            int elem_size = call->type.bytes();
+            int elem_size = prefetch->type.bytes();
 
             vector<string> index_names;
             vector<Expr> extents;
-            Expr new_offset = call->args[1];
-            for (size_t i = 2; i < call->args.size(); i += 2) {
-                Expr extent = call->args[i];
-                Expr stride = call->args[i + 1];
+            Expr new_offset = prefetch->args[1];
+            for (size_t i = 2; i < prefetch->args.size(); i += 2) {
+                Expr extent = prefetch->args[i];
+                Expr stride = prefetch->args[i + 1];
                 Expr stride_bytes = stride * elem_size;
 
                 string index_name = "prefetch_split_" + base->name + "." + std::to_string((i - 1) / 2);
@@ -324,14 +321,14 @@ class SplitPrefetch : public IRMutator {
             }
 
             vector<Expr> args = {base, new_offset, Expr(1), simplify(max_byte_size / elem_size)};
-            stmt = Evaluate::make(Call::make(call->type, Call::prefetch, args, Call::Intrinsic));
+            stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
                 stmt = For::make(index_names[i], 0, extents[i],
                                  ForType::Serial, DeviceAPI::None, stmt);
             }
             debug(5) << "\nSplit prefetch to max of " << max_byte_size << " bytes:\n"
                      << "Before:\n"
-                     << Expr(call) << "\nAfter:\n"
+                     << Expr(prefetch) << "\nAfter:\n"
                      << stmt << "\n";
         }
         return stmt;
@@ -364,7 +361,7 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
 
     // Hexagon's prefetch takes in a range of address and can be maximum of
     // two dimension. Other architectures generate one prefetch per cache line.
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         max_dim = 2;
     } else if (t.arch == Target::ARM) {
         // ARM's cache line size can be 32 or 64 bytes and it can switch the

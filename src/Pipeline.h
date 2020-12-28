@@ -148,9 +148,6 @@ private:
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
-    static void auto_schedule_Mullapudi2016(const Pipeline &pipeline, const Target &target,
-                                            const MachineParams &arch_params, AutoSchedulerResults *outputs);
-
     static std::map<std::string, AutoSchedulerFn> &get_autoscheduler_map();
 
     static std::string &get_default_autoscheduler_name();
@@ -339,7 +336,7 @@ public:
     Module compile_to_module(const std::vector<Argument> &args,
                              const std::string &fn_name,
                              const Target &target = get_target_from_environment(),
-                             const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
+                             LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
@@ -627,7 +624,9 @@ public:
         stream << " (*)(";
         bool comma = false;
         for (const auto &t : sig.arg_types_) {
-            if (comma) stream << ", ";
+            if (comma) {
+                stream << ", ";
+            }
             stream << t;
             comma = true;
         }

@@ -161,7 +161,7 @@ bool can_parallelize_rvar(const string &v,
         hazard = l->body;
     }
 
-    return is_zero(hazard);
+    return is_const_zero(hazard);
 }
 
 }  // namespace Internal

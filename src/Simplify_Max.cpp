@@ -87,8 +87,10 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              rewrite(max(x, intrin(Call::likely_if_innermost, x)), a) ||
 
              (no_overflow(op->type) &&
-              (rewrite(max(ramp(x, y), broadcast(z)), a, can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
-               rewrite(max(ramp(x, y), broadcast(z)), b, can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
+              (rewrite(max(ramp(x, y, lanes), broadcast(z, lanes)), a,
+                       can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
+               rewrite(max(ramp(x, y, lanes), broadcast(z, lanes)), b,
+                       can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
                // Compare x to a stair-step function in x
                rewrite(max(((x + c0)/c1)*c1 + c2, x), a, c1 > 0 && c0 + c2 >= c1 - 1) ||
                rewrite(max(x, ((x + c0)/c1)*c1 + c2), b, c1 > 0 && c0 + c2 >= c1 - 1) ||
@@ -116,8 +118,8 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              rewrite(max(max(x, y), max(z, x)), max(max(y, z), x)) ||
              rewrite(max(max(y, x), max(z, x)), max(max(y, z), x)) ||
              rewrite(max(max(x, y), max(z, w)), max(max(max(x, y), z), w)) ||
-             rewrite(max(broadcast(x), broadcast(y)), broadcast(max(x, y), lanes)) ||
-             rewrite(max(max(x, broadcast(y)), broadcast(z)), max(x, broadcast(max(y, z), lanes))) ||
+             rewrite(max(broadcast(x, c0), broadcast(y, c0)), broadcast(max(x, y), c0)) ||
+             rewrite(max(max(x, broadcast(y, c0)), broadcast(z, c0)), max(x, broadcast(max(y, z), c0))) ||
              rewrite(max(min(x, y), min(x, z)), min(x, max(y, z))) ||
              rewrite(max(min(x, y), min(z, x)), min(x, max(y, z))) ||
              rewrite(max(min(y, x), min(x, z)), min(max(y, z), x)) ||

@@ -15,9 +15,6 @@ namespace Internal {
  * calls. */
 Stmt optimize_hexagon_shuffles(const Stmt &s, int lut_alignment);
 
-/** Generate vtmpy instruction if possible */
-Stmt vtmpy_generator(Stmt s);
-
 /* Generate vscatter-vgather instructions on Hexagon using VTCM memory.
  * The pass should be run before generating shuffles.
  * Some expressions which generate vscatter-vgathers are:
@@ -40,6 +37,14 @@ Expr native_interleave(const Expr &x);
 bool is_native_deinterleave(const Expr &x);
 bool is_native_interleave(const Expr &x);
 //@}
+
+std::string type_suffix(Type type, bool signed_variants = true);
+
+std::string type_suffix(const Expr &a, bool signed_variants = true);
+
+std::string type_suffix(const Expr &a, const Expr &b, bool signed_variants = true);
+
+std::string type_suffix(const std::vector<Expr> &ops, bool signed_variants = true);
 
 }  // namespace Internal
 }  // namespace Halide

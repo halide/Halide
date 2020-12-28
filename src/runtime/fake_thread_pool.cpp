@@ -27,22 +27,22 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
 WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
                                           struct halide_parallel_task_t *tasks,
                                           void *task_parent) {
-    halide_error(NULL, "halide_default_do_parallel_tasks not implemented on this platform.");
+    halide_error(nullptr, "halide_default_do_parallel_tasks not implemented on this platform.");
     return -1;
 }
 
 WEAK int halide_default_semaphore_init(halide_semaphore_t *s, int n) {
-    halide_error(NULL, "halide_default_semaphore_init not implemented on this platform.");
+    halide_error(nullptr, "halide_default_semaphore_init not implemented on this platform.");
     return 0;
 }
 
 WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
-    halide_error(NULL, "halide_default_semaphore_release not implemented on this platform.");
+    halide_error(nullptr, "halide_default_semaphore_release not implemented on this platform.");
     return 0;
 }
 
 WEAK bool halide_default_semaphore_try_acquire(halide_semaphore_t *s, int n) {
-    halide_error(NULL, "halide_default_semaphore_try_acquire not implemented on this platform.");
+    halide_error(nullptr, "halide_default_semaphore_try_acquire not implemented on this platform.");
     return false;
 }
 
@@ -68,12 +68,12 @@ extern "C" {
 
 WEAK halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     // We can't fake spawning a thread. Emit an error.
-    halide_error(NULL, "halide_spawn_thread not implemented on this platform.");
-    return NULL;
+    halide_error(nullptr, "halide_spawn_thread not implemented on this platform.");
+    return nullptr;
 }
 
 WEAK void halide_join_thread(halide_thread *thread_arg) {
-    halide_error(NULL, "halide_join_thread not implemented on this platform.");
+    halide_error(nullptr, "halide_join_thread not implemented on this platform.");
 }
 
 // Don't need to do anything with mutexes since we are in a fake thread pool.
@@ -90,7 +90,7 @@ struct halide_mutex_array {
 };
 
 WEAK halide_mutex_array *halide_mutex_array_create(int sz) {
-    return NULL;
+    return nullptr;
 }
 
 WEAK void halide_mutex_array_destroy(void *user_context, void *array) {
@@ -109,7 +109,7 @@ WEAK void halide_shutdown_thread_pool() {
 
 WEAK int halide_set_num_threads(int n) {
     if (n != 1) {
-        halide_error(NULL, "halide_set_num_threads: only supports a value of 1 on this platform.");
+        halide_error(nullptr, "halide_set_num_threads: only supports a value of 1 on this platform.");
     }
     return 1;
 }

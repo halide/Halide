@@ -509,11 +509,14 @@ struct Call : public ExprNode<Call> {
         div_round_to_zero,
         dynamic_shuffle,
         extract_mask_element,
-        gather,
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
         gpu_thread_barrier,
+        hvx_gather,
+        hvx_scatter,
+        hvx_scatter_acc,
+        hvx_scatter_release,
         if_then_else,
         if_then_else_mask,
         image_load,
@@ -535,9 +538,6 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
-        scatter,
-        scatter_acc,
-        scatter_release,
         select_mask,
         shift_left,
         shift_right,
@@ -636,6 +636,19 @@ struct Call : public ExprNode<Call> {
         return is_intrinsic() && this->name == get_intrinsic_name(op);
     }
 
+    /** Returns a pointer to a call node if the expression is a call to
+     * one of the requested intrinsics. */
+    static const Call *as_intrinsic(const Expr &e, std::initializer_list<IntrinsicOp> intrinsics) {
+        if (const Call *c = e.as<Call>()) {
+            for (IntrinsicOp i : intrinsics) {
+                if (c->is_intrinsic(i)) {
+                    return c;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     bool is_extern() const {
         return (call_type == Extern ||
                 call_type == ExternCPlusPlus ||
@@ -731,7 +744,7 @@ struct Shuffle : public ExprNode<Shuffle> {
 
     /** Indices indicating which vector element to place into the
      * result. The elements are numbered by their position in the
-     * concatenation of the vector argumentss. */
+     * concatenation of the vector arguments. */
     std::vector<int> indices;
 
     static Expr make(const std::vector<Expr> &vectors,
@@ -746,6 +759,10 @@ struct Shuffle : public ExprNode<Shuffle> {
     static Expr make_concat(const std::vector<Expr> &vectors);
 
     /** Convenience constructor for making a shuffle representing a
+     * broadcast of a vector. */
+    static Expr make_broadcast(Expr vector, int factor);
+
+    /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */
     static Expr make_slice(Expr vector, int begin, int stride, int size);
 
@@ -756,6 +773,14 @@ struct Shuffle : public ExprNode<Shuffle> {
     /** Check if this shuffle is an interleaving of the vector
      * arguments. */
     bool is_interleave() const;
+
+    /** Check if this shuffle can be represented as a broadcast.
+     * For example:
+     * A uint8 shuffle of with 4*n lanes and indices:
+     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
+     * can be represented as a uint32 broadcast with n lanes (factor = 4). */
+    bool is_broadcast() const;
+    int broadcast_factor() const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */

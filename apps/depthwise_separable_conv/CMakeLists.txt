@@ -21,7 +21,7 @@ target_link_libraries(depthwise_separable_conv.generator
 add_halide_library(depthwise_separable_conv FROM depthwise_separable_conv.generator)
 add_halide_library(depthwise_separable_conv_auto_schedule FROM depthwise_separable_conv.generator
                    GENERATOR depthwise_separable_conv
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(depthwise_separable_conv_process process.cpp)
@@ -34,6 +34,6 @@ target_link_libraries(depthwise_separable_conv_process
 # Test that the app actually works!
 add_test(NAME depthwise_separable_conv_process COMMAND depthwise_separable_conv_process)
 set_tests_properties(depthwise_separable_conv_process PROPERTIES
-                     LABELS internal_app_tests
+                     LABELS depthwise_separable_conv
                      PASS_REGULAR_EXPRESSION "Success!"
                      SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")

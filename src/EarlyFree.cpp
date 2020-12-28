@@ -120,7 +120,9 @@ private:
     using IRMutator::visit;
 
     Stmt inject_marker(Stmt s) {
-        if (injected) return s;
+        if (injected) {
+            return s;
+        }
         if (s.same_as(last_use)) {
             injected = true;
             return Block::make(s, Free::make(func));

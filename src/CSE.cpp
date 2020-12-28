@@ -244,9 +244,9 @@ class CSEEveryExprInStmt : public IRMutator {
             lets.emplace_back(let->name, let->value);
             dummy = let->body;
         }
-        const Call *c = dummy.as<Call>();
-        internal_assert(c && c->is_intrinsic(Call::bundle) && c->args.size() == 2);
-        Stmt s = Store::make(op->name, c->args[0], c->args[1],
+        const Call *bundle = Call::as_intrinsic(dummy, {Call::bundle});
+        internal_assert(bundle && bundle->args.size() == 2);
+        Stmt s = Store::make(op->name, bundle->args[0], bundle->args[1],
                              op->param, mutate(op->predicate), op->alignment);
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
             s = LetStmt::make(it->first, it->second, s);
@@ -272,7 +272,9 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     Expr e = e_in;
 
     // Early-out for trivial cases.
-    if (is_const(e) || e.as<Variable>()) return e;
+    if (is_const(e) || e.as<Variable>()) {
+        return e;
+    }
 
     debug(4) << "\n\n\nInput to CSE " << e << "\n";
 
@@ -335,7 +337,7 @@ namespace {
 // Normalize all names in an expr so that expr compares can be done
 // without worrying about mere name differences.
 class NormalizeVarNames : public IRMutator {
-    int counter;
+    int counter = 0;
 
     map<string, string> new_names;
 
@@ -359,9 +361,7 @@ class NormalizeVarNames : public IRMutator {
     }
 
 public:
-    NormalizeVarNames()
-        : counter(0) {
-    }
+    NormalizeVarNames() = default;
 };
 
 void check(const Expr &in, const Expr &correct) {

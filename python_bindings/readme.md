@@ -32,6 +32,8 @@ with some differences where the C++ idiom is either inappropriate or impossible:
 - `Buffer::for_each_value()` is hard to implement well in Python; it's omitted
   entirely for now.
 - `Func::in` becomes `Func.in_` because `in` is a Python keyword.
+- `Func::async` becomes `Func.async_` because `async` is a Python keyword.
+- The `not` keyword cannot be used to negate boolean Halide expressions. Instead, the `logical_not` function can be used and is equivalent to using `operator!` in C++.
 
 ## Enhancements to the C++ API
 
