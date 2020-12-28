@@ -1,5 +1,6 @@
 #include "Simplify_Internal.h"
 
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 
@@ -421,7 +422,10 @@ Stmt Simplify::visit(const Block *op) {
                equal(store_first->predicate, store_next->predicate) &&
                is_pure(store_first->index) &&
                is_pure(store_first->value) &&
-               is_pure(store_first->predicate)) {
+               is_pure(store_first->predicate) &&
+               !expr_uses_var(store_next->index, store_next->name) &&
+               !expr_uses_var(store_next->value, store_next->name) &&
+               !expr_uses_var(store_next->predicate, store_next->name)) {
         // Second store clobbers first
         if (block_rest) {
             return Block::make(store_next, block_rest->rest);
