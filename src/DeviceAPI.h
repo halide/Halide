@@ -24,6 +24,7 @@ enum class DeviceAPI {
     Hexagon,
     HexagonDma,
     D3D12Compute,
+    Vulkan,
 };
 
 /** An array containing all the device apis. Useful for iterating
@@ -38,7 +39,8 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::Metal,
                                      DeviceAPI::Hexagon,
                                      DeviceAPI::HexagonDma,
-                                     DeviceAPI::D3D12Compute};
+                                     DeviceAPI::D3D12Compute,
+                                     DeviceAPI::Vulkan};
 
 }  // namespace Halide
 

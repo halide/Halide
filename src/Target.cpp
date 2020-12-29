@@ -948,7 +948,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
     // clang-format off
-    const std::array<Feature, 18> union_features = {{
+    const std::array<Feature, 19> union_features = {{
         // These are true union features.
         CUDA,
         D3D12Compute,
