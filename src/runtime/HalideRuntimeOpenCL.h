@@ -1,7 +1,12 @@
 #ifndef HALIDE_HALIDERUNTIMEOPENCL_H
 #define HALIDE_HALIDERUNTIMEOPENCL_H
 
+// Don't include HalideRuntime.h if the contents of it were already pasted into a generated header above this one
+#ifndef HALIDE_HALIDERUNTIME_H
+
 #include "HalideRuntime.h"
+
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,12 +19,13 @@ extern "C" {
 #define HALIDE_RUNTIME_OPENCL
 
 extern const struct halide_device_interface_t *halide_opencl_device_interface();
+extern const struct halide_device_interface_t *halide_opencl_image_device_interface();
 
 /** These are forward declared here to allow clients to override the
  *  Halide OpenCL runtime. Do not call them. */
 // @{
 extern int halide_opencl_initialize_kernels(void *user_context, void **state_ptr,
-                                               const char *src, int size);
+                                            const char *src, int size);
 extern int halide_opencl_run(void *user_context,
                              void *state_ptr,
                              const char *entry_name,
@@ -30,7 +36,7 @@ extern int halide_opencl_run(void *user_context,
                              void *args[],
                              int8_t arg_is_buffer[],
                              int num_attributes,
-                             float* vertex_buffer,
+                             float *vertex_buffer,
                              int num_coords_dim0,
                              int num_coords_dim1);
 // @}
@@ -63,6 +69,19 @@ extern void halide_opencl_set_device_type(const char *n);
  * halide_set_ocl_device_type. */
 extern const char *halide_opencl_get_device_type(void *user_context);
 
+/** Set the additional build options for OpenCL to use. The argument
+ * is copied internally. If never called,
+ * Halide uses the environment variable HL_OCL_BUILD_OPTIONS. */
+extern void halide_opencl_set_build_options(const char *n);
+
+/** Halide calls this to gets the additional build options for OpenCL to
+ * use. Implement this yourself to use a different build options per
+ * user_context. The default implementation returns the value set by
+ * halide_opencl_set_build_options, or the environment variable
+ * HL_OCL_BUILD_OPTIONS. The result is valid until the next call to
+ * halide_opencl_set_build_options. */
+extern const char *halide_opencl_get_build_options(void *user_context);
+
 /** Set the underlying cl_mem for a halide_buffer_t. This memory should be
  * allocated using clCreateBuffer or similar and must have an extent
  * large enough to cover that specified by the halide_buffer_t extent
@@ -71,6 +90,11 @@ extern const char *halide_opencl_get_device_type(void *user_context);
  * or being passed an invalid device pointer. The device and host
  * dirty bits are left unmodified. */
 extern int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr);
+
+/** Same as halide_opencl_wrap_cl_mem but wraps a cl_mem created with
+ * clCreateImage
+ */
+extern int halide_opencl_image_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr);
 
 /** Disconnect a halide_buffer_t from the memory it was previously
  * wrapped around. Should only be called for a halide_buffer_t that
@@ -92,7 +116,7 @@ extern uintptr_t halide_opencl_get_cl_mem(void *user_context, struct halide_buff
 extern uint64_t halide_opencl_get_crop_offset(void *user_context, halide_buffer_t *buf);
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEOPENCL_H
+#endif  // HALIDE_HALIDERUNTIMEOPENCL_H

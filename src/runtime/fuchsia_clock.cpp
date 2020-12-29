@@ -5,7 +5,7 @@ extern "C" {
 typedef int32_t zx_status_t;
 typedef int64_t zx_time_t;
 typedef int64_t zx_duration_t;
-  
+
 zx_time_t zx_clock_get_monotonic();
 
 zx_time_t zx_deadline_after(zx_duration_t nanoseconds);
@@ -30,5 +30,4 @@ WEAK int64_t halide_current_time_ns(void *user_context) {
 WEAK void halide_sleep_ms(void *user_context, int ms) {
     zx_nanosleep(zx_deadline_after(ms * 1000));
 }
-
 }

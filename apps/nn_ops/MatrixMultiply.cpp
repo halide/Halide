@@ -5,8 +5,8 @@
 
 #include "halide_benchmark.h"
 
-#include "common_reference.h"
 #include "MatrixMultiply.h"
+#include "common_reference.h"
 
 #include "HalideBuffer.h"
 
@@ -117,15 +117,15 @@ int main(int argc, char **argv) {
     mat_ab.for_each_element([&](int x, int y) {
         int32_t ab_xy = bias(x);
         for (int k = 0; k < N; k++) {
-            int32_t a_ky = (int32_t) mat_a(k, y) + mat_a_offset;
-            int32_t b_xk = (int32_t) mat_b(x, k) + mat_b_offset;
+            int32_t a_ky = (int32_t)mat_a(k, y) + mat_a_offset;
+            int32_t b_xk = (int32_t)mat_b(x, k) + mat_b_offset;
             ab_xy += a_ky * b_xk;
         }
 
         int32_t output = multiply_quantized_multiplier_reference(ab_xy, output_multiplier, output_shift);
         output += output_offset;
-        output = std::max(output, (int32_t) output_min);
-        output = std::min(output, (int32_t) output_max);
+        output = std::max(output, (int32_t)output_min);
+        output = std::min(output, (int32_t)output_max);
         if (output != mat_ab(x, y)) {
             printf("Mismatch at %d %d: %d != %d\n", x, y, output, mat_ab(x, y));
             abort();

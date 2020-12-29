@@ -18,7 +18,6 @@ public:
     CodeGen_RISCV(Target);
 
 protected:
-
     using CodeGen_Posix::visit;
 
     std::string mcpu() const override;
@@ -27,6 +26,7 @@ protected:
     int native_vector_bits() const override;
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

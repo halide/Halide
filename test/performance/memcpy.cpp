@@ -1,13 +1,20 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
-#include <cstdio>
+#include "halide_test_dirs.h"
+
 #include <chrono>
-#include "test/common/halide_test_dirs.h"
+#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     ImageParam src(UInt(8), 1);
     Func dst;
     Var x;

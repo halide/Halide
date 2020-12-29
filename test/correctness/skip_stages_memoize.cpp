@@ -42,7 +42,7 @@ int check_correctness_single(const Buffer<int> &out, bool toggle) {
     for (int x = 0; x < out.width(); ++x) {
         int correct = 1;
         if (toggle) {
-            correct = 2*x;
+            correct = 2 * x;
         }
         if (out(x) != correct) {
             printf("out(%d) = %d instead of %d\n",
@@ -57,7 +57,7 @@ int check_correctness_double(const Buffer<int> &out, bool toggle1, bool toggle2)
     for (int x = 0; x < out.width(); ++x) {
         int correct;
         if (toggle1 && toggle2) {
-            correct = 2*x;
+            correct = 2 * x;
         } else if (toggle1 && !toggle2) {
             correct = x;
         } else if (!toggle1 && toggle2) {
@@ -74,7 +74,6 @@ int check_correctness_double(const Buffer<int> &out, bool toggle1, bool toggle2)
     return 0;
 }
 
-
 int single_memoize_test(int index) {
     buffer_index = index;
 
@@ -82,7 +81,7 @@ int single_memoize_test(int index) {
     Func f1("f1_" + std::to_string(index)), f2("f2_" + std::to_string(index));
     Var x;
 
-    f1(x) = 2*x;
+    f1(x) = 2 * x;
     f2(x) = select(toggle, f1(x), 1);
 
     f1.compute_root().memoize();
@@ -92,7 +91,7 @@ int single_memoize_test(int index) {
 
     f2.compile_jit();
 
-    for (bool toggle_val : { false, true }) {
+    for (bool toggle_val : {false, true}) {
         set_toggle1 = toggle_val;
         toggle.set(set_toggle1);
         Buffer<int> out = f2.realize(10);
@@ -110,9 +109,9 @@ int tuple_memoize_test(int index) {
     Func f1("f1_" + std::to_string(index)), f2("f2_" + std::to_string(index));
     Var x;
 
-    f1(x) = Tuple(2*x, 2*x);
+    f1(x) = Tuple(2 * x, 2 * x);
     f2(x) = Tuple(select(toggle, f1(x)[0], 1),
-                     select(toggle, f1(x)[1], 1));
+                  select(toggle, f1(x)[1], 1));
 
     f1.compute_root().memoize();
 
@@ -121,7 +120,7 @@ int tuple_memoize_test(int index) {
 
     f2.compile_jit();
 
-    for (bool toggle_val : { false, true }) {
+    for (bool toggle_val : {false, true}) {
         set_toggle1 = toggle_val;
         toggle.set(set_toggle1);
         Realization out = f2.realize(128);
@@ -147,7 +146,7 @@ int non_trivial_allocate_predicate_test(int index) {
     Var x;
 
     // Generate allocate f1[...] if toggle
-    f1(x) = 2*x;
+    f1(x) = 2 * x;
     f2(x) = select(toggle, f1(x), 1);
     f3(x) = select(toggle, f2(x), 1);
 
@@ -160,7 +159,7 @@ int non_trivial_allocate_predicate_test(int index) {
 
     f3.compile_jit();
 
-    for (bool toggle_val : { false, true }) {
+    for (bool toggle_val : {false, true}) {
         set_toggle1 = toggle_val;
         set_toggle2 = toggle_val;
         toggle.set(set_toggle1);
@@ -231,5 +230,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

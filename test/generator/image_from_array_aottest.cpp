@@ -1,8 +1,8 @@
 #include "HalideBuffer.h"
 
-#include <stdint.h>
 #include <iostream>
 #include <limits>
+#include <stdint.h>
 #include <type_traits>
 #include <vector>
 
@@ -14,7 +14,7 @@ using namespace Halide::Runtime;
 // E.g. ary[2][3][4] returns (4, 3, 2).
 
 template<typename T>
-vector<int> dimension_sizes(T const &, vector<int> sizes = vector<int>() ) {
+vector<int> dimension_sizes(T const &, vector<int> sizes = vector<int>()) {
     return sizes;
 }
 
@@ -30,12 +30,12 @@ vector<int> dimension_sizes(Array (&vals)[N], vector<int> sizes = vector<int>())
 // Array has.
 
 template<typename T>
-T const * first_of_array(T const &val) {
+T const *first_of_array(T const &val) {
     return &val;
 }
 
 template<typename Array, size_t N>
-typename remove_all_extents<Array>::type const * first_of_array(Array (&vals)[N]) {
+typename remove_all_extents<Array>::type const *first_of_array(Array (&vals)[N]) {
     return first_of_array(vals[0]);
 }
 
@@ -72,9 +72,15 @@ void verify_dimension_sizes() {
 
     vector<int> v1(1), v2(2), v3(3), v4(4);
     v1[0] = 2;
-    v2[0] = 3; v2[1] = 4;
-    v3[0] = 5; v3[1] = 6; v3[2] = 7;
-    v4[0] = 8; v4[1] = 9; v4[2] = 10; v4[3] = 11;
+    v2[0] = 3;
+    v2[1] = 4;
+    v3[0] = 5;
+    v3[1] = 6;
+    v3[2] = 7;
+    v4[0] = 8;
+    v4[1] = 9;
+    v4[2] = 10;
+    v4[3] = 11;
 
     compare_vectors(dimension_sizes(a1), v1);
     compare_vectors(dimension_sizes(a2), v2);
@@ -125,8 +131,7 @@ void test() {
 
 //-----------------------------------------------------------------------------
 
-int main()
-{
+int main() {
     // Verify dimension_sizes() works as intended.
     verify_dimension_sizes();
 

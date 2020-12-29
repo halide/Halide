@@ -17,4 +17,4 @@ extern "C" int cxx_mangling_3(void *ctx, halide_buffer_t *_input_buffer, int8_t 
     return AnotherNamespace::cxx_mangling(_input_buffer, _offset_i8, _offset_u8, _offset_i16, _offset_u16, _offset_i32, _offset_u32, _offset_i64, _offset_u64, _scale_direction, _scale_f, _scale_d, _ptr, _const_ptr, _void_ptr, _const_void_ptr, _string_ptr, _const_string_ptr, nullptr, nullptr, nullptr, _f_buffer);
 }
 
-};
+};  // namespace HalideTest

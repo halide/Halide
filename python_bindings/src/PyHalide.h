@@ -1,9 +1,9 @@
 #ifndef HALIDE_PYTHON_BINDINGS_PYHALIDE_H
 #define HALIDE_PYTHON_BINDINGS_PYHALIDE_H
 
-#include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
+#include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
 // Some very-commonly-used headers here, to simplify things.
@@ -32,8 +32,9 @@ std::vector<T> args_to_vector(const py::args &args, size_t start_offset = 0, siz
     return v;
 }
 
+Expr double_to_expr_check(double v);
+
 }  // namespace PythonBindings
 }  // namespace Halide
-
 
 #endif  // HALIDE_PYTHON_BINDINGS_PYHALIDE_H

@@ -15,6 +15,6 @@ int main(int argc, char **argv) {
 
     g.realize(10);
 
-    printf("There should have been an error\n");
+    printf("Success!\n");
     return 0;
 }

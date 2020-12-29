@@ -12,6 +12,8 @@ using std::pair;
 using std::string;
 using std::vector;
 
+namespace {
+
 // Find all the externally referenced scalar parameters
 class FindParameters : public IRGraphVisitor {
 public:
@@ -25,6 +27,8 @@ public:
         }
     }
 };
+
+}  // namespace
 
 // Insert checks to make sure that parameters are within their
 // declared range.
@@ -63,8 +67,7 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
                 ParamAssert p = {
                     constrained_value >= param.min_value(),
                     constrained_value, param.min_value(),
-                    param.name()
-                };
+                    param.name()};
                 asserts.push_back(p);
                 constrained_value = max(constrained_value, param.min_value());
             }
@@ -73,13 +76,12 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
                 ParamAssert p = {
                     constrained_value <= param.max_value(),
                     constrained_value, param.max_value(),
-                    param.name()
-                };
+                    param.name()};
                 asserts.push_back(p);
                 constrained_value = min(constrained_value, param.max_value());
             }
 
-            lets.push_back({ constrained_name, constrained_value });
+            lets.emplace_back(constrained_name, constrained_value);
         }
     }
 
@@ -97,7 +99,7 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
         // Upgrade the types to 64-bit versions for the error call
         Type wider = p.value.type().with_bits(64);
         p.limit_value = cast(wider, p.limit_value);
-        p.value       = cast(wider, p.value);
+        p.value = cast(wider, p.value);
 
         string error_call_name = "halide_error_param";
 

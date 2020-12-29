@@ -15,10 +15,7 @@ int test_per_channel_select() {
     Func gpu("gpu"), cpu("cpu");
     Var x("x"), y("y"), c("c");
 
-    gpu(x, y, c) = cast<uint8_t>(select(c == 0, 128,
-                                        c == 1, x,
-                                        c == 2, y,
-                                        x * y));
+    gpu(x, y, c) = cast<uint8_t>(mux(c, {128, x, y, x * y}));
     gpu.bound(c, 0, 4);
     gpu.glsl(x, y, c);
     gpu.compute_root();

@@ -7,7 +7,7 @@
  * Bindings for parameters, extern calls, etc. are established and the
  * Wasm code is executed. Allows calls to realize to work
  * exactly as if native code had been run, but via a JavaScript/Wasm VM.
- * Currently, V8 is supported, with SpiderMonkey intended to be included soon as well.
+ * Currently, only the WABT interpreter is supported.
  */
 
 #include "Argument.h"
@@ -34,8 +34,7 @@ struct WasmModule {
         const std::vector<Argument> &arguments,
         const std::string &fn_name,
         const std::map<std::string, JITExtern> &externs,
-        const std::vector<JITModule> &extern_deps
-    );
+        const std::vector<JITModule> &extern_deps);
 
     /** Run generated previously compiled wasm code with a set of arguments. */
     int run(const void **args);

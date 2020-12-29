@@ -1,7 +1,12 @@
 #ifndef HALIDE_HALIDERUNTIMEOPENGLCOMPUTE_H
 #define HALIDE_HALIDERUNTIMEOPENGLCOMPUTE_H
 
+// Don't include HalideRuntime.h if the contents of it were already pasted into a generated header above this one
+#ifndef HALIDE_HALIDERUNTIME_H
+
 #include "HalideRuntime.h"
+
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,7 +28,7 @@ extern const struct halide_device_interface_t *halide_openglcompute_device_inter
  *  compiles src OpenGL compute shader into OpenGL program and stores it for future use.
  */
 extern int halide_openglcompute_initialize_kernels(void *user_context, void **state_ptr,
-                                            const char *src, int size);
+                                                   const char *src, int size);
 
 /** This function triggers execution of OpenGL program built around compute shader.
  *  Execution of the shader is parallelized into given number of blocks and threads.
@@ -32,18 +37,18 @@ extern int halide_openglcompute_initialize_kernels(void *user_context, void **st
  *  barrier which forces successive retrieval of output data to wait until shader is done.
  */
 extern int halide_openglcompute_run(void *user_context,
-                             void *state_ptr,
-                             const char *entry_name,
-                             int blocksX, int blocksY, int blocksZ,
-                             int threadsX, int threadsY, int threadsZ,
-                             int shared_mem_bytes,
-                             struct halide_type_t arg_types[],
-                             void *args[],
-                             int8_t is_buffer[],
-                             int num_attributes,
-                             float* vertex_buffer,
-                             int num_coords_dim0,
-                             int num_coords_dim1);
+                                    void *state_ptr,
+                                    const char *entry_name,
+                                    int blocksX, int blocksY, int blocksZ,
+                                    int threadsX, int threadsY, int threadsZ,
+                                    int shared_mem_bytes,
+                                    struct halide_type_t arg_types[],
+                                    void *args[],
+                                    int8_t is_buffer[],
+                                    int num_attributes,
+                                    float *vertex_buffer,
+                                    int num_coords_dim0,
+                                    int num_coords_dim1);
 // @}
 
 /** This function retrieves pointers to OpenGL API functions.
@@ -53,7 +58,6 @@ extern int halide_openglcompute_run(void *user_context,
  */
 void *halide_opengl_get_proc_address(void *user_context, const char *name);
 
-
 /** This function creates an OpenGL context for use by the OpenGL backend.
  *
  *  You may have to implement this yourself as well. Halide only provides
@@ -62,7 +66,7 @@ void *halide_opengl_get_proc_address(void *user_context, const char *name);
 int halide_opengl_create_context(void *user_context);
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEOPENGLCOMPUTE_H
+#endif  // HALIDE_HALIDERUNTIMEOPENGLCOMPUTE_H

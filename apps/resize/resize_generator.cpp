@@ -3,7 +3,10 @@
 using namespace Halide;
 
 enum InterpolationType {
-    Box, Linear, Cubic, Lanczos
+    Box,
+    Linear,
+    Cubic,
+    Lanczos
 };
 
 Expr kernel_box(Expr x) {
@@ -23,8 +26,8 @@ Expr kernel_cubic(Expr x) {
     float a = -0.5f;
 
     return select(xx < 1.0f, (a + 2.0f) * xx3 - (a + 3.0f) * xx2 + 1,
-                  select (xx < 2.0f, a * xx3 - 5 * a * xx2 + 8 * a * xx - 4.0f * a,
-                          0.0f));
+                  select(xx < 2.0f, a * xx3 - 5 * a * xx2 + 8 * a * xx - 4.0f * a,
+                         0.0f));
 }
 
 Expr sinc(Expr x) {
@@ -33,9 +36,9 @@ Expr sinc(Expr x) {
 }
 
 Expr kernel_lanczos(Expr x) {
-    Expr value = sinc(x) * sinc(x/3);
-    value = select(x == 0.0f, 1.0f, value); // Take care of singularity at zero
-    value = select(x > 3 || x < -3, 0.0f, value); // Clamp to zero out of bounds
+    Expr value = sinc(x) * sinc(x / 3);
+    value = select(x == 0.0f, 1.0f, value);        // Take care of singularity at zero
+    value = select(x > 3 || x < -3, 0.0f, value);  // Clamp to zero out of bounds
     return value;
 }
 
@@ -46,20 +49,14 @@ struct KernelInfo {
 };
 
 static KernelInfo kernel_info[] = {
-    { "box", 1, kernel_box },
-    { "linear", 2, kernel_linear },
-    { "cubic", 4, kernel_cubic },
-    { "lanczos", 6, kernel_lanczos }
-};
+    {"box", 1, kernel_box},
+    {"linear", 2, kernel_linear},
+    {"cubic", 4, kernel_cubic},
+    {"lanczos", 6, kernel_lanczos}};
 
 class Resize : public Halide::Generator<Resize> {
 public:
-    GeneratorParam<InterpolationType> interpolation_type
-        {"interpolation_type", Cubic,
-         {{"box", Box},
-          {"linear", Linear},
-          {"cubic", Cubic},
-          {"lanczos", Lanczos}}};
+    GeneratorParam<InterpolationType> interpolation_type{"interpolation_type", Cubic, {{"box", Box}, {"linear", Linear}, {"cubic", Cubic}, {"lanczos", Lanczos}}};
 
     // If we statically know whether we're upsampling or downsampling,
     // we can generate different pipelines (we want to reorder the
@@ -74,38 +71,43 @@ public:
     Var x, y, c, k;
 
     // Intermediate Funcs
-    Func as_float, clamped, resized_x, resized_y,
+    Func as_float, resized_x, resized_y,
         unnormalized_kernel_x, unnormalized_kernel_y,
         kernel_x, kernel_y,
         kernel_sum_x, kernel_sum_y;
 
     void generate() {
 
-        clamped = BoundaryConditions::repeat_edge(input,
-                 {{input.dim(0).min(), input.dim(0).extent()},
-                  {input.dim(1).min(), input.dim(1).extent()}});
-
         // Handle different types by just casting to float
-        as_float(x, y, c) = cast<float>(clamped(x, y, c));
+        as_float(x, y, c) = cast<float>(input(x, y, c));
 
         // For downscaling, widen the interpolation kernel to perform lowpass
         // filtering.
 
+        // Invert the scale factor in a single place and do it
+        // strictly, to avoid getting different ratios showing up in
+        // different places.
+        Expr inverse_scale_factor = strict_float(1.0f / scale_factor);
+
         Expr kernel_scaling = upsample ? Expr(1.0f) : scale_factor;
+        Expr inverse_kernel_scaling = upsample ? Expr(1.0f) : inverse_scale_factor;
 
-        Expr kernel_radius = 0.5f * kernel_info[interpolation_type].taps / kernel_scaling;
+        Expr kernel_radius = 0.5f * kernel_info[interpolation_type].taps * inverse_kernel_scaling;
 
-        Expr kernel_taps = ceil(kernel_info[interpolation_type].taps / kernel_scaling);
+        Expr kernel_taps = cast<int>(ceil(kernel_info[interpolation_type].taps * inverse_kernel_scaling));
 
         // source[xy] are the (non-integer) coordinates inside the source image
-        Expr sourcex = (x + 0.5f) / scale_factor - 0.5f;
-        Expr sourcey = (y + 0.5f) / scale_factor - 0.5f;
+        Expr sourcex = (x + 0.5f) * inverse_scale_factor - 0.5f;
+        Expr sourcey = (y + 0.5f) * inverse_scale_factor - 0.5f;
 
-        // Initialize interpolation kernels. Since we allow an arbitrary
-        // scaling factor, the filter coefficients are different for each x
-        // and y coordinate.
-        Expr beginx = cast<int>(ceil(sourcex - kernel_radius));
-        Expr beginy = cast<int>(ceil(sourcey - kernel_radius));
+        // Initialize interpolation kernels. Since we allow an
+        // arbitrary scaling factor, the filter coefficients are
+        // different for each x and y coordinate. Use strict-float to
+        // ensure fast-math doesn't mess up our bounds inference.
+        Expr beginx = cast<int>(strict_float(ceil(sourcex - kernel_radius)));
+        Expr beginy = cast<int>(strict_float(ceil(sourcey - kernel_radius)));
+        beginx = clamp(beginx, input.dim(0).min(), input.dim(0).max() + 1 - kernel_taps);
+        beginy = clamp(beginy, input.dim(1).min(), input.dim(1).max() + 1 - kernel_taps);
 
         RDom r(0, kernel_taps);
         const KernelInfo &info = kernel_info[interpolation_type];
@@ -141,6 +143,8 @@ public:
     }
 
     void schedule() {
+        const int vec = natural_vector_size<float>();
+
         Var xi, yi;
         unnormalized_kernel_x
             .compute_at(kernel_x, x)
@@ -151,17 +155,18 @@ public:
         kernel_x
             .compute_root()
             .reorder(k, x)
-            .vectorize(x, 8);
+            .vectorize(x, vec);
 
         unnormalized_kernel_y
             .compute_at(kernel_y, y)
-            .vectorize(y, 8);
+            .vectorize(y, vec);
         kernel_sum_y
             .compute_at(kernel_y, y)
             .vectorize(y);
         kernel_y
             .compute_at(output, y)
-            .reorder(k, y).vectorize(y, 8);
+            .reorder(k, y)
+            .vectorize(y, vec);
 
         if (upsample) {
             output
@@ -170,10 +175,11 @@ public:
                 .vectorize(xi);
             resized_x
                 .compute_at(output, x)
-                .vectorize(x, 8);
-            as_float
-                .compute_at(output, y)
-                .vectorize(x, 8);
+                .store_in(MemoryType::Stack)
+                .vectorize(x);
+            resized_y
+                .compute_at(output, xi)
+                .unroll(c);
         } else {
             output
                 .tile(x, y, xi, yi, 32, 8)
@@ -181,9 +187,10 @@ public:
                 .vectorize(xi);
             resized_y
                 .compute_at(output, y)
-                .vectorize(x, 8);
+                .vectorize(x, vec);
             resized_x
-                .compute_at(output, xi);
+                .compute_at(output, xi)
+                .unroll(c);
         }
 
         // Allow the input and output to have arbitrary memory layout,
@@ -211,7 +218,6 @@ public:
                             input.dim(2).stride() == 1 &&
                             input.dim(2).min() == 0 &&
                             input.dim(2).extent() == 4);
-
 
         output.specialize(planar);
 

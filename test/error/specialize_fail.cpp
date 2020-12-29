@@ -15,7 +15,6 @@ int main(int argc, char **argv) {
     p.set(42);  // arbitrary nonzero value
     f.realize(100);
 
-    printf("How did I get here?\n");
-
+    printf("Success!\n");
     return 0;
 }

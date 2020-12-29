@@ -1,28 +1,19 @@
 #!/usr/bin/python3
+
 # Halide tutorial lesson 13: Tuples
 
 # This lesson describes how to write Funcs that evaluate to multiple
 # values.
 
-# On linux, you can compile and run it like so:
-# g++ lesson_13*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_13 -std=c++11
-# LD_LIBRARY_PATH=../bin ./lesson_13
-
-# On os x:
-# g++ lesson_13*.cpp -g -I ../include -L ../bin -lHalide -o lesson_13 -std=c++11
-# DYLD_LIBRARY_PATH=../bin ./lesson_13
-
-# If you have the entire Halide source tree, you can also build it by
-# running:
-#    make tutorial_lesson_13_tuples
-# in a shell with the current directory at the top of the halide
-# source tree.
-from __future__ import print_function
+# This lesson can be built by invoking the command:
+#    make test_tutorial_lesson_13_tuples
+# in a shell with the current directory at python_bindings/
 
 import halide as hl
 
 import numpy as np
 import math
+
 
 def main():
 
@@ -39,9 +30,14 @@ def main():
     # for every x, y coordinate indexed by c.
     color_image = hl.Func()
     c = hl.Var("c")
-    color_image[x, y, c] = hl.select(c == 0, 245, # Red value
+    color_image[x, y, c] = hl.select(c == 0, 245,  # Red value
                                      c == 1, 42,  # Green value
                                      132)        # Blue value
+
+    # Since this pattern appears quite often, Halide provides a
+    # syntatic sugar to write the code above as the following,
+    # using the "mux" function.
+    # color_image[x, y, c] = hl.mux(c, [245, 42, 132]);
 
     # This method is often convenient because it makes it easy to
     # operate on this hl.Func in a way that treats each item in the
@@ -103,24 +99,23 @@ def main():
         assert im1[30, 40] == 30 + 40
         assert np.isclose(im2[30, 40], math.sin(30 * 40))
 
-
     # All Tuple elements are evaluated together over the same domain
     # in the same loop nest, but stored in distinct allocations. The
     # equivalent C++ code to the above is:
     if True:
-        multi_valued_0 = np.empty((80*60), dtype=np.int32)
-        multi_valued_1 = np.empty((80*60), dtype=np.int32)
+        multi_valued_0 = np.empty((80 * 60), dtype=np.int32)
+        multi_valued_1 = np.empty((80 * 60), dtype=np.int32)
 
         for yy in range(80):
             for xx in range(60):
-                multi_valued_0[xx + 60*yy] = xx + yy
-                multi_valued_1[xx + 60*yy] = math.sin(xx*yy)
-
+                multi_valued_0[xx + 60 * yy] = xx + yy
+                multi_valued_1[xx + 60 * yy] = math.sin(xx * yy)
 
     # When compiling ahead-of-time, a Tuple-valued hl.Func evaluates
-    # into multiple distinct output buffer_t structs. These appear in
+    # into multiple distinct output halide_buffer_t structs. These appear in
     # order at the end of the function signature:
-    # int multi_valued(...input buffers and params..., buffer_t *output_1, buffer_t *output_2)
+    # int multi_valued(...input buffers and params..., halide_buffer_t
+    # *output_1, halide_buffer_t *output_2)
 
     # You can construct a Tuple by passing multiple Exprs to the
     # Tuple constructor as we did above. Perhaps more elegantly, you
@@ -167,9 +162,9 @@ def main():
         # Update definition.
         r = hl.RDom([(1, 99)])
         old_index = arg_max[()][0]
-        old_max   = arg_max[()][1]
+        old_max = arg_max[()][1]
         new_index = hl.select(old_max > input[r], r, old_index)
-        new_max   = hl.max(input[r], old_max)
+        new_max = hl.max(input[r], old_max)
         arg_max[()] = (new_index, new_max)
 
         # The equivalent C++ is:
@@ -187,7 +182,6 @@ def main():
             arg_max_0 = new_index
             arg_max_1 = new_max
 
-
         # Let's verify that the Halide and C++ found the same maximum
         # value and index.
         if True:
@@ -198,14 +192,12 @@ def main():
             assert arg_max_0 == r0[()]
             assert np.isclose(arg_max_1, r1[()])
 
-
         # Halide provides argmax and hl.argmin as built-in reductions
         # similar to sum, product, maximum, and minimum. They return
         # a Tuple consisting of the point in the reduction domain
         # corresponding to that value, and the value itself. In the
         # case of ties they return the first value found. We'll use
         # one of these in the following section.
-
 
     # Tuples for user-defined types.
     if True:
@@ -230,11 +222,9 @@ def main():
                 "Convert to a Tuple"
                 return (self.real, self.imag)
 
-
             def __add__(self, other):
                 "Complex addition"
                 return Complex(self.real + other.real, self.imag + other.imag)
-
 
             def __mul__(self, other):
                 "Complex multiplication"
@@ -251,17 +241,15 @@ def main():
                 "Complex magnitude"
                 return (self.real * self.real) + (self.imag * self.imag)
 
-
             # Other complex operators would go here. The above are
             # sufficient for this example.
-
 
         # Let's use the Complex struct to compute a Mandelbrot set.
         mandelbrot = hl.Func()
 
         # The initial complex value corresponding to an x, y coordinate
         # in our hl.Func.
-        initial = Complex(x/15.0 - 2.5, y/6.0 - 2.0)
+        initial = Complex(x / 15.0 - 2.5, y / 6.0 - 2.0)
 
         # Pure definition.
         t = hl.Var("t")
@@ -269,11 +257,11 @@ def main():
 
         # We'll use an update definition to take 12 steps.
         r = hl.RDom([(1, 12)])
-        current = Complex(mandelbrot[x, y, r-1])
+        current = Complex(mandelbrot[x, y, r - 1])
 
         # The following line uses the complex multiplication and
         # addition we defined above.
-        mandelbrot[x, y, r] = (Complex(current*current) + initial)
+        mandelbrot[x, y, r] = (Complex(current * current) + initial)
 
         # We'll use another tuple reduction to compute the iteration
         # number where the value first escapes a circle of radius 4.
@@ -302,9 +290,8 @@ def main():
                 if index < len(code):
                     print("%c" % code[index], end="")
                 else:
-                    pass # is lesson 13 cpp version buggy ?
+                    pass  # is lesson 13 cpp version buggy ?
             print("")
-
 
     print("Success!")
 

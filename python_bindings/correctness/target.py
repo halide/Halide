@@ -1,21 +1,27 @@
 import halide as hl
 
+
 def test_target():
     # Target("") should be exactly like get_host_target().
     t1 = hl.get_host_target()
     t2 = hl.Target("")
     assert t1 == t2, "Default ctor failure"
-    assert t1.supported();
+    assert t1.supported()
 
     # to_string roundtripping
     t1 = hl.Target()
     ts = t1.to_string()
     assert ts == "arch_unknown-0-os_unknown"
-    assert hl.Target.validate_target_string(ts)
-    t2 = hl.Target(ts)
 
-    # equality
-    assert t2 == t1
+    # Note, this should *not* validate, since validate_target_string
+    # now returns false if any of arch-bits-os are undefined
+    assert not hl.Target.validate_target_string(ts)
+
+    # Don't attempt to roundtrip this: trying to create
+    # a Target with unknown portions will now assert-fail.
+    #
+    # t2 = hl.Target(ts)
+    # assert t2 == t1
 
     # repr() and str()
     assert str(t1) == "arch_unknown-0-os_unknown"
@@ -26,7 +32,7 @@ def test_target():
     assert t1.bits == 0
 
     # Full specification round-trip:
-    t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [ hl.TargetFeature.SSE41 ])
+    t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [hl.TargetFeature.SSE41])
     ts = t1.to_string()
     assert ts == "x86-32-linux-sse41"
     assert hl.Target.validate_target_string(ts)
@@ -39,9 +45,9 @@ def test_target():
 
     # Full specification round-trip, crazy features
     t1 = hl.Target(hl.TargetOS.Android, hl.TargetArch.ARM, 32,
-                [hl.TargetFeature.JIT, hl.TargetFeature.SSE41, hl.TargetFeature.AVX, hl.TargetFeature.AVX2,
-                 hl.TargetFeature.CUDA, hl.TargetFeature.OpenCL, hl.TargetFeature.OpenGL, hl.TargetFeature.OpenGLCompute,
-                 hl.TargetFeature.Debug])
+                   [hl.TargetFeature.JIT, hl.TargetFeature.SSE41, hl.TargetFeature.AVX, hl.TargetFeature.AVX2,
+                    hl.TargetFeature.CUDA, hl.TargetFeature.OpenCL, hl.TargetFeature.OpenGL, hl.TargetFeature.OpenGLCompute,
+                    hl.TargetFeature.Debug])
     ts = t1.to_string()
     assert ts == "arm-32-android-avx-avx2-cuda-debug-jit-opencl-opengl-openglcompute-sse41"
     assert hl.Target.validate_target_string(ts)
@@ -91,9 +97,11 @@ def test_target():
     assert ts == "x86-32-linux-no_asserts-no_bounds_query-sse41"
 
     # without_feature
-    t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [hl.TargetFeature.SSE41, hl.TargetFeature.NoAsserts])
+    t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [
+                   hl.TargetFeature.SSE41, hl.TargetFeature.NoAsserts])
     # Note that NoBoundsQuery wasn't set here, so 'without' is a no-op
-    t2 = t1.without_feature(hl.TargetFeature.NoAsserts).without_feature(hl.TargetFeature.NoBoundsQuery)
+    t2 = t1.without_feature(hl.TargetFeature.NoAsserts).without_feature(
+        hl.TargetFeature.NoBoundsQuery)
     ts = t2.to_string()
     assert ts == "x86-32-linux-sse41"
 
@@ -142,7 +150,7 @@ def test_target():
 
     # with_feature with non-convertible lists
     try:
-        t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [ "this is a string" ])
+        t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, ["this is a string"])
     except TypeError as e:
         assert "incompatible constructor arguments" in str(e)
     else:

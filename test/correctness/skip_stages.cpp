@@ -3,8 +3,6 @@
 
 using namespace Halide;
 
-
-
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
@@ -43,8 +41,8 @@ int main(int argc, char **argv) {
         // side-lobes is used.
         Func f1, f2, f3, f4;
         f1(x) = x;
-        f2(x) = call_counter(f1(x)+1, 0);
-        f3(x) = call_counter(f1(x)+2, 1);
+        f2(x) = call_counter(f1(x) + 1, 0);
+        f3(x) = call_counter(f1(x) + 2, 1);
         f4(x) = select(toggle1, f2(x), f3(x));
 
         f1.compute_root();
@@ -103,9 +101,7 @@ int main(int argc, char **argv) {
         toggle2.set(false);
         f4.realize(10);
         check_counts(0, 0, 0);
-
     }
-
 
     {
         // Make a tuple-valued func where one value is used but the
@@ -114,7 +110,7 @@ int main(int argc, char **argv) {
         // be a recursive dependence of one on the other in an update
         // step.
         Func f1, f2;
-        f1(x) = Tuple(call_counter(x, 0), call_counter(x+1, 1));
+        f1(x) = Tuple(call_counter(x, 0), call_counter(x + 1, 1));
         f2(x) = select(toggle1, f1(x)[0], 0) + f1(x)[1];
         f1.compute_root();
 
@@ -135,7 +131,7 @@ int main(int argc, char **argv) {
         // Make a tuple-valued func where neither value is used when
         // the toggle is false.
         Func f1, f2;
-        f1(x) = Tuple(call_counter(x, 0), call_counter(x+1, 1));
+        f1(x) = Tuple(call_counter(x, 0), call_counter(x + 1, 1));
         f2(x) = select(toggle1, f1(x)[0], 0);
         f1.compute_root();
         f2.realize(10);
@@ -202,7 +198,7 @@ int main(int argc, char **argv) {
         reset_counts();
         Func f("f"), g("g"), h("h");
         f(x) = call_counter(x, 0);
-        g(x) = f(x) + f(x-1);
+        g(x) = f(x) + f(x - 1);
         h(x) = select(x == 5, 0, g(x));
 
         f.store_root().compute_at(g, x);

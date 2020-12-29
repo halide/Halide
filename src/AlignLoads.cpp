@@ -2,12 +2,12 @@
 
 #include "AlignLoads.h"
 #include "Bounds.h"
+#include "HexagonAlignment.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "ModulusRemainder.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "HexagonAlignment.h"
 using std::vector;
 
 namespace Halide {
@@ -22,7 +22,8 @@ namespace {
 class AlignLoads : public IRMutator {
 public:
     AlignLoads(int alignment)
-        : alignment_analyzer(alignment), required_alignment(alignment) {}
+        : alignment_analyzer(alignment), required_alignment(alignment) {
+    }
 
 private:
     HexagonAlignmentAnalyzer alignment_analyzer;
@@ -33,8 +34,8 @@ private:
     using IRMutator::visit;
 
     // Rewrite a load to have a new index, updating the type if necessary.
-    Expr make_load(const Load *load, Expr index, ModulusRemainder alignment) {
-        internal_assert(is_one(load->predicate)) << "Load should not be predicated.\n";
+    Expr make_load(const Load *load, const Expr &index, ModulusRemainder alignment) {
+        internal_assert(is_const_one(load->predicate)) << "Load should not be predicated.\n";
         return mutate(Load::make(load->type.with_lanes(index.type().lanes()), load->name,
                                  index, load->image, load->param,
                                  const_true(index.type().lanes()),
@@ -42,7 +43,7 @@ private:
     }
 
     Expr visit(const Load *op) override {
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             // TODO(psuriana): Do nothing to predicated loads for now.
             return IRMutator::visit(op);
         }
@@ -54,6 +55,10 @@ private:
 
         if (op->image.defined()) {
             // We can't reason about the alignment of external images.
+            return IRMutator::visit(op);
+        }
+
+        if (required_alignment % op->type.bytes() != 0) {
             return IRMutator::visit(op);
         }
 
@@ -78,7 +83,6 @@ private:
         bool known_alignment = is_aligned || (!is_aligned && aligned_offset != 0);
         int lanes = ramp->lanes;
         int native_lanes = required_alignment / op->type.bytes();
-
         int stride = static_cast<int>(*const_stride);
         if (stride != 1) {
             internal_assert(stride >= 0);
@@ -93,7 +97,7 @@ private:
             // Load a dense vector covering all of the addresses in the load.
             Expr dense_base = simplify(ramp->base - shift);
             ModulusRemainder alignment = op->alignment - shift;
-            Expr dense_index = Ramp::make(dense_base, 1, lanes*stride);
+            Expr dense_index = Ramp::make(dense_base, 1, lanes * stride);
             Expr dense = make_load(op, dense_index, alignment);
 
             // Shuffle the dense load.
@@ -105,10 +109,22 @@ private:
         if (lanes < native_lanes) {
             // This load is smaller than a native vector. Load a
             // native vector.
-            Expr native_load = make_load(op, Ramp::make(ramp->base, 1, native_lanes), op->alignment);
+            Expr ramp_base = ramp->base;
+            ModulusRemainder alignment = op->alignment;
+            int slice_offset = 0;
+
+            // If load is smaller than a native vector and can fully fit inside of it and offset is known,
+            // we can simply offset the native load and slice.
+            if (!is_aligned && aligned_offset != 0 && Int(32).can_represent(aligned_offset) && (aligned_offset + lanes <= native_lanes)) {
+                ramp_base = simplify(ramp_base - (int)aligned_offset);
+                alignment = alignment - aligned_offset;
+                slice_offset = aligned_offset;
+            }
+
+            Expr native_load = make_load(op, Ramp::make(ramp_base, 1, native_lanes), alignment);
 
             // Slice the native load.
-            return Shuffle::make_slice(native_load, 0, 1, lanes);
+            return Shuffle::make_slice(native_load, slice_offset, 1, lanes);
         }
 
         if (lanes > native_lanes) {
@@ -130,7 +146,7 @@ private:
             // native vectors, followed by a shuffle.
             Expr aligned_base = simplify(ramp->base - (int)aligned_offset);
             ModulusRemainder alignment = op->alignment - (int)aligned_offset;
-            Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes*2), alignment);
+            Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes * 2), alignment);
 
             return Shuffle::make_slice(aligned_load, (int)aligned_offset, 1, lanes);
         }
@@ -141,9 +157,9 @@ private:
 
 }  // namespace
 
-Stmt align_loads(Stmt s, int alignment) {
+Stmt align_loads(const Stmt &s, int alignment) {
     return AlignLoads(alignment).mutate(s);
 }
 
-} // namespace Internal
-} // namespace Halide
+}  // namespace Internal
+}  // namespace Halide

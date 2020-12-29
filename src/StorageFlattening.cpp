@@ -1,9 +1,11 @@
 #include "StorageFlattening.h"
 
 #include "Bounds.h"
+#include "Function.h"
 #include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "Parameter.h"
 #include "Scope.h"
 
@@ -12,12 +14,12 @@
 namespace Halide {
 namespace Internal {
 
-using std::ostringstream;
-using std::string;
-using std::vector;
 using std::map;
+using std::ostringstream;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -27,18 +29,21 @@ public:
                       const vector<Function> &o,
                       const Target &t)
         : env(e), target(t) {
-        for (auto &f : o) {
+        for (const auto &f : o) {
             outputs.insert(f.name());
         }
     }
+
 private:
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
+    set<string> textures;
     const Target &target;
     Scope<> realizations, shader_scope_realizations;
     bool in_shader = false;
+    bool in_gpu = false;
 
-    Expr make_shape_var(string name, string field, size_t dim,
+    Expr make_shape_var(string name, const string &field, size_t dim,
                         const Buffer<> &buf, const Parameter &param) {
         ReductionDomain rdom;
         name = name + "." + field + "." + std::to_string(dim);
@@ -93,7 +98,7 @@ private:
             idx -= base;
         }
 
-        if (!is_zero(constant_term)) {
+        if (!is_const_zero(constant_term)) {
             idx += constant_term;
         }
 
@@ -107,6 +112,11 @@ private:
 
         if (in_shader) {
             shader_scope_realizations.push(op->name);
+        }
+
+        if (op->memory_type == MemoryType::GPUTexture) {
+            textures.insert(op->name);
+            debug(2) << "found texture " << op->name << "\n";
         }
 
         Stmt body = mutate(op->body);
@@ -127,7 +137,7 @@ private:
 
         // The allocation extents of the function taken into account of
         // the align_storage directives. It is only used to determine the
-        // host allocation size and the strides in buffer_t objects (which
+        // host allocation size and the strides in halide_buffer_t objects (which
         // also affects the device allocation in some backends).
         vector<Expr> allocation_extents(extents.size());
         vector<int> storage_permutation;
@@ -143,13 +153,13 @@ private:
                         storage_permutation.push_back((int)j);
                         Expr alignment = storage_dims[i].alignment;
                         if (alignment.defined()) {
-                            allocation_extents[j] = ((extents[j] + alignment - 1)/alignment)*alignment;
+                            allocation_extents[j] = ((extents[j] + alignment - 1) / alignment) * alignment;
                         } else {
                             allocation_extents[j] = extents[j];
                         }
                     }
                 }
-                internal_assert(storage_permutation.size() == i+1);
+                internal_assert(storage_permutation.size() == i + 1);
             }
         }
 
@@ -174,7 +184,7 @@ private:
             stride_var[i] = Variable::make(Int(32), stride_name[i]);
         }
 
-        // Create a buffer_t object for this allocation.
+        // Create a halide_buffer_t object for this allocation.
         BufferBuilder builder;
         builder.host = Variable::make(Handle(), op->name);
         builder.type = op->types[0];
@@ -190,8 +200,8 @@ private:
         stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
 
         // Compute the strides
-        for (int i = (int)op->bounds.size()-1; i > 0; i--) {
-            int prev_j = storage_permutation[i-1];
+        for (int i = (int)op->bounds.size() - 1; i > 0; i--) {
+            int prev_j = storage_permutation[i - 1];
             int j = storage_permutation[i];
             Expr stride = stride_var[prev_j] * allocation_extents[prev_j];
             stmt = LetStmt::make(stride_name[j], stride, stmt);
@@ -205,8 +215,8 @@ private:
 
         // Assign the mins and extents stored
         for (size_t i = op->bounds.size(); i > 0; i--) {
-            stmt = LetStmt::make(min_name[i-1], op->bounds[i-1].min, stmt);
-            stmt = LetStmt::make(extent_name[i-1], extents[i-1], stmt);
+            stmt = LetStmt::make(min_name[i - 1], op->bounds[i - 1].min, stmt);
+            stmt = LetStmt::make(extent_name[i - 1], extents[i - 1], stmt);
         }
         return stmt;
     }
@@ -230,6 +240,12 @@ private:
             }
         }
 
+        if (output_buf.defined()) {
+            if (output_buf.memory_type() == MemoryType::GPUTexture) {
+                textures.insert(op->name);
+            }
+        }
+
         Expr value = mutate(op->values[0]);
         if (in_shader && !shader_scope_realizations.contains(op->name)) {
             user_assert(op->args.size() == 3)
@@ -243,6 +259,20 @@ private:
             Expr store = Call::make(value.type(), Call::image_store,
                                     args, Call::Intrinsic);
             return Evaluate::make(store);
+        } else if (in_gpu && textures.count(op->name)) {
+            Expr buffer_var =
+                Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer", output_buf);
+            vector<Expr> args(2);
+            args[0] = op->name;
+            args[1] = buffer_var;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                Expr min = Variable::make(Int(32), op->name + ".min." + std::to_string(i));
+                args.push_back(op->args[i] - min);
+            }
+            args.push_back(value);
+            Expr store = Call::make(value.type(), Call::image_store,
+                                    args, Call::Intrinsic);
+            return Evaluate::make(store);
         } else {
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
             return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()), ModulusRemainder());
@@ -253,9 +283,20 @@ private:
         if (op->call_type == Call::Halide ||
             op->call_type == Call::Image) {
 
+            debug(2) << " load call to " << op->name << " " << textures.count(op->name) << "\n";
+            if (op->param.defined()) {
+                debug(2) << "     is param: "
+                         << " " << op->param.name() << " " << op->param.memory_type()
+                         << "\n";
+
+                if (op->param.memory_type() == MemoryType::GPUTexture) {
+                    textures.insert(op->name);
+                }
+            }
+
             internal_assert(op->value_index == 0);
 
-            if (in_shader && !shader_scope_realizations.contains(op->name)) {
+            if ((in_shader && !shader_scope_realizations.contains(op->name)) || (in_gpu && textures.count(op->name))) {
                 ReductionDomain rdom;
                 Expr buffer_var =
                     Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer",
@@ -273,10 +314,6 @@ private:
                     Expr extent = make_shape_var(op->name, "extent", i, op->image, op->param);
                     args.push_back(mutate(op->args[i]) - min);
                     args.push_back(extent);
-                }
-                for (size_t i = op->args.size(); i < 3; i++) {
-                    args.push_back(0);
-                    args.push_back(1);
                 }
 
                 return Call::make(op->type,
@@ -332,7 +369,7 @@ private:
                             storage_permutation.push_back((int)j);
                         }
                     }
-                    internal_assert(storage_permutation.size() == i+1);
+                    internal_assert(storage_permutation.size() == i + 1);
                 }
             }
             internal_assert(storage_permutation.size() == op->bounds.size());
@@ -349,8 +386,9 @@ private:
             }
         }
 
+        // TODO: Consider generating a prefetch call for each tuple element.
         Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
-        if (!is_one(condition)) {
+        if (!is_const_one(condition)) {
             prefetch_call = IfThenElse::make(condition, prefetch_call);
         }
         Stmt body = mutate(op->body);
@@ -359,16 +397,21 @@ private:
 
     Stmt visit(const For *op) override {
         bool old_in_shader = in_shader;
+        bool old_in_gpu = in_gpu;
         if ((op->for_type == ForType::GPUBlock ||
              op->for_type == ForType::GPUThread) &&
             op->device_api == DeviceAPI::GLSL) {
             in_shader = true;
         }
+        if (op->for_type == ForType::GPUBlock ||
+            op->for_type == ForType::GPUThread) {
+            in_gpu = true;
+        }
         Stmt stmt = IRMutator::visit(op);
         in_shader = old_in_shader;
+        in_gpu = old_in_gpu;
         return stmt;
     }
-
 };
 
 // Realizations, stores, and loads must all be on types that are
@@ -377,7 +420,7 @@ class PromoteToMemoryType : public IRMutator {
     using IRMutator::visit;
 
     Type upgrade(Type t) {
-        return t.with_bits(((t.bits() + 7)/8)*8);
+        return t.with_bits(((t.bits() + 7) / 8) * 8);
     }
 
     Expr visit(const Load *op) override {
@@ -405,7 +448,7 @@ class PromoteToMemoryType : public IRMutator {
         Type t = upgrade(op->type);
         if (t != op->type) {
             vector<Expr> extents;
-            for (Expr e : op->extents) {
+            for (const Expr &e : op->extents) {
                 extents.push_back(mutate(e));
             }
             return Allocate::make(op->name, t, op->memory_type, extents,
@@ -430,7 +473,7 @@ Stmt storage_flattening(Stmt s,
     // Function corresponds to a tuple component. foo.0, foo.1, foo.2,
     // all point to the function foo.
     map<string, pair<Function, int>> tuple_env;
-    for (auto p : env) {
+    for (const auto &p : env) {
         if (p.second.outputs() > 1) {
             for (int i = 0; i < p.second.outputs(); i++) {
                 tuple_env[p.first + "." + std::to_string(i)] = {p.second, i};
@@ -445,5 +488,5 @@ Stmt storage_flattening(Stmt s,
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

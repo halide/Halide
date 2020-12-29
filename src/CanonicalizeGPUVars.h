@@ -5,7 +5,7 @@
  * Defines the lowering pass that canonicalize the GPU var names over.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

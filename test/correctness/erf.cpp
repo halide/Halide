@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     Func f;
     Var x;
 
-    f(x) = erf((x-50000)/10000.0f);
+    f(x) = erf((x - 50000) / 10000.0f);
     f.vectorize(x, 8);
 
     Buffer<float> im = f.realize(100000);
@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     int max_err = 0;
     float max_err_x = 0;
     for (int i = 0; i < 100000; i++) {
-        float x = (i-50000) / 10000.0f;
+        float x = (i - 50000) / 10000.0f;
         float correct = erff(x);
         float approx = im(i);
         int err = bits_diff(correct, approx);

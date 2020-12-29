@@ -14,11 +14,16 @@ Halide::Expr extract_value_ns(Halide::Expr arg) {
 }
 
 namespace my_namespace {
-class my_class {public: int foo;};
+class my_class {
+public:
+    int foo;
+};
 namespace my_subnamespace {
-struct my_struct {int foo;};
-}
-}
+struct my_struct {
+    int foo;
+};
+}  // namespace my_subnamespace
+}  // namespace my_namespace
 union my_union {
     float a;
     int b;
@@ -72,11 +77,32 @@ public:
 
         // No significance to the calculation here.
         output(x) = select(scale_direction, (input(x) * scale_f + offset) / scale_d,
-                                       (input(x) * scale_d + offset) / scale_f);
+                           (input(x) * scale_d + offset) / scale_f);
     }
 
     void schedule() {
-        // nothing
+        input.set_estimates({{0, 100}});
+        offset_i8.set_estimate(0);
+        offset_u8.set_estimate(0);
+        offset_i16.set_estimate(0);
+        offset_u16.set_estimate(0);
+        offset_i32.set_estimate(0);
+        offset_u32.set_estimate(0);
+        offset_i64.set_estimate(0);
+        offset_u64.set_estimate(0);
+        scale_direction.set_estimate(1);
+        scale_f.set_estimate(0);
+        scale_d.set_estimate(0);
+        ptr.set_estimate(nullptr);
+        const_ptr.set_estimate(nullptr);
+        void_ptr.set_estimate(nullptr);
+        const_void_ptr.set_estimate(nullptr);
+        string_ptr.set_estimate(nullptr);
+        const_string_ptr.set_estimate(nullptr);
+        const_my_class_ptr.set_estimate(nullptr);
+        const_my_struct_ptr.set_estimate(nullptr);
+        const_my_union_ptr.set_estimate(nullptr);
+        output.set_estimates({{0, 100}});
     }
 };
 

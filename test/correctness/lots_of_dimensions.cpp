@@ -11,7 +11,7 @@ uint64_t fn(int i0, int i1, int i2, int i3, int i4, int i5, int i6, int i7) {
     uint64_t u5 = (uint64_t)i5;
     uint64_t u6 = (uint64_t)i6;
     uint64_t u7 = (uint64_t)i7;
-    return (((u0 + u1)*u2 + u3)*u4 + u5)*u6 + u7;
+    return (((u0 + u1) * u2 + u3) * u4 + u5) * u6 + u7;
 }
 
 int main(int argc, char **argv) {

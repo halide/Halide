@@ -21,7 +21,7 @@ void spawn_thread_helper(void *arg) {
     spawned_thread *t = (spawned_thread *)arg;
     t->f(t->closure);
 }
-}
+}  // namespace
 
 extern "C" {
 
@@ -32,15 +32,15 @@ int halide_host_cpu_count() {
     return 4;
 }
 
-#define STACK_SIZE 256*1024
+#define STACK_SIZE 256 * 1024
 
 WEAK uint16_t halide_qurt_default_thread_priority = 100;
 
 WEAK void halide_set_default_thread_priority(int priority) {
     if (priority > 0xFF) {
-        priority = 0xFF;        // Clamp to max priority
+        priority = 0xFF;  // Clamp to max priority
     } else if (priority <= 0) {
-        return;                 // Ignore settings of zero and below
+        return;  // Ignore settings of zero and below
     }
     halide_qurt_default_thread_priority = priority;
 }
@@ -73,37 +73,40 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     free(t);
 }
 
-} // extern "C"
+}  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 namespace Synchronization {
 
 struct thread_parker {
     qurt_mutex_t mutex;
     qurt_cond_t condvar;
-    bool should_park;
+    bool should_park = false;
 
-#if __cplusplus >= 201103L
     thread_parker(const thread_parker &) = delete;
-#endif
+    thread_parker &operator=(const thread_parker &) = delete;
+    thread_parker(thread_parker &&) = delete;
+    thread_parker &operator=(thread_parker &&) = delete;
 
-    __attribute__((always_inline)) thread_parker() : should_park(false) {
+    ALWAYS_INLINE thread_parker() {
         qurt_mutex_init(&mutex);
         qurt_cond_init(&condvar);
         should_park = false;
     }
 
-    __attribute__((always_inline)) ~thread_parker() {
+    ALWAYS_INLINE ~thread_parker() {
         qurt_cond_destroy(&condvar);
         qurt_mutex_destroy(&mutex);
     }
 
-    __attribute__((always_inline)) void prepare_park() {
+    ALWAYS_INLINE void prepare_park() {
         should_park = true;
     }
 
-    __attribute__((always_inline)) void park() {
+    ALWAYS_INLINE void park() {
         qurt_mutex_lock(&mutex);
         while (should_park) {
             qurt_cond_wait(&condvar, &mutex);
@@ -111,21 +114,24 @@ struct thread_parker {
         qurt_mutex_unlock(&mutex);
     }
 
-    __attribute__((always_inline)) void unpark_start() {
+    ALWAYS_INLINE void unpark_start() {
         qurt_mutex_lock(&mutex);
     }
 
-    __attribute__((always_inline)) void unpark() {
+    ALWAYS_INLINE void unpark() {
         should_park = false;
         qurt_cond_signal(&condvar);
     }
 
-    __attribute__((always_inline)) void unpark_finish() {
+    ALWAYS_INLINE void unpark_finish() {
         qurt_mutex_unlock(&mutex);
     }
 };
 
-}}}} // namespace Halide::Runtime::Internal::Synchronization
+}  // namespace Synchronization
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 #include "synchronization_common.h"
 

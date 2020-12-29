@@ -20,7 +20,10 @@ int main(int argc, char *argv[]) {
         f.store_at(g, x).compute_at(g, y);
     }
 
-    Halide::Buffer<int> out = g.realize(10, 10);
+    Halide::Buffer<int> out_orig = g.realize(10, 10);
+
+    // This is here solely to test Halider::Buffer::copy()
+    Halide::Buffer<int> out = out_orig.copy();
 
     for (int y = 0; y < out.height(); y++) {
         for (int x = 0; x < out.width(); x++) {

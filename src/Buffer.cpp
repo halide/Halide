@@ -1,4 +1,5 @@
 #include "Buffer.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "Var.h"
@@ -7,7 +8,7 @@ namespace Halide {
 namespace Internal {
 
 template<>
-RefCount &ref_count<BufferContents>(const BufferContents *c) {
+RefCount &ref_count<BufferContents>(const BufferContents *c) noexcept {
     return c->ref_count;
 }
 
@@ -18,7 +19,7 @@ void destroy<BufferContents>(const BufferContents *c) {
 
 Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args) {
     std::vector<Expr> int_args;
-    for (Expr e : args) {
+    for (const Expr &e : args) {
         user_assert(Int(32).can_represent(e.type()))
             << "Args to a call to an Image must be representable as 32-bit integers.\n";
         if (equal(e, _)) {

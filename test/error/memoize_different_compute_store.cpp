@@ -24,4 +24,7 @@ int main(int argc, char **argv) {
             assert(out(i, j) == (uint8_t)(3 * 23 + i + (i - 1) + (i + 1)));
         }
     }
+
+    printf("Success!\n");
+    return 0;
 }

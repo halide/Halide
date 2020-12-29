@@ -25,12 +25,12 @@ int main(int argc, char **argv) {
     halide_dimension_t shape[] = {{0, 64, 1},
                                   {0, 123, 64}};
 
-    in.host = (uint8_t *)malloc(64*123*4);
+    in.host = (uint8_t *)malloc(64 * 123 * 4);
     in.type = halide_type_of<int>();
     in.dim = shape;
     in.dimensions = 2;
 
-    out.host = (uint8_t *)malloc(64*123*4);
+    out.host = (uint8_t *)malloc(64 * 123 * 4);
     out.type = halide_type_of<int>();
     out.dim = shape;
     out.dimensions = 2;
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
     in.dim = shape;
 
     // strides and extents are 32-bit signed integers. It's
-    // therefore impossible to make a buffer_t that can address
+    // therefore impossible to make a halide_buffer_t that can address
     // more than 2^31 * 2^31 * dimensions elements, which is less
     // than 2^63, so there's no way a Halide pipeline can return
     // the above two error codes in 64-bit code.
@@ -112,14 +112,14 @@ int main(int argc, char **argv) {
     check(result, correct);
     shape[0].extent = 64;
 
-    // You can't pass nullptr as a buffer_t argument.
+    // You can't pass nullptr as a halide_buffer_t argument.
     result = error_codes(nullptr, 64, &out);
     correct = halide_error_code_buffer_argument_is_null;
     check(result, correct);
 
     // Violate the custom requirement that the height of the input is 123
     halide_dimension_t too_tall[] = {{0, 64, 1},
-                                      {0, 200, 64}};
+                                     {0, 200, 64}};
     in.dim = too_tall;
     result = error_codes(&in, 64, &out);
     correct = halide_error_code_requirement_failed;

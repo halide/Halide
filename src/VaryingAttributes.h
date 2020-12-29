@@ -7,7 +7,7 @@
  * instead of being evaluated at each pixel location across the image.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,7 +16,7 @@ namespace Internal {
  * out of the generated fragment shader into a varying attribute. These
  * expressions are tagged by wrapping them in a glsl_varying intrinsic
  */
-Stmt find_linear_expressions(Stmt s);
+Stmt find_linear_expressions(const Stmt &s);
 
 /** Compute a set of 2D mesh coordinates based on the behavior of varying
  * attribute expressions contained within a GLSL scheduled for loop. This
@@ -25,7 +25,7 @@ Stmt find_linear_expressions(Stmt s);
  * location. The operation is performed on the host before the draw call
  * to invoke the shader
  */
-Stmt setup_gpu_vertex_buffer(Stmt s);
+Stmt setup_gpu_vertex_buffer(const Stmt &s);
 
 }  // namespace Internal
 }  // namespace Halide

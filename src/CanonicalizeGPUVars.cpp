@@ -29,7 +29,7 @@ string get_block_name(int index) {
 }
 
 class CountGPUBlocksThreads : public IRVisitor {
-    string prefix; // Producer name + stage
+    string prefix;  // Producer name + stage
 
     using IRVisitor::visit;
 
@@ -69,7 +69,9 @@ class CountGPUBlocksThreads : public IRVisitor {
     }
 
 public:
-    CountGPUBlocksThreads(const string &p) : prefix(p) {}
+    CountGPUBlocksThreads(const string &p)
+        : prefix(p) {
+    }
     int nblocks = 0;
     int nthreads = 0;
     int nlanes = 0;
@@ -166,7 +168,6 @@ class CanonicalizeGPUVars : public IRMutator {
         }
     }
 
-
     Stmt visit(const LetStmt *op) override {
         vector<std::pair<string, Expr>> lets;
         Stmt result;
@@ -174,7 +175,7 @@ class CanonicalizeGPUVars : public IRMutator {
         do {
             lets.emplace_back(op->name, mutate(op->value));
             result = op->body;
-        } while((op = op->body.as<LetStmt>()));
+        } while ((op = op->body.as<LetStmt>()));
 
         result = mutate(result);
 

@@ -28,6 +28,8 @@ public:
         CPlusPlusHeader,
         CImplementation,
         CPlusPlusImplementation,
+        CExternDecl,
+        CPlusPlusExternDecl,
     };
 
     /** Initialize a C code generator pointing at a particular output
@@ -42,11 +44,21 @@ public:
     void compile(const Module &module);
 
     /** The target we're generating code for */
-    const Target &get_target() const { return target; }
+    const Target &get_target() const {
+        return target;
+    }
 
     static void test();
 
 protected:
+    enum class IntegerSuffixStyle {
+        PlainC = 0,
+        OpenCL = 1,
+        HLSL = 2
+    };
+
+    /** How to emit 64-bit integer constants */
+    IntegerSuffixStyle integer_suffix_style = IntegerSuffixStyle::PlainC;
 
     /** Emit a declaration. */
     // @{
@@ -69,17 +81,16 @@ protected:
 
     /** Emit an expression as an assignment, then return the id of the
      * resulting var */
-    std::string print_expr(Expr);
+    std::string print_expr(const Expr &);
 
     /** Like print_expr, but cast the Expr to the given Type */
-    std::string print_cast_expr(const Type &, Expr);
+    std::string print_cast_expr(const Type &, const Expr &);
 
     /** Emit a statement */
-    void print_stmt(Stmt);
+    void print_stmt(const Stmt &);
 
-    void create_assertion(const std::string &id_cond, const std::string &id_msg);
-    void create_assertion(const std::string &id_cond, Expr message);
-    void create_assertion(Expr cond, Expr message);
+    void create_assertion(const std::string &id_cond, const Expr &message);
+    void create_assertion(const Expr &cond, const Expr &message);
 
     enum AppendSpaceIfNeeded {
         DoNotAppendSpace,
@@ -94,7 +105,7 @@ protected:
     virtual std::string print_type(Type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
     /** Emit a statement to reinterpret an expression as another type */
-    virtual std::string print_reinterpret(Type, Expr);
+    virtual std::string print_reinterpret(Type, const Expr &);
 
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
     virtual std::string print_name(const std::string &);
@@ -107,10 +118,13 @@ protected:
     virtual std::string print_extern_call(const Call *op);
 
     /** Convert a vector Expr into a series of scalar Exprs, then reassemble into vector of original type.  */
-    std::string print_scalarized_expr(Expr e);
+    std::string print_scalarized_expr(const Expr &e);
 
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     virtual std::string print_assignment(Type t, const std::string &rhs);
+
+    /** Emit free for the heap allocation. **/
+    void print_heap_free(const std::string &alloc_name);
 
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header() {
@@ -118,10 +132,22 @@ protected:
                output_kind == CPlusPlusHeader;
     }
 
+    /** Return true if only generating an interface, which may be extern "C" or C++ */
+    bool is_extern_decl() {
+        return output_kind == CExternDecl ||
+               output_kind == CPlusPlusExternDecl;
+    }
+
+    /** Return true if only generating an interface, which may be extern "C" or C++ */
+    bool is_header_or_extern_decl() {
+        return is_header() || is_extern_decl();
+    }
+
     /** Return true if generating C++ linkage. */
     bool is_c_plus_plus_interface() {
         return output_kind == CPlusPlusHeader ||
-               output_kind == CPlusPlusImplementation;
+               output_kind == CPlusPlusImplementation ||
+               output_kind == CPlusPlusExternDecl;
     }
 
     /** Open a new C scope (i.e. throw in a brace, increase the indent) */
@@ -203,8 +229,10 @@ protected:
     void visit(const Prefetch *) override;
     void visit(const Fork *) override;
     void visit(const Acquire *) override;
+    void visit(const Atomic *) override;
 
-    void visit_binop(Type t, Expr a, Expr b, const char *op);
+    void visit_binop(Type t, const Expr &a, const Expr &b, const char *op);
+    void visit_relop(Type t, const Expr &a, const Expr &b, const char *scalar_op, const char *vector_op);
 
     template<typename T>
     static std::string with_sep(const std::vector<T> &v, const std::string &sep) {
@@ -222,6 +250,16 @@ protected:
     static std::string with_commas(const std::vector<T> &v) {
         return with_sep<T>(v, ", ");
     }
+
+    /** Are we inside an atomic node that uses mutex locks?
+        This is used for detecting deadlocks from nested atomics. */
+    bool inside_atomic_mutex_node;
+
+    /** Emit atomic store instructions? */
+    bool emit_atomic_stores;
+
+    /** true if add_vector_typedefs() has been called. */
+    bool using_vector_typedefs;
 };
 
 }  // namespace Internal

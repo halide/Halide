@@ -5,7 +5,7 @@ CXX ?= c++
 TOP := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 .PHONY: all $(TOP)
 all: run run-two
-HALIDE_LIB := $(TOP)/$(LIB_HALIDE)
+HALIDE_LIB := $(TOP)/$(LIBHALIDE_LDFLAGS)
 $(HALIDE_LIB): $(TOP)
 	$(MAKE) -C $(TOP)
 

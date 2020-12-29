@@ -10,13 +10,13 @@ char *dlerror();
 #define RTLD_LAZY 0x1
 
 WEAK void *halide_default_get_symbol(const char *name) {
-    return dlsym(NULL, name);
+    return dlsym(nullptr, name);
 }
 
 WEAK void *halide_default_load_library(const char *name) {
     void *lib = dlopen(name, RTLD_LAZY);
     if (!lib) {
-        debug(NULL) << "dlerror: " << dlerror() << "\n";
+        debug(nullptr) << "dlerror: " << dlerror() << "\n";
     }
     return lib;
 }
@@ -27,13 +27,17 @@ WEAK void *halide_default_get_library_symbol(void *lib, const char *name) {
 
 }  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK halide_get_symbol_t custom_get_symbol = halide_default_get_symbol;
 WEAK halide_load_library_t custom_load_library = halide_default_load_library;
 WEAK halide_get_library_symbol_t custom_get_library_symbol = halide_default_get_library_symbol;
 
-}}} // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 

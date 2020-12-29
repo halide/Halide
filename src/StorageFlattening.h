@@ -7,12 +7,16 @@
  */
 
 #include <map>
+#include <string>
+#include <vector>
 
-#include "IR.h"
+#include "Expr.h"
 #include "Target.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Take a statement with multi-dimensional Realize, Provide, and Call
  * nodes, and turn it into a statement with single-dimensional

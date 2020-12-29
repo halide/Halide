@@ -1,6 +1,8 @@
 include ../support/Makefile.inc
 
-BIN ?= bin
+.PHONY: build test
+build:
+	@echo Nothing to build
 
 test:
 	./run_blur.sh

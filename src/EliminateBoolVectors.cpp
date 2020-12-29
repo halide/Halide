@@ -6,6 +6,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 class EliminateBoolVectors : public IRMutator {
 private:
     using IRMutator::visit;
@@ -20,8 +22,8 @@ private:
         }
     }
 
-    template <typename T>
-    Expr visit_comparison(const T* op) {
+    template<typename T>
+    Expr visit_comparison(const T *op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         Type t = a.type();
@@ -56,15 +58,27 @@ private:
         return expr;
     }
 
-    Expr visit(const EQ *op) override { return visit_comparison(op); }
-    Expr visit(const NE *op) override { return visit_comparison(op); }
-    Expr visit(const LT *op) override { return visit_comparison(op); }
-    Expr visit(const LE *op) override { return visit_comparison(op); }
-    Expr visit(const GT *op) override { return visit_comparison(op); }
-    Expr visit(const GE *op) override { return visit_comparison(op); }
+    Expr visit(const EQ *op) override {
+        return visit_comparison(op);
+    }
+    Expr visit(const NE *op) override {
+        return visit_comparison(op);
+    }
+    Expr visit(const LT *op) override {
+        return visit_comparison(op);
+    }
+    Expr visit(const LE *op) override {
+        return visit_comparison(op);
+    }
+    Expr visit(const GT *op) override {
+        return visit_comparison(op);
+    }
+    Expr visit(const GE *op) override {
+        return visit_comparison(op);
+    }
 
-    template <typename T>
-    Expr visit_logical_binop(const T* op, const std::string& bitwise_op) {
+    template<typename T>
+    Expr visit_logical_binop(const T *op, Call::IntrinsicOp bitwise_op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
@@ -124,7 +138,7 @@ private:
 
     Stmt visit(const Store *op) override {
         Expr predicate = op->predicate;
-        if (!is_one(predicate)) {
+        if (!is_const_one(predicate)) {
             predicate = mutate(predicate);
         }
         Expr value = op->value;
@@ -146,7 +160,7 @@ private:
 
     Expr visit(const Load *op) override {
         Expr predicate = op->predicate;
-        if (!is_one(predicate)) {
+        if (!is_const_one(predicate)) {
             predicate = mutate(predicate);
         }
         Expr index = mutate(op->index);
@@ -166,7 +180,7 @@ private:
     //    Expr a = float_expr1() < float_expr2();  // promoted to int32xN
     //    Expr b = uint8_expr1() < uint8_expr2();  // promoted to int8xN
     //    Expr c = select(a < b, a, b);            // whoops
-    static void unify_bool_vector_types(Expr& a, Expr& b) {
+    static void unify_bool_vector_types(Expr &a, Expr &b) {
         if (a.type().bits() != b.type().bits() &&
             a.type().lanes() == b.type().lanes() &&
             a.type().is_int() && b.type().is_int()) {
@@ -217,7 +231,6 @@ private:
 
         return IRMutator::visit(op);
     }
-
 
     Expr visit(const Select *op) override {
         Expr cond = mutate(op->condition);
@@ -271,7 +284,7 @@ private:
         return expr;
     }
 
-    template <typename NodeType, typename LetType>
+    template<typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
         Expr value = mutate(op->value);
 
@@ -295,15 +308,21 @@ private:
         }
     }
 
-    Expr visit(const Let *op) override { return visit_let<Expr>(op); }
-    Stmt visit(const LetStmt *op) override { return visit_let<Stmt>(op); }
+    Expr visit(const Let *op) override {
+        return visit_let<Expr>(op);
+    }
+    Stmt visit(const LetStmt *op) override {
+        return visit_let<Stmt>(op);
+    }
 };
 
-Stmt eliminate_bool_vectors(Stmt s) {
+}  // namespace
+
+Stmt eliminate_bool_vectors(const Stmt &s) {
     return EliminateBoolVectors().mutate(s);
 }
 
-Expr eliminate_bool_vectors(Expr e) {
+Expr eliminate_bool_vectors(const Expr &e) {
     return EliminateBoolVectors().mutate(e);
 }
 

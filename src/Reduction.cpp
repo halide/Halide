@@ -1,4 +1,5 @@
 #include "Reduction.h"
+
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -6,13 +7,14 @@
 #include "IRVisitor.h"
 #include "Simplify.h"
 #include "Var.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
 
 namespace {
 
-void check(Expr pred, std::vector<Expr> &expected) {
+void check(const Expr &pred, std::vector<Expr> &expected) {
     std::vector<Expr> result;
     split_into_ands(pred, result);
     bool is_equal = true;
@@ -93,9 +95,10 @@ struct ReductionDomainContents {
     mutable RefCount ref_count;
     std::vector<ReductionVariable> domain;
     Expr predicate;
-    bool frozen;
+    bool frozen = false;
 
-    ReductionDomainContents() : predicate(const_true()), frozen(false) {
+    ReductionDomainContents()
+        : predicate(const_true()) {
     }
 
     // Pass an IRVisitor through to all Exprs referenced in the ReductionDomainContents
@@ -130,13 +133,17 @@ struct ReductionDomainContents {
 };
 
 template<>
-RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) noexcept {
+    return p->ref_count;
+}
 
 template<>
-void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {delete p;}
+void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {
+    delete p;
+}
 
-ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain) :
-    contents(new ReductionDomainContents) {
+ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain)
+    : contents(new ReductionDomainContents) {
     contents->domain = domain;
 }
 
@@ -169,22 +176,24 @@ class DropSelfReferences : public IRMutator {
             return op;
         }
     }
+
 public:
     Expr predicate;
     const ReductionDomain &domain;
-    DropSelfReferences(Expr p, const ReductionDomain &d) :
-        predicate(p), domain(d) {}
+    DropSelfReferences(Expr p, const ReductionDomain &d)
+        : predicate(std::move(p)), domain(d) {
+    }
 };
 }  // namespace
 
-void ReductionDomain::set_predicate(Expr p) {
+void ReductionDomain::set_predicate(const Expr &p) {
     // The predicate can refer back to the RDom. We need to break
     // those cycles to prevent a leak.
     contents->predicate = DropSelfReferences(p, *this).mutate(p);
 }
 
 void ReductionDomain::where(Expr predicate) {
-    set_predicate(simplify(contents->predicate && predicate));
+    set_predicate(simplify(contents->predicate && std::move(predicate)));
 }
 
 Expr ReductionDomain::predicate() const {

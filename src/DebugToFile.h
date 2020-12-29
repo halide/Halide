@@ -6,11 +6,14 @@
  * every realization to dump functions to a file for debugging.  */
 
 #include <map>
+#include <vector>
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Takes a statement with Realize nodes still unlowered. If the
  * corresponding functions have a debug_file set, then inject code

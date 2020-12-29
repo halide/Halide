@@ -6,6 +6,8 @@ namespace Internal {
 
 using std::string;
 
+namespace {
+
 // Prefix all names in an expression with some string.
 class QualifyExpr : public IRMutator {
     using IRMutator::visit;
@@ -24,11 +26,16 @@ class QualifyExpr : public IRMutator {
         Expr body = mutate(op->body);
         return Let::make(prefix + op->name, value, body);
     }
+
 public:
-    QualifyExpr(const string &p) : prefix(p) {}
+    QualifyExpr(const string &p)
+        : prefix(p) {
+    }
 };
 
-Expr qualify(const string &prefix, Expr value) {
+}  // namespace
+
+Expr qualify(const string &prefix, const Expr &value) {
     QualifyExpr q(prefix);
     return q.mutate(value);
 }

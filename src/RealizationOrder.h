@@ -36,7 +36,7 @@ std::pair<std::vector<std::string>, std::vector<std::vector<std::string>>> reali
  * This ordering adheres to the producer-consumer dependencies, i.e. producer
  * will come before its consumers in that order */
 std::vector<std::string> topological_order(
-        const std::vector<Function> &outputs, const std::map<std::string, Function> &env);
+    const std::vector<Function> &outputs, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

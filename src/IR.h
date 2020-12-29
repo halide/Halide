@@ -8,19 +8,19 @@
 #include <string>
 #include <vector>
 
-#include "Debug.h"
-#include "Error.h"
+#include "Buffer.h"
 #include "Expr.h"
-#include "Function.h"
-#include "IntrusivePtr.h"
-#include "Parameter.h"
-#include "Type.h"
+#include "FunctionPtr.h"
 #include "ModulusRemainder.h"
-#include "Util.h"
-#include "runtime/HalideBuffer.h"
+#include "Parameter.h"
+#include "PrefetchDirective.h"
+#include "Reduction.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */
@@ -345,11 +345,10 @@ struct Provide : public StmtNode<Provide> {
 
 /** Allocate a scratch area called with the given name, type, and
  * size. The buffer lives for at most the duration of the body
- * statement, within which it is freed. It is an error for an allocate
- * node not to contain a free node of the same buffer. Allocation only
- * occurs if the condition evaluates to true. Within the body of the
- * allocation, defines a symbol with the given name and the type
- * Handle(). */
+ * statement, within which it may or may not be freed explicitly with
+ * a Free node with a matching name. Allocation only occurs if the
+ * condition evaluates to true. Within the body of the allocation,
+ * defines a symbol with the given name and the type Handle(). */
 struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
@@ -394,19 +393,6 @@ struct Free : public StmtNode<Free> {
     static const IRNodeType _node_type = IRNodeType::Free;
 };
 
-/** A single-dimensional span. Includes all numbers between min and
- * (min + extent - 1) */
-struct Range {
-    Expr min, extent;
-    Range() {}
-    Range(Expr min, Expr extent) : min(min), extent(extent) {
-        internal_assert(min.type() == extent.type()) << "Region min and extent must have same type\n";
-    }
-};
-
-/** A multi-dimensional box. The outer product of the elements */
-typedef std::vector<Range> Region;
-
 /** Allocate a multi-dimensional buffer of the given type and
  * size. Create some scratch memory that will back the function 'name'
  * over the range specified in 'bounds'. The bounds are a vector of
@@ -424,7 +410,6 @@ struct Realize : public StmtNode<Realize> {
     static Stmt make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Realize;
-
 };
 
 /** A sequence of statements to be executed in-order. 'rest' may be
@@ -479,13 +464,13 @@ struct Evaluate : public StmtNode<Evaluate> {
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image,        ///< A load from an input image
-                  Extern,       ///< A call to an external C-ABI function, possibly with side-effects
-                  ExternCPlusPlus, ///< A call to an external C-ABI function, possibly with side-effects
-                  PureExtern,   ///< A call to a guaranteed-side-effect-free external function
-                  Halide,       ///< A call to a Func
-                  Intrinsic,    ///< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
-                  PureIntrinsic ///< A side-effect-free version of the above.
+    typedef enum { Image,            ///< A load from an input image
+                   Extern,           ///< A call to an external C-ABI function, possibly with side-effects
+                   ExternCPlusPlus,  ///< A call to an external C-ABI function, possibly with side-effects
+                   PureExtern,       ///< A call to a guaranteed-side-effect-free external function
+                   Halide,           ///< A call to a Func
+                   Intrinsic,        ///< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
+                   PureIntrinsic     ///< A side-effect-free version of the above.
     } CallType;
     CallType call_type;
 
@@ -496,58 +481,77 @@ struct Call : public ExprNode<Call> {
     // risking ambiguous initalization order; we use a typedef to simplify
     // declaration.
     typedef const char *const ConstString;
-    HALIDE_EXPORT static ConstString debug_to_file,
-        reinterpret,
-        bitwise_and,
-        bitwise_not,
-        bitwise_xor,
-        bitwise_or,
-        shift_left,
-        shift_right,
+
+    // enums for various well-known intrinsics. (It is not *required* that all
+    // intrinsics have an enum entry here, but as a matter of style, it is recommended.)
+    // Note that these are only used in the API; inside the node, they are translated
+    // into a name. (To recover the name, call get_intrinsic_name().)
+    //
+    // Please keep this list sorted alphabetically; the specific enum values
+    // are *not* guaranteed to be stable across time.
+    enum IntrinsicOp {
         abs,
         absd,
-        rewrite_buffer,
-        random,
-        lerp,
-        popcount,
+        add_image_checks_marker,
+        alloca,
+        bitwise_and,
+        bitwise_not,
+        bitwise_or,
+        bitwise_xor,
+        bool_to_mask,
+        bundle,  // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
+        call_cached_indirect_function,
+        cast_mask,
         count_leading_zeros,
         count_trailing_zeros,
-        undef,
-        return_second,
-        if_then_else,
-        if_then_else_mask,
+        declare_box_touched,
+        debug_to_file,
+        div_round_to_zero,
+        dynamic_shuffle,
+        extract_mask_element,
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
+        gpu_thread_barrier,
+        hvx_gather,
+        hvx_scatter,
+        hvx_scatter_acc,
+        hvx_scatter_release,
+        if_then_else,
+        if_then_else_mask,
         image_load,
         image_store,
-        make_struct,
-        stringify,
-        memoize_expr,
-        alloca,
+        lerp,
         likely,
         likely_if_innermost,
-        register_destructor,
-        div_round_to_zero,
+        make_struct,
+        memoize_expr,
         mod_round_to_zero,
-        call_cached_indirect_function,
+        mulhi_shr,  // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
+        popcount,
         prefetch,
-        signed_integer_overflow,
-        indeterminate_expression,
-        bool_to_mask,
-        cast_mask,
-        select_mask,
-        extract_mask_element,
+        promise_clamped,
+        random,
+        register_destructor,
+        reinterpret,
         require,
         require_mask,
+        return_second,
+        rewrite_buffer,
+        select_mask,
+        shift_left,
+        shift_right,
+        signed_integer_overflow,
         size_of_halide_buffer_t,
+        sorted_avg,  // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         strict_float,
-        quiet_div,
-        quiet_mod,
+        stringify,
+        undef,
         unsafe_promise_clamped,
-        gpu_thread_barrier,
-        mulhi_shr, // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
-        sorted_avg; // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
+        IntrinsicOpCount  // Sentinel: keep last.
+    };
+
+    static const char *get_intrinsic_name(IntrinsicOp op);
 
     // We also declare some symbolic names for some of the runtime
     // functions that we want to construct Call nodes to here to avoid
@@ -590,20 +594,24 @@ struct Call : public ExprNode<Call> {
     // pointer to that
     Parameter param;
 
+    static Expr make(Type type, IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
+                     FunctionPtr func = FunctionPtr(), int value_index = 0,
+                     const Buffer<> &image = Buffer<>(), Parameter param = Parameter());
+
     static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
                      Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
-    static Expr make(Function func, const std::vector<Expr> &args, int idx = 0);
+    static Expr make(const Function &func, const std::vector<Expr> &args, int idx = 0);
 
     /** Convenience constructor for loads from concrete images */
-    static Expr make(Buffer<> image, const std::vector<Expr> &args) {
+    static Expr make(const Buffer<> &image, const std::vector<Expr> &args) {
         return make(image.type(), image.name(), args, Image, FunctionPtr(), 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
-    static Expr make(Parameter param, const std::vector<Expr> &args) {
+    static Expr make(const Parameter &param, const std::vector<Expr> &args) {
         return make(param.type(), param.name(), args, Image, FunctionPtr(), 0, Buffer<>(), param);
     }
 
@@ -624,8 +632,21 @@ struct Call : public ExprNode<Call> {
                 call_type == PureIntrinsic);
     }
 
-    bool is_intrinsic(ConstString intrin_name) const {
-        return is_intrinsic() && name == intrin_name;
+    bool is_intrinsic(IntrinsicOp op) const {
+        return is_intrinsic() && this->name == get_intrinsic_name(op);
+    }
+
+    /** Returns a pointer to a call node if the expression is a call to
+     * one of the requested intrinsics. */
+    static const Call *as_intrinsic(const Expr &e, std::initializer_list<IntrinsicOp> intrinsics) {
+        if (const Call *c = e.as<Call>()) {
+            for (IntrinsicOp i : intrinsics) {
+                if (c->is_intrinsic(i)) {
+                    return c;
+                }
+            }
+        }
+        return nullptr;
     }
 
     bool is_extern() const {
@@ -658,15 +679,15 @@ struct Variable : public ExprNode<Variable> {
     }
 
     static Expr make(Type type, const std::string &name, Parameter param) {
-        return make(type, name, Buffer<>(), param, ReductionDomain());
+        return make(type, name, Buffer<>(), std::move(param), ReductionDomain());
     }
 
-    static Expr make(Type type, const std::string &name, Buffer<> image) {
+    static Expr make(Type type, const std::string &name, const Buffer<> &image) {
         return make(type, name, image, Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, const std::string &name, ReductionDomain reduction_domain) {
-        return make(type, name, Buffer<>(), Parameter(), reduction_domain);
+        return make(type, name, Buffer<>(), Parameter(), std::move(reduction_domain));
     }
 
     static Expr make(Type type, const std::string &name, Buffer<> image,
@@ -723,7 +744,7 @@ struct Shuffle : public ExprNode<Shuffle> {
 
     /** Indices indicating which vector element to place into the
      * result. The elements are numbered by their position in the
-     * concatenation of the vector argumentss. */
+     * concatenation of the vector arguments. */
     std::vector<int> indices;
 
     static Expr make(const std::vector<Expr> &vectors,
@@ -738,6 +759,10 @@ struct Shuffle : public ExprNode<Shuffle> {
     static Expr make_concat(const std::vector<Expr> &vectors);
 
     /** Convenience constructor for making a shuffle representing a
+     * broadcast of a vector. */
+    static Expr make_broadcast(Expr vector, int factor);
+
+    /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */
     static Expr make_slice(Expr vector, int begin, int stride, int size);
 
@@ -749,6 +774,14 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_interleave() const;
 
+    /** Check if this shuffle can be represented as a broadcast.
+     * For example:
+     * A uint8 shuffle of with 4*n lanes and indices:
+     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
+     * can be represented as a uint32 broadcast with n lanes (factor = 4). */
+    bool is_broadcast() const;
+    int broadcast_factor() const;
+
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */
     bool is_concat() const;
@@ -758,8 +791,12 @@ struct Shuffle : public ExprNode<Shuffle> {
      * slice. */
     ///@{
     bool is_slice() const;
-    int slice_begin() const { return indices[0]; }
-    int slice_stride() const { return indices.size() >= 2 ? indices[1] - indices[0] : 1; }
+    int slice_begin() const {
+        return indices[0];
+    }
+    int slice_stride() const {
+        return indices.size() >= 2 ? indices[1] - indices[0] : 1;
+    }
     ///@}
 
     /** Check if this shuffle is extracting a scalar from the vector
@@ -786,6 +823,51 @@ struct Prefetch : public StmtNode<Prefetch> {
                      Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Prefetch;
+};
+
+/** Lock all the Store nodes in the body statement.
+ *  Typically the lock is implemented by an atomic operation
+ *  (e.g. atomic add or atomic compare-and-swap).
+ *  However, if necessary, the node can access a mutex buffer through
+ *  mutex_name and mutex_args, by lowering this node into
+ *  calls to acquire and release the lock. */
+struct Atomic : public StmtNode<Atomic> {
+    std::string producer_name;
+    std::string mutex_name;  // empty string if not using mutex
+    Stmt body;
+
+    static Stmt make(const std::string &producer_name,
+                     const std::string &mutex_name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::Atomic;
+};
+
+/** Horizontally reduce a vector to a scalar or narrower vector using
+ * the given commutative and associative binary operator. The reduction
+ * factor is dictated by the number of lanes in the input and output
+ * types. Groups of adjacent lanes are combined. The number of lanes
+ * in the input type must be a divisor of the number of lanes of the
+ * output type.  */
+struct VectorReduce : public ExprNode<VectorReduce> {
+    // 99.9% of the time people will use this for horizontal addition,
+    // but these are all of our commutative and associative primitive
+    // operators.
+    typedef enum {
+        Add,
+        Mul,
+        Min,
+        Max,
+        And,
+        Or,
+    } Operator;
+
+    Expr value;
+    Operator op;
+
+    static Expr make(Operator op, Expr vec, int lanes);
+
+    static const IRNodeType _node_type = IRNodeType::VectorReduce;
 };
 
 }  // namespace Internal

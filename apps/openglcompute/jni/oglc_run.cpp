@@ -1,22 +1,22 @@
-#include <android/log.h>
-#include <jni.h>
-#include <iostream>
-#include <iomanip>
-#include "avg_filter_uint32t.h"
-#include "avg_filter_uint32t_arm.h"
 #include "avg_filter_float.h"
 #include "avg_filter_float_arm.h"
+#include "avg_filter_uint32t.h"
+#include "avg_filter_uint32t_arm.h"
+#include <android/log.h>
+#include <iomanip>
+#include <iostream>
+#include <jni.h>
 #include <sstream>
 
 #include "HalideBuffer.h"
 #include "HalideRuntimeOpenGLCompute.h"
 
-#define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "oglc_run", __VA_ARGS__)
-#define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR, "oglc_run", __VA_ARGS__)
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "oglc_run", __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "oglc_run", __VA_ARGS__)
 
 using Halide::Runtime::Buffer;
 
-typedef int (*filter_t) (halide_buffer_t *, halide_buffer_t *);
+typedef int (*filter_t)(halide_buffer_t *, halide_buffer_t *);
 
 struct timing {
     filter_t filter;
@@ -28,8 +28,9 @@ struct timing {
     int best_rep = 0;
 
     template<typename T>
-    timing(filter_t filter, Buffer<T> *input, Buffer<T> *output):
-        filter(filter), input(&input->template as<void>()), output(&output->template as<void>()) {}
+    timing(filter_t filter, Buffer<T> *input, Buffer<T> *output)
+        : filter(filter), input(&input->template as<void>()), output(&output->template as<void>()) {
+    }
 
     int run(int n_reps, bool with_copying) {
         timeval t1, t2;
@@ -44,7 +45,7 @@ struct timing {
             }
             gettimeofday(&t2, NULL);
             if (error) {
-                return(error);
+                return error;
             }
             double t = (t2.tv_sec - t1.tv_sec) * 1000.0 + (t2.tv_usec - t1.tv_usec) / 1000.0;
             if (t < best_t) {
@@ -60,29 +61,35 @@ struct timing {
     }
 };
 
-template<class T> class Tester;
+template<class T>
+class Tester;
 
-template<class T> bool doBlur(Tester<T> *tester,
-                              Buffer<T> bt_input,
-                              Buffer<T> bt_output,
-                              Buffer<T> bt_output_arm) {
-    return false; // This abstract implementation should never be called
+template<class T>
+bool doBlur(Tester<T> *tester,
+            Buffer<T> bt_input,
+            Buffer<T> bt_output,
+            Buffer<T> bt_output_arm) {
+    return false;  // This abstract implementation should never be called
 }
 
-template<class T> bool doCopy(Tester<T> *tester,
-                              Buffer<T> bt_input,
-                              Buffer<T> bt_output,
-                              Buffer<T> bt_output_arm) {
-    return false; // This abstract implementation should never be called
+template<class T>
+bool doCopy(Tester<T> *tester,
+            Buffer<T> bt_input,
+            Buffer<T> bt_output,
+            Buffer<T> bt_output_arm) {
+    return false;  // This abstract implementation should never be called
 }
 
-template<class T> class Tester {
+template<class T>
+class Tester {
     int debug_level;
-  public:
-    Tester(int _debug_level = 0): debug_level(_debug_level) {}
 
-  private:
+public:
+    Tester(int _debug_level = 0)
+        : debug_level(_debug_level) {
+    }
 
+private:
     bool validate(Buffer<T> actual, Buffer<T> expected) {
         int count_mismatches = 0;
         actual.for_each_element([&](int x, int y, int c) {
@@ -123,7 +130,7 @@ template<class T> class Tester {
         }
     }
 
-  public:
+public:
     bool test(Buffer<T> input,
               Buffer<T> output,
               Buffer<T> output_arm,
@@ -144,21 +151,21 @@ template<class T> class Tester {
         openglcompute_with_copying.run(N_REPS, true);
 
         LOGI("Out of %d runs best times are:\n"
-                "openglcompute:            %fms(@%d)\n"
-                "openglcompute(with copy): %fms(@%d)\n"
-                "ARM:                      %fms(@%d)\n",
-                N_REPS,
-                openglcompute.best_t, openglcompute.best_rep,
-                openglcompute_with_copying.best_t, openglcompute_with_copying.best_rep,
-                arm.best_t, arm.best_rep);
+             "openglcompute:            %fms(@%d)\n"
+             "openglcompute(with copy): %fms(@%d)\n"
+             "ARM:                      %fms(@%d)\n",
+             N_REPS,
+             openglcompute.best_t, openglcompute.best_rep,
+             openglcompute_with_copying.best_t, openglcompute_with_copying.best_rep,
+             arm.best_t, arm.best_rep);
         LOGI("Out of %d runs worst times are:\n"
-                "openglcompute:            %fms(@%d)\n"
-                "openglcompute(with copy): %fms(@%d)\n"
-                "ARM:                      %fms(@%d)\n",
-                N_REPS,
-                openglcompute.worst_t, openglcompute.worst_rep,
-                openglcompute_with_copying.worst_t, openglcompute_with_copying.worst_rep,
-                arm.worst_t, arm.worst_rep);
+             "openglcompute:            %fms(@%d)\n"
+             "openglcompute(with copy): %fms(@%d)\n"
+             "ARM:                      %fms(@%d)\n",
+             N_REPS,
+             openglcompute.worst_t, openglcompute.worst_rep,
+             openglcompute_with_copying.worst_t, openglcompute_with_copying.worst_rep,
+             arm.worst_t, arm.worst_rep);
 
         // Data correctness check
         input.set_host_dirty();
@@ -174,7 +181,7 @@ template<class T> class Tester {
         print(output);
 
         bool matches = validate(output, output_arm);
-        LOGI(matches? "Test passed.\n": "Test failed.\n");
+        LOGI(matches ? "Test passed.\n" : "Test failed.\n");
 
         return matches;
     }
@@ -201,27 +208,29 @@ template<class T> class Tester {
     }
 };
 
-template<> bool doBlur<float>(Tester<float> *tester,
-                              Buffer<float> bt_input,
-                              Buffer<float> bt_output,
-                              Buffer<float> bt_output_arm) {
+template<>
+bool doBlur<float>(Tester<float> *tester,
+                   Buffer<float> bt_input,
+                   Buffer<float> bt_output,
+                   Buffer<float> bt_output_arm) {
     return tester->test(bt_input,
                         bt_output, bt_output_arm,
                         avg_filter_float,
                         avg_filter_float_arm);
 }
 
-template<> bool doBlur<uint32_t>(Tester<uint32_t> *tester,
-                                 Buffer<uint32_t> bt_input,
-                                 Buffer<uint32_t> bt_output,
-                                 Buffer<uint32_t> bt_output_arm) {
+template<>
+bool doBlur<uint32_t>(Tester<uint32_t> *tester,
+                      Buffer<uint32_t> bt_input,
+                      Buffer<uint32_t> bt_output,
+                      Buffer<uint32_t> bt_output_arm) {
     return tester->test(bt_input,
                         bt_output, bt_output_arm,
                         avg_filter_uint32t,
                         avg_filter_uint32t_arm);
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     LOGI("\nvvvv vvvv vvvv");
     LOGI("\nTesting uint32_t...\n");
     (new Tester<uint32_t>())->runTest();

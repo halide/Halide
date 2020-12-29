@@ -1,8 +1,8 @@
 #include "Halide.h"
-#include <cstdio>
-#include <cstdint>
-#include <random>
 #include "halide_benchmark.h"
+#include <cstdint>
+#include <cstdio>
+#include <random>
 
 using namespace Halide;
 using namespace Halide::Tools;
@@ -16,7 +16,7 @@ bool test(int w, bool div) {
     Func f, g, h;
     Var x, y;
 
-    size_t bits = sizeof(T)*8;
+    size_t bits = sizeof(T) * 8;
     bool is_signed = (T)(-1) < (T)(0);
 
     printf("%sInt(%2d, %2d)    ",
@@ -38,7 +38,7 @@ bool test(int w, bool div) {
 
     for (int y = 0; y < num_vals; y++) {
         for (int x = 0; x < input.width(); x++) {
-            uint32_t bits = (uint32_t) rng();
+            uint32_t bits = (uint32_t)rng();
             input(x, y) = (T)bits;
         }
     }
@@ -101,10 +101,15 @@ bool test(int w, bool div) {
     }
 
     return true;
-
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
     rng.seed(seed);
     std::cout << "const_division test seed: " << seed << std::endl;
@@ -129,10 +134,10 @@ int main(int argc, char **argv) {
         success = success && test<uint8_t>(32, i == 0);
     }
 
-    if (success) {
-        printf("Success!\n");
-        return 0;
-    } else {
+    if (!success) {
         return -1;
     }
+
+    printf("Success!\n");
+    return 0;
 }

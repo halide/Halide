@@ -23,8 +23,9 @@
  *   mandelbrot:  0.006444ms (10%)   peak: 505344   num: 104000   avg: 5376
  *   argmin:      0.027715ms (46%)   stack: 20
  */
+#include <string>
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
@@ -36,7 +37,7 @@ namespace Internal {
  * storage flattening, but after all bounds inference.
  *
  */
-Stmt inject_profiling(Stmt, std::string);
+Stmt inject_profiling(Stmt, const std::string &);
 
 }  // namespace Internal
 }  // namespace Halide

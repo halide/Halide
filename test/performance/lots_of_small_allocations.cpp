@@ -4,6 +4,12 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     Param<int> p;
 
     const char *names[3] = {"heap", "pseudostack", "stack"};
@@ -56,7 +62,7 @@ int main(int argc, char **argv) {
         p.set(200);
 
         Buffer<int> out(16 * 1000 * 1000);
-        t[i] = Halide::Tools::benchmark([&] {chain.back().realize(out);});
+        t[i] = Halide::Tools::benchmark([&] { chain.back().realize(out); });
 
         printf("Time using %s: %f\n", names[i], t[i]);
     }
@@ -66,5 +72,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    printf("Success!\n");
     return 0;
 }

@@ -1,5 +1,7 @@
 #include "SlidingWindow.h"
+
 #include "Bounds.h"
+#include "CompilerLogger.h"
 #include "Debug.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -8,6 +10,7 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -22,7 +25,9 @@ class ExprDependsOnVar : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Variable *op) override {
-        if (op->name == var) result = true;
+        if (op->name == var) {
+            result = true;
+        }
     }
 
     void visit(const Let *op) override {
@@ -33,21 +38,21 @@ class ExprDependsOnVar : public IRVisitor {
             op->body.accept(this);
         }
     }
-public:
 
+public:
     bool result;
     string var;
 
-    ExprDependsOnVar(string v) : result(false), var(v) {
+    ExprDependsOnVar(string v)
+        : result(false), var(std::move(v)) {
     }
 };
 
-bool expr_depends_on_var(Expr e, string v) {
-    ExprDependsOnVar depends(v);
+bool expr_depends_on_var(const Expr &e, string v) {
+    ExprDependsOnVar depends(std::move(v));
     e.accept(&depends);
     return depends.result;
 }
-
 
 class ExpandExpr : public IRMutator {
     using IRMutator::visit;
@@ -64,18 +69,17 @@ class ExpandExpr : public IRMutator {
     }
 
 public:
-    ExpandExpr(const Scope<Expr> &s) : scope(s) {}
-
+    ExpandExpr(const Scope<Expr> &s)
+        : scope(s) {
+    }
 };
 
 // Perform all the substitutions in a scope
-Expr expand_expr(Expr e, const Scope<Expr> &scope) {
+Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
     Expr result = ee.mutate(e);
     debug(3) << "Expanded " << e << " into " << result << "\n";
     return result;
-}
-
 }
 
 // Perform sliding window optimization for a function over a
@@ -92,7 +96,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
     // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
     // in the definition (including in its specializations)
-    bool is_dim_always_pure(const Definition &def, const string& dim, int dim_idx) {
+    bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
         const Variable *var = def.args()[dim_idx].as<Variable>();
         if ((!var) || (var->name != dim)) {
             return false;
@@ -135,7 +139,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 min_req = expand_expr(min_req, scope);
                 max_req = expand_expr(max_req, scope);
 
-                debug(3) << func_args[i] << ":" << min_req << ", " << max_req  << "\n";
+                debug(3) << func_args[i] << ":" << min_req << ", " << max_req << "\n";
                 if (expr_depends_on_var(min_req, loop_var) ||
                     expr_depends_on_var(max_req, loop_var)) {
                     if (!dim.empty()) {
@@ -193,11 +197,19 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             if (monotonic_min == Monotonic::Increasing ||
                 monotonic_min == Monotonic::Constant) {
                 can_slide_up = true;
+            } else if (monotonic_min == Monotonic::Unknown) {
+                if (get_compiler_logger()) {
+                    get_compiler_logger()->record_non_monotonic_loop_var(loop_var, min_required);
+                }
             }
 
             if (monotonic_max == Monotonic::Decreasing ||
                 monotonic_max == Monotonic::Constant) {
                 can_slide_down = true;
+            } else if (monotonic_max == Monotonic::Unknown) {
+                if (get_compiler_logger()) {
+                    get_compiler_logger()->record_non_monotonic_loop_var(loop_var, max_required);
+                }
             }
 
             if (!can_slide_up && !can_slide_down) {
@@ -289,7 +301,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         // the var we're sliding over.
         Expr min = expand_expr(op->min, scope);
         Expr extent = expand_expr(op->extent, scope);
-        if (is_one(extent)) {
+        if (is_const_one(extent)) {
             // Just treat it like a let
             Stmt s = LetStmt::make(op->name, min, op->body);
             s = mutate(s);
@@ -328,7 +340,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min) : func(f), loop_var(v), loop_min(v_min) {}
+    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min)
+        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)) {
+    }
 };
 
 // Perform sliding window optimization for a particular function
@@ -357,7 +371,9 @@ class SlidingWindowOnFunction : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunction(Function f) : func(f) {}
+    SlidingWindowOnFunction(Function f)
+        : func(std::move(f)) {
+    }
 };
 
 // Perform sliding window optimization for all functions
@@ -398,12 +414,16 @@ class SlidingWindow : public IRMutator {
                                  op->bounds, op->condition, new_body);
         }
     }
-public:
-    SlidingWindow(const map<string, Function> &e) : env(e) {}
 
+public:
+    SlidingWindow(const map<string, Function> &e)
+        : env(e) {
+    }
 };
 
-Stmt sliding_window(Stmt s, const map<string, Function> &env) {
+}  // namespace
+
+Stmt sliding_window(const Stmt &s, const map<string, Function> &env) {
     return SlidingWindow(env).mutate(s);
 }
 

@@ -1,5 +1,5 @@
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     int extra_value = 0;
     for (int i = 0; i < 3; ++i) {
         extras.push_back(Buffer<uint8_t>(kSize, kSize));
-        extras.back().fill((uint8_t) i);
+        extras.back().fill((uint8_t)i);
         extra_value += i;
     }
 
@@ -43,11 +43,11 @@ int main(int argc, char **argv) {
 
     const int bias = 1;
     int result = configure(input, bias,
-                            // extra inputs are in the order they were added, after all predeclared inputs
-                            extras[0], extras[1], extras[2], typed_extra, func_extra, extra_scalar,
-                            output,
-                            // extra outputs are in the order they were added, after all predeclared outputs
-                            extra_buffer_output, extra_func_output);
+                           // extra inputs are in the order they were added, after all predeclared inputs
+                           extras[0], extras[1], extras[2], typed_extra, func_extra, extra_scalar,
+                           output,
+                           // extra outputs are in the order they were added, after all predeclared outputs
+                           extra_buffer_output, extra_func_output);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);
         exit(-1);

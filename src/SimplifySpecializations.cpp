@@ -1,5 +1,6 @@
 #include "SimplifySpecializations.h"
 #include "Definition.h"
+#include "Function.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -7,18 +8,18 @@
 #include "Substitute.h"
 
 #include <set>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::set;
 using std::string;
 using std::vector;
 
 namespace {
 
-void substitute_value_in_var(const string &var, Expr value, vector<Definition> &definitions) {
+void substitute_value_in_var(const string &var, const Expr &value, vector<Definition> &definitions) {
     for (Definition &def : definitions) {
         for (auto &def_arg : def.args()) {
             def_arg = simplify(substitute(var, value, def_arg));
@@ -51,10 +52,12 @@ public:
     }
 
     Expr fact;
-    SimplifyUsingFact(Expr f) : fact(f) {}
+    SimplifyUsingFact(Expr f)
+        : fact(std::move(f)) {
+    }
 };
 
-void simplify_using_fact(Expr fact, vector<Definition> &definitions) {
+void simplify_using_fact(const Expr &fact, vector<Definition> &definitions) {
     for (Definition &def : definitions) {
         for (auto &def_arg : def.args()) {
             def_arg = simplify(SimplifyUsingFact(fact).mutate(def_arg));
@@ -85,21 +88,21 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         Expr c = simplify(it->condition);
         // Go ahead and save the simplified condition now
         it->condition = c;
-        if (is_zero(c) || seen_const_true) {
+        if (is_const_zero(c) || seen_const_true) {
             debug(1) << "Erasing unreachable specialization ("
-                << old_c << ") -> (" << c << ") for function \"" << name << "\"\n";
+                     << old_c << ") -> (" << c << ") for function \"" << name << "\"\n";
             it = specializations.erase(it);
         } else {
             it++;
         }
-        seen_const_true |= is_one(c);
+        seen_const_true |= is_const_one(c);
     }
 
     // If the final Specialization is const-true, then the default schedule
     // for the definition will never be run: replace the definition's main
     // schedule with the one from the final Specialization and prune it from
     // the list. This may leave the list of Specializations empty.
-    if (!specializations.empty() && is_one(specializations.back().condition) && specializations.back().failure_message.empty()) {
+    if (!specializations.empty() && is_const_one(specializations.back().condition) && specializations.back().failure_message.empty()) {
         debug(1) << "Replacing default Schedule with const-true specialization for function \"" << name << "\"\n";
         const Definition s_def = specializations.back().definition;
         specializations.pop_back();
@@ -117,8 +120,8 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     }
 
     for (size_t i = specializations.size(); i > 0; i--) {
-        Expr c = specializations[i-1].condition;
-        Definition &s_def = specializations[i-1].definition;
+        Expr c = specializations[i - 1].condition;
+        Definition &s_def = specializations[i - 1].definition;
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 

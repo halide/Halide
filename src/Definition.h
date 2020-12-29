@@ -7,7 +7,6 @@
 
 #include "Expr.h"
 #include "IntrusivePtr.h"
-#include "Reduction.h"
 #include "Schedule.h"
 
 #include <map>
@@ -17,6 +16,7 @@ namespace Halide {
 namespace Internal {
 struct DefinitionContents;
 struct FunctionContents;
+class ReductionDomain;
 }  // namespace Internal
 
 namespace Internal {

@@ -11,5 +11,6 @@ int main(int argc, char **argv) {
     f(r.x, r.y) = in(r.x, r.y) + 2;
     f.realize(in.width(), in.height());
 
+    printf("Success!\n");
     return 0;
 }

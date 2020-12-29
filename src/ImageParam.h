@@ -6,6 +6,8 @@
  * Classes for declaring image parameters to halide pipelines
  */
 
+#include <utility>
+
 #include "Func.h"
 #include "OutputImageParam.h"
 #include "Var.h"
@@ -13,23 +15,26 @@
 namespace Halide {
 
 namespace Internal {
-template<typename T2> class GeneratorInput_Buffer;
+template<typename T2>
+class GeneratorInput_Buffer;
 }
 
 /** An Image parameter to a halide pipeline. E.g., the input image. */
 class ImageParam : public OutputImageParam {
-    template<typename T2> friend class ::Halide::Internal::GeneratorInput_Buffer;
+    template<typename T2>
+    friend class ::Halide::Internal::GeneratorInput_Buffer;
 
     // Only for use of Generator
-    ImageParam(const Internal::Parameter &p, Func f) : OutputImageParam(p, Argument::InputBuffer, f) {}
+    ImageParam(const Internal::Parameter &p, Func f)
+        : OutputImageParam(p, Argument::InputBuffer, std::move(f)) {
+    }
 
     /** Helper function to initialize the Func representation of this ImageParam. */
     Func create_func() const;
 
 public:
-
     /** Construct a nullptr image parameter handle. */
-    ImageParam() : OutputImageParam() {}
+    ImageParam() = default;
 
     /** Construct an image parameter of the given type and
      * dimensionality, with an auto-generated unique name. */
@@ -41,7 +46,7 @@ public:
 
     /** Bind an Image to this ImageParam. Only relevant for jitting */
     // @{
-    void set(Buffer<> im);
+    void set(const Buffer<> &im);
     // @}
 
     /** Get a reference to the Buffer bound to this ImageParam. Only relevant for jitting. */
@@ -58,8 +63,8 @@ public:
      * (see \ref Var::implicit)
      */
     // @{
-    template <typename... Args>
-    HALIDE_NO_USER_CODE_INLINE Expr operator()(Args&&... args) const {
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE Expr operator()(Args &&... args) const {
         return func(std::forward<Args>(args)...);
     }
     Expr operator()(std::vector<Expr>) const;
@@ -80,7 +85,6 @@ public:
      * second dimension of the Func.
      */
     operator Func() const;
-
 
     /** Creates and returns a new Func that wraps this ImageParam. During
      * compilation, Halide will replace calls to this ImageParam with calls

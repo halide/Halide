@@ -9,9 +9,9 @@ int32_t saturating_rounding_doubling_high_multiply_reference(int32_t a, int32_t 
     int64_t ab_wide = a_wide * b_wide;
     int64_t nudge = 1 << 30;
     int64_t result = (ab_wide + nudge) >> 31;
-    result = std::max(result, (int64_t) std::numeric_limits<int32_t>::min());
-    result = std::min(result, (int64_t) std::numeric_limits<int32_t>::max());
-    return (int32_t) result;
+    result = std::max(result, (int64_t)std::numeric_limits<int32_t>::min());
+    result = std::min(result, (int64_t)std::numeric_limits<int32_t>::max());
+    return (int32_t)result;
 }
 
 int32_t rounding_shift_right_reference(int32_t x, int32_t shift) {

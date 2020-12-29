@@ -1,0 +1,14 @@
+# .clang-format-ignore
+./bin
+./build
+./cmake_build
+./cmake_build_static
+./cmake_build_shared
+./distrib
+./doc
+./include
+./lib
+# Our tutorials have special formatting: skip them
+./tutorial
+# hexagon_remote/bin/src is also special
+./src/runtime/hexagon_remote/bin/src

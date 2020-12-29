@@ -17,5 +17,6 @@ int main() {
     // never used in 'g'.
     h.realize(5, 5);
 
+    printf("Success!\n");
     return 0;
 }

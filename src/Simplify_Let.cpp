@@ -10,18 +10,18 @@ using std::vector;
 namespace {
 
 class CountVarUses : public IRVisitor {
-    std::map<std::string, int>& var_uses;
+    std::map<std::string, int> &var_uses;
 
-    void visit(const Variable* var) override {
+    void visit(const Variable *var) override {
         var_uses[var->name]++;
     }
 
-    void visit(const Load* op) override {
+    void visit(const Load *op) override {
         var_uses[op->name]++;
         IRVisitor::visit(op);
     }
 
-    void visit(const Store* op) override {
+    void visit(const Store *op) override {
         var_uses[op->name]++;
         IRVisitor::visit(op);
     }
@@ -29,11 +29,13 @@ class CountVarUses : public IRVisitor {
     using IRVisitor::visit;
 
 public:
-    CountVarUses(std::map<std::string, int>& var_uses) : var_uses(var_uses) {}
+    CountVarUses(std::map<std::string, int> &var_uses)
+        : var_uses(var_uses) {
+    }
 };
 
 template<typename StmtOrExpr>
-void count_var_uses(StmtOrExpr x, std::map<std::string, int>& var_uses) {
+void count_var_uses(StmtOrExpr x, std::map<std::string, int> &var_uses) {
     CountVarUses counter(var_uses);
     x.accept(&counter);
 }
@@ -51,7 +53,9 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         string new_name;
         bool new_value_alignment_tracked = false, new_value_bounds_tracked = false;
         bool value_alignment_tracked = false, value_bounds_tracked = false;
-        Frame(const LetOrLetStmt *op) : op(op) {}
+        Frame(const LetOrLetStmt *op)
+            : op(op) {
+        }
     };
 
     vector<Frame> frames;
@@ -90,7 +94,6 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
             const Cast *cast = f.new_value.template as<Cast>();
             const Broadcast *broadcast = f.new_value.template as<Broadcast>();
             const Shuffle *shuffle = f.new_value.template as<Shuffle>();
-            const Call *call = f.new_value.template as<Call>();
             const Variable *var_b = nullptr;
             const Variable *var_a = nullptr;
 
@@ -168,9 +171,9 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
                 Expr op_b = var_a ? new_var : shuffle->vectors[1];
                 replacement = substitute(f.new_name, Shuffle::make_concat({op_a, op_b}), replacement);
                 f.new_value = var_a ? shuffle->vectors[1] : shuffle->vectors[0];
-            } else if (call && (call->is_intrinsic(Call::likely) || call->is_intrinsic(Call::likely_if_innermost))) {
-                replacement = substitute(f.new_name, Call::make(call->type, call->name, {new_var}, Call::PureIntrinsic), replacement);
-                f.new_value = call->args[0];
+            } else if (const Call *likely = Call::as_intrinsic(f.new_value, {Call::likely, Call::likely_if_innermost})) {
+                replacement = substitute(f.new_name, Call::make(likely->type, likely->name, {new_var}, Call::PureIntrinsic), replacement);
+                f.new_value = likely->args[0];
             } else {
                 break;
             }
@@ -243,7 +246,8 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
             count_var_uses(it->new_value, vars_used);
         }
 
-        if (!remove_dead_lets || (info.old_uses > 0 && vars_used.count(it->op->name) > 0)) {
+        if ((!remove_dead_lets && std::is_same<LetOrLetStmt, LetStmt>::value) ||
+            (info.old_uses > 0 && vars_used.count(it->op->name) > 0)) {
             // The old name is still in use. We'd better keep it as well.
             result = LetOrLetStmt::make(it->op->name, it->value, result);
             count_var_uses(it->value, vars_used);
@@ -269,5 +273,5 @@ Stmt Simplify::visit(const LetStmt *op) {
     return simplify_let<LetStmt, Stmt>(op, nullptr);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

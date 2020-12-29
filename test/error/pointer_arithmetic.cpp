@@ -12,5 +12,6 @@ int main(int argc, char **argv) {
     // Should error out during match_types
     f(x) = p + 2;
 
+    printf("Success!\n");
     return 0;
 }

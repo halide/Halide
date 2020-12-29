@@ -17,7 +17,7 @@ namespace Internal {
  * different outputs on different architectures (e.g. with and without
  * FMA). It's also a useful way to detect bad tests, such as those
  * that expect exact floating point equality across platforms. */
-Stmt fuzz_float_stores(Stmt s);
+Stmt fuzz_float_stores(const Stmt &s);
 
 }  // namespace Internal
 }  // namespace Halide

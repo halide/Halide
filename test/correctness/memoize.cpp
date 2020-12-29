@@ -52,13 +52,18 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, halide_b
             in->dim[i] = out->dim[i];
         }
     } else if (!out->is_bounds_query()) {
-        assert(stage < static_cast<int32_t>(sizeof(call_count_staged)/sizeof(call_count_staged[0])));
+        assert(stage < static_cast<int32_t>(sizeof(call_count_staged) / sizeof(call_count_staged[0])));
         call_count_staged[stage]++;
         Halide::Runtime::Buffer<uint8_t> out_buf(*out), in_buf(*in);
-        out_buf.for_each_value([&](uint8_t &out, uint8_t &in) {out = in + val;}, in_buf);
+        out_buf.for_each_value([&](uint8_t &out, uint8_t &in) { out = in + val; }, in_buf);
     }
     return 0;
 }
+
+extern "C" DLLEXPORT int computed_eviction_key(int a) {
+    return 2020 + a;
+}
+HalideExtern_1(int, computed_eviction_key, int);
 
 void simple_free(void *user_context, void *ptr) {
     free(ptr);
@@ -86,7 +91,6 @@ int main(int argc, char **argv) {
 
         Func f, f_memoized;
         f_memoized() = count_calls(0, 0);
-        f_memoized.compute_root().memoize();
         f() = f_memoized();
         f_memoized.compute_root().memoize();
 
@@ -221,7 +225,6 @@ int main(int argc, char **argv) {
         val2.set(57);
         Buffer<uint8_t> out6 = f.realize(256, 256);
 
-
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
                 assert(out1(i, j) == (23 + 42));
@@ -341,7 +344,6 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> out0 = out[0];
         Buffer<int32_t> out1 = out[1];
 
-
         for (int32_t i = 0; i < 100; i++) {
             for (int32_t j = 0; j < 100; j++) {
                 assert(out0(i, j) == (uint8_t)(3 * 23 + i + (i - 1) + (i + 1)));
@@ -351,7 +353,6 @@ int main(int argc, char **argv) {
         out = g.realize(128, 128);
         out0 = out[0];
         out1 = out[1];
-
 
         for (int32_t i = 0; i < 100; i++) {
             for (int32_t j = 0; j < 100; j++) {
@@ -486,11 +487,49 @@ int main(int argc, char **argv) {
 
         // TODO work out an assertion on call counts here.
         for (int i = 0; i < 8; i++) {
-          printf("Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
+            printf("Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
         }
 
         // Return cache size to default.
         Internal::JITSharedRuntime::memoization_cache_set_size(0);
+    }
+
+    {
+        // Test multiple argument memoize_tag. This can be unsafe but
+        // models cases where one uses a hash of image data as part of
+        // a tag to memoize an expensive computation.
+        ImageParam input(UInt(8), 1);
+        Param<int> key;
+        Func f, g;
+        RDom extent(input);
+
+        g() = memoize_tag(sum(input(extent)), key);
+        f() = g() + 42;
+        g.compute_root().memoize();
+
+        Buffer<uint8_t> in(10);
+        input.set(in);
+
+        in.fill(42);
+
+        key.set(0);
+        Buffer<uint8_t> result = f.realize();
+        assert(result() == (462 % 256));
+
+        // Change image data without channging tag
+        in(0) = 41;
+        result = f.realize();
+
+        // Result is likely stale. This is not strictly guaranteed due to e.g.
+        // cache size. Hence allow correct value to make test express the
+        // contract.
+        assert((result() == (462 % 256)) ||
+               (result() == (461 % 256)));
+
+        // Change tag, thus ensuring correct result.
+        key.set(1);
+        result = f.realize();
+        assert(result() == (461 % 256));
     }
 
     {
@@ -516,7 +555,7 @@ int main(int argc, char **argv) {
 
         f.compute_root();
         for (int i = 0; i < 3; i++) {
-          stage[i].compute_root();
+            stage[i].compute_root();
         }
         stage[3].compute_root().memoize();
         Func output;
@@ -526,18 +565,7 @@ int main(int argc, char **argv) {
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
-              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
-            }
-        }
-
-        for (int i = 0; i < 4; i++) {
-          printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
-        }
-
-        result = output.realize(128, 128);
-        for (int32_t i = 0; i < 128; i++) {
-            for (int32_t j = 0; j < 128; j++) {
-              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
+                assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
             }
         }
 
@@ -545,10 +573,20 @@ int main(int argc, char **argv) {
             printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
+        result = output.realize(128, 128);
+        for (int32_t i = 0; i < 128; i++) {
+            for (int32_t j = 0; j < 128; j++) {
+                assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
+            }
+        }
+
+        for (int i = 0; i < 4; i++) {
+            printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
+        }
     }
 
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping out of memory handling for WebAssembly as the wasm JIT cannot support set_custom_allocator.\n");
+        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
         return 0;
     } else {
         // Test out of memory handling.
@@ -586,7 +624,7 @@ int main(int argc, char **argv) {
 
                 for (int32_t i = 0; i < 16; i++) {
                     for (int32_t j = 0; j < 16; j++) {
-                      assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                        assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
                         assert(out1(i, j) == i);
                     }
                 }
@@ -601,7 +639,7 @@ int main(int argc, char **argv) {
 
                     for (int32_t i = 0; i < 16; i++) {
                         for (int32_t j = 0; j < 16; j++) {
-                          assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                            assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
                             assert(out1(i, j) == i);
                         }
                     }
@@ -612,8 +650,93 @@ int main(int argc, char **argv) {
         }
 
         printf("In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
+    }
 
+    {
+        call_count = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
+        ImageParam input(UInt(8), 1);
+        Func f, f_memoized;
+        f_memoized() = count_calls(0, 0) + cast<uint8_t>(input.dim(0).extent());
+        f_memoized.compute_root().memoize();
+        f() = f_memoized();
+
+        Buffer<uint8_t> in_one(1);
+        input.set(in_one);
+
+        Buffer<uint8_t> result1 = f.realize();
+        Buffer<uint8_t> result2 = f.realize();
+
+        assert(result1(0) == 43);
+        assert(result2(0) == 43);
+
+        assert(call_count == 1);
+
+        Buffer<uint8_t> in_ten(10);
+        input.set(in_ten);
+
+        result1 = f.realize();
+        result2 = f.realize();
+
+        assert(result1(0) == 52);
+        assert(result2(0) == 52);
+
+        assert(call_count == 2);
+    }
+
+    // Test cache eviction.
+    {
+        call_count = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
+
+        Param<void *> p;
+        Func f, memoized_one, memoized_two, memoized_three;
+        memoized_one() = count_calls(0, 0);
+        memoized_two() = count_calls(1, 1);
+        memoized_three() = count_calls(3, 3);
+        memoized_one.compute_root().memoize(EvictionKey(1));
+        memoized_two.compute_root().memoize(EvictionKey(p));
+        // The called extern here would usually take user_context and extact a value
+        // from within, but JIT mostly subsumes user_context, so this is just an example.
+        memoized_three.compute_root().memoize(EvictionKey(computed_eviction_key(5)));
+        f() = memoized_one() + memoized_two() + memoized_three();
+
+        p.set((void *)&call_count);
+        Buffer<uint8_t> result1 = f.realize();
+        Buffer<uint8_t> result2 = f.realize();
+
+        assert(result1(0) == 126);
+        assert(result2(0) == 126);
+
+        assert(call_count == 3);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(1);
+        result1 = f.realize();
+        assert(result1(0) == 126);
+
+        assert(call_count == 4);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(1);
+        result1 = f.realize();
+        assert(result1(0) == 126);
+
+        assert(call_count == 5);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(1);
+        Internal::JITSharedRuntime::memoization_cache_evict((uint64_t)&call_count);
+        result1 = f.realize();
+        assert(result1(0) == 126);
+
+        assert(call_count == 7);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(2025);
+        result1 = f.realize();
+        assert(result1(0) == 126);
+
+        assert(call_count == 8);
     }
 
     printf("Success!\n");

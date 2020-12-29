@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature() && !target.has_feature(Target::OpenGLCompute)) {
-        printf("No gpu target enabled. Skipping test.\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 

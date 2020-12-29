@@ -8,14 +8,16 @@ extern "C" {
 #define WIN32API __stdcall
 #endif
 
+typedef unsigned short WCHAR;
+
 int WIN32API MultiByteToWideChar(
-        unsigned int CodePage,
-        unsigned long dwFlags,
-        const char* lpMultiByteStr,
-        int cbMultiByte,
-        wchar_t* lpWideCharStr,
-        int cchWideChar);
-WIN32API void *LoadLibraryW(const wchar_t *);
+    unsigned int CodePage,
+    unsigned long dwFlags,
+    const char *lpMultiByteStr,
+    int cbMultiByte,
+    WCHAR *lpWideCharStr,
+    int cchWideChar);
+WIN32API void *LoadLibraryW(const WCHAR *);
 WIN32API void *GetProcAddress(void *, const char *);
 WIN32API unsigned SetErrorMode(unsigned);
 #define SEM_FAILCRITICALERRORS 0x0001
@@ -23,16 +25,16 @@ WIN32API unsigned SetErrorMode(unsigned);
 #define CP_UTF8 65001
 
 WEAK void *halide_default_get_symbol(const char *name) {
-    return GetProcAddress(NULL, name);
+    return GetProcAddress(nullptr, name);
 }
 
 WEAK void *halide_default_load_library(const char *name) {
     // Suppress dialog windows during library open.
     unsigned old_mode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
-    void* lib = NULL;
-    int wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, NULL, 0);
+    void *lib = nullptr;
+    int wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, nullptr, 0);
     if (wide_len > 0) {
-        wchar_t* wide_lib = (wchar_t*)malloc(wide_len * sizeof(*wide_lib));
+        WCHAR *wide_lib = (WCHAR *)malloc(wide_len * sizeof(*wide_lib));
         wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, wide_lib, wide_len);
         if (wide_len > 0) {
             lib = LoadLibraryW(wide_lib);
@@ -49,13 +51,17 @@ WEAK void *halide_default_get_library_symbol(void *lib, const char *name) {
 
 }  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK halide_get_symbol_t custom_get_symbol = halide_default_get_symbol;
 WEAK halide_load_library_t custom_load_library = halide_default_load_library;
 WEAK halide_get_library_symbol_t custom_get_library_symbol = halide_default_get_library_symbol;
 
-}}} // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 

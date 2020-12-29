@@ -2,6 +2,7 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
+#include "CompilerLogger.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
 
@@ -14,7 +15,7 @@
 #endif
 #include <windows.h>
 #else
-#include <stdio.h>
+#include <cstdio>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -23,6 +24,8 @@ namespace Halide {
 
 namespace Internal {
 namespace Archive {
+
+namespace {
 
 // This is a bare-bones Windows .lib file writer, based on inspection
 // of the LLVM ArchiveWriter class and the documentation at
@@ -38,47 +41,47 @@ namespace Archive {
 // If data too small, pad on the right with spaces.
 // If data too large, assert.
 // Return the offset at which 'data' was written.
-template <typename T>
+template<typename T>
 size_t emit_padded(std::ostream &out, T data, size_t size) {
     size_t pos = out.tellp();
     out << data;
     size_t written = (size_t)out.tellp() - pos;
     internal_assert(written <= size);
     while (written < size) {
-        out << ' ';
+        out.put(' ');
         written++;
     }
     return pos;
 }
 
-using EmitU32 = std::function<void(std::ostream&, uint32_t)>;
+using EmitU32 = std::function<void(std::ostream &, uint32_t)>;
 
 void emit_big_endian_u32(std::ostream &out, uint32_t value) {
     out << static_cast<uint8_t>((value >> 24) & 0xff)
         << static_cast<uint8_t>((value >> 16) & 0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff)
-        << static_cast<uint8_t>((value) & 0xff);
+        << static_cast<uint8_t>((value)&0xff);
 }
 
 void emit_little_endian_u32(std::ostream &out, uint32_t value) {
-    out << static_cast<uint8_t>((value) & 0xff)
+    out << static_cast<uint8_t>((value)&0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff)
         << static_cast<uint8_t>((value >> 16) & 0xff)
         << static_cast<uint8_t>((value >> 24) & 0xff);
 }
 
 void emit_little_endian_u16(std::ostream &out, uint16_t value) {
-    out << static_cast<uint8_t>((value) & 0xff)
+    out << static_cast<uint8_t>((value)&0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff);
 }
 
 // Return the offset at which 'size' was written
 size_t finish_member_header(std::ostream &out, size_t size) {
     // Emit zero for all of these, to mimic the 'deterministic' flag
-    emit_padded(out, 0, 12);    // timestamp
-    emit_padded(out, ' ', 6);   // UID
-    emit_padded(out, ' ', 6);   // GID
-    emit_padded(out, 0, 8);     // perm
+    emit_padded(out, 0, 12);                        // timestamp
+    emit_padded(out, ' ', 6);                       // UID
+    emit_padded(out, ' ', 6);                       // GID
+    emit_padded(out, 0, 8);                         // perm
     const size_t pos = emit_padded(out, size, 10);  // total size of the archive member (not including header)
     out << "\x60\x0A";
     return pos;
@@ -104,14 +107,15 @@ std::map<std::string, size_t> write_string_table(std::ostream &out,
             finish_member_header(out, 0);
             start_offset = out.tellp();
         }
-        string_to_offset_map[name] = (size_t) out.tellp() - start_offset;
-        out << name << '\0';
+        string_to_offset_map[name] = (size_t)out.tellp() - start_offset;
+        out << name;
+        out.put('\0');
     }
     // If all strings are short enough, we skip the string table entirely
     if (start_offset != 0) {
         size_t member_end = out.tellp();
         if (out.tellp() % 2) {
-            out << '\x0A';
+            out.put('\x0A');
         }
         size_t final_offset = out.tellp();
         out.seekp(start_offset - 12);
@@ -132,9 +136,7 @@ void write_symbol_table(std::ostream &out,
                         std::map<size_t, std::vector<PatchInfo>> *patchers) {
     internal_assert(!members.empty());
 
-    EmitU32 emit_u32 = windows_coff_format
-        ? emit_little_endian_u32
-        : emit_big_endian_u32;
+    EmitU32 emit_u32 = windows_coff_format ? emit_little_endian_u32 : emit_big_endian_u32;
 
     // Write zero for sizes/offsets that will be patched later.
     const size_t kPatchLater = 0;
@@ -147,8 +149,8 @@ void write_symbol_table(std::ostream &out,
     for (size_t i = 0, n = members.size(); i < n; ++i) {
         llvm::MemoryBufferRef member_buffer = members[i].Buf->getMemBufferRef();
         llvm::Expected<std::unique_ptr<llvm::object::SymbolicFile>> obj_or_err =
-                llvm::object::SymbolicFile::createSymbolicFile(
-                        member_buffer, kFileMagicUnknown, &context);
+            llvm::object::SymbolicFile::createSymbolicFile(
+                member_buffer, kFileMagicUnknown, &context);
         if (!obj_or_err) {
             // Don't use internal_assert: the call to new_member.takeError() will be
             // evaluated even if the assert does not fail, leaving new_member in an
@@ -157,7 +159,15 @@ void write_symbol_table(std::ostream &out,
         }
         llvm::object::SymbolicFile &obj = *obj_or_err.get();
         for (const auto &sym : obj.symbols()) {
+#if LLVM_VERSION >= 110
+            auto flags = sym.getFlags();
+            if (!flags) {
+                internal_error << llvm::toString(flags.takeError()) << "\n";
+            }
+            const uint32_t sym_flags = flags.get();
+#else
             const uint32_t sym_flags = sym.getFlags();
+#endif
             if (sym_flags & llvm::object::SymbolRef::SF_FormatSpecific) {
                 continue;
             }
@@ -186,7 +196,7 @@ void write_symbol_table(std::ostream &out,
         }
     }
 
-    size_t header_start_offset =  emit_padded(out, "/", 16);
+    size_t header_start_offset = emit_padded(out, "/", 16);
     size_t symbol_table_size_offset = finish_member_header(out, kPatchLater);  // size of symbol table
 
     size_t symbol_count_offset = 0;
@@ -202,7 +212,7 @@ void write_symbol_table(std::ostream &out,
         // symbol-to-archive-member-index, but 1-based rather than zero-based.
         for (auto &it : name_to_member_index) {
             internal_assert(it.second <= 65534);
-            emit_little_endian_u16(out, (uint16_t) it.second + 1);
+            emit_little_endian_u16(out, (uint16_t)it.second + 1);
         }
     } else {
         symbol_count_offset = out.tellp();
@@ -216,14 +226,15 @@ void write_symbol_table(std::ostream &out,
 
     // Symbol table goes at the end for both variants.
     for (auto &it : name_to_member_index) {
-        out << it.first << '\0';
+        out << it.first;
+        out.put('\0');
     }
 
     size_t member_end = out.tellp();
 
     // lib.exe pads to 2-byte align with 0x0a
     if (out.tellp() % 2) {
-        out << '\x0A';
+        out.put('\x0A');
     }
     size_t final_offset = out.tellp();
 
@@ -267,7 +278,7 @@ void write_coff_archive(std::ostream &out,
         std::string name = member_name(m);
         auto it = string_to_offset_map.find(name);
         if (it != string_to_offset_map.end()) {
-            out << '/';
+            out.put('/');
             emit_padded(out, it->second, 15);
         } else {
             emit_padded(out, name + "/", 16);
@@ -278,7 +289,7 @@ void write_coff_archive(std::ostream &out,
         out << m.Buf->getMemBufferRef().getBuffer().str();
 
         if (out.tellp() % 2) {
-            out << '\x0A';
+            out.put('\x0A');
         }
     }
 
@@ -291,6 +302,8 @@ void write_coff_archive(std::ostream &out,
     }
 }
 
+}  // namespace
+
 }  // namespace Archive
 }  // namespace Internal
 
@@ -298,7 +311,9 @@ std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &fil
     std::string error_string;
     std::error_code err;
     std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, err, llvm::sys::fs::F_None));
-    if (err) error_string = err.message();
+    if (err) {
+        error_string = err.message();
+    }
     internal_assert(error_string.empty())
         << "Error opening output " << filename << ": " << error_string << "\n";
 
@@ -327,9 +342,12 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
 
 }  // namespace
 
-void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::TargetMachine::CodeGenFileType file_type) {
+void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
+               llvm::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
+
+    auto time_start = std::chrono::high_resolution_clock::now();
 
     // Work on a copy of the module to avoid modifying the original.
     std::unique_ptr<llvm::Module> module = clone_module(module_in);
@@ -369,29 +387,35 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
 
     pass_manager.run(*module);
+
+    auto *logger = Internal::get_compiler_logger();
+    if (logger) {
+        auto time_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = time_end - time_start;
+        logger->record_compilation_time(Internal::CompilerLogger::Phase::LLVM, diff.count());
+    }
+
     // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
-#if LLVM_VERSION >= 80
     llvm::reportAndResetTimings();
-#endif
 }
 
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
     return codegen_llvm(module, context);
 }
 
-void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream& out) {
-    emit_file(module, out, llvm::TargetMachine::CGFT_ObjectFile);
+void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
+    emit_file(module, out, llvm::CGFT_ObjectFile);
 }
 
-void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream& out) {
-    emit_file(module, out, llvm::TargetMachine::CGFT_AssemblyFile);
+void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
+    emit_file(module, out, llvm::CGFT_AssemblyFile);
 }
 
-void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream& out) {
+void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream &out) {
     WriteBitcodeToFile(module, out);
 }
 
-void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream& out) {
+void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
     module.print(out, nullptr);
 }
 
@@ -403,18 +427,31 @@ namespace {
 
 std::string get_current_directory() {
 #ifdef _WIN32
-    std::string dir;
-    char p[MAX_PATH];
-    DWORD ret = GetCurrentDirectoryA(MAX_PATH, p);
-    internal_assert(ret != 0) << "GetCurrentDirectoryA() failed";
-    dir = p;
+    DWORD dir_buf_size = GetCurrentDirectoryW(0, nullptr);
+    internal_assert(dir_buf_size) << "GetCurrentDirectoryW() failed; error " << GetLastError() << "\n";
+
+    // GetCurrentDirectoryW returns a _buffer size_, not a character count.
+    // std::wstring null-terminates on its own, so don't count that here.
+    std::wstring wdir(dir_buf_size - 1, 0);
+
+    DWORD ret = GetCurrentDirectoryW(dir_buf_size, &wdir[0]);
+    internal_assert(ret) << "GetCurrentDirectoryW() failed; error " << GetLastError() << "\n";
+
+    int dir_len = WideCharToMultiByte(CP_UTF8, 0, &wdir[0], (int)wdir.size(), nullptr, 0, nullptr, nullptr);
+    internal_assert(dir_len) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+
+    std::string dir(dir_len, 0);
+
+    ret = WideCharToMultiByte(CP_UTF8, 0, &wdir[0], (int)wdir.size(), &dir[0], (int)dir.size(), nullptr, nullptr);
+    internal_assert(ret) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+
     return dir;
 #else
     std::string dir;
     // Note that passing null for the first arg isn't strictly POSIX, but is
     // supported everywhere we currently build.
     char *p = getcwd(nullptr, 0);
-    internal_assert(p != NULL) << "getcwd() failed";
+    internal_assert(p != nullptr) << "getcwd() failed";
     dir = p;
     free(p);
     return dir;
@@ -423,7 +460,14 @@ std::string get_current_directory() {
 
 void set_current_directory(const std::string &d) {
 #ifdef _WIN32
-    internal_assert(SetCurrentDirectoryA(d.c_str())) << "SetCurrentDirectoryA() failed";
+    int n_chars = MultiByteToWideChar(CP_UTF8, 0, &d[0], (int)d.size(), nullptr, 0);
+    internal_assert(n_chars) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+
+    std::wstring wd(n_chars, 0);
+    int ret = MultiByteToWideChar(CP_UTF8, 0, &d[0], (int)d.size(), &wd[0], wd.size());
+    internal_assert(ret) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+
+    internal_assert(SetCurrentDirectoryW(wd.c_str())) << "SetCurrentDirectoryW() failed; error " << GetLastError() << "\n";
 #else
     internal_assert(chdir(d.c_str()) == 0) << "chdir() failed";
 #endif
@@ -444,7 +488,7 @@ std::pair<std::string, std::string> dir_and_file(const std::string &path) {
     } else {
         file = path;
     }
-    return { dir, file };
+    return {dir, file};
 }
 
 std::string make_absolute_path(const std::string &path) {
@@ -469,7 +513,8 @@ std::string make_absolute_path(const std::string &path) {
 
 struct SetCwd {
     const std::string original_directory;
-    explicit SetCwd(const std::string &d) : original_directory(get_current_directory()) {
+    explicit SetCwd(const std::string &d)
+        : original_directory(get_current_directory()) {
         if (!d.empty()) {
             set_current_directory(d);
         }
@@ -497,7 +542,7 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
     // our existing usage.)
     std::string src_dir = dir_and_file(src_files_in.front()).first;
     std::vector<std::string> src_files;
-    for (auto &s_in : src_files_in) {
+    for (const auto &s_in : src_files_in) {
         auto df = dir_and_file(s_in);
         internal_assert(df.first == src_dir) << "All inputs to create_static_library() must be in the same directory";
         for (auto &s_existing : src_files) {
@@ -532,14 +577,13 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
     }
 
     const bool write_symtab = true;
-    const auto kind = Internal::get_triple_for_target(target).isOSDarwin()
-        ? llvm::object::Archive::K_BSD
-        : llvm::object::Archive::K_GNU;
+    const auto kind = Internal::get_triple_for_target(target).isOSDarwin() ? llvm::object::Archive::K_BSD : llvm::object::Archive::K_GNU;
     const bool thin = false;
     auto result = llvm::writeArchive(dst_file, new_members,
-                       write_symtab, kind,
-                       deterministic, thin, nullptr);
-    internal_assert(!result) << "Failed to write archive: " << dst_file
+                                     write_symtab, kind,
+                                     deterministic, thin, nullptr);
+    internal_assert(!result)
+        << "Failed to write archive: " << dst_file
         << ", reason: " << llvm::toString(std::move(result)) << "\n";
 }
 

@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     // internal variables created by lets.
     Param<int> p;
     Var x;
-    RDom r(0, Halide::Internal::Let::make(x.name(), (p + 8) / p, x*x));
+    RDom r(0, Halide::Internal::Let::make(x.name(), (p + 8) / p, x * x));
     Func f;
     f(x) = 0;
     f(x) += r;

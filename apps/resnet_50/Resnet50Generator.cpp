@@ -28,91 +28,89 @@ int find_index(int value, std::vector<int> vec) {
 
 class Resnet50Generator : public Halide::Generator<Resnet50Generator> {
 public:
-    Input<Buffer<float>> input{ "input", 3 };
+    Input<Buffer<float>> input{"input", 3};
     /** parameter values for scaling layers **/
-    Input<Buffer<float>> conv1_gamma{ "conv1_gamma", 1 };
+    Input<Buffer<float>> conv1_gamma{"conv1_gamma", 1};
     Input<Buffer<float>[4]> br1_gamma { "br1_gamma", 1 };
     Input<Buffer<float>[16]> br2a_gamma { "br2a_gamma", 1 };
     Input<Buffer<float>[16]> br2b_gamma { "br2b_gamma", 1 };
     Input<Buffer<float>[16]> br2c_gamma { "br2c_gamma", 1 };
 
-    Input<Buffer<float>> conv1_beta{ "conv1_beta", 1 };
+    Input<Buffer<float>> conv1_beta{"conv1_beta", 1};
     Input<Buffer<float>[4]> br1_beta { "br1_beta", 1 };
     Input<Buffer<float>[16]> br2a_beta { "br2a_beta", 1 };
     Input<Buffer<float>[16]> br2b_beta { "br2b_beta", 1 };
     Input<Buffer<float>[16]> br2c_beta { "br2c_beta", 1 };
 
-    Input<Buffer<float>> conv1_mu{ "conv1_mu", 1 };
+    Input<Buffer<float>> conv1_mu{"conv1_mu", 1};
     Input<Buffer<float>[4]> br1_mu { "br1_mu", 1 };
     Input<Buffer<float>[16]> br2a_mu { "br2a_mu", 1 };
     Input<Buffer<float>[16]> br2b_mu { "br2b_mu", 1 };
     Input<Buffer<float>[16]> br2c_mu { "br2c_mu", 1 };
 
-    Input<Buffer<float>> conv1_sig{ "conv1_sig", 1 };
+    Input<Buffer<float>> conv1_sig{"conv1_sig", 1};
     Input<Buffer<float>[4]> br1_sig { "br1_sig", 1 };
     Input<Buffer<float>[16]> br2a_sig { "br2a_sig", 1 };
     Input<Buffer<float>[16]> br2b_sig { "br2b_sig", 1 };
     Input<Buffer<float>[16]> br2c_sig { "br2c_sig", 1 };
 
     /** weights and biases for convolutions **/
-    Input<Buffer<float>> conv1_weights{ "conv1_weights", 4 };
+    Input<Buffer<float>> conv1_weights{"conv1_weights", 4};
     Input<Buffer<float>[4]> br1_conv_weights { "br1_conv_weights", 4 };
     Input<Buffer<float>[16]> br2a_conv_weights { "br2a_conv_weights", 4 };
     Input<Buffer<float>[16]> br2b_conv_weights { "br2b_conv_weights", 4 };
     Input<Buffer<float>[16]> br2c_conv_weights { "br2c_conv_weights", 4 };
 
-    Input<Buffer<float>> fc1000_weights{ "fc1000_weights", 2 };
-    Input<Buffer<float>> fc1000_bias{ "fc1000_bias", 1 };
-    Output<Buffer<float>> final_output{ "final_output", 1 };
+    Input<Buffer<float>> fc1000_weights{"fc1000_weights", 2};
+    Input<Buffer<float>> fc1000_bias{"fc1000_bias", 1};
+    Output<Buffer<float>> final_output{"final_output", 1};
 
     /** list out shapes of each layers weights **/
     // weight shapes: out channels, kernel_w, kernel_h, pad, stride. In channels infered by input tensor shape
-    const WeightShape conv1_ws = { 64, 7, 7, 3, 2 };
-    const WeightShape pool1_ws = { 64, 3, 3, 1, 2 };
-    const WeightShape pool5_ws = { 2048, 7, 7, 0, 1 };
-    const WeightShape fc1000_ws = { 1000, 1, 1, 0, 1 };  // 1x1 conv with 2048 input channels and 1000 output channels
+    const WeightShape conv1_ws = {64, 7, 7, 3, 2};
+    const WeightShape pool1_ws = {64, 3, 3, 1, 2};
+    const WeightShape pool5_ws = {2048, 7, 7, 0, 1};
+    const WeightShape fc1000_ws = {1000, 1, 1, 0, 1};  // 1x1 conv with 2048 input channels and 1000 output channels
 
     // res2a, res2b, res2c all have shame shapes
-    const WeightShape res2x_br2a_ws = { 64, 1, 1, 0, 1 };
-    const WeightShape res2a_br2b_ws = { 64, 3, 3, 1, 1 };
-    const WeightShape res2x_br2b_ws = { 64, 3, 3, 1, 1 };
-    const WeightShape res2x_br2c_ws = { 256, 1, 1, 0, 1 };
-    const WeightShape res2a_br1_ws = { 256, 1, 1, 0, 1 };
+    const WeightShape res2x_br2a_ws = {64, 1, 1, 0, 1};
+    const WeightShape res2a_br2b_ws = {64, 3, 3, 1, 1};
+    const WeightShape res2x_br2b_ws = {64, 3, 3, 1, 1};
+    const WeightShape res2x_br2c_ws = {256, 1, 1, 0, 1};
+    const WeightShape res2a_br1_ws = {256, 1, 1, 0, 1};
 
     // res3x is same for most layers
-    const WeightShape res3x_br2a_ws = { 128, 1, 1, 0, 1 };
-    const WeightShape res3a_br2b_ws = { 128, 3, 3, 1, 2 };
-    const WeightShape res3x_br2b_ws = { 128, 3, 3, 1, 1 };
-    const WeightShape res3x_br2c_ws = { 512, 1, 1, 0, 1 };
-    const WeightShape res3a_br1_ws = { 512, 1, 1, 0, 2 };
+    const WeightShape res3x_br2a_ws = {128, 1, 1, 0, 1};
+    const WeightShape res3a_br2b_ws = {128, 3, 3, 1, 2};
+    const WeightShape res3x_br2b_ws = {128, 3, 3, 1, 1};
+    const WeightShape res3x_br2c_ws = {512, 1, 1, 0, 1};
+    const WeightShape res3a_br1_ws = {512, 1, 1, 0, 2};
 
+    const WeightShape res4x_br2a_ws = {256, 1, 1, 0, 1};
+    const WeightShape res4a_br2b_ws = {256, 3, 3, 1, 2};
+    const WeightShape res4x_br2b_ws = {256, 3, 3, 1, 1};
+    const WeightShape res4x_br2c_ws = {1024, 1, 1, 0, 1};
+    const WeightShape res4a_br1_ws = {1024, 1, 1, 0, 2};
 
-    const WeightShape res4x_br2a_ws = { 256, 1, 1, 0, 1 };
-    const WeightShape res4a_br2b_ws = { 256, 3, 3, 1, 2 };
-    const WeightShape res4x_br2b_ws = { 256, 3, 3, 1, 1 };
-    const WeightShape res4x_br2c_ws = { 1024, 1, 1, 0, 1 };
-    const WeightShape res4a_br1_ws = { 1024, 1, 1, 0, 2 };
+    const WeightShape res5x_br2a_ws = {512, 1, 1, 0, 1};
+    const WeightShape res5a_br2b_ws = {512, 3, 3, 1, 2};
+    const WeightShape res5x_br2b_ws = {512, 3, 3, 1, 1};
+    const WeightShape res5x_br2c_ws = {2048, 1, 1, 0, 1};
+    const WeightShape res5a_br1_ws = {2048, 1, 1, 0, 2};
 
-
-    const WeightShape res5x_br2a_ws = { 512, 1, 1, 0, 1 };
-    const WeightShape res5a_br2b_ws = { 512, 3, 3, 1, 2 };
-    const WeightShape res5x_br2b_ws = { 512, 3, 3, 1, 1 };
-    const WeightShape res5x_br2c_ws = { 2048, 1, 1, 0, 1 };
-    const WeightShape res5a_br1_ws = { 2048, 1, 1, 0, 2 };
-
-    const WeightShape br1_ws[4] = { res2a_br1_ws, res3a_br1_ws, res4a_br1_ws, res5a_br1_ws };
-    const WeightShape br2a_ws[16] = { res2x_br2a_ws, res2x_br2a_ws, res2x_br2a_ws,
-                                      res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws,
-                                      res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws,
-                                      res5x_br2a_ws, res5x_br2a_ws, res5x_br2a_ws };
-    const WeightShape br2b_ws[16] = { res2a_br2b_ws, res2x_br2b_ws, res2x_br2b_ws,
-                                      res3a_br2b_ws, res3x_br2b_ws, res3x_br2b_ws, res3x_br2b_ws,
-                                      res4a_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws,
-                                      res5a_br2b_ws, res5x_br2b_ws, res5x_br2b_ws };
-    const WeightShape br2c_ws[16] = { res2x_br2c_ws, res2x_br2c_ws, res2x_br2c_ws,
-                                      res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws,
-                                      res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws,
-                                      res5x_br2c_ws, res5x_br2c_ws, res5x_br2c_ws };
+    const WeightShape br1_ws[4] = {res2a_br1_ws, res3a_br1_ws, res4a_br1_ws, res5a_br1_ws};
+    const WeightShape br2a_ws[16] = {res2x_br2a_ws, res2x_br2a_ws, res2x_br2a_ws,
+                                     res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws,
+                                     res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws,
+                                     res5x_br2a_ws, res5x_br2a_ws, res5x_br2a_ws};
+    const WeightShape br2b_ws[16] = {res2a_br2b_ws, res2x_br2b_ws, res2x_br2b_ws,
+                                     res3a_br2b_ws, res3x_br2b_ws, res3x_br2b_ws, res3x_br2b_ws,
+                                     res4a_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws,
+                                     res5a_br2b_ws, res5x_br2b_ws, res5x_br2b_ws};
+    const WeightShape br2c_ws[16] = {res2x_br2c_ws, res2x_br2c_ws, res2x_br2c_ws,
+                                     res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws,
+                                     res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws,
+                                     res5x_br2c_ws, res5x_br2c_ws, res5x_br2c_ws};
 
     Var c, i, j;
 
@@ -155,12 +153,12 @@ public:
         // used only for block_id == 0
         Tensor conv1, norm1, scaled1, relu1, pool1;
 
-        std::vector<int> branch1_indices{0,3,7,13};
+        std::vector<int> branch1_indices{0, 3, 7, 13};
 
         /** if block_id is 0 build the (stem) conv1 section **/
         for (int block_id = 0; block_id < 16; ++block_id) {
             if (block_id == 0) {
-                input_shape = { 3, 224, 224 };
+                input_shape = {3, 224, 224};
                 input_t.f = input;
                 input_t.shape = input_shape;
 
@@ -172,7 +170,7 @@ public:
 
                 br2a_input = pool1;
             } else {
-                br2a_input = resunit_relu[block_id-1];
+                br2a_input = resunit_relu[block_id - 1];
             }
 
             // build branch1 if this section has branch1
@@ -183,7 +181,7 @@ public:
                 br1_scale[br1_i] = scale_layer(br1_norm[br1_i], br1_gamma[br1_i], br1_beta[br1_i], "br1_scale");
                 resunit_sum_input = br1_scale[br1_i];
             } else {
-                resunit_sum_input = resunit_relu[block_id-1];
+                resunit_sum_input = resunit_relu[block_id - 1];
             }
 
             // branch2a
@@ -236,11 +234,11 @@ public:
 
 private:
     Func pad(Func f, Expr width, Expr height) {
-        std::vector<std::pair<Expr, Expr>> bounds(f.dimensions());
-        bounds[1].first = 0;
-        bounds[1].second = width;
-        bounds[2].first = 0;
-        bounds[2].second = height;
+        Halide::Region bounds(f.dimensions());
+        bounds[1].min = 0;
+        bounds[1].extent = width;
+        bounds[2].min = 0;
+        bounds[2].extent = height;
         return Halide::BoundaryConditions::constant_exterior(f, 0.0f, bounds);
     }
 
@@ -249,7 +247,7 @@ private:
         int h = (1.0 / params.stride) * (params.pad * 2 + in.shape[2] - params.h + 1 + params.stride - 1);
         int c = params.c;
 
-        return { c, w, h };
+        return {c, w, h};
     }
 
     Tensor conv2D(const Tensor &input, const WeightShape &weight_shape, const Func &weights, const std::string &name) {
@@ -379,7 +377,7 @@ private:
         output(c) = exp_vals(c) / sum(exp_vals(r.x));
         return output;
     }
-}; 
+};
 }  //namespace
 
 HALIDE_REGISTER_GENERATOR(Resnet50Generator, resnet50)

@@ -10,14 +10,14 @@ public:
     Output<Buffer<uint8_t>> result{"result", 2};
 
     void generate() {
-        tone_curve(x) = cast<int16_t>(pow(cast<float>(x)/256.0f, 1.8f) * 256.0f);
+        tone_curve(x) = cast<int16_t>(pow(cast<float>(x) / 256.0f, 1.8f) * 256.0f);
 
         Func clamped = BoundaryConditions::repeat_edge(input);
 
         curved(x, y) = tone_curve(clamped(x, y));
 
         Func sharper;
-        sharper(x, y) = 9*curved(x, y) - 2*(curved(x-1, y) + curved(x+1, y) + curved(x, y-1) + curved(x, y+1));
+        sharper(x, y) = 9 * curved(x, y) - 2 * (curved(x - 1, y) + curved(x + 1, y) + curved(x, y - 1) + curved(x, y + 1));
 
         result(x, y) = cast<uint8_t>(clamp(sharper(x, y), 0, 255));
     }

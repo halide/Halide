@@ -1,16 +1,18 @@
 #include "HalideRuntime.h"
 #include "cpu_features.h"
 
-#define AT_HWCAP    16
-#define AT_HWCAP2   26
+#define AT_HWCAP 16
+#define AT_HWCAP2 26
 
-#define PPC_FEATURE_HAS_VSX     0x00000080
+#define PPC_FEATURE_HAS_VSX 0x00000080
 
-#define PPC_FEATURE2_ARCH_2_07     0x80000000
+#define PPC_FEATURE2_ARCH_2_07 0x80000000
 
 extern "C" unsigned long int getauxval(unsigned long int);
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK CpuFeatures halide_get_cpu_features() {
     CpuFeatures features;
@@ -29,4 +31,6 @@ WEAK CpuFeatures halide_get_cpu_features() {
     return features;
 }
 
-}}} // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide

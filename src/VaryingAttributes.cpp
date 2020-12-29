@@ -2,14 +2,17 @@
 
 #include <algorithm>
 
-#include "CodeGen_GPU_Dev.h"
-
 #include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
+#include "IR.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
+
+namespace {
 
 Stmt make_block(Stmt first, Stmt rest) {
     if (first.defined() && rest.defined()) {
@@ -33,7 +36,7 @@ class FindLinearExpressions : public IRMutator {
 protected:
     using IRMutator::visit;
 
-    bool in_glsl_loops;
+    bool in_glsl_loops = false;
 
     Expr tag_linear_expression(Expr e, const std::string &name = unique_name('a')) {
 
@@ -58,10 +61,10 @@ protected:
         std::vector<Expr> new_args = op->args;
 
         // Check to see if this call is a load
-        if (op->name == Call::glsl_texture_load) {
+        if (op->is_intrinsic(Call::glsl_texture_load)) {
             // Check if the texture coordinate arguments are linear wrt the GPU
             // loop variables
-            internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture load\n";
+            internal_assert(!loop_vars.empty()) << "No GPU loop variables found at texture load\n";
 
             // Iterate over the texture coordinate arguments
             for (int i = 2; i != 4; ++i) {
@@ -70,9 +73,9 @@ protected:
                     new_args[i] = tag_linear_expression(new_args[i]);
                 }
             }
-        } else if (op->name == Call::glsl_texture_store) {
+        } else if (op->is_intrinsic(Call::glsl_texture_store)) {
             // Check if the value expression is linear wrt the loop variables
-            internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture store\n";
+            internal_assert(!loop_vars.empty()) << "No GPU loop variables found at texture store\n";
 
             // The value is the 5th argument to the intrinsic
             new_args[5] = mutate(new_args[5]);
@@ -149,10 +152,22 @@ protected:
         return op;
     }
 
-    Expr visit(const IntImm *op)    override { order = 0; return op; }
-    Expr visit(const UIntImm *op)   override { order = 0; return op; }
-    Expr visit(const FloatImm *op)  override { order = 0; return op; }
-    Expr visit(const StringImm *op) override { order = 0; return op; }
+    Expr visit(const IntImm *op) override {
+        order = 0;
+        return op;
+    }
+    Expr visit(const UIntImm *op) override {
+        order = 0;
+        return op;
+    }
+    Expr visit(const FloatImm *op) override {
+        order = 0;
+        return op;
+    }
+    Expr visit(const StringImm *op) override {
+        order = 0;
+        return op;
+    }
 
     Expr visit(const Cast *op) override {
 
@@ -195,8 +210,12 @@ protected:
         return T::make(a, b);
     }
 
-    Expr visit(const Add *op) override { return visit_binary_linear(op); }
-    Expr visit(const Sub *op) override { return visit_binary_linear(op); }
+    Expr visit(const Add *op) override {
+        return visit_binary_linear(op);
+    }
+    Expr visit(const Sub *op) override {
+        return visit_binary_linear(op);
+    }
 
     // Multiplying increases the order of the expression, possibly making it
     // non-linear
@@ -272,7 +291,9 @@ protected:
         return T::make(a, b);
     }
 
-    Expr visit(const Mod *op) override { return visit_binary(op); }
+    Expr visit(const Mod *op) override {
+        return visit_binary(op);
+    }
 
     // Break the expression into a piecewise function, if the expressions are
     // linear, we treat the piecewise behavior specially during codegen
@@ -280,17 +301,37 @@ protected:
     // Once this is done, Min and Max should call visit_binary_linear and the code
     // in setup_mesh will handle piecewise linear behavior introduced by these
     // expressions
-    Expr visit(const Min *op) override { return visit_binary(op); }
-    Expr visit(const Max *op) override { return visit_binary(op); }
+    Expr visit(const Min *op) override {
+        return visit_binary(op);
+    }
+    Expr visit(const Max *op) override {
+        return visit_binary(op);
+    }
 
-    Expr visit(const EQ *op) override { return visit_binary(op); }
-    Expr visit(const NE *op) override { return visit_binary(op); }
-    Expr visit(const LT *op) override { return visit_binary(op); }
-    Expr visit(const LE *op) override { return visit_binary(op); }
-    Expr visit(const GT *op) override { return visit_binary(op); }
-    Expr visit(const GE *op) override { return visit_binary(op); }
-    Expr visit(const And *op) override { return visit_binary(op); }
-    Expr visit(const Or *op) override { return visit_binary(op); }
+    Expr visit(const EQ *op) override {
+        return visit_binary(op);
+    }
+    Expr visit(const NE *op) override {
+        return visit_binary(op);
+    }
+    Expr visit(const LT *op) override {
+        return visit_binary(op);
+    }
+    Expr visit(const LE *op) override {
+        return visit_binary(op);
+    }
+    Expr visit(const GT *op) override {
+        return visit_binary(op);
+    }
+    Expr visit(const GE *op) override {
+        return visit_binary(op);
+    }
+    Expr visit(const And *op) override {
+        return visit_binary(op);
+    }
+    Expr visit(const Or *op) override {
+        return visit_binary(op);
+    }
 
     Expr visit(const Not *op) override {
         Expr a = mutate(op->a);
@@ -363,41 +404,46 @@ public:
     unsigned int order;
     bool found;
 
-    unsigned int total_found;
+    unsigned int total_found = 0;
 
     // This parameter controls the maximum number of linearly varying
     // expressions halide will pull out of the fragment shader and evaluate per
     // vertex, and allow the GPU to linearly interpolate across the domain. For
     // OpenGL ES 2.0 we can pass 16 vec4 varying attributes, or 64 scalars. Two
     // scalar slots are used by boilerplate code to pass pixel coordinates.
-    const unsigned int max_expressions;
+    const unsigned int max_expressions = 62;
 
-    FindLinearExpressions() : in_glsl_loops(false), total_found(0), max_expressions(62) {}
+    FindLinearExpressions() = default;
 };
 
-Stmt find_linear_expressions(Stmt s) {
+}  // namespace
+
+Stmt find_linear_expressions(const Stmt &s) {
 
     return FindLinearExpressions().mutate(s);
 }
 
+namespace {
+
 // This visitor produces a map containing name and expression pairs from varying
 // tagged intrinsics
-class FindVaryingAttributeTags : public IRVisitor
-{
+class FindVaryingAttributeTags : public IRVisitor {
 public:
-    FindVaryingAttributeTags(std::map<std::string, Expr>& varyings_) : varyings(varyings_) { }
+    FindVaryingAttributeTags(std::map<std::string, Expr> &varyings_)
+        : varyings(varyings_) {
+    }
 
     using IRVisitor::visit;
 
     void visit(const Call *op) override {
-        if (op->name == Call::glsl_varying) {
+        if (op->is_intrinsic(Call::glsl_varying)) {
             std::string name = op->args[0].as<StringImm>()->value;
             varyings[name] = op->args[1];
         }
         IRVisitor::visit(op);
     }
 
-    std::map<std::string, Expr>& varyings;
+    std::map<std::string, Expr> &varyings;
 };
 
 // This visitor removes glsl_varying intrinsics.
@@ -406,7 +452,7 @@ public:
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->name == Call::glsl_varying) {
+        if (op->is_intrinsic(Call::glsl_varying)) {
             // Replace the call expression with its wrapped argument expression
             return op->args[1];
         } else {
@@ -415,10 +461,13 @@ public:
     }
 };
 
-Stmt remove_varying_attributes(Stmt s)
-{
+}  // namespace
+
+Stmt remove_varying_attributes(const Stmt &s) {
     return RemoveVaryingAttributeTags().mutate(s);
 }
+
+namespace {
 
 // This visitor removes glsl_varying intrinsics and replaces them with
 // variables. After this visitor is called, the varying attribute expressions
@@ -429,7 +478,7 @@ public:
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->name == Call::glsl_varying) {
+        if (op->is_intrinsic(Call::glsl_varying)) {
             // Replace the intrinsic tag wrapper with a variable the variable
             // name ends with the tag ".varying"
             std::string name = op->args[0].as<StringImm>()->value;
@@ -443,11 +492,13 @@ public:
     }
 };
 
-Stmt replace_varying_attributes(Stmt s)
-{
+}  // namespace
+
+Stmt replace_varying_attributes(const Stmt &s) {
     return ReplaceVaryingAttributeTags().mutate(s);
 }
 
+namespace {
 
 // This visitor produces a set of variable names that are tagged with
 // ".varying".
@@ -464,16 +515,17 @@ public:
     std::set<std::string> variables;
 };
 
+}  // namespace
+
 // Remove varying attributes from the varying's map if they do not appear in the
 // loop_stmt because they were simplified away.
-void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varying)
-{
+void prune_varying_attributes(const Stmt &loop_stmt, std::map<std::string, Expr> &varying) {
     FindVaryingAttributeVars find;
     loop_stmt.accept(&find);
 
     std::vector<std::string> remove_list;
 
-    for (const std::pair<std::string, Expr> &i : varying) {
+    for (const std::pair<const std::string, Expr> &i : varying) {
         const std::string &name = i.first;
         if (find.variables.find(name) == find.variables.end()) {
             debug(2) << "Removed varying attribute " << name << "\n";
@@ -485,6 +537,8 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
         varying.erase(i);
     }
 }
+
+namespace {
 
 // This visitor changes the type of variables tagged with .varying to float,
 // since GLSL will only interpolate floats. In the case that the type of the
@@ -539,7 +593,7 @@ protected:
         }
     }
 
-    Type float_type(Expr e) {
+    Type float_type(const Expr &e) {
         return Float(e.type().bits(), e.type().lanes());
     }
 
@@ -564,21 +618,51 @@ protected:
         return T::make(mutated_a, mutated_b);
     }
 
-    Expr visit(const Add *op) override { return visit_binary_op(op); }
-    Expr visit(const Sub *op) override { return visit_binary_op(op); }
-    Expr visit(const Mul *op) override { return visit_binary_op(op); }
-    Expr visit(const Div *op) override { return visit_binary_op(op); }
-    Expr visit(const Mod *op) override { return visit_binary_op(op); }
-    Expr visit(const Min *op) override { return visit_binary_op(op); }
-    Expr visit(const Max *op) override { return visit_binary_op(op); }
-    Expr visit(const EQ *op) override { return visit_binary_op(op); }
-    Expr visit(const NE *op) override { return visit_binary_op(op); }
-    Expr visit(const LT *op) override { return visit_binary_op(op); }
-    Expr visit(const LE *op) override { return visit_binary_op(op); }
-    Expr visit(const GT *op) override { return visit_binary_op(op); }
-    Expr visit(const GE *op) override { return visit_binary_op(op); }
-    Expr visit(const And *op) override { return visit_binary_op(op); }
-    Expr visit(const Or *op) override { return visit_binary_op(op); }
+    Expr visit(const Add *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const Sub *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const Mul *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const Div *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const Mod *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const Min *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const Max *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const EQ *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const NE *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const LT *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const LE *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const GT *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const GE *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const And *op) override {
+        return visit_binary_op(op);
+    }
+    Expr visit(const Or *op) override {
+        return visit_binary_op(op);
+    }
 
     Expr visit(const Select *op) override {
         Expr mutated_condition = mutate(op->condition);
@@ -610,8 +694,7 @@ protected:
         bool stride_float = mutated_stride.type().is_float();
         if (!base_float && stride_float) {
             mutated_base = Cast::make(float_type(op->base), mutated_base);
-        }
-        else if (base_float && !stride_float) {
+        } else if (base_float && !stride_float) {
             mutated_stride = Cast::make(float_type(op->stride), mutated_stride);
         }
 
@@ -655,10 +738,13 @@ protected:
 
         return LetStmt::make(op->name, mutated_value, mutated_body);
     }
-public:
-    CastVariablesToFloatAndOffset(const std::vector<std::string>& names_) : names(names_) { }
 
-    const std::vector<std::string>& names;
+public:
+    CastVariablesToFloatAndOffset(const std::vector<std::string> &names_)
+        : names(names_) {
+    }
+
+    const std::vector<std::string> &names;
     Scope<Expr> scope;
 };
 
@@ -740,57 +826,93 @@ Stmt IRFilter::mutate(const Stmt &s) {
     return stmt;
 }
 
-namespace {
-    template<typename T, typename A>
-    void mutate_operator(IRFilter *mutator, const T *op, const A op_a, Stmt *stmt) {
-        Stmt a = mutator->mutate(op_a);
-        *stmt = a;
-    }
-    template<typename T, typename A, typename B>
-    void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, Stmt *stmt) {
-        Stmt a = mutator->mutate(op_a);
-        Stmt b = mutator->mutate(op_b);
-        *stmt = make_block(a, b);
-    }
-    template<typename T, typename A, typename B, typename C>
-    void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, const C op_c, Stmt *stmt) {
-        Stmt a = mutator->mutate(op_a);
-        Stmt b = mutator->mutate(op_b);
-        Stmt c = mutator->mutate(op_c);
-        *stmt = make_block(make_block(a, b), c);
-    }
+template<typename T, typename A>
+void mutate_operator(IRFilter *mutator, const T *op, const A op_a, Stmt *stmt) {
+    Stmt a = mutator->mutate(op_a);
+    *stmt = a;
+}
+template<typename T, typename A, typename B>
+void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, Stmt *stmt) {
+    Stmt a = mutator->mutate(op_a);
+    Stmt b = mutator->mutate(op_b);
+    *stmt = make_block(a, b);
+}
+template<typename T, typename A, typename B, typename C>
+void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, const C op_c, Stmt *stmt) {
+    Stmt a = mutator->mutate(op_a);
+    Stmt b = mutator->mutate(op_b);
+    Stmt c = mutator->mutate(op_c);
+    *stmt = make_block(make_block(a, b), c);
 }
 
-void IRFilter::visit(const IntImm *op)   {stmt = Stmt();}
-void IRFilter::visit(const FloatImm *op) {stmt = Stmt();}
-void IRFilter::visit(const StringImm *op) {stmt = Stmt();}
-void IRFilter::visit(const Variable *op) {stmt = Stmt();}
+void IRFilter::visit(const IntImm *op) {
+    stmt = Stmt();
+}
+void IRFilter::visit(const FloatImm *op) {
+    stmt = Stmt();
+}
+void IRFilter::visit(const StringImm *op) {
+    stmt = Stmt();
+}
+void IRFilter::visit(const Variable *op) {
+    stmt = Stmt();
+}
 
 void IRFilter::visit(const Cast *op) {
     mutate_operator(this, op, op->value, &stmt);
 }
 
-void IRFilter::visit(const Add *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const Sub *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const Mul *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const Div *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const Mod *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const Min *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const Max *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const EQ *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const NE *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const LT *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const LE *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const GT *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const GE *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const And *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
-void IRFilter::visit(const Or *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const Add *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const Sub *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const Mul *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const Div *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const Mod *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const Min *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const Max *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const EQ *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const NE *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const LT *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const LE *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const GT *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const GE *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const And *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
+void IRFilter::visit(const Or *op) {
+    mutate_operator(this, op, op->a, op->b, &stmt);
+}
 
 void IRFilter::visit(const Not *op) {
     mutate_operator(this, op, op->a, &stmt);
 }
 
-void IRFilter::visit(const Select *op)  {
+void IRFilter::visit(const Select *op) {
     mutate_operator(this, op, op->condition, op->true_value, op->false_value, &stmt);
 }
 
@@ -866,17 +988,20 @@ void IRFilter::visit(const Allocate *op) {
     stmt = Stmt();
     for (size_t i = 0; i < op->extents.size(); i++) {
         Stmt new_extent = mutate(op->extents[i]);
-        if (new_extent.defined())
+        if (new_extent.defined()) {
             stmt = make_block(new_extent, stmt);
+        }
     }
 
     Stmt body = mutate(op->body);
-    if (body.defined())
+    if (body.defined()) {
         stmt = make_block(body, stmt);
+    }
 
     Stmt condition = mutate(op->condition);
-    if (condition.defined())
+    if (condition.defined()) {
         stmt = make_block(condition, stmt);
+    }
 }
 
 void IRFilter::visit(const Free *op) {
@@ -887,24 +1012,28 @@ void IRFilter::visit(const Realize *op) {
 
     // Mutate the bounds
     for (size_t i = 0; i < op->bounds.size(); i++) {
-        Expr old_min    = op->bounds[i].min;
+        Expr old_min = op->bounds[i].min;
         Expr old_extent = op->bounds[i].extent;
-        Stmt new_min    = mutate(old_min);
+        Stmt new_min = mutate(old_min);
         Stmt new_extent = mutate(old_extent);
 
-        if (new_min.defined())
+        if (new_min.defined()) {
             stmt = make_block(new_min, stmt);
-        if (new_extent.defined())
+        }
+        if (new_extent.defined()) {
             stmt = make_block(new_extent, stmt);
+        }
     }
 
     Stmt body = mutate(op->body);
-    if (body.defined())
+    if (body.defined()) {
         stmt = make_block(body, stmt);
+    }
 
     Stmt condition = mutate(op->condition);
-    if (condition.defined())
+    if (condition.defined()) {
         stmt = make_block(condition, stmt);
+    }
 }
 
 void IRFilter::visit(const Block *op) {
@@ -918,7 +1047,6 @@ void IRFilter::visit(const IfThenElse *op) {
 void IRFilter::visit(const Evaluate *op) {
     mutate_operator(this, op, op->value, &stmt);
 }
-
 
 // This visitor takes a IR tree containing a set of .glsl scheduled for-loops
 // and creates a matching set of serial for-loops to setup a vertex buffer on
@@ -935,7 +1063,7 @@ public:
 
         // Transform glsl_varying intrinsics into store operations to output the
         // vertex coordinate values.
-        if (op->name == Call::glsl_varying) {
+        if (op->is_intrinsic(Call::glsl_varying)) {
 
             // Construct an expression for the offset of the coordinate value in
             // terms of the current integer loop variables and the varying
@@ -950,7 +1078,6 @@ public:
         } else {
             IRFilter::visit(op);
         }
-
     }
 
     void visit(const Let *op) override {
@@ -996,12 +1123,12 @@ public:
             // this dimension
 
             std::string name = op->name + ".idx";
-            const std::vector<Expr>& dim = dims[op->name];
+            const std::vector<Expr> &dim = dims[op->name];
 
             internal_assert(for_loops.size() <= 1);
             for_loops.push_back(op);
 
-            Expr loop_variable = Variable::make(Int(32),name);
+            Expr loop_variable = Variable::make(Int(32), name);
             loop_variables.push_back(loop_variable);
 
             // TODO: When support for piecewise linear expressions is added this
@@ -1023,8 +1150,8 @@ public:
                 Expr gpu_varying_offset = Variable::make(Int(32), "gpu.vertex_offset");
 
                 // Add expressions for the x and y vertex coordinates.
-                Expr coord1 = cast<float>(Variable::make(Int(32),for_loops[0]->name));
-                Expr coord0 = cast<float>(Variable::make(Int(32),for_loops[1]->name));
+                Expr coord1 = cast<float>(Variable::make(Int(32), for_loops[0]->name));
+                Expr coord0 = cast<float>(Variable::make(Int(32), for_loops[1]->name));
 
                 // Transform the vertex coordinates to GPU device coordinates on
                 // [-1,1]
@@ -1049,25 +1176,23 @@ public:
                                                       gpu_varying_offset + 1,
                                                       Parameter(), const_true(),
                                                       ModulusRemainder()),
-                                           mutated_body);
+                                          mutated_body);
 
                 mutated_body = make_block(Store::make(vertex_buffer_name,
                                                       coord0,
                                                       gpu_varying_offset + 0,
                                                       Parameter(), const_true(),
                                                       ModulusRemainder()),
-                                           mutated_body);
+                                          mutated_body);
 
                 // TODO: The value 2 in this expression must be changed to reflect
                 // addition coordinate values in the fastest changing dimension when
                 // support for piecewise linear functions is added
                 Expr offset_expression = (loop_variables[0] * num_padded_attributes * 2) +
-                (loop_variables[1] * num_padded_attributes);
+                                         (loop_variables[1] * num_padded_attributes);
                 mutated_body = LetStmt::make("gpu.vertex_offset",
                                              offset_expression, mutated_body);
-
             }
-
 
             // Add a let statement for the for-loop name variable
             Stmt loop_var = LetStmt::make(op->name, coord_expr, mutated_body);
@@ -1095,7 +1220,7 @@ public:
     int num_padded_attributes;
 
     // Independent variable names in the linear expressions
-    std::vector<const For*> for_loops;
+    std::vector<const For *> for_loops;
 
     // Loop variables iterated across per GPU scheduled loop dimension to
     // construct the vertex buffer
@@ -1116,7 +1241,7 @@ public:
 // from removing the variables or substituting in their constant
 // values.
 
-Expr dont_simplify(Expr v_) {
+Expr dont_simplify(const Expr &v_) {
     return Internal::Call::make(v_.type(),
                                 Internal::Call::return_second,
                                 {0, v_},
@@ -1129,7 +1254,6 @@ Stmt used_in_codegen(Type type_, const std::string &v_) {
                                                {Variable::make(type_, v_), 0},
                                                Internal::Call::Intrinsic));
 }
-
 
 // This mutator inserts a set of serial for-loops to create the vertex buffer
 // on the host using CreateVertexBufferOnHost above.
@@ -1160,7 +1284,7 @@ public:
             attribute_order["__vertex_y"] = 1;
 
             int idx = 2;
-            for (const std::pair<std::string, Expr> &v : varyings) {
+            for (const std::pair<const std::string, Expr> &v : varyings) {
                 attribute_order[v.first] = idx++;
             }
 
@@ -1187,7 +1311,7 @@ public:
 
             // Pad the number of attributes up to a multiple of four
             int num_padded_attributes = (num_attributes + 0x3) & ~0x3;
-            int vertex_buffer_size = num_padded_attributes*coords[0].size()*coords[1].size();
+            int vertex_buffer_size = num_padded_attributes * coords[0].size() * coords[1].size();
 
             // Filter out varying attribute expressions from the glsl scheduled
             // loops. The expressions are filtered out in situ, among the
@@ -1234,6 +1358,7 @@ public:
             // snap the value back to the integer grid.
             loop_stmt = CastVaryingVariables().mutate(loop_stmt);
 
+            // clang-format off
             // Insert two new for-loops for vertex buffer generation on the host
             // before the two GPU scheduled for-loops
             return LetStmt::make("glsl.num_coords_dim0", dont_simplify((int)(coords[0].size())),
@@ -1246,13 +1371,16 @@ public:
                    Block::make(used_in_codegen(Int(32), "glsl.num_coords_dim1"),
                    Block::make(used_in_codegen(Int(32), "glsl.num_padded_attributes"),
                    Free::make(vs.vertex_buffer_name))))))))));
+            // clang-format on
         } else {
             return IRMutator::visit(op);
         }
     }
 };
 
-Stmt setup_gpu_vertex_buffer(Stmt s) {
+}  // namespace
+
+Stmt setup_gpu_vertex_buffer(const Stmt &s) {
     CreateVertexBufferHostLoops vb;
     return vb.mutate(s);
 }

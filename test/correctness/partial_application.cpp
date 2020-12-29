@@ -12,11 +12,11 @@ int main(int argc, char **argv) {
     f(x, y) = 2.0f;
 
     // implicit for all y
-    g(x, _) = f(x, _) + f(x-1, _);
+    g(x, _) = f(x, _) + f(x - 1, _);
 
     // implicit for all x, y on both sides, except for the float which has zero implicit args
     Func h;
-    h(_) = (g(_) + f(_))*6.0f;
+    h(_) = (g(_) + f(_)) * 6.0f;
 
     printf("Realizing function...\n");
 

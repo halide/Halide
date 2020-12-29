@@ -5,7 +5,7 @@
  * Removes side-effects in integer math.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,9 +18,9 @@ namespace Internal {
  * used. This mutator rewrites divs and mods in such expressions to
  * fail silently (evaluate to undef) when the denominator is zero.
  */
-Expr purify_index_math(Expr);
+Expr purify_index_math(const Expr &);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

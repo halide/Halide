@@ -5,7 +5,7 @@
 using namespace Halide;
 
 // Test that internal allocations work correctly with copy_to_device.
-// This requires that suitable buffer_t objects are created internally.
+// This requires that suitable halide_buffer_t objects are created internally.
 int main() {
     // This test must be run with an OpenGL target.
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);

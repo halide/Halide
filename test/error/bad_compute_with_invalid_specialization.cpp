@@ -22,5 +22,6 @@ int main(int argc, char **argv) {
     tile.set(true);
     h.realize(200, 200);
 
+    printf("Success!\n");
     return 0;
 }

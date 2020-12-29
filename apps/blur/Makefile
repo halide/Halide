@@ -1,14 +1,17 @@
 include ../support/Makefile.inc
 
-all: $(BIN)/test
+.PHONY: build clean test
+build: $(BIN)/$(HL_TARGET)/test
 
-$(BIN)/halide_blur.generator: halide_blur_generator.cpp $(GENERATOR_DEPS)
+# In order to ensure our static library works, we arbitrarily link against
+# the static library for this app.
+$(GENERATOR_BIN)/halide_blur.generator: halide_blur_generator.cpp $(GENERATOR_DEPS_STATIC)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS_STATIC)
 
-$(BIN)/%/halide_blur.a: $(BIN)/halide_blur.generator
+$(BIN)/%/halide_blur.a: $(GENERATOR_BIN)/halide_blur.generator
 	@mkdir -p $(@D)
-	$^ -g halide_blur -o $(BIN)/$* target=$(HL_TARGET)
+	$^ -g halide_blur -e $(GENERATOR_OUTPUTS) -o $(@D) target=$*
 
 # g++ on OS X might actually be system clang without openmp
 CXX_VERSION=$(shell $(CXX) --version)
@@ -26,5 +29,5 @@ $(BIN)/%/test: $(BIN)/%/halide_blur.a test.cpp
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/host/test
-	$(BIN)/host/test
+test: $(BIN)/$(HL_TARGET)/test
+	$<

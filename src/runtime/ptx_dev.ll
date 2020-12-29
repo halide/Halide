@@ -17,13 +17,17 @@ declare  i32 @llvm.nvvm.read.ptx.sreg.ntid.w()
 declare  i32 @llvm.nvvm.read.ptx.sreg.nctaid.w()
 declare  i32 @llvm.nvvm.read.ptx.sreg.warpsize()
 
+; Remove these two once the minimum required llvm version is 9.0
+declare float @llvm.nvvm.atomic.load.add.f32.p0f32(float*, float)
+declare double @llvm.nvvm.atomic.load.add.f64.p0f64(double *, double)
+
 ; Legacy - to replace
 ;declare void @llvm.ptx.red.global.add.s32(i32*, i32)
 ;declare void @llvm.ptx.red.global.add.f32(float*, float)
 ;declare void @llvm.ptx.red.shared.add.s32(i32 addrspace(4)*, i32)
 
 define weak_odr float @nan_f32() nounwind uwtable readnone alwaysinline {
-       ret float 0xFFF0000000000000;
+       ret float 0x7FF8000000000000;
 }
 
 define weak_odr float @neg_inf_f32() nounwind uwtable readnone alwaysinline {
@@ -340,3 +344,46 @@ define weak_odr i32 @halide_ptx_trap() nounwind uwtable alwaysinline {
        ", ""() nounwind
        ret i32 0
 }
+
+; llvm doesn't expose dot product instructions as intrinsics
+define weak_odr i32 @dp4a_s32_s32(i32 %a, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp4a.s32.s32    $0, $1, $2, $3;", "=r,r,r,r"(i32 %a, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
+
+define weak_odr i32 @dp4a_s32_u32(i32 %a, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp4a.s32.u32    $0, $1, $2, $3;", "=r,r,r,r"(i32 %a, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
+
+define weak_odr i32 @dp4a_u32_s32(i32 %a, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp4a.u32.s32    $0, $1, $2, $3;", "=r,r,r,r"(i32 %a, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
+
+define weak_odr i32 @dp4a_u32_u32(i32 %a, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp4a.u32.u32    $0, $1, $2, $3;", "=r,r,r,r"(i32 %a, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
+
+
+define weak_odr i32 @dp2a_s32_s32(i32 %a_lo, i32 %a_hi, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp2a.lo.s32.s32    $0, $1, $3, $4; dp2a.hi.s32.s32    $0, $2, $3, $0;", "=r,r,r,r,r"(i32 %a_lo, i32 %a_hi, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
+
+define weak_odr i32 @dp2a_s32_u32(i32 %a_lo, i32 %a_hi, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp2a.lo.s32.u32    $0, $1, $3, $4; dp2a.hi.s32.u32    $0, $2, $3, $0;", "=r,r,r,r,r"(i32 %a_lo, i32 %a_hi, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
+
+define weak_odr i32 @dp2a_u32_s32(i32 %a_lo, i32 %a_hi, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp2a.lo.u32.s32    $0, $1, $3, $4; dp2a.hi.u32.s32    $0, $2, $3, $0;", "=r,r,r,r,r"(i32 %a_lo, i32 %a_hi, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
+
+define weak_odr i32 @dp2a_u32_u32(i32 %a_lo, i32 %a_hi, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp2a.lo.u32.u32    $0, $1, $3, $4; dp2a.hi.u32.u32    $0, $2, $3, $0;", "=r,r,r,r,r"(i32 %a_lo, i32 %a_hi, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
+

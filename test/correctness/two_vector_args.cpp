@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     Func f, g;
     Var x, y;
 
-    g(x, y) = x+y;
+    g(x, y) = x + y;
 
     f(x, y) = g(x, x);
 
@@ -20,4 +20,3 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-

@@ -29,6 +29,7 @@ protected:
     bool use_pic() const override;
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

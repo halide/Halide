@@ -3,22 +3,23 @@
 #ifdef WITH_INTROSPECTION
 
 #include "Debug.h"
-#include "LLVM_Headers.h"
 #include "Error.h"
+#include "LLVM_Headers.h"
+#include "Util.h"
 
-#include <string>
+#include <cstdio>
 #include <iostream>
 #include <sstream>
-#include <stdio.h>
+#include <string>
 
 // defines backtrace, which gets the call stack as instruction pointers
 #include <execinfo.h>
 
 #include <regex>
 
-using std::vector;
-using std::pair;
 using std::map;
+using std::pair;
+using std::vector;
 
 namespace Halide {
 namespace Internal {
@@ -48,22 +49,24 @@ inline T load_misaligned(const T *p) {
     return result;
 }
 
-}
+typedef uint64_t llvm_offset_t;
 
 class DebugSections {
 
     bool calibrated;
 
     struct FieldFormat {
-        uint64_t name, form;
-        FieldFormat() : name(0), form(0) {}
-        FieldFormat(uint64_t n, uint64_t f) : name(n), form(f) {}
+        uint64_t name = 0, form = 0;
+        FieldFormat() = default;
+        FieldFormat(uint64_t n, uint64_t f)
+            : name(n), form(f) {
+        }
     };
 
     struct EntryFormat {
-        uint64_t code, tag;
-        bool has_children;
-        EntryFormat() : code(0), tag(0), has_children(false) {}
+        uint64_t code = 0, tag = 0;
+        bool has_children = false;
+        EntryFormat() = default;
         vector<FieldFormat> fields;
     };
     vector<EntryFormat> entry_formats;
@@ -76,16 +79,13 @@ class DebugSections {
 
     struct GlobalVariable {
         std::string name;
-        TypeInfo *type;
-        uint64_t type_def_loc;
-        uint64_t def_loc, spec_loc;
-        uint64_t addr;
-        GlobalVariable() : name(""),
-                           type(nullptr),
-                           type_def_loc(0),
-                           def_loc(0),
-                           spec_loc(0),
-                           addr(0) {}
+        TypeInfo *type = nullptr;
+        uint64_t type_def_loc = 0;
+        uint64_t def_loc = 0, spec_loc = 0;
+        uint64_t addr = 0;
+        GlobalVariable()
+            : name("") {
+        }
         bool operator<(const GlobalVariable &other) const {
             return addr < other.addr;
         }
@@ -109,34 +109,36 @@ class DebugSections {
 
     struct LocalVariable {
         std::string name;
-        TypeInfo *type;
-        int stack_offset;
-        uint64_t type_def_loc;
-        uint64_t def_loc, origin_loc;
+        TypeInfo *type = nullptr;
+        int stack_offset = 0;
+        uint64_t type_def_loc = 0;
+        uint64_t def_loc = 0, origin_loc = 0;
         // Some local vars are only alive for certain address ranges
         // (e.g. those inside a lexical block). If the ranges vector
         // is empty, the variables are alive for the entire containing
         // function.
         vector<LiveRange> live_ranges;
-        LocalVariable() : name(""),
-                          type(nullptr),
-                          stack_offset(0),
-                          type_def_loc(0),
-                          def_loc(0),
-                          origin_loc(0) {}
+        LocalVariable()
+            : name("") {
+        }
     };
 
     struct FunctionInfo {
         std::string name;
-        uint64_t pc_begin, pc_end;
+        uint64_t pc_begin = 0, pc_end = 0;
         vector<LocalVariable> variables;
-        uint64_t def_loc, spec_loc;
+        uint64_t def_loc = 0, spec_loc = 0;
         // The stack variable offsets are w.r.t either:
         // gcc: the top of the stack frame (one below the return address to the caller)
         // clang with frame pointers: the bottom of the stack frame (one above the return address to this function)
         // clang without frame pointers: the top of the stack frame (...TODO...)
-        enum {Unknown = 0, GCC, ClangFP, ClangNoFP} frame_base;
-        FunctionInfo() : name(""), pc_begin(0), pc_end(0), def_loc(0), spec_loc(0) {}
+        enum { Unknown = 0,
+               GCC,
+               ClangFP,
+               ClangNoFP } frame_base;
+        FunctionInfo()
+            : name("") {
+        }
 
         bool operator<(const FunctionInfo &other) const {
             return pc_begin < other.pc_begin;
@@ -148,7 +150,7 @@ class DebugSections {
     struct LineInfo {
         uint64_t pc;
         uint32_t line;
-        uint32_t file; // Index into source_files
+        uint32_t file;  // Index into source_files
         bool operator<(const LineInfo &other) const {
             return pc < other.pc;
         }
@@ -157,40 +159,48 @@ class DebugSections {
 
     struct TypeInfo {
         std::string name;
-        uint64_t size;
-        uint64_t def_loc;
+        uint64_t size = 0;
+        uint64_t def_loc = 0;
         vector<LocalVariable> members;
 
         // TypeInfo can also be used to represent a pointer to
         // another type, in which case there's a single member, which
         // represents the value pointed to (its name is empty and its
         // stack_offset is meaningless).
-        enum {Primitive, Class, Struct, Pointer, Typedef, Const, Reference, Array} type;
+        enum { Primitive,
+               Class,
+               Struct,
+               Pointer,
+               Typedef,
+               Const,
+               Reference,
+               Array } type = Primitive;
 
-        TypeInfo() : size(0), def_loc(0), type(Primitive) {}
+        TypeInfo() = default;
     };
     vector<TypeInfo> types;
 
 public:
-
     bool working;
 
-    DebugSections(std::string binary) : calibrated(false), working(false) {
-        #ifdef __APPLE__
-        size_t last_slash = binary.rfind('/');
+    DebugSections(const std::string &binary)
+        : calibrated(false), working(false) {
+        std::string binary_path = binary;
+#ifdef __APPLE__
+        size_t last_slash = binary_path.rfind('/');
         if (last_slash == std::string::npos ||
-            last_slash >= binary.size() - 1) {
+            last_slash >= binary_path.size() - 1) {
             last_slash = 0;
         } else {
             last_slash++;
         }
-        std::string file_only = binary.substr(last_slash, binary.size() - last_slash);
-        binary += ".dSYM/Contents/Resources/DWARF/" + file_only;
-        #endif
+        std::string file_only = binary_path.substr(last_slash, binary_path.size() - last_slash);
+        binary_path += ".dSYM/Contents/Resources/DWARF/" + file_only;
+#endif
 
-        debug(5) << "Loading " << binary << "\n";
+        debug(5) << "Loading " << binary_path << "\n";
 
-        load_and_parse_object_file(binary);
+        load_and_parse_object_file(binary_path);
     }
 
     int count_trailing_zeros(int64_t x) {
@@ -286,7 +296,7 @@ public:
         size_t hi = global_variables.size();
         size_t lo = 0;
         while (hi > lo + 1) {
-            size_t mid = (hi + lo)/2;
+            size_t mid = (hi + lo) / 2;
             uint64_t addr_mid = global_variables[mid].addr;
             if (address < addr_mid) {
                 hi = mid;
@@ -301,7 +311,7 @@ public:
 
         // There may be multiple matching addresses. Walk backwards to find the first one.
         size_t idx = lo;
-        while (idx > 0 && global_variables[idx-1].addr == global_variables[lo].addr) {
+        while (idx > 0 && global_variables[idx - 1].addr == global_variables[lo].addr) {
             idx--;
         }
 
@@ -359,7 +369,7 @@ public:
                 (type_name.empty() ||
                  (v.type && regex_match(v.type->name, re)))) {
                 return v.name;
-            } else if (elem_type && // Check if it's an array element
+            } else if (elem_type &&  // Check if it's an array element
                        (type_name.empty() ||
                         (elem_type && regex_match(elem_type->name, re)))) {
                 int64_t array_size_bytes = v.type->size * elem_type->size;
@@ -368,7 +378,7 @@ public:
                     pos_bytes < array_size_bytes &&
                     pos_bytes % elem_type->size == 0) {
                     std::ostringstream oss;
-                    oss << v.name << '[' << (pos_bytes / elem_type->size) << ']';
+                    oss << v.name << "[" << (pos_bytes / elem_type->size) << "]";
                     debug(5) << "Successful match to array element\n";
                     return oss.str();
                 } else {
@@ -437,7 +447,9 @@ public:
             // addresses of their children-of-children might follow a
             // dangling pointer.
             if (parent.type->type == TypeInfo::Pointer ||
-                parent.type->type == TypeInfo::Reference) continue;
+                parent.type->type == TypeInfo::Reference) {
+                continue;
+            }
 
             for (size_t j = 0; j < parent.type->members.size(); j++) {
                 const LocalVariable &member_spec = parent.type->members[j];
@@ -451,7 +463,7 @@ public:
                     // We're just following a type modifier. It's still the same member.
                     child.name = parent.name;
                 } else if (parent.type->type == TypeInfo::Array) {
-                    child.name = ""; // the '[index]' gets added in the query routine.
+                    child.name = "";  // the '[index]' gets added in the query routine.
                 } else {
                     child.name = member_spec.name;
                 }
@@ -510,7 +522,6 @@ public:
             return "";
         }
 
-
         std::ostringstream name;
 
         std::regex re(type_name);
@@ -519,13 +530,14 @@ public:
         for (size_t i = 0; i < obj.members.size(); i++) {
             TypeInfo *t = obj.members[i].type;
 
-            if (!t) continue;
+            if (!t) {
+                continue;
+            }
 
             debug(5) << "Comparing to member " << obj.members[i].name
                      << " at address " << std::hex << obj.members[i].addr << std::dec
                      << " with type " << t->name
                      << " and type type " << (int)t->type << "\n";
-
 
             if (obj.members[i].addr == addr &&
                 (type_name.empty() ||
@@ -548,7 +560,7 @@ public:
                     addr -= containing_elem * elem_type->size;
                     debug(5) << "Query belongs to this array. Adjusting query address backwards to "
                              << std::hex << addr << std::dec << "\n";
-                    name << obj.members[i].name << '[' << containing_elem << ']';
+                    name << obj.members[i].name << "[" << containing_elem << "]";
                 }
             } else if (t->type == TypeInfo::Struct ||
                        t->type == TypeInfo::Class ||
@@ -558,7 +570,7 @@ public:
                 uint64_t struct_end_addr = struct_start_addr + t->size;
                 debug(5) << "Struct runs from " << std::hex << struct_start_addr << " to " << struct_end_addr << "\n";
                 if (addr >= struct_start_addr && addr < struct_end_addr) {
-                    name << obj.members[i].name << '.';
+                    name << obj.members[i].name << ".";
                 }
             }
         }
@@ -628,7 +640,7 @@ public:
         // next_fp->return_address
 
         // Get the program counter at the position of the call
-        uint64_t pc = (uint64_t)(next_fp->return_address) - 5; // -5 for the callq instruction
+        uint64_t pc = (uint64_t)(next_fp->return_address) - 5;  // -5 for the callq instruction
 
         FunctionInfo *func = find_containing_function(next_fp->return_address);
 
@@ -646,11 +658,11 @@ public:
 
         int offset;
         if (func->frame_base == FunctionInfo::GCC) {
-            offset = offset_above - 2*addr_size;
+            offset = offset_above - 2 * addr_size;
         } else if (func->frame_base == FunctionInfo::ClangFP) {
             offset = offset_above;
         } else if (func->frame_base == FunctionInfo::ClangNoFP) {
-            offset = offset_below - 2*addr_size;
+            offset = offset_below - 2 * addr_size;
         } else {
             debug(5) << "Bailing out because containing function used an unknown mechanism for specifying stack offsets\n";
             return "";
@@ -665,7 +677,7 @@ public:
             debug(5) << "Var " << var.name << " is at offset " << var.stack_offset << "\n";
 
             // Reject it if we're not in its live ranges
-            if (var.live_ranges.size()) {
+            if (!var.live_ranges.empty()) {
                 bool in_live_range = false;
                 for (size_t i = 0; i < var.live_ranges.size(); i++) {
                     if (pc >= var.live_ranges[i].pc_begin &&
@@ -695,9 +707,9 @@ public:
                  (type && regex_match(type->name, re)))) {
                 debug(5) << "Successful match to scalar var\n";
                 return var.name;
-            } else if (elem_type && // Check if it's an array element
+            } else if (elem_type &&  // Check if it's an array element
                        (type_name.empty() ||
-                        (elem_type && // Check the type matches
+                        (elem_type &&  // Check the type matches
                          regex_match(elem_type->name, re)))) {
                 int64_t array_size_bytes = type->size * elem_type->size;
                 int64_t pos_bytes = offset - var.stack_offset;
@@ -705,7 +717,7 @@ public:
                     pos_bytes < array_size_bytes &&
                     pos_bytes % elem_type->size == 0) {
                     std::ostringstream oss;
-                    oss << var.name << '[' << (pos_bytes / elem_type->size) << ']';
+                    oss << var.name << "[" << (pos_bytes / elem_type->size) << "]";
                     debug(5) << "Successful match to array element\n";
                     return oss.str();
                 } else {
@@ -718,12 +730,11 @@ public:
         return "";
     }
 
-
     // Look up n stack frames and get the source location as filename:line
     std::string get_source_location() {
         debug(5) << "Finding source location\n";
 
-        if (!source_lines.size()) {
+        if (source_lines.empty()) {
             debug(5) << "Bailing out because we have no source lines\n";
             return "";
         }
@@ -776,7 +787,7 @@ public:
             size_t hi = source_lines.size();
             size_t lo = 0;
             while (hi > lo + 1) {
-                size_t mid = (hi + lo)/2;
+                size_t mid = (hi + lo) / 2;
                 uint64_t pc_mid = source_lines[mid].pc;
                 if (address < pc_mid) {
                     hi = mid;
@@ -870,7 +881,6 @@ public:
                    (long long unsigned)v.addr,
                    type_name);
         }
-
     }
 
     bool dump_stack_frame(void *ptr) {
@@ -895,7 +905,6 @@ public:
     }
 
 private:
-
     void load_and_parse_object_file(const std::string &binary) {
         llvm::object::ObjectFile *obj = nullptr;
 
@@ -932,10 +941,10 @@ private:
 
         for (llvm::object::section_iterator iter = obj->section_begin();
              iter != obj->section_end(); ++iter) {
-            llvm::StringRef name;
-            iter->getName(name);
+            auto expected_name = iter->getName();
+            internal_assert(expected_name);
+            llvm::StringRef name = expected_name.get();
             debug(2) << "Section: " << name.str() << "\n";
-#if LLVM_VERSION >= 90
             // ignore errors, just leave strings empty
             auto e = iter->getContents();
             if (e) {
@@ -951,19 +960,6 @@ private:
                     debug_ranges = *e;
                 }
             }
-#else
-            if (name == prefix + "debug_info") {
-                iter->getContents(debug_info);
-            } else if (name == prefix + "debug_abbrev") {
-                iter->getContents(debug_abbrev);
-            } else if (name == prefix + "debug_str") {
-                iter->getContents(debug_str);
-            } else if (name == prefix + "debug_line") {
-                iter->getContents(debug_line);
-            } else if (name == prefix + "debug_ranges") {
-                iter->getContents(debug_ranges);
-            }
-#endif
         }
 
         if (debug_info.empty() ||
@@ -990,15 +986,16 @@ private:
     }
 
     void parse_debug_ranges(const llvm::DataExtractor &e) {
-
     }
 
-    void parse_debug_abbrev(const llvm::DataExtractor &e, uint32_t off = 0) {
+    void parse_debug_abbrev(const llvm::DataExtractor &e, llvm_offset_t off = 0) {
         entry_formats.clear();
         while (1) {
             EntryFormat fmt;
             fmt.code = e.getULEB128(&off);
-            if (!fmt.code) break;
+            if (!fmt.code) {
+                break;
+            }
             fmt.tag = e.getULEB128(&off);
             fmt.has_children = (e.getU8(&off) != 0);
             // Get the attributes
@@ -1010,7 +1007,9 @@ private:
             while (1) {
                 uint64_t name = e.getULEB128(&off);
                 uint64_t form = e.getULEB128(&off);
-                if (!name && !form) break;
+                if (!name && !form) {
+                    break;
+                }
                 //printf(" name = %lu, form = %lu\n", name, form);
 
                 FieldFormat f_fmt(name, form);
@@ -1025,7 +1024,7 @@ private:
                           llvm::StringRef debug_str,
                           llvm::StringRef debug_ranges) {
         // Offset into the section
-        uint32_t off = 0;
+        llvm_offset_t off = 0;
 
         llvm::StringRef debug_info = e.getData();
 
@@ -1115,23 +1114,23 @@ private:
 
                 // A null entry indicates we're popping the stack.
                 if (abbrev_code == 0) {
-                    if (func_stack.size() &&
+                    if (!func_stack.empty() &&
                         stack_depth == func_stack.back().second) {
                         const FunctionInfo &f = func_stack.back().first;
                         functions.push_back(f);
                         func_stack.pop_back();
                     }
-                    if (type_stack.size() &&
+                    if (!type_stack.empty() &&
                         stack_depth == type_stack.back().second) {
                         const TypeInfo &c = type_stack.back().first;
                         types.push_back(c);
                         type_stack.pop_back();
                     }
-                    if (namespace_stack.size() &&
+                    if (!namespace_stack.empty() &&
                         stack_depth == namespace_stack.back().second) {
                         namespace_stack.pop_back();
                     }
-                    if (live_range_stack.size() &&
+                    if (!live_range_stack.empty() &&
                         stack_depth == live_range_stack.back().second) {
                         live_range_stack.pop_back();
                     }
@@ -1139,9 +1138,9 @@ private:
                     continue;
                 }
 
-                assert(abbrev_code <= entry_formats.size());
-                const EntryFormat &fmt = entry_formats[abbrev_code-1];
-                assert(fmt.code == abbrev_code);
+                internal_assert(abbrev_code <= entry_formats.size());
+                const EntryFormat &fmt = entry_formats[abbrev_code - 1];
+                internal_assert(fmt.code == abbrev_code);
 
                 LocalVariable var;
                 GlobalVariable gvar;
@@ -1155,7 +1154,7 @@ private:
                 std::string namespace_name;
 
                 std::string containing_namespace;
-                if (type_stack.size()) {
+                if (!type_stack.empty()) {
                     containing_namespace = type_stack.back().first.name + "::";
                 } else {
                     for (size_t i = 0; i < namespace_stack.size(); i++) {
@@ -1183,8 +1182,8 @@ private:
                     // payload size. If val is zero the payload is a
                     // null-terminated string.
 
-                    switch(fmt.fields[i].form) {
-                    case 1: // addr (4 or 8 bytes)
+                    switch (fmt.fields[i].form) {
+                    case 1:  // addr (4 or 8 bytes)
                     {
                         if (address_size == 4) {
                             val = e.getU32(&off);
@@ -1193,77 +1192,78 @@ private:
                         }
                         break;
                     }
-                    case 2: // There is no case 2
+                    case 2:  // There is no case 2
                     {
-                        assert(false && "What's form 2?");
+                        internal_error << "What's form 2?";
                         break;
                     }
-                    case 3: // block2 (2 byte length followed by payload)
+                    case 3:  // block2 (2 byte length followed by payload)
                     {
                         val = e.getU16(&off);
                         payload = (const uint8_t *)(debug_info.data() + off);
                         off += val;
                         break;
                     }
-                    case 4: // block4 (4 byte length followed by payload)
+                    case 4:  // block4 (4 byte length followed by payload)
                     {
                         val = e.getU32(&off);
                         payload = (const uint8_t *)(debug_info.data() + off);
                         off += val;
                         break;
                     }
-                    case 5: // data2 (2 bytes)
+                    case 5:  // data2 (2 bytes)
                     {
                         val = e.getU16(&off);
                         break;
                     }
-                    case 6: // data4 (4 bytes)
+                    case 6:  // data4 (4 bytes)
                     {
                         val = e.getU32(&off);
                         break;
                     }
-                    case 7: // data8 (8 bytes)
+                    case 7:  // data8 (8 bytes)
                     {
                         val = e.getU64(&off);
                         break;
                     }
-                    case 8: // string (null terminated sequence of bytes)
+                    case 8:  // string (null terminated sequence of bytes)
                     {
                         val = 0;
                         payload = (const uint8_t *)(debug_info.data() + off);
-                        while (e.getU8(&off));
+                        while (e.getU8(&off)) {
+                        }
                         break;
                     }
-                    case 9: // block (uleb128 length followed by payload)
+                    case 9:  // block (uleb128 length followed by payload)
                     {
                         val = e.getULEB128(&off);
                         payload = (const uint8_t *)(debug_info.data() + off);
                         off += val;
                         break;
                     }
-                    case 10: // block1 (1 byte length followed by payload)
+                    case 10:  // block1 (1 byte length followed by payload)
                     {
                         val = e.getU8(&off);
                         payload = (const uint8_t *)(debug_info.data() + off);
                         off += val;
                         break;
                     }
-                    case 11: // data1 (1 byte)
+                    case 11:  // data1 (1 byte)
                     {
                         val = e.getU8(&off);
                         break;
                     }
-                    case 12: // flag (1 byte)
+                    case 12:  // flag (1 byte)
                     {
                         val = e.getU8(&off);
                         break;
                     }
-                    case 13: // sdata (sleb128 constant)
+                    case 13:  // sdata (sleb128 constant)
                     {
                         val = (uint64_t)e.getSLEB128(&off);
                         break;
                     }
-                    case 14: // strp (offset into debug_str section. 4 bytes in dwarf 32, 8 in dwarf 64)
+                    case 14:  // strp (offset into debug_str section. 4 bytes in dwarf 32, 8 in dwarf 64)
                     {
                         uint64_t offset;
                         if (dwarf_64) {
@@ -1275,12 +1275,12 @@ private:
                         payload = (const uint8_t *)(debug_str.data() + offset);
                         break;
                     }
-                    case 15: // udata (uleb128 constant)
+                    case 15:  // udata (uleb128 constant)
                     {
                         val = e.getULEB128(&off);
                         break;
                     }
-                    case 16: // ref_addr (offset from beginning of debug_info. 4 bytes in dwarf 32, 8 in dwarf 64)
+                    case 16:  // ref_addr (offset from beginning of debug_info. 4 bytes in dwarf 32, 8 in dwarf 64)
                     {
                         if ((dwarf_version <= 2 && address_size == 8) ||
                             (dwarf_version > 2 && dwarf_64)) {
@@ -1290,37 +1290,37 @@ private:
                         }
                         break;
                     }
-                    case 17: // ref1 (1 byte offset from the first byte of the compilation unit header)
+                    case 17:  // ref1 (1 byte offset from the first byte of the compilation unit header)
                     {
                         val = e.getU8(&off) + start_of_unit_header;
                         break;
                     }
-                    case 18: // ref2 (2 byte version of the same)
+                    case 18:  // ref2 (2 byte version of the same)
                     {
                         val = e.getU16(&off) + start_of_unit_header;
                         break;
                     }
-                    case 19: // ref4 (4 byte version of the same)
+                    case 19:  // ref4 (4 byte version of the same)
                     {
                         val = e.getU32(&off) + start_of_unit_header;
                         break;
                     }
-                    case 20: // ref8 (8 byte version of the same)
+                    case 20:  // ref8 (8 byte version of the same)
                     {
                         val = e.getU64(&off) + start_of_unit_header;
                         break;
                     }
-                    case 21: // ref_udata (uleb128 version of the same)
+                    case 21:  // ref_udata (uleb128 version of the same)
                     {
                         val = e.getULEB128(&off) + start_of_unit_header;
                         break;
                     }
-                    case 22: // indirect
+                    case 22:  // indirect
                     {
-                        assert(false && "Can't handle indirect form");
+                        internal_error << "Can't handle indirect form";
                         break;
                     }
-                    case 23: // sec_offset
+                    case 23:  // sec_offset
                     {
                         if (dwarf_64) {
                             val = e.getU64(&off);
@@ -1329,7 +1329,7 @@ private:
                         }
                         break;
                     }
-                    case 24: // exprloc
+                    case 24:  // exprloc
                     {
                         // Length
                         val = e.getULEB128(&off);
@@ -1338,20 +1338,20 @@ private:
                         off += val;
                         break;
                     }
-                    case 25: // flag_present
+                    case 25:  // flag_present
                     {
                         val = 0;
                         // Just the existence of this field is information apparently? There's no data.
                         break;
                     }
-                    case 32: // ref_sig8
+                    case 32:  // ref_sig8
                     {
                         // 64-bit type signature for a reference in its own type unit
                         val = e.getU64(&off);
                         break;
                     }
                     default:
-                        assert(false && "Unknown form");
+                        internal_error << "Unknown form";
                         break;
                     }
 
@@ -1483,11 +1483,11 @@ private:
                             if (payload && payload[0] == 0x91) {
                                 // It's a local
                                 // payload + 1 is a sleb128
-                                var.stack_offset = (int)(get_sleb128(payload+1));
+                                var.stack_offset = (int)(get_sleb128(payload + 1));
                             } else if (payload && payload[0] == 0x03 && val == (sizeof(void *) + 1)) {
                                 // It's a global
                                 // payload + 1 is an address
-                                const void *addr = load_misaligned((const void * const *)(payload + 1));
+                                const void *addr = load_misaligned((const void *const *)(payload + 1));
                                 gvar.addr = (uint64_t)(addr);
                             } else {
                                 // Some other format that we don't understand
@@ -1506,7 +1506,7 @@ private:
                     } else if (fmt.tag == tag_member) {
                         if (attr == attr_name) {
                             var.name = std::string((const char *)payload);
-                            if (type_stack.size()) {
+                            if (!type_stack.empty()) {
                                 gvar.name = type_stack.back().first.name + "::" + var.name;
                             } else {
                                 gvar.name = var.name;
@@ -1515,7 +1515,7 @@ private:
                             if (!payload) {
                                 var.stack_offset = val;
                             } else if (payload[0] == 0x23) {
-                                var.stack_offset = (int)(get_uleb128(payload+1));
+                                var.stack_offset = (int)(get_uleb128(payload + 1));
                             }
                         } else if (attr == attr_type) {
                             var.type_def_loc = val;
@@ -1528,11 +1528,11 @@ private:
                     } else if (fmt.tag == tag_subrange_type) {
                         // Could be telling us the size of an array type
                         if (attr == attr_upper_bound &&
-                            type_stack.size() &&
+                            !type_stack.empty() &&
                             type_stack.back().first.type == TypeInfo::Array) {
-                            type_stack.back().first.size = val+1;
+                            type_stack.back().first.size = val + 1;
                         } else if (attr == attr_count &&
-                                   type_stack.size() &&
+                                   !type_stack.empty() &&
                                    type_stack.back().first.type == TypeInfo::Array) {
                             type_stack.back().first.size = val;
                         }
@@ -1541,7 +1541,7 @@ private:
                         if (attr == attr_low_pc) {
                             LiveRange r = {val, val};
                             live_ranges.push_back(r);
-                        } else if (attr == attr_high_pc && live_ranges.size()) {
+                        } else if (attr == attr_high_pc && !live_ranges.empty()) {
                             if (fmt.fields[i].form == 0x1) {
                                 // Literal address
                                 live_ranges.back().pc_end = val;
@@ -1552,12 +1552,12 @@ private:
                         } else if (attr == attr_ranges) {
                             if (val < debug_ranges.size()) {
                                 // It's an array of addresses
-                                const void * const * ptr = (const void * const *)(debug_ranges.data() + val);
-                                const void * const * end = (const void * const *)(debug_ranges.data() + debug_ranges.size());
+                                const void *const *ptr = (const void *const *)(debug_ranges.data() + val);
+                                const void *const *end = (const void *const *)(debug_ranges.data() + debug_ranges.size());
                                 // Note: might not be properly aligned; use memcpy to avoid
                                 // sanitizer warnings
-                                while (load_misaligned(ptr) && ptr < end-1) {
-                                    LiveRange r = {(uint64_t)load_misaligned(ptr), (uint64_t)load_misaligned(ptr+1)};
+                                while (load_misaligned(ptr) && ptr < end - 1) {
+                                    LiveRange r = {(uint64_t)load_misaligned(ptr), (uint64_t)load_misaligned(ptr + 1)};
                                     r.pc_begin += compile_unit_base_pc;
                                     r.pc_end += compile_unit_base_pc;
                                     live_ranges.push_back(r);
@@ -1570,12 +1570,11 @@ private:
                             compile_unit_base_pc = val;
                         }
                     }
-
                 }
 
                 if (fmt.tag == tag_variable) {
-                    if (func_stack.size() && !gvar.addr) {
-                        if (live_range_stack.size()) {
+                    if (!func_stack.empty() && !gvar.addr) {
+                        if (!live_range_stack.empty()) {
                             var.live_ranges = live_range_stack.back().first;
                         }
                         func_stack.back().first.variables.push_back(var);
@@ -1583,7 +1582,7 @@ private:
                         global_variables.push_back(gvar);
                     }
                 } else if (fmt.tag == tag_member &&
-                           type_stack.size()) {
+                           !type_stack.empty()) {
                     if (var.stack_offset == no_location) {
                         // A member with no stack offset location is probably the prototype for a static member
                         global_variables.push_back(gvar);
@@ -1593,7 +1592,7 @@ private:
 
                 } else if (fmt.tag == tag_function) {
                     if (fmt.has_children) {
-                        func_stack.push_back({ func, stack_depth });
+                        func_stack.emplace_back(func, stack_depth);
                     } else {
                         functions.push_back(func);
                     }
@@ -1602,7 +1601,7 @@ private:
                            fmt.tag == tag_array_type ||
                            fmt.tag == tag_base_type) {
                     if (fmt.has_children) {
-                        type_stack.push_back({ type_info, stack_depth });
+                        type_stack.emplace_back(type_info, stack_depth);
                     } else {
                         types.push_back(type_info);
                     }
@@ -1616,11 +1615,11 @@ private:
                     if (namespace_name.empty()) {
                         namespace_name = "_";
                     }
-                    namespace_stack.push_back({ namespace_name, stack_depth });
+                    namespace_stack.emplace_back(namespace_name, stack_depth);
                 } else if ((fmt.tag == tag_inlined_subroutine ||
                             fmt.tag == tag_lexical_block) &&
-                           live_ranges.size() && fmt.has_children) {
-                    live_range_stack.push_back({ live_ranges, stack_depth });
+                           !live_ranges.empty() && fmt.has_children) {
+                    live_range_stack.emplace_back(live_ranges, stack_depth);
                 }
             }
         }
@@ -1730,36 +1729,36 @@ private:
             TypeInfo *t = &types[i];
             while (t) {
                 if (t->type == TypeInfo::Pointer) {
-                    suffix.push_back("*");
-                    assert(t->members.size() == 1);
+                    suffix.emplace_back("*");
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Reference) {
-                    suffix.push_back("&");
-                    assert(t->members.size() == 1);
+                    suffix.emplace_back("&");
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Const) {
-                    suffix.push_back("const");
-                    assert(t->members.size() == 1);
+                    suffix.emplace_back("const");
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Array) {
                     // Do we know the size?
                     if (t->size != 0) {
                         std::ostringstream oss;
-                        oss << '[' << t->size << ']';
+                        oss << "[" << t->size << "]";
                         suffix.push_back(oss.str());
                     } else {
-                        suffix.push_back("[]");
+                        suffix.emplace_back("[]");
                     }
-                    assert(t->members.size() == 1);
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else {
                     break;
                 }
             }
 
-            if (t && suffix.size()) {
+            if (t && !suffix.empty()) {
                 types[i].name = t->name;
-                while (suffix.size()) {
+                while (!suffix.empty()) {
                     types[i].name += " " + suffix.back();
                     suffix.pop_back();
                 }
@@ -1775,7 +1774,6 @@ private:
                 t->size = t->members[0].type->size;
             }
         }
-
 
         // Unpack class members into the local variables list.
         for (size_t i = 0; i < functions.size(); i++) {
@@ -1795,15 +1793,15 @@ private:
 
                     // Typedefs retain the same name and stack offset
                     if (new_vars[j].type->type == TypeInfo::Typedef) {
-                        new_vars[j+1].name = new_vars[j].name;
-                        new_vars[j+1].stack_offset = new_vars[j].stack_offset;
+                        new_vars[j + 1].name = new_vars[j].name;
+                        new_vars[j + 1].stack_offset = new_vars[j].stack_offset;
                     } else {
                         // Correct the stack offsets and names
                         for (size_t k = 0; k < members; k++) {
-                            new_vars[j+k+1].stack_offset += new_vars[j].stack_offset;
-                            if (new_vars[j+k+1].name.size() &&
-                                new_vars[j].name.size()) {
-                                new_vars[j+k+1].name = new_vars[j].name + "." + new_vars[j+k+1].name;
+                            new_vars[j + k + 1].stack_offset += new_vars[j].stack_offset;
+                            if (!new_vars[j + k + 1].name.empty() &&
+                                !new_vars[j].name.empty()) {
+                                new_vars[j + k + 1].name = new_vars[j].name + "." + new_vars[j + k + 1].name;
                             }
                         }
                     }
@@ -1811,7 +1809,7 @@ private:
             }
             functions[i].variables.swap(new_vars);
 
-            if (functions[i].variables.size()) {
+            if (!functions[i].variables.empty()) {
                 debug(5) << "Function " << functions[i].name << ":\n";
                 for (size_t j = 0; j < functions[i].variables.size(); j++) {
                     if (functions[i].variables[j].type) {
@@ -1819,7 +1817,6 @@ private:
                     }
                 }
             }
-
         }
 
         // Unpack class members of global variables
@@ -1900,7 +1897,7 @@ private:
     }
 
     void parse_debug_line(const llvm::DataExtractor &e) {
-        uint32_t off = 0;
+        llvm_offset_t off = 0;
 
         // For every compilation unit
         while (1) {
@@ -1912,15 +1909,15 @@ private:
                 break;
             }
 
-            uint32_t unit_end = off + unit_length;
+            llvm_offset_t unit_end = off + unit_length;
 
             debug(5) << "Parsing compilation unit from " << off << " to " << unit_end << "\n";
 
             uint16_t version = e.getU16(&off);
-            assert(version >= 2);
+            internal_assert(version >= 2);
 
             uint32_t header_length = e.getU32(&off);
-            uint32_t end_header_off = off + header_length;
+            llvm_offset_t end_header_off = off + header_length;
             uint8_t min_instruction_length = e.getU8(&off);
             uint8_t max_ops_per_instruction = 1;
             if (version >= 4) {
@@ -1928,8 +1925,8 @@ private:
                 max_ops_per_instruction = e.getU8(&off);
             }
             uint8_t default_is_stmt = e.getU8(&off);
-            int8_t line_base    = (int8_t)e.getU8(&off);
-            uint8_t line_range  = e.getU8(&off);
+            int8_t line_base = (int8_t)e.getU8(&off);
+            uint8_t line_range = e.getU8(&off);
             uint8_t opcode_base = e.getU8(&off);
 
             vector<uint8_t> standard_opcode_length(opcode_base);
@@ -1940,11 +1937,11 @@ private:
 
             vector<std::string> include_dirs;
             // The current directory is implicitly the first dir.
-            include_dirs.push_back(".");
+            include_dirs.emplace_back(".");
             while (off < end_header_off) {
                 const char *s = e.getCStr(&off);
                 if (s && s[0]) {
-                    include_dirs.push_back(s);
+                    include_dirs.emplace_back(s);
                 } else {
                     break;
                 }
@@ -1961,14 +1958,14 @@ private:
                     uint64_t length = e.getULEB128(&off);
                     (void)mod_time;
                     (void)length;
-                    assert(dir <= include_dirs.size());
+                    internal_assert(dir <= include_dirs.size());
                     source_files.push_back(include_dirs[dir] + "/" + name);
                 } else {
                     break;
                 }
             }
 
-            assert(off == end_header_off && "Failed parsing section .debug_line");
+            internal_assert(off == end_header_off) << "Failed parsing section .debug_line";
 
             // Now parse the table. It uses a state machine with the following fields:
             struct {
@@ -2011,24 +2008,24 @@ private:
 
                 if (opcode == 0) {
                     // Extended opcodes
-                    uint32_t ext_offset = off;
+                    llvm_offset_t ext_offset = off;
                     uint64_t len = e.getULEB128(&off);
-                    uint32_t arg_size = len - (off - ext_offset);
+                    llvm_offset_t arg_size = len - (off - ext_offset);
                     uint8_t sub_opcode = e.getU8(&off);
                     switch (sub_opcode) {
-                    case 1: // end_sequence
+                    case 1:  // end_sequence
                     {
                         state.end_sequence = true;
                         state.append_row(source_lines);
                         state = initial_state;
                         break;
                     }
-                    case 2: // set_address
+                    case 2:  // set_address
                     {
                         state.address = e.getAddress(&off);
                         break;
                     }
-                    case 3: // define_file
+                    case 3:  // define_file
                     {
                         const char *name = e.getCStr(&off);
                         uint64_t dir_index = e.getULEB128(&off);
@@ -2036,22 +2033,22 @@ private:
                         uint64_t length = e.getULEB128(&off);
                         (void)mod_time;
                         (void)length;
-                        assert(dir_index < include_dirs.size());
+                        internal_assert(dir_index < include_dirs.size());
                         source_files.push_back(include_dirs[dir_index] + "/" + name);
                         break;
                     }
-                    case 4: // set_discriminator
+                    case 4:  // set_discriminator
                     {
                         state.discriminator = e.getULEB128(&off);
                         break;
                     }
-                    default: // Some unknown thing. Skip it.
+                    default:  // Some unknown thing. Skip it.
                         off += arg_size;
                     }
                 } else if (opcode < opcode_base) {
                     // A standard opcode
                     switch (opcode) {
-                    case 1: // copy
+                    case 1:  // copy
                     {
                         state.append_row(source_lines);
                         state.basic_block = false;
@@ -2060,39 +2057,39 @@ private:
                         state.discriminator = 0;
                         break;
                     }
-                    case 2: // advance_pc
+                    case 2:  // advance_pc
                     {
                         uint64_t advance = e.getULEB128(&off);
                         state.address += min_instruction_length * ((state.op_index + advance) / max_ops_per_instruction);
                         state.op_index = (state.op_index + advance) % max_ops_per_instruction;
                         break;
                     }
-                    case 3: // advance_line
+                    case 3:  // advance_line
                     {
                         state.line += e.getSLEB128(&off);
                         break;
                     }
-                    case 4: // set_file
+                    case 4:  // set_file
                     {
                         state.file = e.getULEB128(&off) - 1 + source_files_base;
                         break;
                     }
-                    case 5: // set_column
+                    case 5:  // set_column
                     {
                         state.column = e.getULEB128(&off);
                         break;
                     }
-                    case 6: // negate_stmt
+                    case 6:  // negate_stmt
                     {
                         state.is_stmt = !state.is_stmt;
                         break;
                     }
-                    case 7: // set_basic_block
+                    case 7:  // set_basic_block
                     {
                         state.basic_block = true;
                         break;
                     }
-                    case 8: // const_add_pc
+                    case 8:  // const_add_pc
                     {
                         // Same as special opcode 255 (but doesn't emit a row or reset state)
                         uint8_t adjust_opcode = 255 - opcode_base;
@@ -2101,35 +2098,35 @@ private:
                         state.op_index = (state.op_index + advance) % max_ops_per_instruction;
                         break;
                     }
-                    case 9: // fixed_advance_pc
+                    case 9:  // fixed_advance_pc
                     {
                         uint16_t advance = e.getU16(&off);
                         state.address += advance;
                         break;
                     }
-                    case 10: // set_prologue_end
+                    case 10:  // set_prologue_end
                     {
                         state.prologue_end = true;
                         break;
                     }
-                    case 11: // set_epilogue_begin
+                    case 11:  // set_epilogue_begin
                     {
                         state.epilogue_begin = true;
                         break;
                     }
-                    case 12: // set_isa
+                    case 12:  // set_isa
                     {
                         state.isa = e.getULEB128(&off);
                         break;
                     }
-                    default:
-                    {
+                    default: {
                         // Unknown standard opcode. Skip over the args.
                         uint8_t args = standard_opcode_length[opcode];
                         for (int i = 0; i < args; i++) {
                             e.getULEB128(&off);
                         }
-                    }}
+                    }
+                    }
                 } else {
                     // Special opcode
                     uint8_t adjust_opcode = opcode - opcode_base;
@@ -2149,7 +2146,6 @@ private:
 
         // Sort the sequences and functions by low PC to make searching into it faster.
         std::sort(source_lines.begin(), source_lines.end());
-
     }
 
     FunctionInfo *find_containing_function(void *addr) {
@@ -2158,7 +2154,7 @@ private:
         size_t hi = functions.size();
         size_t lo = 0;
         while (hi > lo) {
-            size_t mid = (hi + lo)/2;
+            size_t mid = (hi + lo) / 2;
             uint64_t pc_mid_begin = functions[mid].pc_begin;
             uint64_t pc_mid_end = functions[mid].pc_end;
             if (address < pc_mid_begin) {
@@ -2182,7 +2178,7 @@ private:
         uint8_t byte = 0;
 
         while (1) {
-            assert(shift < 57);
+            internal_assert(shift < 57);
             byte = *ptr++;
             result |= (uint64_t)(byte & 0x7f) << shift;
             shift += 7;
@@ -2206,7 +2202,7 @@ private:
         uint8_t byte = 0;
 
         while (1) {
-            assert(shift < 57);
+            internal_assert(shift < 57);
             byte = *ptr++;
             result |= (uint64_t)(byte & 0x7f) << shift;
             shift += 7;
@@ -2217,9 +2213,9 @@ private:
     }
 };
 
-namespace {
 DebugSections *debug_sections = nullptr;
-}
+
+}  // namespace
 
 bool dump_stack_frame() {
     if (!debug_sections || !debug_sections->working) {
@@ -2230,8 +2226,10 @@ bool dump_stack_frame() {
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
-    if (!debug_sections) return "";
-    if (!debug_sections->working) return "";
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return "";
+    }
     std::string name = debug_sections->get_stack_variable_name(var, expected_type);
     if (name.empty()) {
         // Maybe it's a member of a heap object.
@@ -2246,37 +2244,48 @@ std::string get_variable_name(const void *var, const std::string &expected_type)
 }
 
 std::string get_source_location() {
-    if (!debug_sections) return "";
-    if (!debug_sections->working) return "";
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return "";
+    }
     return debug_sections->get_source_location();
 }
 
 void register_heap_object(const void *obj, size_t size, const void *helper) {
-    if (!debug_sections) return;
-    if (!debug_sections->working) return;
-    if (!helper) return;
+    if (!debug_sections ||
+        !debug_sections->working ||
+        !helper) {
+        return;
+    }
     debug_sections->register_heap_object(obj, size, helper);
 }
 
 void deregister_heap_object(const void *obj, size_t size) {
-    if (!debug_sections) return;
-    if (!debug_sections->working) return;
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return;
+    }
     debug_sections->deregister_heap_object(obj, size);
 }
 
 bool saves_frame_pointer(void *fn) {
     // On x86-64, if we save the frame pointer, the first two instructions should be pushing the stack pointer and the frame pointer:
     const uint8_t *ptr = (const uint8_t *)(fn);
-    return ptr[0] == 0x55; // push %rbp
+    // Skip over a valid-branch-target marker (endbr64), if there is
+    // one. These sometimes start functions to help detect control flow
+    // violations.
+    if (ptr[0] == 0xf3 && ptr[1] == 0x0f && ptr[2] == 0x1e && ptr[3] == 0xfa) {
+        ptr += 4;
+    }
+    return ptr[0] == 0x55;  // push %rbp
 }
-
 
 void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
                            bool (*test_a)(const void *, const std::string &),
                            void (*calib)()) {
-    #ifdef __ARM__
+#ifdef __ARM__
     return;
-    #else
+#else
 
     // Skip entirely on arm or 32-bit
     if (sizeof(void *) == 4) {
@@ -2312,7 +2321,7 @@ void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string
         debug(5) << "Test passed\n";
     }
 
-    #endif
+#endif
 }
 
 }  // namespace Introspection

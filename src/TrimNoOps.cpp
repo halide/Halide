@@ -15,8 +15,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
-using std::pair;
 using std::string;
 using std::vector;
 
@@ -50,12 +48,15 @@ class LoadsFromBuffer : public IRVisitor {
     }
 
     string buffer;
+
 public:
     bool result = false;
-    LoadsFromBuffer(const string &b) : buffer(b) {}
+    LoadsFromBuffer(const string &b)
+        : buffer(b) {
+    }
 };
 
-bool loads_from_buffer(Expr e, string buf) {
+bool loads_from_buffer(const Expr &e, const string &buf) {
     LoadsFromBuffer l(buf);
     e.accept(&l);
     return l.result;
@@ -66,22 +67,30 @@ class IsNoOp : public IRVisitor {
     using IRVisitor::visit;
 
     Expr make_and(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) return a;
-        if (is_zero(b) || is_one(a)) return b;
+        if (is_const_zero(a) || is_const_one(b)) {
+            return a;
+        }
+        if (is_const_zero(b) || is_const_one(a)) {
+            return b;
+        }
         return a && b;
     }
 
     Expr make_or(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) return b;
-        if (is_zero(b) || is_one(a)) return a;
+        if (is_const_zero(a) || is_const_one(b)) {
+            return b;
+        }
+        if (is_const_zero(b) || is_const_one(a)) {
+            return a;
+        }
         return a || b;
     }
 
     void visit(const Store *op) override {
-        if (op->value.type().is_handle() || is_zero(op->predicate)) {
+        if (op->value.type().is_handle() || is_const_zero(op->predicate)) {
             condition = const_false();
         } else {
-            if (is_zero(condition)) {
+            if (is_const_zero(condition)) {
                 return;
             }
             // If the value being stored is the same as the value loaded,
@@ -111,7 +120,7 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const For *op) override {
-        if (is_zero(condition)) {
+        if (is_const_zero(condition)) {
             return;
         }
         Expr old_condition = condition;
@@ -127,7 +136,7 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const IfThenElse *op) override {
-        if (is_zero(condition)) {
+        if (is_const_zero(condition)) {
             return;
         }
         Expr total_condition = condition;
@@ -191,14 +200,14 @@ class SimplifyUsingBounds : public IRMutator {
             // need to take each variable one-by-one, simplifying in
             // between to allow for cancellations of the bounds of
             // inner loops with outer loop variables.
-            auto loop = containing_loops[i-1];
+            auto loop = containing_loops[i - 1];
             if (is_const(test)) {
                 break;
             } else if (!expr_uses_var(test, loop.var)) {
                 continue;
-            }  else if (loop.i.is_bounded() &&
-                        can_prove(loop.i.min == loop.i.max) &&
-                        expr_uses_var(test, loop.var)) {
+            } else if (loop.i.is_bounded() &&
+                       can_prove(loop.i.min == loop.i.max) &&
+                       expr_uses_var(test, loop.var)) {
                 // If min == max then either the domain only has one correct value, which we
                 // can substitute directly.
                 // Need to call CSE here since simplify() is sometimes unable to simplify expr with
@@ -228,7 +237,7 @@ class SimplifyUsingBounds : public IRMutator {
             test = simplify(test);
             debug(3) << " -> " << test << "\n";
         }
-        return is_one(test);
+        return is_const_one(test);
     }
 
     Expr visit(const Min *op) override {
@@ -302,9 +311,14 @@ class SimplifyUsingBounds : public IRMutator {
     template<typename StmtOrExpr, typename LetStmtOrLet>
     StmtOrExpr visit_let(const LetStmtOrLet *op) {
         Expr value = mutate(op->value);
-        containing_loops.push_back({op->name, {value, value}});
-        StmtOrExpr body = mutate(op->body);
-        containing_loops.pop_back();
+        StmtOrExpr body;
+        if (value.type() == Int(32) && is_pure(value)) {
+            containing_loops.push_back({op->name, {value, value}});
+            body = mutate(op->body);
+            containing_loops.pop_back();
+        } else {
+            body = mutate(op->body);
+        }
         return LetStmtOrLet::make(op->name, value, body);
     }
 
@@ -325,12 +339,13 @@ class SimplifyUsingBounds : public IRMutator {
         containing_loops.pop_back();
         return For::make(op->name, min, extent, op->for_type, op->device_api, body);
     }
+
 public:
     SimplifyUsingBounds(const string &v, const Interval &i) {
         containing_loops.push_back({v, i});
     }
 
-    SimplifyUsingBounds() {}
+    SimplifyUsingBounds() = default;
 };
 
 class TrimNoOps : public IRMutator {
@@ -354,10 +369,10 @@ class TrimNoOps : public IRMutator {
 
         debug(3) << "Simplified condition is " << is_no_op.condition << "\n";
 
-        if (is_one(is_no_op.condition)) {
+        if (is_const_one(is_no_op.condition)) {
             // This loop is definitely useless
             return Evaluate::make(0);
-        } else if (is_zero(is_no_op.condition)) {
+        } else if (is_const_zero(is_no_op.condition)) {
             // This loop is definitely needed
             return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
         }

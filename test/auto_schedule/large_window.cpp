@@ -3,6 +3,18 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] Autoschedulers do not support WebAssembly.\n");
+        return 0;
+    }
+
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
+    load_plugin(argv[1]);
+
     int W = 800;
     int H = 1200;
 
@@ -22,13 +34,13 @@ int main(int argc, char **argv) {
     int win_size = 15;
     RDom w(-win_size, win_size, -win_size, win_size);
     Func f("f");
-    f(x, y) = sum(in_b(x + w.x, y + w.y), "sum1")/1024;
+    f(x, y) = sum(in_b(x + w.x, y + w.y), "sum1") / 1024;
 
     Func g("g");
-    g(x, y) = sum(f(x + w.x, y + w.y), "sum2")/1024;
+    g(x, y) = sum(f(x + w.x, y + w.y), "sum2") / 1024;
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, input.width()).estimate(y, 0, input.height());
+    g.set_estimate(x, 0, input.width()).set_estimate(y, 0, input.height());
 
     // Pick a schedule
     Target target = get_jit_target_from_environment();

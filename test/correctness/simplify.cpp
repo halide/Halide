@@ -7,12 +7,11 @@ using namespace Halide::Internal;
 
 void check_is_sio(const Expr &e) {
     Expr simpler = simplify(e);
-    const Call *call = simpler.as<Call>();
-    if (!(call && call->is_intrinsic(Call::signed_integer_overflow))) {
+    if (!Call::as_intrinsic(simpler, {Call::signed_integer_overflow})) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input: " << e << '\n'
-            << "Output: " << simpler << '\n'
+            << "Input: " << e << "\n"
+            << "Output: " << simpler << "\n"
             << "Expected output: signed_integer_overflow(n)\n";
         abort();
     }
@@ -23,9 +22,9 @@ void check(const Expr &a, const Expr &b) {
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input: " << a << '\n'
-            << "Output: " << simpler << '\n'
-            << "Expected output: " << b << '\n';
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
         abort();
     }
 }
@@ -35,9 +34,12 @@ void check(const Stmt &a, const Stmt &b) {
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input:\n" << a << '\n'
-            << "Output:\n" << simpler << '\n'
-            << "Expected output:\n" << b << '\n';
+            << "Input:\n"
+            << a << "\n"
+            << "Output:\n"
+            << simpler << "\n"
+            << "Expected output:\n"
+            << b << "\n";
         abort();
     }
 }
@@ -47,9 +49,9 @@ void check_in_bounds(const Expr &a, const Expr &b, const Scope<Interval> &bi) {
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input: " << a << '\n'
-            << "Output: " << simpler << '\n'
-            << "Expected output: " << b << '\n';
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
         abort();
     }
 }
@@ -76,7 +78,7 @@ Expr broadcast(const Expr &base, int w) {
 }
 
 void check_casts() {
-    Expr x = Var("x");
+    Expr x = Var("x"), y = Var("y");
 
     check(cast(Int(32), cast(Int(32), x)), x);
     check(cast(Float(32), 3), 3.0f);
@@ -109,15 +111,15 @@ void check_casts() {
     check(cast(Float(32), cast(UInt(16), 123456.0f)), 57920.0f);
     // Specific checks for 32 bit unsigned expressions - ensure simplifications are actually unsigned.
     // 4000000000 (4 billion) is less than 2^32 but more than 2^31.  As an int, it is negative.
-    check(cast(UInt(32), (int) 4000000000UL) + cast(UInt(32), 5), make_const(UInt(32), (int) 4000000005UL));
-    check(cast(UInt(32), (int) 4000000000UL) - cast(UInt(32), 5), make_const(UInt(32), (int) 3999999995UL));
-    check(cast(UInt(32), (int) 4000000000UL) / cast(UInt(32), 5), make_const(UInt(32), 800000000));
-    check(cast(UInt(32), 800000000) * cast(UInt(32), 5), make_const(UInt(32), (int) 4000000000UL));
-    check(cast(UInt(32), (int) 4000000023UL) % cast(UInt(32), 100), make_const(UInt(32), 23));
-    check(min(cast(UInt(32), (int) 4000000023UL) , cast(UInt(32), 1000)), make_const(UInt(32), (int) 1000));
-    check(max(cast(UInt(32), (int) 4000000023UL) , cast(UInt(32), 1000)), make_const(UInt(32), (int) 4000000023UL));
-    check(cast(UInt(32), (int) 4000000023UL) < cast(UInt(32), 1000), const_false());
-    check(cast(UInt(32), (int) 4000000023UL) == cast(UInt(32), 1000), const_false());
+    check(cast(UInt(32), (int)4000000000UL) + cast(UInt(32), 5), make_const(UInt(32), (int)4000000005UL));
+    check(make_const(UInt(32, 4), (int)4000000000UL) - make_const(UInt(32, 4), 5), make_const(UInt(32, 4), (int)3999999995UL));
+    check(cast(UInt(32), (int)4000000000UL) / cast(UInt(32), 5), make_const(UInt(32), 800000000));
+    check(cast(UInt(32), 800000000) * cast(UInt(32), 5), make_const(UInt(32), (int)4000000000UL));
+    check(make_const(UInt(32, 2), (int)4000000023UL) % make_const(UInt(32, 2), 100), make_const(UInt(32, 2), 23));
+    check(min(cast(UInt(32), (int)4000000023UL), cast(UInt(32), 1000)), make_const(UInt(32), (int)1000));
+    check(max(cast(UInt(32), (int)4000000023UL), cast(UInt(32), 1000)), make_const(UInt(32), (int)4000000023UL));
+    check(cast(UInt(32), (int)4000000023UL) < cast(UInt(32), 1000), const_false());
+    check(make_const(UInt(32, 3), (int)4000000023UL) == make_const(UInt(32, 3), 1000), const_false(3));
 
     check(cast(Float(64), 0.5f), Expr(0.5));
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
@@ -140,6 +142,25 @@ void check_casts() {
     // between zero-extending and sign-extending.
     check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),
           UIntImm::make(UInt(64), 0xffffffffULL));
+
+    // It's a good idea to pull widening casts outside of shuffles
+    // when the shuffle reduces the lane count (e.g. a slice_vector).
+    Expr some_vector = ramp(y, 2, 8) * ramp(x, 1, 8);
+    check(slice(cast(UInt(64, 8), some_vector), 2, 1, 3),
+          cast(UInt(64, 3), slice(some_vector, 2, 1, 3)));
+
+    std::vector<int> indices(18);
+    for (int i = 0; i < 18; i++) {
+        indices[i] = i & 3;
+    }
+    check(Shuffle::make({cast(UInt(64, 8), some_vector)}, indices),
+          Shuffle::make({cast(UInt(64, 8), some_vector)}, indices));
+
+    // Interleaving simplifications can result in slices.
+    Expr var_vector = Variable::make(Int(32, 12), "v");
+    Expr even = Shuffle::make_slice(var_vector, 0, 2, 4);
+    Expr odd = Shuffle::make_slice(var_vector, 1, 2, 4);
+    check(Shuffle::make_interleave({even, odd}), Shuffle::make_slice(var_vector, 0, 1, 8));
 }
 
 void check_algebra() {
@@ -151,7 +172,7 @@ void check_algebra() {
     check(3 + x, x + 3);
     check(x + 0, x);
     check(0 + x, x);
-    check(Expr(ramp(x, 2, 3)) + Expr(ramp(y, 4, 3)), ramp(x+y, 6, 3));
+    check(Expr(ramp(x, 2, 3)) + Expr(ramp(y, 4, 3)), ramp(x + y, 6, 3));
     check(Expr(broadcast(4.0f, 5)) + Expr(ramp(3.25f, 4.5f, 5)), ramp(7.25f, 4.5f, 5));
     check(Expr(ramp(3.25f, 4.5f, 5)) + Expr(broadcast(4.0f, 5)), ramp(7.25f, 4.5f, 5));
     check(Expr(broadcast(3, 3)) + Expr(broadcast(1, 3)), broadcast(4, 3));
@@ -161,15 +182,15 @@ void check_algebra() {
     check(y + (x + 3), (x + y) + 3);
     check((3 - x) + x, 3);
     check(x + (3 - x), 3);
-    check(x*y + x*z, (y+z)*x);
-    check(x*y + z*x, (y+z)*x);
-    check(y*x + x*z, (y+z)*x);
-    check(y*x + z*x, (y+z)*x);
+    check(x * y + x * z, (y + z) * x);
+    check(x * y + z * x, (y + z) * x);
+    check(y * x + x * z, (y + z) * x);
+    check(y * x + z * x, (y + z) * x);
 
     check(x - 0, x);
-    check((x/y) - (x/y), 0);
+    check((x / y) - (x / y), 0);
     check(x - 2, x + (-2));
-    check(Expr(ramp(x, 2, 3)) - Expr(ramp(y, 4, 3)), ramp(x-y, -2, 3));
+    check(Expr(ramp(x, 2, 3)) - Expr(ramp(y, 4, 3)), ramp(x - y, -2, 3));
     check(Expr(broadcast(4.0f, 5)) - Expr(ramp(3.25f, 4.5f, 5)), ramp(0.75f, -4.5f, 5));
     check(Expr(ramp(3.25f, 4.5f, 5)) - Expr(broadcast(4.0f, 5)), ramp(-0.75f, 4.5f, 5));
     check(Expr(broadcast(3, 3)) - Expr(broadcast(1, 3)), broadcast(2, 3));
@@ -185,111 +206,109 @@ void check_algebra() {
     check(x - (0 - y), x + y);
     check(x + (0 - y), x - y);
     check((0 - x) + y, y - x);
-    check(x*y - x*z, (y-z)*x);
-    check(x*y - z*x, (y-z)*x);
-    check(y*x - x*z, (y-z)*x);
-    check(y*x - z*x, (y-z)*x);
-    check(x - y*-2, y*2 + x);
-    check(x + y*-2, x - y*2);
-    check(x*-2 + y, y - x*2);
-    check(xf - yf*-2.0f, y*2.0f + xf);
-    check(xf + yf*-2.0f, xf - y*2.0f);
-    check(xf*-2.0f + yf, yf - x*2.0f);
+    check(x * y - x * z, (y - z) * x);
+    check(x * y - z * x, (y - z) * x);
+    check(y * x - x * z, (y - z) * x);
+    check(y * x - z * x, (y - z) * x);
 
     check((x * 8) - (y * 4), (x * 2 - y) * 4);
     check((x * 4) - (y * 8), (x - y * 2) * 4);
 
     check((x * 2) % 6, (x % 3) * 2);
 
-    check(x - (x/8)*8, x % 8);
-    check((x/8)*8 - x, -(x % 8));
-    check((x/8)*8 < x + y, 0 < x%8 + y);
-    check((x/8)*8 < x - y, y < x%8);
-    check((x/8)*8 < x, x%8 != 0);
-    check(((x+3)/8)*8 < x + y, 3 < (x+3)%8 + y);
-    check(((x+3)/8)*8 < x - y, y < (x+3)%8 + (-3));
-    check(((x+3)/8)*8 < x, 3 < (x+3)%8);
+    check(x - (x / 8) * 8, x % 8);
+    check((x / 8) * 8 - x, -(x % 8));
+    check((x / 8) * 8 < x + y, 0 < x % 8 + y);
+    check((x / 8) * 8 < x - y, y < x % 8);
+    check((x / 8) * 8 < x, x % 8 != 0);
+    check(((x + 3) / 8) * 8 < x + y, 3 < (x + 3) % 8 + y);
+    check(((x + 3) / 8) * 8 < x - y, y < (x + 3) % 8 + (-3));
+    check(((x + 3) / 8) * 8 < x, 3 < (x + 3) % 8);
 
-    check(x*0, 0);
-    check(0*x, 0);
-    check(x*1, x);
-    check(1*x, x);
-    check(Expr(2.0f)*4.0f, 8.0f);
-    check(Expr(2)*4, 8);
-    check((3*x)*4, x*12);
-    check(4*(3+x), x*4 + 12);
+    check(x * 0, 0);
+    check(0 * x, 0);
+    check(x * 1, x);
+    check(1 * x, x);
+    check(Expr(2.0f) * 4.0f, 8.0f);
+    check(Expr(2) * 4, 8);
+    check((3 * x) * 4, x * 12);
+    check(4 * (3 + x), x * 4 + 12);
     check(Expr(broadcast(4.0f, 5)) * Expr(ramp(3.0f, 4.0f, 5)), ramp(12.0f, 16.0f, 5));
     check(Expr(ramp(3.0f, 4.0f, 5)) * Expr(broadcast(2.0f, 5)), ramp(6.0f, 8.0f, 5));
     check(Expr(broadcast(3, 3)) * Expr(broadcast(2, 3)), broadcast(6, 3));
 
-    check(x*y + x, (y + 1)*x);
-    check(x*y - x, (y + -1)*x);
-    check(x + x*y, (y + 1)*x);
-    check(x - x*y, (1 - y)*x);
-    check(x*y + y, (x + 1)*y);
-    check(x*y - y, (x + -1)*y);
-    check(y + x*y, (x + 1)*y);
-    check(y - x*y, (1 - x)*y);
+    check(x * y + x, (y + 1) * x);
+    check(x * y - x, (y + -1) * x);
+    check(x + x * y, (y + 1) * x);
+    check(x - x * y, (1 - y) * x);
+    check(x * y + y, (x + 1) * y);
+    check(x * y - y, (x + -1) * y);
+    check(y + x * y, (x + 1) * y);
+    check(y - x * y, (1 - x) * y);
 
-    check(0/max(x, 1), 0);
-    check(x/1, x);
-    check(x/x, 1);
-    check((-1)/(x*2 + 1), select(x < 0, 1, -1));
-    check(Expr(7)/3, 2);
-    check(Expr(6.0f)/2.0f, 3.0f);
+    check(0 / max(x, 1), 0);
+    check(x / 1, x);
+    check(max(x, 1) / (max(x, 1)), 1);
+    check(min(x, -1) / (min(x, -1)), 1);
+    check((x * 2 + 1) / (x * 2 + 1), 1);
+    check((-1) / (x * 2 + 1), select(x < 0, 1, -1));
+    check(Expr(7) / 3, 2);
+    check(Expr(6.0f) / 2.0f, 3.0f);
     check((x / 3) / 4, x / 12);
-    check((x*4)/2, x*2);
-    check((x*2)/4, x/2);
-    check((x*(-4))/2, x*(-2));
-    check((x*4 + y)/2, y/2 + x*2);
-    check((y + x*4)/2, y/2 + x*2);
-    check((x*4 - y)/2, (0 - y)/2 + x*2);
-    check((y - x*4)/2, y/2 - x*2);
-    check((x + 3)/2 + 7, (x + 17)/2);
-    check((x/2 + 3)/5, (x + 6)/10);
-    check((x + (y + 3)/5) + 5, (y + 28)/5 + x);
-    check((x + 8)/2, x/2 + 4);
-    check((x - y)*-2, (y - x)*2);
-    check((xf - yf)*-2.0f, (yf - xf)*2.0f);
+    check((x * 4) / 2, x * 2);
+    check((x * 2) / 4, x / 2);
+    check((x * (-4)) / 2, x * (-2));
+    check((x * 4 + y) / 2, y / 2 + x * 2);
+    check((y + x * 4) / 2, y / 2 + x * 2);
+    check((x * 2 - y) / 2, (0 - y) / 2 + x);
+    check((x * -2 - y) / 2, (0 - y) / 2 - x);
+    check((y - x * 4) / 2, y / 2 - x * 2);
+    check((x + 3) / 2 + 7, (x + 17) / 2);
+    check((x / 2 + 3) / 5, (x + 6) / 10);
+    check((x + (y + 3) / 5) + 5, (y + 28) / 5 + x);
+    check((x + 8) / 2, x / 2 + 4);
+    check((x - y) * -2, (y - x) * 2);
+    check((xf - yf) * -2.0f, (yf - xf) * 2.0f);
 
-    check(x*3 + y*9, (y*3 + x)*3);
-    check(x*9 + y*3, (x*3 + y)*3);
+    check(x * 3 + y * 9, (y * 3 + x) * 3);
+    check(x * 9 + y * 3, (x * 3 + y) * 3);
 
     // Pull terms that are a multiple of the divisor out of a ternary expression
-    check(((x*4 + y) + z) / 2, (y + z)/2 + x*2);
-    check(((x*4 - y) + z) / 2, (z - y)/2 + x*2);
-    check(((x*4 + y) - z) / 2, (y - z)/2 + x*2);
-    check(((x*4 - y) - z) / 2, (0 - y - z)/2 + x*2);
-    check((x + (y*4 + z)) / 2, (x + z)/2 + y*2);
-    check(((x + y*4) + z) / 2, (x + z)/2 + y*2);
-    check((x + (y*4 - z)) / 2, (x - z)/2 + y*2);
-    check((x - (y*4 + z)) / 2, (x - z)/2 - y*2);
-    check((x - (y*4 - z)) / 2, (x + z)/2 - y*2);
+    check(((x * 4 + y) + z) / 2, (y + z) / 2 + x * 2);
+    check(((x * 4 - y) + z) / 2, (z - y) / 2 + x * 2);
+    check(((x * 4 + y) - z) / 2, (y - z) / 2 + x * 2);
+    check(((x * 2 - y) - z) / 2, (0 - y - z) / 2 + x);
+    check(((x * -2 - y) - z) / 2, (0 - y - z) / 2 - x);
+    check((x + (y * 4 + z)) / 2, (x + z) / 2 + y * 2);
+    check(((x + y * 4) + z) / 2, (x + z) / 2 + y * 2);
+    check((x + (y * 4 - z)) / 2, (x - z) / 2 + y * 2);
+    check((x - (y * 4 + z)) / 2, (x - z) / 2 + y * -2);
+    check((x - (y * 4 - z)) / 2, (x + z) / 2 - y * 2);
 
     // Pull out the gcd of the numerator and divisor
     check((x * 3 + 5) / 9, (x + 1) / 3);
 
     // Cancellations in integer divisions.
-    check((7*y)/7, y);
-    check((y*7)/7, y);
-    check((7*y + z)/7, z/7 + y);
-    check((y*7 + z)/7, z/7 + y);
-    check((z + 7*y)/7, z/7 + y);
-    check((z + y*7)/7, z/7 + y);
-    check((7*y - z)/7, (-z)/7 + y);
-    check((y*7 - z)/7, (-z)/7 + y);
-    check((z - 7*y)/7, z/7 - y);
-    check((z - y*7)/7, z/7 - y);
+    check((7 * y) / 7, y);
+    check((y * 7) / 7, y);
+    check((7 * y + z) / 7, z / 7 + y);
+    check((y * 7 + z) / 7, z / 7 + y);
+    check((z + 7 * y) / 7, z / 7 + y);
+    check((z + y * 7) / 7, z / 7 + y);
+    check((7 * y - z) / 7, (-z) / 7 + y);
+    check((y * 7 - z) / 7, (-z) / 7 + y);
+    check((z - 7 * y) / 7, z / 7 - y);
+    check((z - y * 7) / 7, z / 7 - y);
 
-    check((7 + y)/7, y/7 + 1);
-    check((y + 7)/7, y/7 + 1);
-    check((7 - y)/7, (-y)/7 + 1);
-    check((y - 7)/7, y/7 + (-1));
+    check((7 + y) / 7, y / 7 + 1);
+    check((y + 7) / 7, y / 7 + 1);
+    check((7 - y) / 7, (-y) / 7 + 1);
+    check((y - 7) / 7, y / 7 + (-1));
 
-    check(((7 + y) + z)/7, (y + z)/7 + 1);
-    check(((y + 7) + z)/7, (y + z)/7 + 1);
-    check((y + (7 + z))/7, (y + z)/7 + 1);
-    check((y + (z + 7))/7, (y + z)/7 + 1);
+    check(((7 + y) + z) / 7, (y + z) / 7 + 1);
+    check(((y + 7) + z) / 7, (y + z) / 7 + 1);
+    check((y + (7 + z)) / 7, (y + z) / 7 + 1);
+    check((y + (z + 7)) / 7, (y + z) / 7 + 1);
 
     check(xf / 4.0f, xf * 0.25f);
 
@@ -307,54 +326,54 @@ void check_algebra() {
     check((x + (y + z)) - y, x + z);
     check((x + (y + z)) - z, x + y);
 
-    check((x*8) % 4, 0);
-    check((x*8 + y) % 4, y % 4);
+    check((x * 8) % 4, 0);
+    check((x * 8 + y) % 4, y % 4);
     check((y + 8) % 4, y % 4);
-    check((y + x*8) % 4, y % 4);
-    check((y*16 - 13) % 2, 1);
-    check((x*y) % 1, 0);
+    check((y + x * 8) % 4, y % 4);
+    check((y * 16 - 13) % 2, 1);
+    check((x * y) % 1, 0);
 
-    check((y*16 - 13) % 2, 1);
+    check((y * 16 - 13) % 2, 1);
     check((y - 8) % 4, y % 4);
-    check((y - x*8) % 4, y % 4);
-    check((x*8 - y) % 4, (-y) % 4);
+    check((y - x * 8) % 4, y % 4);
+    check((x * 8 - y) % 4, (-y) % 4);
 
     // Check an optimization important for fusing dimensions
-    check((x/3)*3 + x%3, x);
-    check(x%3 + (x/3)*3, x);
+    check((x / 3) * 3 + x % 3, x);
+    check(x % 3 + (x / 3) * 3, x);
 
-    check(((x/3)*3 + y) + x%3, x + y);
-    check(((x/3) + y)*3 + x%3, y*3 + x);
-    check((x%3 + y) + (x/3)*3, x + y);
+    check(((x / 3) * 3 + y) + x % 3, x + y);
+    check(((x / 3) + y) * 3 + x % 3, y * 3 + x);
+    check((x % 3 + y) + (x / 3) * 3, x + y);
 
-    check((y + x%3) + (x/3)*3, x + y);
-    check((y + (x/3*3)) + x%3, x + y);
-    check((y + (x/3))*3 + x%3, y*3 + x);
+    check((y + x % 3) + (x / 3) * 3, x + y);
+    check((y + (x / 3 * 3)) + x % 3, x + y);
+    check((y + (x / 3)) * 3 + x % 3, y * 3 + x);
 
-    check(x/2 + x%2, (x + 1)/2);
-    check(x%2 + x/2, (x + 1)/2);
-    check(((x+1)/2)*2 - x, x%2);
-    check(((x+2)/3)*3 - x, (-x)%3);
-    check(x - ((x+1)/2)*2, ((x + 1)%2 + -1));
-    check(x - ((x+2)/3)*3, ((x + 2)%3 + -2));
-    check((x%2 + 4)/2, 2);
-    check((x%2 + 5)/2, x%2 + 2);
+    check(x / 2 + x % 2, (x + 1) / 2);
+    check(x % 2 + x / 2, (x + 1) / 2);
+    check(((x + 1) / 2) * 2 - x, x % 2);
+    check(((x + 2) / 3) * 3 - x, (-x) % 3);
+    check(x - ((x + 1) / 2) * 2, ((x + 1) % 2 + -1));
+    check(x - ((x + 2) / 3) * 3, ((x + 2) % 3 + -2));
+    check((x % 2 + 4) / 2, 2);
+    check((x % 2 + 5) / 2, x % 2 + 2);
 
     // Almost-cancellations through integer divisions. These rules all
     // deduplicate x and wrap it in a modulo operator, neutering it
     // for the purposes of bounds inference. Patterns below look
     // confusing, but were brute-force tested.
-    check((x + 17)/3 - (x + 7)/3, ((x+1)%3 + 10)/3);
-    check((x + 17)/3 - (x + y)/3, (19 - y - (x+2)%3)/3);
-    check((x + y )/3 - (x + 7)/3, ((x+1)%3 + y + -7)/3);
-    check( x      /3 - (x + y)/3, (2 - y - x % 3)/3);
-    check((x + y )/3 -  x     /3, (x%3 + y)/3);
-    check( x      /3 - (x + 7)/3, (-5 - x%3)/3);
-    check((x + 17)/3 -  x     /3, (x%3 + 17)/3);
-    check((x + 17)/3 - (x - y)/3, (y - (x+2)%3 + 19)/3);
-    check((x - y )/3 - (x + 7)/3, ((x+1)%3 - y + (-7))/3);
-    check( x      /3 - (x - y)/3, (y - x%3 + 2)/3);
-    check((x - y )/3 -  x     /3, (x%3 - y)/3);
+    check((x + 17) / 3 - (x + 7) / 3, ((x + 1) % 3 + 10) / 3);
+    check((x + 17) / 3 - (x + y) / 3, (19 - y - (x + 2) % 3) / 3);
+    check((x + y) / 3 - (x + 7) / 3, ((x + 1) % 3 + y + -7) / 3);
+    check(x / 3 - (x + y) / 3, (2 - y - x % 3) / 3);
+    check((x + y) / 3 - x / 3, (x % 3 + y) / 3);
+    check(x / 3 - (x + 7) / 3, (-5 - x % 3) / 3);
+    check((x + 17) / 3 - x / 3, (x % 3 + 17) / 3);
+    check((x + 17) / 3 - (x - y) / 3, (y - (x + 2) % 3 + 19) / 3);
+    check((x - y) / 3 - (x + 7) / 3, ((x + 1) % 3 - y + (-7)) / 3);
+    check(x / 3 - (x - y) / 3, (y - x % 3 + 2) / 3);
+    check((x - y) / 3 - x / 3, (x % 3 - y) / 3);
 
     // Check some specific expressions involving div and mod
     check(Expr(23) / 4, Expr(5));
@@ -377,33 +396,43 @@ void check_algebra() {
     check(Expr(-7.25f) % -2.0f, -1.25f);
     check(Expr(7.25f) % -2.0f, -0.75f);
 
-    check(2*x + (2*x + y)/5, (x*12 + y)/5);
-    check(x + (x - y)/4, (x*5 - y)/4);
-    check((x + z) + (y + (x + z))/3, ((x + z)*4 + y)/3);
-    check(x + ((y + w) - x)/2, ((w + y) + x)/2);
-    check((x + y)/3 + x, (x*4 + y)/3);
-    check((x - y)/4 + x, (x*5 - y)/4);
-    check((y + x)/3 + x, (x*4 + y)/3);
-    check((y - x)/3 + x, (x*2 + y)/3);
-    check(1 + (1 + y)/2, (y + 3)/2);
-    check((y + 1)/2 + 1, (y + 3)/2);
-    check((0 - y)/5 + 1, (0 - y)/5 + 1);
+    check(2 * x + (2 * x + y) / 5, (x * 12 + y) / 5);
+    check(x + (x - y) / 4, (x * 5 - y) / 4);
+    check((x + z) + (y + (x + z)) / 3, ((x + z) * 4 + y) / 3);
+    check(x + ((y + w) - x) / 2, ((w + y) + x) / 2);
+    check((x + y) / 3 + x, (x * 4 + y) / 3);
+    check((x - y) / 4 + x, (x * 5 - y) / 4);
+    check((y + x) / 3 + x, (x * 4 + y) / 3);
+    check((y - x) / 3 + x, (x * 2 + y) / 3);
+    check(1 + (1 + y) / 2, (y + 3) / 2);
+    check((y + 1) / 2 + 1, (y + 3) / 2);
+    check((0 - y) / 5 + 1, (0 - y) / 5 + 1);
 
-    check(x - (x + y)/3, (x*2 - y + 2)/3);
-    check((w + x) - ((w + x) - y*z)/3, ((w + x)*2 + y*z + 2)/3);
-    check(x - (y + x)/2, (x - y + 1)/2);
-    check(x - (y - x)/6, (x*7 - y + 5)/6);
-    check(x - (x + y)/-3, x - (x + y)/-3);
-    check((w + x) - ((w + x) - y*z)/-3, (w + x) - ((w + x) - y*z)/-3);
-    check(x - (y + x)/-2, x - (x + y)/-2);
-    check(x - (y - x)/-6, x - (y - x)/-6);
-    check((x + y)/3 - x, (y - x*2)/3);
-    check((x*y - w)/4 - x*y, (x*y*(-3) - w)/4);
-    check((y + x)/5 - x, (y - x*4)/5);
-    check((y - x)/6 - x, (y - x*7)/6);
-    check(1 - (1 + y)/2 - 1, (0 - y)/2);
-    check(1 - (-y + 1)/2 - 1, y/2);
-    check(1 - (0 - y)/5, (y + 9)/5);
+    check(x - (x + y) / 3, (x * 2 - y + 2) / 3);
+    check((w + x) - ((w + x) - y * z) / 3, ((w + x) * 2 + y * z + 2) / 3);
+    check(x - (y + x) / 2, (x - y + 1) / 2);
+    check(x - (y - x) / 6, (x * 7 - y + 5) / 6);
+    check(x - (x + y) / -3, x - (x + y) / -3);
+    check((w + x) - ((w + x) - y * z) / -3, (w + x) - ((w + x) - y * z) / -3);
+    check(x - (y + x) / -2, x - (x + y) / -2);
+    check(x - (y - x) / -6, x - (y - x) / -6);
+    check((x + y) / 3 - x, (x * -2 + y) / 3);
+    check((x * y - w) / 4 - x * y, (x * y * (-3) - w) / 4);
+    check((y + x) / 5 - x, (x * -4 + y) / 5);
+    check((y - x) / 6 - x, (y - x * 7) / 6);
+    check(1 - (1 + y) / 2 - 1, (0 - y) / 2);
+    check(1 - (-y + 1) / 2 - 1, y / 2);
+    check(1 - (0 - y) / 5, (y + 9) / 5);
+
+    // Div/mod can't make things larger
+    check(5 / x < 6, const_true());
+    check(5 / x > -6, const_true());
+    check(5 / x < 5, 5 / x < 5);
+    check(5 / x > -5, -5 < 5 / x);
+    check(5 % x < 6, const_true());
+    check(5 % x < 5, 5 % x < 5);
+    check(5 % x >= 0, const_true());
+    check(5 % x > 0, 0 < 5 % x);
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
@@ -427,11 +456,11 @@ void check_algebra() {
           require(x % 4 == 3, 1));
 
     // Check modulo of expressions that are not-obviously a multiple of something
-    check(max(min(x*8, 32), y*16) % 4 == 0, const_true());
-    check(select(x > 4, x*9 + 1, y*6 - 2) % 3 == 1, const_true());
-    check(max(32, x*4) % 16 < 13, const_true()); // After the %16 the max value is 12, not 15, due to alignment
+    check(max(min(x * 8, 32), y * 16) % 4 == 0, const_true());
+    check(select(x > 4, x * 9 + 1, y * 6 - 2) % 3 == 1, const_true());
+    check(max(32, x * 4) % 16 < 13, const_true());  // After the %16 the max value is 12, not 15, due to alignment
 
-    Expr complex_cond = ((10 < y) && (y % 17 == 4) && (y < 30) && (x == y*16 + 3));
+    Expr complex_cond = ((10 < y) && (y % 17 == 4) && (y < 30) && (x == y * 16 + 3));
     // The condition is enough to imply that y == 21, x == 339
     check(require(complex_cond, select(x % 2 == 0, 1237, y)),
           require(complex_cond, 21));
@@ -441,30 +470,29 @@ void check_vectors() {
     Expr x = Var("x"), y = Var("y"), z = Var("z");
 
     check(Expr(broadcast(y, 4)) / Expr(broadcast(x, 4)),
-          Expr(broadcast(y/x, 4)));
-    check(Expr(ramp(x, 4, 4)) / 2, ramp(x/2, 2, 4));
-    check(Expr(ramp(x, -4, 7)) / 2, ramp(x/2, -2, 7));
-    check(Expr(ramp(x, 4, 5)) / -2, ramp(x/-2, -2, 5));
-    check(Expr(ramp(x, -8, 5)) / -2, ramp(x/-2, 4, 5));
+          Expr(broadcast(y / x, 4)));
+    check(Expr(ramp(x, 4, 4)) / 2, ramp(x / 2, 2, 4));
+    check(Expr(ramp(x, -4, 7)) / 2, ramp(x / 2, -2, 7));
+    check(Expr(ramp(x, 4, 5)) / -2, ramp(x / -2, -2, 5));
+    check(Expr(ramp(x, -8, 5)) / -2, ramp(x / -2, 4, 5));
 
-    check(Expr(ramp(4*x, 1, 4)) / 4, broadcast(x, 4));
-    check(Expr(ramp(x*4, 1, 3)) / 4, broadcast(x, 3));
-    check(Expr(ramp(x*8, 2, 4)) / 8, broadcast(x, 4));
-    check(Expr(ramp(x*8, 3, 3)) / 8, broadcast(x, 3));
+    check(Expr(ramp(4 * x, 1, 4)) / 4, broadcast(x, 4));
+    check(Expr(ramp(x * 4, 1, 3)) / 4, broadcast(x, 3));
+    check(Expr(ramp(x * 8, 2, 4)) / 8, broadcast(x, 4));
+    check(Expr(ramp(x * 8, 3, 3)) / 8, broadcast(x, 3));
     check(Expr(ramp(0, 1, 8)) % 16, Expr(ramp(0, 1, 8)));
     check(Expr(ramp(8, 1, 8)) % 16, Expr(ramp(8, 1, 8)));
     check(Expr(ramp(9, 1, 8)) % 16, Expr(ramp(9, 1, 8)) % 16);
     check(Expr(ramp(16, 1, 8)) % 16, Expr(ramp(0, 1, 8)));
     check(Expr(ramp(0, 1, 8)) % 8, Expr(ramp(0, 1, 8)));
-    check(Expr(ramp(x*8+17, 1, 4)) % 8, Expr(ramp(1, 1, 4)));
-    check(Expr(ramp(x*8+17, 1, 8)) % 8, Expr(ramp(1, 1, 8) % 8));
-
+    check(Expr(ramp(x * 8 + 17, 1, 4)) % 8, Expr(ramp(1, 1, 4)));
+    check(Expr(ramp(x * 8 + 17, 1, 8)) % 8, Expr(ramp(1, 1, 8) % 8));
 
     check(Expr(broadcast(x, 4)) % Expr(broadcast(y, 4)),
           Expr(broadcast(x % y, 4)));
     check(Expr(ramp(x, 2, 4)) % (broadcast(2, 4)),
           broadcast(x % 2, 4));
-    check(Expr(ramp(2*x+1, 4, 4)) % (broadcast(2, 4)),
+    check(Expr(ramp(2 * x + 1, 4, 4)) % (broadcast(2, 4)),
           broadcast(1, 4));
 
     check(max(broadcast(24, 2), broadcast(x, 2) % ramp(-8, -33, 2)),
@@ -474,6 +502,49 @@ void check_vectors() {
 
     check(ramp(0, 1, 4) == broadcast(2, 4),
           ramp(-2, 1, 4) == broadcast(0, 4));
+
+    // Any linear combination of simple ramps and broadcasts should
+    // reduce to a single ramp or broadcast.
+    std::mt19937 rng(0);
+    for (int i = 0; i < 50; i++) {
+        std::vector<Expr> leaves =
+            {ramp(x, 1, 4),
+             ramp(x, y, 4),
+             ramp(z, x, 4),
+             broadcast(x, 4),
+             broadcast(y, 4),
+             broadcast(z, 4)};
+        while (leaves.size() > 1) {
+            int idx1 = rng() % (int)leaves.size();
+            int idx2 = 0;
+            do {
+                idx2 = rng() % (int)leaves.size();
+            } while (idx2 == idx1);
+
+            switch (rng() % 4) {
+            case 0:
+                leaves[idx1] += leaves[idx2];
+                break;
+            case 1:
+                leaves[idx1] -= leaves[idx2];
+                break;
+            case 2:
+                leaves[idx1] += (int)(rng() % 8) * leaves[idx2];
+                break;
+            case 3:
+                leaves[idx1] -= (int)(rng() % 8) * leaves[idx2];
+                break;
+            }
+            std::swap(leaves[idx2], leaves.back());
+            leaves.pop_back();
+        }
+        Expr simpler = simplify(leaves[0]);
+        if (!simpler.as<Ramp>() && !simpler.as<Broadcast>()) {
+            std::cerr << "A linear combination of ramps and broadcasts should be a single ramp or broadcast:\n"
+                      << simpler << "\n";
+            abort();
+        }
+    }
 
     {
         Expr test = select(ramp(const_true(), const_true(), 2),
@@ -495,12 +566,11 @@ void check_vectors() {
         check(test, expected);
     }
 
-
     // Collapse some vector interleaves
-    check(interleave_vectors({ramp(x, 2, 4), ramp(x+1, 2, 4)}), ramp(x, 1, 8));
-    check(interleave_vectors({ramp(x, 4, 4), ramp(x+2, 4, 4)}), ramp(x, 2, 8));
-    check(interleave_vectors({ramp(x-y, 2*y, 4), ramp(x, 2*y, 4)}), ramp(x-y, y, 8));
-    check(interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4), ramp(x+2, 3, 4)}), ramp(x, 1, 12));
+    check(interleave_vectors({ramp(x, 2, 4), ramp(x + 1, 2, 4)}), ramp(x, 1, 8));
+    check(interleave_vectors({ramp(x, 4, 4), ramp(x + 2, 4, 4)}), ramp(x, 2, 8));
+    check(interleave_vectors({ramp(x - y, 2 * y, 4), ramp(x, 2 * y, 4)}), ramp(x - y, y, 8));
+    check(interleave_vectors({ramp(x, 3, 4), ramp(x + 1, 3, 4), ramp(x + 2, 3, 4)}), ramp(x, 1, 12));
     {
         Expr vec = ramp(x, 1, 16);
         check(interleave_vectors({slice(vec, 0, 2, 8), slice(vec, 1, 2, 8)}), vec);
@@ -508,34 +578,34 @@ void check_vectors() {
     }
 
     // Collapse some vector concats
-    check(concat_vectors({ramp(x, 2, 4), ramp(x+8, 2, 4)}), ramp(x, 2, 8));
-    check(concat_vectors({ramp(x, 3, 2), ramp(x+6, 3, 2), ramp(x+12, 3, 2)}), ramp(x, 3, 6));
+    check(concat_vectors({ramp(x, 2, 4), ramp(x + 8, 2, 4)}), ramp(x, 2, 8));
+    check(concat_vectors({ramp(x, 3, 2), ramp(x + 6, 3, 2), ramp(x + 12, 3, 2)}), ramp(x, 3, 6));
 
     // Now some ones that can't work
     {
         Expr e = interleave_vectors({ramp(x, 2, 4), ramp(x, 2, 4)});
         check(e, e);
-        e = interleave_vectors({ramp(x, 2, 4), ramp(x+2, 2, 4)});
+        e = interleave_vectors({ramp(x, 2, 4), ramp(x + 2, 2, 4)});
         check(e, e);
-        e = interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4)});
+        e = interleave_vectors({ramp(x, 3, 4), ramp(x + 1, 3, 4)});
         check(e, e);
-        e = interleave_vectors({ramp(x, 2, 4), ramp(y+1, 2, 4)});
+        e = interleave_vectors({ramp(x, 2, 4), ramp(y + 1, 2, 4)});
         check(e, e);
-        e = interleave_vectors({ramp(x, 2, 4), ramp(x+1, 3, 4)});
+        e = interleave_vectors({ramp(x, 2, 4), ramp(x + 1, 3, 4)});
         check(e, e);
 
-        e = concat_vectors({ramp(x, 1, 4), ramp(x+4, 2, 4)});
+        e = concat_vectors({ramp(x, 1, 4), ramp(x + 4, 2, 4)});
         check(e, e);
-        e = concat_vectors({ramp(x, 1, 4), ramp(x+8, 1, 4)});
+        e = concat_vectors({ramp(x, 1, 4), ramp(x + 8, 1, 4)});
         check(e, e);
-        e = concat_vectors({ramp(x, 1, 4), ramp(y+4, 1, 4)});
+        e = concat_vectors({ramp(x, 1, 4), ramp(y + 4, 1, 4)});
         check(e, e);
     }
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
         Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x + 1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
         Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8), ModulusRemainder());
         check(interleave_vectors({load1, load2}), load12);
 
@@ -544,7 +614,7 @@ void check_vectors() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x + 1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
         e = interleave_vectors({load1, load3});
         check(e, e);
     }
@@ -554,10 +624,10 @@ void check_vectors() {
         int lanes = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < lanes; i++) {
-            loads.push_back(Load::make(Float(32), "buf", 4*x+i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
+            loads.push_back(Load::make(Float(32), "buf", 4 * x + i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x*4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x * 4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
     }
 
     // Check that concatenated loads of adjacent vectors collapse into a vector load, with appropriate alignment.
@@ -566,20 +636,31 @@ void check_vectors() {
         int vectors = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < vectors; i++) {
-          loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i*lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+            loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i * lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes*vectors), "buf", ramp(0, 1, lanes*vectors), Buffer<>(), Parameter(), const_true(vectors*lanes), ModulusRemainder(0, 0)));
+        check(concat_vectors(loads), Load::make(Float(32, lanes * vectors), "buf", ramp(0, 1, lanes * vectors), Buffer<>(), Parameter(), const_true(vectors * lanes), ModulusRemainder(0, 0)));
     }
 
     {
         // A predicated store with a provably-false predicate.
-        Expr pred = ramp(x*y + x*z, 2, 8) > 2;
+        Expr pred = ramp(x * y + x * z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
         Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()), ModulusRemainder());
         Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder());
         check(stmt, Evaluate::make(0));
     }
+
+    Expr bool_vector = Variable::make(Bool(4), "bool_vector");
+    Expr int_vector = Variable::make(Int(32, 4), "int_vector");
+    check(VectorReduce::make(VectorReduce::And, Broadcast::make(bool_vector, 4), 1),
+          VectorReduce::make(VectorReduce::And, bool_vector, 1));
+    check(VectorReduce::make(VectorReduce::Or, Broadcast::make(bool_vector, 4), 2),
+          VectorReduce::make(VectorReduce::Or, bool_vector, 2));
+    check(VectorReduce::make(VectorReduce::Min, Broadcast::make(int_vector, 4), 4),
+          int_vector);
+    check(VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8),
+          VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8));
 }
 
 void check_bounds() {
@@ -589,9 +670,9 @@ void check_bounds() {
     check(min(Expr(4.25f), 1.25f), 1.25f);
     check(min(broadcast(x, 4), broadcast(y, 4)),
           broadcast(min(x, y), 4));
-    check(min(x, x+3), x);
-    check(min(x+4, x), x);
-    check(min(x-1, x+2), x+(-1));
+    check(min(x, x + 3), x);
+    check(min(x + 4, x), x);
+    check(min(x - 1, x + 2), x + (-1));
     check(min(7, min(x, 3)), min(x, 3));
     check(min(min(x, y), x), min(x, y));
     check(min(min(x, y), y), min(x, y));
@@ -642,9 +723,9 @@ void check_bounds() {
     check(max(Expr(4.25f), 1.25f), 4.25f);
     check(max(broadcast(x, 4), broadcast(y, 4)),
           broadcast(max(x, y), 4));
-    check(max(x, x+3), x+3);
-    check(max(x+4, x), x+4);
-    check(max(x-1, x+2), x+2);
+    check(max(x, x + 3), x + 3);
+    check(max(x + 4, x), x + 4);
+    check(max(x - 1, x + 2), x + 2);
     check(max(7, max(x, 3)), max(x, 7));
     check(max(max(x, y), x), max(x, y));
     check(max(max(x, y), y), max(x, y));
@@ -676,17 +757,7 @@ void check_bounds() {
     check((x - y) - (z - y), x - z);
     check((y - z) - (y - x), x - z);
 
-    check((x + 3) / 4 - (x + 2) / 4, ((x + 2) % 4 + 1)/4);
-
-    check(x - min(x + y, z), max(-y, x-z));
-    check(x - min(y + x, z), max(-y, x-z));
-    check(x - min(z, x + y), max(-y, x-z));
-    check(x - min(z, y + x), max(-y, x-z));
-
-    check(min(x + y, z) - x, min(z-x, y));
-    check(min(y + x, z) - x, min(z-x, y));
-    check(min(z, x + y) - x, min(z-x, y));
-    check(min(z, y + x) - x, min(z-x, y));
+    check((x + 3) / 4 - (x + 2) / 4, ((x + 2) % 4 + 1) / 4);
 
     check(min(x + y, y + z), min(x, z) + y);
     check(min(y + x, y + z), min(x, z) + y);
@@ -699,48 +770,48 @@ void check_bounds() {
     check(min(123 - x, 1 - x), 1 - x);
     check(max(123 - x, 1 - x), 123 - x);
 
-    check(min(x*43, y*43), min(x, y)*43);
-    check(max(x*43, y*43), max(x, y)*43);
-    check(min(x*-43, y*-43), max(x, y)*-43);
-    check(max(x*-43, y*-43), min(x, y)*-43);
+    check(min(x * 43, y * 43), min(x, y) * 43);
+    check(max(x * 43, y * 43), max(x, y) * 43);
+    check(min(x * -43, y * -43), max(x, y) * -43);
+    check(max(x * -43, y * -43), min(x, y) * -43);
 
     check(min(min(x, 4), y), min(min(x, y), 4));
     check(max(max(x, 4), y), max(max(x, y), 4));
 
-    check(min(x*8, 24), min(x, 3)*8);
-    check(max(x*8, 24), max(x, 3)*8);
-    check(min(x*-8, 24), max(x, -3)*-8);
-    check(max(x*-8, 24), min(x, -3)*-8);
+    check(min(x * 8, 24), min(x, 3) * 8);
+    check(max(x * 8, 24), max(x, 3) * 8);
+    check(min(x * -8, 24), max(x, -3) * -8);
+    check(max(x * -8, 24), min(x, -3) * -8);
 
     check(min(clamp(x, -10, 14), clamp(y, -10, 14)), clamp(min(x, y), -10, 14));
 
-    check(min(x/4, y/4), min(x, y)/4);
-    check(max(x/4, y/4), max(x, y)/4);
+    check(min(x / 4, y / 4), min(x, y) / 4);
+    check(max(x / 4, y / 4), max(x, y) / 4);
 
-    check(min(x/(-4), y/(-4)), max(x, y)/(-4));
-    check(max(x/(-4), y/(-4)), min(x, y)/(-4));
+    check(min(x / (-4), y / (-4)), max(x, y) / (-4));
+    check(max(x / (-4), y / (-4)), min(x, y) / (-4));
 
-    check(min(x/4 + 2, y/4), min(x + 8, y)/4);
-    check(max(x/4 + 2, y/4), max(x + 8, y)/4);
-    check(min(x/4, y/4 + 2), min(y + 8, x)/4);
-    check(max(x/4, y/4 + 2), max(y + 8, x)/4);
-    check(min(x/(-4) + 2, y/(-4)), max(x + -8, y)/(-4));
-    check(max(x/(-4) + 2, y/(-4)), min(x + -8, y)/(-4));
-    check(min(x/(-4), y/(-4) + 2), max(y + -8, x)/(-4));
-    check(max(x/(-4), y/(-4) + 2), min(y + -8, x)/(-4));
+    check(min(x / 4 + 2, y / 4), min(x + 8, y) / 4);
+    check(max(x / 4 + 2, y / 4), max(x + 8, y) / 4);
+    check(min(x / 4, y / 4 + 2), min(y + 8, x) / 4);
+    check(max(x / 4, y / 4 + 2), max(y + 8, x) / 4);
+    check(min(x / (-4) + 2, y / (-4)), max(x + -8, y) / (-4));
+    check(max(x / (-4) + 2, y / (-4)), min(x + -8, y) / (-4));
+    check(min(x / (-4), y / (-4) + 2), max(y + -8, x) / (-4));
+    check(max(x / (-4), y / (-4) + 2), min(y + -8, x) / (-4));
 
-    check(min(x*4 + 8, y*4), min(x + 2, y)*4);
-    check(max(x*4 + 8, y*4), max(x + 2, y)*4);
-    check(min(x*4, y*4 + 8), min(y + 2, x)*4);
-    check(max(x*4, y*4 + 8), max(y + 2, x)*4);
-    check(min(x*(-4) + 8, y*(-4)), max(x + -2, y)*(-4));
-    check(max(x*(-4) + 8, y*(-4)), min(x + -2, y)*(-4));
-    check(min(x*(-4), y*(-4) + 8), max(y + -2, x)*(-4));
-    check(max(x*(-4), y*(-4) + 8), min(y + -2, x)*(-4));
+    check(min(x * 4 + 8, y * 4), min(x + 2, y) * 4);
+    check(max(x * 4 + 8, y * 4), max(x + 2, y) * 4);
+    check(min(x * 4, y * 4 + 8), min(y + 2, x) * 4);
+    check(max(x * 4, y * 4 + 8), max(y + 2, x) * 4);
+    check(min(x * (-4) + 8, y * (-4)), max(x + -2, y) * (-4));
+    check(max(x * (-4) + 8, y * (-4)), min(x + -2, y) * (-4));
+    check(min(x * (-4), y * (-4) + 8), max(y + -2, x) * (-4));
+    check(max(x * (-4), y * (-4) + 8), min(y + -2, x) * (-4));
 
     // Min and max of clamped expressions
-    check(min(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+(-1), y, z));
-    check(max(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+1, y, z));
+    check(min(clamp(x + 1, y, z), clamp(x - 1, y, z)), clamp(x + (-1), y, z));
+    check(max(clamp(x + 1, y, z), clamp(x - 1, y, z)), clamp(x + 1, y, z));
 
     // Additions that cancel a term inside a min or max
     check(x + min(y - x, z), min(x + z, y));
@@ -755,23 +826,34 @@ void check_bounds() {
     check(max(min(x, y), min(x, z)), min(max(y, z), x));
 
     // Mins of expressions and rounded up versions of them
-    check(min(((x+7)/8)*8, x), x);
-    check(min(x, ((x+7)/8)*8), x);
-    check(max(((x+7)/8)*8, x), ((x+7)/8)*8);
-    check(max(x, ((x+7)/8)*8), ((x+7)/8)*8);
+    check(min(((x + 7) / 8) * 8, x), x);
+    check(min(x, ((x + 7) / 8) * 8), x);
+    check(max(((x + 7) / 8) * 8, x), ((x + 7) / 8) * 8);
+    check(max(x, ((x + 7) / 8) * 8), ((x + 7) / 8) * 8);
 
     // And rounded down...
-    check(max((x/8)*8, x), x);
-    check(max(x, (x/8)*8), x);
-    check(min((x/8)*8, x), (x/8)*8);
-    check(min(x, (x/8)*8), (x/8)*8);
+    check(max((x / 8) * 8, x), x);
+    check(max(x, (x / 8) * 8), x);
+    check(min((x / 8) * 8, x), (x / 8) * 8);
+    check(min(x, (x / 8) * 8), (x / 8) * 8);
 
-    check(min(x, likely(x)), likely(x));
-    check(min(likely(x), x), likely(x));
-    check(max(x, likely(x)), likely(x));
-    check(max(likely(x), x), likely(x));
-    check(select(x > y, likely(x), x), likely(x));
-    check(select(x > y, x, likely(x)), likely(x));
+    // "likely" marks which side of a containing min/max/select is the
+    // one to optimize for, so if the min/max/select gets simplified
+    // away, the likely should be stripped too.
+    check(min(x, likely(x)), x);
+    check(min(likely(x), x), x);
+    check(max(x, likely(x)), x);
+    check(max(likely(x), x), x);
+    check(select(x > y, likely(x), x), x);
+    check(select(x > y, x, likely(x)), x);
+    // Check constant-bounds reasoning works through likelies
+    check(min(4, likely(5)), 4);
+    check(min(7, likely(5)), 5);
+    check(max(4, likely(5)), 5);
+    check(max(7, likely(5)), 7);
+
+    check(select(x < y, x + y, x), select(x < y, y, 0) + x);
+    check(select(x < y, x, x + y), select(x < y, 0, y) + x);
 
     check(min(x + 1, y) - min(x, y - 1), 1);
     check(max(x + 1, y) - max(x, y - 1), 1);
@@ -796,7 +878,7 @@ void check_bounds() {
 
     check(min(8 - x, 2), 8 - max(x, 6));
     check(max(3, 77 - x), 77 - min(x, 74));
-    check(min(max(8-x, 0), 8), 8 - max(min(x, 8), 0));
+    check(min(max(8 - x, 0), 8), 8 - max(min(x, 8), 0));
 
     check(x - min(x, 2), max(x, 2) + -2);
     check(x - max(x, 2), min(x, 2) + -2);
@@ -837,14 +919,85 @@ void check_bounds() {
     check(max(min(x, 5), 1) == 3, x == 3);
     check(max(min(x, 5), 1) == 5, 5 <= x);
 
-    check(min((x*32 + y)*4, x*128 + 127), min(y*4, 127) + x*128);
-    check(min((x*32 + y)*4, x*128 + 4), (min(y, 1) + x*32)*4);
-    check(min((y + x*32)*4, x*128 + 127), min(y*4, 127) + x*128);
-    check(min((y + x*32)*4, x*128 + 4), (min(y, 1) + x*32)*4);
-    check(max((x*32 + y)*4, x*128 + 127), max(y*4, 127) + x*128);
-    check(max((x*32 + y)*4, x*128 + 4), (max(y, 1) + x*32)*4);
-    check(max((y + x*32)*4, x*128 + 127), max(y*4, 127) + x*128);
-    check(max((y + x*32)*4, x*128 + 4), (max(y, 1) + x*32)*4);
+    check(min((x * 32 + y) * 4, x * 128 + 127), min(y * 4, 127) + x * 128);
+    check(min((x * 32 + y) * 4, x * 128 + 4), (min(y, 1) + x * 32) * 4);
+    check(min((y + x * 32) * 4, x * 128 + 127), min(y * 4, 127) + x * 128);
+    check(min((y + x * 32) * 4, x * 128 + 4), (min(y, 1) + x * 32) * 4);
+    check(max((x * 32 + y) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
+    check(max((x * 32 + y) * 4, x * 128 + 4), (max(y, 1) + x * 32) * 4);
+    check(max((y + x * 32) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
+    check(max((y + x * 32) * 4, x * 128 + 4), (max(y, 1) + x * 32) * 4);
+
+    check((min(x + y, z) + w) - x, min(z - x, y) + w);
+    check(min((x + y) + w, z) - x, min(z - x, w + y));
+
+    check(min(min(x + z, y), w) - x, min(min(w, y) - x, z));
+    check(min(min(y, x + z), w) - x, min(min(w, y) - x, z));
+
+    // Two- and three-deep cancellations into min/max nodes
+    check((x - min(z, (x + y))), (0 - min(z - x, y)));
+    check((x - min(z, (y + x))), (0 - min(z - x, y)));
+    check((x - min((x + y), z)), (0 - min(z - x, y)));
+    check((x - min((y + x), z)), (0 - min(z - x, y)));
+    check((x - min(y, (w + (x + z)))), (0 - min((y - x), (w + z))));
+    check((x - min(y, (w + (z + x)))), (0 - min((y - x), (w + z))));
+    check((x - min(y, ((x + z) + w))), (0 - min((y - x), (w + z))));
+    check((x - min(y, ((z + x) + w))), (0 - min((y - x), (w + z))));
+    check((x - min((w + (x + z)), y)), (0 - min((y - x), (w + z))));
+    check((x - min((w + (z + x)), y)), (0 - min((y - x), (w + z))));
+    check((x - min(((x + z) + w), y)), (0 - min((y - x), (w + z))));
+    check((x - min(((z + x) + w), y)), (0 - min((y - x), (w + z))));
+
+    check(min(x + y, z) - x, min(z - x, y));
+    check(min(y + x, z) - x, min(z - x, y));
+    check(min(z, x + y) - x, min(z - x, y));
+    check(min(z, y + x) - x, min(z - x, y));
+    check((min(x, (w + (y + z))) - z), min(x - z, w + y));
+    check((min(x, (w + (z + y))) - z), min(x - z, w + y));
+    check((min(x, ((y + z) + w)) - z), min(x - z, w + y));
+    check((min(x, ((z + y) + w)) - z), min(x - z, w + y));
+    check((min((w + (y + z)), x) - z), min(x - z, w + y));
+    check((min((w + (z + y)), x) - z), min(x - z, w + y));
+    check((min(((y + z) + w), x) - z), min(x - z, w + y));
+    check((min(((z + y) + w), x) - z), min(x - z, w + y));
+
+    check((x - max(z, (x + y))), (0 - max(z - x, y)));
+    check((x - max(z, (y + x))), (0 - max(z - x, y)));
+    check((x - max((x + y), z)), (0 - max(z - x, y)));
+    check((x - max((y + x), z)), (0 - max(z - x, y)));
+    check((x - max(y, (w + (x + z)))), (0 - max((y - x), (w + z))));
+    check((x - max(y, (w + (z + x)))), (0 - max((y - x), (w + z))));
+    check((x - max(y, ((x + z) + w))), (0 - max((y - x), (w + z))));
+    check((x - max(y, ((z + x) + w))), (0 - max((y - x), (w + z))));
+    check((x - max((w + (x + z)), y)), (0 - max((y - x), (w + z))));
+    check((x - max((w + (z + x)), y)), (0 - max((y - x), (w + z))));
+    check((x - max(((x + z) + w), y)), (0 - max((y - x), (w + z))));
+    check((x - max(((z + x) + w), y)), (0 - max((y - x), (w + z))));
+
+    check(max(x + y, z) - x, max(z - x, y));
+    check(max(y + x, z) - x, max(z - x, y));
+    check(max(z, x + y) - x, max(z - x, y));
+    check(max(z, y + x) - x, max(z - x, y));
+    check((max(x, (w + (y + z))) - z), max(x - z, w + y));
+    check((max(x, (w + (z + y))) - z), max(x - z, w + y));
+    check((max(x, ((y + z) + w)) - z), max(x - z, w + y));
+    check((max(x, ((z + y) + w)) - z), max(x - z, w + y));
+    check((max((w + (y + z)), x) - z), max(x - z, w + y));
+    check((max((w + (z + y)), x) - z), max(x - z, w + y));
+    check((max(((y + z) + w), x) - z), max(x - z, w + y));
+    check((max(((z + y) + w), x) - z), max(x - z, w + y));
+
+    check(min((x + y) * 7 + z, w) - x * 7, min(w - x * 7, y * 7 + z));
+    check(min((y + x) * 7 + z, w) - x * 7, min(w - x * 7, y * 7 + z));
+
+    check(min(x * 12 + y, z) / 4 - x * 3, min(z - x * 12, y) / 4);
+    check(min(z, x * 12 + y) / 4 - x * 3, min(z - x * 12, y) / 4);
+
+    check((min(x * 12 + y, z) + w) / 4 - x * 3, (min(z - x * 12, y) + w) / 4);
+    check((min(z, x * 12 + y) + w) / 4 - x * 3, (min(z - x * 12, y) + w) / 4);
+
+    check(min((min(((y + 5) / 2), x) * 2), y + 3), min(x * 2, y + 3));
+    check(min((min(((y + 1) / 3), x) * 3) + 1, y), min(x * 3 + 1, y));
 
     {
         Expr one = 1;
@@ -941,7 +1094,7 @@ void check_bounds() {
     check(min(x + (z + y), y + w), min(x + z, w) + y);
     check(min(x + y, z + (x + w)), min(w + z, y) + x);
     check(min(x + y, z + (w + x)), min(w + z, y) + x);
-    check(min(x + y/2 + 13, x + (0 - y)/2), min(0 - y, y + 26)/2 + x);
+    check(min(x + y / 2 + 13, x + (0 - y) / 2), min(0 - y, y + 26) / 2 + x);
 
     check(max((x + y) + z, x + w), max(y + z, w) + x);
     check(max((y + x) + z, x + w), max(y + z, w) + x);
@@ -953,10 +1106,10 @@ void check_bounds() {
     check(max(x + y, z + (w + x)), max(w + z, y) + x);
 
     // Check min(x, y)*max(x, y) gets simplified into x*y
-    check(min(x, y)*max(x, y), x*y);
-    check(min(x, y)*max(y, x), x*y);
-    check(max(x, y)*min(x, y), x*y);
-    check(max(y, x)*min(x, y), x*y);
+    check(min(x, y) * max(x, y), x * y);
+    check(min(x, y) * max(y, x), x * y);
+    check(max(x, y) * min(x, y), x * y);
+    check(max(y, x) * min(x, y), x * y);
 
     // Check min(x, y) + max(x, y) gets simplified into x + y
     check(min(x, y) + max(x, y), x + y);
@@ -978,19 +1131,19 @@ void check_bounds() {
 
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
-    bounds_info.push("x", Interval(0,4));
-    check_in_bounds(ramp(x,  1, 4) < broadcast( 0, 4), const_false(4), bounds_info);
-    check_in_bounds(ramp(x,  1, 4) < broadcast( 8, 4), const_true(4),  bounds_info);
+    bounds_info.push("x", Interval(0, 4));
+    check_in_bounds(ramp(x, 1, 4) < broadcast(0, 4), const_false(4), bounds_info);
+    check_in_bounds(ramp(x, 1, 4) < broadcast(8, 4), const_true(4), bounds_info);
     check_in_bounds(ramp(x, -1, 4) < broadcast(-4, 4), const_false(4), bounds_info);
-    check_in_bounds(ramp(x, -1, 4) < broadcast( 5, 4), const_true(4),  bounds_info);
-    check_in_bounds(min(ramp(x,  1, 4), broadcast( 0, 4)), broadcast(0, 4),  bounds_info);
-    check_in_bounds(min(ramp(x,  1, 4), broadcast( 8, 4)), ramp(x, 1, 4),    bounds_info);
+    check_in_bounds(ramp(x, -1, 4) < broadcast(5, 4), const_true(4), bounds_info);
+    check_in_bounds(min(ramp(x, 1, 4), broadcast(0, 4)), broadcast(0, 4), bounds_info);
+    check_in_bounds(min(ramp(x, 1, 4), broadcast(8, 4)), ramp(x, 1, 4), bounds_info);
     check_in_bounds(min(ramp(x, -1, 4), broadcast(-4, 4)), broadcast(-4, 4), bounds_info);
-    check_in_bounds(min(ramp(x, -1, 4), broadcast( 5, 4)), ramp(x, -1, 4),   bounds_info);
-    check_in_bounds(max(ramp(x,  1, 4), broadcast( 0, 4)), ramp(x, 1, 4),    bounds_info);
-    check_in_bounds(max(ramp(x,  1, 4), broadcast( 8, 4)), broadcast(8, 4),  bounds_info);
-    check_in_bounds(max(ramp(x, -1, 4), broadcast(-4, 4)), ramp(x, -1, 4),   bounds_info);
-    check_in_bounds(max(ramp(x, -1, 4), broadcast( 5, 4)), broadcast(5, 4),  bounds_info);
+    check_in_bounds(min(ramp(x, -1, 4), broadcast(5, 4)), ramp(x, -1, 4), bounds_info);
+    check_in_bounds(max(ramp(x, 1, 4), broadcast(0, 4)), ramp(x, 1, 4), bounds_info);
+    check_in_bounds(max(ramp(x, 1, 4), broadcast(8, 4)), broadcast(8, 4), bounds_info);
+    check_in_bounds(max(ramp(x, -1, 4), broadcast(-4, 4)), ramp(x, -1, 4), bounds_info);
+    check_in_bounds(max(ramp(x, -1, 4), broadcast(5, 4)), broadcast(5, 4), bounds_info);
 
     check(min(x, 63) - min(x, 3), clamp(x, 3, 63) + (-3));
     check(min(x, 3) - min(x, 63), 3 - clamp(x, 3, 63));
@@ -998,13 +1151,13 @@ void check_bounds() {
     check(min(x, 3) - min(63, x), 3 - clamp(x, 3, 63));
 
     // This used to throw the simplifier into a loop
-    simplify((min((min(((x*64) + y), (z + -63)) + 31), min((((x*64) + y) + 63), z)) -
-              min((min((((x*64) + y) + 63), z) + -31), (min(((x*64) + y), (z + -63)) + 32))));
+    simplify((min((min(((x * 64) + y), (z + -63)) + 31), min((((x * 64) + y) + 63), z)) -
+              min((min((((x * 64) + y) + 63), z) + -31), (min(((x * 64) + y), (z + -63)) + 32))));
 
     check(min(x * 4 + 63, y) - min(x * 4, y - 3), clamp(y - x * 4, 3, 63));
     check(min(y, x * 4 + 63) - min(x * 4, y - 3), clamp(y - x * 4, 3, 63));
-    check(min(x * 4, y - 3) - min(x * 4 + 63, y), clamp(x*4 - y, -63, -3));
-    check(min(x * 4, y - 3) - min(y, x * 4 + 63), clamp(x*4 - y, -63, -3));
+    check(min(x * 4, y - 3) - min(x * 4 + 63, y), clamp(x * 4 - y, -63, -3));
+    check(min(x * 4, y - 3) - min(y, x * 4 + 63), clamp(x * 4 - y, -63, -3));
 
     check(max(x, 63) - max(x, 3), 63 - clamp(x, 3, 63));
     check(max(63, x) - max(3, x), 63 - clamp(x, 3, 63));
@@ -1026,33 +1179,33 @@ void check_boolean() {
     Expr b2 = Variable::make(Bool(), "b2");
 
     check(x == x, t);
-    check(x == (x+1), f);
-    check(x-2 == y+3, x == y + 5);
-    check(x+y == y+z, x == z);
-    check(y+x == y+z, x == z);
-    check(x+y == z+y, x == z);
-    check(y+x == z+y, x == z);
-    check((y+x)*17 == (z+y)*17, x == z);
-    check(x*0 == y*0, t);
-    check(x == x+y, y == 0);
-    check(x+y == x, y == 0);
+    check(x == (x + 1), f);
+    check(x - 2 == y + 3, x == y + 5);
+    check(x + y == y + z, x == z);
+    check(y + x == y + z, x == z);
+    check(x + y == z + y, x == z);
+    check(y + x == z + y, x == z);
+    check((y + x) * 17 == (z + y) * 17, x == z);
+    check(x * 0 == y * 0, t);
+    check(x == x + y, y == 0);
+    check(x + y == x, y == 0);
     check(100 - x == 99 - y, y == x + (-1));
 
     check(x < x, f);
-    check(x < (x+1), t);
-    check(x-2 < y+3, x < y+5);
-    check(x+y < y+z, x < z);
-    check(y+x < y+z, x < z);
-    check(x+y < z+y, x < z);
-    check(y+x < z+y, x < z);
-    check((y+x)*17 < (z+y)*17, x < z);
-    check(x*0 < y*0, f);
-    check(x < x+y, 0 < y);
-    check(x+y < x, y < 0);
+    check(x < (x + 1), t);
+    check(x - 2 < y + 3, x < y + 5);
+    check(x + y < y + z, x < z);
+    check(y + x < y + z, x < z);
+    check(x + y < z + y, x < z);
+    check(y + x < z + y, x < z);
+    check((y + x) * 17 < (z + y) * 17, x < z);
+    check(x * 0 < y * 0, f);
+    check(x < x + y, 0 < y);
+    check(x + y < x, y < 0);
 
     check(select(x < 3, 2, 2), 2);
-    check(select(x < (x+1), 9, 2), 9);
-    check(select(x > (x+1), 9, 2), 2);
+    check(select(x < (x + 1), 9, 2), 9);
+    check(select(x > (x + 1), 9, 2), 2);
     // Selects of comparisons should always become selects of LT or selects of EQ
     check(select(x != 5, 2, 3), select(x == 5, 3, 2));
     check(select(x >= 5, 2, 3), select(x < 5, 3, 2));
@@ -1065,7 +1218,15 @@ void check_boolean() {
     check(select(x < 5, select(x < 5, 0, 1), 2), select(x < 5, 0, 2));
     check(select(x < 5, 0, select(x < 5, 1, 2)), select(x < 5, 0, 2));
 
-    check((1 - xf)*6 < 3, 0.5f < xf);
+    check(max(select((x == -1), 1, x), 6), max(x, 6));
+    check(max(select((x == -1), 1, x), x), select((x == -1), 1, x));
+    check(max(select((x == 17), 1, x), x), x);
+
+    check(min(select((x == 1), -1, x), -6), min(x, -6));
+    check(min(select((x == 1), -1, x), x), select((x == 1), -1, x));
+    check(min(select((x == -17), -1, x), x), x);
+
+    check((1 - xf) * 6 < 3, 0.5f < xf);
 
     check(!f, t);
     check(!t, f);
@@ -1147,10 +1308,10 @@ void check_boolean() {
     check(x >= 20 && x <= 20, 20 <= x && x <= 20);
 
     check(min(x, 20) < min(x, 19), const_false());
-    check(min(x, 23) < min(x, 18) + 3, const_false());
+    check(min(x, 23) < min(x, 18) - 3, const_false());
 
     check(max(x, 19) > max(x, 20), const_false());
-    check(max(x, 19) > max(x, 18) + 3, const_false());
+    check(max(x, 18) > max(x, 23) + 3, const_false());
 
     // check for substitution patterns
     check((b1 == t) && (b1 && b2), b1 && b2);
@@ -1171,57 +1332,85 @@ void check_boolean() {
     check(x <= y && x > y, f);
 
     check(x <= max(x, y), t);
-    check(x <  min(x, y), f);
+    check(x < min(x, y), f);
     check(min(x, y) <= x, t);
-    check(max(x, y) <  x, f);
+    check(max(x, y) < x, f);
     check(max(x, y) <= y, x <= y);
     check(min(x, y) >= y, y <= x);
 
+    check(max(x, y) < min(y, z), f);
+    check(max(x, y) < min(z, y), f);
+    check(max(y, x) < min(y, z), f);
+    check(max(y, x) < min(z, y), f);
+
+    check(max(x, y) >= min(y, z), t);
+    check(max(x, y) >= min(z, y), t);
+    check(max(y, x) >= min(y, z), t);
+    check(max(y, x) >= min(z, y), t);
+
+    check(min(z, y) < min(x, y), z < min(x, y));
+    check(min(z, y) < min(y, x), z < min(x, y));
+    check(min(y, z) < min(x, y), z < min(x, y));
+    check(min(y, z) < min(y, x), z < min(x, y));
+    check(min(z, y) < min(x, y + 5), min(y, z) < x);
+    check(min(z, y) < min(y + 5, x), min(y, z) < x);
+    check(min(z, y - 5) < min(x, y), min(y + (-5), z) < x);
+    check(min(z, y - 5) < min(y, x), min(y + (-5), z) < x);
+
+    check(max(z, y) < max(x, y), max(y, z) < x);
+    check(max(z, y) < max(y, x), max(y, z) < x);
+    check(max(y, z) < max(x, y), max(y, z) < x);
+    check(max(y, z) < max(y, x), max(y, z) < x);
+    check(max(z, y) < max(x, y - 5), max(y, z) < x);
+    check(max(z, y) < max(y - 5, x), max(y, z) < x);
+    check(max(z, y + 5) < max(x, y), max(y + 5, z) < x);
+    check(max(z, y + 5) < max(y, x), max(y + 5, z) < x);
+
     check((1 < y) && (2 < y), 2 < y);
 
-    check(x*5 < 4, x < 1);
-    check(x*5 < 5, x < 1);
-    check(x*5 < 6, x < 2);
-    check(x*5 <= 4, x <= 0);
-    check(x*5 <= 5, x <= 1);
-    check(x*5 <= 6, x <= 1);
-    check(x*5 > 4, 0 < x);
-    check(x*5 > 5, 1 < x);
-    check(x*5 > 6, 1 < x);
-    check(x*5 >= 4, 1 <= x);
-    check(x*5 >= 5, 1 <= x);
-    check(x*5 >= 6, 2 <= x);
+    check(x * 5 < 4, x < 1);
+    check(x * 5 < 5, x < 1);
+    check(x * 5 < 6, x < 2);
+    check(x * 5 <= 4, x <= 0);
+    check(x * 5 <= 5, x <= 1);
+    check(x * 5 <= 6, x <= 1);
+    check(x * 5 > 4, 0 < x);
+    check(x * 5 > 5, 1 < x);
+    check(x * 5 > 6, 1 < x);
+    check(x * 5 >= 4, 1 <= x);
+    check(x * 5 >= 5, 1 <= x);
+    check(x * 5 >= 6, 2 <= x);
 
-    check(x/4 < 3, x < 12);
-    check(3 < x/4, 15 < x);
+    check(x / 4 < 3, x < 12);
+    check(3 < x / 4, 15 < x);
 
     check(4 - x <= 0, 4 <= x);
 
-    check((x/8)*8 < x - 8, f);
-    check((x/8)*8 < x - 9, f);
-    check((x/8)*8 < x - 7, f);
-    check((x/8)*8 < x - 6, 6 < x % 8);
-    check(ramp(x*4, 1, 4) < broadcast(y*4, 4), broadcast(x < y, 4));
-    check(ramp(x*8, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 1, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 4, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 8, 1, 4) < broadcast(y*8, 4), broadcast(x < y + (-1), 4));
-    check(ramp(x*8 + 5, 1, 4) < broadcast(y*8, 4), ramp(x*8 + 5, 1, 4) < broadcast(y*8, 4));
-    check(ramp(x*8 - 1, 1, 4) < broadcast(y*8, 4), ramp(x*8 + (-1), 1, 4) < broadcast(y*8, 4));
-    check(ramp(x*8, 1, 4) < broadcast(y*4, 4), broadcast(x*2 < y, 4));
-    check(ramp(x*8, 2, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 1, 2, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 2, 2, 4) < broadcast(y*8, 4), ramp(x*8 + 2, 2, 4) < broadcast(y*8, 4));
-    check(ramp(x*8, 3, 4) < broadcast(y*8, 4), ramp(x*8, 3, 4) < broadcast(y*8, 4));
-    check(select(ramp((x/16)*16, 1, 8) < broadcast((y/8)*8, 8), broadcast(1, 8), broadcast(3, 8)),
-          select((x/16)*2 < y/8, broadcast(1, 8), broadcast(3, 8)));
+    check((x / 8) * 8 < x - 8, f);
+    check((x / 8) * 8 < x - 9, f);
+    check((x / 8) * 8 < x - 7, f);
+    check((x / 8) * 8 < x - 6, 6 < x % 8);
+    check(ramp(x * 4, 1, 4) < broadcast(y * 4, 4), broadcast(x < y, 4));
+    check(ramp(x * 8, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 1, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 4, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 8, 1, 4) < broadcast(y * 8, 4), broadcast(x < y + (-1), 4));
+    check(ramp(x * 8 + 5, 1, 4) < broadcast(y * 8, 4), ramp(x * 8 + 5, 1, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8 - 1, 1, 4) < broadcast(y * 8, 4), ramp(x * 8 + (-1), 1, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8, 1, 4) < broadcast(y * 4, 4), broadcast(x * 2 < y, 4));
+    check(ramp(x * 8, 2, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 1, 2, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 2, 2, 4) < broadcast(y * 8, 4), ramp(x * 8 + 2, 2, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8, 3, 4) < broadcast(y * 8, 4), ramp(x * 8, 3, 4) < broadcast(y * 8, 4));
+    check(select(ramp((x / 16) * 16, 1, 8) < broadcast((y / 8) * 8, 8), broadcast(1, 8), broadcast(3, 8)),
+          select((x / 16) * 2 < y / 8, broadcast(1, 8), broadcast(3, 8)));
 
-    check(ramp(x*8, -1, 4) < broadcast(y*8, 4), ramp(x*8, -1, 4) < broadcast(y*8, 4));
-    check(ramp(x*8 + 1, -1, 4) < broadcast(y*8, 4), ramp(x*8 + 1, -1, 4) < broadcast(y*8, 4));
-    check(ramp(x*8 + 4, -1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 8, -1, 4) < broadcast(y*8, 4), ramp(x*8 + 8, -1, 4) < broadcast(y*8, 4));
-    check(ramp(x*8 + 5, -1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 - 1, -1, 4) < broadcast(y*8, 4), broadcast(x < y + 1, 4));
+    check(ramp(x * 8, -1, 4) < broadcast(y * 8, 4), ramp(x * 8, -1, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8 + 1, -1, 4) < broadcast(y * 8, 4), ramp(x * 8 + 1, -1, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8 + 4, -1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 8, -1, 4) < broadcast(y * 8, 4), ramp(x * 8 + 8, -1, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8 + 5, -1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 - 1, -1, 4) < broadcast(y * 8, 4), broadcast(x < y + 1, 4));
 
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
@@ -1233,10 +1422,10 @@ void check_boolean() {
 
     // Check ored conditions apply to the else case only
     check(IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x+3, y+4) + select(b2, x+5, y+7)),
-                           Evaluate::make(select(b1, x+3, y+8) - select(b2, x+5, y+7))),
+                           Evaluate::make(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
+                           Evaluate::make(select(b1, x + 3, y + 8) - select(b2, x + 5, y + 7))),
           IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x+3, y+4) + select(b2, x+5, y+7)),
+                           Evaluate::make(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
                            Evaluate::make(1)));
 
     // Check single conditions apply to both cases of an ifthenelse
@@ -1254,48 +1443,48 @@ void check_boolean() {
                            Evaluate::make(y),
                            Evaluate::make(x)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
-                      IfThenElse::make(x < y, Evaluate::make(x+3), Evaluate::make(x+4))),
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                      IfThenElse::make(x < y, Evaluate::make(x + 3), Evaluate::make(x + 4))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
-                           Block::make(Evaluate::make(x+2), Evaluate::make(x+4))));
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
+                           Block::make(Evaluate::make(x + 2), Evaluate::make(x + 4))));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1)),
-                      IfThenElse::make(x < y, Evaluate::make(x+2))),
-          IfThenElse::make(x < y, Block::make(Evaluate::make(x+1), Evaluate::make(x+2))));
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                      IfThenElse::make(x < y, Evaluate::make(x + 2))),
+          IfThenElse::make(x < y, Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
-                       IfThenElse::make(x < y, Evaluate::make(x+3), Evaluate::make(x+4)),
-                       Evaluate::make(x+5)}),
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                       IfThenElse::make(x < y, Evaluate::make(x + 3), Evaluate::make(x + 4)),
+                       Evaluate::make(x + 5)}),
           Block::make(IfThenElse::make(x < y,
-                                       Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
-                                       Block::make(Evaluate::make(x+2), Evaluate::make(x+4))),
-                      Evaluate::make(x+5)));
+                                       Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
+                                       Block::make(Evaluate::make(x + 2), Evaluate::make(x + 4))),
+                      Evaluate::make(x + 5)));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1)),
-                       IfThenElse::make(x < y, Evaluate::make(x+2)),
-                       IfThenElse::make(x < y, Evaluate::make(x+3)),
-                       Evaluate::make(x+4)}),
-          Block::make(IfThenElse::make(x < y, Block::make({Evaluate::make(x+1), Evaluate::make(x+2), Evaluate::make(x+3)})),
-                      Evaluate::make(x+4)));
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                       IfThenElse::make(x < y, Evaluate::make(x + 2)),
+                       IfThenElse::make(x < y, Evaluate::make(x + 3)),
+                       Evaluate::make(x + 4)}),
+          Block::make(IfThenElse::make(x < y, Block::make({Evaluate::make(x + 1), Evaluate::make(x + 2), Evaluate::make(x + 3)})),
+                      Evaluate::make(x + 4)));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1)),
-                       IfThenElse::make(x < y, Evaluate::make(x+2)),
-                       Evaluate::make(x+3)}),
-          Block::make(IfThenElse::make(x < y, Block::make(Evaluate::make(x+1), Evaluate::make(x+2))),
-                      Evaluate::make(x+3)));
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                       IfThenElse::make(x < y, Evaluate::make(x + 2)),
+                       Evaluate::make(x + 3)}),
+          Block::make(IfThenElse::make(x < y, Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
+                      Evaluate::make(x + 3)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
-                      IfThenElse::make(x < y, Evaluate::make(x+3))),
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                      IfThenElse::make(x < y, Evaluate::make(x + 3))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
-                           Evaluate::make(x+2)));
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
+                           Evaluate::make(x + 2)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1)),
-                      IfThenElse::make(x < y, Evaluate::make(x+2), Evaluate::make(x+3))),
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                      IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
-                           Evaluate::make(x+3)));
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                           Evaluate::make(x + 3)));
 
     // The construct
     //     if (var == expr) then a else b;
@@ -1306,46 +1495,95 @@ void check_boolean() {
           IfThenElse::make(b1 == b2, then_clause, else_clause));
 
     // Check common statements are pulled out of ifs.
-    check(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+1)),
-          Evaluate::make(x+1));
+    check(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 1)),
+          Evaluate::make(x + 1));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+3))),
-          Block::make(Evaluate::make(x+1),
-                      IfThenElse::make(x < y, Evaluate::make(x+2), Evaluate::make(x+3))));
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3))),
+          Block::make(Evaluate::make(x + 1),
+                      IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
-                           Block::make(Evaluate::make(x+3), Evaluate::make(x+2))),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+3)),
-                      Evaluate::make(x+2)));
-
-
-    check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
-                           Evaluate::make(x+2)),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(x+1)),
-                      Evaluate::make(x+2)));
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                           Block::make(Evaluate::make(x + 3), Evaluate::make(x + 2))),
+          Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 3)),
+                      Evaluate::make(x + 2)));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
-                           Evaluate::make(x+1)),
-          Block::make(Evaluate::make(x+1),
-                      IfThenElse::make(x < y, Evaluate::make(x+2))));
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                           Evaluate::make(x + 2)),
+          Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                      Evaluate::make(x + 2)));
 
     check(IfThenElse::make(x < y,
-                           Evaluate::make(x+1),
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2))),
-          Block::make(Evaluate::make(x+1),
-                      IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x+2))));
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                           Evaluate::make(x + 1)),
+          Block::make(Evaluate::make(x + 1),
+                      IfThenElse::make(x < y, Evaluate::make(x + 2))));
 
     check(IfThenElse::make(x < y,
-                           Evaluate::make(x+2),
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2))),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x+1)),
-                      Evaluate::make(x+2)));
+                           Evaluate::make(x + 1),
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
+          Block::make(Evaluate::make(x + 1),
+                      IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x + 2))));
 
+    check(IfThenElse::make(x < y,
+                           Evaluate::make(x + 2),
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
+          Block::make(IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x + 1)),
+                      Evaluate::make(x + 2)));
+
+    // A for loop is also an if statement that the extent is greater than zero
+    Stmt body = AssertStmt::make(y == z, y);
+    Stmt loop = For::make("t", 0, x, ForType::Serial, DeviceAPI::None, body);
+    check(IfThenElse::make(0 < x, loop), loop);
+
+    // A for loop where the extent is exactly one is just the body
+    check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
+
+    // A for loop where the extent is at most one can just be an if statement
+    check(IfThenElse::make(y % 2 == x, loop), IfThenElse::make(y % 2 == x, IfThenElse::make(0 < x, body)));
+
+    // Check we can learn from bounds on variables
+    check(IfThenElse::make(x < 5, Evaluate::make(min(x, 17))),
+          IfThenElse::make(x < 5, Evaluate::make(x)));
+
+    check(IfThenElse::make(x < min(y, 5), Evaluate::make(min(x, 17))),
+          IfThenElse::make(x < min(y, 5), Evaluate::make(x)));
+
+    check(IfThenElse::make(5 < x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(5 < x, Evaluate::make(x)));
+
+    check(IfThenElse::make(max(y, 5) < x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(max(y, 5) < x, Evaluate::make(x)));
+
+    check(IfThenElse::make(x <= 5, Evaluate::make(min(x, 17))),
+          IfThenElse::make(x <= 5, Evaluate::make(x)));
+
+    check(IfThenElse::make(x <= min(y, 5), Evaluate::make(min(x, 17))),
+          IfThenElse::make(x <= min(y, 5), Evaluate::make(x)));
+
+    check(IfThenElse::make(5 <= x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(5 <= x, Evaluate::make(x)));
+
+    check(IfThenElse::make(max(y, 5) <= x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(max(y, 5) <= x, Evaluate::make(x)));
+
+    // Concretely, this lets us skip some redundant assertions
+    check(Block::make(AssertStmt::make(max(y, 3) < x, x),
+                      AssertStmt::make(0 < x, x)),
+          Block::make(AssertStmt::make(max(y, 3) < x, x),
+                      Evaluate::make(0)));
+
+    // Check it works transitively
+    check(IfThenElse::make(0 < x,
+                           IfThenElse::make(x < y,
+                                            IfThenElse::make(y < z,
+                                                             Evaluate::make(z == 2)))),
+          // z can't possibly be two, because x is at least one, so y
+          // is at least two, so z must be at least three.
+          Evaluate::make(const_false()));
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
     check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
@@ -1361,35 +1599,33 @@ void check_boolean() {
     check(select(x == 3, y, 2) == 4, (x == 3) && (y == 4));
     check(select(x == 3, 2, y) == 4, (x != 3) && (y == 4));
 
-    check(min(select(x == 2, y*3, 8), select(x == 2, y+8, y*7)),
-          select(x == 2, min(y*3, y+8), min(y*7, 8)));
+    check(min(select(x == 2, y * 3, 8), select(x == 2, y + 8, y * 7)),
+          select(x == 2, min(y * 3, y + 8), min(y * 7, 8)));
 
-    check(max(select(x == 2, y*3, 8), select(x == 2, y+8, y*7)),
-          select(x == 2, max(y*3, y+8), max(y*7, 8)));
+    check(max(select(x == 2, y * 3, 8), select(x == 2, y + 8, y * 7)),
+          select(x == 2, max(y * 3, y + 8), max(y * 7, 8)));
 
-    Expr cond = (x*x == 16);
-    check(select(cond, x+1, x+5), select(cond, 1, 5) + x);
-    check(select(cond, x+y, x+z), select(cond, y, z) + x);
-    check(select(cond, y+x, x+z), select(cond, y, z) + x);
-    check(select(cond, y+x, z+x), select(cond, y, z) + x);
-    check(select(cond, x+y, z+x), select(cond, y, z) + x);
-    check(select(cond, x*2, x*5), select(cond, 2, 5) * x);
-    check(select(cond, x*y, x*z), select(cond, y, z) * x);
-    check(select(cond, y*x, x*z), select(cond, y, z) * x);
-    check(select(cond, y*x, z*x), select(cond, y, z) * x);
-    check(select(cond, x*y, z*x), select(cond, y, z) * x);
-    check(select(cond, x-y, x-z), x - select(cond, y, z));
-    check(select(cond, y-x, z-x), select(cond, y, z) - x);
-    check(select(cond, x+y, x-z), select(cond, y, 0-z) + x);
-    check(select(cond, y+x, x-z), select(cond, y, 0-z) + x);
-    check(select(cond, x-z, x+y), select(cond, 0-z, y) + x);
-    check(select(cond, x-z, y+x), select(cond, 0-z, y) + x);
-    check(select(cond, x/y, z/y), select(cond, x, z) / y);
-    check(select(cond, x%y, z%y), select(cond, x, z) % y);
-
+    Expr cond = (x * x == 16);
+    check(select(cond, x + 1, x + 5), select(cond, 1, 5) + x);
+    check(select(cond, x + y, x + z), select(cond, y, z) + x);
+    check(select(cond, y + x, x + z), select(cond, y, z) + x);
+    check(select(cond, y + x, z + x), select(cond, y, z) + x);
+    check(select(cond, x + y, z + x), select(cond, y, z) + x);
+    check(select(cond, x * 2, x * 5), select(cond, 2, 5) * x);
+    check(select(cond, x * y, x * z), select(cond, y, z) * x);
+    check(select(cond, y * x, x * z), select(cond, y, z) * x);
+    check(select(cond, y * x, z * x), select(cond, y, z) * x);
+    check(select(cond, x * y, z * x), select(cond, y, z) * x);
+    check(select(cond, x - y, x - z), x - select(cond, y, z));
+    check(select(cond, y - x, z - x), select(cond, y, z) - x);
+    check(select(cond, x + y, x - z), select(cond, y, 0 - z) + x);
+    check(select(cond, y + x, x - z), select(cond, y, 0 - z) + x);
+    check(select(cond, x - z, x + y), select(cond, 0 - z, y) + x);
+    check(select(cond, x - z, y + x), select(cond, 0 - z, y) + x);
+    check(select(cond, x / y, z / y), select(cond, x, z) / y);
+    check(select(cond, x % y, z % y), select(cond, x, z) % y);
 
     {
-
         Expr b[12];
         for (int i = 0; i < 12; i++) {
             b[i] = Variable::make(Bool(), unique_name('b'));
@@ -1449,7 +1685,7 @@ void check_math() {
     check(Halide::log(0.5f + 0.5f), 0.0f);
     check(Halide::exp(Halide::log(2.0f)), 2.0f);
     check(Halide::pow(4.0f, 0.5f), 2.0f);
-    check(Halide::round(1000.0f*Halide::pow(Halide::exp(1.0f), Halide::log(10.0f))), 10000.0f);
+    check(Halide::round(1000.0f * Halide::pow(Halide::exp(1.0f), Halide::log(10.0f))), 10000.0f);
 
     check(Halide::floor(0.98f), 0.0f);
     check(Halide::ceil(0.98f), 1.0f);
@@ -1506,24 +1742,92 @@ void check_overflow() {
         internal_assert(is_const(simplify(e)))
             << "Non-everflowing expression should have simplified: " << e << "\n";
     }
+
+    // We also risk 64-bit overflow when computing the constant bounds of subexpressions
+    Expr x = Variable::make(halide_type_of<int64_t>(), "x");
+    Expr y = Variable::make(halide_type_of<int64_t>(), "y");
+
+    Expr zero = make_const(Int(64), 0);
+    Expr two_32 = make_const(Int(64), (int64_t)1 << 32);
+    Expr neg_two_32 = make_const(Int(64), -((int64_t)1 << 32));
+    Expr min_64 = make_const(Int(64), INT64_MIN);
+    Expr max_64 = make_const(Int(64), INT64_MAX);
+    for (int x_pos = 0; x_pos <= 1; x_pos++) {
+        for (int y_pos = 0; y_pos <= 1; y_pos++) {
+            // Mul
+            {
+                Scope<Interval> scope;
+                if (x_pos) {
+                    scope.push("x", {zero, two_32});
+                } else {
+                    scope.push("x", {neg_two_32, zero});
+                }
+                if (y_pos) {
+                    scope.push("y", {zero, two_32});
+                } else {
+                    scope.push("y", {neg_two_32, zero});
+                }
+                if (x_pos == y_pos) {
+                    internal_assert(!is_const(simplify((x * y) < two_32, true, scope)));
+                } else {
+                    internal_assert(!is_const(simplify((x * y) > neg_two_32, true, scope)));
+                }
+            }
+            // Add/Sub
+            {
+                Scope<Interval> scope;
+                if (x_pos) {
+                    scope.push("x", {zero, max_64});
+                } else {
+                    scope.push("x", {min_64, zero});
+                }
+                if (y_pos) {
+                    scope.push("y", {zero, max_64});
+                } else {
+                    scope.push("y", {min_64, zero});
+                }
+                if (x_pos && y_pos) {
+                    internal_assert(!is_const(simplify((x + y) < two_32, true, scope)));
+                } else if (x_pos && !y_pos) {
+                    internal_assert(!is_const(simplify((x - y) < two_32, true, scope)));
+                } else if (!x_pos && y_pos) {
+                    internal_assert(!is_const(simplify((x - y) > neg_two_32, true, scope)));
+                } else {
+                    internal_assert(!is_const(simplify((x + y) > neg_two_32, true, scope)));
+                }
+            }
+        }
+    }
 }
 
 template<typename T>
 void check_clz(uint64_t value, uint64_t result) {
     Expr x = Variable::make(halide_type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_leading_zeros(x)), cast<T>(Expr(result)));
+
+    Type vt = halide_type_of<T>().with_lanes(4);
+    Expr xv = Variable::make(vt, "x");
+    check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_leading_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_ctz(uint64_t value, uint64_t result) {
     Expr x = Variable::make(halide_type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_trailing_zeros(x)), cast<T>(Expr(result)));
+
+    Type vt = halide_type_of<T>().with_lanes(4);
+    Expr xv = Variable::make(vt, "x");
+    check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_trailing_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_popcount(uint64_t value, uint64_t result) {
     Expr x = Variable::make(halide_type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), popcount(x)), cast<T>(Expr(result)));
+
+    Type vt = halide_type_of<T>().with_lanes(4);
+    Expr xv = Variable::make(vt, "x");
+    check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), popcount(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 void check_bitwise() {
@@ -1533,13 +1837,13 @@ void check_bitwise() {
     check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);
     check(cast(Int(16), x) >> 10, cast(Int(16), x) / 1024);
 
-    // Correctly triggers an error (shift by negative amount).
-    // check(cast(Int(16), x) << -10, 0);
-    // check(cast(Int(16), x) >> -10, 0);
+    // Shift by negative amount is a shift in the opposite direction
+    check(cast(Int(16), x) << -10, cast(Int(16), x) / 1024);
+    check(cast(Int(16), x) >> -10, cast(Int(16), x) * 1024);
 
-    // Correctly triggers an error (shift by >= type size).
-    // check(cast(Int(16), x) << 20, 0);
-    // check(cast(Int(16), x) >> 20, 0);
+    // Shift by >= type size is an overflow
+    check_is_sio(cast(Int(16), x) << 20);
+    check_is_sio(cast(Int(16), x) >> 20);
 
     // Check bitwise_and. (Added as result of a bug.)
     // TODO: more coverage of bitwise_and and bitwise_or.
@@ -1549,6 +1853,13 @@ void check_bitwise() {
     // Check constant-folding of bitwise ops (and indirectly, reinterpret)
     check(Let::make(x.as<Variable>()->name, 5, (((~x) & 3) | 16) ^ 33), ((~5 & 3) | 16) ^ 33);
     check(Let::make(x.as<Variable>()->name, 5, (((~cast<uint8_t>(x)) & 3) | 16) ^ 33), make_const(UInt(8), ((~5 & 3) | 16) ^ 33));
+
+    // Check bitwise ops of constant broadcasts.
+    Expr v = Broadcast::make(12, 4);
+    check(v >> 2, Broadcast::make(3, 4));
+    check(Broadcast::make(32768, 4) >> 1, Broadcast::make(16384, 4));
+    check((Broadcast::make(1, 4) << 15) >> 1, Broadcast::make(16384, 4));
+    check(Ramp::make(0, 1, 4) << Broadcast::make(4, 4), Ramp::make(0, 16, 4));
 
     check_clz<int8_t>(10, 4);
     check_clz<int16_t>(10, 12);
@@ -1586,28 +1897,27 @@ void check_lets() {
     Expr a = Variable::make(Int(32), "a");
     Expr b = Variable::make(Int(32), "b");
     // Check constants get pushed inwards
-    check(Let::make("x", 3, x+4), 7);
+    check(Let::make("x", 3, x + 4), 7);
 
     // Check ramps in lets get pushed inwards
-    check(Let::make("v", ramp(x*2+7, 3, 4), v + Expr(broadcast(2, 4))),
-          ramp(x*2+9, 3, 4));
+    check(Let::make("v", ramp(x * 2 + 7, 3, 4), v + Expr(broadcast(2, 4))),
+          ramp(x * 2 + 9, 3, 4));
 
     // Check broadcasts in lets get pushed inwards
     check(Let::make("v", broadcast(x, 4), v + Expr(broadcast(2, 4))),
-          broadcast(x+2, 4));
+          broadcast(x + 2, 4));
 
     // Check that dead lets get stripped
-    check(Let::make("x", 3*y*y*y, 4), 4);
-    check(Let::make("a", 3*y*y*y, Let::make("b", 4*a*a*a, b - b)), 0);
-    check(Let::make("a", b/2, a - a), 0);
-    check(Let::make("a", b/2 + (x + y)*64, a - a), 0);
-    check(Let::make("x", 3*y*y*y, x - x), 0);
+    check(Let::make("x", 3 * y * y * y, 4), 4);
+    check(Let::make("a", 3 * y * y * y, Let::make("b", 4 * a * a * a, b - b)), 0);
+    check(Let::make("a", b / 2, a - a), 0);
+    check(Let::make("a", b / 2 + (x + y) * 64, a - a), 0);
+    check(Let::make("x", 3 * y * y * y, x - x), 0);
     check(Let::make("x", 0, 0), 0);
 
     // Check that lets inside an evaluate node get lifted
     check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Let::make("y", 10, x + y + 2))),
           LetStmt::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Evaluate::make(x + 12)));
-
 }
 
 void check_inv(Expr before) {
@@ -1624,8 +1934,8 @@ void check_invariant() {
     // fuzz testing of each as a side effect). The final expression
     // should be exactly the same object as the input.
     for (Type t : {UInt(1), UInt(8), UInt(16), UInt(32), UInt(64),
-                Int(8), Int(16), Int(32), Int(64),
-                Float(32), Float(64)}) {
+                   Int(8), Int(16), Int(32), Int(64),
+                   Float(32), Float(64)}) {
         Expr x = Variable::make(t, "x");
         Expr y = Variable::make(t, "y");
         Expr z = Variable::make(t, "z");
@@ -1685,7 +1995,7 @@ int main(int argc, char **argv) {
     {
         Expr e = x;
         for (int i = 0; i < 100; i++) {
-            e = max(e, 1)/2;
+            e = max(e, 1) / 2;
         }
         check(e, e);
     }
@@ -1748,6 +2058,46 @@ int main(int argc, char **argv) {
         check(Halide::is_nan(Expr(std::nan("1"))), const_true());
     }
 
+    // Check that is_inf() returns a boolean result for constant inputs
+    {
+        constexpr float inf32 = std::numeric_limits<float>::infinity();
+        constexpr double inf64 = std::numeric_limits<double>::infinity();
+
+        check(Halide::is_inf(cast<float16_t>(Expr(0.f))), const_false());
+        check(Halide::is_inf(Expr(0.f)), const_false());
+        check(Halide::is_inf(Expr(0.0)), const_false());
+
+        check(Halide::is_inf(Expr(cast<float16_t>(inf32))), const_true());
+        check(Halide::is_inf(Expr(inf32)), const_true());
+        check(Halide::is_inf(Expr(inf64)), const_true());
+
+        check(Halide::is_inf(Expr(cast<float16_t>(-inf32))), const_true());
+        check(Halide::is_inf(Expr(-inf32)), const_true());
+        check(Halide::is_inf(Expr(-inf64)), const_true());
+    }
+
+    // Check that is_finite() returns a boolean result for constant inputs
+    {
+        constexpr float inf32 = std::numeric_limits<float>::infinity();
+        constexpr double inf64 = std::numeric_limits<double>::infinity();
+
+        check(Halide::is_finite(cast<float16_t>(Expr(0.f))), const_true());
+        check(Halide::is_finite(Expr(0.f)), const_true());
+        check(Halide::is_finite(Expr(0.0)), const_true());
+
+        check(Halide::is_finite(Expr(cast<float16_t>(std::nanf("1")))), const_false());
+        check(Halide::is_finite(Expr(std::nanf("1"))), const_false());
+        check(Halide::is_finite(Expr(std::nan("1"))), const_false());
+
+        check(Halide::is_finite(Expr(cast<float16_t>(inf32))), const_false());
+        check(Halide::is_finite(Expr(inf32)), const_false());
+        check(Halide::is_finite(Expr(inf64)), const_false());
+
+        check(Halide::is_finite(Expr(cast<float16_t>(-inf32))), const_false());
+        check(Halide::is_finite(Expr(-inf32)), const_false());
+        check(Halide::is_finite(Expr(-inf64)), const_false());
+    }
+
     {
         using ConciseCasts::i32;
 
@@ -1763,15 +2113,15 @@ int main(int argc, char **argv) {
         const Expr a = Expr(std::numeric_limits<int16_t>::lowest());
         const Expr b = Expr(std::numeric_limits<int16_t>::max());
 
-        check(a >> 14,  i16(-2));
-        check(a << 14,  i16(0));
-        check(a >> 15,  i16(-1));
-        check(a << 15,  i16(0));
+        check(a >> 14, i16(-2));
+        check(a << 14, i16(0));
+        check(a >> 15, i16(-1));
+        check(a << 15, i16(0));
 
-        check(b >> 14,  i16(1));
-        check(b << 14,  i16(-16384));
-        check(b >> 15,  i16(0));
-        check(b << 15,  i16(-32768));
+        check(b >> 14, i16(1));
+        check(b << 14, i16(-16384));
+        check(b >> 15, i16(0));
+        check(b << 15, i16(-32768));
     }
 
     {
@@ -1783,7 +2133,7 @@ int main(int argc, char **argv) {
         check(a >> 15, u16(0));
         check(b >> 15, u16(1));
         check(a << 15, u16(0));
-        check(b << 15, Expr((uint16_t) 0x8000));
+        check(b << 15, Expr((uint16_t)0x8000));
     }
 
     {
@@ -1792,15 +2142,15 @@ int main(int argc, char **argv) {
         const Expr a = Expr(std::numeric_limits<int64_t>::lowest());
         const Expr b = Expr(std::numeric_limits<int64_t>::max());
 
-        check(a >> 62,  i64(-2));
+        check(a >> 62, i64(-2));
         check_is_sio(a << 62);
-        check(a >> 63,  i64(-1));
-        check(a << 63,  i64(0));
+        check(a >> 63, i64(-1));
+        check(a << 63, i64(0));
 
-        check(b >> 62,  i64(1));
+        check(b >> 62, i64(1));
         check_is_sio(b << 62);
-        check(b >> 63,  i64(0));
-        check(b << 63,  Expr(std::numeric_limits<int64_t>::lowest()));
+        check(b >> 63, i64(0));
+        check(b << 63, Expr(std::numeric_limits<int64_t>::lowest()));
     }
 
     {
@@ -1812,7 +2162,21 @@ int main(int argc, char **argv) {
         check(a >> 63, u64(0));
         check(b >> 63, u64(1));
         check(a << 63, u64(0));
-        check(b << 63, Expr((uint64_t) 0x8000000000000000ULL));
+        check(b << 63, Expr((uint64_t)0x8000000000000000ULL));
+    }
+
+    {
+        Expr vec_x = Variable::make(Int(32, 32), "x");
+        Expr vec_y = Variable::make(Int(32, 32), "y");
+        Expr vec_z = Variable::make(Int(32, 32), "z");
+        check(slice(slice(vec_x, 2, 3, 8), 3, 2, 3), slice(vec_x, 11, 6, 3));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 0, 2, 32), slice(concat_vectors({vec_x, vec_y}), 0, 2, 32));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 1, 2, 32), slice(concat_vectors({vec_x, vec_y}), 1, 2, 32));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 32), slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 32));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 31), slice(concat_vectors({vec_x, vec_y}), 2, 2, 31));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 0, 2, 16), slice(concat_vectors({vec_x}), 0, 2, 16));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 32, 2, 22), slice(concat_vectors({vec_y, vec_z}), 0, 2, 22));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 33, 2, 16), slice(concat_vectors({vec_y}), 1, 2, 16));
     }
 
     // Check a bounds-related fuzz tester failure found in issue https://github.com/halide/Halide/issues/3764

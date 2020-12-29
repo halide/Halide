@@ -75,9 +75,8 @@ bool test(int vec_width) {
             if (!equals(outputf(x, y), outputg(x, y))) {
                 std::cout << type_of<A>() << " x " << vec_width << " failed at "
                           << x << " " << y << ": "
-                          << outputf(x, y) << " vs " << outputg(x, y)
-                          << std::endl;
-                printf("Failure!\n");
+                          << outputf(x, y) << " vs " << outputg(x, y) << "\n"
+                          << "Failure!\n";
                 exit(1);
                 return false;
             }

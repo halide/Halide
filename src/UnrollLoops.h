@@ -5,7 +5,7 @@
  * Defines the lowering pass that unrolls loops marked as such
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
@@ -13,7 +13,7 @@ namespace Internal {
 /** Take a statement with for loops marked for unrolling, and convert
  * each into several copies of the innermost statement. I.e. unroll
  * the loop. */
-Stmt unroll_loops(Stmt);
+Stmt unroll_loops(const Stmt &);
 
 }  // namespace Internal
 }  // namespace Halide

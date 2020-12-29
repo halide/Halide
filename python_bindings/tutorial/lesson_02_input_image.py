@@ -3,25 +3,14 @@
 # This lesson demonstrates how to pass in input images.
 
 # This lesson can be built by invoking the command:
-#    make tutorial_lesson_02_input_image
-# in a shell with the current directory at the top of the halide source tree.
-# Otherwise, see the platform-specific compiler invocations below.
-
-# On linux, you can compile and run it like so:
-# g++ lesson_02*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_02 -std=c++11
-# LD_LIBRARY_PATH=../bin ./lesson_02
-
-# On os x:
-# g++ lesson_02*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_02 -std=c++11
-# DYLD_LIBRARY_PATH=../bin ./lesson_02
-
-# The only Halide header file you need is Halide.h. It includes all of Halide.
-#include "Halide.h"
+#    make test_tutorial_lesson_02_input_image
+# in a shell with the current directory at python_bindings/
 
 import halide as hl
 import numpy as np
-from scipy.misc import imread, imsave
+import imageio
 import os.path
+
 
 def main():
 
@@ -32,7 +21,7 @@ def main():
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
 
     # We create a hl.Buffer object to wrap the numpy array
-    input = hl.Buffer(imread(image_path))
+    input = hl.Buffer(imageio.imread(image_path))
     assert input.type() == hl.UInt(8)
 
     # Next we define our hl.Func object that represents our one pipeline
@@ -97,7 +86,8 @@ def main():
     assert output_image.type() == hl.UInt(8)
 
     # Save the output for inspection. It should look like a bright parrot.
-    imsave("brighter.png", output_image)
+    # python3-imageio versions <2.5 expect a numpy array
+    imageio.imsave("brighter.png", np.asanyarray(output_image))
     print("Created brighter.png result file.")
 
     print("Success!")

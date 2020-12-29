@@ -6,7 +6,7 @@
  * instructions to access storage outside of a GPULane loop.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

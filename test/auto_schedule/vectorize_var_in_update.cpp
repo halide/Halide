@@ -4,6 +4,18 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] Autoschedulers do not support WebAssembly.\n");
+        return 0;
+    }
+
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
+    load_plugin(argv[1]);
+
     // This test is making sure that the auto-scheduler picks the appropriate
     // tail strategy when splitting the var of an update definition.
     // The default tail strategy for this case (i.e. RoundUp) will cause
@@ -21,7 +33,7 @@ int main(int argc, char **argv) {
     in(x, y) = x + y;
     in(x, y) += input(x) - input(y);
 
-    f(x, y) = x*y;
+    f(x, y) = x * y;
     f(r.x, r.y) += in(r.x, r.y) + 3;
     f(x, y) += in(r.x, r.y) + 3;
 
@@ -32,8 +44,7 @@ int main(int argc, char **argv) {
     h(x, y) += g(r.x, r.y) + 3;
 
     // Provide estimates on the pipeline output
-    h.estimate(x, 0, 50);
-    h.estimate(y, 0, 50);
+    h.set_estimates({{0, 50}, {0, 50}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();

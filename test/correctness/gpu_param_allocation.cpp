@@ -6,7 +6,7 @@ using namespace Halide::Internal;
 
 int main(int argc, char **argv) {
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("No gpu target enabled. Skipping test.\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 
@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     Var x("x"), y("y");
 
     Param<int> slices;
-    RDom r(0, 3*slices + 1);
+    RDom r(0, 3 * slices + 1);
     slices.set_range(1, 256);
 
     f(x, y) = x + y;
@@ -27,5 +27,6 @@ int main(int argc, char **argv) {
     slices.set(32);
     g.realize(1024, 1024);
 
+    printf("Success!\n");
     return 0;
 }

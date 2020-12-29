@@ -6,7 +6,7 @@ int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment().with_feature(Target::StrictFloat);
 
     Var x;
-    ImageParam   input(Float(32), 1);
+    ImageParam input(Float(32), 1);
     Param<float> f_param;
 
     Buffer<float> input_buffer(1);

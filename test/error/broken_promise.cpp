@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include "Halide.h"
 
 using namespace Halide;
@@ -29,6 +27,6 @@ int main(int argc, char **argv) {
 
     auto result = f.realize(100, get_jit_target_from_environment().with_feature(Target::CheckUnsafePromises));
 
-    std::cout << "Success!\n";
+    printf("Success!\n");
     return 0;
 }

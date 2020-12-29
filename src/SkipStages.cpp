@@ -11,11 +11,11 @@
 #include "Substitute.h"
 
 #include <iterator>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::set;
 using std::string;
 using std::vector;
@@ -39,19 +39,18 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
     return false;
 }
 
-}  // namespace
-
 class PredicateFinder : public IRVisitor {
 public:
     Expr predicate;
-    PredicateFinder(const string &b, bool s) : predicate(const_false()),
-                                               buffer(b),
-                                               varies(false),
-                                               treat_selects_as_guards(s),
-                                               in_produce(false) {}
+    PredicateFinder(const string &b, bool s)
+        : predicate(const_false()),
+          buffer(b),
+          varies(false),
+          treat_selects_as_guards(s),
+          in_produce(false) {
+    }
 
 private:
-
     using IRVisitor::visit;
     string buffer;
     bool varies;
@@ -60,7 +59,6 @@ private:
     Scope<> varying;
     Scope<> in_pipeline;
     Scope<> local_buffers;
-
 
     void visit(const Variable *op) override {
         bool this_varies = varying.contains(op->name);
@@ -73,7 +71,7 @@ private:
         bool min_varies = varies;
         op->extent.accept(this);
         bool should_pop = false;
-        if (!is_one(op->extent) || min_varies) {
+        if (!is_const_one(op->extent) || min_varies) {
             should_pop = true;
             varying.push(op->name);
         }
@@ -87,7 +85,7 @@ private:
     }
 
     template<typename T>
-    void visit_let(const std::string &name, Expr value, T body) {
+    void visit_let(const std::string &name, const Expr &value, T body) {
         bool old_varies = varies;
         varies = false;
         value.accept(this);
@@ -125,9 +123,9 @@ private:
 
     // Logical operators with eager constant folding
     Expr make_and(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) {
+        if (is_const_zero(a) || is_const_one(b)) {
             return a;
-        } else if (is_zero(b) || is_one(a)) {
+        } else if (is_const_zero(b) || is_const_one(a)) {
             return b;
         } else if (equal(a, b)) {
             return a;
@@ -137,9 +135,9 @@ private:
     }
 
     Expr make_or(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) {
+        if (is_const_zero(a) || is_const_one(b)) {
             return b;
-        } else if (is_zero(b) || is_one(a)) {
+        } else if (is_const_zero(b) || is_const_one(a)) {
             return a;
         } else if (equal(a, b)) {
             return a;
@@ -148,28 +146,28 @@ private:
         }
     }
 
-    Expr make_select(Expr a, Expr b, Expr c) {
-        if (is_one(a)) {
+    Expr make_select(const Expr &a, Expr b, Expr c) {
+        if (is_const_one(a)) {
             return b;
-        } else if (is_zero(a)) {
+        } else if (is_const_zero(a)) {
             return c;
-        } else if (is_one(b)) {
+        } else if (is_const_one(b)) {
             return make_or(a, c);
-        } else if (is_zero(b)) {
+        } else if (is_const_zero(b)) {
             return make_and(make_not(a), c);
-        } else if (is_one(c)) {
+        } else if (is_const_one(c)) {
             return make_or(make_not(a), b);
-        } else if (is_zero(c)) {
+        } else if (is_const_zero(c)) {
             return make_and(a, b);
         } else {
             return select(a, b, c);
         }
     }
 
-    Expr make_not(Expr a) {
-        if (is_one(a)) {
+    Expr make_not(const Expr &a) {
+        if (is_const_one(a)) {
             return make_zero(a.type());
-        } else if (is_zero(a)) {
+        } else if (is_const_zero(a)) {
             return make_one(a.type());
         } else {
             return !a;
@@ -177,7 +175,7 @@ private:
     }
 
     template<typename T>
-    void visit_conditional(Expr condition, T true_case, T false_case) {
+    void visit_conditional(const Expr &condition, T true_case, T false_case) {
         Expr old_predicate = predicate;
 
         predicate = const_false();
@@ -185,7 +183,9 @@ private:
         Expr true_predicate = predicate;
 
         predicate = const_false();
-        if (false_case.defined()) false_case.accept(this);
+        if (false_case.defined()) {
+            false_case.accept(this);
+        }
         Expr false_predicate = predicate;
 
         bool old_varies = varies;
@@ -251,8 +251,10 @@ private:
 
 class ProductionGuarder : public IRMutator {
 public:
-    ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p):
-        buffer(b), compute_predicate(compute_p), alloc_predicate(alloc_p) {}
+    ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p)
+        : buffer(b), compute_predicate(std::move(compute_p)), alloc_predicate(std::move(alloc_p)) {
+    }
+
 private:
     string buffer;
     Expr compute_predicate;
@@ -277,7 +279,7 @@ private:
     Expr visit(const Call *op) override {
 
         if ((op->name == "halide_memoization_cache_lookup") &&
-             memoize_call_uses_buffer(op)) {
+            memoize_call_uses_buffer(op)) {
             // We need to guard call to halide_memoization_cache_lookup to only
             // be executed if the corresponding buffer is allocated. We ignore
             // the compute_predicate since in the case that alloc_predicate is
@@ -289,7 +291,7 @@ private:
             return Call::make(op->type, Call::if_then_else,
                               {alloc_predicate, op, 0}, Call::PureIntrinsic);
         } else if ((op->name == "halide_memoization_cache_store") &&
-                    memoize_call_uses_buffer(op)) {
+                   memoize_call_uses_buffer(op)) {
             // We need to wrap the halide_memoization_cache_store with the
             // compute_predicate, since the data to be written is only valid if
             // the producer of the buffer is executed.
@@ -319,7 +321,10 @@ private:
 
 class StageSkipper : public IRMutator {
 public:
-    StageSkipper(const string &f) : func(f), in_vector_loop(false) {}
+    StageSkipper(const string &f)
+        : func(f), in_vector_loop(false) {
+    }
+
 private:
     string func;
     using IRMutator::visit;
@@ -395,7 +400,7 @@ private:
                 compute_predicate = const_true();
             }
 
-            if (!is_one(compute_predicate)) {
+            if (!is_const_one(compute_predicate)) {
 
                 debug(3) << "Finding allocate predicate for " << op->name << "\n";
                 PredicateFinder find_alloc(op->name, false);
@@ -496,20 +501,23 @@ class MightBeSkippable : public IRVisitor {
     }
 
     set<string> unconditionally_used;
+
 public:
     set<string> candidates;
 };
+
+}  // namespace
 
 Stmt skip_stages(Stmt stmt, const vector<string> &order) {
     // Don't consider the last stage, because it's the output, so it's
     // never skippable.
     MightBeSkippable check;
     stmt.accept(&check);
-    for (size_t i = order.size()-1; i > 0; i--) {
-        debug(2) << "skip_stages checking " << order[i-1] << "\n";
-        if (check.candidates.count(order[i-1])) {
-            debug(2) << "skip_stages can skip " << order[i-1] << "\n";
-            StageSkipper skipper(order[i-1]);
+    for (size_t i = order.size() - 1; i > 0; i--) {
+        debug(2) << "skip_stages checking " << order[i - 1] << "\n";
+        if (check.candidates.count(order[i - 1])) {
+            debug(2) << "skip_stages can skip " << order[i - 1] << "\n";
+            StageSkipper skipper(order[i - 1]);
             Stmt new_stmt = skipper.mutate(stmt);
             if (!new_stmt.same_as(stmt)) {
                 // Might have made earlier stages skippable too

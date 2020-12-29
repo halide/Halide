@@ -4,12 +4,12 @@
 // does not start at (0, 0).
 
 // On linux, you can compile and run it like so:
-// g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_06 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_06
+// g++ lesson_06*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_06 -std=c++11
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_06
 
 // On os x:
-// g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -o lesson_06 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_06
+// g++ lesson_06*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_06 -std=c++11
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_06
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -72,8 +72,8 @@ int main(int argc, char **argv) {
     // from (100, 50) to (104, 56) inclusive.
 
     // We start by creating an image that represents that rectangle:
-    Buffer<int> shifted(5, 7); // In the constructor we tell it the size.
-    shifted.set_min(100, 50); // Then we tell it the top-left corner.
+    Buffer<int> shifted(5, 7);  // In the constructor we tell it the size.
+    shifted.set_min(100, 50);   // Then we tell it the top-left corner.
 
     printf("Evaluating gradient from (100, 50) to (104, 56)\n");
 

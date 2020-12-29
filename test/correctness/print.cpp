@@ -1,8 +1,8 @@
 #include "Halide.h"
+#include <limits>
 #include <stdio.h>
 #include <string>
 #include <vector>
-#include <limits>
 
 using namespace Halide;
 
@@ -22,14 +22,14 @@ int main(int argc, char **argv) {
     if (target.has_feature(Target::Profile)) {
         // The profiler adds lots of extra prints, so counting the
         // number of prints is not useful.
-        printf("Skipping test because profiler is active\n");
+        printf("[SKIP] Test incompatible with profiler.\n");
         return 0;
     }
 
     if (target.has_feature(Target::Debug)) {
         // Same thing here: the runtime debug adds lots of extra prints,
         // so counting the number of prints is not useful.
-        printf("Skipping test because runtime debug is active\n");
+        printf("[SKIP] Test incompatible with debug runtime.\n");
         return 0;
     }
 
@@ -92,7 +92,6 @@ int main(int argc, char **argv) {
         assert(nine == 9);
         assert(forty_two == 42.0f);
         assert(p == 127);
-
     }
 
     messages.clear();
@@ -131,12 +130,12 @@ int main(int argc, char **argv) {
     // Check that Halide's stringification of floats and doubles
     // matches %f and %e respectively.
 
-    #ifndef _WIN32
+#ifndef _WIN32
     // msvc's library has different ideas about how %f and %e should come out.
     {
         Func f, g;
 
-        const int N = 1000000;
+        const int N = 100000;
 
         Expr e = reinterpret(Float(32), random_uint());
         // Make sure we cover some special values.
@@ -199,10 +198,8 @@ int main(int argc, char **argv) {
                 return -1;
             }
         }
-
-
     }
-    #endif
+#endif
 
     messages.clear();
 
@@ -213,12 +210,12 @@ int main(int argc, char **argv) {
         f(x) = print(x * 3);
         f.set_custom_print(halide_print);
         f.vectorize(x, 32);
-        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (target.has_feature(Target::HVX)) {
             f.hexagon();
         }
         Buffer<int> result = f.realize(128);
 
-        if (!target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (!target.has_feature(Target::HVX)) {
             assert((int)messages.size() == result.width());
             for (size_t i = 0; i < messages.size(); i++) {
                 assert(messages[i] == std::to_string(i * 3) + "\n");
@@ -238,12 +235,12 @@ int main(int argc, char **argv) {
         f(x) = print_when(x % 2 == 0, x * 3);
         f.set_custom_print(halide_print);
         f.vectorize(x, 32);
-        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (target.has_feature(Target::HVX)) {
             f.hexagon();
         }
         Buffer<int> result = f.realize(128);
 
-        if (!target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (!target.has_feature(Target::HVX)) {
             assert((int)messages.size() == result.width() / 2);
             for (size_t i = 0; i < messages.size(); i++) {
                 assert(messages[i] == std::to_string(i * 2 * 3) + "\n");
@@ -253,7 +250,6 @@ int main(int argc, char **argv) {
             // can't read the messages.
         }
     }
-
 
     printf("Success!\n");
     return 0;

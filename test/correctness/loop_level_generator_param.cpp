@@ -11,7 +11,7 @@ std::string strip_uniquified_names(const std::string &str) {
     std::string result = str;
     while ((pos = result.find("$", pos)) != std::string::npos) {
         int digits = 0;
-        while (pos+digits+1 < result.size() && isdigit(result[pos+digits+1])) {
+        while (pos + digits + 1 < result.size() && isdigit(result[pos + digits + 1])) {
             digits++;
         }
         if (digits > 0) {
@@ -31,8 +31,9 @@ public:
     }
 
 private:
-    CheckLoopLevels(const std::string &inner_loop_level, const std::string &outer_loop_level) :
-        inner_loop_level(inner_loop_level), outer_loop_level(outer_loop_level) {}
+    CheckLoopLevels(const std::string &inner_loop_level, const std::string &outer_loop_level)
+        : inner_loop_level(inner_loop_level), outer_loop_level(outer_loop_level) {
+    }
 
     using IRVisitor::visit;
 
@@ -76,8 +77,8 @@ Var x{"x"};
 
 class Example : public Generator<Example> {
 public:
-    GeneratorParam<LoopLevel> inner_compute_at{ "inner_compute_at", LoopLevel::inlined() };
-    Output<Func> inner{ "inner", Int(32), 1 };
+    GeneratorParam<LoopLevel> inner_compute_at{"inner_compute_at", LoopLevel::inlined()};
+    Output<Func> inner{"inner", Int(32), 1};
 
     void generate() {
         // Use sin() as a proxy for verifying compute_at, since it won't
@@ -106,8 +107,8 @@ int main(int argc, char **argv) {
         outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
 
         CheckLoopLevels::lower_and_check(outer,
-            /* inner loop level */ "inner.s0.x",
-            /* outer loop level */ "outer.s0.x");
+                                         /* inner loop level */ "inner.s0.x",
+                                         /* outer loop level */ "outer.s0.x");
     }
 
     {
@@ -124,8 +125,8 @@ int main(int argc, char **argv) {
         inner_compute_at.set({outer, x});
 
         CheckLoopLevels::lower_and_check(outer,
-            /* inner loop level */ "outer.s0.x",
-            /* outer loop level */ "outer.s0.x");
+                                         /* inner loop level */ "outer.s0.x",
+                                         /* outer loop level */ "outer.s0.x");
     }
 
     {
@@ -139,8 +140,8 @@ int main(int argc, char **argv) {
         gen->inner_compute_at.set({outer, x});
 
         CheckLoopLevels::lower_and_check(outer,
-            /* inner loop level */ "outer.s0.x",
-            /* outer loop level */ "outer.s0.x");
+                                         /* inner loop level */ "outer.s0.x",
+                                         /* outer loop level */ "outer.s0.x");
     }
 
     {
@@ -161,8 +162,8 @@ int main(int argc, char **argv) {
         inner_compute_at.set({outer, x});
 
         CheckLoopLevels::lower_and_check(outer,
-            /* inner loop level */ "inner.s0.x",
-            /* outer loop level */ "outer.s0.x");
+                                         /* inner loop level */ "inner.s0.x",
+                                         /* outer loop level */ "outer.s0.x");
     }
 
     printf("Success!\n");

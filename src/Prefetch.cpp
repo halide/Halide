@@ -1,13 +1,17 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <utility>
 
 #include "Bounds.h"
 #include "ExprUsesVar.h"
+#include "Function.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "Prefetch.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Target.h"
 #include "Util.h"
 
 namespace Halide {
@@ -20,13 +24,6 @@ using std::vector;
 
 namespace {
 
-const Definition &get_stage_definition(const Function &f, int stage_num) {
-    if (stage_num == 0) {
-        return f.definition();
-    }
-    return f.update(stage_num - 1);
-}
-
 // Collect the bounds of all the externally referenced buffers in a stmt.
 class CollectExternalBufferBounds : public IRVisitor {
 public:
@@ -34,7 +31,7 @@ public:
 
     using IRVisitor::visit;
 
-    void add_buffer_bounds(const string &name, Buffer<> image, Parameter param, int dims) {
+    void add_buffer_bounds(const string &name, const Buffer<> &image, const Parameter &param, int dims) {
         Box b;
         for (int i = 0; i < dims; ++i) {
             string dim_name = std::to_string(i);
@@ -63,17 +60,17 @@ public:
 class InjectPrefetch : public IRMutator {
 public:
     InjectPrefetch(const map<string, Function> &e, const map<string, Box> &buffers)
-        : env(e), external_buffers(buffers) {}
+        : env(e), external_buffers(buffers) {
+    }
 
 private:
     const map<string, Function> &env;
     const map<string, Box> &external_buffers;
     Scope<Box> buffer_bounds;
 
-private:
     using IRMutator::visit;
 
-    Box get_buffer_bounds(string name, int dims) {
+    Box get_buffer_bounds(const string &name, int dims) {
         if (buffer_bounds.contains(name)) {
             const Box &b = buffer_bounds.ref(name);
             internal_assert((int)b.size() == dims);
@@ -82,7 +79,7 @@ private:
 
         // It is an external buffer.
         user_assert(env.find(name) == env.end())
-            << "Prefetch to buffer \"" << name << "\" which has not been allocated\n" ;
+            << "Prefetch to buffer \"" << name << "\" which has not been allocated\n";
 
         const auto &iter = external_buffers.find(name);
         internal_assert(iter != external_buffers.end());
@@ -149,11 +146,11 @@ private:
                 condition = simplify(prefetch_box.used && condition);
             }
             internal_assert(!new_bounds.empty());
-            return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, condition, std::move(body));
+            return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, condition, body);
         }
 
         if (!body.same_as(op->body)) {
-            return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, std::move(body));
+            return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, body);
         } else if (op->bounds.empty()) {
             // Remove the Prefetch IR since it is prefetching an empty region
             user_warning << "Removing prefetch of " << p.name
@@ -170,7 +167,8 @@ class InjectPlaceholderPrefetch : public IRMutator {
 public:
     InjectPlaceholderPrefetch(const map<string, Function> &e, const string &prefix,
                               const vector<PrefetchDirective> &prefetches)
-        : env(e), prefix(prefix), prefetch_list(prefetches) {}
+        : env(e), prefix(prefix), prefetch_list(prefetches) {
+    }
 
 private:
     const map<string, Function> &env;
@@ -179,7 +177,7 @@ private:
 
     using IRMutator::visit;
 
-    Stmt add_placeholder_prefetch(const string &loop_var, PrefetchDirective p, Stmt body) {
+    Stmt add_placeholder_prefetch(const string &loop_var, PrefetchDirective p, const Stmt &body) {
         debug(5) << "...Injecting placeholder prefetch for " << loop_var << "\n";
         p.var = loop_var;
         internal_assert(body.defined());
@@ -231,45 +229,49 @@ class ReducePrefetchDimension : public IRMutator {
         Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Evaluate>();
         internal_assert(op);
-        const Call *call = op->value.as<Call>();
+        const Call *prefetch = Call::as_intrinsic(op->value, {Call::prefetch});
 
         // TODO(psuriana): Ideally, we want to keep the loop size minimal to
         // minimize the number of prefetch calls. We probably want to lift
         // the dimensions with larger strides and keep the smaller ones in
         // the prefetch call.
 
-        size_t max_arg_size = 2 + 2 * max_dim; // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...}
-        if (call && call->is_intrinsic(Call::prefetch) && (call->args.size() > max_arg_size)) {
-            const Variable *base = call->args[0].as<Variable>();
+        size_t max_arg_size = 2 + 2 * max_dim;  // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...}
+        if (prefetch && (prefetch->args.size() > max_arg_size)) {
+            const Variable *base = prefetch->args[0].as<Variable>();
             internal_assert(base && base->type.is_handle());
 
             vector<string> index_names;
-            Expr new_offset = call->args[1];
-            for (size_t i = max_arg_size; i < call->args.size(); i += 2) {
-                Expr stride = call->args[i+1];
-                string index_name = "prefetch_reduce_" + base->name + "." + std::to_string((i-1)/2);
+            Expr new_offset = prefetch->args[1];
+            for (size_t i = max_arg_size; i < prefetch->args.size(); i += 2) {
+                Expr stride = prefetch->args[i + 1];
+                string index_name = "prefetch_reduce_" + base->name + "." + std::to_string((i - 1) / 2);
                 index_names.push_back(index_name);
                 new_offset += Variable::make(Int(32), index_name) * stride;
             }
 
             vector<Expr> args = {base, new_offset};
             for (size_t i = 2; i < max_arg_size; ++i) {
-                args.push_back(call->args[i]);
+                args.push_back(prefetch->args[i]);
             }
 
-            stmt = Evaluate::make(Call::make(call->type, Call::prefetch, args, Call::Intrinsic));
+            stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
-                stmt = For::make(index_names[i], 0, call->args[(i+max_dim)*2 + 2],
+                stmt = For::make(index_names[i], 0, prefetch->args[(i + max_dim) * 2 + 2],
                                  ForType::Serial, DeviceAPI::None, stmt);
             }
             debug(5) << "\nReduce prefetch to " << max_dim << " dim:\n"
-                     << "Before:\n" << Expr(call) << "\nAfter:\n" << stmt << "\n";
+                     << "Before:\n"
+                     << Expr(prefetch) << "\nAfter:\n"
+                     << stmt << "\n";
         }
         return stmt;
     }
 
 public:
-    ReducePrefetchDimension(size_t dim) : max_dim(dim) {}
+    ReducePrefetchDimension(size_t dim)
+        : max_dim(dim) {
+    }
 };
 
 // If the prefetched data is larger than 'max_byte_size', we need to tile the
@@ -284,23 +286,21 @@ class SplitPrefetch : public IRMutator {
         Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Evaluate>();
         internal_assert(op);
-        const Call *call = op->value.as<Call>();
-
-        if (call && call->is_intrinsic(Call::prefetch)) {
-            const Variable *base = call->args[0].as<Variable>();
+        if (const Call *prefetch = Call::as_intrinsic(op->value, {Call::prefetch})) {
+            const Variable *base = prefetch->args[0].as<Variable>();
             internal_assert(base && base->type.is_handle());
 
-            int elem_size = call->type.bytes();
+            int elem_size = prefetch->type.bytes();
 
             vector<string> index_names;
             vector<Expr> extents;
-            Expr new_offset = call->args[1];
-            for (size_t i = 2; i < call->args.size(); i += 2) {
-                Expr extent = call->args[i];
-                Expr stride = call->args[i+1];
+            Expr new_offset = prefetch->args[1];
+            for (size_t i = 2; i < prefetch->args.size(); i += 2) {
+                Expr extent = prefetch->args[i];
+                Expr stride = prefetch->args[i + 1];
                 Expr stride_bytes = stride * elem_size;
 
-                string index_name = "prefetch_split_" + base->name + "." + std::to_string((i-1)/2);
+                string index_name = "prefetch_split_" + base->name + "." + std::to_string((i - 1) / 2);
                 index_names.push_back(index_name);
 
                 Expr is_negative_stride = (stride < 0);
@@ -314,38 +314,42 @@ class SplitPrefetch : public IRMutator {
                 } else {
                     // Otherwise, we just prefetch 'max_byte_size' per iteration.
                     Expr abs_stride_bytes = Call::make(stride_bytes.type(), Call::abs, {stride_bytes}, Call::PureIntrinsic);
-                    outer_extent = simplify((extent * abs_stride_bytes + max_byte_size - 1)/max_byte_size);
+                    outer_extent = simplify((extent * abs_stride_bytes + max_byte_size - 1) / max_byte_size);
                     new_offset += outer_var * simplify(select(is_negative_stride, -max_byte_size, max_byte_size));
                 }
                 extents.push_back(outer_extent);
             }
 
             vector<Expr> args = {base, new_offset, Expr(1), simplify(max_byte_size / elem_size)};
-            stmt = Evaluate::make(Call::make(call->type, Call::prefetch, args, Call::Intrinsic));
+            stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
                 stmt = For::make(index_names[i], 0, extents[i],
                                  ForType::Serial, DeviceAPI::None, stmt);
             }
             debug(5) << "\nSplit prefetch to max of " << max_byte_size << " bytes:\n"
-                     << "Before:\n" << Expr(call) << "\nAfter:\n" << stmt << "\n";
+                     << "Before:\n"
+                     << Expr(prefetch) << "\nAfter:\n"
+                     << stmt << "\n";
         }
         return stmt;
     }
 
 public:
-    SplitPrefetch(Expr bytes) : max_byte_size(bytes) {}
+    SplitPrefetch(Expr bytes)
+        : max_byte_size(std::move(bytes)) {
+    }
 };
 
-} // anonymous namespace
+}  // anonymous namespace
 
-Stmt inject_placeholder_prefetch(Stmt s, const map<string, Function> &env,
+Stmt inject_placeholder_prefetch(const Stmt &s, const map<string, Function> &env,
                                  const string &prefix,
                                  const vector<PrefetchDirective> &prefetches) {
     Stmt stmt = InjectPlaceholderPrefetch(env, prefix, prefetches).mutate(s);
     return stmt;
 }
 
-Stmt inject_prefetch(Stmt s, const map<string, Function> &env) {
+Stmt inject_prefetch(const Stmt &s, const map<string, Function> &env) {
     CollectExternalBufferBounds finder;
     s.accept(&finder);
     return InjectPrefetch(env, finder.buffers).mutate(s);
@@ -357,7 +361,7 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
 
     // Hexagon's prefetch takes in a range of address and can be maximum of
     // two dimension. Other architectures generate one prefetch per cache line.
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         max_dim = 2;
     } else if (t.arch == Target::ARM) {
         // ARM's cache line size can be 32 or 64 bytes and it can switch the

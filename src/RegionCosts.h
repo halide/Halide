@@ -23,14 +23,20 @@ struct Cost {
     // Estimate of bytes loaded.
     Expr memory;
 
-    Cost(int64_t arith, int64_t memory) : arith(arith), memory(memory) {}
-    Cost(Expr arith, Expr memory) : arith(std::move(arith)), memory(std::move(memory)) {}
-    Cost() {}
+    Cost(int64_t arith, int64_t memory)
+        : arith(arith), memory(memory) {
+    }
+    Cost(Expr arith, Expr memory)
+        : arith(std::move(arith)), memory(std::move(memory)) {
+    }
+    Cost() = default;
 
-    inline bool defined() const { return arith.defined() && memory.defined(); }
+    inline bool defined() const {
+        return arith.defined() && memory.defined();
+    }
     void simplify();
 
-    friend std::ostream& operator<<(std::ostream &stream, const Cost &c) {
+    friend std::ostream &operator<<(std::ostream &stream, const Cost &c) {
         stream << "[arith: " << c.arith << ", memory: " << c.memory << "]";
         return stream;
     }
@@ -57,19 +63,19 @@ struct RegionCosts {
     /** Return the cost of producing a region (specified by 'bounds') of a
      * function stage (specified by 'func' and 'stage'). 'inlines' specifies
      * names of all the inlined functions. */
-    Cost stage_region_cost(std::string func, int stage, const DimBounds &bounds,
+    Cost stage_region_cost(const std::string &func, int stage, const DimBounds &bounds,
                            const std::set<std::string> &inlines = std::set<std::string>());
 
     /** Return the cost of producing a region of a function stage (specified
      * by 'func' and 'stage'). 'inlines' specifies names of all the inlined
      * functions. */
-    Cost stage_region_cost(std::string func, int stage, const Box &region,
+    Cost stage_region_cost(const std::string &func, int stage, const Box &region,
                            const std::set<std::string> &inlines = std::set<std::string>());
 
     /** Return the cost of producing a region of function 'func'. This adds up the
      * costs of all stages of 'func' required to produce the region. 'inlines'
      * specifies names of all the inlined functions. */
-    Cost region_cost(std::string func, const Box &region,
+    Cost region_cost(const std::string &func, const Box &region,
                      const std::set<std::string> &inlines = std::set<std::string>());
 
     /** Same as region_cost above but this computes the total cost of many
@@ -80,7 +86,7 @@ struct RegionCosts {
     /** Compute the cost of producing a single value by one stage of 'f'.
      * 'inlines' specifies names of all the inlined functions. */
     Cost get_func_stage_cost(const Function &f, int stage,
-                             const std::set<std::string> &inlines = std::set<std::string>());
+                             const std::set<std::string> &inlines = std::set<std::string>()) const;
 
     /** Compute the cost of producing a single value by all stages of 'f'.
      * 'inlines' specifies names of all the inlined functions. This returns a
@@ -93,29 +99,29 @@ struct RegionCosts {
      * containing the costs incurred to access each of the functions required
      * to produce 'func'. */
     std::map<std::string, Expr>
-        stage_detailed_load_costs(std::string func, int stage, DimBounds &bounds,
-                                  const std::set<std::string> &inlines = std::set<std::string>());
+    stage_detailed_load_costs(const std::string &func, int stage, DimBounds &bounds,
+                              const std::set<std::string> &inlines = std::set<std::string>());
 
     /** Return a map containing the costs incurred to access each of the functions
      * required to produce a single value of a function stage. */
     std::map<std::string, Expr>
-        stage_detailed_load_costs(std::string func, int stage,
-                                  const std::set<std::string> &inlines = std::set<std::string>());
+    stage_detailed_load_costs(const std::string &func, int stage,
+                              const std::set<std::string> &inlines = std::set<std::string>());
 
     /** Same as stage_detailed_load_costs above but this computes the cost of a region
      * of 'func'. */
     std::map<std::string, Expr>
-        detailed_load_costs(std::string func, const Box &region,
-                            const std::set<std::string> &inlines = std::set<std::string>());
+    detailed_load_costs(const std::string &func, const Box &region,
+                        const std::set<std::string> &inlines = std::set<std::string>());
 
     /** Same as detailed_load_costs above but this computes the cost of many function
      * regions and aggregates them. */
     std::map<std::string, Expr>
-        detailed_load_costs(const std::map<std::string, Box> &regions,
-                            const std::set<std::string> &inlines = std::set<std::string>());
+    detailed_load_costs(const std::map<std::string, Box> &regions,
+                        const std::set<std::string> &inlines = std::set<std::string>());
 
     /** Return the size of the region of 'func' in bytes. */
-    Expr region_size(std::string func, const Box &region);
+    Expr region_size(const std::string &func, const Box &region);
 
     /** Return the size of the peak amount of memory allocated in bytes. This takes
      * the realization (topological) order of the function regions and the early
@@ -124,7 +130,7 @@ struct RegionCosts {
                           const std::set<std::string> &inlined = std::set<std::string>());
 
     /** Return the size of the input region in bytes. */
-    Expr input_region_size(std::string input, const Box &region);
+    Expr input_region_size(const std::string &input, const Box &region);
 
     /** Return the total size of the many input regions in bytes. */
     Expr input_region_size(const std::map<std::string, Box> &input_regions);

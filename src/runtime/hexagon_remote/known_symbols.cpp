@@ -1,16 +1,16 @@
 #include "HalideRuntime.h"
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <dlfcn.h>
-#include <unistd.h>
 #include <memory.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #include "known_symbols.h"
 
 void *lookup_symbol(const char *name, const known_symbol *map) {
     for (int i = 0; map[i].name; i++) {
-        if (strncmp(name, map[i].name, strlen(map[i].name)+1) == 0) {
+        if (strncmp(name, map[i].name, strlen(map[i].name) + 1) == 0) {
             return map[i].addr;
         }
     }
@@ -94,7 +94,7 @@ void *get_known_symbol(const char *name) {
         {"memcpy", (char *)(&memcpy)},
         {"memmove", (char *)(&memmove)},
         {"memset", (char *)(&memset)},
-        {"memalign", (char*)(*memalign)},
+        {"memalign", (char *)(*memalign)},
         {"strcmp", (char *)(&strcmp)},
         {"strchr", (char *)(char *(*)(char *, int))(&strchr)},
         {"strlen", (char *)(int (*)(const char *))(&strlen)},
@@ -162,7 +162,7 @@ void *get_known_symbol(const char *name) {
         {"floor", (char *)(&floor)},
         {"ceilf", (char *)(&ceilf)},
         {"ceil", (char *)(&ceil)},
-        {NULL, NULL} // Null terminator.
+        {NULL, NULL}  // Null terminator.
     };
 
     return lookup_symbol(name, known_syms);

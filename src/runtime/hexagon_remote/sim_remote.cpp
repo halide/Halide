@@ -1,17 +1,16 @@
-#include "halide_hexagon_remote.h"
 #include "HalideRuntime.h"
+#include "halide_hexagon_remote.h"
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <dlfcn.h>
-#include <unistd.h>
-#include <memory.h>
 #include "hexagon_standalone.h"
+#include <dlfcn.h>
+#include <memory.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
-#include "sim_protocol.h"
-#include "log.h"
-#include "dlib.h"
 #include "known_symbols.h"
+#include "log.h"
+#include "sim_protocol.h"
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
@@ -26,14 +25,14 @@ static void *aligned_malloc(size_t alignment, size_t x) {
         return NULL;
     }
     // We want to store the original pointer prior to the pointer we return.
-    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
+    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void *) - 1) & ~(alignment - 1));
     ((void **)ptr)[-1] = orig;
     return ptr;
 }
 
 static void aligned_free(void *ptr) {
     if (ptr) {
-        free(((void**)ptr)[-1]);
+        free(((void **)ptr)[-1]);
     }
 }
 
@@ -55,24 +54,9 @@ void halide_error(void *user_context, const char *str) {
     halide_print(user_context, str);
 }
 
-// These might not always be available.
-__attribute__((weak)) extern int mmap;
-__attribute__((weak)) extern int mprotect;
-__attribute__((weak)) extern int munmap;
-
 void *halide_get_symbol(const char *name) {
     // dlsym doesn't do anything on the simulator, and we need to
     // support mmap/mprotect/mnmap if needed.
-    static known_symbol known_syms[] = {
-        {"mmap", (char *)(&mmap)},
-        {"mprotect", (char *)(&mprotect)},
-        {"munmap", (char *)(&munmap)},
-    };
-    void *mmap_sym = lookup_symbol(name, known_syms);
-    if (mmap_sym) {
-        return mmap_sym;
-    }
-
     return get_known_symbol(name);
 }
 
@@ -84,52 +68,40 @@ void *halide_get_library_symbol(void *lib, const char *name) {
     return dlsym(lib, name);
 }
 
-__attribute__ ((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
+__attribute__((weak)) void *dlopenbuf(const char *filename, const char *data, int size, int perms);
 
 }  // extern "C"
 
 static void dllib_init() {
     // The simulator needs this call to enable dlopen to work...
     const char *builtin[] = {"libgcc.so", "libc.so", "libstdc++.so"};
-    dlinit(3, const_cast<char**>(builtin));
+    dlinit(3, const_cast<char **>(builtin));
 }
 
-int load_library(const char *soname, const unsigned char *code, int codeLen, bool use_dlopenbuf, handle_t *module_ptr) {
+int load_library(const char *soname, const unsigned char *code, int codeLen, handle_t *module_ptr) {
     void *lib = NULL;
-    if (use_dlopenbuf) {
-        if (!dlopenbuf) {
-            log_printf("dlopenbuf not available.\n");
-            return -1;
-        }
+    if (!dlopenbuf) {
+        log_printf("dlopenbuf not available.\n");
+        return -1;
+    }
 
-        // Open the library
-        dllib_init();
-        // We need to use RTLD_NOW, the libraries we build for Hexagon
-        // offloading do not support lazy bindin.
-        lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_LOCAL | RTLD_NOW);
-        if (!lib) {
-            halide_print(NULL, "dlopenbuf failed\n");
-            halide_print(NULL, dlerror());
-            return -1;
-        }
-    } else {
-        lib = mmap_dlopen(code, codeLen);
-        if (!lib) {
-            halide_print(NULL, "mmap_dlopen failed\n");
-            return -1;
-        }
+    // Open the library
+    dllib_init();
+    // We need to use RTLD_NOW, the libraries we build for Hexagon
+    // offloading do not support lazy bindin.
+    lib = dlopenbuf(soname, (const char *)code, codeLen, RTLD_LOCAL | RTLD_NOW);
+    if (!lib) {
+        halide_print(NULL, "dlopenbuf failed\n");
+        halide_print(NULL, dlerror());
+        return -1;
     }
 
     *module_ptr = reinterpret_cast<handle_t>(lib);
     return 0;
 }
 
-handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen, bool use_dlopenbuf) {
-    if (use_dlopenbuf) {
-        return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void *>(module_ptr), name));
-    } else {
-        return reinterpret_cast<handle_t>(mmap_dlsym(reinterpret_cast<void *>(module_ptr), name));
-    }
+handle_t get_symbol(handle_t module_ptr, const char *name, int nameLen) {
+    return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void *>(module_ptr), name));
 }
 
 int run(handle_t module_ptr, handle_t function,
@@ -140,20 +112,21 @@ int run(handle_t module_ptr, handle_t function,
     typedef int (*pipeline_argv_t)(void **);
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
-    // Construct a list of arguments. This is only part of a
-    // buffer_t. We know that the only field of buffer_t that the
-    // generated code should access is the host field (any other
-    // fields should be passed as their own scalar parameters) so we
-    // can just make this dummy buffer_t type.
-    struct buffer_t {
+    // Construct a list of arguments.
+    struct hexagon_device_pointer {
         uint64_t dev;
-        uint8_t* host;
+        uint8_t *host;
     };
-    void **args = (void **)__builtin_alloca((input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *));
-    buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
+
+    size_t args_size = (input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *);
+    size_t buffers_size = (input_buffersLen + output_buffersLen) * sizeof(hexagon_device_pointer);
+
+    void **args = (void **)__builtin_alloca(args_size);
+    hexagon_device_pointer *buffers = (hexagon_device_pointer *)__builtin_alloca(buffers_size);
+    memset(buffers, 0, buffers_size);
 
     void **next_arg = &args[0];
-    buffer_t *next_buffer_t = &buffers[0];
+    hexagon_device_pointer *next_buffer_t = &buffers[0];
     // Input buffers come first.
     for (int i = 0; i < input_buffersLen; i++, next_arg++, next_buffer_t++) {
         next_buffer_t->host = input_buffersPtrs[i].data;
@@ -173,12 +146,8 @@ int run(handle_t module_ptr, handle_t function,
     return pipeline(args);
 }
 
-int release_library(handle_t module_ptr, bool use_dlopenbuf) {
-    if (use_dlopenbuf) {
-        dlclose(reinterpret_cast<void *>(module_ptr));
-    } else {
-        mmap_dlclose(reinterpret_cast<void *>(module_ptr));
-    }
+int release_library(handle_t module_ptr) {
+    dlclose(reinterpret_cast<void *>(module_ptr));
     return 0;
 }
 
@@ -215,12 +184,11 @@ void set_rpc_return(int value) {
     rpc_ret = value;
     rpc_call = Message::None;
 }
-
 }
 
 int main(int argc, const char **argv) {
 
-    while(true) {
+    while (true) {
         switch (rpc_call) {
         case Message::None:
             break;
@@ -228,39 +196,36 @@ int main(int argc, const char **argv) {
             set_rpc_return(reinterpret_cast<int>(aligned_malloc(hvx_alignment, RPC_ARG(0))));
             break;
         case Message::Free:
-            aligned_free(reinterpret_cast<void*>(RPC_ARG(0)));
+            aligned_free(reinterpret_cast<void *>(RPC_ARG(0)));
             set_rpc_return(0);
             break;
         case Message::LoadLibrary:
             set_rpc_return(load_library(
-                reinterpret_cast<char*>(RPC_ARG(0)),
-                reinterpret_cast<unsigned char*>(RPC_ARG(2)),
+                reinterpret_cast<char *>(RPC_ARG(0)),
+                reinterpret_cast<unsigned char *>(RPC_ARG(2)),
                 RPC_ARG(3),
-                RPC_ARG(4),
-                reinterpret_cast<handle_t*>(RPC_ARG(5))));
+                reinterpret_cast<handle_t *>(RPC_ARG(4))));
             break;
         case Message::GetSymbol:
             set_rpc_return(get_symbol(
                 static_cast<handle_t>(RPC_ARG(0)),
                 reinterpret_cast<const char *>(RPC_ARG(1)),
-                RPC_ARG(2),
-                RPC_ARG(3)));
+                RPC_ARG(2)));
             break;
         case Message::Run:
             set_rpc_return(run(
                 static_cast<handle_t>(RPC_ARG(0)),
                 static_cast<handle_t>(RPC_ARG(1)),
-                reinterpret_cast<const buffer*>(RPC_ARG(2)),
+                reinterpret_cast<const buffer *>(RPC_ARG(2)),
                 RPC_ARG(3),
-                reinterpret_cast<buffer*>(RPC_ARG(4)),
+                reinterpret_cast<buffer *>(RPC_ARG(4)),
                 RPC_ARG(5),
-                reinterpret_cast<const buffer*>(RPC_ARG(6)),
+                reinterpret_cast<const buffer *>(RPC_ARG(6)),
                 RPC_ARG(7)));
             break;
         case Message::ReleaseLibrary:
             set_rpc_return(release_library(
-                static_cast<handle_t>(RPC_ARG(0)),
-                RPC_ARG(1)));
+                static_cast<handle_t>(RPC_ARG(0))));
             break;
         case Message::Break:
             return 0;

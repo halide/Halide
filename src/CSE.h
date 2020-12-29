@@ -4,7 +4,7 @@
 /** \file
  * Defines a pass for introducing let expressions to wrap common sub-expressions. */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

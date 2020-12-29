@@ -7,6 +7,6 @@ int main(int argc, char **argv) {
     const Buffer<> foo;
     foo.raw_buffer();
 
-    printf("I should not have reached here\n");
+    printf("Success!\n");
     return 0;
 }

@@ -12,8 +12,7 @@ using namespace Halide::Runtime;
 #define DLLEXPORT
 #endif
 
-extern "C" DLLEXPORT
-int extern_stage(halide_buffer_t *input, int addend, halide_buffer_t *output) {
+extern "C" DLLEXPORT int extern_stage(halide_buffer_t *input, int addend, halide_buffer_t *output) {
     // Note the final output buffer argument is unused.
     if (input->is_bounds_query()) {
         for (int d = 0; d < 2; d++) {
@@ -28,7 +27,7 @@ int extern_stage(halide_buffer_t *input, int addend, halide_buffer_t *output) {
         int max_y = min_y + output->dim[1].extent - 1;
         for (int y = min_y; y <= max_y; y++) {
             for (int x = min_x; x <= max_x; x++) {
-                int coords[2] = { x, y };
+                int coords[2] = {x, y};
                 *(int *)output->address_of(coords) = *(int *)input->address_of(coords) + addend;
             }
         }

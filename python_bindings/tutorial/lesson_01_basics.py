@@ -5,25 +5,11 @@
 # This lesson demonstrates basic usage of Halide as a JIT compiler for imaging.
 
 # This lesson can be built by invoking the command:
-#    make tutorial_lesson_01_basics
-# in a shell with the current directory at the top of the halide source tree.
-# Otherwise, see the platform-specific compiler invocations below.
-
-# On linux, you can compile and run it like so:
-# g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_01 -std=c++11
-# LD_LIBRARY_PATH=../bin ./lesson_01
-
-# On os x:
-# g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -o lesson_01 -std=c++11
-# DYLD_LIBRARY_PATH=../bin ./lesson_01
-
-# The only Halide header file you need is Halide.h. It includes all of Halide.
-#include "Halide.h"
-
-# We'll also include stdio for printf.
-#include <stdio.h>
+#    make test_tutorial_lesson_01_basics
+# in a shell with the current directory at python_bindings/
 
 import halide as hl
+
 
 def main():
 
@@ -95,12 +81,10 @@ def main():
         for i in range(output.width()):
             # We can access a pixel of an hl.Buffer object using similar
             # syntax to defining and using functions.
-            if (output[i, j] != i + j):
-                print("Something went wrong!\n"
-                       "Pixel %d, %d was supposed to be %d, but instead it's %d\n"
-                        % (i, j, i+j, output[i, j]))
-                return -1
-
+            assert output[i, j] == i + j, \
+                "Something went wrong!\n" + \
+                "Pixel %d, %d was supposed to be %d, but instead it's %d\n" % (
+                    i, j, i + j, output[i, j])
 
     # Everything worked! We defined a hl.Func, then called 'realize' on
     # it to generate and run machine code that produced a hl.Buffer.

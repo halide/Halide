@@ -3,6 +3,17 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] Autoschedulers do not support WebAssembly.\n");
+        return 0;
+    }
+
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
+    load_plugin(argv[1]);
 
     int W = 6400;
     int H = 4800;
@@ -19,27 +30,29 @@ int main(int argc, char **argv) {
     int num_stencils = 15;
 
     std::vector<Func> stencils;
-    for(int i = 0; i < num_stencils; i ++) {
+    for (int i = 0; i < num_stencils; i++) {
         Func s("stencil_" + std::to_string(i));
         stencils.push_back(s);
     }
 
-    stencils[0](x, y) = (input(x, y) + input(x+1, y) + input(x+2, y))/3;
+    stencils[0](x, y) = (input(x, y) + input(x + 1, y) + input(x + 2, y)) / 3;
     for (int i = 1; i < num_stencils; i++) {
-        stencils[i](x, y) = (stencils[i-1](x, y) + stencils[i-1](x, y+1) +
-                             stencils[i-1](x, y+2))/3;
+        stencils[i](x, y) = (stencils[i - 1](x, y) + stencils[i - 1](x, y + 1) +
+                             stencils[i - 1](x, y + 2)) /
+                            3;
     }
 
     // Provide estimates on the pipeline output
-    stencils[num_stencils - 1].estimate(x, 0, 6200).estimate(y, 0, 4600);
+    stencils[num_stencils - 1].set_estimate(x, 0, 6200).set_estimate(y, 0, 4600);
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();
     Pipeline p(stencils[num_stencils - 1]);
+    AutoSchedulerResults results = p.auto_schedule(target);
 
     std::cout << "\n\n******************************************\nSCHEDULE:\n"
               << "******************************************\n"
-              << p.auto_schedule(target)
+              << results.schedule_source
               << "\n******************************************\n\n";
 
     // Inspect the schedule

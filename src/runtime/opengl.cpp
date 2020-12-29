@@ -1,7 +1,10 @@
+// Ignore deprecation warnings inside our own runtime
+#define HALIDE_ALLOW_DEPRECATED 1
+
 #include "HalideRuntimeOpenGL.h"
 #include "device_interface.h"
-#include "printer.h"
 #include "mini_opengl.h"
+#include "printer.h"
 
 // This constant is used to indicate that the application will take
 // responsibility for binding the output render target before calling the
@@ -14,121 +17,125 @@
 
 // List of all OpenGL functions used by the runtime. The list is used to
 // declare and initialize the dispatch table in OpenGLState below.
-#define USED_GL_FUNCTIONS                                               \
-    GLFUNC(PFNGLDELETETEXTURESPROC, DeleteTextures);                    \
-    GLFUNC(PFNGLGENTEXTURESPROC, GenTextures);                          \
-    GLFUNC(PFNGLBINDTEXTUREPROC, BindTexture);                          \
-    GLFUNC(PFNGLGETERRORPROC, GetError);                                \
-    GLFUNC(PFNGLVIEWPORTPROC, Viewport);                                \
-    GLFUNC(PFNGLGENBUFFERSPROC, GenBuffers);                            \
-    GLFUNC(PFNGLDELETEBUFFERSPROC, DeleteBuffers);                      \
-    GLFUNC(PFNGLBINDBUFFERPROC, BindBuffer);                            \
-    GLFUNC(PFNGLBUFFERDATAPROC, BufferData);                            \
-    GLFUNC(PFNGLTEXPARAMETERIPROC, TexParameteri);                      \
-    GLFUNC(PFNGLTEXIMAGE2DPROC, TexImage2D);                            \
-    GLFUNC(PFNGLTEXSUBIMAGE2DPROC, TexSubImage2D);                      \
-    GLFUNC(PFNGLDISABLEPROC, Disable);                                  \
-    GLFUNC(PFNGLDISABLEPROC, Enable);                                   \
-    GLFUNC(PFNGLCREATESHADERPROC, CreateShader);                        \
-    GLFUNC(PFNGLACTIVETEXTUREPROC, ActiveTexture);                      \
-    GLFUNC(PFNGLSHADERSOURCEPROC, ShaderSource);                        \
-    GLFUNC(PFNGLCOMPILESHADERPROC, CompileShader);                      \
-    GLFUNC(PFNGLGETSHADERIVPROC, GetShaderiv);                          \
-    GLFUNC(PFNGLGETSHADERINFOLOGPROC, GetShaderInfoLog);                \
-    GLFUNC(PFNGLDELETESHADERPROC, DeleteShader);                        \
-    GLFUNC(PFNGLCREATEPROGRAMPROC, CreateProgram);                      \
-    GLFUNC(PFNGLATTACHSHADERPROC, AttachShader);                        \
-    GLFUNC(PFNGLLINKPROGRAMPROC, LinkProgram);                          \
-    GLFUNC(PFNGLGETPROGRAMIVPROC, GetProgramiv);                        \
-    GLFUNC(PFNGLGETPROGRAMINFOLOGPROC, GetProgramInfoLog);              \
-    GLFUNC(PFNGLUSEPROGRAMPROC, UseProgram);                            \
-    GLFUNC(PFNGLDELETEPROGRAMPROC, DeleteProgram);                      \
-    GLFUNC(PFNGLGETUNIFORMLOCATIONPROC, GetUniformLocation);            \
-    GLFUNC(PFNGLUNIFORM1IVPROC, Uniform1iv);                            \
-    GLFUNC(PFNGLUNIFORM2IVPROC, Uniform2iv);                            \
-    GLFUNC(PFNGLUNIFORM2IVPROC, Uniform4iv);                            \
-    GLFUNC(PFNGLUNIFORM1FVPROC, Uniform1fv);                            \
-    GLFUNC(PFNGLUNIFORM1FVPROC, Uniform4fv);                            \
-    GLFUNC(PFNGLGENFRAMEBUFFERSPROC, GenFramebuffers);                  \
-    GLFUNC(PFNGLDELETEFRAMEBUFFERSPROC, DeleteFramebuffers);            \
-    GLFUNC(PFNGLCHECKFRAMEBUFFERSTATUSPROC, CheckFramebufferStatus);    \
-    GLFUNC(PFNGLBINDFRAMEBUFFERPROC, BindFramebuffer);                  \
-    GLFUNC(PFNGLFRAMEBUFFERTEXTURE2DPROC, FramebufferTexture2D);        \
-    GLFUNC(PFNGLGETATTRIBLOCATIONPROC, GetAttribLocation);              \
-    GLFUNC(PFNGLVERTEXATTRIBPOINTERPROC, VertexAttribPointer);          \
-    GLFUNC(PFNGLDRAWELEMENTSPROC, DrawElements);                        \
-    GLFUNC(PFNGLENABLEVERTEXATTRIBARRAYPROC, EnableVertexAttribArray);  \
+#define USED_GL_FUNCTIONS                                                \
+    GLFUNC(PFNGLDELETETEXTURESPROC, DeleteTextures);                     \
+    GLFUNC(PFNGLGENTEXTURESPROC, GenTextures);                           \
+    GLFUNC(PFNGLBINDTEXTUREPROC, BindTexture);                           \
+    GLFUNC(PFNGLGETERRORPROC, GetError);                                 \
+    GLFUNC(PFNGLVIEWPORTPROC, Viewport);                                 \
+    GLFUNC(PFNGLGENBUFFERSPROC, GenBuffers);                             \
+    GLFUNC(PFNGLDELETEBUFFERSPROC, DeleteBuffers);                       \
+    GLFUNC(PFNGLBINDBUFFERPROC, BindBuffer);                             \
+    GLFUNC(PFNGLBUFFERDATAPROC, BufferData);                             \
+    GLFUNC(PFNGLTEXPARAMETERIPROC, TexParameteri);                       \
+    GLFUNC(PFNGLTEXIMAGE2DPROC, TexImage2D);                             \
+    GLFUNC(PFNGLTEXSUBIMAGE2DPROC, TexSubImage2D);                       \
+    GLFUNC(PFNGLDISABLEPROC, Disable);                                   \
+    GLFUNC(PFNGLDISABLEPROC, Enable);                                    \
+    GLFUNC(PFNGLCREATESHADERPROC, CreateShader);                         \
+    GLFUNC(PFNGLACTIVETEXTUREPROC, ActiveTexture);                       \
+    GLFUNC(PFNGLSHADERSOURCEPROC, ShaderSource);                         \
+    GLFUNC(PFNGLCOMPILESHADERPROC, CompileShader);                       \
+    GLFUNC(PFNGLGETSHADERIVPROC, GetShaderiv);                           \
+    GLFUNC(PFNGLGETSHADERINFOLOGPROC, GetShaderInfoLog);                 \
+    GLFUNC(PFNGLDELETESHADERPROC, DeleteShader);                         \
+    GLFUNC(PFNGLCREATEPROGRAMPROC, CreateProgram);                       \
+    GLFUNC(PFNGLATTACHSHADERPROC, AttachShader);                         \
+    GLFUNC(PFNGLLINKPROGRAMPROC, LinkProgram);                           \
+    GLFUNC(PFNGLGETPROGRAMIVPROC, GetProgramiv);                         \
+    GLFUNC(PFNGLGETPROGRAMINFOLOGPROC, GetProgramInfoLog);               \
+    GLFUNC(PFNGLUSEPROGRAMPROC, UseProgram);                             \
+    GLFUNC(PFNGLDELETEPROGRAMPROC, DeleteProgram);                       \
+    GLFUNC(PFNGLGETUNIFORMLOCATIONPROC, GetUniformLocation);             \
+    GLFUNC(PFNGLUNIFORM1IVPROC, Uniform1iv);                             \
+    GLFUNC(PFNGLUNIFORM2IVPROC, Uniform2iv);                             \
+    GLFUNC(PFNGLUNIFORM2IVPROC, Uniform4iv);                             \
+    GLFUNC(PFNGLUNIFORM1FVPROC, Uniform1fv);                             \
+    GLFUNC(PFNGLUNIFORM1FVPROC, Uniform4fv);                             \
+    GLFUNC(PFNGLGENFRAMEBUFFERSPROC, GenFramebuffers);                   \
+    GLFUNC(PFNGLDELETEFRAMEBUFFERSPROC, DeleteFramebuffers);             \
+    GLFUNC(PFNGLCHECKFRAMEBUFFERSTATUSPROC, CheckFramebufferStatus);     \
+    GLFUNC(PFNGLBINDFRAMEBUFFERPROC, BindFramebuffer);                   \
+    GLFUNC(PFNGLFRAMEBUFFERTEXTURE2DPROC, FramebufferTexture2D);         \
+    GLFUNC(PFNGLGETATTRIBLOCATIONPROC, GetAttribLocation);               \
+    GLFUNC(PFNGLVERTEXATTRIBPOINTERPROC, VertexAttribPointer);           \
+    GLFUNC(PFNGLDRAWELEMENTSPROC, DrawElements);                         \
+    GLFUNC(PFNGLENABLEVERTEXATTRIBARRAYPROC, EnableVertexAttribArray);   \
     GLFUNC(PFNGLDISABLEVERTEXATTRIBARRAYPROC, DisableVertexAttribArray); \
-    GLFUNC(PFNGLGETVERTEXATTRIBIVPROC, GetVertexAttribiv);              \
-    GLFUNC(PFNGLPIXELSTOREIPROC, PixelStorei);                          \
-    GLFUNC(PFNGLREADPIXELS, ReadPixels);                                \
-    GLFUNC(PFNGLGETSTRINGPROC, GetString);                              \
-    GLFUNC(PFNGLGETINTEGERV, GetIntegerv);                              \
-    GLFUNC(PFNGLGETBOOLEANV, GetBooleanv);                              \
+    GLFUNC(PFNGLGETVERTEXATTRIBIVPROC, GetVertexAttribiv);               \
+    GLFUNC(PFNGLPIXELSTOREIPROC, PixelStorei);                           \
+    GLFUNC(PFNGLREADPIXELS, ReadPixels);                                 \
+    GLFUNC(PFNGLGETSTRINGPROC, GetString);                               \
+    GLFUNC(PFNGLGETINTEGERV, GetIntegerv);                               \
+    GLFUNC(PFNGLGETBOOLEANV, GetBooleanv);                               \
     GLFUNC(PFNGLFINISHPROC, Finish);
 
 // List of all OpenGL functions used by the runtime, which may not
 // exist due to an older or less capable version of GL. In using any
-// of these functions, code must test if they are NULL.
-#define OPTIONAL_GL_FUNCTIONS                                           \
-    GLFUNC(PFNGLGENVERTEXARRAYS, GenVertexArrays);                      \
-    GLFUNC(PFNGLBINDVERTEXARRAY, BindVertexArray);                      \
-    GLFUNC(PFNGLDELETEVERTEXARRAYS, DeleteVertexArrays);                \
+// of these functions, code must test if they are nullptr.
+#define OPTIONAL_GL_FUNCTIONS                            \
+    GLFUNC(PFNGLGENVERTEXARRAYS, GenVertexArrays);       \
+    GLFUNC(PFNGLBINDVERTEXARRAY, BindVertexArray);       \
+    GLFUNC(PFNGLDELETEVERTEXARRAYS, DeleteVertexArrays); \
     GLFUNC(PFNDRAWBUFFERS, DrawBuffers)
 
 // ---------- Types ----------
 
 using namespace Halide::Runtime::Internal;
 
-namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace OpenGL {
 
 extern WEAK halide_device_interface_t opengl_device_interface;
 
 WEAK const char *gl_error_name(int32_t err) {
-  const char *result;
-  switch (err) {
-  case 0x500:
-    result = "GL_INVALID_ENUM";
-    break;
-  case 0x501:
-    result = "GL_INVALID_VALUE";
-    break;
-  case 0x502:
-    result = "GL_INVALID_OPERATION";
-    break;
-  case 0x503:
-    result = "GL_STACK_OVERFLOW";
-    break;
-  case 0x504:
-    result = "GL_STACK_UNDERFLOW";
-    break;
-  case 0x505:
-    result = "GL_OUT_OF_MEMORY";
-    break;
-  case 0x506:
-    result = "GL_INVALID_FRAMEBUFFER_OPERATION";
-    break;
-  case 0x507:
-    result = "GL_CONTEXT_LOST";
-    break;
-  case 0x8031:
-    result = "GL_TABLE_TOO_LARGE";
-    break;
-  default:
-    result = "<unknown GL error>";
-    break;
-  }
-  return result;
+    const char *result;
+    switch (err) {
+    case 0x500:
+        result = "GL_INVALID_ENUM";
+        break;
+    case 0x501:
+        result = "GL_INVALID_VALUE";
+        break;
+    case 0x502:
+        result = "GL_INVALID_OPERATION";
+        break;
+    case 0x503:
+        result = "GL_STACK_OVERFLOW";
+        break;
+    case 0x504:
+        result = "GL_STACK_UNDERFLOW";
+        break;
+    case 0x505:
+        result = "GL_OUT_OF_MEMORY";
+        break;
+    case 0x506:
+        result = "GL_INVALID_FRAMEBUFFER_OPERATION";
+        break;
+    case 0x507:
+        result = "GL_CONTEXT_LOST";
+        break;
+    case 0x8031:
+        result = "GL_TABLE_TOO_LARGE";
+        break;
+    default:
+        result = "<unknown GL error>";
+        break;
+    }
+    return result;
 }
 
 struct HalideMalloc {
-     __attribute__((always_inline)) HalideMalloc(void *user_context, size_t size)
-        : user_context(user_context), ptr(halide_malloc(user_context, size)) {}
-     __attribute__((always_inline)) ~HalideMalloc() {
+    ALWAYS_INLINE HalideMalloc(void *user_context, size_t size)
+        : user_context(user_context), ptr(halide_malloc(user_context, size)) {
+    }
+    ALWAYS_INLINE ~HalideMalloc() {
         halide_free(user_context, ptr);
     }
-    void * const user_context;
-    void * const ptr;
+    void *const user_context;
+    void *const ptr;
 };
 
 enum OpenGLProfile {
@@ -140,15 +147,23 @@ struct Argument {
     // The kind of data stored in an argument
     enum Kind {
         Invalid,
-        Uniform,                        // uniform variable
-        Varying,                        // varying attribute
-        Inbuf,                          // input texture
-        Outbuf                          // output texture
+        Uniform,  // uniform variable
+        Varying,  // varying attribute
+        Inbuf,    // input texture
+        Outbuf    // output texture
     };
 
     // The elementary data type of the argument
     enum Type {
-        Void, Bool, Float, Int8, Int16, Int32, UInt8, UInt16, UInt32
+        Void,
+        Bool,
+        Float,
+        Int8,
+        Int16,
+        Int32,
+        UInt8,
+        UInt16,
+        UInt32
     };
 
     char *name;
@@ -169,7 +184,6 @@ struct ModuleState {
     KernelInfo *kernel;
     ModuleState *next;
 };
-
 
 // All persistent state maintained by the runtime.
 struct GlobalState {
@@ -193,7 +207,7 @@ struct GlobalState {
     GLuint element_buffer;
 
     // Declare pointers used OpenGL functions
-#define GLFUNC(PTYPE,VAR) PTYPE VAR
+#define GLFUNC(PTYPE, VAR) PTYPE VAR
     USED_GL_FUNCTIONS;
     OPTIONAL_GL_FUNCTIONS;
 #undef GLFUNC
@@ -202,8 +216,8 @@ struct GlobalState {
 WEAK bool GlobalState::CheckAndReportError(void *user_context, const char *location) {
     GLenum err = GetError();
     if (err != GL_NO_ERROR) {
-        error(user_context) << "OpenGL error " << gl_error_name(err) << "(" << (int)err << ")" <<
-            " at " << location << ".\n" ;
+        error(user_context) << "OpenGL error " << gl_error_name(err) << "(" << (int)err << ")"
+                            << " at " << location << ".\n";
         return true;
     }
     return false;
@@ -213,13 +227,15 @@ WEAK GlobalState global_state;
 
 // Saves & restores OpenGL state
 class GLStateSaver {
-    public:
+public:
+    ALWAYS_INLINE GLStateSaver() {
+        save();
+    }
+    ALWAYS_INLINE ~GLStateSaver() {
+        restore();
+    }
 
-    __attribute__((always_inline)) GLStateSaver() { save(); }
-    __attribute__((always_inline)) ~GLStateSaver() { restore(); }
-
-    private:
-
+private:
     // The state variables
     GLint active_texture;
     GLint array_buffer_binding;
@@ -240,8 +256,7 @@ class GLStateSaver {
     void restore();
 };
 
-WEAK void GLStateSaver::save()
-{
+WEAK void GLStateSaver::save() {
     global_state.GetIntegerv(GL_ACTIVE_TEXTURE, &active_texture);
     global_state.GetIntegerv(GL_ARRAY_BUFFER_BINDING, &array_buffer_binding);
     global_state.GetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &element_array_buffer_binding);
@@ -252,15 +267,15 @@ WEAK void GLStateSaver::save()
     global_state.GetIntegerv(GL_VIEWPORT, viewport);
 
     global_state.GetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &max_combined_texture_image_units);
-    texture_2d_binding = (GLint *) malloc(max_combined_texture_image_units * sizeof(GLint));
-    for (int i=0; i < max_combined_texture_image_units; i++) {
+    texture_2d_binding = (GLint *)malloc(max_combined_texture_image_units * sizeof(GLint));
+    for (int i = 0; i < max_combined_texture_image_units; i++) {
         global_state.ActiveTexture(GL_TEXTURE0 + i);
         global_state.GetIntegerv(GL_TEXTURE_BINDING_2D, &texture_2d_binding[i]);
     }
 
     global_state.GetIntegerv(GL_MAX_VERTEX_ATTRIBS, &max_vertex_attribs);
-    vertex_attrib_array_enabled = (GLint *) malloc(max_vertex_attribs * sizeof(GLint));
-    for (int i=0; i< max_vertex_attribs; i++) {
+    vertex_attrib_array_enabled = (GLint *)malloc(max_vertex_attribs * sizeof(GLint));
+    for (int i = 0; i < max_vertex_attribs; i++) {
         global_state.GetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &vertex_attrib_array_enabled[i]);
     }
 
@@ -269,27 +284,27 @@ WEAK void GLStateSaver::save()
     }
 
 #ifdef DEBUG_RUNTIME
-    debug(NULL) << "Saved OpenGL state\n";
+    debug(nullptr) << "Saved OpenGL state\n";
 #endif
 }
 
-WEAK void GLStateSaver::restore()
-{
+WEAK void GLStateSaver::restore() {
 #ifdef DEBUG_RUNTIME
-    debug(NULL) << "Restoring OpenGL state\n";
+    debug(nullptr) << "Restoring OpenGL state\n";
 #endif
 
-    for (int i=0; i < max_combined_texture_image_units; i++) {
+    for (int i = 0; i < max_combined_texture_image_units; i++) {
         global_state.ActiveTexture(GL_TEXTURE0 + i);
         global_state.BindTexture(GL_TEXTURE_2D, texture_2d_binding[i]);
     }
     free(texture_2d_binding);
 
-    for (int i=0; i< max_vertex_attribs; i++) {
-        if (vertex_attrib_array_enabled[i])
+    for (int i = 0; i < max_vertex_attribs; i++) {
+        if (vertex_attrib_array_enabled[i]) {
             global_state.EnableVertexAttribArray(i);
-        else
+        } else {
             global_state.DisableVertexAttribArray(i);
+        }
     }
     free(vertex_attrib_array_enabled);
 
@@ -311,15 +326,15 @@ WEAK void GLStateSaver::restore()
 WEAK ModuleState *state_list;
 
 WEAK const char *kernel_marker = "/// KERNEL ";
-WEAK const char *input_marker  = "/// IN_BUFFER ";
+WEAK const char *input_marker = "/// IN_BUFFER ";
 WEAK const char *output_marker = "/// OUT_BUFFER ";
-WEAK const char *uniform_marker    = "/// UNIFORM ";
-WEAK const char *varying_marker    = "/// VARYING ";
+WEAK const char *uniform_marker = "/// UNIFORM ";
+WEAK const char *varying_marker = "/// VARYING ";
 
 // ---------- Helper functions ----------
 
 WEAK char *strndup(const char *s, size_t n) {
-    char *p = (char*)malloc(n+1);
+    char *p = (char *)malloc(n + 1);
     memcpy(p, s, n);
     p[n] = '\0';
     return p;
@@ -329,10 +344,7 @@ WEAK char *strndup(const char *s, size_t n) {
 // a string
 WEAK char *strstrip(char *str, size_t n) {
     char *pos = str;
-    while (pos != str+n
-           && *pos != '\0'
-           && *pos != '\n'
-           && *pos != ' ') {
+    while (pos != str + n && *pos != '\0' && *pos != '\n' && *pos != ' ') {
         pos++;
     }
     *pos = '\0';
@@ -346,13 +358,13 @@ WEAK void debug_buffer(void *user_context, halide_buffer_t *buf) {
 WEAK GLuint make_shader(void *user_context, GLenum type,
                         const char *source, GLint *length) {
 #ifdef DEBUG_RUNTIME
-{
-    debug(user_context) << ((type == GL_VERTEX_SHADER) ? "GL_VERTEX_SHADER" : "GL_FRAGMENT_SHADER")
-                        << " SOURCE:\n";
-    // debug() will go thru Printer<> which has a fixed, non-growing size.
-    // Just pass the source directly to halide_print instead, so it won't get clipped.
-    halide_print(user_context, source);
-}
+    {
+        debug(user_context) << ((type == GL_VERTEX_SHADER) ? "GL_VERTEX_SHADER" : "GL_FRAGMENT_SHADER")
+                            << " SOURCE:\n";
+        // debug() will go thru Printer<> which has a fixed, non-growing size.
+        // Just pass the source directly to halide_print instead, so it won't get clipped.
+        halide_print(user_context, source);
+    }
 #endif
 
     GLuint shader = global_state.CreateShader(type);
@@ -362,7 +374,7 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
     if (*source == '\0') {
         debug(user_context) << "Halide GLSL: passed shader source is empty, using default.\n";
         const char *default_shader = "varying vec2 pixcoord;\n void main() { }";
-        global_state.ShaderSource(shader, 1, (const GLchar **)&default_shader, NULL);
+        global_state.ShaderSource(shader, 1, (const GLchar **)&default_shader, nullptr);
     } else {
         global_state.ShaderSource(shader, 1, (const GLchar **)&source, length);
     }
@@ -382,8 +394,8 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
         global_state.GetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_len);
         HalideMalloc log_tmp(user_context, log_len);
         if (log_tmp.ptr) {
-            char *log = (char*) log_tmp.ptr;
-            global_state.GetShaderInfoLog(shader, log_len, NULL, log);
+            char *log = (char *)log_tmp.ptr;
+            global_state.GetShaderInfoLog(shader, log_len, nullptr, log);
             print(user_context) << log << "\n";
         }
         global_state.DeleteShader(shader);
@@ -393,12 +405,12 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
 }
 
 // Check whether string starts with a given prefix.
-// Returns pointer to character after matched prefix if successful or NULL.
+// Returns pointer to character after matched prefix if successful or nullptr.
 WEAK const char *match_prefix(const char *s, const char *prefix) {
     if (0 == strncmp(s, prefix, strlen(prefix))) {
         return s + strlen(prefix);
     }
-    return NULL;
+    return nullptr;
 }
 
 // Parse declaration of the form "type name" and construct matching Argument.
@@ -425,14 +437,14 @@ WEAK Argument *parse_argument(void *user_context, const char *src,
     }
     if (type == Argument::Void) {
         error(user_context) << "Internal error: argument type not supported";
-        return NULL;
+        return nullptr;
     }
 
     Argument *arg = (Argument *)malloc(sizeof(Argument));
     arg->name = strndup(name, end - name);
     arg->type = type;
     arg->kind = Argument::Invalid;
-    arg->next = 0;
+    arg->next = nullptr;
     return arg;
 }
 
@@ -441,7 +453,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
     KernelInfo *kernel = (KernelInfo *)malloc(sizeof(KernelInfo));
 
     kernel->source = strndup(src, size);
-    kernel->arguments = NULL;
+    kernel->arguments = nullptr;
     kernel->program_id = 0;
 
     debug(user_context) << "Compiling GLSL kernel (size = " << size << "):\n";
@@ -450,8 +462,9 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
     const char *line = kernel->source;
     while (*line) {
         const char *next_line = strchr(line, '\n') + 1;
-        if (!next_line)
+        if (!next_line) {
             next_line = line + size;
+        }
 
         const char *args;
         if ((args = match_prefix(line, kernel_marker))) {
@@ -459,7 +472,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
             kernel->name = strstrip(strndup(args, next_line - args), next_line - args);
         } else if ((args = match_prefix(line, uniform_marker))) {
             if (Argument *arg =
-                parse_argument(user_context, args, next_line - 1)) {
+                    parse_argument(user_context, args, next_line - 1)) {
                 arg->kind = Argument::Uniform;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
@@ -469,7 +482,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
             }
         } else if ((args = match_prefix(line, varying_marker))) {
             if (Argument *arg =
-                parse_argument(user_context, args, next_line - 1)) {
+                    parse_argument(user_context, args, next_line - 1)) {
                 arg->kind = Argument::Varying;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
@@ -505,7 +518,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
     // Arguments are currently in reverse order, flip the list.
     {
         Argument *cur = kernel->arguments;
-        kernel->arguments = NULL;
+        kernel->arguments = nullptr;
         while (cur) {
             Argument *next = cur->next;
             cur->next = kernel->arguments;
@@ -515,16 +528,16 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
     }
 
     return kernel;
-  error:
+error:
     free(kernel);
-    return NULL;
+    return nullptr;
 }
 
 // Delete all data associated with a kernel. Also release associated OpenGL
 // shader and program.
 WEAK void delete_kernel(void *user_context, KernelInfo *kernel) {
     global_state.DeleteProgram(kernel->program_id);
-#if 0 // TODO figure out why this got deleted.
+#if 0  // TODO figure out why this got deleted.
     global_state.DeleteShader(kernel->shader_id);
 #endif
 
@@ -543,10 +556,9 @@ WEAK void delete_kernel(void *user_context, KernelInfo *kernel) {
 // Vertices and their order in a triangle strip for rendering a quad
 // ranging from (-1,-1) to (1,1).
 WEAK GLfloat quad_vertices[] = {
-    -1.0f, -1.0f,    1.0f, -1.0f,
-    -1.0f,  1.0f,    1.0f,  1.0f
-};
-WEAK GLuint quad_indices[] = { 0, 1, 2, 3 };
+    -1.0f, -1.0f, 1.0f, -1.0f,
+    -1.0f, 1.0f, 1.0f, 1.0f};
+WEAK GLuint quad_indices[] = {0, 1, 2, 3};
 
 WEAK void GlobalState::init() {
     initialized = false;
@@ -558,8 +570,8 @@ WEAK void GlobalState::init() {
     have_vertex_array_objects = false;
     have_texture_rg = false;
     have_texture_rgb8_rgba8 = false;
-    // Initialize all GL function pointers to NULL
-#define GLFUNC(type, name) name = NULL;
+    // Initialize all GL function pointers to nullptr
+#define GLFUNC(type, name) name = nullptr;
     USED_GL_FUNCTIONS;
     OPTIONAL_GL_FUNCTIONS;
 #undef GLFUNC
@@ -599,15 +611,15 @@ WEAK bool extension_supported(void *user_context, const char *name) {
 // Check for availability of various version- and extension-specific features
 // and hook up functions pointers as necessary
 WEAK void init_extensions(void *user_context) {
-    if (global_state.major_version >= 3) { // This is likely valid for both OpenGL and OpenGL ES
-        load_gl_func(user_context, "glGenVertexArrays", (void**)&global_state.GenVertexArrays, false);
-        load_gl_func(user_context, "glBindVertexArray", (void**)&global_state.BindVertexArray, false);
-        load_gl_func(user_context, "glDeleteVertexArrays", (void**)&global_state.DeleteVertexArrays, false);
+    if (global_state.major_version >= 3) {  // This is likely valid for both OpenGL and OpenGL ES
+        load_gl_func(user_context, "glGenVertexArrays", (void **)&global_state.GenVertexArrays, false);
+        load_gl_func(user_context, "glBindVertexArray", (void **)&global_state.BindVertexArray, false);
+        load_gl_func(user_context, "glDeleteVertexArrays", (void **)&global_state.DeleteVertexArrays, false);
         if (global_state.GenVertexArrays && global_state.BindVertexArray && global_state.DeleteVertexArrays) {
             global_state.have_vertex_array_objects = true;
         }
     }
-    load_gl_func(user_context, "glDrawBuffers", (void**)&global_state.DrawBuffers, false);
+    load_gl_func(user_context, "glDrawBuffers", (void **)&global_state.DrawBuffers, false);
 
     global_state.have_texture_rg =
         global_state.major_version >= 3 ||
@@ -640,13 +652,13 @@ WEAK const char *parse_int(const char *str, int *val) {
         *val = v;
         return &str[i];
     }
-    return NULL;
+    return nullptr;
 }
 
 WEAK const char *parse_opengl_version(const char *str, int *major, int *minor) {
     str = parse_int(str, major);
-    if (str == NULL || *str != '.') {
-        return NULL;
+    if (str == nullptr || *str != '.') {
+        return nullptr;
     }
     return parse_int(str + 1, minor);
 }
@@ -670,9 +682,9 @@ WEAK int halide_opengl_init(void *user_context) {
     }
 
     // Initialize pointers to core OpenGL functions.
-#define GLFUNC(TYPE, VAR)                                               \
-    if (load_gl_func(user_context, "gl" #VAR, (void**)&global_state.VAR, true) < 0) { \
-        return -1;                                                      \
+#define GLFUNC(TYPE, VAR)                                                              \
+    if (load_gl_func(user_context, "gl" #VAR, (void **)&global_state.VAR, true) < 0) { \
+        return -1;                                                                     \
     }
     USED_GL_FUNCTIONS;
 #undef GLFUNC
@@ -745,7 +757,7 @@ WEAK int halide_opengl_device_release(void *user_context) {
     ModuleState *mod = state_list;
     while (mod) {
         delete_kernel(user_context, mod->kernel);
-        mod->kernel = NULL;
+        mod->kernel = nullptr;
         ModuleState *next = mod->next;
         // do not call free(mod) to avoid dangling pointers: the module state
         // is still referenced in the code generated by Halide (see
@@ -763,7 +775,6 @@ WEAK int halide_opengl_device_release(void *user_context) {
 
     return 0;
 }
-
 
 // Determine OpenGL texture format and channel type for a given halide_buffer_t.
 WEAK bool get_texture_format(void *user_context, halide_buffer_t *buf,
@@ -795,7 +806,7 @@ WEAK bool get_texture_format(void *user_context, halide_buffer_t *buf,
 
     // Common formats supported by both GLES 2.0 and GL 2.1 are selected below
     //
-    switch(channels) {
+    switch (channels) {
     case 0:
     case 1:
         *format = GL_RED;
@@ -948,7 +959,7 @@ WEAK int halide_opengl_device_malloc(void *user_context, halide_buffer_t *buf) {
             return 1;
         }
 
-        global_state.TexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, format, type, NULL);
+        global_state.TexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, format, type, nullptr);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc TexImage2D")) {
             global_state.DeleteTextures(1, &tex);
             return 1;
@@ -991,22 +1002,26 @@ WEAK int halide_opengl_device_free(void *user_context, halide_buffer_t *buf) {
     }
     buf->device = 0;
     buf->device_interface->impl->release_module();
-    buf->device_interface = NULL;
+    buf->device_interface = nullptr;
 
     return result;
 }
 
 // Can't use std::min, std::max in Halide runtime.
-template<typename T> __attribute__((always_inline)) T std_min(T a, T b) { return (a < b) ? a : b; }
-template<typename T> __attribute__((always_inline)) T std_max(T a, T b) { return (a > b) ? a : b; }
-
+template<typename T>
+ALWAYS_INLINE T std_min(T a, T b) {
+    return (a < b) ? a : b;
+}
+template<typename T>
+ALWAYS_INLINE T std_max(T a, T b) {
+    return (a > b) ? a : b;
+}
 
 // This method copies image data from the layout specified by the strides of the
 // halide_buffer_t to the packed interleaved format needed by GL. It is assumed that
 // src and dst have the same number of channels.
-template <class T>
- __attribute__((always_inline))
- void halide_to_interleaved(const halide_buffer_t *src_buf, T *dst) {
+template<class T>
+ALWAYS_INLINE void halide_to_interleaved(const halide_buffer_t *src_buf, T *dst) {
     const T *src = reinterpret_cast<const T *>(src_buf->host);
     int width = (src_buf->dimensions > 0) ? src_buf->dim[0].extent : 1;
     int height = (src_buf->dimensions > 1) ? src_buf->dim[1].extent : 1;
@@ -1031,10 +1046,9 @@ template <class T>
 // to the arbitrary strided layout specified by the halide_buffer_t. If src has fewer
 // channels than dst, the excess in dst will be left untouched; if src has
 // more channels than dst, the excess will be ignored.
-template <class T>
-__attribute__((always_inline))
-void interleaved_to_halide(void *user_context, const T *src, int src_channels, halide_buffer_t *dst_buf) {
-    T *dst = reinterpret_cast<T*>(dst_buf->host);
+template<class T>
+ALWAYS_INLINE void interleaved_to_halide(void *user_context, const T *src, int src_channels, halide_buffer_t *dst_buf) {
+    T *dst = reinterpret_cast<T *>(dst_buf->host);
     int width = (dst_buf->dimensions > 0) ? dst_buf->dim[0].extent : 1;
     int height = (dst_buf->dimensions > 1) ? dst_buf->dim[1].extent : 1;
     int dst_channels = (dst_buf->dimensions > 2) ? dst_buf->dim[2].extent : 1;
@@ -1074,7 +1088,7 @@ WEAK int halide_opengl_copy_to_device(void *user_context, halide_buffer_t *buf) 
 
     if (!buf->host || !buf->device) {
         debug_buffer(user_context, buf);
-        error(user_context) << "Invalid copy_to_device operation: host or device NULL";
+        error(user_context) << "Invalid copy_to_device operation: host or device nullptr";
         return 1;
     }
 
@@ -1127,13 +1141,13 @@ WEAK int halide_opengl_copy_to_device(void *user_context, halide_buffer_t *buf) 
 
         switch (type) {
         case GL_UNSIGNED_BYTE:
-            halide_to_interleaved<uint8_t>(buf, (uint8_t*)tmp.ptr);
+            halide_to_interleaved<uint8_t>(buf, (uint8_t *)tmp.ptr);
             break;
         case GL_UNSIGNED_SHORT:
-            halide_to_interleaved<uint16_t>(buf, (uint16_t*)tmp.ptr);
+            halide_to_interleaved<uint16_t>(buf, (uint16_t *)tmp.ptr);
             break;
         case GL_FLOAT:
-            halide_to_interleaved<float>(buf, (float*)tmp.ptr);
+            halide_to_interleaved<float>(buf, (float *)tmp.ptr);
             break;
         }
 
@@ -1158,7 +1172,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, halide_buffer_t *buf) {
 
     if (!buf->host || !buf->device) {
         debug_buffer(user_context, buf);
-        error(user_context) << "Invalid copy_to_host operation: host or dev NULL";
+        error(user_context) << "Invalid copy_to_host operation: host or dev nullptr";
         return 1;
     }
 
@@ -1174,7 +1188,6 @@ WEAK int halide_opengl_copy_to_host(void *user_context, halide_buffer_t *buf) {
         return 1;
     }
     GLint texture_channels = buffer_channels;
-
 
     uint64_t handle = buf->device;
     if (handle != HALIDE_OPENGL_RENDER_TARGET) {
@@ -1240,7 +1253,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, halide_buffer_t *buf) {
             return 1;
         }
 #ifdef DEBUG_RUNTIME
-        debug(user_context) << "ReadPixels(1) time: "<<(t2-t1)/1e3<<"usec\n";
+        debug(user_context) << "ReadPixels(1) time: " << (t2 - t1) / 1e3 << "usec\n";
 #endif
     } else {
         debug(user_context)
@@ -1260,7 +1273,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, halide_buffer_t *buf) {
         global_state.ReadPixels(0, 0, buf->dim[0].extent, buf->dim[1].extent, format, type, tmp.ptr);
 #ifdef DEBUG_RUNTIME
         int64_t t2 = halide_current_time_ns(user_context);
-        debug(user_context)<<"ReadPixels(2) time: "<<(t2-t1)/1e3<<"usec\n";
+        debug(user_context) << "ReadPixels(2) time: " << (t2 - t1) / 1e3 << "usec\n";
 #endif
         if (global_state.CheckAndReportError(user_context, "copy_to_host ReadPixels (2)")) {
             return 1;
@@ -1274,35 +1287,38 @@ WEAK int halide_opengl_copy_to_host(void *user_context, halide_buffer_t *buf) {
 #endif
         switch (type) {
         case GL_UNSIGNED_BYTE:
-            interleaved_to_halide<uint8_t>(user_context, (uint8_t*)tmp.ptr, texture_channels, buf);
+            interleaved_to_halide<uint8_t>(user_context, (uint8_t *)tmp.ptr, texture_channels, buf);
             break;
         case GL_UNSIGNED_SHORT:
-            interleaved_to_halide<uint16_t>(user_context, (uint16_t*)tmp.ptr, texture_channels, buf);
+            interleaved_to_halide<uint16_t>(user_context, (uint16_t *)tmp.ptr, texture_channels, buf);
             break;
         case GL_FLOAT:
-            interleaved_to_halide<float>(user_context, (float*)tmp.ptr, texture_channels, buf);
+            interleaved_to_halide<float>(user_context, (float *)tmp.ptr, texture_channels, buf);
             break;
         }
 #ifdef DEBUG_RUNTIME
         int64_t t4 = halide_current_time_ns(user_context);
-        debug(user_context)<<"deinterleave time: "<<(t4-t3)/1e3<<"usec\n";
+        debug(user_context) << "deinterleave time: " << (t4 - t3) / 1e3 << "usec\n";
 #endif
     }
 
     return 0;
 }
 
-}}}} // namespace Halide::Runtime::Internal::OpenGL
+}  // namespace OpenGL
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 using namespace Halide::Runtime::Internal::OpenGL;
 
 // Find the correct module for the called function
 // TODO: This currently takes O(# of GLSL'd stages) and can
 // be optimized
-WEAK ModuleState* find_module(const char *stage_name) {
-    ModuleState* state_ptr = state_list;
+WEAK ModuleState *find_module(const char *stage_name) {
+    ModuleState *state_ptr = state_list;
 
-    while (state_ptr != NULL) {
+    while (state_ptr != nullptr) {
         KernelInfo *kernel = state_ptr->kernel;
         if (kernel && strcmp(stage_name, kernel->name) == 0) {
             return state_ptr;
@@ -1310,7 +1326,7 @@ WEAK ModuleState* find_module(const char *stage_name) {
         state_ptr = state_ptr->next;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 //  Create wrappers that satisfy old naming conventions
@@ -1325,7 +1341,7 @@ WEAK int halide_opengl_run(void *user_context,
                            int shared_mem_bytes,
                            size_t arg_sizes[], void *args[], int8_t is_buffer[],
                            int num_padded_attributes,
-                           float* vertex_buffer,
+                           float *vertex_buffer,
                            int num_coords_dim0,
                            int num_coords_dim1) {
     if (!global_state.initialized) {
@@ -1338,8 +1354,8 @@ WEAK int halide_opengl_run(void *user_context,
     // Find the right module
     ModuleState *mod = find_module(entry_name);
     if (!mod) {
-      error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
-      return 1;
+        error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
+        return 1;
     }
 
     KernelInfo *kernel = mod->kernel;
@@ -1374,34 +1390,34 @@ WEAK int halide_opengl_run(void *user_context,
         // Count the number of float and int uniform parameters.
         if (kernel_arg->kind == Argument::Uniform) {
             switch (kernel_arg->type) {
-                case Argument::Float:
-                // Integer parameters less than 32 bits wide are passed as
-                // normalized float values
-                case Argument::Int8:
-                case Argument::UInt8:
-                case Argument::Int16:
-                case Argument::UInt16:
-                    ++num_uniform_floats;
-                    break;
-                case Argument::Bool:
-                case Argument::Int32:
-                case Argument::UInt32:
-                    ++num_uniform_ints;
-                    break;
-                default:
-                    error(user_context) << "GLSL: Encountered invalid kernel argument type";
-                    return 1;
+            case Argument::Float:
+            // Integer parameters less than 32 bits wide are passed as
+            // normalized float values
+            case Argument::Int8:
+            case Argument::UInt8:
+            case Argument::Int16:
+            case Argument::UInt16:
+                ++num_uniform_floats;
+                break;
+            case Argument::Bool:
+            case Argument::Int32:
+            case Argument::UInt32:
+                ++num_uniform_ints;
+                break;
+            default:
+                error(user_context) << "GLSL: Encountered invalid kernel argument type";
+                return 1;
             }
         }
     }
 
     // Pad up to a multiple of four
     int num_padded_uniform_floats = (num_uniform_floats + 0x3) & ~0x3;
-    int num_padded_uniform_ints   = (num_uniform_ints + 0x3) & ~0x3;
+    int num_padded_uniform_ints = (num_uniform_ints + 0x3) & ~0x3;
 
     // Allocate storage for the packed arguments
     float uniform_float[num_padded_uniform_floats];
-    int   uniform_int[num_padded_uniform_ints];
+    int uniform_int[num_padded_uniform_ints];
 
     bool bind_render_targets = true;
 
@@ -1419,7 +1435,7 @@ WEAK int halide_opengl_run(void *user_context,
             // the Halide runtime
             uint64_t handle = ((halide_buffer_t *)args[i])->device;
             if (!handle) {
-                error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
+                error(user_context) << "GLSL: Encountered invalid nullptr dev pointer";
                 return 1;
             }
             if (handle == HALIDE_OPENGL_RENDER_TARGET) {
@@ -1428,7 +1444,7 @@ WEAK int halide_opengl_run(void *user_context,
             // Outbuf textures are handled explicitly below
             continue;
         } else if (kernel_arg->kind == Argument::Inbuf) {
-            halide_assert(user_context, is_buffer[i] && "OpenGL Inbuf argument is not a buffer.")
+            halide_assert(user_context, is_buffer[i] && "OpenGL Inbuf argument is not a buffer.");
             GLint loc =
                 global_state.GetUniformLocation(kernel->program_id, kernel_arg->name);
             if (global_state.CheckAndReportError(user_context, "halide_opengl_run GetUniformLocation(InBuf)")) {
@@ -1440,7 +1456,7 @@ WEAK int halide_opengl_run(void *user_context,
             }
             uint64_t handle = ((halide_buffer_t *)args[i])->device;
             if (!handle) {
-                error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
+                error(user_context) << "GLSL: Encountered invalid nullptr dev pointer";
                 return 1;
             }
             global_state.ActiveTexture(GL_TEXTURE0 + num_active_textures);
@@ -1463,31 +1479,31 @@ WEAK int halide_opengl_run(void *user_context,
             // Note: small integers are represented as floats in GLSL.
             switch (kernel_arg->type) {
             case Argument::Float:
-                uniform_float[uniform_float_idx++] = *(float*)args[i];
+                uniform_float[uniform_float_idx++] = *(float *)args[i];
                 break;
             case Argument::Bool:
-                uniform_int[uniform_int_idx++] = *((bool*)args[i]) ? 1 : 0;
+                uniform_int[uniform_int_idx++] = *((bool *)args[i]) ? 1 : 0;
                 break;
             case Argument::Int8:
-                uniform_float[uniform_float_idx++] = *((int8_t*)args[i]);
+                uniform_float[uniform_float_idx++] = *((int8_t *)args[i]);
                 break;
             case Argument::UInt8:
-                uniform_float[uniform_float_idx++] = *((uint8_t*)args[i]);
+                uniform_float[uniform_float_idx++] = *((uint8_t *)args[i]);
                 break;
             case Argument::Int16: {
-                uniform_float[uniform_float_idx++] = *((int16_t*)args[i]);
+                uniform_float[uniform_float_idx++] = *((int16_t *)args[i]);
                 break;
             }
             case Argument::UInt16: {
-                uniform_float[uniform_float_idx++] = *((uint16_t*)args[i]);
+                uniform_float[uniform_float_idx++] = *((uint16_t *)args[i]);
                 break;
             }
             case Argument::Int32: {
-                uniform_int[uniform_int_idx++] = *((int32_t*)args[i]);
+                uniform_int[uniform_int_idx++] = *((int32_t *)args[i]);
                 break;
             }
             case Argument::UInt32: {
-                uint32_t value = *((uint32_t*)args[i]);
+                uint32_t value = *((uint32_t *)args[i]);
                 if (value > 0x7fffffff) {
                     error(user_context)
                         << "OpenGL: argument '" << kernel_arg->name << "' is too large for GLint";
@@ -1497,7 +1513,7 @@ WEAK int halide_opengl_run(void *user_context,
                 break;
             }
             case Argument::Void:
-                error(user_context) <<"OpenGL: Encountered invalid kernel argument type";
+                error(user_context) << "OpenGL: Encountered invalid kernel argument type";
                 return 1;
             }
         }
@@ -1512,8 +1528,8 @@ WEAK int halide_opengl_run(void *user_context,
     for (int idx = 0; idx != num_padded_uniform_ints; idx += 4) {
 
         // Produce the uniform parameter name without using the std library.
-        Printer<StringStreamPrinter,16> name(user_context);
-        name << "_uniformi" << (idx/4);
+        Printer<StringStreamPrinter, 16> name(user_context);
+        name << "_uniformi" << (idx / 4);
 
         GLint loc = global_state.GetUniformLocation(kernel->program_id, name.str());
         if (global_state.CheckAndReportError(user_context, "halide_opengl_run GetUniformLocation")) {
@@ -1524,15 +1540,15 @@ WEAK int halide_opengl_run(void *user_context,
             continue;
         }
 
-        global_state.Uniform4iv(loc,1,&uniform_int[idx]);
+        global_state.Uniform4iv(loc, 1, &uniform_int[idx]);
     }
 
     // Set the packed uniform float parameters
     for (int idx = 0; idx != num_padded_uniform_floats; idx += 4) {
 
         // Produce the uniform parameter name without using the std library.
-        Printer<StringStreamPrinter,16> name(user_context);
-        name << "_uniformf" << (idx/4);
+        Printer<StringStreamPrinter, 16> name(user_context);
+        name << "_uniformf" << (idx / 4);
 
         GLint loc = global_state.GetUniformLocation(kernel->program_id, name.str());
         if (global_state.CheckAndReportError(user_context, "halide_opengl_run GetUniformLocation(2)")) {
@@ -1543,12 +1559,12 @@ WEAK int halide_opengl_run(void *user_context,
             continue;
         }
 
-        global_state.Uniform4fv(loc,1,&uniform_float[idx]);
+        global_state.Uniform4fv(loc, 1, &uniform_float[idx]);
     }
 
     // Prepare framebuffer for rendering to output textures.
-    GLint output_min[2] = { 0, 0 };
-    GLint output_extent[2] = { 0, 0 };
+    GLint output_min[2] = {0, 0};
+    GLint output_extent[2] = {0, 0};
 
     if (bind_render_targets) {
         global_state.BindFramebuffer(GL_FRAMEBUFFER, global_state.framebuffer_id);
@@ -1560,9 +1576,11 @@ WEAK int halide_opengl_run(void *user_context,
     GLint num_output_textures = 0;
     kernel_arg = kernel->arguments;
     for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
-        if (kernel_arg->kind != Argument::Outbuf) continue;
+        if (kernel_arg->kind != Argument::Outbuf) {
+            continue;
+        }
 
-        halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
+        halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.");
 
         // TODO: GL_MAX_COLOR_ATTACHMENTS
         if (num_output_textures >= 1) {
@@ -1575,7 +1593,7 @@ WEAK int halide_opengl_run(void *user_context,
         halide_assert(user_context, buf->dimensions >= 2);
         uint64_t handle = buf->device;
         if (!handle) {
-            error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
+            error(user_context) << "GLSL: Encountered invalid nullptr dev pointer";
             return 1;
         }
         GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
@@ -1585,8 +1603,8 @@ WEAK int halide_opengl_run(void *user_context,
             debug(user_context)
                 << "Output texture " << num_output_textures << ": " << tex << "\n";
             global_state.FramebufferTexture2D(GL_FRAMEBUFFER,
-                                    GL_COLOR_ATTACHMENT0 + num_output_textures,
-                                    GL_TEXTURE_2D, tex, 0);
+                                              GL_COLOR_ATTACHMENT0 + num_output_textures,
+                                              GL_TEXTURE_2D, tex, 0);
             if (global_state.CheckAndReportError(user_context, "halide_opengl_run FramebufferTexture2D")) {
                 return 1;
             }
@@ -1610,8 +1628,8 @@ WEAK int halide_opengl_run(void *user_context,
                 error(user_context) << "halide_malloc";
                 return 1;
             }
-            GLenum *draw_buffers = (GLenum*)draw_buffers_tmp.ptr;
-            for (int i=0; i<num_output_textures; i++) {
+            GLenum *draw_buffers = (GLenum *)draw_buffers_tmp.ptr;
+            for (int i = 0; i < num_output_textures; i++) {
                 draw_buffers[i] = GL_COLOR_ATTACHMENT0 + i;
             }
             global_state.DrawBuffers(num_output_textures, draw_buffers);
@@ -1652,7 +1670,7 @@ WEAK int halide_opengl_run(void *user_context,
         return 1;
     }
 
-#if 0 // DEBUG_RUNTIME
+#if 0  // DEBUG_RUNTIME
     debug(user_context) << "output_extent: " << output_extent[0] << "," << output_extent[1] << "\n";
     debug(user_context) << "output_min: " << output_min[0] << "," << output_min[1] << "\n";
 #endif
@@ -1665,29 +1683,28 @@ WEAK int halide_opengl_run(void *user_context,
     int width = num_coords_dim0;
     int height = num_coords_dim1;
 
-    int vertex_buffer_size = width*height*num_padded_attributes;
+    int vertex_buffer_size = width * height * num_padded_attributes;
 
-    int element_buffer_size = (width-1)*(height-1)*6;
+    int element_buffer_size = (width - 1) * (height - 1) * 6;
     int element_buffer[element_buffer_size];
 
     int idx = 0;
-    for (int h=0;h!=(height-1);++h) {
-        for (int w=0;w!=(width-1);++w) {
+    for (int h = 0; h != (height - 1); ++h) {
+        for (int w = 0; w != (width - 1); ++w) {
 
             // TODO(abestephensg): Use sorted coordinates when integrated
-            int v = w+h*width;
+            int v = w + h * width;
             element_buffer[idx++] = v;
-            element_buffer[idx++] = v+1;
-            element_buffer[idx++] = v+width+1;
+            element_buffer[idx++] = v + 1;
+            element_buffer[idx++] = v + width + 1;
 
-            element_buffer[idx++] = v+width+1;
-            element_buffer[idx++] = v+width;
+            element_buffer[idx++] = v + width + 1;
+            element_buffer[idx++] = v + width;
             element_buffer[idx++] = v;
         }
     }
 
-
-#if 0 // DEBUG_RUNTIME
+#if 0  // DEBUG_RUNTIME
     debug(user_context) << "Vertex buffer:";
     for (int i=0;i!=vertex_buffer_size;++i) {
         if (!(i%num_padded_attributes)) {
@@ -1721,7 +1738,7 @@ WEAK int halide_opengl_run(void *user_context,
     GLuint vertex_buffer_id;
     global_state.GenBuffers(1, &vertex_buffer_id);
     global_state.BindBuffer(GL_ARRAY_BUFFER, vertex_buffer_id);
-    global_state.BufferData(GL_ARRAY_BUFFER, sizeof(float)*vertex_buffer_size, vertex_buffer, GL_STATIC_DRAW);
+    global_state.BufferData(GL_ARRAY_BUFFER, sizeof(float) * vertex_buffer_size, vertex_buffer, GL_STATIC_DRAW);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run vertex BufferData et al")) {
         return 1;
     }
@@ -1729,7 +1746,7 @@ WEAK int halide_opengl_run(void *user_context,
     GLuint element_buffer_id;
     global_state.GenBuffers(1, &element_buffer_id);
     global_state.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer_id);
-    global_state.BufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(float)*element_buffer_size, element_buffer, GL_STATIC_DRAW);
+    global_state.BufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(float) * element_buffer_size, element_buffer, GL_STATIC_DRAW);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run element BufferData et al")) {
         return 1;
     }
@@ -1737,12 +1754,12 @@ WEAK int halide_opengl_run(void *user_context,
     // The num_padded_attributes argument is the number of vertex attributes,
     // including the spatial x and y coordinates, padded up to a multiple of
     // four so that the attributes may be packed into vec4 slots.
-    int num_packed_attributes = num_padded_attributes/4;
+    int num_packed_attributes = num_padded_attributes / 4;
 
     // Set up the per vertex attributes
     GLint attrib_ids[num_packed_attributes];
 
-    for (int i=0;i!=num_packed_attributes;i++) {
+    for (int i = 0; i != num_packed_attributes; i++) {
 
         // The attribute names can synthesized by the runtime based on the
         // number of packed varying attributes
@@ -1756,10 +1773,10 @@ WEAK int halide_opengl_run(void *user_context,
         // Check to see if the varying attribute was simplified out of the
         // program by the GLSL compiler.
         if (attrib_id == -1) {
-          continue;
+            continue;
         }
 
-        global_state.VertexAttribPointer(attrib_id, 4, GL_FLOAT, GL_FALSE /* Normalized */, sizeof(GLfloat)*num_padded_attributes, (void*)(i*sizeof(GLfloat)*4));
+        global_state.VertexAttribPointer(attrib_id, 4, GL_FLOAT, GL_FALSE /* Normalized */, sizeof(GLfloat) * num_padded_attributes, (void *)(i * sizeof(GLfloat) * 4));
         if (global_state.CheckAndReportError(user_context, "halide_opengl_run VertexAttribPointer et al")) {
             return 1;
         }
@@ -1770,9 +1787,8 @@ WEAK int halide_opengl_run(void *user_context,
         }
     }
 
-
     // Draw the scene
-    global_state.DrawElements(GL_TRIANGLES, element_buffer_size, GL_UNSIGNED_INT, NULL);
+    global_state.DrawElements(GL_TRIANGLES, element_buffer_size, GL_UNSIGNED_INT, nullptr);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run DrawElements et al")) {
         return 1;
     }
@@ -1822,7 +1838,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
 
     while (this_kernel) {
         // Find the start of the next kernel
-        const char *next_kernel = strstr(this_kernel+1, kernel_marker);
+        const char *next_kernel = strstr(this_kernel + 1, kernel_marker);
 
         // Use that to compute the length of this kernel
         int len = 0;
@@ -1834,7 +1850,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
 
         // Construct a new ModuleState and add it to the global list
         module = (ModuleState *)malloc(sizeof(ModuleState));
-        module->kernel = NULL;
+        module->kernel = nullptr;
         module->next = state_list;
         state_list = module;
         *state = module;
@@ -1856,17 +1872,18 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
         // expressions interpolated by varying attributes are evaluated
         // by host code on the CPU and passed to the GPU as values in the
         // vertex buffer.
-        enum { PrinterLength = 1024*4 };
-        Printer<StringStreamPrinter,PrinterLength> vertex_src(user_context);
+        enum { PrinterLength = 1024 * 4 };
+        Printer<StringStreamPrinter, PrinterLength> vertex_src(user_context);
 
         // Count the number of varying attributes, this is 2 for the spatial
         // x and y coordinates, plus the number of scalar varying attribute
         // expressions pulled out of the fragment shader.
         int num_varying_float = 2;
 
-        for (Argument* arg = kernel->arguments; arg; arg=arg->next) {
-            if (arg->kind == Argument::Varying)
+        for (Argument *arg = kernel->arguments; arg; arg = arg->next) {
+            if (arg->kind == Argument::Varying) {
                 ++num_varying_float;
+            }
         }
 
         int num_packed_varying_float = ((num_varying_float + 3) & ~0x3) / 4;
@@ -1904,7 +1921,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
 
         // Initialize vertex shader.
         GLuint vertex_shader_id = make_shader(user_context,
-                                              GL_VERTEX_SHADER, vertex_src.buf, NULL);
+                                              GL_VERTEX_SHADER, vertex_src.buf, nullptr);
         if (vertex_shader_id == 0) {
             halide_error(user_context, "Failed to create vertex shader");
             return 1;
@@ -1912,7 +1929,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
 
         // Create the fragment shader
         GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
-                                                kernel->source, NULL);
+                                                kernel->source, nullptr);
         // Link GLSL program
         GLuint program = global_state.CreateProgram();
         global_state.AttachShader(program, vertex_shader_id);
@@ -1930,9 +1947,10 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
             global_state.GetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
             HalideMalloc log_tmp(user_context, log_len);
             if (log_tmp.ptr) {
-                char *log = (char*) log_tmp.ptr;
-                global_state.GetProgramInfoLog(program, log_len, NULL, log);
-                debug(user_context) << "Could not link GLSL program:\n" << log << "\n";
+                char *log = (char *)log_tmp.ptr;
+                global_state.GetProgramInfoLog(program, log_len, nullptr, log);
+                debug(user_context) << "Could not link GLSL program:\n"
+                                    << log << "\n";
             }
             global_state.DeleteProgram(program);
             return -1;
@@ -1957,7 +1975,9 @@ WEAK const halide_device_interface_t *halide_opengl_device_interface() {
 }
 
 WEAK void halide_opengl_context_lost(void *user_context) {
-    if (!global_state.initialized) return;
+    if (!global_state.initialized) {
+        return;
+    }
 
     debug(user_context) << "halide_opengl_context_lost\n";
     for (ModuleState *mod = state_list; mod; mod = mod->next) {
@@ -1966,7 +1986,6 @@ WEAK void halide_opengl_context_lost(void *user_context) {
     }
 
     global_state.init();
-    return;
 }
 
 WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, uint64_t texture_id) {
@@ -2013,7 +2032,7 @@ WEAK int halide_opengl_detach_texture(void *user_context, halide_buffer_t *buf) 
     halide_assert(user_context, buf->device_interface == &opengl_device_interface);
     buf->device = 0;
     buf->device_interface->impl->release_module();
-    buf->device_interface = NULL;
+    buf->device_interface = nullptr;
     return 0;
 }
 
@@ -2028,16 +2047,17 @@ WEAK uintptr_t halide_opengl_get_texture(void *user_context, halide_buffer_t *bu
 }
 
 namespace {
-__attribute__((destructor))
-WEAK void halide_opengl_cleanup() {
-    halide_opengl_device_release(NULL);
+WEAK __attribute__((destructor)) void halide_opengl_cleanup() {
+    halide_opengl_device_release(nullptr);
 }
-}
+}  // namespace
 
-} // extern "C"
+}  // extern "C"
 
-
-namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace OpenGL {
 
 WEAK halide_device_interface_impl_t opengl_device_interface_impl = {
     halide_use_jit_module,
@@ -2055,8 +2075,7 @@ WEAK halide_device_interface_impl_t opengl_device_interface_impl = {
     halide_default_device_slice,
     halide_default_device_release_crop,
     halide_opengl_wrap_texture,
-    halide_opengl_detach_texture
-};
+    halide_opengl_detach_texture};
 
 WEAK halide_device_interface_t opengl_device_interface = {
     halide_device_malloc,
@@ -2073,8 +2092,10 @@ WEAK halide_device_interface_t opengl_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
-    NULL,
-    &opengl_device_interface_impl
-};
+    nullptr,
+    &opengl_device_interface_impl};
 
-}}}} // namespace Halide::Runtime::Internal::OpenGL
+}  // namespace OpenGL
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide

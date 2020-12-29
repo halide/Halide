@@ -24,7 +24,7 @@ protected:
     Internal::Parameter param;
 
     /** Is this an input or an output? OutputImageParam is the base class for both. */
-    Argument::Kind kind;
+    Argument::Kind kind = Argument::InputScalar;
 
     /** If Input: Func representation of the ImageParam.
      * If Output: Func that creates this OutputImageParam.
@@ -40,9 +40,8 @@ protected:
     OutputImageParam(const Internal::Parameter &p, Argument::Kind k, Func f);
 
 public:
-
     /** Construct a null image parameter handle. */
-    OutputImageParam() : kind(Argument::InputScalar) {}
+    OutputImageParam() = default;
 
     /** Get the name of this Param */
     const std::string &name() const;
@@ -59,7 +58,7 @@ public:
 
     /** Get a handle on one of the dimensions for the purposes of
      * inspecting its min, extent, or stride. */
-    const Internal::Dimension dim(int i) const;
+    Internal::Dimension dim(int i) const;
 
     /** Get the alignment of the host pointer in bytes. Defaults to
      * the size of type. */
@@ -110,6 +109,16 @@ public:
     /** Using a param as the argument to an external stage treats it
      * as an Expr */
     operator ExternFuncArgument() const;
+
+    /** Set (min, extent) estimates for all dimensions in the ImageParam
+     * at once; this is equivalent to calling `dim(n).set_estimate(min, extent)`
+     * repeatedly, but slightly terser. The size of the estimates vector
+     * must match the dimensionality of the ImageParam. */
+    OutputImageParam &set_estimates(const Region &estimates);
+
+    /** Set the desired storage type for this parameter.  Only useful
+     * for MemoryType::GPUTexture at present */
+    OutputImageParam &store_in(MemoryType type);
 };
 
 }  // namespace Halide

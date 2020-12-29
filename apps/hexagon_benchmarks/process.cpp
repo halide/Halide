@@ -1,6 +1,6 @@
-#include <stdio.h>
-#include <memory.h>
 #include <assert.h>
+#include <memory.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "halide_benchmark.h"
@@ -10,8 +10,7 @@ void usage(char *prg_name) {
     const char usage_string[] = " Run a bunch of small filters\n\n"
                                 "\t -n -> number of iterations\n"
                                 "\t -h -> print this help message\n";
-    printf ("%s - %s", prg_name, usage_string);
-
+    printf("%s - %s", prg_name, usage_string);
 }
 
 int main(int argc, char **argv) {
@@ -29,7 +28,7 @@ int main(int argc, char **argv) {
                 return 0;
                 break;
             case 'n':
-                iterations = atoi(argv[i+1]);
+                iterations = atoi(argv[i + 1]);
                 i++;
                 break;
             }
@@ -43,7 +42,6 @@ int main(int argc, char **argv) {
     SobelDescriptor sobel_pipeline(W, H);
     Conv3x3a32Descriptor conv3x3a32_pipeline(W, H);
 
-
     std::vector<PipelineDescriptorBase *> pipelines = {&conv3x3a16_pipeline, &dilate3x3_pipeine, &median3x3_pipeline,
                                                        &gaussian5x5_pipeline, &sobel_pipeline, &conv3x3a32_pipeline};
 
@@ -52,7 +50,7 @@ int main(int argc, char **argv) {
             continue;
         }
         p->init();
-        printf ("Running %s...\n", p->name());
+        printf("Running %s...\n", p->name());
 
 #ifdef HALIDE_RUNTIME_HEXAGON
         // To avoid the cost of powering HVX on in each call of the
@@ -64,7 +62,7 @@ int main(int argc, char **argv) {
         double time = Halide::Tools::benchmark(iterations, 10, [&]() {
             int result = p->run();
             if (result != 0) {
-              printf("pipeline failed! %d\n", result);
+                printf("pipeline failed! %d\n", result);
             }
         });
         printf("Done, time (%s): %g s\n", p->name(), time);

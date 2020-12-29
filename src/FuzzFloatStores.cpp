@@ -26,7 +26,7 @@ class FuzzFloatStores : public IRMutator {
 };
 }  // namespace
 
-Stmt fuzz_float_stores(Stmt s) {
+Stmt fuzz_float_stores(const Stmt &s) {
     return FuzzFloatStores().mutate(s);
 }
 

@@ -8,17 +8,16 @@ int main(int argc, char **argv) {
     // Move this test to correctness once we can support >4d buffer_ts on the gpu
 
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("No gpu target enabled. Skipping test.\n");
-        // This test is currently expected to error out.
+        printf("[SKIP] No GPU target enabled.\n");
+        // This test is currently expected to error out. This is for the Makefile's benefit.
         printf("Error: pretending that there was an error\n");
         return -1;
     }
 
-
     Func f;
     Var v0, v1, v2, v3, v4;
 
-    f(v0, v1, v2, v3, v4) = v0 + 2*v1 + 4*v2 + 8*v3 + 16*v4;
+    f(v0, v1, v2, v3, v4) = v0 + 2 * v1 + 4 * v2 + 8 * v3 + 16 * v4;
 
     f.compute_root().gpu_blocks(v3, v4).gpu_threads(v1, v2);
 

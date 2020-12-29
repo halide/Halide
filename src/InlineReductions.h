@@ -1,7 +1,9 @@
 #ifndef HALIDE_INLINE_REDUCTIONS_H
 #define HALIDE_INLINE_REDUCTIONS_H
 
-#include "IR.h"
+#include <string>
+
+#include "Expr.h"
 #include "RDom.h"
 #include "Tuple.h"
 
@@ -49,10 +51,10 @@ Expr minimum(Expr, const std::string &s = "minimum");
  \endcode
 */
 // @{
-Expr sum(RDom, Expr, const std::string &s = "sum");
-Expr product(RDom, Expr, const std::string &s = "product");
-Expr maximum(RDom, Expr, const std::string &s = "maximum");
-Expr minimum(RDom, Expr, const std::string &s = "minimum");
+Expr sum(const RDom &, Expr, const std::string &s = "sum");
+Expr product(const RDom &, Expr, const std::string &s = "product");
+Expr maximum(const RDom &, Expr, const std::string &s = "maximum");
+Expr minimum(const RDom &, Expr, const std::string &s = "minimum");
 // @}
 
 /** Returns an Expr or Tuple representing the coordinates of the point
@@ -62,8 +64,8 @@ Expr minimum(RDom, Expr, const std::string &s = "minimum");
 // @{
 Tuple argmax(Expr, const std::string &s = "argmax");
 Tuple argmin(Expr, const std::string &s = "argmin");
-Tuple argmax(RDom, Expr, const std::string &s = "argmax");
-Tuple argmin(RDom, Expr, const std::string &s = "argmin");
+Tuple argmax(const RDom &, Expr, const std::string &s = "argmax");
+Tuple argmin(const RDom &, Expr, const std::string &s = "argmin");
 // @}
 
 }  // namespace Halide

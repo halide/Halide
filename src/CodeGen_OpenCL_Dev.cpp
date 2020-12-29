@@ -1,12 +1,20 @@
 #include <algorithm>
+#include <array>
 #include <sstream>
+#include <utility>
 
+#include "CSE.h"
+#include "CodeGen_C.h"
+#include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "Debug.h"
 #include "EliminateBoolVectors.h"
+#include "EmulateFloat16Math.h"
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,14 +24,99 @@ using std::sort;
 using std::string;
 using std::vector;
 
-CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
-    clc(src_stream, t) {
+namespace {
+
+class CodeGen_OpenCL_Dev : public CodeGen_GPU_Dev {
+public:
+    CodeGen_OpenCL_Dev(Target target);
+
+    /** Compile a GPU kernel into the module. This may be called many times
+     * with different kernels, which will all be accumulated into a single
+     * source module shared by a given Halide pipeline. */
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args) override;
+
+    /** (Re)initialize the GPU kernel module. This is separate from compile,
+     * since a GPU device module will often have many kernels compiled into it
+     * for a single pipeline. */
+    void init_module() override;
+
+    std::vector<char> compile_to_src() override;
+
+    std::string get_current_kernel_name() override;
+
+    void dump() override;
+
+    std::string print_gpu_name(const std::string &name) override;
+
+    std::string api_unique_name() override {
+        return "opencl";
+    }
+
+protected:
+    class CodeGen_OpenCL_C : public CodeGen_C {
+    public:
+        CodeGen_OpenCL_C(std::ostream &s, Target t)
+            : CodeGen_C(s, t) {
+            integer_suffix_style = IntegerSuffixStyle::OpenCL;
+        }
+        void add_kernel(Stmt stmt,
+                        const std::string &name,
+                        const std::vector<DeviceArgument> &args);
+
+    protected:
+        using CodeGen_C::visit;
+        std::string print_type(Type type, AppendSpaceIfNeeded append_space = DoNotAppendSpace) override;
+        std::string print_reinterpret(Type type, const Expr &e) override;
+        std::string print_extern_call(const Call *op) override;
+        std::string print_array_access(const std::string &name,
+                                       const Type &type,
+                                       const std::string &id_index);
+        void add_vector_typedefs(const std::set<Type> &vector_types) override;
+
+        std::string get_memory_space(const std::string &);
+
+        std::string shared_name;
+
+        void visit(const For *) override;
+        void visit(const Ramp *op) override;
+        void visit(const Broadcast *op) override;
+        void visit(const Call *op) override;
+        void visit(const Load *op) override;
+        void visit(const Store *op) override;
+        void visit(const Cast *op) override;
+        void visit(const Select *op) override;
+        void visit(const EQ *) override;
+        void visit(const NE *) override;
+        void visit(const LT *) override;
+        void visit(const LE *) override;
+        void visit(const GT *) override;
+        void visit(const GE *) override;
+        void visit(const Allocate *op) override;
+        void visit(const Free *op) override;
+        void visit(const AssertStmt *op) override;
+        void visit(const Shuffle *op) override;
+        void visit(const Min *op) override;
+        void visit(const Max *op) override;
+        void visit(const Atomic *op) override;
+    };
+
+    std::ostringstream src_stream;
+    std::string cur_kernel_name;
+    CodeGen_OpenCL_C clc;
+};
+
+CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t)
+    : clc(src_stream, t) {
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIfNeeded space) {
     ostringstream oss;
     if (type.is_float()) {
         if (type.bits() == 16) {
+            user_assert(target.has_feature(Target::CLHalf))
+                << "OpenCL kernel uses half type, but CLHalf target flag not enabled\n";
             oss << "half";
         } else if (type.bits() == 32) {
             oss << "float";
@@ -34,14 +127,16 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
         }
 
     } else {
-        if (type.is_uint() && type.bits() > 1) oss << 'u';
+        if (type.is_uint() && type.bits() > 1) {
+            oss << "u";
+        }
         switch (type.bits()) {
         case 1:
             internal_assert(type.lanes() == 1) << "Encountered vector of bool\n";
             oss << "bool";
             break;
         case 8:
-          oss << "char";
+            oss << "char";
             break;
         case 16:
             oss << "short";
@@ -66,11 +161,11 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
             oss << type.lanes();
             break;
         default:
-            user_error <<  "Unsupported vector width in OpenCL C: " << type << "\n";
+            user_error << "Unsupported vector width in OpenCL C: " << type << "\n";
         }
     }
     if (space == AppendSpace) {
-        oss << ' ';
+        oss << " ";
     }
     return oss.str();
 }
@@ -79,13 +174,11 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_vector_typedefs(const std::set<Type> &vector_types) {
 }
 
-string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e) {
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, const Expr &e) {
     ostringstream oss;
     oss << "as_" << print_type(type) << "(" << print_expr(e) << ")";
     return oss.str();
 }
-
-
 
 namespace {
 string simt_intrinsic(const string &name) {
@@ -112,14 +205,16 @@ string simt_intrinsic(const string &name) {
 }  // namespace
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
+    user_assert(loop->for_type != ForType::GPULane)
+        << "The OpenCL backend does not support the gpu_lanes() scheduling directive.";
+
     if (is_gpu_var(loop->name)) {
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))
             << "kernel loop must be either gpu block or gpu thread\n";
-        internal_assert(is_zero(loop->min));
+        internal_assert(is_const_zero(loop->min));
 
-        do_indent();
-        stream << print_type(Int(32)) << " " << print_name(loop->name)
+        stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
                << " = " << simt_intrinsic(loop->name) << ";\n";
 
         loop->body.accept(this);
@@ -158,8 +253,27 @@ const char *vector_elements = "0123456789ABCDEF";
 }  // namespace
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf) {
-    return "__address_space_" + print_name(buf);
+    if (buf == shared_name) {
+        return "__local";
+    } else {
+        return "__address_space_" + print_name(buf);
+    }
 }
+
+namespace {
+std::string image_type_suffix(const Type &type) {
+    if (type.is_int()) {
+        return "i";
+    } else if (type.is_uint()) {
+        return "ui";
+    } else if (type.is_float()) {
+        return "f";
+    } else {
+        internal_error << "Invalid type for image: " << type << "\n";
+    }
+    return "";
+}
+}  // namespace
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::bool_to_mask)) {
@@ -204,18 +318,131 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         rhs << "abs_diff(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
         print_assignment(op->type, rhs.str());
     } else if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        do_indent();
-        stream << "barrier(CLK_LOCAL_MEM_FENCE);\n";
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
+
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
+        internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
+        auto fence_type = *fence_type_ptr;
+
+        stream << get_indent() << "barrier(0";
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
+            stream << " | CLK_GLOBAL_MEM_FENCE";
+        }
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
+            stream << " | CLK_LOCAL_MEM_FENCE";
+        }
+        stream << ");\n";
         print_assignment(op->type, "0");
     } else if (op->is_intrinsic(Call::shift_left) || op->is_intrinsic(Call::shift_right)) {
         // Some OpenCL implementations forbid mixing signed-and-unsigned shift values;
-        // we enforce RHS as unsigned, so quietly cast it back to int if the LHS is int
+        // if the RHS is uint, quietly cast it back to int if the LHS is int
         if (op->args[0].type().is_int() && op->args[1].type().is_uint()) {
             Type t = op->args[0].type().with_code(halide_type_int);
             Expr e = Call::make(op->type, op->name, {op->args[0], cast(t, op->args[1])}, op->call_type);
             e.accept(this);
         } else {
             CodeGen_C::visit(op);
+        }
+    } else if (op->is_intrinsic(Call::image_load)) {
+        // image_load(<image name>, <buffer>, <x>, <x-extent>, <y>,
+        // <y-extent>, <z>, <z-extent>)
+        int dims = (op->args.size() - 2) / 2;
+        internal_assert(dims >= 1 && dims <= 3);
+        const StringImm *string_imm = op->args[0].as<StringImm>();
+        if (!string_imm) {
+            internal_assert(op->args[0].as<Broadcast>());
+            string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+        }
+        internal_assert(string_imm);
+        Type arg_type = op->args[2].type();
+        internal_assert(arg_type.lanes() <= 16);
+        internal_assert(arg_type.lanes() == op->type.lanes());
+
+        std::array<string, 3> coord;
+        for (int i = 0; i < dims; i++) {
+            coord[i] = print_expr(op->args[i * 2 + 2]);
+        }
+        vector<string> results(arg_type.lanes());
+        // For vectorized reads, codegen as a sequence of read_image calls
+        for (int i = 0; i < arg_type.lanes(); i++) {
+            ostringstream rhs;
+            rhs << "read_image" << image_type_suffix(op->type) << "(" << print_name(string_imm->value) << ", ";
+            string idx = arg_type.is_vector() ? string(".s") + vector_elements[i] : "";
+            switch (dims) {
+            case 1:
+                rhs << coord[0] << idx << ").s0";
+                break;
+            case 2:
+                rhs << "(int2)(" << coord[0] << idx << ", " << coord[1] << idx << ")).s0";
+                break;
+            case 3:
+                rhs << "(int4)(" << coord[0] << idx << ", " << coord[1] << idx
+                    << ", " << coord[2] << idx << ", 0)).s0";
+                break;
+            }
+            print_assignment(op->type.with_bits(32).with_lanes(1), rhs.str());
+            results[i] = id;
+        }
+
+        if (op->type.is_vector()) {
+            // Combine all results into a single vector
+            ostringstream rhs;
+            rhs << "(" << print_type(op->type) << ")(";
+            for (int i = 0; i < op->type.lanes(); i++) {
+                rhs << results[i];
+                if (i < op->type.lanes() - 1) {
+                    rhs << ", ";
+                }
+            }
+            rhs << ")";
+            print_assignment(op->type, rhs.str());
+        }
+        if (op->type.bits() != 32) {
+            // Widen to the correct type
+            print_assignment(op->type, "convert_" + print_type(op->type) + "(" + id + ")");
+        }
+    } else if (op->is_intrinsic(Call::image_store)) {
+        // image_store(<image name>, <buffer>, <x>, <y>, <z>, <value>)
+        const StringImm *string_imm = op->args[0].as<StringImm>();
+        if (!string_imm) {
+            internal_assert(op->args[0].as<Broadcast>());
+            string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+        }
+        internal_assert(string_imm);
+        int dims = op->args.size() - 3;
+        internal_assert(dims >= 1 && dims <= 3);
+        Type arg_type = op->args[2].type();
+        internal_assert(arg_type.lanes() <= 16);
+        Type value_type = op->args.back().type();
+        internal_assert(arg_type.lanes() == value_type.lanes());
+
+        std::array<string, 3> coord;
+        for (int i = 0; i < dims; i++) {
+            coord[i] = print_expr(op->args[i + 2]);
+        }
+        string value = print_expr(op->args.back());
+        // For vectorized writes, codegen as a sequence of write_image calls
+        for (int i = 0; i < arg_type.lanes(); i++) {
+            ostringstream write_image;
+            write_image << "write_image" << image_type_suffix(op->type)
+                        << "(" << print_name(string_imm->value) << ", ";
+            string idx = arg_type.is_vector() ? string(".s") + vector_elements[i] : "";
+            switch (dims) {
+            case 1:
+                write_image << coord[0] << idx;
+                break;
+            case 2:
+                write_image << "(int2)(" << coord[0] << idx << ", " << coord[1] << idx << ")";
+                break;
+            case 3:
+                write_image << "(int4)(" << coord[0] << idx << ", " << coord[1] << idx
+                            << ", " << coord[2] << idx << ", 0)";
+                break;
+            }
+            write_image << ", (" << print_type(value_type.with_bits(32).with_lanes(4))
+                        << ")(" << value << idx << ", 0, 0, 0));\n";
+            //  do_indent();
+            stream << write_image.str();
         }
     } else {
         CodeGen_C::visit(op);
@@ -233,21 +460,49 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_extern_call(const Call *op) {
     return rhs.str();
 }
 
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string &name,
+                                                                const Type &type,
+                                                                const string &id_index) {
+    ostringstream rhs;
+    bool type_cast_needed = !(allocations.contains(name) &&
+                              allocations.get(name).type == type);
+
+    if (type_cast_needed) {
+        rhs << "((" << get_memory_space(name) << " "
+            << print_type(type) << " *)"
+            << print_name(name)
+            << ")";
+    } else {
+        rhs << print_name(name);
+    }
+    rhs << "[" << id_index << "]";
+
+    return rhs.str();
+}
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside OpenCL kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside OpenCL kernel.\n";
 
     // If we're loading a contiguous ramp into a vector, use vload instead.
     Expr ramp_base = strided_ramp_base(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->type.is_vector());
-        string id_ramp_base = print_expr(ramp_base);
 
         ostringstream rhs;
-        rhs << "vload" << op->type.lanes()
-            << "(0, (" << get_memory_space(op->name) << " "
-            << print_type(op->type.element_of()) << "*)"
-            << print_name(op->name) << " + " << id_ramp_base << ")";
+        if ((op->alignment.modulus % op->type.lanes() == 0) &&
+            (op->alignment.remainder % op->type.lanes() == 0)) {
+            // Get the rhs just for the cache.
+            string id_ramp_base = print_expr(ramp_base / op->type.lanes());
+            string array_indexing = print_array_access(op->name, op->type, id_ramp_base);
 
+            rhs << array_indexing;
+        } else {
+            string id_ramp_base = print_expr(ramp_base);
+            rhs << "vload" << op->type.lanes()
+                << "(0, (" << get_memory_space(op->name) << " "
+                << print_type(op->type.element_of()) << "*)"
+                << print_name(op->name) << " + " << id_ramp_base << ")";
+        }
         print_assignment(op->type, rhs.str());
         return;
     }
@@ -255,20 +510,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     string id_index = print_expr(op->index);
 
     // Get the rhs just for the cache.
-    bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name).type == op->type);
-    ostringstream rhs;
-    if (type_cast_needed) {
-        rhs << "((" << get_memory_space(op->name) << " "
-            << print_type(op->type) << " *)"
-            << print_name(op->name)
-            << ")";
-    } else {
-        rhs << print_name(op->name);
-    }
-    rhs << "[" << id_index << "]";
+    string array_indexing = print_array_access(op->name, op->type, id_index);
 
-    std::map<string, string>::iterator cached = cache.find(rhs.str());
+    std::map<string, string>::iterator cached = cache.find(array_indexing);
     if (cached != cache.end()) {
         id = cached->second;
         return;
@@ -279,14 +523,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         internal_assert(op->type.is_vector());
 
         id = "_" + unique_name('V');
-        cache[rhs.str()] = id;
+        cache[array_indexing] = id;
 
-        do_indent();
-        stream << print_type(op->type)
+        stream << get_indent() << print_type(op->type)
                << " " << id << ";\n";
 
         for (int i = 0; i < op->type.lanes(); ++i) {
-            do_indent();
+            stream << get_indent();
             stream
                 << id << ".s" << vector_elements[i]
                 << " = ((" << get_memory_space(op->name) << " "
@@ -295,12 +538,115 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
                 << "[" << id_index << ".s" << vector_elements[i] << "];\n";
         }
     } else {
-        print_assignment(op->type, rhs.str());
+        print_assignment(op->type, array_indexing);
     }
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "Predicated store is not supported inside OpenCL kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported inside OpenCL kernel.\n";
+
+    if (emit_atomic_stores) {
+        // Currently only support scalar atomics.
+        user_assert(op->value.type().is_scalar()) << "OpenCL atomic store does not support vectorization.\n";
+        user_assert(op->value.type().bits() >= 32) << "OpenCL only support 32 and 64 bit atomics.\n";
+        if (op->value.type().bits() == 64) {
+            user_assert(target.has_feature(Target::CLAtomics64))
+                << "Enable feature CLAtomics64 for 64-bit atomics in OpenCL.\n";
+        }
+        // Detect whether we can describe this as an atomic-read-modify-write,
+        // otherwise fallback to a compare-and-swap loop.
+        // Current only test for atomic add.
+        Expr val_expr = op->value;
+        Type t = val_expr.type();
+        Expr equiv_load = Load::make(t, op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
+        Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
+        // For atomicAdd, we check if op->value - store[index] is independent of store.
+        // The atomicAdd operations in OpenCL only supports integers so we also check that.
+        bool is_atomic_add = t.is_int_or_uint() && !expr_uses_var(delta, op->name);
+        bool type_cast_needed = !(allocations.contains(op->name) &&
+                                  allocations.get(op->name).type == t);
+        auto print_store_var = [&]() {
+            if (type_cast_needed) {
+                stream << "(("
+                       << get_memory_space(op->name) << " "
+                       << print_type(t)
+                       << " *)"
+                       << print_name(op->name)
+                       << ")";
+            } else {
+                stream << print_name(op->name);
+            }
+        };
+        if (is_atomic_add) {
+            string id_index = print_expr(op->index);
+            string id_delta = print_expr(delta);
+            stream << get_indent();
+            // atomic_add(&x[i], delta);
+            if (t.bits() == 32) {
+                stream << "atomic_add(&";
+            } else {
+                stream << "atom_add(&";
+            }
+
+            print_store_var();
+            stream << "[" << id_index << "]";
+            stream << "," << id_delta << ");\n";
+        } else {
+            // CmpXchg loop
+            // {
+            //   union {unsigned int i; float f;} old_val;
+            //   union {unsigned int i; float f;} new_val;
+            //   do {
+            //     old_val.f = x[id_index];
+            //     new_val.f = ...
+            //   } while(atomic_cmpxchg((volatile address_space unsigned int*)&x[id_index], old_val.i, new_val.i) != old_val.i);
+            // }
+            stream << get_indent() << "{\n";
+            indent += 2;
+            string id_index = print_expr(op->index);
+            std::string int_type = t.bits() == 32 ? "int" : "long";
+            if (t.is_float() || t.is_uint()) {
+                int_type = "unsigned " + int_type;
+            }
+            if (t.is_float()) {
+                stream << get_indent() << "union {" << int_type << " i; " << print_type(t) << " f;} old_val;\n";
+                stream << get_indent() << "union {" << int_type << " i; " << print_type(t) << " f;} new_val;\n";
+            } else {
+                stream << get_indent() << int_type << " old_val;\n";
+                stream << get_indent() << int_type << " new_val;\n";
+            }
+            stream << get_indent() << "do {\n";
+            indent += 2;
+            stream << get_indent();
+            if (t.is_float()) {
+                stream << "old_val.f = ";
+            } else {
+                stream << "old_val = ";
+            }
+            print_store_var();
+            stream << "[" << id_index << "];\n";
+            string id_value = print_expr(op->value);
+            stream << get_indent();
+            if (t.is_float()) {
+                stream << "new_val.f = ";
+            } else {
+                stream << "new_val = ";
+            }
+            stream << id_value << ";\n";
+            indent -= 2;
+            std::string old_val = t.is_float() ? "old_val.i" : "old_val";
+            std::string new_val = t.is_float() ? "new_val.i" : "new_val";
+            stream << get_indent()
+                   << "} while(atomic_cmpxchg((volatile "
+                   << get_memory_space(op->name) << " " << int_type << "*)&"
+                   << print_name(op->name) << "[" << id_index << "], "
+                   << old_val << ", " << new_val << ") != " << old_val << ");\n"
+                   << get_indent() << "}\n";
+            indent -= 2;
+        }
+        cache.clear();
+        return;
+    }
 
     string id_value = print_expr(op->value);
     Type t = op->value.type();
@@ -309,16 +655,21 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     Expr ramp_base = strided_ramp_base(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
-        string id_ramp_base = print_expr(ramp_base);
 
-        do_indent();
-        stream << "vstore" << t.lanes() << "("
-               << id_value << ","
-               << 0 << ", (" << get_memory_space(op->name) << " "
-               << print_type(t.element_of()) << "*)"
-               << print_name(op->name) << " + " << id_ramp_base
-               << ");\n";
-
+        if ((op->alignment.modulus % op->value.type().lanes() == 0) &&
+            (op->alignment.remainder % op->value.type().lanes() == 0)) {
+            string id_ramp_base = print_expr(ramp_base / op->value.type().lanes());
+            string array_indexing = print_array_access(op->name, t, id_ramp_base);
+            stream << get_indent() << array_indexing << " = " << id_value << ";\n";
+        } else {
+            string id_ramp_base = print_expr(ramp_base);
+            stream << get_indent() << "vstore" << t.lanes() << "("
+                   << id_value << ","
+                   << 0 << ", (" << get_memory_space(op->name) << " "
+                   << print_type(t.element_of()) << "*)"
+                   << print_name(op->name) << " + " << id_ramp_base
+                   << ");\n";
+        }
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
@@ -326,8 +677,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         string id_index = print_expr(op->index);
 
         for (int i = 0; i < t.lanes(); ++i) {
-            do_indent();
-            stream << "((" << get_memory_space(op->name) << " "
+            stream << get_indent() << "((" << get_memory_space(op->name) << " "
                    << print_type(t.element_of()) << " *)"
                    << print_name(op->name)
                    << ")["
@@ -335,25 +685,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
                    << id_value << ".s" << vector_elements[i] << ";\n";
         }
     } else {
-        bool type_cast_needed = !(allocations.contains(op->name) &&
-                                  allocations.get(op->name).type == t);
-
         string id_index = print_expr(op->index);
-        string id_value = print_expr(op->value);
-        do_indent();
-
-        if (type_cast_needed) {
-            stream << "(("
-                   << get_memory_space(op->name) << " "
-                   << print_type(t)
-                   << " *)"
-                   << print_name(op->name)
-                   << ")";
-        } else {
-            stream << print_name(op->name);
-        }
-        stream << "[" << id_index << "] = "
-               << id_value << ";\n";
+        stream << get_indent();
+        std::string array_indexing = print_array_access(op->name, t, id_index);
+        stream << array_indexing << " = " << id_value << ";\n";
     }
 
     cache.clear();
@@ -387,6 +722,14 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const GE *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
+    if (!target.has_feature(Target::CLHalf) &&
+        ((op->type.is_float() && op->type.bits() < 32) ||
+         (op->value.type().is_float() && op->value.type().bits() < 32))) {
+        Expr equiv = lower_float16_cast(op);
+        equiv.accept(this);
+        return;
+    }
+
     if (op->type.is_vector()) {
         print_assignment(op->type, "convert_" + print_type(op->type) + "(" + print_expr(op->value) + ")");
     } else {
@@ -395,15 +738,21 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Select *op) {
-    internal_assert(op->condition.type().is_scalar());
+    if (!op->condition.type().is_scalar()) {
+        // A vector of bool was recursively introduced while
+        // performing codegen. Eliminate it.
+        Expr equiv = eliminate_bool_vectors(op);
+        equiv.accept(this);
+        return;
+    }
     CodeGen_C::visit(op);
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
-    user_assert(!op->new_expr.defined()) << "Allocate node inside OpenCL kernel has custom new expression.\n" <<
-        "(Memoization is not supported inside GPU kernels at present.)\n";
+    user_assert(!op->new_expr.defined()) << "Allocate node inside OpenCL kernel has custom new expression.\n"
+                                         << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-    if (op->name == "__shared") {
+    if (op->memory_type == MemoryType::GPUShared) {
         // Already handled
         op->body.accept(this);
     } else {
@@ -421,11 +770,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
-        do_indent();
-        stream << print_type(op->type) << ' '
+        stream << get_indent() << print_type(op->type) << " "
                << print_name(op->name) << "[" << size << "];\n";
-        do_indent();
-        stream << "#define " << get_memory_space(op->name) << " __private\n";
+        stream << get_indent() << "#define " << get_memory_space(op->name) << " __private\n";
 
         Allocation alloc;
         alloc.type = op->type;
@@ -441,17 +788,15 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
-    if (op->name == "__shared") {
+    if (op->name == shared_name) {
         return;
     } else {
         // Should have been freed internally
         internal_assert(allocations.contains(op->name));
         allocations.pop(op->name);
-        do_indent();
-        stream << "#undef " << get_memory_space(op->name) << "\n";
+        stream << get_indent() << "#undef " << get_memory_space(op->name) << "\n";
     }
 }
-
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const AssertStmt *op) {
     user_warning << "Ignoring assertion inside OpenCL kernel: " << op->condition << "\n";
@@ -474,12 +819,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
             string a1 = print_expr(op->vectors[0]);
             string a2 = print_expr(op->vectors[1]);
             id = unique_name('_');
-            do_indent();
-            stream << print_type(op->type) << " " << id << ";\n";
-            do_indent();
-            stream << id << ".even = " << a1 << ";\n";
-            do_indent();
-            stream << id << ".odd = " << a2 << ";\n";
+            stream << get_indent() << print_type(op->type) << " " << id << ";\n";
+            stream << get_indent() << id << ".even = " << a1 << ";\n";
+            stream << get_indent() << id << ".odd = " << a2 << ";\n";
         } else {
             // 3+ arguments, interleave via a vector literal
             // selecting the appropriate elements of the vectors
@@ -493,8 +835,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
             }
             internal_assert(num_vectors * arg_lanes >= dest_lanes);
             id = unique_name('_');
-            do_indent();
-            stream << print_type(op->type) << " " << id;
+            stream << get_indent() << print_type(op->type) << " " << id;
             stream << " = (" << print_type(op->type) << ")(";
             for (int i = 0; i < dest_lanes; i++) {
                 int arg = i % num_vectors;
@@ -520,6 +861,17 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Min *op) {
     print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
 }
 
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
+    // Most GPUs require all the threads in a warp to perform the same operations,
+    // which means our mutex will lead to deadlock.
+    user_assert(op->mutex_name.empty())
+        << "The atomic update requires a mutex lock, which is not supported in OpenCL.\n";
+
+    // Issue atomic stores.
+    ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
+    CodeGen_C::visit(op);
+}
+
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
                                     const string &name,
                                     const vector<DeviceArgument> &args) {
@@ -533,12 +885,14 @@ void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
 namespace {
 struct BufferSize {
     string name;
-    size_t size;
+    size_t size = 0;
 
-    BufferSize() : size(0) {}
-    BufferSize(string name, size_t size) : name(name), size(size) {}
+    BufferSize() = default;
+    BufferSize(string name, size_t size)
+        : name(std::move(name)), size(size) {
+    }
 
-    bool operator < (const BufferSize &r) const {
+    bool operator<(const BufferSize &r) const {
         return size < r.size;
     }
 };
@@ -552,7 +906,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
 
     debug(2) << "Eliminating bool vectors\n";
     s = eliminate_bool_vectors(s);
-    debug(2) << "After eliminating bool vectors:\n" << s << "\n";
+    debug(2) << "After eliminating bool vectors:\n"
+             << s << "\n";
 
     // Figure out which arguments should be passed in __constant.
     // Such arguments should be:
@@ -568,7 +923,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
         if (args[i].is_buffer &&
             CodeGen_GPU_Dev::is_buffer_constant(s, args[i].name) &&
             args[i].size > 0) {
-            constants.push_back(BufferSize(args[i].name, args[i].size));
+            constants.emplace_back(args[i].name, args[i].size);
         }
     }
 
@@ -606,35 +961,97 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
         }
     }
 
-    // Emit the function prototype
+    // Emit the function prototype.
     stream << "__kernel void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            stream << " " << get_memory_space(args[i].name) << " ";
-            if (!args[i].write) stream << "const ";
-            stream << print_type(args[i].type) << " *"
-                   << "restrict "
-                   << print_name(args[i].name);
+            if (args[i].memory_type == MemoryType::GPUTexture) {
+                int dims = args[i].dimensions;
+                internal_assert(dims >= 1 && dims <= 3) << "dims = " << dims << "\n";
+                if (args[i].read && args[i].write) {
+                    stream << " __read_write ";
+                } else if (args[i].read) {
+                    stream << " __read_only ";
+                } else if (args[i].write) {
+                    stream << " __write_only ";
+                } else {
+                    internal_error << "CL Image argument " << args[i].name
+                                   << " is neither read nor write";
+                }
+                stream << "image" << dims << "d_t ";
+            } else {
+                stream << " " << get_memory_space(args[i].name) << " ";
+                if (!args[i].write) {
+                    stream << "const ";
+                }
+                stream << print_type(args[i].type) << " *"
+                       << "restrict ";
+            }
+            stream << print_name(args[i].name);
             Allocation alloc;
             alloc.type = args[i].type;
             allocations.push(args[i].name, alloc);
         } else {
             Type t = args[i].type;
+            string name = args[i].name;
             // Bools are passed as a uint8.
             t = t.with_bits(t.bytes() * 8);
+            // float16 are passed as uints
+            if (t.is_float() && t.bits() < 32) {
+                t = t.with_code(halide_type_uint);
+                name += "_bits";
+            }
             stream << " const "
                    << print_type(t)
                    << " "
-                   << print_name(args[i].name);
+                   << print_name(name);
         }
 
-        if (i < args.size()-1) stream << ",\n";
+        if (i < args.size() - 1) {
+            stream << ",\n";
+        }
     }
-    stream << ",\n" << " __address_space___shared int16* __shared";
 
-    stream << ")\n";
+    class FindShared : public IRVisitor {
+        using IRVisitor::visit;
+        void visit(const Allocate *op) override {
+            if (op->memory_type == MemoryType::GPUShared) {
+                internal_assert(alloc == nullptr)
+                    << "Found multiple shared allocations in opencl kernel\n";
+                alloc = op;
+            }
+        }
+
+    public:
+        const Allocate *alloc = nullptr;
+    } find_shared;
+    s.accept(&find_shared);
+
+    if (find_shared.alloc) {
+        shared_name = find_shared.alloc->name;
+    } else {
+        shared_name = "__shared";
+    }
+    // Note that int16 below is an int32x16, not an int16_t. The type
+    // is chosen to be large to maximize alignment.
+    stream << ",\n"
+           << " __local int16* "
+           << print_name(shared_name)
+           << ")\n";
 
     open_scope();
+
+    // Reinterpret half args passed as uint16 back to half
+    for (size_t i = 0; i < args.size(); i++) {
+        if (!args[i].is_buffer &&
+            args[i].type.is_float() &&
+            args[i].type.bits() < 32) {
+            stream << " const " << print_type(args[i].type)
+                   << " " << print_name(args[i].name)
+                   << " = half_from_bits(" << print_name(args[i].name + "_bits") << ");\n";
+        }
+    }
+
     print(s);
     close_scope("kernel " + name);
 
@@ -672,6 +1089,9 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "inline float nan_f32() { return NAN; }\n"
                << "inline float neg_inf_f32() { return -INFINITY; }\n"
                << "inline float inf_f32() { return INFINITY; }\n"
+               << "inline bool is_nan_f32(float x) {return isnan(x); }\n"
+               << "inline bool is_inf_f32(float x) {return isinf(x); }\n"
+               << "inline bool is_finite_f32(float x) {return isfinite(x); }\n"
                << "#define sqrt_f32 sqrt \n"
                << "#define sin_f32 sin \n"
                << "#define cos_f32 cos \n"
@@ -697,12 +1117,15 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define fast_inverse_f32 native_recip \n"
                << "#define fast_inverse_sqrt_f32 native_rsqrt \n";
 
-    // __shared always has address space __local.
-    src_stream << "#define __address_space___shared __local\n";
+    // There does not appear to be a reliable way to safely ignore unused
+    // variables in OpenCL C. See https://github.com/halide/Halide/issues/4918.
+    src_stream << "#define halide_unused(x)\n";
 
     if (target.has_feature(Target::CLDoubles)) {
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"
-                   << "bool is_nan_f64(double x) {return x != x; }\n"
+                   << "inline bool is_nan_f64(double x) {return isnan(x); }\n"
+                   << "inline bool is_inf_f64(double x) {return isinf(x); }\n"
+                   << "inline bool is_finite_f64(double x) {return isfinite(x); }\n"
                    << "#define sqrt_f64 sqrt\n"
                    << "#define sin_f64 sin\n"
                    << "#define cos_f64 cos\n"
@@ -729,11 +1152,13 @@ void CodeGen_OpenCL_Dev::init_module() {
 
     if (target.has_feature(Target::CLHalf)) {
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
-                   << "inline half half_from_bits(unsigned short x) {return as_half(x);}\n"
-                   << "inline half nan_f16() { return nan((unsigned short)0); }\n"
-                   << "inline half neg_inf_f16() { return -INFINITY; }\n"
-                   << "inline half inf_f16() { return INFINITY; }\n"
-                   << "bool is_nan_f16(half x) {return x != x; }\n"
+                   << "inline half half_from_bits(unsigned short x) {return __builtin_astype(x, half);}\n"
+                   << "inline half nan_f16() { return half_from_bits(32767); }\n"
+                   << "inline half neg_inf_f16() { return half_from_bits(31744); }\n"
+                   << "inline half inf_f16() { return half_from_bits(64512); }\n"
+                   << "inline bool is_nan_f16(half x) {return isnan(x); }\n"
+                   << "inline bool is_inf_f16(half x) {return isinf(x); }\n"
+                   << "inline bool is_finite_f16(half x) {return isfinite(x); }\n"
                    << "#define sqrt_f16 sqrt\n"
                    << "#define sin_f16 sin\n"
                    << "#define cos_f16 cos\n"
@@ -758,7 +1183,12 @@ void CodeGen_OpenCL_Dev::init_module() {
                    << "#define atanh_f16 atanh\n";
     }
 
-    src_stream << '\n';
+    if (target.has_feature(Target::CLAtomics64)) {
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable\n";
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_int64_extended_atomics : enable\n";
+    }
+
+    src_stream << "\n";
 
     // Add at least one kernel to avoid errors on some implementations for functions
     // without any GPU schedules.
@@ -769,7 +1199,8 @@ void CodeGen_OpenCL_Dev::init_module() {
 
 vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "OpenCL kernel:\n" << str << "\n";
+    debug(1) << "OpenCL kernel:\n"
+             << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
@@ -780,11 +1211,17 @@ string CodeGen_OpenCL_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_OpenCL_Dev::dump() {
-    std::cerr << src_stream.str() << std::endl;
+    std::cerr << src_stream.str() << "\n";
 }
 
 std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
     return name;
+}
+
+}  // namespace
+
+CodeGen_GPU_Dev *new_CodeGen_OpenCL_Dev(const Target &target) {
+    return new CodeGen_OpenCL_Dev(target);
 }
 
 }  // namespace Internal

@@ -1,6 +1,6 @@
+#include <cstdint>
 #include <mutex>
 #include <set>
-#include <stdint.h>
 #include <string>
 
 #ifdef _WIN32
@@ -22,15 +22,18 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 
-
 namespace Halide {
 namespace Internal {
 
 using std::string;
 
+#if defined(__GNUC__) && defined(__i386__)
+extern "C" unsigned long __udivdi3(unsigned long a, unsigned long b);
+#endif
+
 #ifdef _WIN32
 void *get_symbol_address(const char *s) {
-    return (void *) GetProcAddress(GetModuleHandle(nullptr), s);
+    return (void *)GetProcAddress(GetModuleHandle(nullptr), s);
 }
 #else
 void *get_symbol_address(const char *s) {
@@ -51,35 +54,8 @@ bool have_symbol(const char *s) {
 
 typedef struct CUctx_st *CUcontext;
 
-struct SharedCudaContext {
-    CUctx_st *ptr;
-    volatile int lock;
-
-    // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext() : ptr(0), lock(0) {
-    }
-
-    // Note that we never free the context, because static destructor
-    // order is unpredictable, and we can't free the context before
-    // all JITModules are freed. Users may be stashing Funcs or Images
-    // in globals, and these keep JITModules around.
-} cuda_ctx;
-
 typedef struct cl_context_st *cl_context;
 typedef struct cl_command_queue_st *cl_command_queue;
-
-// A single global OpenCL context and command queue to share between
-// jitted functions.
-struct SharedOpenCLContext {
-    cl_context context;
-    cl_command_queue command_queue;
-    volatile int lock;
-
-    SharedOpenCLContext() : context(nullptr), command_queue(nullptr), lock(0) {
-    }
-
-    // We never free the context, for the same reason as above.
-} cl_ctx;
 
 void load_opengl() {
 #if defined(__linux__)
@@ -133,8 +109,7 @@ public:
     mutable RefCount ref_count;
 
     // Just construct a module with symbols to import into other modules.
-    JITModuleContents() : execution_engine(nullptr) {
-    }
+    JITModuleContents() = default;
 
     ~JITModuleContents() {
         if (execution_engine != nullptr) {
@@ -145,7 +120,7 @@ public:
 
     std::map<std::string, JITModule::Symbol> exports;
     llvm::LLVMContext context;
-    ExecutionEngine *execution_engine;
+    ExecutionEngine *execution_engine = nullptr;
     std::vector<JITModule> dependencies;
     JITModule::Symbol entrypoint;
     JITModule::Symbol argv_entrypoint;
@@ -153,20 +128,24 @@ public:
     std::string name;
 };
 
-template <>
-RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) { return f->ref_count; }
+template<>
+RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) noexcept {
+    return f->ref_count;
+}
 
-template <>
-void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
+template<>
+void destroy<JITModuleContents>(const JITModuleContents *f) {
+    delete f;
+}
 
 namespace {
 
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
-    llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
+    llvm::Function *fn = ee.FindFunctionNamed(name);
     internal_assert(fn->getName() == name);
-    void *f = (void *) ee.getFunctionAddress(name);
+    void *f = (void *)ee.getFunctionAddress(name);
     if (!f) {
         internal_error << "Compiling " << name << " returned nullptr\n";
     }
@@ -179,14 +158,14 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &na
 }
 
 // Expand LLVM's search for symbols to include code contained in a set of JITModule.
-// TODO: Does this need to be conditionalized to llvm 3.6?
 class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<JITModule> modules;
     std::vector<std::pair<uint8_t *, size_t>> code_pages;
 
 public:
-
-    HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) {}
+    HalideJITMemoryManager(const std::vector<JITModule> &modules)
+        : modules(modules) {
+    }
 
     uint64_t getSymbolAddress(const std::string &name) override {
         for (size_t i = 0; i < modules.size(); i++) {
@@ -199,57 +178,39 @@ public:
                 return (uint64_t)iter->second.address;
             }
         }
-        return SectionMemoryManager::getSymbolAddress(name);
+        uint64_t result = SectionMemoryManager::getSymbolAddress(name);
+#if defined(__GNUC__) && defined(__i386__)
+        // This is a workaround for an odd corner case (cross-compiling + testing
+        // Python bindings x86-32 on an x86-64 system): __udivdi3 is a helper function
+        // that GCC uses to do u64/u64 division on 32-bit systems; it's usually included
+        // by the linker on these systems as needed. When we JIT, LLVM will include references
+        // to this call; MCJIT fixes up these references by doing (roughly) dlopen(NULL)
+        // to look up the symbol. For normal JIT tests, this works fine, as dlopen(NULL)
+        // finds the test executable, which has the right lookups to locate it inside libHalide.so.
+        // If, however, we are running a JIT-via-Python test, dlopen(NULL) returns the
+        // CPython executable... which apparently *doesn't* include this as an exported
+        // function, so the lookup fails and crashiness ensues. So our workaround here is
+        // a bit icky, but expedient: check for this name if we can't find it elsewhere,
+        // and if so, return the one we know should be present. (Obviously, if other runtime
+        // helper functions of this sort crop up in the future, this should be expanded
+        // into a "builtins map".)
+        if (result == 0 && name == "__udivdi3") {
+            result = (uint64_t)&__udivdi3;
+        }
+#endif
+        internal_assert(result != 0)
+            << "HalideJITMemoryManager: unable to find address for " << name << "\n";
+        return result;
     }
 
     uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
         uint8_t *result = SectionMemoryManager::allocateCodeSection(size, alignment, section_id, section_name);
-        code_pages.push_back({result, size});
+        code_pages.emplace_back(result, size);
         return result;
     }
-
-#if LLVM_VERSION >= 80
-    // nothing
-#else
-    void work_around_llvm_bugs() {
-
-        for (auto p : code_pages) {
-            uint8_t *start = p.first;
-            uint8_t *end = p.first + p.second;
-
-            (void)start;
-            (void)end;
-#ifdef __arm__
-            // Flush each function from the dcache so that it gets pulled into
-            // the icache correctly.
-
-            // finalizeMemory should have done the trick, but as of Aug 28
-            // 2013, it doesn't work unless we also manually flush the
-            // cache. Otherwise the icache's view of the code is missing the
-            // relocations, which gets really confusing to debug, because
-            // gdb's view of the code uses the dcache, so the disassembly
-            // isn't right.
-            debug(2) << "Flushing cache from " << (void *)start
-                     << " to " << (void *)end << "\n";
-            __builtin___clear_cache((char*)start, (char*)end);
-#endif
-
-#ifndef _WIN32
-            // As of November 2016, llvm doesn't always mark the right pages
-            // as executable either.
-            // https://llvm.org/bugs/show_bug.cgi?id=30905
-
-            start = (uint8_t *)(((uintptr_t)start) & ~4095);
-            end = (uint8_t *)(((uintptr_t)end + 4095) & ~4095);
-            mprotect((void *)start, end - start, PROT_READ | PROT_EXEC);
-#endif
-        }
-    }
-#endif
-
 };
 
-}
+}  // namespace
 
 JITModule::JITModule() {
     jit_module = new JITModuleContents();
@@ -264,9 +225,7 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
     compile_module(std::move(llvm_module), fn.name, m.target(), deps_with_runtime);
     // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
-#if LLVM_VERSION >= 80
     llvm::reportAndResetTimings();
-#endif
 }
 
 void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
@@ -314,7 +273,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     }
     ExecutionEngine *ee = engine_builder.create(tm);
 
-    if (!ee) std::cerr << error_string << "\n";
+    if (!ee) {
+        std::cerr << error_string << "\n";
+    }
     internal_assert(ee) << "Couldn't create execution engine\n";
 
     // Do any target-specific initialization
@@ -352,11 +313,6 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
-#if LLVM_VERSION >= 80
-    // nothing
-#else
-    memory_manager->work_around_llvm_bugs();
-#endif
     // Do any target-specific post-compilation module meddling
     for (size_t i = 0; i < listeners.size(); i++) {
         ee->UnregisterJITEventListener(listeners[i]);
@@ -387,13 +343,13 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg,
     JITModule result;
     std::vector<std::pair<std::string, ExternSignature>> extern_signatures;
     std::vector<std::string> requested_exports;
-    for (const std::pair<std::string, JITExtern> &e : externs) {
+    for (const std::pair<const std::string, JITExtern> &e : externs) {
         const std::string &callee_name = e.first;
         const std::string wrapper_name = callee_name + suffix;
         const ExternCFunction &extern_c = e.second.extern_c_function();
         result.add_extern_for_export(callee_name, extern_c);
         requested_exports.push_back(wrapper_name);
-        extern_signatures.push_back({callee_name, extern_c.signature()});
+        extern_signatures.emplace_back(callee_name, extern_c.signature());
     }
 
     std::unique_ptr<llvm::Module> llvm_module = CodeGen_LLVM::compile_trampolines(
@@ -415,7 +371,9 @@ JITModule::Symbol JITModule::find_symbol_by_name(const std::string &name) const 
     }
     for (const JITModule &dep : jit_module->dependencies) {
         JITModule::Symbol s = dep.find_symbol_by_name(name);
-        if (s.address) return s;
+        if (s.address) {
+            return s;
+        }
     }
     return JITModule::Symbol();
 }
@@ -436,7 +394,7 @@ JITModule::Symbol JITModule::argv_entrypoint_symbol() const {
     return jit_module->argv_entrypoint;
 }
 
-static bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set <const JITModuleContents *> &already_seen) {
+static bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set<const JITModuleContents *> &already_seen) {
     if (start == target) {
         return true;
     }
@@ -473,12 +431,28 @@ void JITModule::memoization_cache_set_size(int64_t size) const {
     std::map<std::string, Symbol>::const_iterator f =
         exports().find("halide_memoization_cache_set_size");
     if (f != exports().end()) {
-        return (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
+        (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
+    }
+}
+
+void JITModule::memoization_cache_evict(uint64_t eviction_key) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_memoization_cache_evict");
+    if (f != exports().end()) {
+        (reinterpret_bits<void (*)(void *, uint64_t)>(f->second.address))(nullptr, eviction_key);
+    }
+}
+
+void JITModule::reuse_device_allocations(bool b) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_reuse_device_allocations");
+    if (f != exports().end()) {
+        (reinterpret_bits<int (*)(void *, bool)>(f->second.address))(nullptr, b);
     }
 }
 
 bool JITModule::compiled() const {
-  return jit_module->execution_engine != nullptr;
+    return jit_module->execution_engine != nullptr;
 }
 
 namespace {
@@ -598,7 +572,7 @@ void *get_library_symbol_handler(void *lib, const char *name) {
     return (*active_handlers.custom_get_library_symbol)(lib, name);
 }
 
-template <typename function_t>
+template<typename function_t>
 function_t hook_function(const std::map<std::string, JITModule::Symbol> &exports, const char *hook_name, function_t hook) {
     auto iter = exports.find(hook_name);
     internal_assert(iter != exports.end()) << "Failed to find function " << hook_name << "\n";
@@ -636,14 +610,14 @@ enum RuntimeKind {
     OpenCL,
     Metal,
     CUDA,
-    OpenGL,
+    OpenGL,  // NOTE: this feature is deprecated and will be removed in Halide 12.
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
-    OpenGLDebug,
+    OpenGLDebug,  // NOTE: this feature is deprecated and will be removed in Halide 12.
     OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,
@@ -679,8 +653,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::OpenCL, false);
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
-        one_gpu.set_feature(Target::HVX_64, false);
-        one_gpu.set_feature(Target::HVX_128, false);
+        one_gpu.set_feature(Target::HVX, false);
         one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
@@ -739,11 +712,11 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
-            one_gpu.set_feature(Target::HVX_64);
+            one_gpu.set_feature(Target::HVX);
             module_name = "debug_hexagon";
             break;
         case Hexagon:
-            one_gpu.set_feature(Target::HVX_64);
+            one_gpu.set_feature(Target::HVX);
             module_name += "hexagon";
             break;
         case D3D12ComputeDebug:
@@ -754,9 +727,9 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         case D3D12Compute:
             one_gpu.set_feature(Target::D3D12Compute);
             module_name += "d3d12compute";
-            #if !defined(_WIN32)
-                internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
-            #endif
+#if !defined(_WIN32)
+            internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
+#endif
             break;
         default:
             module_name = "shared runtime";
@@ -764,8 +737,11 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         }
 
         // This function is protected by a mutex so this is thread safe.
-        std::unique_ptr<llvm::Module> module(get_initial_module_for_target(one_gpu,
-            &runtime.jit_module->context, true, runtime_kind != MainShared));
+        auto module =
+            get_initial_module_for_target(one_gpu,
+                                          &runtime.jit_module->context,
+                                          true,
+                                          runtime_kind != MainShared);
         if (for_module) {
             clone_target_options(*for_module, *module);
         }
@@ -777,7 +753,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         for (auto &f : *module) {
             // LLVM_Runtime_Linker has marked everything that should be exported as weak
             if (f.hasWeakLinkage()) {
-                halide_exports_unique.insert(f.getName());
+                halide_exports_unique.insert(get_llvm_function_name(f));
             }
         }
 
@@ -898,7 +874,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (target.has_feature(Target::HVX)) {
         auto kind = target.has_feature(Target::Debug) ? HexagonDebug : Hexagon;
         JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
@@ -951,6 +927,16 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
         default_cache_size = size;
         shared_runtimes(MainShared).memoization_cache_set_size(size);
     }
+}
+
+void JITSharedRuntime::memoization_cache_evict(uint64_t eviction_key) {
+    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    shared_runtimes(MainShared).memoization_cache_evict(eviction_key);
+}
+
+void JITSharedRuntime::reuse_device_allocations(bool b) {
+    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    shared_runtimes(MainShared).reuse_device_allocations(b);
 }
 
 }  // namespace Internal

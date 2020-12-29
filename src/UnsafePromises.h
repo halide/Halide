@@ -5,7 +5,7 @@
  * Defines the lowering pass that removes unsafe promises
  */
 
-#include "IR.h"
+#include "Expr.h"
 #include "Target.h"
 
 namespace Halide {
@@ -13,7 +13,12 @@ namespace Internal {
 
 /** Lower all unsafe promises into either assertions or unchecked
     code, depending on the target. */
-Stmt lower_unsafe_promises(Stmt s, const Target &t);
+Stmt lower_unsafe_promises(const Stmt &s, const Target &t);
+
+/** Lower all safe promises by just stripping them. This is a good
+ * idea once no more lowering stages are going to use
+ * boxes_touched. */
+Stmt lower_safe_promises(const Stmt &s);
 
 }  // namespace Internal
 }  // namespace Halide

@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-template <typename T>
+template<typename T>
 bool test_interleave() {
     Var x("x"), y("y"), c("c");
 
@@ -17,16 +17,16 @@ bool test_interleave() {
     input.compute_root();
     interleaved.reorder(c, x, y).bound(c, 0, 3);
     interleaved.output_buffer()
-        .dim(0).set_stride(3)
-        .dim(2).set_stride(1).set_extent(3);
+        .dim(0)
+        .set_stride(3)
+        .dim(2)
+        .set_stride(1)
+        .set_extent(3);
 
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
         interleaved.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (target.has_feature(Target::HVX_64)) {
-        const int vector_width = 64 / sizeof(T);
-        interleaved.hexagon().vectorize(x, vector_width).unroll(c);
-    } else if (target.has_feature(Target::HVX_128)) {
+    } else if (target.has_feature(Target::HVX)) {
         const int vector_width = 128 / sizeof(T);
         interleaved.hexagon().vectorize(x, vector_width).unroll(c);
     } else {

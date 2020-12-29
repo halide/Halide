@@ -1,25 +1,15 @@
 #!/usr/bin/python3
+
 # Halide tutorial lesson 4
 
 # This lesson demonstrates how to follow what Halide is doing at runtime.
 
 # This lesson can be built by invoking the command:
-#    make tutorial_lesson_04_debugging_2
-# in a shell with the current directory at the top of the halide source tree.
-# Otherwise, see the platform-specific compiler invocations below.
+#    make test_tutorial_lesson_04_debugging_2
+# in a shell with the current directory at python_bindings/
 
-# On linux, you can compile and run it like so:
-# g++ lesson_04*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_04 -std=c++11
-# LD_LIBRARY_PATH=../bin ./lesson_04
-
-# On os x:
-# g++ lesson_04*.cpp -g -I ../include -L ../bin -lHalide -o lesson_04 -std=c++11
-# DYLD_LIBRARY_PATH=../bin ./lesson_04
-
-#include "Halide.h"
-#include <stdio.h>
-#using namespace Halide
 import halide as hl
+
 
 def main():
 

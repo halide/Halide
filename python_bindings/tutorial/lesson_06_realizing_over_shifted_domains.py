@@ -1,27 +1,16 @@
 #!/usr/bin/python3
+
 # Halide tutorial lesson 6.
 
 # This lesson demonstrates how to evaluate a hl.Func over a domain that
 # does not start at (0, 0).
 
 # This lesson can be built by invoking the command:
-#    make tutorial_lesson_06_realizing_over_shifted_domains
-# in a shell with the current directory at the top of the halide source tree.
-# Otherwise, see the platform-specific compiler invocations below.
+#    make test_tutorial_lesson_06_realizing_over_shifted_domains
+# in a shell with the current directory at python_bindings/
 
-# On linux, you can compile and run it like so:
-# g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_06 -std=c++11
-# LD_LIBRARY_PATH=../bin ./lesson_06
-
-# On os x:
-# g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -o lesson_06 -std=c++11
-# DYLD_LIBRARY_PATH=../bin ./lesson_06
-
-#include "Halide.h"
-#include <stdio.h>
-
-#using namespace Halide
 import halide as hl
+
 
 def main():
 
@@ -31,7 +20,7 @@ def main():
     # domains that do not start at the origin.
 
     # We define our familiar gradient function.
-    gradient = hl.Func ("gradient")
+    gradient = hl.Func("gradient")
     x, y = hl.Var("x"), hl.Var("y")
     gradient[x, y] = x + y
 
@@ -61,20 +50,16 @@ def main():
     # Let's check it did what we expect:
     for yy in range(8):
         for xx in range(8):
-            if result[xx, yy] != xx + yy:
-                print("Something went wrong!")
-                return -1
-
-
-
+            assert result[xx, yy] == xx + yy, "Something went wrong!"
 
     # Now let's evaluate gradient over a 5 x 7 rectangle that starts
     # somewhere else -- at position (100, 50). So x and y will run
     # from (100, 50) to (104, 56) inclusive.
 
     # We start by creating an image that represents that rectangle:
-    shifted = hl.Buffer(hl.Int(32), [5, 7]) # In the constructor we tell it the size.
-    shifted.set_min([100, 50]) # Then we tell it the top-left corner.
+    # In the constructor we tell it the size.
+    shifted = hl.Buffer(hl.Int(32), [5, 7])
+    shifted.set_min([100, 50])  # Then we tell it the top-left corner.
 
     print("Evaluating gradient from (100, 50) to (104, 56)")
 
@@ -87,11 +72,7 @@ def main():
     # that start at (100, 50).
     for yy in range(50, 57):
         for xx in range(100, 105):
-            if shifted[xx, yy] != xx + yy:
-                print("Something went wrong!")
-                return -1
-
-
+            assert shifted[xx, yy] == xx + yy, "Something went wrong!"
 
     # The image 'shifted' stores the value of our hl.Func over a domain
     # that starts at (100, 50), so asking for shifted(0, 0) would in
@@ -102,7 +83,6 @@ def main():
 
     print("Success!")
     return 0
-
 
 
 if __name__ == "__main__":

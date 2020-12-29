@@ -1,4 +1,5 @@
 #include <map>
+#include <utility>
 
 #include "EarlyFree.h"
 #include "ExprUsesVar.h"
@@ -10,16 +11,16 @@ namespace Halide {
 namespace Internal {
 namespace {
 
-using std::map;
 using std::string;
-using std::vector;
 
 class FindLastUse : public IRVisitor {
 public:
     string func;
     Stmt last_use;
 
-    FindLastUse(string s) : func(s) {}
+    FindLastUse(string s)
+        : func(std::move(s)) {
+    }
 
 private:
     bool in_loop = false;
@@ -99,6 +100,13 @@ private:
             }
         }
     }
+
+    void visit(const Atomic *op) override {
+        if (op->mutex_name == func) {
+            last_use = containing_stmt;
+        }
+        IRVisitor::visit(op);
+    }
 };
 
 class InjectMarker : public IRMutator {
@@ -107,13 +115,14 @@ public:
     Stmt last_use;
 
 private:
-
     bool injected = false;
 
     using IRMutator::visit;
 
     Stmt inject_marker(Stmt s) {
-        if (injected) return s;
+        if (injected) {
+            return s;
+        }
         if (s.same_as(last_use)) {
             injected = true;
             return Block::make(s, Free::make(func));
@@ -158,13 +167,12 @@ class InjectEarlyFrees : public IRMutator {
                                   alloc->new_expr, alloc->free_function);
         }
         return stmt;
-
     }
 };
 
 }  // namespace
 
-Stmt inject_early_frees(Stmt s) {
+Stmt inject_early_frees(const Stmt &s) {
     InjectEarlyFrees early_frees;
     return early_frees.mutate(s);
 }

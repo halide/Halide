@@ -1,13 +1,14 @@
 #include "Halide.h"
-#include "test/common/check_call_graphs.h"
+#include "check_call_graphs.h"
 
-#include <stdio.h>
+#include <cstdio>
 #include <map>
 
 namespace {
 
 using std::map;
 using std::string;
+using std::vector;
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -179,7 +180,7 @@ int global_wrapper_test() {
     }
 
     Buffer<int> im = h.realize(200, 200);
-    auto func = [](int x, int y) { return 2*(x + y); };
+    auto func = [](int x, int y) { return 2 * (x + y); };
     if (check_image(im, func)) {
         return -1;
     }
@@ -199,7 +200,7 @@ int update_defined_after_wrapper_test() {
     // still call f's wrapper.
     RDom r(0, 100, 0, 100);
     r.where(r.x < r.y);
-    g(r.x, r.y) += 2*f(r.x, r.y);
+    g(r.x, r.y) += 2 * f(r.x, r.y);
 
     Param<bool> param;
 
@@ -231,7 +232,7 @@ int update_defined_after_wrapper_test() {
 
         Buffer<int> im = g.realize(200, 200);
         auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
             return -1;
@@ -259,7 +260,7 @@ int update_defined_after_wrapper_test() {
 
         Buffer<int> im = g.realize(200, 200);
         auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
             return -1;
@@ -273,10 +274,13 @@ int rdom_wrapper_test() {
     Func f("f"), g("g"), result("result");
     Var x("x"), y("y");
 
+    constexpr int W = 32;
+    constexpr int H = 32;
+
     f(x, y) = x + y;
     g(x, y) = 10;
     g(x, y) += 2 * f(x, x);
-    RDom r(0, 200, 0, 200);
+    RDom r(0, W, 0, H);
     g(r.x, r.y) += 3 * f(r.y, r.y);
 
     // Make a global wrapper on 'g', so that we can schedule initialization
@@ -301,8 +305,8 @@ int rdom_wrapper_test() {
         return -1;
     }
 
-    Buffer<int> im = wrapper.realize(200, 200);
-    auto func = [](int x, int y) { return 4*x + 6* y + 10; };
+    Buffer<int> im = wrapper.realize(W, H);
+    auto func = [](int x, int y) { return 4 * x + 6 * y + 10; };
     if (check_image(im, func)) {
         return -1;
     }
@@ -341,13 +345,12 @@ int global_and_custom_wrapper_test() {
     }
 
     Buffer<int> im = result.realize(200, 200);
-    auto func = [](int x, int y) { return 2*x; };
+    auto func = [](int x, int y) { return 2 * x; };
     if (check_image(im, func)) {
         return -1;
     }
     return 0;
 }
-
 
 int wrapper_depend_on_mutated_func_test() {
     Func e("e"), f("f"), g("g"), h("h");
@@ -431,7 +434,7 @@ int wrapper_on_wrapper_test() {
     }
 
     Buffer<int> im = h.realize(200, 200);
-    auto func = [](int x, int y) { return 4*(x + y); };
+    auto func = [](int x, int y) { return 4 * (x + y); };
     if (check_image(im, func)) {
         return -1;
     }
@@ -487,7 +490,7 @@ int two_fold_wrapper_test() {
     Func input("input"), input_in_output_in_output, input_in_output, output("output");
     Var x("x"), y("y");
 
-    input(x, y) = 2*x + 3*y;
+    input(x, y) = 2 * x + 3 * y;
     input.compute_root();
 
     output(x, y) = input(y, x);
@@ -514,7 +517,7 @@ int two_fold_wrapper_test() {
     }
 
     Buffer<int> im = output.realize(1024, 1024);
-    auto func = [](int x, int y) { return 3*x + 2*y; };
+    auto func = [](int x, int y) { return 3 * x + 2 * y; };
     if (check_image(im, func)) {
         return -1;
     }
@@ -525,7 +528,7 @@ int multi_folds_wrapper_test() {
     Func f("f"), f_in_g_in_g, f_in_g, f_in_g_in_g_in_h, f_in_g_in_g_in_h_in_h, g("g"), h("h");
     Var x("x"), y("y");
 
-    f(x, y) = 2*x + 3*y;
+    f(x, y) = 2 * x + 3 * y;
     f.compute_root();
 
     g(x, y) = f(y, x);
@@ -562,13 +565,48 @@ int multi_folds_wrapper_test() {
     Realization r = p.realize(1024, 1024);
     Buffer<int> img_g = r[0];
     Buffer<int> img_h = r[1];
-    auto func = [](int x, int y) { return 3*x + 2*y; };
+    auto func = [](int x, int y) { return 3 * x + 2 * y; };
     if (check_image(img_g, func)) {
         return -1;
     }
     if (check_image(img_h, func)) {
         return -1;
     }
+    return 0;
+}
+
+int lots_of_wrappers_test() {
+    // This is a case that showed up in practice. It demonstrates that
+    // it's important that the different wrappers of a Func get
+    // different names.
+    Func common;
+    vector<Func> funcs;
+    Var x;
+    common(x) = x;
+    common.compute_root();
+
+    Func prev = common;
+    for (int i = 0; i < 100; i++) {
+        Func f;
+        f(x) = common(x) + prev(x);
+        prev = f;
+        funcs.push_back(f);
+
+        // Compute in groups of five, each with a local copy of the common func.
+        if (i % 5 == 4) {
+            vector<Func> group;
+            funcs[i].compute_root();
+            group.push_back(funcs[i]);
+            for (int j = i - 4; j < i; j++) {
+                funcs[j].compute_at(funcs[i], x);
+                group.push_back(funcs[j]);
+            }
+            common.in(group).compute_at(funcs[i], x);
+        }
+    }
+
+    // This used to crash
+    funcs.back().compile_jit();
     return 0;
 }
 
@@ -632,6 +670,11 @@ int main(int argc, char **argv) {
 
     printf("Running multi folds wrapper test\n");
     if (multi_folds_wrapper_test() != 0) {
+        return -1;
+    }
+
+    printf("Running lots of wrappers test\n");
+    if (lots_of_wrappers_test() != 0) {
         return -1;
     }
 

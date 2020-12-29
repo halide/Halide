@@ -23,8 +23,8 @@ namespace Internal {
  */
 class IRMutator {
 public:
-    IRMutator();
-    virtual ~IRMutator();
+    IRMutator() = default;
+    virtual ~IRMutator() = default;
 
     /** This is the main interface for using a mutator. Also call
      * these in your subclass to mutate sub-expressions and
@@ -35,8 +35,10 @@ public:
 
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement mutate_expr/mutate_stmt())
-    template<typename T> friend struct ExprNode;
-    template<typename T> friend struct StmtNode;
+    template<typename T>
+    friend struct ExprNode;
+    template<typename T>
+    friend struct StmtNode;
 
     virtual Expr visit(const IntImm *);
     virtual Expr visit(const UIntImm *);
@@ -67,6 +69,7 @@ protected:
     virtual Expr visit(const Call *);
     virtual Expr visit(const Let *);
     virtual Expr visit(const Shuffle *);
+    virtual Expr visit(const VectorReduce *);
 
     virtual Stmt visit(const LetStmt *);
     virtual Stmt visit(const AssertStmt *);
@@ -83,12 +86,13 @@ protected:
     virtual Stmt visit(const Prefetch *);
     virtual Stmt visit(const Acquire *);
     virtual Stmt visit(const Fork *);
+    virtual Stmt visit(const Atomic *);
 };
 
 /** A mutator that caches and reapplies previously-done mutations, so
  * that it can handle graphs of IR that have not had CSE done to
  * them. */
-class IRGraphMutator2 : public IRMutator {
+class IRGraphMutator : public IRMutator {
 protected:
     std::map<Expr, Expr, ExprCompare> expr_replacements;
     std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;
@@ -100,7 +104,7 @@ public:
 
 /** A helper function for mutator-like things to mutate regions */
 template<typename Mutator, typename... Args>
-std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args&&... args) {
+std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&... args) {
     Region new_bounds(bounds.size());
     bool bounds_changed = false;
 

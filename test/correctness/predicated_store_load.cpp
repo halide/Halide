@@ -1,17 +1,14 @@
 #include "Halide.h"
-#include <assert.h>
-#include <stdio.h>
-#include <functional>
-#include <map>
-#include <numeric>
+#include "check_call_graphs.h"
 
-#include "test/common/check_call_graphs.h"
+#include <cstdio>
+#include <functional>
 
 namespace {
 
 using std::map;
-using std::vector;
 using std::string;
+using std::vector;
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -21,20 +18,22 @@ public:
     int store_count;
     int load_count;
 
-    CountPredicatedStoreLoad() : store_count(0), load_count(0) {}
+    CountPredicatedStoreLoad()
+        : store_count(0), load_count(0) {
+    }
 
 protected:
     using IRVisitor::visit;
 
     void visit(const Load *op) override {
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             load_count++;
         }
         IRVisitor::visit(op);
     }
 
     void visit(const Store *op) override {
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             store_count++;
         }
         IRVisitor::visit(op);
@@ -44,9 +43,10 @@ protected:
 class CheckPredicatedStoreLoad : public IRMutator {
     int expected_store_count;
     int expected_load_count;
+
 public:
-    CheckPredicatedStoreLoad(const Target &target, int store, int load) :
-        expected_store_count(store), expected_load_count(load) {
+    CheckPredicatedStoreLoad(const Target &target, int store, int load)
+        : expected_store_count(store), expected_load_count(load) {
         // TODO: disabling for now due to trunk LLVM breakage.
         // See: https://github.com/halide/Halide/issues/3534
         if (target.arch == Target::X86) {
@@ -62,12 +62,12 @@ public:
 
         if (expected_store_count != c.store_count) {
             printf("There were %d predicated stores; expect %d predicated stores\n",
-                    c.store_count, expected_store_count);
+                   c.store_count, expected_store_count);
             exit(-1);
         }
         if (expected_load_count != c.load_count) {
             printf("There were %d predicated loads; expect %d predicated loads\n",
-                    c.load_count, expected_load_count);
+                   c.load_count, expected_load_count);
             exit(-1);
         }
         return s;
@@ -76,22 +76,22 @@ public:
 
 int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t) {
     Var x("x"), y("y");
-    Func f ("f"), g("g"), ref("ref");
+    Func f("f"), g("g"), ref("ref");
 
     g(x, y) = x + y;
     g.compute_root();
 
     RDom r(0, 100, 0, 100);
-    r.where(r.x + r.y < r.x*r.y);
+    r.where(r.x + r.y < r.x * r.y);
 
     ref(x, y) = 10;
-    ref(r.x, r.y) += g(2*r.x, r.y) + g(2*r.x + 1, r.y);
+    ref(r.x, r.y) += g(2 * r.x, r.y) + g(2 * r.x + 1, r.y);
     Buffer<int> im_ref = ref.realize(170, 170);
 
     f(x, y) = 10;
-    f(r.x, r.y) += g(2*r.x, r.y) + g(2*r.x + 1, r.y);
+    f(r.x, r.y) += g(2 * r.x, r.y) + g(2 * r.x + 1, r.y);
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
@@ -109,17 +109,17 @@ int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t)
 int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
     int size = 73;
     Var x("x"), y("y");
-    Func f ("f"), g("g"), ref("ref");
+    Func f("f"), g("g"), ref("ref");
 
     g(x, y) = x * y;
     g.compute_root();
 
-    ref(x, y) = select(x < 23, g(size-x, y) * 2 + g(20-x, y), undef<int>());
+    ref(x, y) = select(x < 23, g(size - x, y) * 2 + g(20 - x, y), undef<int>());
     Buffer<int> im_ref = ref.realize(size, size);
 
-    f(x, y) = select(x < 23, g(size-x, y) * 2 + g(20-x, y), undef<int>());
+    f(x, y) = select(x < 23, g(size - x, y) * 2 + g(20 - x, y), undef<int>());
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         f.hexagon().vectorize(x, 32);
     } else if (t.arch == Target::X86) {
         f.vectorize(x, 32);
@@ -140,23 +140,23 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
 int multiple_vectorized_predicate_test(const Target &t) {
     int size = 100;
     Var x("x"), y("y");
-    Func f ("f"), g("g"), ref("ref");
+    Func f("f"), g("g"), ref("ref");
 
     g(x, y) = x * y;
     g.compute_root();
 
     RDom r(0, size, 0, size);
     r.where(r.x + r.y < 57);
-    r.where(r.x*r.y + r.x*r.x < 490);
+    r.where(r.x * r.y + r.x * r.x < 490);
 
     ref(x, y) = 10;
-    ref(r.x, r.y) = g(size-r.x, r.y) * 2 + g(67-r.x, r.y);
+    ref(r.x, r.y) = g(size - r.x, r.y) * 2 + g(67 - r.x, r.y);
     Buffer<int> im_ref = ref.realize(size, size);
 
     f(x, y) = 10;
-    f(r.x, r.y) = g(size-r.x, r.y) * 2 + g(67-r.x, r.y);
+    f(r.x, r.y) = g(size - r.x, r.y) * 2 + g(67 - r.x, r.y);
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
@@ -173,7 +173,7 @@ int multiple_vectorized_predicate_test(const Target &t) {
 
 int scalar_load_test(const Target &t) {
     Var x("x"), y("y");
-    Func f ("f"), g("g"), ref("ref");
+    Func f("f"), g("g"), ref("ref");
 
     g(x, y) = x + y;
     g.compute_root();
@@ -182,13 +182,13 @@ int scalar_load_test(const Target &t) {
     r.where(r.x + r.y < 48);
 
     ref(x, y) = 10;
-    ref(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
+    ref(r.x, r.y) += 1 + max(g(0, 1), g(2 * r.x + 1, r.y));
     Buffer<int> im_ref = ref.realize(160, 160);
 
     f(x, y) = 10;
-    f(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
+    f(r.x, r.y) += 1 + max(g(0, 1), g(2 * r.x + 1, r.y));
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
@@ -205,7 +205,7 @@ int scalar_load_test(const Target &t) {
 
 int scalar_store_test(const Target &t) {
     Var x("x"), y("y");
-    Func f ("f"), g("g"), ref("ref");
+    Func f("f"), g("g"), ref("ref");
 
     g(x, y) = x + y;
     g.compute_root();
@@ -214,15 +214,15 @@ int scalar_store_test(const Target &t) {
     r.where(r.x + r.y < 48);
 
     ref(x, y) = 10;
-    ref(13, 13) = max(g(0, 1), g(2*r.x + 1, r.y));
+    ref(13, 13) = max(g(0, 1), g(2 * r.x + 1, r.y));
     Buffer<int> im_ref = ref.realize(160, 160);
 
     f(x, y) = 10;
-    f(13, 13) = max(g(0, 1), g(2*r.x + 1, r.y));
+    f(13, 13) = max(g(0, 1), g(2 * r.x + 1, r.y));
 
     f.update(0).allow_race_conditions();
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
@@ -239,13 +239,13 @@ int scalar_store_test(const Target &t) {
 
 int not_dependent_on_vectorized_var_test(const Target &t) {
     Var x("x"), y("y"), z("z");
-    Func f ("f"), g("g"), ref("ref");
+    Func f("f"), g("g"), ref("ref");
 
     g(x, y, z) = x + y + z;
     g.compute_root();
 
     RDom r(0, 80, 0, 80, 0, 80);
-    r.where(r.z*r.z < 47);
+    r.where(r.z * r.z < 47);
 
     ref(x, y, z) = 10;
     ref(r.x, r.y, 1) = max(g(0, 1, 2), g(r.x + 1, r.y, 2));
@@ -256,7 +256,7 @@ int not_dependent_on_vectorized_var_test(const Target &t) {
 
     f.update(0).allow_race_conditions();
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon().vectorize(r.z, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.z, 32);
@@ -273,21 +273,21 @@ int not_dependent_on_vectorized_var_test(const Target &t) {
 
 int no_op_store_test(const Target &t) {
     Var x("x"), y("y");
-    Func f ("f"), ref("ref");
+    Func f("f"), ref("ref");
 
     RDom r(0, 80, 0, 80);
     r.where(r.x + r.y < 47);
 
     ref(x, y) = x + y;
-    ref(2*r.x + 1, r.y) = ref(2*r.x + 1, r.y);
-    ref(2*r.x, 3*r.y) = ref(2*r.x, 3*r.y);
+    ref(2 * r.x + 1, r.y) = ref(2 * r.x + 1, r.y);
+    ref(2 * r.x, 3 * r.y) = ref(2 * r.x, 3 * r.y);
     Buffer<int> im_ref = ref.realize(240, 240);
 
     f(x, y) = x + y;
-    f(2*r.x + 1, r.y) = f(2*r.x + 1, r.y);
-    f(2*r.x, 3*r.y) = f(2*r.x, 3*r.y);
+    f(2 * r.x + 1, r.y) = f(2 * r.x + 1, r.y);
+    f(2 * r.x, 3 * r.y) = f(2 * r.x, 3 * r.y);
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon().vectorize(r.x, 32);
         f.update(1).hexagon().vectorize(r.y, 32);
     } else if (t.arch == Target::X86) {
@@ -306,22 +306,22 @@ int no_op_store_test(const Target &t) {
 
 int vectorized_predicated_predicate_with_pure_call_test(const Target &t) {
     Var x("x"), y("y");
-    Func f ("f"), g("g"), ref("ref");
+    Func f("f"), g("g"), ref("ref");
 
     g(x, y) = x + y;
     g.compute_root();
 
     RDom r(0, 100, 0, 100);
-    r.where(r.x + r.y < r.x*r.y);
+    r.where(r.x + r.y < r.x * r.y);
 
     ref(x, y) = 10;
-    ref(r.x, r.y) += abs(r.x*r.y) + g(2*r.x + 1, r.y);
+    ref(r.x, r.y) += abs(r.x * r.y) + g(2 * r.x + 1, r.y);
     Buffer<int> im_ref = ref.realize(160, 160);
 
     f(x, y) = 10;
-    f(r.x, r.y) += abs(r.x*r.y) + g(2*r.x + 1, r.y);
+    f(r.x, r.y) += abs(r.x * r.y) + g(2 * r.x + 1, r.y);
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
@@ -359,7 +359,7 @@ int vectorized_predicated_load_const_index_test(const Target &t) {
     f(x, y) = x + y;
     f(r.x, y) = clamp(select((r.x % 2) == 0, r.x, y) + input(r.x % 2, y), 0, 10);
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.has_feature(Target::HVX)) {
         f.update().hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update().vectorize(r.x, 32);
@@ -383,7 +383,7 @@ int vectorized_predicated_load_lut_test(const Target &t) {
     }
 
     constexpr int vector_size = 4;
-    constexpr int lut_height = vector_size + 2; // Any non-even multiple of vector-size will do.
+    constexpr int lut_height = vector_size + 2;  // Any non-even multiple of vector-size will do.
     constexpr int dst_len = 100;
 
     Buffer<int32_t> lut(2, lut_height);

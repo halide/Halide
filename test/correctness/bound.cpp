@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
                 return -1;
             }
             for (int c = 0; c < 3; c++) {
-                if (img(i, j, c) != c*(i > j ? i : j)) {
+                if (img(i, j, c) != c * (i > j ? i : j)) {
                     printf("img[%d, %d, %d] = %d\n", i, j, c, img(i, j, c));
                     return -1;
                 }

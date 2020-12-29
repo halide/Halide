@@ -3,29 +3,33 @@
 extern "C" {
 
 WEAK void *halide_default_get_symbol(const char *name) {
-    halide_error(NULL, "halide_default_get_symbol not implemented on this platform.");
-    return 0;
+    halide_error(nullptr, "halide_default_get_symbol not implemented on this platform.");
+    return nullptr;
 }
 
 WEAK void *halide_default_load_library(const char *name) {
-    halide_error(NULL, "halide_default_load_library not implemented on this platform.");
-    return 0;
+    halide_error(nullptr, "halide_default_load_library not implemented on this platform.");
+    return nullptr;
 }
 
 WEAK void *halide_default_get_library_symbol(void *lib, const char *name) {
-    halide_error(NULL, "halide_default_get_library_symbol not implemented on this platform.");
-    return 0;
+    halide_error(nullptr, "halide_default_get_library_symbol not implemented on this platform.");
+    return nullptr;
 }
 
 }  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK halide_get_symbol_t custom_get_symbol = halide_default_get_symbol;
 WEAK halide_load_library_t custom_load_library = halide_default_load_library;
 WEAK halide_get_library_symbol_t custom_get_library_symbol = halide_default_get_library_symbol;
 
-}}} // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 

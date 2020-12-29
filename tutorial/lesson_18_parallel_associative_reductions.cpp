@@ -4,12 +4,12 @@
 // reduction using the scheduling directive 'rfactor'.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_18*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_18 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_18
+// g++ lesson_18*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_18 -std=c++11
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_18
 
 // On os x:
-// g++ lesson_18*.cpp -g -I ../include -L ../bin -lHalide -o lesson_18 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_18
+// g++ lesson_18*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_18 -std=c++11
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_18
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -238,7 +238,7 @@ int main(int argc, char **argv) {
         for (int r_y = 0; r_y < input.height(); r_y++) {
             for (int u = 0; u < input.width() / 8; u++) {
                 /* vectorize */ for (int u_i = 0; u_i < 8; u_i++) {
-                    c_intm[u*4 + u_i][input(u*8 + u_i, r_y) / 32] += 1;
+                    c_intm[u * 8 + u_i][input(u * 8 + u_i, r_y) / 32] += 1;
                 }
             }
         }
@@ -312,7 +312,7 @@ int main(int argc, char **argv) {
             /* parallel */ for (int u = 0; u < input.width() / 2; u++) {
                 for (int ry_inner = 0; ry_inner < 2; ry_inner++) {
                     for (int rx_inner = 0; rx_inner < 2; rx_inner++) {
-                        c_intm[v][u][input(u*2 + rx_inner, v*2 + ry_inner) / 32] += 1;
+                        c_intm[v][u][input(u * 2 + rx_inner, v * 2 + ry_inner) / 32] += 1;
                     }
                 }
             }

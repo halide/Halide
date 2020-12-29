@@ -19,21 +19,24 @@ using std::map;
 using std::string;
 using std::vector;
 
+namespace {
+
 class InjectProfiling : public IRMutator {
 public:
-    map<string, int> indices;   // maps from func name -> index in buffer.
+    map<string, int> indices;  // maps from func name -> index in buffer.
 
-    vector<int> stack; // What produce nodes are we currently inside of.
+    vector<int> stack;  // What produce nodes are we currently inside of.
 
     string pipeline_name;
 
-    InjectProfiling(const string &pipeline_name) : pipeline_name(pipeline_name) {
+    InjectProfiling(const string &pipeline_name)
+        : pipeline_name(pipeline_name) {
         indices["overhead"] = 0;
         stack.push_back(0);
     }
 
-    map<int, uint64_t> func_stack_current; // map from func id -> current stack allocation
-    map<int, uint64_t> func_stack_peak; // map from func id -> peak stack allocation
+    map<int, uint64_t> func_stack_current;  // map from func id -> current stack allocation
+    map<int, uint64_t> func_stack_peak;     // map from func id -> peak stack allocation
 
 private:
     using IRMutator::visit;
@@ -50,7 +53,7 @@ private:
     // Strip down the tuple name, e.g. f.0 into f
     string normalize_name(const string &name) {
         vector<string> v = split_string(name, ".");
-        internal_assert(v.size() > 0);
+        internal_assert(!v.empty());
         return v[0];
     }
 
@@ -75,21 +78,21 @@ private:
         on_stack = true;
 
         Expr cond = simplify(condition);
-        if (is_zero(cond)) { // Condition always false
+        if (is_const_zero(cond)) {  // Condition always false
             return make_zero(UInt(64));
         }
 
         int32_t constant_size = Allocate::constant_allocation_size(extents, name);
         if (constant_size > 0) {
             int64_t stack_bytes = constant_size * type.bytes();
-            if (can_allocation_fit_on_stack(stack_bytes)) { // Allocation on stack
+            if (can_allocation_fit_on_stack(stack_bytes)) {  // Allocation on stack
                 return make_const(UInt(64), stack_bytes);
             }
         }
 
         // Check that the allocation is not scalar (if it were scalar
         // it would have constant size).
-        internal_assert(extents.size() > 0);
+        internal_assert(!extents.empty());
 
         on_stack = false;
         Expr size = cast<uint64_t>(extents[0]);
@@ -119,9 +122,9 @@ private:
         // compute_allocation_size() might return a zero size, if the allocation is
         // always conditionally false. remove_dead_allocations() is called after
         // inject_profiling() so this is a possible scenario.
-        if (!is_zero(size) && on_stack) {
+        if (!is_const_zero(size) && on_stack) {
             const uint64_t *int_size = as_const_uint(size);
-            internal_assert(int_size != NULL); // Stack size is always a const int
+            internal_assert(int_size != nullptr);  // Stack size is always a const int
             func_stack_current[idx] += *int_size;
             func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
             debug(3) << "  Allocation on stack: " << op->name << "(" << size << ") in pipeline " << pipeline_name
@@ -144,7 +147,7 @@ private:
                                   new_extents, condition, body, new_expr, op->free_function);
         }
 
-        if (!is_zero(size) && !on_stack && profiling_memory) {
+        if (!is_const_zero(size) && !on_stack && profiling_memory) {
             Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
             debug(3) << "  Allocation on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
             Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
@@ -163,7 +166,7 @@ private:
 
         Stmt stmt = IRMutator::visit(op);
 
-        if (!is_zero(alloc.size)) {
+        if (!is_const_zero(alloc.size)) {
             Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
 
             if (!alloc.on_stack) {
@@ -215,7 +218,7 @@ private:
     Stmt incr_active_threads() {
         Expr state = Variable::make(Handle(), "profiler_state");
         return Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
-                                  {state}, Call::Extern));
+                                         {state}, Call::Extern));
     }
 
     Stmt decr_active_threads() {
@@ -224,7 +227,7 @@ private:
                                          {state}, Call::Extern));
     }
 
-    Stmt visit_parallel_task(Stmt s) {
+    Stmt visit_parallel_task(const Stmt &s) {
         if (const Fork *f = s.as<Fork>()) {
             return Fork::make(visit_parallel_task(f->first), visit_parallel_task(f->rest));
         } else if (const Acquire *a = s.as<Acquire>()) {
@@ -291,7 +294,9 @@ private:
     }
 };
 
-Stmt inject_profiling(Stmt s, string pipeline_name) {
+}  // namespace
+
+Stmt inject_profiling(Stmt s, const string &pipeline_name) {
     InjectProfiling profiling(pipeline_name);
     s = profiling.mutate(s);
 
@@ -308,7 +313,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
     Expr profiler_token = Variable::make(Int(32), "profiler_token");
 
-    Expr stop_profiler = Call::make(Int(32), Call::register_destructor,
+    Expr stop_profiler = Call::make(Handle(), Call::register_destructor,
                                     {Expr("halide_profiler_pipeline_end"), get_state}, Call::Intrinsic);
 
     bool no_stack_alloc = profiling.func_stack_peak.empty();
@@ -317,7 +322,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
         Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
         Stmt update_stack = Evaluate::make(Call::make(Int(32), "halide_profiler_stack_peak_update",
-                                           {profiler_pipeline_state, func_stack_peak_buf}, Call::Extern));
+                                                      {profiler_pipeline_state, func_stack_peak_buf}, Call::Extern));
         s = Block::make(update_stack, s);
     }
 
@@ -339,17 +344,18 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
     s = LetStmt::make("profiler_token", start_profiler, s);
 
     if (!no_stack_alloc) {
-        for (int i = num_funcs-1; i >= 0; --i) {
+        for (int i = num_funcs - 1; i >= 0; --i) {
             s = Block::make(Store::make("profiling_func_stack_peak_buf",
                                         make_const(UInt(64), profiling.func_stack_peak[i]),
-                                        i, Parameter(), const_true(), ModulusRemainder()), s);
+                                        i, Parameter(), const_true(), ModulusRemainder()),
+                            s);
         }
         s = Block::make(s, Free::make("profiling_func_stack_peak_buf"));
         s = Allocate::make("profiling_func_stack_peak_buf", UInt(64),
                            MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
-    for (std::pair<string, int> p : profiling.indices) {
+    for (const auto &p : profiling.indices) {
         s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
     }
 

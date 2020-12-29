@@ -1,9 +1,8 @@
-from __future__ import print_function
-from __future__ import division
 
 import halide as hl
 import numpy as np
 import gc
+import sys
 
 def test_ndarray_to_buffer():
     a0 = np.ones((200, 300), dtype=np.int32)
@@ -87,6 +86,9 @@ def test_buffer_to_ndarray():
 def _assert_fn(e):
     assert e
 
+def _is_64bits():
+    return sys.maxsize > 2**32
+
 def test_for_each_element():
     buf = hl.Buffer(hl.Float(32), [3, 4])
     for x in range(3):
@@ -104,8 +106,13 @@ def test_fill_all_equal():
 
 
 def test_bufferinfo_sharing():
+    # Don't bother testing this on 32-bit systems (our "huge" size is too large there)
+    if not _is_64bits():
+        print("skipping test_bufferinfo_sharing()")
+        return
+
     # Torture-test to ensure that huge Python Buffer Protocol allocations are properly
-    # shared (rather than copied), and also that the lifetime is held appropriately
+    # shared (rather than copied), and also that the lifetime is held appropriately.
     a0 = np.ones((20000, 30000), dtype=np.int32)
     b0 = hl.Buffer(a0)
     del a0
@@ -223,6 +230,11 @@ def test_reorder():
     assert b.dim(3).stride() == b2.dim(3).stride()
 
 def test_overflow():
+    # Don't bother testing this on 32-bit systems (our "huge" size is too large there)
+    if not _is_64bits():
+        print("skipping test_overflow()")
+        return
+
     # size = INT_MAX
     w_intmax = 0x7FFFFFFF
 
@@ -240,6 +252,12 @@ def test_overflow():
     except ValueError as e:
         assert 'Out of range arguments to make_dim_vec.' in str(e)
 
+def test_buffer_to_str():
+    b = hl.Buffer()
+    assert str(b) == '<undefined halide.Buffer>'
+    b = hl.Buffer(hl.Int(32), [128, 256])
+    assert str(b) == '<halide.Buffer of type int32 shape:[[0,128,1],[0,256,128]]>'
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -252,3 +270,4 @@ if __name__ == "__main__":
     test_int64()
     test_reorder()
     test_overflow()
+    test_buffer_to_str()
