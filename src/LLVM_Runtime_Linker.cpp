@@ -259,6 +259,12 @@ DECLARE_CPP_INITMOD(riscv_cpu_features)
 DECLARE_NO_INITMOD(riscv_cpu_features)
 #endif  // WITH_RISCV
 
+#ifdef WITH_VULKAN
+DECLARE_CPP_INITMOD(vulkan)
+#else
+DECLARE_NO_INITMOD(vulkan)
+#endif // WITH_VULKAN
+
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
         if (target.bits == 32) {
@@ -586,6 +592,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
         const std::string f_name = Internal::get_llvm_function_name(f);
+        std::cout << "Found func: " << f_name << "\n";
 
         bool is_halide_extern_c_sym = Internal::starts_with(f_name, "halide_");
         internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
@@ -1142,6 +1149,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 user_error << "Direct3D 12 can only be used on ARM or X86 architectures.\n";
             }
+        }
+        if (t.has_feature(Target::Vulkan)) {
+            //TODO: probably need to add some checks here
+            modules.push_back(get_initmod_vulkan(c, bits_64, debug));
         }
         if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));

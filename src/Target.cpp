@@ -856,6 +856,9 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     }
+    if (has_feature(Target::Vulkan)) {
+        return DeviceAPI::Vulkan;
+    }
     return DeviceAPI::None;
 }
 

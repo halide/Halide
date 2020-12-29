@@ -10,6 +10,7 @@
 #include "HalideRuntimeOpenGL.h"
 #include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeQurt.h"
+#include "HalideRuntimeVulkan.h"
 #include "cpu_features.h"
 
 // This runtime module will contain extern declarations of the Halide
@@ -208,4 +209,9 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_d3d12compute_initialize_kernels,
     (void *)&halide_d3d12compute_release_context,
     (void *)&halide_d3d12compute_run,
+    (void *)&halide_vulkan_acquire_context,
+    (void *)&halide_vulkan_device_interface,
+    (void *)&halide_vulkan_initialize_kernels,
+    (void *)&halide_vulkan_release_context,
+    (void *)&halide_vulkan_run,
 };

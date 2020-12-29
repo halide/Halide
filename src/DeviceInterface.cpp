@@ -204,7 +204,7 @@ Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type) {
         interface_name = "halide_d3d12compute_device_interface";
         break;
     case DeviceAPI::Vulkan:
-        interface_name = "halide_hexagon_device_interface";
+        interface_name = "halide_vulkan_device_interface";
         break;
     case DeviceAPI::Default_GPU:
         // Will be resolved later

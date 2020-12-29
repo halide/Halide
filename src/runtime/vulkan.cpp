@@ -51,33 +51,33 @@ extern "C" {
 //   should block while a previous call (if any) has not yet been
 //   released via halide_release_vulkan_context.
 WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
-                                       VkDevice *device, VkQueue *queue, bool create = true) {
+                                       VkDevice *device, VkQueue *queue, bool create) {
     // TODO: Should we use a more "assertive" assert? These asserts do
     // not block execution on failure.
-    halide_assert(user_context, instance != NULL);
-    halide_assert(user_context, device != NULL);
-    halide_assert(user_context, queue != NULL);
+    halide_assert(user_context, instance != nullptr);
+    halide_assert(user_context, device != nullptr);
+    halide_assert(user_context, queue != nullptr);
 
-    if (cached_instance == NULL && create) {
+    if (cached_instance == nullptr && create) {
         VkInstanceCreateInfo create_info = {
             VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-            NULL,    // Next
+            nullptr,    // Next
             0,       // Flags
-            NULL,    // ApplicationInfo
-            0, NULL, // Layers
-            0, NULL  // Extensions
+            nullptr,    // ApplicationInfo
+            0, nullptr, // Layers
+            0, nullptr  // Extensions
         };
-        VkResult ret_code = vkCreateInstance(&create_info, NULL, &cached_instance);
+        VkResult ret_code = vkCreateInstance(&create_info, nullptr, &cached_instance);
         if (ret_code != VK_SUCCESS) {
             // TODO: Get info on error and return approriate code.
             return -1;
         }
 
-        if (vkCreateDevice == NULL) {
+        if (vkCreateDevice == nullptr) {
             load_vulkan_functions(cached_instance);
         }
         
-        VkPhysicalDevice chosen_device = NULL;
+        VkPhysicalDevice chosen_device = nullptr;
         VkPhysicalDevice devices[16];
         uint32_t queue_family;
         uint32_t device_count = sizeof(devices) / sizeof(devices[0]);
@@ -90,16 +90,17 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
             return -1;
         }
         // Try to find a device that supports compute.
-        for (uint32_t i = 0; chosen_device == NULL && i < device_count; i++) {
+        for (uint32_t i = 0; chosen_device == nullptr && i < device_count; i++) {
             VkPhysicalDeviceProperties properties;
             vkGetPhysicalDeviceProperties(devices[i], &properties);
 
-            if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU || VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+            if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU || 
+                properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
                 VkQueueFamilyProperties queue_properties[16];
                 uint32_t queue_properties_count = sizeof(queue_properties) / sizeof(queue_properties[0]);
                 vkGetPhysicalDeviceQueueFamilyProperties(devices[i], &queue_properties_count, queue_properties);
                 halide_assert(user_context, ret_code == VK_SUCCESS || ret_code == VK_INCOMPLETE);
-                for (uint32_t j = 0; chosen_device == NULL && j < queue_properties_count; j++) {
+                for (uint32_t j = 0; chosen_device == nullptr && j < queue_properties_count; j++) {
                     if (queue_properties[j].queueCount > 0 &&
                         queue_properties[j].queueFlags & VK_QUEUE_COMPUTE_BIT) {
                         chosen_device = devices[i];
@@ -109,7 +110,7 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
             }
         }
         // If nothing, just try the first one for now.
-        if (chosen_device == NULL) {
+        if (chosen_device == nullptr) {
             queue_family = 0;
             chosen_device = devices[0];
         }
@@ -117,7 +118,7 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
         float queue_priority = 1.0f;
         VkDeviceQueueCreateInfo device_queue_create_info = {
             VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            NULL, // Next
+            nullptr, // Next
             0,    // Flags
             queue_family,
             1,
@@ -126,18 +127,18 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
 
         VkDeviceCreateInfo device_create_info = {
             VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            NULL, // Next
+            nullptr, // Next
             0,    // Flags
             1,    // Count of queues to create
             &device_queue_create_info,
             0,    // Enabled layers
-            NULL, // layer names
+            nullptr, // layer names
             0,    // Enabled extensions
-            NULL, // Enabled extension names
-            NULL, // VkPhysicalDeviceFeatures
+            nullptr, // Enabled extension names
+            nullptr, // VkPhysicalDeviceFeatures
         };
 
-        ret_code = vkCreateDevice(chosen_device, &device_create_info, NULL, &cached_device);
+        ret_code = vkCreateDevice(chosen_device, &device_create_info, nullptr, &cached_device);
         if (ret_code != VK_SUCCESS) {
           debug(user_context) << "Vulkan: vkCreateDevice failed with return code: " << get_vulkan_error_name(ret_code) << "\n";
           return -1;
@@ -172,14 +173,14 @@ public:
     VkResult error;
 
     INLINE VulkanContext(void *user_context) : user_context(user_context),
-                                             instance(NULL), device(NULL), queue(NULL),
+                                             instance(nullptr), device(nullptr), queue(nullptr),
                                              error(VK_SUCCESS) {
         
         while (__sync_lock_test_and_set(&thread_lock, 1)) { }
 
         int err_halide = halide_vulkan_acquire_context(user_context, &instance, &device, &queue);
         halide_assert(user_context, err_halide == 0);
-        halide_assert(user_context, device != NULL && queue != NULL);
+        halide_assert(user_context, device != nullptr && queue != nullptr);
 
         __sync_lock_release(&thread_lock);
     }
@@ -188,8 +189,8 @@ public:
         halide_vulkan_release_context(user_context, instance, device, queue);
     }
 
-    // For now, this is always NULL
-    INLINE const VkAllocationCallbacks *allocation_callbacks() { return NULL; }
+    // For now, this is always nullptr
+    INLINE const VkAllocationCallbacks *allocation_callbacks() { return nullptr; }
 };
 
 // Structure to hold the state of a module attached to the context.
@@ -201,7 +202,7 @@ struct module_state {
     VkPipeline pipeline;
     module_state *next;
 };
-WEAK module_state *state_list = NULL;
+WEAK module_state *state_list = nullptr;
 
 }}}} // namespace Halide::Runtime::Internal::Vulkan
 
@@ -226,7 +227,7 @@ WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t* buf) {
 
     buf->device = 0;
     buf->device_interface->impl->release_module();
-    buf->device_interface = NULL;
+    buf->device_interface = nullptr;
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -260,7 +261,7 @@ WEAK int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr, 
     module_state **state = (module_state**)state_ptr;
     if (!(*state)) {
         *state = (module_state*)malloc(sizeof(module_state));
-        (*state)->pipeline = NULL;
+        (*state)->pipeline = 0;
         (*state)->next = state_list;
         state_list = *state;
     }
@@ -307,7 +308,7 @@ WEAK int halide_vulkan_device_release(void *user_context) {
     VkDevice device;
     VkQueue queue;
     err = halide_vulkan_acquire_context(user_context, &instance, &device, &queue, false);
-    if (instance != NULL) {
+    if (instance != nullptr) {
         // SYNC
 
         // Unload the modules attached to this context. Note that the list
@@ -320,18 +321,18 @@ WEAK int halide_vulkan_device_release(void *user_context) {
             if (state->pipeline) {
 
                 debug(user_context) << "    vkDestroyPipeline " << state->pipeline << "\n";
-                vkDestroyPipeline(device, state->pipeline, NULL /* TODO: alloc callbacks. */);
-                state->pipeline = NULL;
+                vkDestroyPipeline(device, state->pipeline, nullptr /* TODO: alloc callbacks. */);
+                state->pipeline = 0;
             }
             state = state->next;
         }
         
         halide_vulkan_release_context(user_context, instance, device, queue);
-        vkDestroyDevice(device, NULL);
+        vkDestroyDevice(device, nullptr);
         if (instance == cached_instance) {
-            cached_instance = NULL;
+            cached_instance = nullptr;
         }
-        vkDestroyInstance(instance, NULL);
+        vkDestroyInstance(instance, nullptr);
     }
 
     return 0;
@@ -364,16 +365,16 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t* buf) {
     #endif
 
     VkBufferCreateInfo args_info = {
-        VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL,
+        VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, nullptr,
         0,
         size,
         // TODO: verify next flags
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_SHARING_MODE_EXCLUSIVE,
-        0, NULL
+        0, nullptr
     };
     VkBuffer result;
-    VkResult ret_code = vkCreateBuffer(context.device, &args_info, NULL, &result);
+    VkResult ret_code = vkCreateBuffer(context.device, &args_info, nullptr, &result);
     if (ret_code != VK_SUCCESS) {
         debug(user_context) << "Vulkan: vkCreateBuffer returned: " << get_vulkan_error_name(ret_code) << "\n";
         return -1;
@@ -554,18 +555,18 @@ WEAK int halide_vulkan_wrap_vk_buffer(void *user_context, struct halide_buffer_t
 }
 
 WEAK int halide_vulkan_detach_vk_buffer(void *user_context, halide_buffer_t *buf) {
-    if (buf->device == NULL) {
+    if (buf->device == 0) {
         return 0;
     }
     halide_assert(user_context, buf->device_interface == &vulkan_device_interface);
     buf->device = 0;
     buf->device_interface->impl->release_module();
-    buf->device_interface = NULL;
+    buf->device_interface = nullptr;
     return 0;
 }
 
 WEAK uintptr_t halide_vulkan_get_vk_buffer(void *user_context, halide_buffer_t *buf) {
-    if (buf->device == NULL) {
+    if (buf->device == 0) {
         return 0;
     }
     halide_assert(user_context, buf->device_interface == &vulkan_device_interface);
@@ -579,7 +580,7 @@ WEAK const struct halide_device_interface_t *halide_vulkan_device_interface() {
 namespace {
 __attribute__((destructor))
 WEAK void halide_vulkan_cleanup() {
-    halide_vulkan_device_release(NULL);
+    halide_vulkan_device_release(nullptr);
 }
 }
 
@@ -654,7 +655,7 @@ WEAK halide_device_interface_t vulkan_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
-    NULL, // target capabilities.
+    nullptr, // target capabilities.
     &vulkan_device_interface_impl
 };
 

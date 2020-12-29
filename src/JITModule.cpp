@@ -100,6 +100,21 @@ void load_metal() {
 #endif
 }
 
+void load_vulkan() {
+#if defined(__linux__)
+    if (have_symbol("VkGetPhysicalDeviceProperties")) {
+        debug(1) << "Vulkan library already linked in...\n";
+    } else {
+        debug(1) << "Looking for Vulkan library...\n";
+        string error;
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.so.1", &error);
+        user_assert(error.empty()) << "Could not find libvulkan.so.1\n";
+    }
+#else
+    internal_error << "Vulkan support only implemented in Linux\n";
+#endif
+}
+
 }  // namespace
 
 using namespace llvm;
@@ -614,6 +629,7 @@ enum RuntimeKind {
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
+    Vulkan,
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
@@ -621,6 +637,7 @@ enum RuntimeKind {
     OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,
+    VulkanDebug,
     MaxRuntimeKind
 };
 
@@ -657,6 +674,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
+        one_gpu.set_feature(Target::Vulkan, false);
         string module_name;
         switch (runtime_kind) {
         case OpenCLDebug:
@@ -709,6 +727,17 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name += "openglcompute";
             load_opengl();
+            break;
+        case VulkanDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::Vulkan);
+            module_name = "debug_vulkan";
+            load_vulkan();
+            break;
+        case Vulkan:
+            one_gpu.set_feature(Target::Vulkan);
+            module_name += "vulkan";
+            load_vulkan();
             break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
@@ -862,6 +891,13 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     }
     if (target.has_feature(Target::OpenGL)) {
         auto kind = target.has_feature(Target::Debug) ? OpenGLDebug : OpenGL;
+        JITModule m = make_module(for_module, target, kind, result, create);
+        if (m.compiled()) {
+            result.push_back(m);
+        }
+    }
+    if (target.has_feature(Target::Vulkan)) {
+        auto kind = target.has_feature(Target::Debug) ? VulkanDebug : Vulkan;
         JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
