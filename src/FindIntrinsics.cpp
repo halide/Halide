@@ -17,6 +17,16 @@ bool find_intrinsics_for_type(const Type &t) {
     return t.is_vector();
 }
 
+Expr widen(Expr a) {
+    Type result_type = a.type().widen();
+    return Cast::make(result_type, std::move(a));
+}
+
+Expr narrow(Expr a) {
+    Type result_type = a.type().narrow();
+    return Cast::make(result_type, std::move(a));
+}
+
 Expr lossless_narrow(const Expr &x) {
     return lossless_cast(x.type().narrow(), x);
 }

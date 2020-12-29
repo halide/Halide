@@ -4,6 +4,11 @@ using namespace Halide;
 using namespace Halide::ConciseCasts;
 using namespace Halide::Internal;
 
+Expr narrow(Expr a) {
+    Type result_type = a.type().narrow();
+    return Cast::make(result_type, std::move(a));
+}
+
 void check(Expr test, Expr expected, Type required_type) {
     // Some of the below tests assume the simplifier has run.
     test = simplify(test);
