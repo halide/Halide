@@ -591,20 +591,22 @@ Expr lower_widening_shift_right(const Expr &a, const Expr &b) {
 
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
     Expr round = simplify(make_shift_right(make_one(a.type()) >> min(b, 0), 1));
-    if (a.type().bits() <= 32) {
+    if ((a.type().is_uint() && a.type().bits() <= 32) || a.type().bits() < 32) {
         return narrow(widening_add(a, round) << b);
     } else {
-        // We can't widening_add with 64 bits.
+        // Avoid widening arithmetic when signed integer overflow is undefined,
+        // or when the intermediate would be 128 bits.
         return (a + round) << b;
     }
 }
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
     Expr round = simplify(make_shift_right(make_one(a.type()) << max(b, 0), 1));
-    if (a.type().bits() <= 32) {
+    if ((a.type().is_uint() && a.type().bits() <= 32) || a.type().bits() < 32) {
         return narrow(widening_add(a, round) >> b);
     } else {
-        // We can't widening_add with 64 bits.
+        // Avoid widening arithmetic when signed integer overflow is undefined,
+        // or when the intermediate would be 128 bits.
         return (a + round) >> b;
     }
 }

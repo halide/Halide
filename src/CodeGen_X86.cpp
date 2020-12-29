@@ -174,6 +174,13 @@ bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
 
     const Call *ma = Call::as_intrinsic(a, {Call::widening_mul});
     const Call *mb = Call::as_intrinsic(b, {Call::widening_mul});
+    // pmaddwd can't handle mixed type widening muls.
+    if (ma && ma->args[0].type() != ma->args[1].type()) {
+        return false;
+    }
+    if (mb && mb->args[0].type() != mb->args[1].type()) {
+        return false;
+    }
     // If the operands are widening shifts, we might be able to treat these as
     // multiplies.
     const Call *sa = Call::as_intrinsic(a, {Call::widening_shift_left});
