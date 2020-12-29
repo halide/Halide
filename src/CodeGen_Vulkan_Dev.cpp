@@ -253,7 +253,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Mul *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Div *op) {
-    user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
+    user_assert(!is_const_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
     if (op->type.is_float()) {
         visit_binop(op->type, op->a, op->b, SpvOpFDiv);
@@ -412,7 +412,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
             spir_v_kernels.push_back(id);
             spir_v_kernels.insert(spir_v_kernels.end(), phi_inputs.ids, phi_inputs.ids + 4);
       }
-    } else if (op->is_intrinsic("div_round_to_zero")) {
+    } else if (op->is_intrinsic(Call::IntrinsicOp::div_round_to_zero)) {
         internal_assert(op->args.size() == 2);
         uint32_t opcode = 0;
         if (op->type.is_int()) {
@@ -423,7 +423,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
             internal_error << "div_round_to_zero of non-integer type.\n";
         }
         visit_binop(op->type, op->args[0], op->args[1], opcode);
-    } else if (op->is_intrinsic("mod_round_to_zero")) {
+    } else if (op->is_intrinsic(Call::IntrinsicOp::mod_round_to_zero)) {
         internal_assert(op->args.size() == 2);
         uint32_t opcode = 0;
         if (op->type.is_int()) {
@@ -434,7 +434,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
         visit_binop(op->type, op->args[0], op->args[1], opcode);
-    } else if (op->is_intrinsic("mulhi_shr")) {
+    } else if (op->is_intrinsic(Call::IntrinsicOp::mulhi_shr)) {
         internal_assert(op->args.size() == 3);
         uint32_t type_id = map_type(op->type);
 
@@ -477,7 +477,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
         }
 
         id = result_id;
-    } else if (op->is_intrinsic("sorted_avg")) {
+    } else if (op->is_intrinsic(Call::IntrinsicOp::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         // b > a, so the following works without widening:
         // a + (b - a)/2
@@ -500,7 +500,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Select *op) {
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
     debug(2) << "Vulkan codegen: Load: " << (Expr)op << "\n";
-    user_assert(is_one(op->predicate)) << "Predicated loads not supported by the Vulkan backend\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated loads not supported by the Vulkan backend\n";
 
     // TODO: implement vector loads
     // TODO: correct casting to the appropriate memory space
@@ -529,7 +529,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
     debug(2) << "Vulkan codegen: Store: " << (Stmt)op << "\n";
 
-    user_assert(is_one(op->predicate)) << "Predicated stores not supported by the Vulkan backend\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated stores not supported by the Vulkan backend\n";
 
     // TODO: implement vector writes
     // TODO: correct casting to the appropriate memory space
@@ -629,7 +629,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
                         (op->for_type == ForType::GPUThread))
             << "kernel loops must be either gpu block or gpu thread\n";
         // This should always be true at this point in codegen
-        internal_assert(is_zero(op->min));
+        internal_assert(is_const_zero(op->min));
 
         // Save & validate the workgroup size
         int idx = thread_loop_workgroup_index(op->name);
