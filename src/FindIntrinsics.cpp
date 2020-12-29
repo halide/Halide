@@ -13,8 +13,8 @@ using namespace Halide::ConciseCasts;
 namespace {
 
 bool find_intrinsics_for_type(const Type &t) {
-    // Currently, we only try to find and replace intrinsics for vector types.
-    return t.is_vector();
+    // Currently, we only try to find and replace intrinsics for vector types that aren't bools.
+    return t.is_vector() && t.bits() >= 8;
 }
 
 Expr widen(Expr a) {
