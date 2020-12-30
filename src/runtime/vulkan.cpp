@@ -198,8 +198,13 @@ public:
 // modules that are attached to a context in order to release them all
 // when then context is released.
 struct module_state {
-    // TODO: Could also be a VkShaderModule
-    VkPipeline pipeline;
+    // TODO: Could also be a VkPipeline, but in that case we need to
+    // pass information required to construct the VkDescriptorSetLayout
+    // to halide_vulkan_initialize_kernels().  This will require modifying
+    // Vulkan GPU codegen to pass in the required info
+    // So, for now, we'll use a VKShaderModule here and do the boilerplate
+    // of creating a pipeline in the run function.
+    VkShaderModule shader_module;
     module_state *next;
 };
 WEAK module_state *state_list = nullptr;
@@ -261,7 +266,7 @@ WEAK int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr, 
     module_state **state = (module_state**)state_ptr;
     if (!(*state)) {
         *state = (module_state*)malloc(sizeof(module_state));
-        (*state)->pipeline = 0;
+        (*state)->shader_module = 0;
         (*state)->next = state_list;
         state_list = *state;
     }
@@ -269,7 +274,22 @@ WEAK int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr, 
     // Create the program if necessary. TODO: The program object needs to not
     // only already exist, but be created for the same context/device as the
     // calling context/device.
-    if (!(*state && (*state)->pipeline) && size > 1) {
+    if (!(*state && (*state)->shader_module) && size > 1) {
+        VkShaderModuleCreateInfo shader_info = {
+            VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            nullptr,        // pointer to structure extending this
+            0,              // flags (curently unused)
+            (size_t)size,   // code size in bytes
+            (const uint32_t*)src  // source
+        };
+
+        debug(user_context) << "    vkCreateShaderModule src: " << (const uint32_t*)src << "\n";
+
+        VkResult ret_code = vkCreateShaderModule(ctx.device, &shader_info, ctx.allocation_callbacks(), &((*state)->shader_module));
+        if (ret_code != VK_SUCCESS) {
+            debug(user_context) << "Vulkan: vkCreateShaderModule returned: " << get_vulkan_error_name(ret_code) << "\n";
+            return -1;
+        }
     }
 
     #ifdef DEBUG_RUNTIME
@@ -318,11 +338,11 @@ WEAK int halide_vulkan_device_release(void *user_context) {
         // object.
         module_state *state = state_list;
         while (state) {
-            if (state->pipeline) {
+            if (state->shader_module) {
 
-                debug(user_context) << "    vkDestroyPipeline " << state->pipeline << "\n";
-                vkDestroyPipeline(device, state->pipeline, nullptr /* TODO: alloc callbacks. */);
-                state->pipeline = 0;
+                debug(user_context) << "    vkDestroyShaderModule " << state->shader_module << "\n";
+                vkDestroyShaderModule(device, state->shader_module, nullptr /* TODO: alloc callbacks. */);
+                state->shader_module = 0;
             }
             state = state->next;
         }
