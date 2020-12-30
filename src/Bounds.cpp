@@ -1426,9 +1426,13 @@ private:
             internal_assert(!op->args.empty());
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::scatter_gather)) {
-            // A tuple could evaluate to any one of the args. The base
-            // class visitor is fine as it takes a union.
-            IRVisitor::visit(op);
+            // Take the union of the args
+            Interval result = Interval::nothing();
+            for (const Expr &e : op->args) {
+                e.accept(this);
+                result.include(interval);
+            }
+            interval = result;
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {
