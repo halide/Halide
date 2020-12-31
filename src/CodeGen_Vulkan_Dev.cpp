@@ -932,9 +932,40 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     add_instruction(spir_v_entrypoints,
                     SpvOpEntryPoint, entry_point_interface);
 
+    // GLSL-style: each input buffer is a runtime array in a buffer struct
+    // All other params get passed in as a single uniform block
+    // First, need to count scalar parameters to construct the uniform struct
+    std::vector<uint32_t> scalar_types;
+    uint32_t offset = 0;
+    uint32_t param_pack_type_id = next_id++;
+    scalar_types.push_back(param_pack_type_id);
+    for (size_t i = 0; i < args.size(); i++) {
+        if (!args[i].is_buffer) {
+            // record the type for later constructing the params struct type
+            scalar_types.push_back(map_type(args[i].type));
+
+            // Add a decoration describing the offset
+            add_instruction(spir_v_annotations, SpvOpMemberDecorate, {param_pack_type_id, 
+                                                                      (uint32_t)(scalar_types.size()-1), 
+                                                                      SpvDecorationOffset,
+                                                                      offset});
+            offset += args[i].type.bytes();
+        }
+    }
+
+    // Add a Block decoration for the parameter pack itself
+    add_instruction(spir_v_annotations, SpvOpDecorate, {param_pack_type_id, SpvDecorationBlock});
+    // We always pass in the parameter pack as the first binding
+    add_instruction(spir_v_annotations, SpvOpDecorate, {param_pack_type_id, SpvDecorationDescriptorSet, 0});
+    add_instruction(spir_v_annotations, SpvOpDecorate, {param_pack_type_id, SpvDecorationBinding, 0});
+
+    // Add a struct type for the parameter pack
+    add_instruction(spir_v_types, SpvOpTypeStruct, scalar_types);
+
+
+    uint32_t binding_counter = 1;
     for (size_t i = 0; i < args.size(); i++) {
         uint32_t param_id = next_id++;
-        // GLSL-style: each input buffer is a runtime array in a buffer struct
         if (args[i].is_buffer) {
             uint32_t element_type = map_type(args[i].type);
             uint32_t runtime_arr_type = next_id++;
@@ -953,7 +984,11 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
                                                                 (uint32_t)(args[i].type.bytes())});
             // Annotate the offset for the array
             add_instruction(spir_v_annotations, SpvOpMemberDecorate, {struct_type, 0, SpvDecorationOffset, (uint32_t)0});
-            // TODO: May have to set DescriptorSet and Binding
+
+            // Set DescriptorSet and Binding
+            add_instruction(spir_v_annotations, SpvOpDecorate, {struct_type, SpvDecorationDescriptorSet, 0});
+            add_instruction(spir_v_annotations, SpvOpDecorate, {struct_type, SpvDecorationBinding, binding_counter++});
+
             add_instruction(spir_v_types, SpvOpVariable, {ptr_struct_type, param_id, SpvStorageClassUniform});
         } else {
             uint32_t param_ptr_id = next_id++;
@@ -1056,11 +1091,11 @@ void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
                                     const std::vector<DeviceArgument> &args) {
     current_kernel_name = name;
     emitter.add_kernel(stmt, name, args);
-    dump();
+    //dump();
 }
 
 std::vector<char> CodeGen_Vulkan_Dev::compile_to_src() {
-    #ifdef WITH_VULKAN
+    //#ifdef WITH_VULKAN
 
     emitter.spir_v_header[3] = emitter.next_id;
 
@@ -1074,9 +1109,13 @@ std::vector<char> CodeGen_Vulkan_Dev::compile_to_src() {
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_types.data(), (const char *)(emitter.spir_v_types.data() + emitter.spir_v_types.size()));
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_kernels.data(), (const char *)(emitter.spir_v_kernels.data() + emitter.spir_v_kernels.size()));
     assert(final_module.size() == total_size);
+    std::ofstream f("/home/skamil/out.spv", std::ios::out | std::ios::binary);
+    f.write((char*)(final_module.data()), final_module.size());
+    f.close();
+
     return final_module;
 
-    #endif
+    //#endif
 }
 
 std::string CodeGen_Vulkan_Dev::get_current_kernel_name() {

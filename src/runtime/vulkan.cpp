@@ -546,6 +546,32 @@ WEAK int halide_vulkan_run(void *user_context,
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
+    // Running a Vulkan pipeline requires a large number of steps
+    // and boilerplate:
+    // 1. Create a descriptor set layout
+    // 2. Create a pipeline layout
+    // 3. Create a compute pipeline
+    // --- The above can be cached between invocations ---
+    // 4. Create a descriptor set
+    // 5. Set bindings for buffers in the descriptor set
+    // 6. Create a command pool
+    // 7. Create a command buffer from the command pool
+    // 8. Begin the command buffer
+    // 9. Bind the compute pipeline from #3
+    // 10. Bind the descriptor set
+    // 11. Add a dispatch to the command buffer
+    // 12. End the command buffer
+    // 13. Submit the command buffer to our command queue
+    // --- The following isn't best practice, but it's in line
+    //     with what we do in Metal etc. --- 
+    // 14. Wait until the queue is done with the command buffer
+
+    //// 1. Create a descriptor set layout
+    int i = 0;
+    while (arg_sizes[i] > 0) {
+        i++;
+    }
+
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
