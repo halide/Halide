@@ -1422,6 +1422,14 @@ f(x, y, scatter(3, 4)) = gather(1, 2);
 f(x + scatter(1, 0, 0), y + scatter(0, 3, 0), c + scatter(0, 0, 2)) = 2 * gather(x, y, c);
 \endcode
 *
+* Repeated values in the scatter cause multiple stores to the same
+* location. The stores happen in order from left to right, so the
+* rightmost value wins. The following code is equivalent to f(x) = 5
+*
+\code
+f(scatter(x, x)) = gather(3, 5);
+\endcode
+*
 * Gathers are most useful for algorithms which require in-place
 * swapping or permutation of multiple elements, or other kinds of
 * in-place mutations that require loading multiple inputs, doing some

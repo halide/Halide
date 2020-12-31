@@ -112,11 +112,6 @@ int main(int argc, char **argv) {
 
         RDom r(0, (sz + 1) / 2, 0, sz / 2);
 
-        vector<Expr> in{rot(r.x, r.y),
-                        rot(sz - 1 - r.y, r.x),
-                        rot(sz - 1 - r.x, sz - 1 - r.y),
-                        rot(r.y, sz - 1 - r.x)};
-
         vector<Expr> src_x{r.x, sz - 1 - r.y, sz - 1 - r.x, r.y};
         vector<Expr> src_y{r.y, r.x, sz - 1 - r.y, sz - 1 - r.x};
         vector<Expr> dst_x = src_x, dst_y = src_y;
@@ -208,6 +203,43 @@ int main(int argc, char **argv) {
                 printf("Sort result is not correctly ordered at elements %d, %d:\n"
                        "(%d, %d) vs (%d, %d)\n",
                        i, i + 1, out_0(i), out_1(i), out_0(i + 1), out_1(i + 1));
+                return -1;
+            }
+        }
+    }
+
+    {
+        // A scatter can exist without a gather if you're just broadcasting
+        Func f;
+        Var x;
+        f(x) = 0;
+        f(scatter(0, 1, 2, 3)) = 5;
+
+        Buffer<int> out = f.realize(5);
+        for (int i = 0; i < 5; i++) {
+            int correct = i < 4 ? 5 : 0;
+            if (out(i) != correct) {
+                printf("out(%d) = %d instead of %d\n", i, out(i), correct);
+                return -1;
+            }
+        }
+    }
+
+    {
+        // A gather can exist without a scatter, but it's sort of
+        // silly because last element wins. It's not outright
+        // disallowed because it may be a degenerate case of some
+        // generic code.
+        Func f;
+        Var x;
+        f(x) = 0;
+        f(3) = gather(1, 9);
+
+        Buffer<int> out = f.realize(5);
+        for (int i = 0; i < 5; i++) {
+            int correct = i == 3 ? 9 : 0;
+            if (out(i) != correct) {
+                printf("out(%d) = %d instead of %d\n", i, out(i), correct);
                 return -1;
             }
         }
