@@ -938,6 +938,8 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     std::vector<uint32_t> scalar_types;
     uint32_t offset = 0;
     uint32_t param_pack_type_id = next_id++;
+    uint32_t param_pack_ptr_type_id = next_id++;
+    uint32_t param_pack_id = next_id++;
     scalar_types.push_back(param_pack_type_id);
     for (size_t i = 0; i < args.size(); i++) {
         if (!args[i].is_buffer) {
@@ -956,14 +958,18 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     // Add a Block decoration for the parameter pack itself
     add_instruction(spir_v_annotations, SpvOpDecorate, {param_pack_type_id, SpvDecorationBlock});
     // We always pass in the parameter pack as the first binding
-    add_instruction(spir_v_annotations, SpvOpDecorate, {param_pack_type_id, SpvDecorationDescriptorSet, 0});
-    add_instruction(spir_v_annotations, SpvOpDecorate, {param_pack_type_id, SpvDecorationBinding, 0});
+    add_instruction(spir_v_annotations, SpvOpDecorate, {param_pack_id, SpvDecorationDescriptorSet, 0});
+    add_instruction(spir_v_annotations, SpvOpDecorate, {param_pack_id, SpvDecorationBinding, 0});
 
-    // Add a struct type for the parameter pack
+    // Add a struct type for the parameter pack and a pointer to it
     add_instruction(spir_v_types, SpvOpTypeStruct, scalar_types);
+    add_instruction(spir_v_types, SpvOpTypePointer, {param_pack_ptr_type_id, SpvStorageClassUniform, param_pack_type_id});
+    // Add a variable for the parameter pack
+    add_instruction(spir_v_types, SpvOpVariable, {param_pack_ptr_type_id, param_pack_id, SpvStorageClassUniform});
 
 
     uint32_t binding_counter = 1;
+    uint32_t scalar_index = 0;
     for (size_t i = 0; i < args.size(); i++) {
         uint32_t param_id = next_id++;
         if (args[i].is_buffer) {
@@ -991,10 +997,12 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
 
             add_instruction(spir_v_types, SpvOpVariable, {ptr_struct_type, param_id, SpvStorageClassUniform});
         } else {
-            uint32_t param_ptr_id = next_id++;
-            add_instruction(spir_v_types, SpvOpVariable, {map_pointer_type(args[i].type, SpvStorageClassUniform),
-                                                          param_ptr_id, SpvStorageClassUniform});
-            add_instruction(SpvOpLoad, {map_type(args[i].type), param_id, param_ptr_id});
+            uint32_t access_chain_id = next_id++;
+            add_instruction(SpvOpInBoundsAccessChain, {map_pointer_type(args[i].type, SpvStorageClassUniform), 
+                                                       access_chain_id, 
+                                                       emit_constant(UInt(32), &scalar_index)});
+            scalar_index++;
+            add_instruction(SpvOpLoad, {map_type(args[i].type), param_id, access_chain_id});
         }
         symbol_table.push(args[i].name, {param_id, SpvStorageClassUniform});
     }
