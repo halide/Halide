@@ -948,7 +948,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
 
             // Add a decoration describing the offset
             add_instruction(spir_v_annotations, SpvOpMemberDecorate, {param_pack_type_id, 
-                                                                      (uint32_t)(scalar_types.size()-1), 
+                                                                      (uint32_t)(scalar_types.size()-2), 
                                                                       SpvDecorationOffset,
                                                                       offset});
             offset += args[i].type.bytes();
@@ -992,14 +992,15 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
             add_instruction(spir_v_annotations, SpvOpMemberDecorate, {struct_type, 0, SpvDecorationOffset, (uint32_t)0});
 
             // Set DescriptorSet and Binding
-            add_instruction(spir_v_annotations, SpvOpDecorate, {struct_type, SpvDecorationDescriptorSet, 0});
-            add_instruction(spir_v_annotations, SpvOpDecorate, {struct_type, SpvDecorationBinding, binding_counter++});
+            add_instruction(spir_v_annotations, SpvOpDecorate, {param_id, SpvDecorationDescriptorSet, 0});
+            add_instruction(spir_v_annotations, SpvOpDecorate, {param_id, SpvDecorationBinding, binding_counter++});
 
             add_instruction(spir_v_types, SpvOpVariable, {ptr_struct_type, param_id, SpvStorageClassUniform});
         } else {
             uint32_t access_chain_id = next_id++;
             add_instruction(SpvOpInBoundsAccessChain, {map_pointer_type(args[i].type, SpvStorageClassUniform), 
                                                        access_chain_id, 
+                                                       param_pack_id,
                                                        emit_constant(UInt(32), &scalar_index)});
             scalar_index++;
             add_instruction(SpvOpLoad, {map_type(args[i].type), param_id, access_chain_id});
@@ -1019,6 +1020,9 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     spir_v_kernels.insert(it, spir_v_kernel_allocations.begin(), spir_v_kernel_allocations.end());
     spir_v_kernel_allocations.clear();
 
+    workgroup_size[0] = std::max(workgroup_size[0], (uint32_t)1);
+    workgroup_size[1] = std::max(workgroup_size[1], (uint32_t)1);
+    workgroup_size[2] = std::max(workgroup_size[2], (uint32_t)1);
     // Add workgroup size to execution mode
     add_instruction(spir_v_execution_modes, SpvOpExecutionMode,
                     {current_function_id, SpvExecutionModeLocalSize,
@@ -1064,8 +1068,8 @@ void CodeGen_Vulkan_Dev::init_module() {
     // Capabilities
     // TODO: only add those required by the generated code
     emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityShader});
-    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityInt8});
-    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityUniformAndStorageBuffer8BitAccess});
+    //emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityInt8});
+    //emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityUniformAndStorageBuffer8BitAccess});
 
     // Extensions
     // TODO: only add those required by the generated code

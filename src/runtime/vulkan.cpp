@@ -58,13 +58,29 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
     halide_assert(user_context, device != nullptr);
     halide_assert(user_context, queue != nullptr);
 
+    // TODO: make validation optional & only in debug
+
+    const char* val_layers[] = {"VK_LAYER_KHRONOS_validation"};
+#define VK_MAKE_VERSION(major, minor, patch) \
+    ((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
+
     if (cached_instance == nullptr && create) {
+        VkApplicationInfo app_info = {
+            VK_STRUCTURE_TYPE_APPLICATION_INFO, // struct type
+            nullptr, // Next
+            nullptr, // application name
+            0, // app version
+            "Halide", // engine name
+            0, // engine version
+            VK_MAKE_VERSION(1, 2, 0)
+        };
         VkInstanceCreateInfo create_info = {
             VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             nullptr,    // Next
             0,       // Flags
-            nullptr,    // ApplicationInfo
-            0, nullptr, // Layers
+            &app_info,    // ApplicationInfo
+//            0, nullptr, // Layers
+            1, val_layers,
             0, nullptr  // Extensions
         };
         VkResult ret_code = vkCreateInstance(&create_info, nullptr, &cached_instance);
@@ -567,12 +583,129 @@ WEAK int halide_vulkan_run(void *user_context,
     // 14. Wait until the queue is done with the command buffer
 
     //// 1. Create a descriptor set layout
+    const size_t HALIDE_MAX_VK_BINDINGS=64;
+    VkDescriptorSetLayoutBinding layout_bindings[HALIDE_MAX_VK_BINDINGS];
+
+    // The first binding is used for scalar parameters
+    uint32_t num_bindings = 1;
+    layout_bindings[0] = {0, // binding
+                          VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptor type
+                          1, // descriptor count
+                          VK_SHADER_STAGE_COMPUTE_BIT, // stage flags
+                          0}; // immutable samplers
+
     int i = 0;
     while (arg_sizes[i] > 0) {
+        if (arg_is_buffer[i]) {
+            // TODO: I don't quite understand why STORAGE_BUFFER is valid
+            // here, but examples all across the docs seem to do this
+            layout_bindings[num_bindings] = 
+                        {num_bindings, // binding
+                         VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptor type
+                         1, // descriptor count
+                         VK_SHADER_STAGE_COMPUTE_BIT, // stage flags
+                         0}; // immutable samplers
+            num_bindings++;
+        }
         i++;
     }
+    // Create the LayoutInfo struct
+    VkDescriptorSetLayoutCreateInfo layout_info = 
+        {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,  // structure type
+         nullptr, // pointer to a struct extending this info
+         0, // flags
+         num_bindings, // binding count
+         layout_bindings // pointer to layout bindings array
+        };
+    
+    // Create the descriptor set layout
+    VkDescriptorSetLayout descriptor_set_layout;
+    auto result = vkCreateDescriptorSetLayout(ctx.device, &layout_info, 0, &descriptor_set_layout);
 
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkCreateDescriptorSetLayout returned " << get_vulkan_error_name(result) << "\n";
+        return result;
+    }
+    
+    ///// 2. Create a pipeline layout
+    VkPipelineLayoutCreateInfo pipeline_layout_info =
+        {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, // structure type
+         nullptr, // pointer to a structure extending this
+         0, // flags
+         1, // number of descriptor sets
+         &descriptor_set_layout, // pointer to the descriptor sets
+         0, // number of push constant ranges
+         nullptr // pointer to push constant range structs
+        };
+    
+    VkPipelineLayout pipeline_layout;
+    result = vkCreatePipelineLayout(ctx.device, &pipeline_layout_info, 0, &pipeline_layout);
 
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkCreatePipelineLayout returned " << get_vulkan_error_name(result) << "\n";
+        return result;
+    }
+
+    //// 3. Create a compute pipeline
+    // Get the shader module
+    halide_assert(user_context, state_ptr);
+    module_state *state = (module_state *)state_ptr;
+
+    VkComputePipelineCreateInfo compute_pipeline_info = 
+        {VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, // structure type
+         nullptr, // pointer to a structure extending this
+         0, // flags
+         // VkPipelineShaderStageCreatInfo
+         {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, // structure type
+          nullptr, //pointer to a structure extending this 
+          0, // flags
+          VK_SHADER_STAGE_COMPUTE_BIT, // compute stage shader
+          state->shader_module, // shader module
+          entry_name, // entry point name
+          nullptr // pointer to VkSpecializationInfo struct
+         },
+         pipeline_layout, // pipeline layout
+         0, // base pipeline handle for derived pipeline
+         0  // base pipeline index for derived pipeline
+        };
+    
+    VkPipeline pipeline;
+    result = vkCreateComputePipelines(ctx.device, 0, 1, &compute_pipeline_info, 0, &pipeline);
+
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkCreateComputePipelines returned " << get_vulkan_error_name(result) << "\n";
+        return result;
+    }
+
+    //// 4. Create a descriptor set
+    VkDescriptorPoolSize descriptor_pool_sizes[2] = {
+        {
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,      // descriptor type
+            1                                       // how many
+        },
+        {
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,      // descriptor type
+            num_bindings - 1                        // how many
+        }
+    };
+
+    VkDescriptorPoolCreateInfo descriptor_pool_info  = 
+        {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, // struct type
+         nullptr, // point to struct extending this
+         0, // flags
+         num_bindings, // max numbewr of sets that can be allocated TODO:should this be 1?
+         2, // pool size count
+         descriptor_pool_sizes // ptr to descriptr pool sizes
+        };
+
+    VkDescriptorPool descriptor_pool;
+    result = vkCreateDescriptorPool(ctx.device, &descriptor_pool_info, 0, &descriptor_pool);
+
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkCreateDescriptorPool returned " << get_vulkan_error_name(result) << "\n";
+        return result;
+    }
+    
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
