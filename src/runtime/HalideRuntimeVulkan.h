@@ -52,8 +52,11 @@ extern int halide_vulkan_run(void *user_context,
 //   call to halide_release_vulkan_context. halide_acquire_vulkan_context
 //   should block while a previous call (if any) has not yet been
 //   released via halide_release_vulkan_context.
+// TODO: describe memory type index
+// TODO: describe queue family index
 extern int halide_vulkan_acquire_context(void *user_context, struct VkInstance_T **instance,
-                                       struct VkDevice_T **device, struct VkQueue_T **queue, bool create = true);
+                                       struct VkDevice_T **device, struct VkQueue_T **queue, 
+                                       uint32_t* memory_type_index, uint32_t* queue_family_index, bool create = true);
 
 
 extern int halide_vulkan_release_context(void *user_context, struct VkInstance_T *instance, struct VkDevice_T *device, struct VkQueue_T *queue);
