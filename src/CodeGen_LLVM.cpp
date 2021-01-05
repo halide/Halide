@@ -167,13 +167,6 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
     // }
 }
 
-// A local helper to make an llvm value type representing
-// alignment. Can't be declared in a header without introducing a
-// dependence on the LLVM headers.
-llvm::Align make_alignment(int a) {
-    return llvm::Align(a);
-}
-
 }  // namespace
 
 CodeGen_LLVM::CodeGen_LLVM(Target t)
@@ -193,61 +186,6 @@ CodeGen_LLVM::CodeGen_LLVM(Target t)
       scalar_value_t_type(nullptr),
       device_interface_t_type(nullptr),
       pseudostack_slot_t_type(nullptr),
-
-      // Vector types. These need an LLVMContext before they can be initialized.
-      i8x8(nullptr),
-      i8x16(nullptr),
-      i8x32(nullptr),
-      i16x4(nullptr),
-      i16x8(nullptr),
-      i16x16(nullptr),
-      i32x2(nullptr),
-      i32x4(nullptr),
-      i32x8(nullptr),
-      i64x2(nullptr),
-      i64x4(nullptr),
-      f32x2(nullptr),
-      f32x4(nullptr),
-      f32x8(nullptr),
-      f64x2(nullptr),
-      f64x4(nullptr),
-
-      // Wildcards for pattern matching
-      wild_i8x8(Variable::make(Int(8, 8), "*")),
-      wild_i16x4(Variable::make(Int(16, 4), "*")),
-      wild_i32x2(Variable::make(Int(32, 2), "*")),
-
-      wild_u8x8(Variable::make(UInt(8, 8), "*")),
-      wild_u16x4(Variable::make(UInt(16, 4), "*")),
-      wild_u32x2(Variable::make(UInt(32, 2), "*")),
-
-      wild_i8x16(Variable::make(Int(8, 16), "*")),
-      wild_i16x8(Variable::make(Int(16, 8), "*")),
-      wild_i32x4(Variable::make(Int(32, 4), "*")),
-      wild_i64x2(Variable::make(Int(64, 2), "*")),
-
-      wild_u8x16(Variable::make(UInt(8, 16), "*")),
-      wild_u16x8(Variable::make(UInt(16, 8), "*")),
-      wild_u32x4(Variable::make(UInt(32, 4), "*")),
-      wild_u64x2(Variable::make(UInt(64, 2), "*")),
-
-      wild_i8x32(Variable::make(Int(8, 32), "*")),
-      wild_i16x16(Variable::make(Int(16, 16), "*")),
-      wild_i32x8(Variable::make(Int(32, 8), "*")),
-      wild_i64x4(Variable::make(Int(64, 4), "*")),
-
-      wild_u8x32(Variable::make(UInt(8, 32), "*")),
-      wild_u16x16(Variable::make(UInt(16, 16), "*")),
-      wild_u32x8(Variable::make(UInt(32, 8), "*")),
-      wild_u64x4(Variable::make(UInt(64, 4), "*")),
-
-      wild_f32x2(Variable::make(Float(32, 2), "*")),
-
-      wild_f32x4(Variable::make(Float(32, 4), "*")),
-      wild_f64x2(Variable::make(Float(64, 2), "*")),
-
-      wild_f32x8(Variable::make(Float(32, 8), "*")),
-      wild_f64x4(Variable::make(Float(64, 4), "*")),
 
       wild_u1x_(Variable::make(UInt(1, 0), "*")),
       wild_i8x_(Variable::make(Int(8, 0), "*")),
@@ -272,29 +210,6 @@ CodeGen_LLVM::CodeGen_LLVM(Target t)
       wild_u64_(Variable::make(UInt(64), "*")),
       wild_f32_(Variable::make(Float(32), "*")),
       wild_f64_(Variable::make(Float(64), "*")),
-
-      // Bounds of types
-      min_i8(Int(8).min()),
-      max_i8(Int(8).max()),
-      max_u8(UInt(8).max()),
-
-      min_i16(Int(16).min()),
-      max_i16(Int(16).max()),
-      max_u16(UInt(16).max()),
-
-      min_i32(Int(32).min()),
-      max_i32(Int(32).max()),
-      max_u32(UInt(32).max()),
-
-      min_i64(Int(64).min()),
-      max_i64(Int(64).max()),
-      max_u64(UInt(64).max()),
-
-      min_f32(Float(32).min()),
-      max_f32(Float(32).max()),
-
-      min_f64(Float(64).min()),
-      max_f64(Float(64).max()),
 
       inside_atomic_mutex_node(false),
       emit_atomic_stores(false),
@@ -457,23 +372,6 @@ void CodeGen_LLVM::init_context() {
     f16_t = llvm::Type::getHalfTy(*context);
     f32_t = llvm::Type::getFloatTy(*context);
     f64_t = llvm::Type::getDoubleTy(*context);
-
-    i8x8 = get_vector_type(i8_t, 8);
-    i8x16 = get_vector_type(i8_t, 16);
-    i8x32 = get_vector_type(i8_t, 32);
-    i16x4 = get_vector_type(i16_t, 4);
-    i16x8 = get_vector_type(i16_t, 8);
-    i16x16 = get_vector_type(i16_t, 16);
-    i32x2 = get_vector_type(i32_t, 2);
-    i32x4 = get_vector_type(i32_t, 4);
-    i32x8 = get_vector_type(i32_t, 8);
-    i64x2 = get_vector_type(i64_t, 2);
-    i64x4 = get_vector_type(i64_t, 4);
-    f32x2 = get_vector_type(f32_t, 2);
-    f32x4 = get_vector_type(f32_t, 4);
-    f32x8 = get_vector_type(f32_t, 8);
-    f64x2 = get_vector_type(f64_t, 2);
-    f64x4 = get_vector_type(f64_t, 4);
 }
 
 void CodeGen_LLVM::init_module() {
@@ -1016,7 +914,7 @@ Constant *CodeGen_LLVM::embed_constant_scalar_value_t(const Expr &e) {
         ConstantArray::get(array_type, array_entries));
 
     // Ensure that the storage is aligned for halide_scalar_value_t
-    storage->setAlignment(make_alignment((int)sizeof(halide_scalar_value_t)));
+    storage->setAlignment(llvm::Align((int)sizeof(halide_scalar_value_t)));
 
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
     return ConstantExpr::getBitCast(
@@ -2072,7 +1970,7 @@ void CodeGen_LLVM::visit(const Load *op) {
     if (op->type.is_scalar()) {
         // Scalar loads
         Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index);
-        LoadInst *load = builder->CreateAlignedLoad(ptr, make_alignment(op->type.bytes()));
+        LoadInst *load = builder->CreateAlignedLoad(ptr, llvm::Align(op->type.bytes()));
         add_tbaa_metadata(load, op->name, op->index);
         value = load;
     } else {
@@ -2380,7 +2278,7 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
 #if LLVM_VERSION >= 110
             Instruction *store_inst =
-                builder->CreateMaskedStore(slice_val, vec_ptr, make_alignment(alignment), slice_mask);
+                builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
 #else
             Instruction *store_inst =
                 builder->CreateMaskedStore(slice_val, vec_ptr, alignment, slice_mask);
@@ -2412,7 +2310,7 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
 
             // Scalar
             Value *ptr = codegen_buffer_pointer(op->name, value_type, idx);
-            builder->CreateAlignedStore(v, ptr, make_alignment(value_type.bytes()));
+            builder->CreateAlignedStore(v, ptr, llvm::Align(value_type.bytes()));
 
             builder->CreateBr(after_bb);
             builder->SetInsertPoint(after_bb);
@@ -2477,12 +2375,12 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
         if (vpred != nullptr) {
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
 #if LLVM_VERSION >= 110
-            load_inst = builder->CreateMaskedLoad(vec_ptr, make_alignment(alignment), slice_mask);
+            load_inst = builder->CreateMaskedLoad(vec_ptr, llvm::Align(alignment), slice_mask);
 #else
             load_inst = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
 #endif
         } else {
-            load_inst = builder->CreateAlignedLoad(vec_ptr, make_alignment(alignment));
+            load_inst = builder->CreateAlignedLoad(vec_ptr, llvm::Align(alignment));
         }
         add_tbaa_metadata(load_inst, load->name, slice_index);
         slices.push_back(load_inst);
@@ -2612,7 +2510,7 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
                 Value *idx = builder->CreateExtractElement(vec_index, ConstantInt::get(i32_t, lane_id));
                 ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
             }
-            LoadInst *orig = builder->CreateAlignedLoad(ptr, make_alignment(value_type.bytes()));
+            LoadInst *orig = builder->CreateAlignedLoad(ptr, llvm::Align(value_type.bytes()));
             orig->setOrdering(AtomicOrdering::Monotonic);
             add_tbaa_metadata(orig, op->name, op->index);
             // Explicit fall through from the current block to the cas loop body.
@@ -3555,7 +3453,7 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
     if (data.size() > alignment && native_vector_bytes > alignment) {
         alignment = native_vector_bytes;
     }
-    global->setAlignment(make_alignment(alignment));
+    global->setAlignment(llvm::Align(alignment));
 
     Constant *zero = ConstantInt::get(i32_t, 0);
     Constant *zeros[] = {zero, zero};
@@ -4122,7 +4020,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     // Scalar
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
-        StoreInst *store = builder->CreateAlignedStore(val, ptr, make_alignment(value_type.bytes()));
+        StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
         add_tbaa_metadata(store, op->name, op->index);
     } else if (const Let *let = op->index.as<Let>()) {
         Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
@@ -4166,7 +4064,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                 Value *slice_val = slice_vector(val, i, slice_lanes);
                 Value *elt_ptr = codegen_buffer_pointer(op->name, value_type.element_of(), slice_base);
                 Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
-                StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, make_alignment(alignment));
+                StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, llvm::Align(alignment));
                 add_tbaa_metadata(store, op->name, slice_index);
             }
         } else if (ramp) {
@@ -4683,7 +4581,7 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     llvm::DataLayout d(module.get());
     int allocated_size = n * (int)d.getTypeAllocSize(t);
     if (t->isVectorTy() || n > 1) {
-        ptr->setAlignment(make_alignment(align));
+        ptr->setAlignment(llvm::Align(align));
     }
     requested_alloca_total += allocated_size;
 
@@ -4691,7 +4589,7 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
         if (n == 1) {
             builder->CreateStore(Constant::getNullValue(t), ptr);
         } else {
-            builder->CreateMemSet(ptr, Constant::getNullValue(t), n, make_alignment(align));
+            builder->CreateMemSet(ptr, Constant::getNullValue(t), n, llvm::Align(align));
         }
     }
     builder->restoreIP(here);
