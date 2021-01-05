@@ -18,11 +18,17 @@ FLATC ?= flatc
 # This is the location that brew installs on my Mac.
 FLATBUFFERS_INCLUDE_PATH ?= /usr/local/Cellar/flatbuffers/1.12.0/include
 
-CXXFLAGS += -Wno-unused-private-field
+# Removing exceptions just because we don't need 'em and it saves space.
+#
+# -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
+# builds but easier to enable it for everything.
+#
+# TODO: Not sure if -fvisibility moves the needle or not
+CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden -fvisibility-inlines-hidden
 
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
-.PHONY: all build clean test build_test_ops
+.PHONY: all build clean test build_test_ops delegate
 all: build
 
 # .SECONDARY with no prerequisites causes all targets to be treated as secondary
@@ -172,6 +178,57 @@ $(BIN)/%/tflite_parser.o: tflite/tflite_parser.cpp $(BIN)/schema/tflite_schema_g
 TFLITE_PARSER_DEPS = \
 	$(BIN)/%/tflite_parser.o
 
+# ---------------------- delegate
+
+TFLITE_INCLUDES_FLAGS ?= -I$(HOME)/GitHub/tensorflow -I$(MAKEFILE_DIR)
+
+$(BIN)/%/halide_delegate.o: delegate/halide_delegate.cpp
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(TFLITE_INCLUDES_FLAGS) $(UTIL_CXXFLAGS) -c $< -o $@
+
+$(BIN)/%/halide_delegate_adaptor.o: delegate/halide_delegate_adaptor.cpp
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(TFLITE_INCLUDES_FLAGS) $(UTIL_CXXFLAGS) -c $< -o $@
+
+ifneq (,$(findstring host,$(HL_TARGET)))
+
+DELEGATE_LD_FLAGS=$(LDFLAGS)
+
+ifeq ($(UNAME), Darwin)
+DELEGATE_LD_FLAGS += -Wl,-exported_symbols_list delegate/exported_symbols.osx
+else
+# Assume Desktop Linux
+DELEGATE_LD_FLAGS += -Wl,--version-script=delegate/exported_symbols.linux
+DELEGATE_LD_FLAGS += -Wl,-soname,libHalideDelegate.so
+endif
+
+else ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
+
+# Don't include $(LDFLAGS) here, it includes pthreads, which we don't want
+DELEGATE_LD_FLAGS=-static-libstdc++
+DELEGATE_LD_FLAGS += -Wl,--version-script=delegate/exported_symbols.linux
+DELEGATE_LD_FLAGS += -Wl,-soname,libHalideDelegate.so
+
+else
+
+# Other values for HL_TARGET will be special-cased here in the future.
+# Unhandled cases will fail to compile/link.
+DELEGATE_LD_FLAGS ?= ERROR_TODO
+
+endif
+
+# Note: delegates are apparently always .so on OSX (never .dylib)
+# TODO: add a linker script to expose only the exported symbols we want
+$(BIN)/%/libHalideDelegate.so: \
+		$(BIN)/%/halide_delegate.o \
+		$(BIN)/%/halide_delegate_adaptor.o \
+		$(INTERPRETER_DEPS) \
+		$(UTIL_DEPS)
+	@mkdir -p $(@D)
+	$(CXX-$*) -shared $^ $(DELEGATE_LD_FLAGS) -o $@
+
+delegate: $(BIN)/$(HL_TARGET)/libHalideDelegate.so
+
 # ---------------------- test
 
 # unit tests for each op (not yet complete)
@@ -274,7 +331,6 @@ ifneq (,$(findstring host,$(HL_TARGET)))
 # 	$ git clone https://github.com/tensorflow/tensorflow
 # 	$ cd tensorflow
 #   $ git checkout $(TFLITE_TAG)
-#	$ ./configure
 # 	$ bazelisk build -c opt //tensorflow/lite/c:tensorflowlite_c
 #
 # (Note that TFLite is very picky about the version of Bazel installed, thus this suggests
@@ -283,7 +339,8 @@ ifneq (,$(findstring host,$(HL_TARGET)))
 TENSORFLOW_BASE ?= $(HOME)/GitHub/tensorflow
 TFLITE_INCLUDES ?= $(TENSORFLOW_BASE)
 TFLITE_SHARED_LIBRARY ?= $(TENSORFLOW_BASE)/bazel-bin/tensorflow/lite/c/libtensorflowlite_c.$(SHARED_EXT)
-TFLITE_LDFLAGS=-Wl,-rpath,$(dir $(TFLITE_SHARED_LIBRARY))
+# Point at the TFLite path, but also the exe directory (for libHalideDelegate.so)
+TFLITE_LDFLAGS=-Wl,-rpath,$(dir $(TFLITE_SHARED_LIBRARY)),-rpath,$(dir $@)
 
 else ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
 
@@ -310,8 +367,9 @@ TFLITE_SHARED_LIBRARY ?= ERROR_TODO
 
 endif
 
+
 # To build for Android, use `HL_TARGET=arm-64-android make compare_vs_tflite`
-$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) $(TFLITE_SHARED_LIBRARY)
+$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) $(TFLITE_SHARED_LIBRARY) $(BIN)/$(HL_TARGET)/libHalideDelegate.so
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(TFLITE_INCLUDES) $(TFLITE_LDFLAGS) $(filter %.cpp %.o %.a %.so %.$(SHARED_EXT),$^) -o $@ $(LDFLAGS-$*)
 

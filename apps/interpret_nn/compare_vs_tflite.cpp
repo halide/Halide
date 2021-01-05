@@ -1,10 +1,9 @@
 #include <chrono>
+#include <dlfcn.h>
 #include <fstream>
 #include <iostream>
 #include <random>
-#ifndef _MSC_VER
 #include <unistd.h>
-#endif
 
 #include "halide_benchmark.h"
 #include "interpreter/interpreter.h"
@@ -77,25 +76,89 @@ Buffer<void> wrap_tf_lite_tensor_with_halide_buffer(const TfLiteTensor *t) {
     return b;
 }
 
+struct DelegateFactory {
+    TfLiteDelegate *(*create_delegate)(char **options_keys,
+                                       char **options_values,
+                                       size_t num_options,
+                                       void (*report_error)(const char *));
+    void (*destroy_delegate)(TfLiteDelegate *delegate);
+};
+
 }  // namespace
 
-void run_both(const std::string &filename, int seed, int threads, bool verbose) {
+void run_all(const std::string &filename, int seed, int threads, bool verbose, DelegateFactory *delegate_factory) {
     std::cout << "Comparing " << filename << "\n";
 
     std::vector<char> buffer = read_entire_file(filename);
 
-    std::vector<Buffer<const void>> tflite_outputs, halide_outputs;
-    std::chrono::duration<double> tflite_time, halide_time;
+    struct RunResult {
+        std::vector<Buffer<const void>> outputs;
+        std::chrono::duration<double> time;
+    };
+
     std::map<std::string, int> seeds;
 
-    // ----- Run in TFLite
+    RunResult halide_result;
+
+    // ----- Run in Halide
     {
+        Model model = parse_tflite_model_from_buffer(buffer.data());
+        if (verbose) {
+            model.dump(std::cout);
+        }
+
+        ModelInterpreter interpreter(std::move(model));
+
+        // Fill in the inputs with random data (but with the same seeds as above).
+        for (Tensor *t : interpreter.inputs()) {
+            if (t->is_constant()) {
+                // Skip constant buffers, just like TFlite above.
+                continue;
+            }
+            int seed_here = seed++;
+            seeds[t->name()] = seed_here;
+            auto input_buf = t->data<void>();
+            dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
+            if (verbose) {
+                std::cout << "HALIDE input " << t->name() << " inited with seed = " << seed_here << " type " << input_buf.type() << "\n";
+            }
+        }
+
+        // No: we won't be parallelizing withing Halide code, that will be done within
+        // our interpreter. Leaving this here as an example of what *not* to do.
+        // halide_set_num_threads(threads);
+
+        // Execute once, to prime the pump
+        interpreter.execute();
+
+        // Now benchmark it
+        halide_result.time = bench([&interpreter]() {
+            interpreter.execute();
+        });
+
+        // Save the outputs
+        for (Tensor *t : interpreter.outputs()) {
+            if (verbose) {
+                std::cout << "HALIDE output is " << t->name() << " type " << to_string(t->type()) << "\n";
+            }
+            // Make a copy since the Buffer might reference memory owned by the interpreter
+            halide_result.outputs.emplace_back(t->data<const void>().copy());
+        }
+    }
+
+    // ----- Run in TFLite
+    const auto run_in_tflite = [&seeds](const std::vector<char> &buffer, int seed, int threads, bool verbose, TfLiteDelegate *delegate) -> RunResult {
+        RunResult result;
+
         TfLiteModel *tf_model = TfLiteModelCreate(buffer.data(), buffer.size());
         CHECK(tf_model);
 
         TfLiteInterpreterOptions *tf_options = TfLiteInterpreterOptionsCreate();
         CHECK(tf_options);
         TfLiteInterpreterOptionsSetNumThreads(tf_options, threads);
+        if (delegate) {
+            TfLiteInterpreterOptionsAddDelegate(tf_options, delegate);
+        }
 
         TfLiteInterpreter *tf_interpreter = TfLiteInterpreterCreate(tf_model, tf_options);
 
@@ -121,8 +184,9 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
                 }
                 continue;
             }
-            int seed_here = seed++;
-            seeds[t->name] = seed_here;
+            auto seed_i = seeds.find(t->name);
+            assert(seed_i != seeds.end());
+            int seed_here = seed_i->second;
             auto input_buf = wrap_tf_lite_tensor_with_halide_buffer(t);
             dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
             if (verbose) {
@@ -134,8 +198,16 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
         // Execute once, to prime the pump
         CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
 
+        // TODO: left in for now for when we re-add DynamicTensor usage
+        // int input_dims[4] = { 2, 28, 28, 32};
+        // CHECK((status = TfLiteInterpreterResizeInputTensor(tf_interpreter, 0, input_dims, 4)) == kTfLiteOk) << status;
+        // CHECK((status = TfLiteInterpreterResizeInputTensor(tf_interpreter, 1, input_dims, 4)) == kTfLiteOk) << status;
+        // CHECK((status = TfLiteInterpreterAllocateTensors(tf_interpreter)) == kTfLiteOk) << status;
+        // CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
+        // CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
+
         // Now benchmark it
-        tflite_time = bench([&tf_interpreter]() {
+        result.time = bench([&tf_interpreter]() {
             TfLiteStatus status;
             CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
         });
@@ -147,102 +219,98 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
                 std::cout << "TFLITE output is " << t->name << " type " << TfLiteTypeGetName(t->type) << "\n";
             }
             // Make a copy since the Buffer might reference memory owned by the tf_interpreter
-            tflite_outputs.emplace_back(wrap_tf_lite_tensor_with_halide_buffer(t).copy());
+            result.outputs.emplace_back(wrap_tf_lite_tensor_with_halide_buffer(t).copy());
         }
 
         TfLiteInterpreterDelete(tf_interpreter);
-    }
 
-    // ----- Run in Halide
-    {
-        Model model = parse_tflite_model_from_buffer(buffer.data());
-        if (verbose) {
-            model.dump(std::cout);
+        return result;
+    };
+
+    RunResult tflite_result = run_in_tflite(buffer, seed, threads, verbose, nullptr);
+
+    RunResult delegate_result;
+    if (delegate_factory) {
+        constexpr size_t num_options = 1;
+        std::pair<std::string, std::string> options_strs[num_options] = {
+            {"num_threads", std::to_string(threads)},
+        };
+        char *keys[num_options];
+        char *values[num_options];
+        for (size_t i = 0; i < num_options; i++) {
+            keys[i] = const_cast<char *>(options_strs[i].first.c_str());
+            values[i] = const_cast<char *>(options_strs[i].second.c_str());
         }
-
-        ModelInterpreter interpreter(std::move(model));
-
-        // Fill in the inputs with random data (but with the same seeds as above).
-        for (Tensor *t : interpreter.inputs()) {
-            if (t->is_constant()) {
-                // Skip constant buffers, just like TFlite above.
-                continue;
-            }
-            auto seed_i = seeds.find(t->name());
-            assert(seed_i != seeds.end());
-            int seed_here = seed_i->second;
-            auto input_buf = t->data<void>();
-            dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
-            if (verbose) {
-                std::cout << "HALIDE input " << t->name() << " inited with seed = " << seed_here << " type " << input_buf.type() << "\n";
-            }
-        }
-
-        halide_set_num_threads(threads);
-
-        // Execute once, to prime the pump
-        interpreter.execute();
-
-        // Now benchmark it
-        halide_time = bench([&interpreter]() {
-            interpreter.execute();
-        });
-
-        // Save the outputs
-        for (Tensor *t : interpreter.outputs()) {
-            if (verbose) {
-                std::cout << "HALIDE output is " << t->name() << " type " << to_string(t->type()) << "\n";
-            }
-            // Make a copy since the Buffer might reference memory owned by the interpreter
-            halide_outputs.emplace_back(t->data<const void>().copy());
-        }
+        TfLiteDelegate *delegate = delegate_factory->create_delegate(keys, values, num_options, nullptr);
+        assert(delegate);
+        delegate_result = run_in_tflite(buffer, seed, threads, verbose, delegate);
+        delegate_factory->destroy_delegate(delegate);
     }
 
     // ----- Log benchmark times
-    std::cout << "TFLITE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(tflite_time).count() << " us"
+    std::cout << "TFLITE-DIRECT   Time: " << std::chrono::duration_cast<std::chrono::microseconds>(tflite_result.time).count() << " us"
               << "\n";
-    std::cout << "HALIDE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(halide_time).count() << " us"
+    std::cout << "HALIDE-DIRECT   Time: " << std::chrono::duration_cast<std::chrono::microseconds>(halide_result.time).count() << " us"
               << "\n";
+    if (delegate_factory) {
+        std::cout << "HALIDE-DELEGATE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(delegate_result.time).count() << " us"
+                  << "\n";
+    }
 
-    double ratio = (halide_time / tflite_time);
+    double ratio = (halide_result.time / tflite_result.time);
     std::cout << "HALIDE = " << ratio * 100.0 << "% of TFLITE";
     if (ratio > 1.0) {
         std::cout << "  *** HALIDE IS SLOWER";
     }
     std::cout << "\n";
 
-    // ----- Now compare the outputs
-    CHECK(tflite_outputs.size() == halide_outputs.size());
-    for (size_t i = 0; i < tflite_outputs.size(); ++i) {
-        const Buffer<const void> &tflite_buf = tflite_outputs[i];
-        const Buffer<const void> &halide_buf = halide_outputs[i];
-        CHECK(tflite_buf.type() == halide_buf.type()) << "Expected type " << tflite_buf.type() << "; saw type " << halide_buf.type();
-        CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
-        for (int d = 0; d < tflite_buf.dimensions(); d++) {
-            CHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
-            CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
-            CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
+    if (delegate_factory) {
+        ratio = (delegate_result.time / tflite_result.time);
+        std::cout << "DELEGATE = " << ratio * 100.0 << "% of TFLITE";
+        if (ratio > 1.0) {
+            std::cout << "  *** DELEGATE IS SLOWER";
         }
-        CompareBuffersOptions options;
+        std::cout << "\n";
+    }
+
+    // ----- Now compare the outputs
+    const auto compare_results = [](const RunResult &a, const RunResult &b, bool verbose) {
+        CHECK(a.outputs.size() == b.outputs.size());
+        for (size_t i = 0; i < a.outputs.size(); ++i) {
+            const Buffer<const void> &tflite_buf = a.outputs[i];
+            const Buffer<const void> &halide_buf = b.outputs[i];
+            CHECK(tflite_buf.type() == halide_buf.type()) << "Expected type " << tflite_buf.type() << "; saw type " << halide_buf.type();
+            CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
+            for (int d = 0; d < tflite_buf.dimensions(); d++) {
+                CHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
+                CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
+                CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
+            }
+            CompareBuffersOptions options;
 #if defined(__arm__) || defined(__aarch64__)
-        // TFLite on Arm devices generally uses the rounding-shift instructions,
-        // which should match our results exactly (since we mimic the same result,
-        // whether or not we actually generate those specific instructions).
-        // So leave the options at their default.
+            // TFLite on Arm devices generally uses the rounding-shift instructions,
+            // which should match our results exactly (since we mimic the same result,
+            // whether or not we actually generate those specific instructions).
+            // So leave the options at their default.
 #else
-        // TFLite on x86 (on desktop platforms, at least) appears to mostly
-        // use the reference implementations, which don't have the same
-        // rounding-shift behavior. We'll bump up the 'close' value for these.
-        // This is a lttle hand-wavy but is a decent proxy for now.
-        options.close_thresh = 3.0;
+            // TFLite on x86 (on desktop platforms, at least) appears to mostly
+            // use the reference implementations, which don't have the same
+            // rounding-shift behavior. We'll bump up the 'close' value for these.
+            // This is a lttle hand-wavy but is a decent proxy for now.
+            options.close_thresh = 3.0;
 #endif
-        CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, options);
-        if (r.ok) {
-            if (verbose) {
-                std::cout << "MATCHING output " << i << " is:\n";
-                dynamic_type_dispatch<DumpBuffer>(halide_buf.type(), halide_buf);
+            CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, options);
+            if (r.ok) {
+                if (verbose) {
+                    std::cout << "MATCHING output " << i << " is:\n";
+                    dynamic_type_dispatch<DumpBuffer>(halide_buf.type(), halide_buf);
+                }
             }
         }
+    };
+    compare_results(tflite_result, halide_result, verbose);
+    if (delegate_factory) {
+        compare_results(tflite_result, delegate_result, verbose);
     }
 }
 
@@ -251,11 +319,17 @@ void run_both(const std::string &filename, int seed, int threads, bool verbose) 
 int main(int argc, char **argv) {
     int seed = time(nullptr);
     int threads = 1;
+    bool use_delegate = true;
     bool verbose = false;
+    std::vector<const char *> files;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--seed")) {
             seed = atoi(argv[++i]);
+            continue;
+        }
+        if (!strcmp(argv[i], "--use_delegate")) {
+            use_delegate = atoi(argv[++i]) != 0;
             continue;
         }
         if (!strcmp(argv[i], "--threads")) {
@@ -266,6 +340,7 @@ int main(int argc, char **argv) {
             verbose = true;
             continue;
         }
+        files.push_back(argv[i]);
     }
     if (threads <= 0) {
 #ifdef _WIN32
@@ -279,15 +354,23 @@ int main(int argc, char **argv) {
     std::cout << "Using random seed: " << seed << "\n";
     std::cout << "Using threads: " << threads << "\n";
 
-    for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--seed") || !strcmp(argv[i], "--threads")) {
-            i++;
-            continue;
+    void *delegate_lib = nullptr;
+    interpret_nn::DelegateFactory delegate_factory;
+    if (use_delegate) {
+        delegate_lib = dlopen("libHalideDelegate.so", RTLD_NOW | RTLD_LOCAL);
+        if (!delegate_lib) {
+            std::cerr << "Unable to open Halide Delegate library: " << dlerror() << "\n";
+            return 1;
         }
-        if (!strcmp(argv[i], "--verbose")) {
-            continue;
-        }
-        interpret_nn::run_both(argv[i], seed, threads, verbose);
+        assert(delegate_lib);
+        delegate_factory.create_delegate = (decltype(delegate_factory.create_delegate))dlsym(delegate_lib, "tflite_plugin_create_delegate");
+        assert(delegate_factory.create_delegate);
+        delegate_factory.destroy_delegate = (decltype(delegate_factory.destroy_delegate))dlsym(delegate_lib, "tflite_plugin_destroy_delegate");
+        assert(delegate_factory.destroy_delegate);
+    }
+
+    for (auto f : files) {
+        interpret_nn::run_all(f, seed, threads, verbose, use_delegate ? &delegate_factory : nullptr);
         std::cout << "\n";
     }
 
