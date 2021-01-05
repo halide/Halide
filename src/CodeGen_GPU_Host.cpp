@@ -139,7 +139,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     function_name = simple_name;
 
     // Create a new module for all of the kernels we find in this function.
-    for (pair<const DeviceAPI, std::unique_ptr<CodeGen_GPU_Dev>> &i : cgdev) {
+    for (auto &i : cgdev) {
         i.second->init_module();
     }
 
@@ -169,7 +169,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     // Fill out the init kernels block
     builder->SetInsertPoint(init_kernels_bb);
 
-    for (pair<const DeviceAPI, std::unique_ptr<CodeGen_GPU_Dev>> &i : cgdev) {
+    for (auto &i : cgdev) {
 
         CodeGen_GPU_Dev *gpu_codegen = i.second.get();
         std::string api_unique_name = gpu_codegen->api_unique_name();
