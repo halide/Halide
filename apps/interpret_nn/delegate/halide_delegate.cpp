@@ -635,9 +635,7 @@ bool IsNodeSupported_Add(TfLiteContext *context, TfLiteNode *node, TfLiteRegistr
     if (!(registration->version <= 2)) {
         return false;
     }
-    if (!InputsHaveCorrectTypes(
-            node, context,
-            {k8BitMask, k8BitMask})) {
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask})) {
         return false;
     }
     const TfLiteAddParams *params = (const TfLiteAddParams *)(node->builtin_data);
@@ -651,9 +649,7 @@ bool IsNodeSupported_AveragePool2d(TfLiteContext *context, TfLiteNode *node, TfL
     if (!(registration->version <= 2)) {
         return false;
     }
-    if (!InputsHaveCorrectTypes(
-            node, context,
-            {k8BitMask})) {
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
         return false;
     }
     const TfLitePoolParams *params = (const TfLitePoolParams *)(node->builtin_data);
@@ -679,9 +675,7 @@ bool IsNodeSupported_Conv2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegi
     if (!(registration->version <= 2)) {
         return false;
     }
-    if (!InputsHaveCorrectTypes(
-            node, context,
-            {k8BitMask, k8BitMask, 1 << kTfLiteInt32})) {
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, 1 << kTfLiteInt32})) {
         return false;
     }
     const TfLiteConvParams *params = (const TfLiteConvParams *)(node->builtin_data);
@@ -695,9 +689,7 @@ bool IsNodeSupported_DepthwiseConv2d(TfLiteContext *context, TfLiteNode *node, T
     if (!(registration->version <= 2)) {
         return false;
     }
-    if (!InputsHaveCorrectTypes(
-            node, context,
-            {k8BitMask, k8BitMask, 1 << kTfLiteInt32})) {
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, 1 << kTfLiteInt32})) {
         return false;
     }
     const TfLiteDepthwiseConvParams *params = (const TfLiteDepthwiseConvParams *)(node->builtin_data);
@@ -712,9 +704,7 @@ bool IsNodeSupported_FullyConnected(TfLiteContext *context, TfLiteNode *node, Tf
     if (!(registration->version <= 1)) {
         return false;
     }
-    if (!InputsHaveCorrectTypes(
-            node, context,
-            {k8BitMask, k8BitMask, (1 << kTfLiteInt32) | (1 << kTfLiteNoType)})) {
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, (1 << kTfLiteInt32) | (1 << kTfLiteNoType)})) {
         return false;
     }
     const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
@@ -728,9 +718,7 @@ bool IsNodeSupported_MaxPool2d(TfLiteContext *context, TfLiteNode *node, TfLiteR
     if (!(registration->version <= 2)) {
         return false;
     }
-    if (!InputsHaveCorrectTypes(
-            node, context,
-            {k8BitMask})) {
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
         return false;
     }
     const TfLitePoolParams *params = (const TfLitePoolParams *)(node->builtin_data);
@@ -744,9 +732,7 @@ bool IsNodeSupported_Pad(TfLiteContext *context, TfLiteNode *node, TfLiteRegistr
     if (!(registration->version <= 2)) {
         return false;
     }
-    if (!InputsHaveCorrectTypes(
-            node, context,
-            {k8BitMask, 1 << kTfLiteInt32})) {
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, 1 << kTfLiteInt32})) {
         return false;
     }
     return true;
@@ -767,9 +753,7 @@ bool IsNodeSupported_Quantize(TfLiteContext *context, TfLiteNode *node, TfLiteRe
     if (!(registration->version <= 2)) {
         return false;
     }
-    if (!InputsHaveCorrectTypes(
-            node, context,
-            {k8BitMask})) {
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
         return false;
     }
     return true;

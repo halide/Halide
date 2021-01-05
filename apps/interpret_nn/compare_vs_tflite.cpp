@@ -124,7 +124,9 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
             }
         }
 
-        halide_set_num_threads(threads);
+        // No: we won't be parallelizing withing Halide code, that will be done within
+        // our interpreter. Leaving this here as an example of what *not* to do.
+        // halide_set_num_threads(threads);
 
         // Execute once, to prime the pump
         interpreter.execute();
