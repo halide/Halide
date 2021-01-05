@@ -147,11 +147,11 @@ void CodeGen_X86::init_module() {
         Type ret_type = i.ret_type;
         std::vector<Type> arg_types;
         arg_types.reserve(max_intrinsic_args);
-        for (halide_type_t i : i.arg_types) {
-            if (i.bits == 0) {
+        for (halide_type_t j : i.arg_types) {
+            if (j.bits == 0) {
                 break;
             }
-            arg_types.emplace_back(i);
+            arg_types.emplace_back(j);
         }
 
         declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));

@@ -50,6 +50,8 @@ void expr_match_test() {
     std::cout << "expr_match test passed" << std::endl;
 }
 
+namespace {
+
 class IRMatch : public IRVisitor {
 public:
     bool result;
@@ -293,6 +295,8 @@ public:
         }
     }
 };
+
+}  // namespace
 
 bool expr_match(const Expr &pattern, const Expr &expr, vector<Expr> &matches) {
     matches.clear();

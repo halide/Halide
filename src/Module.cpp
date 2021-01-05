@@ -557,6 +557,10 @@ std::map<std::string, std::string> Module::get_metadata_name_map() const {
 void Module::compile(const std::map<Output, std::string> &output_files) const {
     validate_outputs(output_files);
 
+    if (target().has_feature(Target::OpenGL)) {
+        user_warning << "WARNING: OpenGL is deprecated in Halide 11 and will be removed in Halide 12.\n";
+    }
+
     // output stmt and html prior to resolving submodules. We need to
     // clear the output after writing it, otherwise the output will
     // be overwritten by recursive calls after submodules are resolved.

@@ -442,10 +442,16 @@ First, Halide expects to find LLVM and Clang through the `CONFIG` mode of
 `find_package`. You can tell Halide where to find these dependencies by setting
 the corresponding `_DIR` variables:
 
-| Variable    | Description                                          |
-| ----------- | ---------------------------------------------------- |
-| `LLVM_DIR`  | Path to the directory containing `LLVMConfig.cmake`  |
-| `Clang_DIR` | Path to the directory containing `ClangConfig.cmake` |
+| Variable    | Description                                    |
+| ----------- | ---------------------------------------------- |
+| `LLVM_DIR`  | `$LLVM_ROOT/lib/cmake/LLVM/LLVMConfig.cmake`   |
+| `Clang_DIR` | `$LLVM_ROOT/lib/cmake/Clang/ClangConfig.cmake` |
+
+Here, `$LLVM_ROOT` is assumed to point to the root of an LLVM installation tree.
+This is either a system path or one produced by running `cmake --install` (as
+detailed in the main README.md). When building LLVM (and any other `CONFIG`
+packages) manually, it is a common mistake to point CMake to a _build tree_
+rather than an _install tree_. Doing so often produces inscrutable errors.
 
 When using CMake 3.18 or above, some of Halide's tests will search for CUDA
 using the [`FindCUDAToolkit`][findcudatoolkit] module. If it doesn't find your
