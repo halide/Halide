@@ -119,6 +119,7 @@ tests(GROUPS correctness
       fused_where_inner_extent_is_zero.cpp
       fuzz_cse.cpp
       fuzz_float_stores.cpp
+      fuzz_ir_operators.cpp
       fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
