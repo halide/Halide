@@ -35,7 +35,6 @@ Expr random_value(Type t) {
     }
 }
 
-
 // Taken from fuzz_simplify.cpp.
 // TODO: make a header for fuzzing?
 Type random_type(int width = 1) {
@@ -86,7 +85,7 @@ bool test_signed_operators(Expr test, Type t, int samples) {
     return true;
 }
 
-} // namespace
+}  // namespace
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.
