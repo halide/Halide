@@ -1184,7 +1184,9 @@ private:
     }
 
 public:
-    OptimizePatterns(const Target &t) : target(t) {}
+    OptimizePatterns(const Target &t)
+        : target(t) {
+    }
 };
 
 class VectorReducePatterns : public IRMutator {
