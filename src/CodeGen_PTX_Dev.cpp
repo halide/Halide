@@ -799,8 +799,8 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
 
 }  // namespace
 
-CodeGen_GPU_Dev *new_CodeGen_PTX_Dev(const Target &target) {
-    return new CodeGen_PTX_Dev(target);
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
+    return std::make_unique<CodeGen_PTX_Dev>(target);
 }
 
 }  // namespace Internal
