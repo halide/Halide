@@ -2303,15 +2303,15 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
 
 }  // namespace
 
-CodeGen_Posix *new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
-    CodeGen_Hexagon *ret = new CodeGen_Hexagon(target);
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
+    std::unique_ptr<CodeGen_Posix> ret(std::make_unique<CodeGen_Hexagon>(target));
     ret->set_context(context);
     return ret;
 }
 
 #else  // WITH_HEXAGON
 
-CodeGen_Posix *new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
     user_error << "hexagon not enabled for this build of Halide.\n";
 }
 

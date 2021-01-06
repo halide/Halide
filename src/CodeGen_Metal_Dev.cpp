@@ -811,8 +811,8 @@ std::string CodeGen_Metal_Dev::print_gpu_name(const std::string &name) {
 
 }  // namespace
 
-CodeGen_GPU_Dev *new_CodeGen_Metal_Dev(const Target &target) {
-    return new CodeGen_Metal_Dev(target);
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_Metal_Dev(const Target &target) {
+    return std::make_unique<CodeGen_Metal_Dev>(target);
 }
 
 }  // namespace Internal
