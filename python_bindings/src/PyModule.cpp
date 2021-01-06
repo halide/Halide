@@ -61,9 +61,9 @@ void define_module(py::module &m) {
             });
 
     m.def("link_modules", &link_modules, py::arg("name"), py::arg("modules"));
-    m.def("compile_standalone_runtime", (void (*)(const std::string &, const Target&)) & compile_standalone_runtime, py::arg("filename"), py::arg("target"));
+    m.def("compile_standalone_runtime", (void (*)(const std::string &, const Target &)) & compile_standalone_runtime, py::arg("filename"), py::arg("target"));
     using OutputMap = std::map<Output, std::string>;
-    m.def("compile_standalone_runtime", (OutputMap(*)(const OutputMap &, const Target&)) & compile_standalone_runtime, py::arg("outputs"), py::arg("target"));
+    m.def("compile_standalone_runtime", (OutputMap(*)(const OutputMap &, const Target &)) & compile_standalone_runtime, py::arg("outputs"), py::arg("target"));
 
     // TODO: compile_multitarget() deliberately skipped for now.
 }
