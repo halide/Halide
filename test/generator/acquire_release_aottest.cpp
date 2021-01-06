@@ -81,30 +81,23 @@ extern "C" int halide_cuda_release_context(void *user_context) {
 struct gpu_context {
     id<MTLDevice> device;
     id<MTLCommandQueue> queue;
-};
+} metal_context;
 
-bool init_context(gpu_context &context) {
-    create_metal_context(context.device, context.queue);
-    return 0;
+bool init_context() {
+    return create_metal_context(metal_context.device, metal_context.queue);
 }
 
-void destroy_context(gpu_context &context) {
-    destroy_metal_context(context.device, context.queue);
-    context.device = nullptr;
-    context.queue = nullptr;
+void destroy_context() {
+    destroy_metal_context(metal_context.device, metal_context.queue);
+    metal_context.device = nullptr;
+    metal_context.queue = nullptr;
 }
 
 int halide_metal_acquire_context(void *user_context, id<MTLDevice> *device_ret,
                                  id<MTLCommandQueue> *queue_ret, bool create) {
-    if (user_context == nullptr) {
-        assert(!create);
-        *device_ret = nullptr;
-        *queue_ret = nullptr;
-    } else {
-        gpu_context *context = (gpu_context *)user_context;
-        *device_ret = context->device;
-        *queue_ret = context->queue;
-    }
+    *device_ret = metal_context.device;
+    *queue_ret = metal_context.queue;
+
     return 0;
 }
 
