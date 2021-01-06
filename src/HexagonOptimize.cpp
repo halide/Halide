@@ -1196,9 +1196,7 @@ class VectorReducePatterns : public IRMutator {
             {4, 32, widening_mul(wild_i8x, wild_i8x)},
             // Sum
             {4, 32, wild_u8x, Signature::SlidingWindow},
-            {4, 32, wild_u8x, Signature::SlidingWindow},
             {4, 32, wild_i8x, Signature::SlidingWindow},
-            {4, 32, wild_u8x},
             {4, 32, wild_u8x},
             {4, 32, wild_i8x},
 
