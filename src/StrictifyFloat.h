@@ -6,6 +6,7 @@
  */
 
 #include <map>
+#include <string>
 
 namespace Halide {
 
