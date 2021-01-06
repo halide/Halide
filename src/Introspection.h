@@ -2,8 +2,8 @@
 #define HALIDE_INTROSPECTION_H
 
 #include <cstdint>
-#include <string>
 #include <iostream>
+#include <string>
 
 /** \file
  *
