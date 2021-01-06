@@ -10,7 +10,11 @@
 #include "Util.h"
 #include "WasmExecutor.h"
 
-#if defined(__powerpc__) && defined(__linux__)
+#if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
+#if defined(__FreeBSD__)
+#include <machine/cpu.h>
+#include <sys/elf_common.h>
+#endif
 // This uses elf.h and must be included after "LLVM_Headers.h", which
 // uses llvm/support/Elf.h.
 #include <sys/auxv.h>
@@ -83,11 +87,17 @@ Target calculate_host_target() {
 #if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
 #else
-#if defined(__powerpc__) && defined(__linux__)
+#if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
     Target::Arch arch = Target::POWERPC;
 
+#if defined(__linux__)
     unsigned long hwcap = getauxval(AT_HWCAP);
     unsigned long hwcap2 = getauxval(AT_HWCAP2);
+#elif defined(__FreeBSD__)
+    unsigned long hwcap, hwcap2;
+    elf_aux_info(AT_HWCAP, &hwcap, sizeof(hwcap));
+    elf_aux_info(AT_HWCAP2, &hwcap2, sizeof(hwcap2));
+#endif
     bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
     bool have_vsx = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
     bool arch_2_07 = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
@@ -354,6 +364,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"wasm_signext", Target::WasmSignExt},
     {"wasm_sat_float_to_int", Target::WasmSatFloatToInt},
     {"wasm_threads", Target::WasmThreads},
+    {"wasm_bulk_memory", Target::WasmBulkMemory},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
@@ -925,17 +936,64 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (a) must be included if either target has the feature (union)
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
-    const std::array<Feature, 18> union_features = {{// These are true union features.
-                                                     CUDA, OpenCL, OpenGL, OpenGLCompute, Metal, D3D12Compute, NoNEON,
 
-                                                     // These features are actually intersection-y, but because targets only record the _highest_,
-                                                     // we have to put their union in the result and then take a lower bound.
-                                                     CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61, CUDACapability70, CUDACapability75, CUDACapability80,
-                                                     HVX_v62, HVX_v65, HVX_v66}};
+    // clang-format off
+    const std::array<Feature, 18> union_features = {{
+        // These are true union features.
+        CUDA,
+        D3D12Compute,
+        Metal,
+        NoNEON,
+        OpenCL,
+        OpenGL,
+        OpenGLCompute,
 
-    const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
+        // These features are actually intersection-y, but because targets only record the _highest_,
+        // we have to put their union in the result and then take a lower bound.
+        CUDACapability30,
+        CUDACapability32,
+        CUDACapability35,
+        CUDACapability50,
+        CUDACapability61,
+        CUDACapability70,
+        CUDACapability75,
+        CUDACapability80,
+        HVX_v62,
+        HVX_v65,
+        HVX_v66,
+    }};
+    // clang-format on
 
-    const std::array<Feature, 12> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, HVX_shared_object, WasmSimd128, WasmSignExt, WasmSatFloatToInt, WasmThreads}};
+    // clang-format off
+    const std::array<Feature, 12> intersection_features = {{
+        ARMv7s,
+        AVX,
+        AVX2,
+        AVX512,
+        AVX512_Cannonlake,
+        AVX512_KNL,
+        AVX512_Skylake,
+        F16C,
+        FMA,
+        FMA4,
+        SSE41,
+        VSX,
+    }};
+    // clang-format on
+
+    // clang-format off
+    const std::array<Feature, 12> matching_features = {{
+        ASAN,
+        Debug,
+        HexagonDma,
+        HVX,
+        HVX_shared_object,
+        MSAN,
+        SoftFloatABI,
+        TSAN,
+        WasmThreads,
+    }};
+    // clang-format on
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;

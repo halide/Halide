@@ -140,7 +140,12 @@ string CodeGen_WebAssembly::mattrs() const {
     }
 
     if (target.has_feature(Target::WasmThreads)) {
-        s << sep << ",+atomics,+bulk-memory";
+        s << sep << ",+atomics";
+        sep = ",";
+    }
+
+    if (target.has_feature(Target::WasmBulkMemory)) {
+        s << sep << "+bulk-memory";
         sep = ",";
     }
 
