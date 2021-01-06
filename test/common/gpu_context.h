@@ -141,12 +141,12 @@ bool create_metal_context(id<MTLDevice> &device, id<MTLCommandQueue> &queue) {
     }
     if (device == nullptr) {
         printf("Failed to find Metal device.\n");
-	return false;
+        return false;
     }
     queue = [device newCommandQueue];
     if (queue == nullptr) {
         printf("Failed to create Metal command queue.\n");
-	return false;
+        return false;
     }
     return true;
 }
