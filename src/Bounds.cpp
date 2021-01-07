@@ -639,8 +639,8 @@ private:
             } else {
                 Type t = op->type.element_of();
                 if (t.is_int() && t.bits() <= 16 &&
-                    !can_prove(make_const(t, -1) > b.max || make_const(t, -1) < b.min)
-                    && !can_prove(a.min != t.min())) {
+                    !can_prove(make_const(t, -1) > b.max || make_const(t, -1) < b.min) &&
+                    !can_prove(a.min != t.min())) {
                     // type.min / -1 overflows.
                     bounds_of_type(op->type);
                 } else {
