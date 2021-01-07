@@ -16,11 +16,11 @@ set(CMAKE_CXX_EXTENSIONS NO)
 # Find Halide
 find_package(Halide REQUIRED)
 
-find_package(OpenGL QUIET OPTIONAL_COMPONENTS EGL)
-if (OpenGL_EGL_FOUND)
-    set(TARGET_FEATURES opengl egl)
-else ()
-    set(TARGET_FEATURES opengl)
+find_package(OpenGL REQUIRED)
+set(opengl_features opengl)
+if (TARGET OpenGL::OpenGL AND TARGET OpenGL::EGL)
+    # EGL requires GLVND (which is found iff ::OpenGL is present)
+    list(APPEND opengl_features egl)
 endif ()
 
 # Generators
@@ -31,8 +31,8 @@ add_executable(ycc.generator halide_ycc_glsl_generator.cpp)
 target_link_libraries(ycc.generator PRIVATE Halide::Generator)
 
 # Libraries
-add_halide_library(halide_blur_glsl FROM glsl_blur.generator FEATURES ${TARGET_FEATURES} debug)
-add_halide_library(halide_ycc_glsl FROM ycc.generator FEATURES ${TARGET_FEATURES} debug)
+add_halide_library(halide_blur_glsl FROM glsl_blur.generator FEATURES ${opengl_features} debug)
+add_halide_library(halide_ycc_glsl FROM ycc.generator FEATURES ${opengl_features} debug)
 
 # Final executable
 add_executable(opengl_test opengl_test.cpp)
