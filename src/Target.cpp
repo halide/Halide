@@ -229,7 +229,13 @@ Target::Feature calculate_host_cuda_capability(Target t) {
     } else if (ver < 80) {
         return Target::CUDACapability75;
     } else {
+#if LLVM_VERSION >= 110
         return Target::CUDACapability80;
+#else
+        // We require LLVM11+ in order to generate for CUDACapability80,
+        // so don't ever return that capability here, even if present.
+        return Target::CUDACapability75;
+#endif
     }
 }
 
@@ -730,7 +736,13 @@ int Target::get_cuda_capability_lower_bound() const {
         return 75;
     }
     if (has_feature(Target::CUDACapability80)) {
+#if LLVM_VERSION >= 110
         return 80;
+#else
+        // We require LLVM11+ in order to generate for CUDACapability80,
+        // so don't ever return that capability here, even if present.
+        return 75;
+#endif
     }
     return 20;
 }
@@ -957,14 +969,36 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // large, so min selects the true lower bound when one target doesn't specify a capability,
     // and the other doesn't use CUDA at all.
     int cuda_capability = std::min((unsigned)cuda_a, (unsigned)cuda_b);
-    if (cuda_capability < 30) output.features.reset(CUDACapability30);
-    if (cuda_capability < 32) output.features.reset(CUDACapability32);
-    if (cuda_capability < 35) output.features.reset(CUDACapability35);
-    if (cuda_capability < 50) output.features.reset(CUDACapability50);
-    if (cuda_capability < 61) output.features.reset(CUDACapability61);
-    if (cuda_capability < 70) output.features.reset(CUDACapability70);
-    if (cuda_capability < 75) output.features.reset(CUDACapability75);
-    if (cuda_capability < 80) output.features.reset(CUDACapability80);
+    if (cuda_capability < 30) {
+        output.features.reset(CUDACapability30);
+    }
+    if (cuda_capability < 32) {
+        output.features.reset(CUDACapability32);
+    }
+    if (cuda_capability < 35) {
+        output.features.reset(CUDACapability35);
+    }
+    if (cuda_capability < 50) {
+        output.features.reset(CUDACapability50);
+    }
+    if (cuda_capability < 61) {
+        output.features.reset(CUDACapability61);
+    }
+    if (cuda_capability < 70) {
+        output.features.reset(CUDACapability70);
+    }
+    if (cuda_capability < 75) {
+        output.features.reset(CUDACapability75);
+    }
+#if LLVM_VERSION >= 110
+    if (cuda_capability < 80) {
+        output.features.reset(CUDACapability80);
+    }
+#else
+    // We require LLVM11+ in order to generate for CUDACapability80,
+    // so don't ever return that capability here, even if present.
+    output.features.reset(CUDACapability80);
+#endif
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
