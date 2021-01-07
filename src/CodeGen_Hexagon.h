@@ -5,6 +5,8 @@
  * Defines the code-generator for producing Hexagon machine code
  */
 
+#include <memory>
+
 namespace llvm {
 
 class LLVMContext;
@@ -19,7 +21,7 @@ namespace Internal {
 
 class CodeGen_Posix;
 
-CodeGen_Posix *new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context);
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context);
 
 }  // namespace Internal
 }  // namespace Halide
