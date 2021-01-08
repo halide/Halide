@@ -68,14 +68,14 @@ void load_opengl(bool needs_egl) {
             // NVIDIA EGL prefers users to load libOpenGL.so instead of libGL.so
             // The way we're using it, it seems like libGL.so.1 is a valid fallback.
             // See here for more details: https://developer.nvidia.com/blog/linking-opengl-server-side-rendering
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenGL.so", &error);
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenGL.so.0", &error);
             if (!error.empty()) {
-                debug(1) << "Could not find libOpenGL.so when EGL requested. Falling back to libGL.so.1\n";
+                debug(1) << "Could not find libOpenGL.so.0 when EGL requested. Falling back to libGL.so.1\n";
                 llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
             }
-            user_assert(error.empty()) << "Could not find libOpenGL.so or libGL.so.1\n";
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libEGL.so", &error);
-            user_assert(error.empty()) << "Could not find libEGL.so\n";
+            user_assert(error.empty()) << "Could not find libOpenGL.so.0 or libGL.so.1\n";
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libEGL.so.1", &error);
+            user_assert(error.empty()) << "Could not find libEGL.so.1\n";
         } else {
             llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
             user_assert(error.empty()) << "Could not find libGL.so\n";
