@@ -731,7 +731,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.write(buffer.data(), buffer.size());
         f.close();
 
-        string cmd = "ptxas --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
+        string cmd = "ptxas --maxrregcount 64 --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
         if (system(cmd.c_str()) == 0) {
             cmd = "nvdisasm " + sass.pathname();
             int ret = system(cmd.c_str());

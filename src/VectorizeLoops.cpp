@@ -49,11 +49,16 @@ public:
     }
 };
 
+Expr get_lane(const Expr &e, int l) {
+    return Shuffle::make_slice(e, l, 0, 1);
+}
+
 /** Find the exact max and min lanes of a vector expression. Not
  * conservative like bounds_of_expr, but uses similar rules for some
  * common node types where it can be exact. Assumes any vector
  * variables defined externally also have .min_lane and .max_lane
  * versions in scope. */
+// TODO: Add a scope<Interval> to handle variables
 Interval bounds_of_lanes(const Expr &e) {
     if (const Add *add = e.as<Add>()) {
         if (const Broadcast *b = add->b.as<Broadcast>()) {
@@ -143,24 +148,9 @@ Interval bounds_of_lanes(const Expr &e) {
         }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return {b->value, b->value};
-    } else if (const Variable *var = e.as<Variable>()) {
-        return {Variable::make(var->type.element_of(), var->name + ".min_lane"),
-                Variable::make(var->type.element_of(), var->name + ".max_lane")};
     } else if (const Let *let = e.as<Let>()) {
         Interval ia = bounds_of_lanes(let->value);
         Interval ib = bounds_of_lanes(let->body);
-        if (expr_uses_var(ib.min, let->name + ".min_lane")) {
-            ib.min = Let::make(let->name + ".min_lane", ia.min, ib.min);
-        }
-        if (expr_uses_var(ib.max, let->name + ".min_lane")) {
-            ib.max = Let::make(let->name + ".min_lane", ia.min, ib.max);
-        }
-        if (expr_uses_var(ib.min, let->name + ".max_lane")) {
-            ib.min = Let::make(let->name + ".max_lane", ia.max, ib.min);
-        }
-        if (expr_uses_var(ib.max, let->name + ".max_lane")) {
-            ib.max = Let::make(let->name + ".max_lane", ia.max, ib.max);
-        }
         if (expr_uses_var(ib.min, let->name)) {
             ib.min = Let::make(let->name, let->value, ib.min);
         }
@@ -689,11 +679,11 @@ class VectorSubs : public IRMutator {
                     for (size_t j = 0; j < call_args.size(); j += 2) {
                         Expr min_v = widen(make_struct->args[j], max_lanes);
                         Expr extent_v = widen(make_struct->args[j + 1], max_lanes);
-                        Expr min_scalar = extract_lane(min_v, 0);
-                        Expr max_scalar = min_scalar + extract_lane(extent_v, 0);
+                        Expr min_scalar = get_lane(min_v, 0);
+                        Expr max_scalar = min_scalar + get_lane(extent_v, 0);
                         for (int k = 1; k < max_lanes; ++k) {
-                            Expr min_k = extract_lane(min_v, k);
-                            Expr extent_k = extract_lane(extent_v, k);
+                            Expr min_k = get_lane(min_v, k);
+                            Expr extent_k = get_lane(extent_v, k);
                             min_scalar = min(min_scalar, min_k);
                             max_scalar = max(max_scalar, min_k + extent_k);
                         }
@@ -774,44 +764,6 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    Stmt wrap_extracted_lets_lanes(const Stmt &body, const string &vectorized_name, const Expr &mutated_value) {
-        // Inner code might have extracted my lanes using
-        // extract_lane, which introduces a shuffle_vector. If
-        // so we should define separate lets for the lanes and
-        // get it to use those instead.
-        Stmt mutated_body = ReplaceShuffleVectors(vectorized_name).mutate(body);
-
-        // Check if inner code wants my individual lanes.
-        Type t = mutated_value.type();
-        for (int i = 0; i < t.lanes(); i++) {
-            string lane_name = vectorized_name + ".lane." + std::to_string(i);
-            if (stmt_uses_var(mutated_body, lane_name)) {
-                mutated_body =
-                    LetStmt::make(lane_name, extract_lane(mutated_value, i), mutated_body);
-            }
-        }
-
-        // Inner code may also have wanted my max or min lane
-        bool uses_min_lane = stmt_uses_var(mutated_body, vectorized_name + ".min_lane");
-        bool uses_max_lane = stmt_uses_var(mutated_body, vectorized_name + ".max_lane");
-
-        if (uses_min_lane || uses_max_lane) {
-            Interval i = bounds_of_lanes(mutated_value);
-
-            if (uses_min_lane) {
-                mutated_body =
-                    LetStmt::make(vectorized_name + ".min_lane", i.min, mutated_body);
-            }
-
-            if (uses_max_lane) {
-                mutated_body =
-                    LetStmt::make(vectorized_name + ".max_lane", i.max, mutated_body);
-            }
-        }
-
-        return mutated_body;
-    }
-
     Stmt visit(const LetStmt *op) override {
         Expr mutated_value = simplify(mutate(op->value));
         string vectorized_name = op->name;
@@ -834,8 +786,6 @@ class VectorSubs : public IRMutator {
             containing_lets.pop_back();
             scope.pop(op->name);
             vector_scope.pop(vectorized_name);
-
-            mutated_body = wrap_extracted_lets_lanes(mutated_body, vectorized_name, mutated_value);
         }
 
         InterleavedRamp ir;
@@ -1022,7 +972,6 @@ class VectorSubs : public IRMutator {
                 string vectorized_name = get_widened_var_name(it.name());
                 Expr vectorized_value = vector_scope.get(vectorized_name);
                 vector_scope.pop(vectorized_name);
-                body = wrap_extracted_lets_lanes(body, vectorized_name, vectorized_value);
                 InterleavedRamp ir;
                 if (is_interleaved_ramp(vectorized_value, vector_scope, &ir)) {
                     body = substitute(vectorized_name, vectorized_value, body);
@@ -1321,9 +1270,9 @@ class VectorSubs : public IRMutator {
             // Hide all the vector let values in scope with a scalar version
             // in the appropriate lane.
             for (Scope<Expr>::const_iterator iter = scope.cbegin(); iter != scope.cend(); ++iter) {
-                string name = iter.name() + ".lane." + std::to_string(i);
-                Expr lane = extract_lane(iter.value(), i);
-                e = substitute(iter.name(), Variable::make(lane.type(), name), e);
+                e = substitute(iter.name(),
+                               get_lane(Variable::make(iter.value().type(), iter.name()), i),
+                               e);
             }
 
             // Replace uses of the vectorized variable with the extracted
