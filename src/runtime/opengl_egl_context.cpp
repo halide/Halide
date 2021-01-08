@@ -68,7 +68,7 @@ EGLAPI EGLBoolean EGLAPIENTRY eglMakeCurrent(EGLDisplay dpy, EGLSurface draw,
                                              EGLSurface read, EGLContext ctx);
 
 EGLAPI void *eglGetProcAddress(const char *procname);
-EGLAPI EGLBoolean EGLAPIENTRY eglGetConfigAttrib (EGLDisplay dpy, EGLConfig config, EGLint attribute, EGLint *value);
+EGLAPI EGLBoolean EGLAPIENTRY eglGetConfigAttrib(EGLDisplay dpy, EGLConfig config, EGLint attribute, EGLint *value);
 
 extern int strcmp(const char *, const char *);
 
@@ -146,61 +146,61 @@ WEAK int halide_opengl_create_context(void *user_context) {
         print(user_context) << "num_actual_configs=" << num_actual_configs << "\n";
         for (int i = 0; i < num_actual_configs; i++) {
             EGLint value;
-#define EGL_ALPHA_SIZE                    0x3021
-#define EGL_BAD_ACCESS                    0x3002
-#define EGL_BAD_ALLOC                     0x3003
-#define EGL_BAD_ATTRIBUTE                 0x3004
-#define EGL_BAD_CONFIG                    0x3005
-#define EGL_BAD_CONTEXT                   0x3006
-#define EGL_BAD_CURRENT_SURFACE           0x3007
-#define EGL_BAD_DISPLAY                   0x3008
-#define EGL_BAD_MATCH                     0x3009
-#define EGL_BAD_NATIVE_PIXMAP             0x300A
-#define EGL_BAD_NATIVE_WINDOW             0x300B
-#define EGL_BAD_PARAMETER                 0x300C
-#define EGL_BAD_SURFACE                   0x300D
-#define EGL_BLUE_SIZE                     0x3022
-#define EGL_BUFFER_SIZE                   0x3020
-#define EGL_CONFIG_CAVEAT                 0x3027
-#define EGL_CONFIG_ID                     0x3028
-#define EGL_CORE_NATIVE_ENGINE            0x305B
-#define EGL_DEPTH_SIZE                    0x3025
-#define EGL_DRAW                          0x3059
-#define EGL_EXTENSIONS                    0x3055
-#define EGL_FALSE                         0
-#define EGL_GREEN_SIZE                    0x3023
-#define EGL_HEIGHT                        0x3056
-#define EGL_LARGEST_PBUFFER               0x3058
-#define EGL_LEVEL                         0x3029
-#define EGL_MAX_PBUFFER_HEIGHT            0x302A
-#define EGL_MAX_PBUFFER_PIXELS            0x302B
-#define EGL_MAX_PBUFFER_WIDTH             0x302C
-#define EGL_NATIVE_RENDERABLE             0x302D
-#define EGL_NATIVE_VISUAL_ID              0x302E
-#define EGL_NATIVE_VISUAL_TYPE            0x302F
-#define EGL_NONE                          0x3038
-#define EGL_NON_CONFORMANT_CONFIG         0x3051
-#define EGL_NOT_INITIALIZED               0x3001
-#define EGL_PBUFFER_BIT                   0x0001
-#define EGL_PIXMAP_BIT                    0x0002
-#define EGL_READ                          0x305A
-#define EGL_RED_SIZE                      0x3024
-#define EGL_SAMPLES                       0x3031
-#define EGL_SAMPLE_BUFFERS                0x3032
-#define EGL_SLOW_CONFIG                   0x3050
-#define EGL_STENCIL_SIZE                  0x3026
-#define EGL_SUCCESS                       0x3000
-#define EGL_SURFACE_TYPE                  0x3033
-#define EGL_TRANSPARENT_BLUE_VALUE        0x3035
-#define EGL_TRANSPARENT_GREEN_VALUE       0x3036
-#define EGL_TRANSPARENT_RED_VALUE         0x3037
-#define EGL_TRANSPARENT_RGB               0x3052
-#define EGL_TRANSPARENT_TYPE              0x3034
-#define EGL_TRUE                          1
-#define EGL_VENDOR                        0x3053
-#define EGL_VERSION                       0x3054
-#define EGL_WIDTH                         0x3057
-#define EGL_WINDOW_BIT                    0x0004
+#define EGL_ALPHA_SIZE 0x3021
+#define EGL_BAD_ACCESS 0x3002
+#define EGL_BAD_ALLOC 0x3003
+#define EGL_BAD_ATTRIBUTE 0x3004
+#define EGL_BAD_CONFIG 0x3005
+#define EGL_BAD_CONTEXT 0x3006
+#define EGL_BAD_CURRENT_SURFACE 0x3007
+#define EGL_BAD_DISPLAY 0x3008
+#define EGL_BAD_MATCH 0x3009
+#define EGL_BAD_NATIVE_PIXMAP 0x300A
+#define EGL_BAD_NATIVE_WINDOW 0x300B
+#define EGL_BAD_PARAMETER 0x300C
+#define EGL_BAD_SURFACE 0x300D
+#define EGL_BLUE_SIZE 0x3022
+#define EGL_BUFFER_SIZE 0x3020
+#define EGL_CONFIG_CAVEAT 0x3027
+#define EGL_CONFIG_ID 0x3028
+#define EGL_CORE_NATIVE_ENGINE 0x305B
+#define EGL_DEPTH_SIZE 0x3025
+#define EGL_DRAW 0x3059
+#define EGL_EXTENSIONS 0x3055
+#define EGL_FALSE 0
+#define EGL_GREEN_SIZE 0x3023
+#define EGL_HEIGHT 0x3056
+#define EGL_LARGEST_PBUFFER 0x3058
+#define EGL_LEVEL 0x3029
+#define EGL_MAX_PBUFFER_HEIGHT 0x302A
+#define EGL_MAX_PBUFFER_PIXELS 0x302B
+#define EGL_MAX_PBUFFER_WIDTH 0x302C
+#define EGL_NATIVE_RENDERABLE 0x302D
+#define EGL_NATIVE_VISUAL_ID 0x302E
+#define EGL_NATIVE_VISUAL_TYPE 0x302F
+#define EGL_NONE 0x3038
+#define EGL_NON_CONFORMANT_CONFIG 0x3051
+#define EGL_NOT_INITIALIZED 0x3001
+#define EGL_PBUFFER_BIT 0x0001
+#define EGL_PIXMAP_BIT 0x0002
+#define EGL_READ 0x305A
+#define EGL_RED_SIZE 0x3024
+#define EGL_SAMPLES 0x3031
+#define EGL_SAMPLE_BUFFERS 0x3032
+#define EGL_SLOW_CONFIG 0x3050
+#define EGL_STENCIL_SIZE 0x3026
+#define EGL_SUCCESS 0x3000
+#define EGL_SURFACE_TYPE 0x3033
+#define EGL_TRANSPARENT_BLUE_VALUE 0x3035
+#define EGL_TRANSPARENT_GREEN_VALUE 0x3036
+#define EGL_TRANSPARENT_RED_VALUE 0x3037
+#define EGL_TRANSPARENT_RGB 0x3052
+#define EGL_TRANSPARENT_TYPE 0x3034
+#define EGL_TRUE 1
+#define EGL_VENDOR 0x3053
+#define EGL_VERSION 0x3054
+#define EGL_WIDTH 0x3057
+#define EGL_WINDOW_BIT 0x0004
             print(user_context) << "Config #" << i << "\n";
             eglGetConfigAttrib(display, actual_configs[i], EGL_BUFFER_SIZE, &value);
             print(user_context) << "Buffer Size " << value << "\n";
