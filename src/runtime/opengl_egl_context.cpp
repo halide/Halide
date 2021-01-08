@@ -137,7 +137,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
     EGLBoolean result = eglChooseConfig(display, attribs, &config, 1, &numconfig);
     if (result != EGL_TRUE || numconfig != 1) {
         error(user_context) << "eglChooseConfig(): config not found: "
-                            << " result=" << (int) result
+                            << " result=" << (int)result
                             << " eglGetError=" << eglGetError()
                             << " numConfig=" << numconfig;
         return -1;
@@ -166,7 +166,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
     result = eglMakeCurrent(display, surface, surface, context);
     if (result != EGL_TRUE) {
         error(user_context) << "eglMakeCurrent fails: "
-                            << " result=" << (int) result
+                            << " result=" << (int)result
                             << " eglGetError=" << eglGetError();
         return -1;
     }
