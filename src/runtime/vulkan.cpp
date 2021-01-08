@@ -30,7 +30,7 @@ WEAK const char *get_vulkan_error_name(VkResult error);
 VkInstance WEAK cached_instance = 0;
 VkDevice WEAK cached_device = 0;
 VkQueue WEAK cached_queue = 0;
-uint32_t WEAK cached_memory_type_index = 0;
+VkPhysicalDevice WEAK cached_physical_device;
 uint32_t WEAK cached_queue_family_index = 0;
 volatile int WEAK thread_lock = 0;
 
@@ -53,7 +53,7 @@ extern "C" {
 //   should block while a previous call (if any) has not yet been
 //   released via halide_release_vulkan_context.
 WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
-                                       VkDevice *device, VkQueue *queue, uint32_t* memory_type_index, uint32_t* queue_family_index, bool create) {
+                                       VkDevice *device, VkQueue *queue, VkPhysicalDevice *physical_device, uint32_t* queue_family_index, bool create) {
     // TODO: Should we use a more "assertive" assert? These asserts do
     // not block execution on failure.
     halide_assert(user_context, instance != nullptr);
@@ -133,6 +133,8 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
             chosen_device = devices[0];
         }
 
+        cached_physical_device = chosen_device;
+
         float queue_priority = 1.0f;
         VkDeviceQueueCreateInfo device_queue_create_info = {
             VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -166,29 +168,12 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
 
         cached_queue_family_index = queue_family;
 
-        // Find an appropriate memory type for allocating buffers
-        cached_memory_type_index = VK_MAX_MEMORY_TYPES;
-        VkPhysicalDeviceMemoryProperties device_mem_properties;
-        vkGetPhysicalDeviceMemoryProperties(chosen_device, &device_mem_properties);
-
-        // TODO: should this be host coherent or cached or something else?
-        for (uint32_t i = 0; i < device_mem_properties.memoryTypeCount; i++) {
-            if ((device_mem_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
-                (device_mem_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-                    cached_memory_type_index = i;
-                    break;
-                }
-        }
-        if (cached_memory_type_index == VK_MAX_MEMORY_TYPES) {
-            debug(user_context) << "Vulkan: unable to find appropriate memory type\n";
-            return -1;
-        }
     }
 
     *instance = cached_instance;
     *device = cached_device;
     *queue = cached_queue;
-    *memory_type_index = cached_memory_type_index;
+    *physical_device = cached_physical_device;
     *queue_family_index = cached_queue_family_index;
 
     return 0;
@@ -211,17 +196,17 @@ public:
     VkDevice device;
     VkQueue queue;
     VkResult error;
-    uint32_t memory_type_index; // used for choosing which memory type to use
+    VkPhysicalDevice physical_device;
     uint32_t queue_family_index; // used for operations requiring queue family
 
     INLINE VulkanContext(void *user_context) : user_context(user_context),
                                              instance(nullptr), device(nullptr), queue(nullptr),
-                                             error(VK_SUCCESS), memory_type_index(0),
+                                             error(VK_SUCCESS), physical_device(nullptr),
                                              queue_family_index(0) {
         
         while (__sync_lock_test_and_set(&thread_lock, 1)) { }
 
-        int err_halide = halide_vulkan_acquire_context(user_context, &instance, &device, &queue, &memory_type_index, &queue_family_index);
+        int err_halide = halide_vulkan_acquire_context(user_context, &instance, &device, &queue, &physical_device, &queue_family_index);
         halide_assert(user_context, err_halide == 0);
         halide_assert(user_context, device != nullptr && queue != nullptr);
 
@@ -370,8 +355,9 @@ WEAK int halide_vulkan_device_release(void *user_context) {
     VkInstance instance;
     VkDevice device;
     VkQueue queue;
+    VkPhysicalDevice physical_device;
     uint32_t _throwaway;
-    err = halide_vulkan_acquire_context(user_context, &instance, &device, &queue, &_throwaway, &_throwaway, false);
+    err = halide_vulkan_acquire_context(user_context, &instance, &device, &queue, &physical_device, &_throwaway, false);
     if (instance != nullptr) {
         // SYNC
 
@@ -401,6 +387,55 @@ WEAK int halide_vulkan_device_release(void *user_context) {
 
     return 0;
 }
+
+namespace {
+
+VkResult allocate_device_memory(VkPhysicalDevice physical_device, VkDevice device, VkDeviceSize size, VkMemoryPropertyFlags flags, 
+                                const VkAllocationCallbacks* allocator,
+                                // returned in device_memory
+                                VkDeviceMemory *device_memory) {
+    // Find an appropriate memory type given the flags
+    auto memory_type_index  = VK_MAX_MEMORY_TYPES;
+    VkPhysicalDeviceMemoryProperties device_mem_properties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &device_mem_properties);
+
+    // TODO: should this be host coherent or cached or something else?
+    for (uint32_t i = 0; i < device_mem_properties.memoryTypeCount; i++) {
+        if (device_mem_properties.memoryTypes[i].propertyFlags & flags) {
+                memory_type_index = i;
+                break;
+            }
+    }
+
+    if (memory_type_index == VK_MAX_MEMORY_TYPES) {
+        debug(nullptr) << "Vulkan: failed to find appropriate memory type";
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
+
+    // TODO: This can greatly benefit from, and is designed for, an
+    // allocation cache.  We should consider allocating larger chunks
+    // of memory and using the larger allocation (with appropriate size/offsets)
+    // to back buffers created here
+
+    VkMemoryAllocateInfo alloc_info =
+        {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, // struct type
+         nullptr, // struct extending this
+         size,  // size of allocation in bytes
+         (uint32_t)memory_type_index  // memory type index from physical device
+        };
+
+    auto ret_code = vkAllocateMemory(device, &alloc_info, allocator, device_memory);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(nullptr) << "Vulkan: vkAllocateMemory returned: " << get_vulkan_error_name(ret_code) << "\n";
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
+
+    return ret_code;
+
+}
+
+} // anonymous namespace
 
 WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t* buf) {
     debug(user_context)
@@ -434,27 +469,15 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t* buf) {
     //    the appropriate memory type with the appropriate properties
     // 2. Construct a VkBuffer
     // 3. Bind the VkBuffer to the allocated memory
-    // TODO: This can greatly benefit from, and is designed for, an
-    // allocation cache.  We should consider allocating larger chunks
-    // of memory and using the larger allocation (with appropriate size/offsets)
-    // to back buffers created here
 
-    // Allocate the memory.  We rely on the halide_vulkan_acquire_context() API to
-    // tell us which memory type to use
-    VkMemoryAllocateInfo alloc_info =
-        {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, // struct type
-         nullptr, // struct extending this
-         size,  // size of allocation in bytes
-         context.memory_type_index  // memory type index from physical device
-        };
+    // Allocate memory
+    // TODO: This really needs an allocation cache
     VkDeviceMemory device_memory;
-    auto ret_code = vkAllocateMemory(context.device, &alloc_info, context.allocation_callbacks(), &device_memory);
-    if (ret_code != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: vkAllocateMemory returned: " << get_vulkan_error_name(ret_code) << "\n";
-        return -1;
-    }
-
-    // Now create the buffer
+    auto ret_code = allocate_device_memory(context.physical_device, context.device,
+                                           size,
+                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                           context.allocation_callbacks(),
+                                           &device_memory);
 
     VkBufferCreateInfo args_info = {
         VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, nullptr,
@@ -536,9 +559,7 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t* buf) 
         << "Vulkan: halide_vulkan_copy_to_device (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
-    // Acquire the context so we can use the command queue. This also avoids multiple
-    // redundant calls to clEnqueueWriteBuffer when multiple threads are trying to copy
-    // the same buffer.
+    // Acquire the context so we can use the command queue. 
     VulkanContext ctx(user_context);
     if (ctx.error != VK_SUCCESS) {
         return ctx.error;
@@ -551,6 +572,10 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t* buf) 
     halide_assert(user_context, buf->host && buf->device);
 
     device_copy c = make_host_to_device_copy(buf);
+
+    // We construct a staging buffer to copy into from host memory.  Then,
+    // we use vkCmdCopyBuffer() to copy from the staging buffer into the
+    // the actual device memory.
 
     do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, false);
 
@@ -699,16 +724,19 @@ WEAK int halide_vulkan_run(void *user_context,
     //// 1a. Create a buffer for the scalar parameters
     // First allocate memory, then map it and copy params, then create a buffer 
     // and bind the allocation
-    VkMemoryAllocateInfo scalar_alloc_info = 
-        {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,    // struct type
-         nullptr,   // point to struct extending this
-         (uint32_t)scalar_buffer_size,    // allocation size
-         ctx.memory_type_index  // memory type
-        };
+    // VkMemoryAllocateInfo scalar_alloc_info = 
+    //     {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,    // struct type
+    //      nullptr,   // point to struct extending this
+    //      (uint32_t)scalar_buffer_size,    // allocation size
+    //      ctx.memory_type_index  // memory type
+    //     };
     VkDeviceMemory scalar_alloc;
-    result = vkAllocateMemory(ctx.device, &scalar_alloc_info, 0, &scalar_alloc); 
+    //result = vkAllocateMemory(ctx.device, &scalar_alloc_info, 0, &scalar_alloc); 
+    result = allocate_device_memory(ctx.physical_device, ctx.device, scalar_buffer_size,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        ctx.allocation_callbacks(), &scalar_alloc);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkAllocateMemory returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "Vulkan: allocate_device_memory() failed "  << "\n";
         return result;
     }
 
