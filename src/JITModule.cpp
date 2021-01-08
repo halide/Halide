@@ -64,13 +64,23 @@ void load_opengl(bool needs_egl) {
     } else {
         debug(1) << "Looking for OpenGL support code...\n";
         string error;
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-        user_assert(error.empty()) << "Could not find libGL.so\n";
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
-        user_assert(error.empty()) << "Could not find libX11.so\n";
         if (needs_egl) {
+            // NVIDIA EGL prefers users to load libOpenGL.so instead of libGL.so
+            // The way we're using it, it seems like libGL.so.1 is a valid fallback.
+            // See here for more details: https://developer.nvidia.com/blog/linking-opengl-server-side-rendering
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenGL.so", &error);
+            if (!error.empty()) {
+                debug(1) << "Could not find libOpenGL.so when EGL requested. Falling back to libGL.so.1\n";
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
+            }
+            user_assert(error.empty()) << "Could not find libOpenGL.so or libGL.so.1\n";
             llvm::sys::DynamicLibrary::LoadLibraryPermanently("libEGL.so", &error);
             user_assert(error.empty()) << "Could not find libEGL.so\n";
+        } else {
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
+            user_assert(error.empty()) << "Could not find libGL.so\n";
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
+            user_assert(error.empty()) << "Could not find libX11.so\n";
         }
     }
 #elif defined(__APPLE__)
