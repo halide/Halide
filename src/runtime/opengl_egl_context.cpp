@@ -139,10 +139,14 @@ WEAK int halide_opengl_create_context(void *user_context) {
     if (result != EGL_TRUE || numconfig != 1) {
         EGLint num_actual_configs;
         EGLBoolean result2 = eglGetConfigs(display, nullptr, 0, &num_actual_configs);
-        if (result2 == EGL_FALSE) abort();
+        if (result2 == EGL_FALSE) {
+            abort();
+        }
         EGLConfig *actual_configs = (EGLConfig *)__builtin_alloca(num_actual_configs * sizeof(EGLConfig));
         result2 = eglGetConfigs(display, actual_configs, num_actual_configs, &num_actual_configs);
-        if (result2 == EGL_FALSE) abort();
+        if (result2 == EGL_FALSE) {
+            abort();
+        }
         print(user_context) << "num_actual_configs=" << num_actual_configs << "\n";
         for (int i = 0; i < num_actual_configs; i++) {
             EGLint value;
@@ -246,6 +250,9 @@ WEAK int halide_opengl_create_context(void *user_context) {
             eglGetConfigAttrib(display, actual_configs[i], EGL_SURFACE_TYPE, &value);
             print(user_context) << "Surface type " << value << "\n";
             eglGetConfigAttrib(display, actual_configs[i], EGL_TRANSPARENT_TYPE, &value);
+            print(user_context) << "Transparent type " << value << "\n";
+            eglGetConfigAttrib(display, actual_configs[i], EGL_RENDERABLE_TYPE, &value);
+            print(user_context) << "Renderable Type " << value << "\n";
             print(user_context) << "--------------------------------------------------------------------------\n";
         }
 
