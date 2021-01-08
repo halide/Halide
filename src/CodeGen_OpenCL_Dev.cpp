@@ -121,6 +121,8 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
         } else if (type.bits() == 32) {
             oss << "float";
         } else if (type.bits() == 64) {
+            user_assert(target.has_feature(Target::CLDoubles))
+                << "OpenCL kernel uses double type, but CLDoubles target flag not enabled\n";
             oss << "double";
         } else {
             user_error << "Can't represent a float with this many bits in OpenCL C: " << type << "\n";
@@ -1220,8 +1222,8 @@ std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
 
 }  // namespace
 
-CodeGen_GPU_Dev *new_CodeGen_OpenCL_Dev(const Target &target) {
-    return new CodeGen_OpenCL_Dev(target);
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_OpenCL_Dev(const Target &target) {
+    return std::make_unique<CodeGen_OpenCL_Dev>(target);
 }
 
 }  // namespace Internal
