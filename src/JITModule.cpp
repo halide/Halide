@@ -57,7 +57,7 @@ typedef struct CUctx_st *CUcontext;
 typedef struct cl_context_st *cl_context;
 typedef struct cl_command_queue_st *cl_command_queue;
 
-void load_opengl() {
+void load_opengl(bool needs_egl) {
 #if defined(__linux__)
     if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
         debug(1) << "OpenGL support code already linked in...\n";
@@ -68,6 +68,10 @@ void load_opengl() {
         user_assert(error.empty()) << "Could not find libGL.so\n";
         llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
         user_assert(error.empty()) << "Could not find libX11.so\n";
+        if (needs_egl) {
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libEGL.so", &error);
+            user_assert(error.empty()) << "Could not find libEGL.so\n";
+        }
     }
 #elif defined(__APPLE__)
     if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
@@ -692,23 +696,23 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             one_gpu.set_feature(Target::Debug);
             one_gpu.set_feature(Target::OpenGL);
             module_name = "debug_opengl";
-            load_opengl();
+            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case OpenGL:
             one_gpu.set_feature(Target::OpenGL);
             module_name += "opengl";
-            load_opengl();
+            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case OpenGLComputeDebug:
             one_gpu.set_feature(Target::Debug);
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name = "debug_openglcompute";
-            load_opengl();
+            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case OpenGLCompute:
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name += "openglcompute";
-            load_opengl();
+            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
