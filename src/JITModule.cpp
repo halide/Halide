@@ -79,8 +79,8 @@ void load_opengl(bool needs_egl) {
         } else {
             llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
             user_assert(error.empty()) << "Could not find libGL.so\n";
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
-            user_assert(error.empty()) << "Could not find libX11.so\n";
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so.6", &error);
+            user_assert(error.empty()) << "Could not find libX11.so.6\n";
         }
     }
 #elif defined(__APPLE__)
