@@ -306,69 +306,6 @@ public:
         return Vec(from_native_vector, base_w, base_w + lanes_2);
     }
 
-    friend Vec operator+(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector[0] + b.native_vector[0], a.native_vector[1] + b.native_vector[1]);
-    }
-
-    friend Vec operator-(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector[0] - b.native_vector[0], a.native_vector[1] - b.native_vector[1]);
-    }
-
-    friend Vec operator*(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_PACKLN_2X64W(IVP_MULN_2X32(a.native_vector[0], b.native_vector[0])),
-                    IVP_PACKLN_2X64W(IVP_MULN_2X32(a.native_vector[1], b.native_vector[1])));
-    }
-
-    friend Vec operator&(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                      a.native_vector[0] & b.native_vector[0],
-                      a.native_vector[1] & b.native_vector[1]);
-    }
-
-    template <typename OtherVec>
-    friend Vec operator>>(const Vec &a, const OtherVec &b) {
-        return Vec(from_native_vector, a.native_vector[0] >> xb_vecN_2x32v(b.native_vector[0]),
-                                       a.native_vector[1] >> xb_vecN_2x32v(b.native_vector[1]));
-    }
-
-    friend Mask operator<(const Vec &a, const Vec &b) {
-        return IVP_JOINBN_2(
-                    IVP_LTN_2X32(a.native_vector[1], b.native_vector[1]),
-                    IVP_LTN_2X32(a.native_vector[0], b.native_vector[0]));
-    }
-
-    friend Mask operator<=(const Vec &a, const Vec &b) {
-        return IVP_JOINBN_2(
-                    IVP_LEN_2X32(a.native_vector[1], b.native_vector[1]),
-                    IVP_LEN_2X32(a.native_vector[0], b.native_vector[0]));
-    }
-
-    friend Mask operator==(const Vec &a, const Vec &b) {
-        return IVP_JOINBN_2(
-                    IVP_EQN_2X32(a.native_vector[1], b.native_vector[1]),
-                    IVP_EQN_2X32(a.native_vector[0], b.native_vector[0]));
-    }
-
-    static Vec select(const Mask &cond, const Vec &true_value, const Vec &false_value) {
-        return Vec(from_native_vector,
-                    IVP_MOVN_2X32T(true_value.native_vector[0], false_value.native_vector[0], IVP_EXTRACTBLN(cond)),
-                    IVP_MOVN_2X32T(true_value.native_vector[1], false_value.native_vector[1], IVP_EXTRACTBHN(cond)));
-    }
-
-    static Vec max(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_MAXN_2X32(a.native_vector[0], b.native_vector[0]),
-                    IVP_MAXN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    static Vec min(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_MINN_2X32(a.native_vector[0], b.native_vector[0]),
-                    IVP_MINN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
     static int32x32_t concat(const int32x16_t& a, const int32x16_t& b) {
         return int32x32_t(from_native_vector, a, b);
     }
@@ -400,49 +337,6 @@ class uint32x32_t {
 
     void aligned_store(void *base, int32_t offset) const {
         memcpy(((ElementType*)base + offset), &native_vector[0], sizeof(ElementType) * Lanes);
-    }
-
-    friend Vec operator+(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, a.native_vector[0] + b.native_vector[0], a.native_vector[1] + b.native_vector[1]);
-    }
-
-    friend Vec operator*(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_PACKLN_2X64W(IVP_MULN_2X32(a.native_vector[0], b.native_vector[0])),
-                    IVP_PACKLN_2X64W(IVP_MULN_2X32(a.native_vector[1], b.native_vector[1])));
-    }
-
-    friend Vec operator<<(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, IVP_SLLN_2X32(a.native_vector[0], b.native_vector[0]),
-                                       IVP_SLLN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    friend Vec operator>>(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector, IVP_SRLN_2X32(a.native_vector[0], b.native_vector[0]),
-                                       IVP_SRLN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    friend Mask operator<(const Vec &a, const Vec &b) {
-        return IVP_JOINBN_2(
-                    a.native_vector[1] < b.native_vector[1],
-                    a.native_vector[0] < b.native_vector[0]);
-    }
-
-    static Vec max(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_MAXUN_2X32(a.native_vector[0], b.native_vector[0]),
-                    IVP_MAXUN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    // TODO: this should be improved by taking advantage of native operator support.
-    static Vec min(const Vec &a, const Vec &b) {
-        return Vec(from_native_vector,
-                    IVP_MINUN_2X32(a.native_vector[0], b.native_vector[0]),
-                    IVP_MINUN_2X32(a.native_vector[1], b.native_vector[1]));
-    }
-
-    static Vec count_leading_zeros(const Vec &a) {
-        return Vec(from_native_vector, IVP_NSAUN_2X32(a.native_vector[0]), IVP_NSAUN_2X32(a.native_vector[1]));
     }
 };
 
