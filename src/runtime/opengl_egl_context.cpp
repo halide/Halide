@@ -122,21 +122,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
         }
     }
 
-    // clang-format off
-    EGLint attribs[] = {
-        EGL_SURFACE_TYPE,    EGL_PBUFFER_BIT,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-        EGL_RED_SIZE,        8,
-        EGL_GREEN_SIZE,      8,
-        EGL_BLUE_SIZE,       8,
-        EGL_ALPHA_SIZE,      8,
-        EGL_NONE,            EGL_NONE
-    };
-    // clang-format on
-    EGLConfig config;
-    int numconfig;
-    EGLBoolean result = eglChooseConfig(display, attribs, &config, 1, &numconfig);
-    if (result != EGL_TRUE || numconfig != 1) {
+    {
         EGLint num_actual_configs;
         EGLBoolean result2 = eglGetConfigs(display, nullptr, 0, &num_actual_configs);
         if (result2 == EGL_FALSE) {
@@ -255,7 +241,23 @@ WEAK int halide_opengl_create_context(void *user_context) {
             print(user_context) << "Renderable Type " << value << "\n";
             print(user_context) << "--------------------------------------------------------------------------\n";
         }
+    }
 
+    // clang-format off
+    EGLint attribs[] = {
+        EGL_SURFACE_TYPE,    EGL_PBUFFER_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_RED_SIZE,        8,
+        EGL_GREEN_SIZE,      8,
+        EGL_BLUE_SIZE,       8,
+        EGL_ALPHA_SIZE,      8,
+        EGL_NONE,            EGL_NONE
+    };
+    // clang-format on
+    EGLConfig config;
+    int numconfig;
+    EGLBoolean result = eglChooseConfig(display, attribs, &config, 1, &numconfig);
+    if (result != EGL_TRUE || numconfig != 1) {
         error(user_context) << "eglChooseConfig(): config not found: "
                             << " result=" << (int)result
                             << " eglGetError=" << eglGetError()
