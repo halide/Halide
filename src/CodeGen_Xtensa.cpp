@@ -845,40 +845,8 @@ HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_deinterleave_odd_u16(const uint16
   return  IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_1);
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_1_i16(const int16x64_t& a) {
-  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_1);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_2_i16(const int16x64_t& a) {
-  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_2);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_3_i16(const int16x64_t& a) {
-  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_3);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_4_i16(const int16x64_t& a) {
-  return IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_4);
-}
-
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_i16(const int16x64_t& a, int start) {
   return IVP_SELNX16(a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_1_u16(const uint16x64_t& a) {
-  return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_1);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_2_u16(const uint16x64_t& a) {
-  return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_2);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_3_u16(const uint16x64_t& a) {
-  return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_3);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_start_4_u16(const uint16x64_t& a) {
-  return IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_ROTATE_RIGHT_4);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_u16(const uint16x64_t& a, int start) {
@@ -900,14 +868,6 @@ HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_deinterleave_even_u8(const uint8x1
 
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_deinterleave_odd_u8(const uint8x128_t& a) {
   return  IVP_SEL2NX8UI(a.native_vector[1], a.native_vector[0], IVP_SELI_8B_EXTRACT_1_OF_2_OFF_1);
-}
-
-HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_slice_start_1_u8(const uint8x128_t& a) {
-  return IVP_SEL2NX8UI(a.native_vector[1], a.native_vector[0], IVP_SELI_8B_ROTATE_RIGHT_1);
-}
-
-HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_slice_start_2_u8(const uint8x128_t& a) {
-  return IVP_SEL2NX8UI(a.native_vector[1], a.native_vector[0], IVP_SELI_8B_ROTATE_RIGHT_2);
 }
 
 HALIDE_ALWAYS_INLINE float16 halide_xtensa_slice_f32(const float32& a, int start) {
@@ -1012,10 +972,6 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_pred_sat_sub_i16(const int16x32_t&
   return r;
 }
 
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_i48(const int16x32_t& a, const int16x32_t& b) {
-  return IVP_MULNX16(a, b);
-}
-
 HALIDE_ALWAYS_INLINE int64x16_t halide_xtensa_widen_mul_i64(const int32x16_t& a, const int32x16_t& b) {
   return IVP_MULN_2X32(a, b);
 }
@@ -1025,6 +981,7 @@ HALIDE_ALWAYS_INLINE int64x16_t halide_xtensa_widen_mul_add_i64(const int32x16_t
   IVP_MULAN_2X32(r, a, b);
   return r;
 }
+
 
 HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_add_i48(const int48x32_t& a, const int16x32_t& b, const int16x32_t& c) {
   int48x32_t r = a;
@@ -1593,6 +1550,46 @@ void CodeGen_Xtensa::visit(const Mul *op) {
     }
 }
 
+template <typename T>
+bool is_native_xtensa_vector(Type t) {
+  return false;
+}
+
+template <>
+bool is_native_xtensa_vector<int8_t>(Type t) {
+  return t.is_int() && (t.bits() == 8) && (t.lanes() == 64);
+}
+
+template <>
+bool is_native_xtensa_vector<uint8_t>(Type t) {
+  return t.is_uint() && (t.bits() == 8) && (t.lanes() == 64);
+}
+
+template <>
+bool is_native_xtensa_vector<int16_t>(Type t) {
+  return t.is_int() && (t.bits() == 16) && (t.lanes() == 32);
+}
+
+template <>
+bool is_native_xtensa_vector<uint16_t>(Type t) {
+  return t.is_uint() && (t.bits() == 16) && (t.lanes() == 32);
+}
+
+template <>
+bool is_native_xtensa_vector<int32_t>(Type t) {
+  return t.is_int() && (t.bits() == 32) && (t.lanes() == 16);
+}
+
+template <>
+bool is_native_xtensa_vector<uint32_t>(Type t) {
+  return t.is_uint() && (t.bits() == 32) && (t.lanes() == 16);
+}
+
+template <>
+bool is_native_xtensa_vector<float>(Type t) {
+  return t.is_float() && (t.bits() == 32) && (t.lanes() == 16);
+}
+
 string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     ostringstream rhs;
     vector<string> args(op->args.size());
@@ -1600,6 +1597,39 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         args[i] = print_expr(op->args[i]);
     }
 
+    if (op->name.find("halide_xtensa_slice_start") == 0) {
+        string intrinsic_name;
+        string shift_define;
+
+        if (is_native_xtensa_vector<int8_t>(op->type)) {
+            intrinsic_name = "IVP_SEL2NX8I";
+            shift_define = "IVP_SELI_8B_ROTATE_RIGHT_";
+        } else if (is_native_xtensa_vector<uint8_t>(op->type)) {
+            intrinsic_name = "IVP_SEL2NX8UI";
+            shift_define = "IVP_SELI_8B_ROTATE_RIGHT_";
+        } else if (is_native_xtensa_vector<int16_t>(op->type)) {
+            intrinsic_name = "IVP_SELNX16I";
+            shift_define = "IVP_SELI_16B_ROTATE_RIGHT_";
+        } else if (is_native_xtensa_vector<uint16_t>(op->type)) {
+            intrinsic_name = "IVP_SELNX16UI";
+            shift_define = "IVP_SELI_16B_ROTATE_RIGHT_";
+        } else if (is_native_xtensa_vector<int32_t>(op->type)) {
+            intrinsic_name = "IVP_SELN_2X32I";
+            shift_define = "IVP_SELI_32B_ROTATE_RIGHT_";
+        } else if (is_native_xtensa_vector<uint32_t>(op->type)) {
+            intrinsic_name = "IVP_SELN_2X32UI";
+            shift_define = "IVP_SELI_32B_ROTATE_RIGHT_";
+        } else if (is_native_xtensa_vector<float>(op->type)) {
+            intrinsic_name = "IVP_SELN_2XF32I";
+            shift_define = "IVP_SELI_32B_ROTATE_RIGHT_";
+        } else {
+            internal_assert(false) << "Unsupported type for slicing";
+        }
+
+        rhs << intrinsic_name << "(" << args[0] << ".native_vector[1], " << args[0] << ".native_vector[0], " << shift_define << args[1] << ")";
+
+        return rhs.str();
+    }
     // absd needs extra cast to uint*
     if (op->name == "halide_xtensa_absd_i16") {
         rhs << "xb_vecNx16_rtor_xb_vecNx16U(IVP_ABSSUBNX16(" << args[0] + ", " + args[1] + "))";

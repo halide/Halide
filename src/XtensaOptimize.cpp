@@ -602,8 +602,8 @@ private:
         } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
             string suffix = op->type.is_int() ? "_i16" : "_u16";
             if (op->slice_begin() < 5) {
-                return Call::make(op->type, "halide_xtensa_slice_start_" + std::to_string(op->slice_begin()) + suffix,
-                                  {mutate(op->vectors[0])},
+                return Call::make(op->type, "halide_xtensa_slice_start_" + suffix,
+                                  {mutate(op->vectors[0]), op->slice_begin()},
                                   Call::PureExtern);
             } else {
                 return Call::make(op->type, "halide_xtensa_slice" + suffix,
@@ -613,8 +613,8 @@ private:
         } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_uint() && (op->type.bits() == 8) && (op->type.lanes() == 64)) {
             // Specialize slices which begin from 1, 2, 3 or 4.
             if (op->slice_begin() < 5) {
-                return Call::make(op->type, "halide_xtensa_slice_start_" + std::to_string(op->slice_begin()) + "_u8",
-                                  {mutate(op->vectors[0])},
+                return Call::make(op->type, "halide_xtensa_slice_start_u8",
+                                  {mutate(op->vectors[0]), op->slice_begin()},
                                   Call::PureExtern);
             } else {
                 return Call::make(op->type, "halide_xtensa_slice_u8",
