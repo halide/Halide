@@ -81,7 +81,6 @@ set(HEADER_FILES
     ImageParam.h
     InferArguments.h
     InjectHostDevBufferCopies.h
-    InjectOpenGLIntrinsics.h
     Inline.h
     InlineReductions.h
     IntegerDivisionTable.h
@@ -163,7 +162,6 @@ set(HEADER_FILES
     UnsafePromises.h
     Util.h
     Var.h
-    VaryingAttributes.h
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
@@ -241,7 +239,6 @@ set(SOURCE_FILES
     ImageParam.cpp
     InferArguments.cpp
     InjectHostDevBufferCopies.cpp
-    InjectOpenGLIntrinsics.cpp
     Inline.cpp
     InlineReductions.cpp
     IntegerDivisionTable.cpp
@@ -335,7 +332,6 @@ set(SOURCE_FILES
     UnsafePromises.cpp
     Util.cpp
     Var.cpp
-    VaryingAttributes.cpp
     VectorizeLoops.cpp
     WasmExecutor.cpp
     WrapCalls.cpp
@@ -452,11 +448,6 @@ target_compile_definitions(Halide
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 if (TARGET_OPENCL)
     target_compile_definitions(Halide PRIVATE WITH_OPENCL)
-endif ()
-
-option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
-if (TARGET_OPENGL)
-    target_compile_definitions(Halide PRIVATE WITH_OPENGL)
 endif ()
 
 option(TARGET_METAL "Include Metal target" ON)

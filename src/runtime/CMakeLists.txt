@@ -132,7 +132,6 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeHexagonHost.h
     HalideRuntimeMetal.h
     HalideRuntimeOpenCL.h
-    HalideRuntimeOpenGL.h
     HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
     )

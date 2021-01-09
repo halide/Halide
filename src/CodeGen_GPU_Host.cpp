@@ -16,7 +16,6 @@
 #include "LLVM_Headers.h"
 #include "Simplify.h"
 #include "Util.h"
-#include "VaryingAttributes.h"
 
 namespace Halide {
 namespace Internal {
@@ -98,13 +97,9 @@ template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
     : CodeGen_CPU(target) {
     // For the default GPU, the order of preferences is: Metal,
-    // OpenCL, CUDA, OpenGLCompute, and OpenGL last.
+    // OpenCL, CUDA, OpenGLCompute last.
     // The code is in reverse order to allow later tests to override
     // earlier ones.
-    if (target.has_feature(Target::OpenGL)) {
-        debug(1) << "Constructing OpenGL device codegen\n";
-        cgdev[DeviceAPI::GLSL] = std::make_unique<CodeGen_OpenGL_Dev>(target);
-    }
     if (target.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Constructing OpenGL Compute device codegen\n";
         cgdev[DeviceAPI::OpenGLCompute] = new_CodeGen_OpenGLCompute_Dev(target);
@@ -250,77 +245,31 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_num_coords_dim0 = zero_int32;
         Value *gpu_num_coords_dim1 = zero_int32;
 
-        if (loop->device_api == DeviceAPI::GLSL) {
-
-            // GL draw calls that invoke the GLSL shader are issued for pairs of
-            // for-loops over spatial x and y dimensions. For each for-loop we create
-            // one scalar vertex attribute for the spatial dimension corresponding to
-            // that loop, plus one scalar attribute for each expression previously
-            // labeled as "glsl_varying"
-
-            // Pass variables created during setup_gpu_vertex_buffer to the
-            // dev run function call.
-            gpu_num_padded_attributes = codegen(Variable::make(Int(32), "glsl.num_padded_attributes"));
-            gpu_num_coords_dim0 = codegen(Variable::make(Int(32), "glsl.num_coords_dim0"));
-            gpu_num_coords_dim1 = codegen(Variable::make(Int(32), "glsl.num_coords_dim1"));
-
-            // Look up the allocation for the vertex buffer and cast it to the
-            // right type
-            gpu_vertex_buffer = codegen(Variable::make(type_of<float *>(), "glsl.vertex_buffer"));
-            gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
-                                                           CodeGen_LLVM::f32_t->getPointerTo());
-        }
-
         // compute a closure over the state passed into the kernel
         HostClosure c(loop->body, loop->name);
 
         // Determine the arguments that must be passed into the halide function
         vector<DeviceArgument> closure_args = c.arguments();
 
-        // Halide allows passing of scalar float and integer arguments. For
-        // OpenGL, pack these into vec4 uniforms and varying attributes
-        if (loop->device_api == DeviceAPI::GLSL) {
-
-            int num_uniform_floats = 0;
-
-            // The spatial x and y coordinates are passed in the first two
-            // scalar float varying slots
-            int num_varying_floats = 2;
-            int num_uniform_ints = 0;
-
-            // Pack scalar parameters into vec4
-            for (size_t i = 0; i < closure_args.size(); i++) {
-                if (closure_args[i].is_buffer) {
-                    continue;
-                } else if (ends_with(closure_args[i].name, ".varying")) {
-                    closure_args[i].packed_index = num_varying_floats++;
-                } else if (closure_args[i].type.is_float()) {
-                    closure_args[i].packed_index = num_uniform_floats++;
-                } else if (closure_args[i].type.is_int()) {
-                    closure_args[i].packed_index = num_uniform_ints++;
-                }
-            }
-        } else {
-            // Sort the args by the size of the underlying type. This is
-            // helpful for avoiding struct-packing ambiguities in metal,
-            // which passes the scalar args as a struct.
-            std::sort(closure_args.begin(), closure_args.end(),
-                      [](const DeviceArgument &a, const DeviceArgument &b) {
-                          if (a.is_buffer == b.is_buffer) {
-                              return a.type.bits() > b.type.bits();
-                          } else {
-                              // Ensure that buffer arguments come first:
-                              // for many OpenGL/Compute systems, the
-                              // legal indices for buffer args are much
-                              // more restrictive than for scalar args,
-                              // and scalar args can be 'grown' by
-                              // LICM. Putting buffers first makes it much
-                              // more likely we won't fail on some
-                              // hardware.
-                              return a.is_buffer > b.is_buffer;
-                          }
-                      });
-        }
+        // Sort the args by the size of the underlying type. This is
+        // helpful for avoiding struct-packing ambiguities in metal,
+        // which passes the scalar args as a struct.
+        std::sort(closure_args.begin(), closure_args.end(),
+                  [](const DeviceArgument &a, const DeviceArgument &b) {
+                      if (a.is_buffer == b.is_buffer) {
+                          return a.type.bits() > b.type.bits();
+                      } else {
+                          // Ensure that buffer arguments come first:
+                          // for many OpenGL/Compute systems, the
+                          // legal indices for buffer args are much
+                          // more restrictive than for scalar args,
+                          // and scalar args can be 'grown' by
+                          // LICM. Putting buffers first makes it much
+                          // more likely we won't fail on some
+                          // hardware.
+                          return a.is_buffer > b.is_buffer;
+                      }
+                  });
 
         for (size_t i = 0; i < closure_args.size(); i++) {
             if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {

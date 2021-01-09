@@ -6,7 +6,6 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
-#include "VaryingAttributes.h"
 #include <iomanip>
 #include <limits>
 #include <map>

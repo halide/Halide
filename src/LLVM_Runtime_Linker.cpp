@@ -1089,22 +1089,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_opencl(c, bits_64, debug));
             }
         }
-        if (t.has_feature(Target::OpenGL)) {
-            modules.push_back(get_initmod_opengl(c, bits_64, debug));
-            if (t.os == Target::Linux) {
-                if (t.has_feature(Target::EGL)) {
-                    modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_opengl_glx_context(c, bits_64, debug));
-                }
-            } else if (t.os == Target::OSX) {
-                modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
-            } else if (t.os == Target::Android) {
-                modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
-            } else {
-                // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
-            }
-        }
         if (t.has_feature(Target::OpenGLCompute)) {
             modules.push_back(get_initmod_openglcompute(c, bits_64, debug));
             if (t.os == Target::Android) {

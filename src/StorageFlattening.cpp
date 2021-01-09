@@ -398,15 +398,11 @@ private:
     Stmt visit(const For *op) override {
         bool old_in_shader = in_shader;
         bool old_in_gpu = in_gpu;
-        if ((op->for_type == ForType::GPUBlock ||
-             op->for_type == ForType::GPUThread) &&
-            op->device_api == DeviceAPI::GLSL) {
-            in_shader = true;
-        }
         if (op->for_type == ForType::GPUBlock ||
             op->for_type == ForType::GPUThread) {
             in_gpu = true;
         }
+        // TODO: in_shader = true is no longer possible, clean up code accordingly
         Stmt stmt = IRMutator::visit(op);
         in_shader = old_in_shader;
         in_gpu = old_in_gpu;
