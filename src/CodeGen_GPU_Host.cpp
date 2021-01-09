@@ -22,7 +22,6 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::pair;
 using std::string;
 using std::vector;
 
@@ -104,7 +103,7 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
     // earlier ones.
     if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
-        cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
+        cgdev[DeviceAPI::GLSL] = std::make_unique<CodeGen_OpenGL_Dev>(target);
     }
     if (target.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Constructing OpenGL Compute device codegen\n";
@@ -133,20 +132,13 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
 }
 
 template<typename CodeGen_CPU>
-CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
-    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
-        delete i.second;
-    }
-}
-
-template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
                                                  const std::string &simple_name,
                                                  const std::string &extern_name) {
     function_name = simple_name;
 
     // Create a new module for all of the kernels we find in this function.
-    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+    for (auto &i : cgdev) {
         i.second->init_module();
     }
 
@@ -176,9 +168,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     // Fill out the init kernels block
     builder->SetInsertPoint(init_kernels_bb);
 
-    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+    for (auto &i : cgdev) {
 
-        CodeGen_GPU_Dev *gpu_codegen = i.second;
+        CodeGen_GPU_Dev *gpu_codegen = i.second.get();
         std::string api_unique_name = gpu_codegen->api_unique_name();
 
         // If the module state for this API/function did not get created, there were
@@ -285,26 +277,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // Determine the arguments that must be passed into the halide function
         vector<DeviceArgument> closure_args = c.arguments();
 
-        // Sort the args by the size of the underlying type. This is
-        // helpful for avoiding struct-packing ambiguities in metal,
-        // which passes the scalar args as a struct.
-        std::sort(closure_args.begin(), closure_args.end(),
-                  [](const DeviceArgument &a, const DeviceArgument &b) {
-                      if (a.is_buffer == b.is_buffer) {
-                          return a.type.bits() > b.type.bits();
-                      } else {
-                          // Ensure that buffer arguments come first:
-                          // for many OpenGL/Compute systems, the
-                          // legal indices for buffer args are much
-                          // more restrictive than for scalar args,
-                          // and scalar args can be 'grown' by
-                          // LICM. Putting buffers first makes it much
-                          // more likely we won't fail on some
-                          // hardware.
-                          return a.is_buffer > b.is_buffer;
-                      }
-                  });
-
         // Halide allows passing of scalar float and integer arguments. For
         // OpenGL, pack these into vec4 uniforms and varying attributes
         if (loop->device_api == DeviceAPI::GLSL) {
@@ -328,6 +300,26 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                     closure_args[i].packed_index = num_uniform_ints++;
                 }
             }
+        } else {
+            // Sort the args by the size of the underlying type. This is
+            // helpful for avoiding struct-packing ambiguities in metal,
+            // which passes the scalar args as a struct.
+            std::sort(closure_args.begin(), closure_args.end(),
+                      [](const DeviceArgument &a, const DeviceArgument &b) {
+                          if (a.is_buffer == b.is_buffer) {
+                              return a.type.bits() > b.type.bits();
+                          } else {
+                              // Ensure that buffer arguments come first:
+                              // for many OpenGL/Compute systems, the
+                              // legal indices for buffer args are much
+                              // more restrictive than for scalar args,
+                              // and scalar args can be 'grown' by
+                              // LICM. Putting buffers first makes it much
+                              // more likely we won't fail on some
+                              // hardware.
+                              return a.is_buffer > b.is_buffer;
+                          }
+                      });
         }
 
         for (size_t i = 0; i < closure_args.size(); i++) {
@@ -336,7 +328,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             }
         }
 
-        CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api];
+        CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api].get();
         user_assert(gpu_codegen != nullptr)
             << "Loop is scheduled on device " << loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";

@@ -1,5 +1,6 @@
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <sstream>
 
@@ -224,9 +225,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t)
 namespace {
 
 template<typename T>
-CodeGen_LLVM *make_codegen(const Target &target,
-                           llvm::LLVMContext &context) {
-    CodeGen_LLVM *ret = new T(target);
+std::unique_ptr<CodeGen_LLVM> make_codegen(const Target &target, llvm::LLVMContext &context) {
+    std::unique_ptr<CodeGen_LLVM> ret = std::make_unique<T>(target);
     ret->set_context(context);
     return ret;
 }
@@ -237,8 +237,7 @@ void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
     this->context = &context;
 }
 
-CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
-                                           llvm::LLVMContext &context) {
+std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target, llvm::LLVMContext &context) {
     // The awkward mapping from targets to code generators
     if (target.features_any_of({Target::CUDA,
                                 Target::OpenCL,

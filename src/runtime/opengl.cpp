@@ -299,6 +299,10 @@ WEAK void GLStateSaver::restore() {
     }
     free(texture_2d_binding);
 
+    if (global_state.have_vertex_array_objects) {
+        global_state.BindVertexArray(vertex_array_binding);
+    }
+
     for (int i = 0; i < max_vertex_attribs; i++) {
         if (vertex_attrib_array_enabled[i]) {
             global_state.EnableVertexAttribArray(i);
@@ -307,10 +311,6 @@ WEAK void GLStateSaver::restore() {
         }
     }
     free(vertex_attrib_array_enabled);
-
-    if (global_state.have_vertex_array_objects) {
-        global_state.BindVertexArray(vertex_array_binding);
-    }
 
     global_state.ActiveTexture(active_texture);
     global_state.BindFramebuffer(GL_FRAMEBUFFER, framebuffer_binding);

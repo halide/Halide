@@ -546,6 +546,7 @@ struct Call : public ExprNode<Call> {
         rounding_shift_right,
         saturating_add,
         saturating_sub,
+        scatter_gather,
         select_mask,
         shift_left,
         shift_right,

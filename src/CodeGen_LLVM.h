@@ -58,8 +58,7 @@ namespace Internal {
 class CodeGen_LLVM : public IRVisitor {
 public:
     /** Create an instance of CodeGen_LLVM suitable for the target. */
-    static CodeGen_LLVM *new_for_target(const Target &target,
-                                        llvm::LLVMContext &context);
+    static std::unique_ptr<CodeGen_LLVM> new_for_target(const Target &target, llvm::LLVMContext &context);
 
     ~CodeGen_LLVM() override;
 
