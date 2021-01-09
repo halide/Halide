@@ -400,7 +400,7 @@ private:
             }
 
             // Assume no overflow for float, int32, and int64
-            if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
+            if (op->type.can_overflow()) {
                 if (interval.has_upper_bound()) {
                     // TODO(rootjalex): Can't catch overflow of UInt(64) currently.
                     Type t = op->type.is_uint() ? UInt(64) : Int(32);
@@ -444,7 +444,7 @@ private:
             }
 
             // Assume no overflow for float, int32, and int64
-            if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
+            if (op->type.can_overflow()) {
                 if (interval.has_upper_bound()) {
                     Expr no_overflow = (cast<int>(a.max) - cast<int>(b.min) == cast<int>(interval.max));
                     if (!can_prove(no_overflow)) {
@@ -522,7 +522,7 @@ private:
         }
 
         // Assume no overflow for float, int32, and int64
-        if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
+        if (op->type.can_overflow()) {
             if (a.is_bounded() && b.is_bounded()) {
                 // Try to prove it can't overflow. (Be sure to use uint32 for unsigned
                 // types so that the case of 65535*65535 won't misleadingly fail.)
@@ -539,6 +539,16 @@ private:
                 bounds_of_type(op->type);
             }
         }
+    }
+
+    bool div_cant_overflow(const Interval &a, const Interval &b, Type t) {
+        // No overflow if: not an allowed overflow int type, or `a` cannot be t.min() or
+        // `b` cannot be -1, because t.min() / -1 overflows for int16 and int8.
+        Expr neg_one = make_const(t, -1);
+        return !t.can_overflow_int() ||
+               (a.has_lower_bound() && can_prove(a.min != t.min())) ||
+               (b.has_upper_bound() && can_prove(b.max < neg_one)) ||
+               (b.has_lower_bound() && can_prove(b.min > neg_one));
     }
 
     void visit(const Div *op) override {
@@ -584,13 +594,7 @@ private:
 
             Type t = op->type.element_of();
 
-            if (op->type.is_int() && op->type.bits() <= 16 &&
-                (!a.has_lower_bound() || !can_prove(a.min != t.min())) &&
-                !can_prove(b.min != make_const(t, -1))) {
-                // Overflow is possible because a can be min of the type and
-                // b can be -1.
-                bounds_of_type(op->type);
-            } else {
+            if (div_cant_overflow(a, b, t)) {
                 // TODO: handle real numbers with can_prove(b.min > 0) and can_prove(b.min < 0) as well - treating floating point as
                 // reals can be error prone when dealing with division near 0, so for now we only consider integers in the can_prove() path
                 if (op->type.is_uint() || is_positive_const(b.min) || (op->type.is_int() && can_prove(b.min >= 0))) {
@@ -610,6 +614,10 @@ private:
                 } else {
                     bounds_of_type(op->type);
                 }
+            } else {
+                // Overflow is possible because a can be min value of type t and
+                // b can be -1.
+                bounds_of_type(op->type);
             }
         } else if (a.is_bounded()) {
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
@@ -638,12 +646,8 @@ private:
                 }
             } else {
                 Type t = op->type.element_of();
-                if (t.is_int() && t.bits() <= 16 &&
-                    !can_prove(make_const(t, -1) > b.max || make_const(t, -1) < b.min) &&
-                    !can_prove(a.min != t.min())) {
-                    // type.min / -1 overflows.
-                    bounds_of_type(op->type);
-                } else {
+
+                if (div_cant_overflow(a, b, t)) {
                     // Divisor is either strictly positive or strictly
                     // negative, so we can just take the extrema.
                     interval = Interval::nothing();
@@ -651,6 +655,10 @@ private:
                     interval.include(a.max / b.min);
                     interval.include(a.min / b.max);
                     interval.include(a.max / b.max);
+                } else {
+                    // Overflow is possible because a can be min value of type t and
+                    // b can be -1.
+                    bounds_of_type(op->type);
                 }
             }
         } else {
@@ -1065,7 +1073,7 @@ private:
         Expr lane = op->base + var * op->stride;
         Expr min_value = make_const(var.type(), 0);
         Expr max_value = make_const(var.type(), op->lanes - 1);
-        if (!var.type().can_represent(static_cast<int64_t>(op->lanes - 1))) {
+        if (!var.type().can_represent((int64_t)(op->lanes - 1))) {
             // max_value will overflow.
             min_value = var.type().min();
             max_value = var.type().max();
