@@ -773,14 +773,12 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return !has_feature(Metal) &&
-                   !has_feature(OpenGL) &&
                    !has_feature(OpenGLCompute) &&
                    !has_feature(D3D12Compute) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
             return (!has_feature(Metal) &&
                     !has_feature(OpenGLCompute) &&
-                    !has_feature(OpenGL) &&
                     !has_feature(D3D12Compute));
         }
     }
@@ -951,7 +949,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         Metal,
         NoNEON,
         OpenCL,
-        OpenGL,
         OpenGLCompute,
 
         // These features are actually intersection-y, but because targets only record the _highest_,
