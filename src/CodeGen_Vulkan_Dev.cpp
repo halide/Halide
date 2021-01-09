@@ -48,6 +48,7 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::emit_constant(const Type &t, const vo
         key[i + 4] = data_char[i];
     }
 
+    debug(3) << "emit_constant for type " << t << "\n";
     auto item = constant_map.find(key);
     if  (item == constant_map.end()) {
         uint32_t type_id = map_type(t);
@@ -90,9 +91,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::scalarize(Expr e) {
 }
 
 uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_type(const Type &t) {
-    // These are the same according to Vulkan, so we use the unsigned
-    // variant as the key
-    auto key_typecode = t.is_int_or_uint() ? Type::UInt : t.code();
+    auto key_typecode = t.code();
 
     Type t_key(key_typecode, t.bits(), t.lanes());
 
@@ -113,10 +112,8 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_type(const Type &t) {
                 add_instruction(spir_v_types, SpvOpTypeBool, { type_id });
             } else if (t.is_int_or_uint()) {
                 type_id = next_id++;
-                // Integer types always have the signedness bit set to
-                // 0 because setting it to 1 is apparently not
-                // supported in Kernel capability.
-                add_instruction(spir_v_types, SpvOpTypeInt, { type_id, (uint32_t)t.bits(), 0 });
+                uint32_t signedness = t.is_uint() ? 0 : 1;
+                add_instruction(spir_v_types, SpvOpTypeInt, { type_id, (uint32_t)t.bits(), signedness });
             } else {
                 internal_error << "Unsupported type in Vulkan backend " << t << "\n";
             }
@@ -194,7 +191,9 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const StringImm *imm) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const FloatImm *imm) {
-    id = emit_constant(imm->type, &imm->value);
+    user_assert(imm->type.bits() == 32) << "Vulkan backend currently only supports 32-bit floats\n";
+    float float_val = (float)(imm->value);
+    id = emit_constant(imm->type, &float_val);
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Cast *op) {
@@ -652,7 +651,11 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
 
         uint32_t intrinsic_id = symbol_table.get(intrinsic.first).first;
         uint32_t gpu_var_id = next_id++;
-        add_instruction(SpvOpCompositeExtract, {map_type(UInt(32)), gpu_var_id, intrinsic_id, intrinsic.second});
+        uint32_t unsigned_gpu_var_id = next_id++;
+        add_instruction(SpvOpCompositeExtract, {map_type(UInt(32)), unsigned_gpu_var_id, intrinsic_id, intrinsic.second});
+        // cast to int, which is what's expected by Halide's for loops
+        add_instruction(SpvOpBitcast, {map_type(Int(32)), gpu_var_id, unsigned_gpu_var_id});
+
         {
             ScopedBinding<std::pair<uint32_t, uint32_t>> binding(symbol_table, op->name, {gpu_var_id, SpvStorageClassUniform});
             op->body.accept(this);

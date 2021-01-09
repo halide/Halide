@@ -435,6 +435,30 @@ VkResult allocate_device_memory(VkPhysicalDevice physical_device, VkDevice devic
 
 }
 
+VkResult create_command_pool(VkDevice device, uint32_t queue_index, const VkAllocationCallbacks *callbacks, VkCommandPool *command_pool) {
+
+   VkCommandPoolCreateInfo command_pool_info =
+        {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,    // struct type
+         nullptr,   // pointer to struct extending this
+         0,     // flags.  may consider VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
+         queue_index     // queue family index corresponding to the compute command queue
+        };
+    return vkCreateCommandPool(device, &command_pool_info, callbacks, command_pool);
+}
+
+VkResult create_command_buffer(VkDevice device, VkCommandPool pool, VkCommandBuffer *command_buffer) {
+
+    VkCommandBufferAllocateInfo command_buffer_info =
+        {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,    // struct type
+         nullptr,    // pointer to struct extending this
+         pool,  // command pool for allocation
+         VK_COMMAND_BUFFER_LEVEL_PRIMARY,   // command buffer level
+         1  // number to allocate
+        };
+    
+    return vkAllocateCommandBuffers(device, &command_buffer_info, command_buffer);
+}
+
 } // anonymous namespace
 
 WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t* buf) {
@@ -577,7 +601,135 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t* buf) 
     // we use vkCmdCopyBuffer() to copy from the staging buffer into the
     // the actual device memory.
 
-    do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, false);
+    // Construct the staging buffer
+    VkDeviceMemory staging_mem;
+    VkResult ret_code = allocate_device_memory(ctx.physical_device, ctx.device, buf->size_in_bytes(),
+                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                            ctx.allocation_callbacks(),
+                            &staging_mem);
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: constructing staging buffer in halide_vulkan_copy_to_device() failed\n";
+        return -1;
+    }
+
+    uint8_t *stage_host_ptr;
+    ret_code = vkMapMemory(ctx.device, staging_mem, 0, buf->size_in_bytes(), 0, (void**)(&stage_host_ptr));
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: mapping staging buffer in halide_vulkan_copy_to_device() failed\n";
+        return ret_code;
+    }
+
+    // copy to the (host-visible/coherent) staging buffer
+    c.dst = (uint64_t)(stage_host_ptr);
+
+    copy_memory(c, user_context);
+
+    // unmap memory
+    vkUnmapMemory(ctx.device, staging_mem);
+
+    // create a buffer to wrap the staging memory
+
+    VkBufferCreateInfo staging_buf_info = {
+        VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, nullptr,
+        0,
+        buf->size_in_bytes(),
+        // TODO: verify next flags
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_SHARING_MODE_EXCLUSIVE,
+        0, nullptr
+    };
+
+    VkBuffer staging_buf;
+    ret_code = vkCreateBuffer(ctx.device, &staging_buf_info, nullptr, &staging_buf);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: vkCreateBuffer returned: " << get_vulkan_error_name(ret_code) << "\n";
+        return -1;
+    }
+
+    // Bind staging buffer
+    ret_code = vkBindBufferMemory(ctx.device, staging_buf, staging_mem, 0);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: vkBindBufferMemory returned: " << get_vulkan_error_name(ret_code) << "\n";
+        return -1;
+    }
+
+    // TODO: only copy the regions that should be copied
+    VkBufferCopy staging_copy = {
+        0,  // srcOffset
+        0,  // dstOffset
+        buf->size_in_bytes() // size
+    };
+
+    // create a command buffer
+    VkCommandPool command_pool;
+    VkCommandBuffer command_buffer;
+    ret_code = create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: vkCreateCommandPool returned: " << get_vulkan_error_name(ret_code) << "\n";
+        return -1;
+    }
+
+    ret_code = create_command_buffer(ctx.device, command_pool, &command_buffer);
+
+    // begin the command buffer
+    VkCommandBufferBeginInfo command_buffer_begin_info =
+        {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,   // struct type
+         nullptr,   // pointer to struct extending this
+         VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, // flags
+         nullptr    // pointer to parent command buffer
+        };
+ 
+    ret_code = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "vkBeginCommandBuffer returned " << get_vulkan_error_name(ret_code) << "\n";
+        return ret_code;
+    }
+
+    // enqueue the copy operation
+    vkCmdCopyBuffer(command_buffer, staging_buf, (VkBuffer)(buf->device), 1, &staging_copy);
+
+    // end the command buffer
+    ret_code = vkEndCommandBuffer(command_buffer);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "vkEndCommandBuffer returned " << get_vulkan_error_name(ret_code) << "\n";
+        return ret_code;
+    }
+
+    //// 13. Submit the command buffer to our command queue
+    VkSubmitInfo submit_info =
+        {VK_STRUCTURE_TYPE_SUBMIT_INFO,     // struct type
+         nullptr,       // pointer to struct extending this
+         0,             // wait semaphore count
+         nullptr,       // semaphores
+         nullptr,       // pipeline stages where semaphore waits occur
+         1,             // how many command buffers to execute
+         &command_buffer,   // the command buffers
+         0,             // number of semaphores to signal
+         nullptr        // the semaphores to signal
+        };
+    
+    ret_code = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "vkQueueSubmit returned " << get_vulkan_error_name(ret_code) << "\n";
+        return ret_code;
+    }
+
+    //// 14. Wait until the queue is done with the command buffer
+    ret_code = vkQueueWaitIdle(ctx.queue);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "vkQueueWaitIdle returned " << get_vulkan_error_name(ret_code) << "\n";
+        return ret_code;
+    }
+
+    //do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, false);
 
     // TODO: sync
 
@@ -605,12 +757,145 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t* buf) {
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
-
+    
     halide_assert(user_context, buf->host && buf->device);
 
     device_copy c = make_device_to_host_copy(buf);
 
-    do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, true);
+    //do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, true);
+
+    // This is the inverse of copy_to_device: we create a staging buffer, copy into
+    // it, map it so the host can see it, then copy into the host buffer
+
+   // Construct the staging buffer
+    VkDeviceMemory staging_mem;
+    VkResult ret_code = allocate_device_memory(ctx.physical_device, ctx.device, buf->size_in_bytes(),
+                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                            ctx.allocation_callbacks(),
+                            &staging_mem);
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: constructing staging buffer in halide_vulkan_copy_to_device() failed\n";
+        return -1;
+    }
+
+    
+
+    // create a buffer to wrap the staging memory
+
+    VkBufferCreateInfo staging_buf_info = {
+        VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, nullptr,
+        0,
+        buf->size_in_bytes(),
+        // TODO: verify next flags
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_SHARING_MODE_EXCLUSIVE,
+        0, nullptr
+    };
+
+    VkBuffer staging_buf;
+    ret_code = vkCreateBuffer(ctx.device, &staging_buf_info, nullptr, &staging_buf);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: vkCreateBuffer returned: " << get_vulkan_error_name(ret_code) << "\n";
+        return -1;
+    }
+
+    // Bind staging buffer
+    ret_code = vkBindBufferMemory(ctx.device, staging_buf, staging_mem, 0);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: vkBindBufferMemory returned: " << get_vulkan_error_name(ret_code) << "\n";
+        return -1;
+    }
+
+    // TODO: only copy the regions that should be copied
+    VkBufferCopy staging_copy = {
+        0,  // srcOffset
+        0,  // dstOffset
+        buf->size_in_bytes() // size
+    };
+
+    // create a command buffer
+    VkCommandPool command_pool;
+    VkCommandBuffer command_buffer;
+    ret_code = create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: vkCreateCommandPool returned: " << get_vulkan_error_name(ret_code) << "\n";
+        return -1;
+    }
+
+    ret_code = create_command_buffer(ctx.device, command_pool, &command_buffer);
+
+    // begin the command buffer
+    VkCommandBufferBeginInfo command_buffer_begin_info =
+        {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,   // struct type
+         nullptr,   // pointer to struct extending this
+         VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, // flags
+         nullptr    // pointer to parent command buffer
+        };
+ 
+    ret_code = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "vkBeginCommandBuffer returned " << get_vulkan_error_name(ret_code) << "\n";
+        return ret_code;
+    }
+
+    // enqueue the copy operation
+    vkCmdCopyBuffer(command_buffer, (VkBuffer)(buf->device), staging_buf, 1, &staging_copy);
+
+    // end the command buffer
+    ret_code = vkEndCommandBuffer(command_buffer);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "vkEndCommandBuffer returned " << get_vulkan_error_name(ret_code) << "\n";
+        return ret_code;
+    }
+
+    //// 13. Submit the command buffer to our command queue
+    VkSubmitInfo submit_info =
+        {VK_STRUCTURE_TYPE_SUBMIT_INFO,     // struct type
+         nullptr,       // pointer to struct extending this
+         0,             // wait semaphore count
+         nullptr,       // semaphores
+         nullptr,       // pipeline stages where semaphore waits occur
+         1,             // how many command buffers to execute
+         &command_buffer,   // the command buffers
+         0,             // number of semaphores to signal
+         nullptr        // the semaphores to signal
+        };
+    
+    ret_code = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "vkQueueSubmit returned " << get_vulkan_error_name(ret_code) << "\n";
+        return ret_code;
+    }
+
+    //// 14. Wait until the queue is done with the command buffer
+    ret_code = vkQueueWaitIdle(ctx.queue);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "vkQueueWaitIdle returned " << get_vulkan_error_name(ret_code) << "\n";
+        return ret_code;
+    }
+
+    uint8_t *stage_host_ptr;
+    ret_code = vkMapMemory(ctx.device, staging_mem, 0, buf->size_in_bytes(), 0, (void**)(&stage_host_ptr));
+
+    if (ret_code != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: mapping staging buffer in halide_vulkan_copy_to_device() failed\n";
+        return ret_code;
+    }
+
+    // copy to the (host-visible/coherent) staging buffer
+    c.src = (uint64_t)(stage_host_ptr);
+
+    copy_memory(c, user_context);
+
+    // unmap memory
+    vkUnmapMemory(ctx.device, staging_mem);
 
     // TODO: sync
 
@@ -749,9 +1034,13 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     size_t scalar_arg_offset = 0;
+    debug(user_context) << "Parameter: (passed in vs value after copy)" << "\n";
     for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
-            memcpy(scalar_ptr+scalar_arg_offset, args + i, arg_sizes[i]); 
+            //int one = 1;
+            memcpy(scalar_ptr+scalar_arg_offset, args[i], arg_sizes[i]); 
+            debug(user_context) << *((int32_t*)(scalar_ptr+scalar_arg_offset));
+            debug(user_context) << "   " << *((int32_t*)(args[i])) << "\n";
             scalar_arg_offset += arg_sizes[i];
         }
     }
@@ -931,14 +1220,15 @@ WEAK int halide_vulkan_run(void *user_context,
     
     //// 6. Create a command pool
     // TODO: This should really be part of the acquire_context API
-    VkCommandPoolCreateInfo command_pool_info =
-        {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,    // struct type
-         nullptr,   // pointer to struct extending this
-         0,     // flags.  may consider VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
-         ctx.queue_family_index     // queue family index corresponding to the compute command queue
-        };
+    // VkCommandPoolCreateInfo command_pool_info =
+    //     {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,    // struct type
+    //      nullptr,   // pointer to struct extending this
+    //      0,     // flags.  may consider VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
+    //      ctx.queue_family_index     // queue family index corresponding to the compute command queue
+    //     };
     VkCommandPool command_pool;
-    result = vkCreateCommandPool(ctx.device, &command_pool_info, ctx.allocation_callbacks(), &command_pool);
+    // result = vkCreateCommandPool(ctx.device, &command_pool_info, ctx.allocation_callbacks(), &command_pool);
+    result = create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
 
     if (result != VK_SUCCESS) {
         debug(user_context) << "vkCreateCommandPool returned " << get_vulkan_error_name(result) << "\n";
@@ -946,16 +1236,17 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     //// 7. Create a command buffer from the command pool
-    VkCommandBufferAllocateInfo command_buffer_info =
-        {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,    // struct type
-         nullptr,    // pointer to struct extending this
-         command_pool,  // command pool for allocation
-         VK_COMMAND_BUFFER_LEVEL_PRIMARY,   // command buffer level
-         1  // number to allocate
-        };
+    // VkCommandBufferAllocateInfo command_buffer_info =
+    //     {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,    // struct type
+    //      nullptr,    // pointer to struct extending this
+    //      command_pool,  // command pool for allocation
+    //      VK_COMMAND_BUFFER_LEVEL_PRIMARY,   // command buffer level
+    //      1  // number to allocate
+    //     };
     
     VkCommandBuffer command_buffer;
-    result = vkAllocateCommandBuffers(ctx.device, &command_buffer_info, &command_buffer);
+    //result = vkAllocateCommandBuffers(ctx.device, &command_buffer_info, &command_buffer);
+    result = create_command_buffer(ctx.device, command_pool, &command_buffer);
 
     if (result != VK_SUCCESS) {
         debug(user_context) << "vkAllocateCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
@@ -973,7 +1264,7 @@ WEAK int halide_vulkan_run(void *user_context,
     result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
 
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkAllocateCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkBeginCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
         return result;
     }
 
