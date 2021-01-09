@@ -712,7 +712,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
             body = rewrap(body);
             success = false;
         } else {
-            debug(0) << "Successfully hoisted shuffle out of for loop\n";
+            debug(3) << "Successfully hoisted shuffle out of for loop\n";
         }
         return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
     }
