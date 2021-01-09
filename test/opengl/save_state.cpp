@@ -206,6 +206,11 @@ public:
         }
         glActiveTexture(initial_active_texture = GL_TEXTURE3);
 
+        // Vertex array objects are only used by Halide if the OpenGL version >=3
+        if (gl_major_version >= 3) {
+            glBindVertexArray(initial_vertex_array_binding = gl_gen(glGenVertexArrays));
+        }
+
         for (int i = 0; i < nvertex_attribs; i++) {
             if ((initial_vertex_attrib_array_enabled[i] = boolval)) {
                 glEnableVertexAttribArray(i);
@@ -224,11 +229,6 @@ public:
         glBindBuffer(GL_ARRAY_BUFFER, initial_array_buffer_binding = gl_gen(glGenBuffers));
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, initial_element_array_buffer_binding = gl_gen(glGenBuffers));
         glBindFramebuffer(GL_FRAMEBUFFER, initial_framebuffer_binding = gl_gen(glGenFramebuffers));
-
-        // Vertex array objects are only used by Halide if the OpenGL version >=3
-        if (gl_major_version >= 3) {
-            glBindVertexArray(initial_vertex_array_binding = gl_gen(glGenVertexArrays));
-        }
 
         check_error("known state");
     }

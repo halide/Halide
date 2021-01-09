@@ -61,7 +61,9 @@ int test_lut1d() {
 int main() {
 
     if (test_lut1d() == 0) {
-        printf("PASSED\n");
+        printf("Success!\n");
+    } else {
+        printf("FAILED\n");
     }
 
     return 0;
