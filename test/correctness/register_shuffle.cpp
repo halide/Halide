@@ -5,8 +5,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
 
-    if (!t.features_any_of({Target::CUDACapability50,
-                            Target::CUDACapability61})) {
+    if (t.get_cuda_capability_lower_bound() < 50) {
         printf("[SKIP] CUDA with capability 5.0 or greater required\n");
         return 0;
     }
@@ -16,14 +15,16 @@ int main(int argc, char **argv) {
         Func f, g;
         Var x, y;
 
-        f(x, y) = x + y;
+        f(x, y) = cast<uint8_t>(x + y);
         g(x, y) = f(x - 1, y) + f(x + 1, y);
 
         Var xo, xi, yi, yo;
         g
             .gpu_tile(x, y, xi, yi, 32, 2, TailStrategy::RoundUp)
             .gpu_lanes(xi);
+
         f.compute_root();
+
         f
             .in(g)
             .compute_at(g, yi)
@@ -31,11 +32,11 @@ int main(int argc, char **argv) {
             .gpu_lanes(xi)
             .unroll(xo);
 
-        Buffer<int> out = g.realize(32, 4);
+        Buffer<uint8_t> out = g.realize(32, 4);
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
-                int correct = 2 * (x + y);
-                int actual = out(x, y);
+                uint8_t correct = 2 * (x + y);
+                uint8_t actual = out(x, y);
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, actual, correct);

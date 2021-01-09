@@ -539,6 +539,15 @@ class LowerWarpShuffles : public IRMutator {
         Expr base_val = Load::make(type, name, idx, Buffer<>(),
                                    Parameter(), const_true(idx.type().lanes()), ModulusRemainder());
 
+        Expr scalar_lane = lane;
+        if (const Broadcast *b = scalar_lane.as<Broadcast>()) {
+            scalar_lane = b->value;
+        }
+        if (equal(scalar_lane, this_lane)) {
+            // This is a regular load. No shuffling required.
+            return base_val;
+        }
+
         // Make 32-bit with a combination of reinterprets and zero extension
         Type shuffle_type = type;
         if (type.bits() < 32) {
@@ -549,15 +558,6 @@ class LowerWarpShuffles : public IRMutator {
             user_error << "Warp shuffles of 64-bit types not yet implemented\n";
         } else {
             user_assert(type.bits() == 32) << "Warp shuffles not supported for this type: " << type << "\n";
-        }
-
-        Expr scalar_lane = lane;
-        if (const Broadcast *b = scalar_lane.as<Broadcast>()) {
-            scalar_lane = b->value;
-        }
-        if (equal(scalar_lane, this_lane)) {
-            // This is a regular load. No shuffling required.
-            return base_val;
         }
 
         internal_assert(may_use_warp_shuffle) << name << ", " << idx << ", " << lane << "\n";
