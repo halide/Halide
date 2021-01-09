@@ -25,7 +25,8 @@ bool is_opengl_es(const Target &target) {
     // versions (desktop GL, GLES2, GLES3, ...), probably by making it part of
     // Target.
     return (target.os == Target::Android ||
-            target.os == Target::IOS);
+            target.os == Target::IOS) ||
+           target.has_feature(Target::EGL);
 }
 
 char get_lane_suffix(int i) {
@@ -134,7 +135,20 @@ Type CodeGen_GLSLBase::map_type(const Type &type) {
         } else if (type.is_int() && type.bits() <= 32) {
             result = Int(32);
         } else if (type.is_uint() && type.bits() <= 32) {
-            result = UInt(32);
+            if (support_native_uint) {
+                result = UInt(32);
+            } else {
+                if (type.bits() == 32) {
+                    // GLSL <= 120 doesn't have unsigned types, simply use int.
+                    // WARNING: Using int to represent unsigned int may result in
+                    // overflows and undefined behavior.
+                    result = Int(32);
+                } else {
+                    // Embed all other uints in a GLSL float. Probably not actually
+                    // valid for uint16 on systems with low float precision.
+                    result = Float(32);
+                }
+            }
         } else {
             user_error << "GLSL: Can't represent type '" << type << "'.\n";
         }
@@ -175,8 +189,10 @@ void CodeGen_GLSLBase::visit(const UIntImm *op) {
         } else {
             id = "false";
         }
-    } else {
+    } else if (support_native_uint) {
         id = std::to_string(op->value) + "u";
+    } else {
+        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
     }
 }
 
@@ -244,7 +260,7 @@ void CodeGen_GLSLBase::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         // Simply discard the first argument, which is generally a call to
         // 'halide_printf'.
-        print_expr(op->args[1]);
+        print_assignment(op->type, print_expr(op->args[1]));
         return;
     } else if (op->name == "fast_inverse_f32") {
         print_expr(make_one(op->type) / op->args[0]);
@@ -297,15 +313,40 @@ void CodeGen_GLSLBase::visit(const Call *op) {
             user_error << "GLSL: unknown function '" << op->name << "' encountered.\n";
         }
 
-        rhs << builtin[op->name] << "(";
-        for (size_t i = 0; i < op->args.size(); i++) {
-            if (i > 0) {
-                rhs << ", ";
+        bool need_cast = false;
+        const Type float_type = Float(32, op->type.lanes());
+        vector<Expr> new_args(op->args.size());
+
+        // For GL 2.0, Most GLSL builtins are only defined for float arguments,
+        // so we may have to introduce type casts around the arguments and the
+        // entire function call.
+        if (!support_int_to_float_implicit_conversion &&
+            !support_non_float_type_builtin.count(op->name)) {
+            need_cast = !op->type.is_float();
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (!op->args[i].type().is_float()) {
+                    new_args[i] = Cast::make(float_type, op->args[i]);
+                    need_cast = true;
+                } else {
+                    new_args[i] = op->args[i];
+                }
             }
-            rhs << print_expr(op->args[i]);
         }
-        rhs << ")";
-        print_assignment(op->type, rhs.str());
+
+        if (need_cast) {
+            Expr val = Call::make(float_type, op->name, new_args, op->call_type);
+            print_expr(simplify(Cast::make(op->type, val)));
+        } else {
+            rhs << builtin[op->name] << "(";
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (i > 0) {
+                    rhs << ", ";
+                }
+                rhs << print_expr(op->args[i]);
+            }
+            rhs << ")";
+            print_assignment(op->type, rhs.str());
+        }
     }
 }
 
@@ -459,6 +500,64 @@ void CodeGen_GLSLBase::visit(const Cast *op) {
 CodeGen_GLSL::CodeGen_GLSL(std::ostream &s, const Target &t)
     : CodeGen_GLSLBase(s, t) {
     builtin["trunc_f32"] = "_trunc_f32";
+
+    // TODO: Add emulation for these builtin functions
+    //       which are available only for GL 3.x (GLSL >= 130)
+    builtin.erase("isnan");
+    builtin.erase("round_f32");
+    builtin.erase("sinh_f32");
+    builtin.erase("cosh_f32");
+    builtin.erase("tanh_f32");
+    builtin.erase("asinh_f32");
+    builtin.erase("acosh_f32");
+    builtin.erase("atanh_f32");
+
+    // TODO: Check OpenGL version then determine support_* variables value
+    support_native_uint = false;
+    support_int_to_float_implicit_conversion = false;
+    support_integer_division_rounding = false;
+    // functions that support ivecs
+    support_non_float_type_builtin.insert("equal");
+    support_non_float_type_builtin.insert("notEqual");
+    support_non_float_type_builtin.insert("lessThan");
+    support_non_float_type_builtin.insert("lessThanEqual");
+    support_non_float_type_builtin.insert("greaterThan");
+    support_non_float_type_builtin.insert("greaterThanEqual");
+}
+
+// Copy back from commit #60442cf9eb
+void CodeGen_GLSL::visit(const Div *op) {
+    if (!support_integer_division_rounding && (op->type.is_int() || op->type.is_uint())) {
+        // Halide's integer division is defined to round according to
+        // the sign of the denominator. Since the rounding behavior of
+        // GLSL's integer division is undefined, emulate the correct
+        // behavior using floating point arithmetic.
+        Type float_type = Float(32, op->type.lanes());
+        // To avoid rounding woes, aim for a floating point value that
+        // should not be close to an integer. If we divide the range
+        // [0, 1, 2, 3] by 4, we want to get floating point values
+        // [1/8, 3/8, 5/8, 7/8]. This can be achieved by adding 0.5 to
+        // the numerator.
+        Expr val = Div::make(Cast::make(float_type, op->a) + 0.5f, Cast::make(float_type, op->b));
+        string float_result = print_expr(simplify(val));
+        val = Variable::make(float_type, float_result);
+        Expr zero = make_zero(op->type);
+        string a = print_expr(op->a);
+        string b = print_expr(op->b);
+        Expr a_var = is_const(op->a) ? op->a : Variable::make(op->type, a);
+        Expr b_var = is_const(op->b) ? op->b : Variable::make(op->type, b);
+        Expr equiv = select(b_var == zero, zero,
+                            b_var > zero, Call::make(op->type, "floor_f32", {val}, Call::Extern),
+                            Call::make(op->type, "ceil_f32", {val}, Call::Extern));
+        if (op->type.bits() >= 32) {
+            // A float isn't precise enough to produce the correct int
+            // in the case where the denominator is one.
+            equiv = select(b_var == make_one(op->type), a_var, equiv);
+        }
+        print_expr(simplify(equiv));
+    } else {
+        CodeGen_GLSLBase::visit(op);
+    }
 }
 
 void CodeGen_GLSL::visit(const Let *op) {
@@ -683,6 +782,10 @@ void CodeGen_GLSL::visit(const Call *op) {
         internal_assert((op->type.code() == Type::UInt || op->type.code() == Type::Float) &&
                         (op->type.lanes() >= 1 && op->type.lanes() <= 4));
 
+        if (op->type.is_uint()) {
+            rhs << print_type(op->type) << "(floor(";
+        }
+
         if (op->type.is_vector()) {
             // The channel argument must be a ramp or a broadcast of a constant.
             Expr c = op->args[4];
@@ -745,7 +848,7 @@ void CodeGen_GLSL::visit(const Call *op) {
         }
 
         if (op->type.is_uint()) {
-            rhs << " * " << print_expr(cast<float>(op->type.max()));
+            rhs << " * " << print_expr(cast<float>(op->type.max())) << " + 0.5))";
         }
 
     } else if (op->is_intrinsic(Call::glsl_texture_store)) {
@@ -919,12 +1022,12 @@ void CodeGen_GLSL::add_kernel(const Stmt &stmt, const string &name,
             ++num_varying_floats;
         } else if (args[i].type.is_float()) {
             header << "/// UNIFORM "
-                   << CodeGen_GLSLBase::print_type(args[i].type) << " "
+                   << CodeGen_C::print_type(args[i].type) << " "  // NOLINT: Allow call to CodeGen_C::print_type
                    << print_name(args[i].name) << " uniformf" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_uniform_floats;
         } else if (args[i].type.is_int()) {
             header << "/// UNIFORM "
-                   << CodeGen_GLSLBase::print_type(args[i].type) << " "
+                   << CodeGen_C::print_type(args[i].type) << " "  // NOLINT: Allow call to CodeGen_C::print_type
                    << print_name(args[i].name) << " uniformi" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_uniform_ints;
         }
@@ -1023,6 +1126,8 @@ void check(Expr e, const string &result) {
         // wrap them to obtain useful output.
         e = Halide::print(e);
     }
+    source.str("");
+    source.clear();
     Evaluate::make(e).accept(&cg);
     string src = normalize_temporaries(source.str());
     if (!ends_with(src, result)) {
@@ -1072,14 +1177,15 @@ void CodeGen_GLSL::test() {
     check(Variable::make(Int(32), "x") / Expr(3),
           "float $ = float($x);\n"
           "float $ = $ * 0.333333343;\n"
+          "float $ = $ + 0.166666672;\n"
           "float $ = floor($);\n"
           "int $ = int($);\n");
-    check(Variable::make(Int(32, 4), "x") / Variable::make(Int(32, 4), "y"),
-          "vec4 $ = vec4($x);\n"
-          "vec4 $ = vec4($y);\n"
-          "vec4 $ = $ / $;\n"
-          "vec4 $ = floor($);\n"
-          "ivec4 $ = ivec4($);\n");
+    // check(Variable::make(Int(32, 4), "x") / Variable::make(Int(32, 4), "y"),
+    //       "vec4 $ = vec4($x);\n"
+    //       "vec4 $ = vec4($y);\n"
+    //       "vec4 $ = $ / $;\n"
+    //       "vec4 $ = floor($);\n"
+    //       "ivec4 $ = ivec4($);\n");
     check(Variable::make(Float(32, 4), "x") / Variable::make(Float(32, 4), "y"),
           "vec4 $ = $x / $y;\n");
 
@@ -1113,19 +1219,21 @@ void CodeGen_GLSL::test() {
           "vec4 $ = sin($);\n");
 
     // use float version of abs in GLSL
-    check(abs(-2),
-          "float $ = abs(-2.0);\n"
+    check(abs(Variable::make(Int(32), "x")),
+          "float $ = float($x);\n"
+          "float $ = abs($);\n"
           "int $ = int($);\n");
 
     check(Halide::print(3.0f), "float $ = 3.0;\n");
 
     // Test rounding behavior of integer division.
-    check(Variable::make(Int(32), "x") / Variable::make(Int(32), "y"),
-          "float $ = float($x);\n"
-          "float $ = float($y);\n"
-          "float $ = $ / $;\n"
-          "float $ = floor($);\n"
-          "int $ = int($);\n");
+    // The latest version of integer division is too complicated to list here
+    // check(Variable::make(Int(32), "x") / Variable::make(Int(32), "y"),
+    //       "float $ = float($x);\n"
+    //       "float $ = float($y);\n"
+    //       "float $ = $ / $;\n"
+    //       "float $ = floor($);\n"
+    //       "int $ = int($);\n");
 
     // Select with scalar condition
     check(Select::make(EQ::make(Variable::make(Float(32), "x"), 1.0f),
@@ -1156,7 +1264,7 @@ void CodeGen_GLSL::test() {
                              Broadcast::make(0, 4),
                              Ramp::make(0, 1, 4)},
                             Call::Intrinsic);
-    check(load4, "vec4 $ = texture2D($buf, vec2(0, 0));\n");
+    check(load4, "vec4 $ = texture2D($buf, vec2(int(0), int(0)));\n");
 
     check(log(1.0f), "float $ = log(1.0);\n");
     check(exp(1.0f), "float $ = exp(1.0);\n");
@@ -1165,7 +1273,7 @@ void CodeGen_GLSL::test() {
     check(pow(1.4f, 2), "float $ = 1.39999998 * 1.39999998;\n");
     check(pow(1.0f, 2.1f), "float $ = pow(1.0, 2.0999999);\n");
 
-    std::cout << "CodeGen_GLSL test passed\n";
+    std::cout << "CodeGen_GLSL test Success!\n";
 }
 
 }  // namespace Internal
