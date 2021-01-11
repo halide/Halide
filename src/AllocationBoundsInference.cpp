@@ -6,6 +6,8 @@
 #include "IROperator.h"
 #include "Simplify.h"
 
+#include <set>
+
 namespace Halide {
 namespace Internal {
 

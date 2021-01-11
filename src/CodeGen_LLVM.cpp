@@ -170,7 +170,7 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
 
 }  // namespace
 
-CodeGen_LLVM::CodeGen_LLVM(Target t)
+CodeGen_LLVM::CodeGen_LLVM(const Target &t)
     : function(nullptr), context(nullptr),
       builder(nullptr),
       value(nullptr),

@@ -13,7 +13,7 @@ namespace Internal {
 /** A code generator that emits WebAssembly code from a given Halide stmt. */
 class CodeGen_WebAssembly : public CodeGen_Posix {
 public:
-    CodeGen_WebAssembly(Target);
+    CodeGen_WebAssembly(const Target &);
 
     static void test();
 

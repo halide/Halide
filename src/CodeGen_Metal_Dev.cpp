@@ -23,7 +23,7 @@ namespace {
 
 class CodeGen_Metal_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_Metal_Dev(Target target);
+    CodeGen_Metal_Dev(const Target &target);
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single
@@ -52,7 +52,7 @@ public:
 protected:
     class CodeGen_Metal_C : public CodeGen_C {
     public:
-        CodeGen_Metal_C(std::ostream &s, Target t)
+        CodeGen_Metal_C(std::ostream &s, const Target &t)
             : CodeGen_C(s, t) {
         }
         void add_kernel(const Stmt &stmt,
@@ -100,7 +100,7 @@ protected:
     CodeGen_Metal_C metal_c;
 };
 
-CodeGen_Metal_Dev::CodeGen_Metal_Dev(Target t)
+CodeGen_Metal_Dev::CodeGen_Metal_Dev(const Target &t)
     : metal_c(src_stream, t) {
 }
 

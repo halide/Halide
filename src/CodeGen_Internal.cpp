@@ -742,7 +742,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
 
-void set_function_attributes_for_target(llvm::Function *fn, Target t) {
+void set_function_attributes_for_target(llvm::Function *fn, const Target &t) {
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn->addFnAttr("reciprocal-estimates", "none");

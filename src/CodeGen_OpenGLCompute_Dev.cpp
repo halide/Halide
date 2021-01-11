@@ -23,7 +23,7 @@ namespace {
 
 class CodeGen_OpenGLCompute_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_OpenGLCompute_Dev(Target target);
+    CodeGen_OpenGLCompute_Dev(const Target &target);
 
     // CodeGen_GPU_Dev interface
     void add_kernel(Stmt stmt,
@@ -50,7 +50,7 @@ public:
 protected:
     class CodeGen_OpenGLCompute_C : public CodeGen_GLSLBase {
     public:
-        CodeGen_OpenGLCompute_C(std::ostream &s, Target t);
+        CodeGen_OpenGLCompute_C(std::ostream &s, const Target &t);
         void add_kernel(const Stmt &stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
@@ -80,11 +80,11 @@ protected:
     CodeGen_OpenGLCompute_C glc;
 };
 
-CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(Target target)
+CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(const Target &target)
     : glc(src_stream, target) {
 }
 
-CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::CodeGen_OpenGLCompute_C(std::ostream &s, Target t)
+CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::CodeGen_OpenGLCompute_C(std::ostream &s, const Target &t)
     : CodeGen_GLSLBase(s, t) {
     builtin["trunc_f32"] = "trunc";
 }

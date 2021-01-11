@@ -34,7 +34,7 @@ Expr bc(Expr x) {
 
 }  // namespace
 
-CodeGen_ARM::CodeGen_ARM(Target target)
+CodeGen_ARM::CodeGen_ARM(const Target &target)
     : CodeGen_Posix(target) {
     if (target.bits == 32) {
 #if !defined(WITH_ARM)
