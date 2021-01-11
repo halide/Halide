@@ -3448,13 +3448,17 @@ private:
         return siv;
     }
 
+    inline void build_inputs(std::vector<std::vector<StubInput>> &inputs, int idx) {
+        internal_assert(idx == (int)inputs.size());
+    }
+
     template<typename Last>
-    inline void build_inputs(std::vector<std::vector<StubInput>> &inputs, int idx, Last last) {
+    inline void build_inputs(std::vector<std::vector<StubInput>> &inputs, int idx, const Last &last) {
         inputs[idx] = build_input(idx, last);
     }
 
     template<typename First, typename Second, typename... Rest>
-    inline void build_inputs(std::vector<std::vector<StubInput>> &inputs, int idx, First first, Second second, Rest &&... rest) {
+    inline void build_inputs(std::vector<std::vector<StubInput>> &inputs, int idx, const First &first, const Second &second, const Rest &... rest) {
         build_inputs<First>(inputs, idx, first);
         build_inputs<Second, Rest...>(inputs, idx + 1, second, rest...);
     }
