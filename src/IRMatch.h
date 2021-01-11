@@ -1771,7 +1771,7 @@ struct NegateOp {
         }
         const Sub &op = (const Sub &)e;
         return (a.template match<bound>(*op.b.get(), state) &&
-                is_zero(op.a));
+                is_const_zero(op.a));
     }
 
     template<uint32_t bound, typename A2>
@@ -2061,7 +2061,7 @@ struct CanProve {
     HALIDE_NEVER_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         Expr condition = a.make(state, {});
         condition = prover->mutate(condition, nullptr);
-        val.u.u64 = is_one(condition);
+        val.u.u64 = is_const_one(condition);
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = condition.type().lanes();

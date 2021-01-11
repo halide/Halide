@@ -9,6 +9,7 @@
 #include <string>
 
 #include "CodeGen_ARM.h"
+#include "CodeGen_GPU_Dev.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
 #include "CodeGen_RISCV.h"
@@ -19,9 +20,6 @@
 namespace Halide {
 namespace Internal {
 
-struct CodeGen_GPU_Dev;
-struct GPU_Argument;
-
 /** A code generator that emits GPU code from a given Halide stmt. */
 template<typename CodeGen_CPU>
 class CodeGen_GPU_Host : public CodeGen_CPU {
@@ -30,8 +28,6 @@ public:
      * CodeGen_GPU_Options. Processor features can be enabled using the
      * appropriate flags from Target */
     CodeGen_GPU_Host(Target);
-
-    ~CodeGen_GPU_Host() override;
 
 protected:
     void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name) override;
@@ -76,7 +72,7 @@ protected:
 
 private:
     /** Child code generator for device kernels. */
-    std::map<DeviceAPI, CodeGen_GPU_Dev *> cgdev;
+    std::map<DeviceAPI, std::unique_ptr<CodeGen_GPU_Dev>> cgdev;
 };
 
 }  // namespace Internal

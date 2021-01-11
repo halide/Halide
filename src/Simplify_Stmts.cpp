@@ -1,5 +1,6 @@
 #include "Simplify_Internal.h"
 
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 
@@ -23,12 +24,12 @@ Stmt Simplify::visit(const IfThenElse *op) {
     }
 
     // If (true) ...
-    if (is_one(unwrapped_condition)) {
+    if (is_const_one(unwrapped_condition)) {
         return mutate(op->then_case);
     }
 
     // If (false) ...
-    if (is_zero(unwrapped_condition)) {
+    if (is_const_zero(unwrapped_condition)) {
         if (op->else_case.defined()) {
             return mutate(op->else_case);
         } else {
@@ -123,7 +124,7 @@ Stmt Simplify::visit(const AssertStmt *op) {
         message = mutate(op->message, nullptr);
     }
 
-    if (is_zero(cond)) {
+    if (is_const_zero(cond)) {
         // Usually, assert(const-false) should generate a warning;
         // in at least one case (specialize_fail()), we want to suppress
         // the warning, because the assertion is generated internally
@@ -135,7 +136,7 @@ Stmt Simplify::visit(const AssertStmt *op) {
             user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
                          << message << "\n";
         }
-    } else if (is_one(cond)) {
+    } else if (is_const_one(cond)) {
         return Evaluate::make(0);
     }
 
@@ -175,7 +176,7 @@ Stmt Simplify::visit(const For *op) {
     } else if (extent_bounds.max_defined &&
                extent_bounds.max <= 0) {
         return Evaluate::make(0);
-    } else if (is_one(new_extent) &&
+    } else if (is_const_one(new_extent) &&
                op->device_api == DeviceAPI::None) {
         Stmt s = LetStmt::make(op->name, new_min, new_body);
         return mutate(s);
@@ -253,10 +254,10 @@ Stmt Simplify::visit(const Store *op) {
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
-    if (is_zero(predicate)) {
+    if (is_const_zero(predicate)) {
         // Predicate is always false
         return Evaluate::make(0);
-    } else if (scalar_pred && !is_one(scalar_pred->value)) {
+    } else if (scalar_pred && !is_const_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
                                 Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), align));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
@@ -388,6 +389,9 @@ Stmt Simplify::visit(const Block *op) {
         rest.as<IfThenElse>() ? rest.as<IfThenElse>() : (block_rest ? block_rest->first.as<IfThenElse>() : nullptr);
     Stmt if_rest = block_rest ? block_rest->rest : Stmt();
 
+    const Store *store_first = first.as<Store>();
+    const Store *store_next = block_rest ? block_rest->first.as<Store>() : rest.as<Store>();
+
     if (is_no_op(first) &&
         is_no_op(rest)) {
         return Evaluate::make(0);
@@ -411,11 +415,28 @@ Stmt Simplify::visit(const Block *op) {
         new_block = substitute(let_rest->name, new_var, new_block);
 
         return LetStmt::make(var_name, let_first->value, new_block);
+    } else if (store_first &&
+               store_next &&
+               store_first->name == store_next->name &&
+               equal(store_first->index, store_next->index) &&
+               equal(store_first->predicate, store_next->predicate) &&
+               is_pure(store_first->index) &&
+               is_pure(store_first->value) &&
+               is_pure(store_first->predicate) &&
+               !expr_uses_var(store_next->index, store_next->name) &&
+               !expr_uses_var(store_next->value, store_next->name) &&
+               !expr_uses_var(store_next->predicate, store_next->name)) {
+        // Second store clobbers first
+        if (block_rest) {
+            return Block::make(store_next, block_rest->rest);
+        } else {
+            return store_next;
+        }
     } else if (if_first &&
                if_next &&
                equal(if_first->condition, if_next->condition) &&
                is_pure(if_first->condition)) {
-        // Two ifs with matching conditions
+        // Two ifs with matching conditions.
         Stmt then_case = mutate(Block::make(if_first->then_case, if_next->then_case));
         Stmt else_case;
         if (if_first->else_case.defined() && if_next->else_case.defined()) {
@@ -436,7 +457,7 @@ Stmt Simplify::visit(const Block *op) {
                !if_next->else_case.defined() &&
                is_pure(if_first->condition) &&
                is_pure(if_next->condition) &&
-               is_one(mutate((if_first->condition && if_next->condition) == if_next->condition, nullptr))) {
+               is_const_one(mutate((if_first->condition && if_next->condition) == if_next->condition, nullptr))) {
         // Two ifs where the second condition is tighter than
         // the first condition.  The second if can be nested
         // inside the first one, because if it's true the
@@ -444,6 +465,25 @@ Stmt Simplify::visit(const Block *op) {
         Stmt then_case = mutate(Block::make(if_first->then_case, if_next));
         Stmt else_case = mutate(if_first->else_case);
         Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
+        if (if_rest.defined()) {
+            result = Block::make(result, if_rest);
+        }
+        return result;
+    } else if (if_first &&
+               if_next &&
+               is_pure(if_first->condition) &&
+               is_pure(if_next->condition) &&
+               is_const_one(mutate(!(if_first->condition && if_next->condition), nullptr))) {
+        // Two ifs where the first condition being true implies the
+        // second is false.  The second if can be nested inside the
+        // else case of the first one, turning a block of if
+        // statements into an if-else chain.
+        Stmt then_case = if_first->then_case;
+        Stmt else_case = if_next;
+        if (if_first->else_case.defined()) {
+            else_case = Block::make(if_first->else_case, else_case);
+        }
+        Stmt result = mutate(IfThenElse::make(if_first->condition, then_case, else_case));
         if (if_rest.defined()) {
             result = Block::make(result, if_rest);
         }
@@ -478,7 +518,7 @@ Stmt Simplify::visit(const Prefetch *op) {
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition, nullptr);
 
-    if (is_zero(op->condition)) {
+    if (is_const_zero(op->condition)) {
         // Predicate is always false
         return body;
     }

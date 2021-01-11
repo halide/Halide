@@ -1,6 +1,8 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
@@ -31,6 +33,78 @@ using std::string;
 using std::vector;
 
 using namespace llvm;
+
+namespace {
+
+/** A code generator that emits GPU code from a given Halide stmt. */
+class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
+public:
+    /** Create a PTX device code generator. */
+    CodeGen_PTX_Dev(Target host);
+    ~CodeGen_PTX_Dev() override;
+
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args) override;
+
+    static void test();
+
+    std::vector<char> compile_to_src() override;
+    std::string get_current_kernel_name() override;
+
+    void dump() override;
+
+    std::string print_gpu_name(const std::string &name) override;
+
+    std::string api_unique_name() override {
+        return "cuda";
+    }
+
+protected:
+    using CodeGen_LLVM::visit;
+
+    /** (Re)initialize the PTX module. This is separate from compile, since
+     * a PTX device module will often have many kernels compiled into it for
+     * a single pipeline. */
+    /* override */ void init_module() override;
+
+    /** We hold onto the basic block at the start of the device
+     * function in order to inject allocas */
+    llvm::BasicBlock *entry_block;
+
+    /** Nodes for which we need to override default behavior for the GPU runtime */
+    // @{
+    void visit(const Call *) override;
+    void visit(const For *) override;
+    void visit(const Allocate *) override;
+    void visit(const Free *) override;
+    void visit(const AssertStmt *) override;
+    void visit(const Load *) override;
+    void visit(const Store *) override;
+    void visit(const Atomic *) override;
+    void codegen_vector_reduce(const VectorReduce *op, const Expr &init) override;
+    // @}
+
+    std::string march() const;
+    std::string mcpu() const override;
+    std::string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
+    bool promote_indices() const override {
+        return false;
+    }
+
+    Type upgrade_type_for_arithmetic(const Type &t) const override {
+        return t;
+    }
+    Type upgrade_type_for_storage(const Type &t) const override;
+
+    /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
+     * ptx intrinsic functions to call to get them. */
+    std::string simt_intrinsic(const std::string &name);
+
+    bool supports_atomic_add(const Type &t) const override;
+};
 
 CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host)
     : CodeGen_LLVM(host) {
@@ -202,7 +276,7 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
 void CodeGen_PTX_Dev::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
         Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
-        internal_assert(is_zero(loop->min));
+        internal_assert(is_const_zero(loop->min));
         sym_push(loop->name, codegen(simt_idx));
         codegen(loop->body);
         sym_pop(loop->name);
@@ -259,7 +333,7 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
     // Do aligned 4-wide 32-bit loads as a single i128 load.
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
-    if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
+    if (is_const_one(op->predicate) && r && is_const_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
         ModulusRemainder align = op->alignment;
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
@@ -277,14 +351,14 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
 void CodeGen_PTX_Dev::visit(const Store *op) {
     // Issue atomic store if we are inside an Atomic node.
     if (emit_atomic_stores) {
-        user_assert(is_one(op->predicate)) << "Atomic update does not support predicated store.\n";
+        user_assert(is_const_one(op->predicate)) << "Atomic update does not support predicated store.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
     }
 
     // Do aligned 4-wide 32-bit stores as a single i128 store.
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
-    if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->value.type().bits() == 32) {
+    if (is_const_one(op->predicate) && r && is_const_one(r->stride) && r->lanes == 4 && op->value.type().bits() == 32) {
         ModulusRemainder align = op->alignment;
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
@@ -382,7 +456,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 const Load *load = e->as<Load>();
                 const Ramp *idx = load ? load->index.as<Ramp>() : nullptr;
                 if (idx &&
-                    is_one(idx->stride) &&
+                    is_const_one(idx->stride) &&
                     load->alignment.modulus % sub_lanes == 0 &&
                     load->alignment.remainder % sub_lanes == 0) {
                     Expr new_idx = simplify(idx->base / sub_lanes);
@@ -472,7 +546,12 @@ string CodeGen_PTX_Dev::march() const {
 
 string CodeGen_PTX_Dev::mcpu() const {
     if (target.has_feature(Target::CUDACapability80)) {
+#if LLVM_VERSION >= 110
         return "sm_80";
+#else
+        user_error << "CUDACapability80 requires LLVM 11 or later.";
+        return "";
+#endif
     } else if (target.has_feature(Target::CUDACapability75)) {
         return "sm_75";
     } else if (target.has_feature(Target::CUDACapability70)) {
@@ -494,7 +573,12 @@ string CodeGen_PTX_Dev::mcpu() const {
 
 string CodeGen_PTX_Dev::mattrs() const {
     if (target.has_feature(Target::CUDACapability80)) {
+#if LLVM_VERSION >= 110
         return "+ptx70";
+#else
+        user_error << "CUDACapability80 requires LLVM 11 or later.";
+        return "";
+#endif
     } else if (target.has_feature(Target::CUDACapability70) ||
                target.has_feature(Target::CUDACapability75)) {
         return "+ptx60";
@@ -721,6 +805,12 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
         return target.get_cuda_capability_lower_bound() >= 61;
     }
     return false;
+}
+
+}  // namespace
+
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
+    return std::make_unique<CodeGen_PTX_Dev>(target);
 }
 
 }  // namespace Internal

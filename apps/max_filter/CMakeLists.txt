@@ -30,12 +30,12 @@ target_link_libraries(max_filter_filter
                       max_filter_auto_schedule)
 
 # Test that the app actually works!
-set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
+set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgba.png)
 if (EXISTS ${IMAGE})
-    configure_file(${IMAGE} rgb.png COPYONLY)
-    add_test(NAME max_filter_filter COMMAND max_filter_filter rgb.png out.png)
+    configure_file(${IMAGE} rgba.png COPYONLY)
+    add_test(NAME max_filter_filter COMMAND max_filter_filter rgba.png out.png)
     set_tests_properties(max_filter_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS max_filter
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

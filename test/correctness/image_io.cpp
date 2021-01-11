@@ -160,8 +160,8 @@ Func make_noise(int depth) {
 
 template<typename T>
 void do_test() {
-    const int width = 1600;
-    const int height = 1200;
+    const int width = 160;
+    const int height = 120;
 
     // Make some colored noise
     Func f;

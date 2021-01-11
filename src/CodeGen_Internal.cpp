@@ -468,12 +468,12 @@ Expr lower_euclidean_div(Expr a, Expr b) {
     if (a.type().is_uint()) {
         // IROperator's div_round_to_zero will replace this with a / b for
         // unsigned ops, so create the intrinsic directly.
-        Expr b_is_zero = (b == 0);
-        if (!can_prove(!b_is_zero)) {
-            b = b | cast(a.type(), b_is_zero);
+        Expr b_is_const_zero = (b == 0);
+        if (!can_prove(!b_is_const_zero)) {
+            b = b | cast(a.type(), b_is_const_zero);
         }
         q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
-        q = select(b_is_zero, 0, q);
+        q = select(b_is_const_zero, 0, q);
     } else {
         internal_assert(a.type().is_int());
 
@@ -534,12 +534,12 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     Expr q;
 
     if (a.type().is_uint()) {
-        Expr b_is_zero = (b == 0);
-        if (!can_prove(!b_is_zero)) {
-            b = b | cast(a.type(), b_is_zero);
+        Expr b_is_const_zero = (b == 0);
+        if (!can_prove(!b_is_const_zero)) {
+            b = b | cast(a.type(), b_is_const_zero);
         }
         q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::Intrinsic);
-        q = select(b_is_zero, make_zero(a.type()), q);
+        q = select(b_is_const_zero, make_zero(a.type()), q);
     } else {
         internal_assert(a.type().is_int());
 

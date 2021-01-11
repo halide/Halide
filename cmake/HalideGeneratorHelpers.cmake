@@ -48,7 +48,7 @@ function(add_halide_library TARGET)
     ##
 
     set(options C_BACKEND GRADIENT_DESCENT)
-    set(oneValueArgs FROM GENERATOR FUNCTION_NAME USE_RUNTIME AUTOSCHEDULER ${EXTRA_OUTPUT_NAMES})
+    set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER ${EXTRA_OUTPUT_NAMES})
     set(multiValueArgs TARGETS FEATURES PARAMS PLUGINS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -77,6 +77,10 @@ function(add_halide_library TARGET)
 
     if (NOT ARG_FUNCTION_NAME)
         set(ARG_FUNCTION_NAME "${TARGET}")
+    endif ()
+
+    if (ARG_NAMESPACE)
+        set(ARG_FUNCTION_NAME "${ARG_NAMESPACE}::${ARG_FUNCTION_NAME}")
     endif ()
 
     # If no TARGETS argument, use Halide_TARGET instead
@@ -339,21 +343,18 @@ endfunction()
 
 function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
     if ("${ARGN}" MATCHES "opengl")
-        if (NOT TARGET X11::X11)
-            find_package(X11)
-            if (NOT X11_FOUND)
-                message(AUTHOR_WARNING "X11 dependency not found on system.")
+        if ("${ARGN}" MATCHES "egl")
+            find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
+            target_link_libraries(${TARGET} ${VISIBILITY} OpenGL::OpenGL OpenGL::EGL)
+        else ()
+            if ("${ARGN}" MATCHES "linux" OR ("${ARGN}" MATCHES "host" AND Halide_HOST_TARGET MATCHES "linux"))
+                find_package(X11 REQUIRED)
+                target_link_libraries(${TARGET} ${VISIBILITY} X11::X11)
             endif ()
-        endif ()
-        target_link_libraries(${TARGET} ${VISIBILITY} X11::X11)
 
-        if (NOT TARGET OpenGL::GL)
-            find_package(OpenGL QUIET)
-            if (NOT OPENGL_FOUND)
-                message(AUTHOR_WARNING "OpenGL dependency not found on system.")
-            endif ()
+            find_package(OpenGL REQUIRED)
+            target_link_libraries(${TARGET} ${VISIBILITY} OpenGL::GL)
         endif ()
-        target_link_libraries(${TARGET} ${VISIBILITY} OpenGL::GL)
     endif ()
 
     if ("${ARGN}" MATCHES "metal")

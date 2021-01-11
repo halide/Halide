@@ -58,8 +58,7 @@ namespace Internal {
 class CodeGen_LLVM : public IRVisitor {
 public:
     /** Create an instance of CodeGen_LLVM suitable for the target. */
-    static CodeGen_LLVM *new_for_target(const Target &target,
-                                        llvm::LLVMContext &context);
+    static std::unique_ptr<CodeGen_LLVM> new_for_target(const Target &target, llvm::LLVMContext &context);
 
     ~CodeGen_LLVM() override;
 
@@ -219,39 +218,17 @@ protected:
 
     // @}
 
-    /** Some useful llvm types for subclasses */
-    // @{
-    llvm::Type *i8x8, *i8x16, *i8x32;
-    llvm::Type *i16x4, *i16x8, *i16x16;
-    llvm::Type *i32x2, *i32x4, *i32x8;
-    llvm::Type *i64x2, *i64x4;
-    llvm::Type *f32x2, *f32x4, *f32x8;
-    llvm::Type *f64x2, *f64x4;
-    // @}
-
     /** Some wildcard variables used for peephole optimizations in
      * subclasses */
     // @{
-    Expr wild_i8x8, wild_i16x4, wild_i32x2;                // 64-bit signed ints
-    Expr wild_u8x8, wild_u16x4, wild_u32x2;                // 64-bit unsigned ints
-    Expr wild_i8x16, wild_i16x8, wild_i32x4, wild_i64x2;   // 128-bit signed ints
-    Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2;   // 128-bit unsigned ints
-    Expr wild_i8x32, wild_i16x16, wild_i32x8, wild_i64x4;  // 256-bit signed ints
-    Expr wild_u8x32, wild_u16x16, wild_u32x8, wild_u64x4;  // 256-bit unsigned ints
-
-    Expr wild_f32x2;              // 64-bit floats
-    Expr wild_f32x4, wild_f64x2;  // 128-bit floats
-    Expr wild_f32x8, wild_f64x4;  // 256-bit floats
-
-    // Wildcards for a varying number of lanes.
     Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
     Expr wild_i32x_, wild_u32x_, wild_i64x_, wild_u64x_;
     Expr wild_f32x_, wild_f64x_;
-    Expr min_i8, max_i8, max_u8;
-    Expr min_i16, max_i16, max_u16;
-    Expr min_i32, max_i32, max_u32;
-    Expr min_i64, max_i64, max_u64;
-    Expr min_f32, max_f32, min_f64, max_f64;
+
+    // Wildcards for scalars.
+    Expr wild_u1_, wild_i8_, wild_u8_, wild_i16_, wild_u16_;
+    Expr wild_i32_, wild_u32_, wild_i64_, wild_u64_;
+    Expr wild_f32_, wild_f64_;
     // @}
 
     /** Emit code that evaluates an expression, and return the llvm
@@ -465,6 +442,26 @@ protected:
      * an arbitrary number of vectors.*/
     virtual llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
 
+    /** Description of an intrinsic function overload. Overloads are resolved
+     * using both argument and return types. The scalar types of the arguments
+     * and return type must match exactly for an overload resolution to succeed. */
+    struct Intrinsic {
+        Type result_type;
+        std::vector<Type> arg_types;
+        llvm::Function *impl;
+
+        Intrinsic(Type result_type, std::vector<Type> arg_types, llvm::Function *impl)
+            : result_type(result_type), arg_types(std::move(arg_types)), impl(impl) {
+        }
+    };
+    /** Mapping of intrinsic functions to the various overloads implementing it. */
+    std::map<std::string, std::vector<Intrinsic>> intrinsics;
+
+    /** Declare an intrinsic function that participates in overload resolution. */
+    void declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types);
+    /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found. */
+    llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
+
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
      * given by 'intrin_lanes', the intrinsic is called on each
@@ -476,8 +473,12 @@ protected:
     // @{
     llvm::Value *call_intrin(const Type &t, int intrin_lanes,
                              const std::string &name, std::vector<Expr>);
+    llvm::Value *call_intrin(const Type &t, int intrin_lanes,
+                             llvm::Function *intrin, std::vector<Expr>);
     llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
                              const std::string &name, std::vector<llvm::Value *>);
+    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
+                             llvm::Function *intrin, std::vector<llvm::Value *>);
     // @}
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs

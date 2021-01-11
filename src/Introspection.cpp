@@ -51,8 +51,6 @@ inline T load_misaligned(const T *p) {
 
 typedef uint64_t llvm_offset_t;
 
-}  // namespace
-
 class DebugSections {
 
     bool calibrated;
@@ -2215,9 +2213,9 @@ private:
     }
 };
 
-namespace {
 DebugSections *debug_sections = nullptr;
-}
+
+}  // namespace
 
 bool dump_stack_frame() {
     if (!debug_sections || !debug_sections->working) {

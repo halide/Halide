@@ -29,7 +29,7 @@ public:
     int decrement() {
         return --count;
     }  // Decrement and return new value
-    bool is_zero() const {
+    bool is_const_zero() const {
         return count == 0;
     }
 };

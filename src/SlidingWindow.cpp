@@ -82,8 +82,6 @@ Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     return result;
 }
 
-}  // namespace
-
 // Perform sliding window optimization for a function over a
 // particular serial for loop
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
@@ -303,7 +301,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         // the var we're sliding over.
         Expr min = expand_expr(op->min, scope);
         Expr extent = expand_expr(op->extent, scope);
-        if (is_one(extent)) {
+        if (is_const_one(extent)) {
             // Just treat it like a let
             Stmt s = LetStmt::make(op->name, min, op->body);
             s = mutate(s);
@@ -422,6 +420,8 @@ public:
         : env(e) {
     }
 };
+
+}  // namespace
 
 Stmt sliding_window(const Stmt &s, const map<string, Function> &env) {
     return SlidingWindow(env).mutate(s);

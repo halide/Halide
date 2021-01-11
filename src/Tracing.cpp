@@ -15,6 +15,8 @@ using std::set;
 using std::string;
 using std::vector;
 
+namespace {
+
 struct TraceEventBuilder {
     string func;
     Expr trace_tag_expr = Expr("");
@@ -325,6 +327,8 @@ public:
         : outputs(o) {
     }
 };
+
+}  // namespace
 
 Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                     const map<string, Function> &env, const vector<Function> &outputs,

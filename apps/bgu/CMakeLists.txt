@@ -35,7 +35,7 @@ if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb.png COPYONLY)
     add_test(NAME bgu_filter COMMAND bgu_filter rgb.png out.png)
     set_tests_properties(bgu_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS bgu
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

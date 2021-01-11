@@ -25,8 +25,6 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     return result;
 }
 
-}  // namespace
-
 #define DECLARE_INITMOD(mod)                                                              \
     extern "C" unsigned char halide_internal_initmod_##mod[];                             \
     extern "C" int halide_internal_initmod_##mod##_length;                                \
@@ -201,8 +199,10 @@ DECLARE_LL_INITMOD(ptx_compute_35)
 
 #ifdef WITH_D3D12
 DECLARE_CPP_INITMOD(windows_d3d12compute_x86)
+DECLARE_CPP_INITMOD(windows_d3d12compute_arm)
 #else
 DECLARE_NO_INITMOD(windows_d3d12compute_x86)
+DECLARE_NO_INITMOD(windows_d3d12compute_arm)
 #endif
 
 #ifdef WITH_X86
@@ -258,8 +258,6 @@ DECLARE_CPP_INITMOD(riscv_cpu_features)
 //DECLARE_NO_INITMOD(riscv)
 DECLARE_NO_INITMOD(riscv_cpu_features)
 #endif  // WITH_RISCV
-
-namespace {
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
@@ -559,6 +557,25 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // in this set.
     const std::set<string> retain = {"__stack_chk_guard",
                                      "__stack_chk_fail"};
+
+    // COMDAT is not supported in MachO object files, hence it does
+    // not work on Mac OS or iOS. These sometimes show up in the
+    // runtime since we compile for an abstract target that is based
+    // on ELF. This code removes all Comdat items and leaves the
+    // symbols they were attached to as regular definitions, which
+    // only works if there is a single instance, which is generally
+    // the case for the runtime. Presumably if this isn't true,
+    // linking the module will fail.
+    //
+    // Comdats are left in for other platforms as they are required
+    // for certain things on Windows and they are useful in general in
+    // ELF based formats.
+    if (t.os == Target::IOS || t.os == Target::OSX) {
+        for (auto &global_obj : modules[0]->global_objects()) {
+            global_obj.setComdat(nullptr);
+        }
+        modules[0]->getComdatSymbolTable().clear();
+    }
 
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
@@ -1118,7 +1135,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (t.has_feature(Target::D3D12Compute)) {
             user_assert(bits_64) << "D3D12Compute target only available on 64-bit targets for now.\n";
             user_assert(t.os == Target::Windows) << "D3D12Compute target only available on Windows targets.\n";
-            modules.push_back(get_initmod_windows_d3d12compute_x86(c, bits_64, debug));
+            if (t.arch == Target::X86) {
+                modules.push_back(get_initmod_windows_d3d12compute_x86(c, bits_64, debug));
+            } else if (t.arch == Target::ARM) {
+                modules.push_back(get_initmod_windows_d3d12compute_arm(c, bits_64, debug));
+            } else {
+                user_error << "Direct3D 12 can only be used on ARM or X86 architectures.\n";
+            }
         }
         if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));

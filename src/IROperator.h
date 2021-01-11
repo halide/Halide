@@ -49,28 +49,16 @@ bool is_positive_const(const Expr &e);
  * strictly less than zero (in all lanes, if a vector expression) */
 bool is_negative_const(const Expr &e);
 
-/** Is the expression a const (as defined by is_const), and also
- * strictly less than zero (in all lanes, if a vector expression) and
- * is its negative value representable. (This excludes the most
- * negative value of the Expr's type from inclusion. Intended to be
- * used when the value will be negated as part of simplification.)
- */
-bool is_negative_negatable_const(const Expr &e);
-
 /** Is the expression an undef */
 bool is_undef(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
-bool is_zero(const Expr &e);
+bool is_const_zero(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to one (in all lanes, if a vector expression) */
-bool is_one(const Expr &e);
-
-/** Is the expression a const (as defined by is_const), and also equal
- * to two (in all lanes, if a vector expression) */
-bool is_two(const Expr &e);
+bool is_const_one(const Expr &e);
 
 /** Is the statement a no-op (which we represent as either an
  * undefined Stmt, or as an Evaluate node of a constant) */
@@ -153,6 +141,10 @@ Expr const_false(int lanes = 1);
  * losing information. If it can't be done, return an undefined
  * Expr. */
 Expr lossless_cast(Type t, Expr e);
+
+/** Attempt to negate x without introducing new IR and without overflow.
+ * If it can't be done, return an undefined Expr. */
+Expr lossless_negate(const Expr &x);
 
 /** Coerce the two expressions to have the same type, using C-style
  * casting rules. For the purposes of casting, a boolean type is
@@ -1405,6 +1397,85 @@ namespace Internal {
  **/
 Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 }  // namespace Internal
+
+/** Scatter and gather are used for update definition which must store
+ * multiple values to distinct locations at the same time. The
+ * multiple expressions on the right-hand-side are bundled together
+ * into a "gather", which must match a "scatter" the the same number
+ * of arguments on the left-hand-size. For example, to store the
+ * values 1 and 2 to the locations (x, y, 3) and (x, y, 4),
+ * respectively:
+ *
+\code
+f(x, y, scatter(3, 4)) = gather(1, 2);
+\endcode
+ *
+ * The result of gather or scatter can be treated as an
+ * expression. Any containing operations on it can be assumed to
+ * distribute over the elements. If two gather expressions are
+ * combined with an arithmetic operator (e.g. added), they combine
+ * element-wise. The following example stores the values 2 * x, 2 * y,
+ * and 2 * c to the locations (x + 1, y, c), (x, y + 3, c), and (x, y,
+ * c + 2) respectively:
+ *
+\code
+f(x + scatter(1, 0, 0), y + scatter(0, 3, 0), c + scatter(0, 0, 2)) = 2 * gather(x, y, c);
+\endcode
+*
+* Repeated values in the scatter cause multiple stores to the same
+* location. The stores happen in order from left to right, so the
+* rightmost value wins. The following code is equivalent to f(x) = 5
+*
+\code
+f(scatter(x, x)) = gather(3, 5);
+\endcode
+*
+* Gathers are most useful for algorithms which require in-place
+* swapping or permutation of multiple elements, or other kinds of
+* in-place mutations that require loading multiple inputs, doing some
+* operations to them jointly, then storing them again. The following
+* update definition swaps the values of f at locations 3 and 5 if an
+* input parameter p is true:
+*
+\code
+f(scatter(3, 5)) = f(select(p, gather(5, 3), gather(3, 5)));
+\endcode
+*
+* For more examples of the use of scatter and gather, see
+* test/correctness/multiple_scatter.cpp
+*
+* It is not currently possible to use scatter and gather to write an
+* update definition in which the *number* of values loaded or stored
+* varies, as the size of the scatter/gather packet must be fixed a
+* compile-time. A workaround is to make the unwanted extra operations
+* a redundant copy of the last operation, which will be
+* dead-code-eliminated by the compiler. For example, the following
+* update definition swaps the values at locations 3 and 5 when the
+* parameter p is true, and rotates the values at locations 1, 2, and 3
+* when it is false. The load from 3 and store to 5 will be redundantly
+* repeated:
+*
+\code
+f(select(p, scatter(3, 5, 5), scatter(1, 2, 3))) = f(select(p, gather(5, 3, 3), gather(2, 3, 1)));
+\endcode
+*
+* Note that in the p == true case, we redudantly load from 3 and write
+* to 5 twice.
+*/
+//@{
+Expr scatter(const std::vector<Expr> &args);
+Expr gather(const std::vector<Expr> &args);
+
+template<typename... Args>
+Expr scatter(const Expr &e, Args &&... args) {
+    return scatter({e, std::forward<Args>(args)...});
+}
+
+template<typename... Args>
+Expr gather(const Expr &e, Args &&... args) {
+    return gather({e, std::forward<Args>(args)...});
+}
+// @}
 
 }  // namespace Halide
 

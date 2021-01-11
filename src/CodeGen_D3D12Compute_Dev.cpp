@@ -3,7 +3,9 @@
 #include <sstream>
 #include <utility>
 
+#include "CodeGen_C.h"
 #include "CodeGen_D3D12Compute_Dev.h"
+#include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "DeviceArgument.h"
@@ -22,6 +24,96 @@ using std::string;
 using std::vector;
 
 static ostringstream nil;
+
+namespace {
+
+class CodeGen_D3D12Compute_Dev : public CodeGen_GPU_Dev {
+public:
+    CodeGen_D3D12Compute_Dev(Target target);
+
+    /** Compile a GPU kernel into the module. This may be called many times
+     * with different kernels, which will all be accumulated into a single
+     * source module shared by a given Halide pipeline. */
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args) override;
+
+    /** (Re)initialize the GPU kernel module. This is separate from compile,
+     * since a GPU device module will often have many kernels compiled into it
+     * for a single pipeline. */
+    void init_module() override;
+
+    std::vector<char> compile_to_src() override;
+
+    std::string get_current_kernel_name() override;
+
+    void dump() override;
+
+    std::string print_gpu_name(const std::string &name) override;
+
+    std::string api_unique_name() override {
+        return "d3d12compute";
+    }
+
+    bool kernel_run_takes_types() const override {
+        return true;
+    }
+
+protected:
+    friend struct StoragePackUnpack;
+
+    class CodeGen_D3D12Compute_C : public CodeGen_C {
+    public:
+        CodeGen_D3D12Compute_C(std::ostream &s, Target t)
+            : CodeGen_C(s, t) {
+            integer_suffix_style = IntegerSuffixStyle::HLSL;
+        }
+        void add_kernel(Stmt stmt,
+                        const std::string &name,
+                        const std::vector<DeviceArgument> &args);
+
+    protected:
+        friend struct StoragePackUnpack;
+
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
+        std::string print_storage_type(Type type);
+        std::string print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space);
+        std::string print_reinterpret(Type type, const Expr &e) override;
+        std::string print_extern_call(const Call *op) override;
+
+        std::string print_vanilla_cast(Type type, const std::string &value_expr);
+        std::string print_reinforced_cast(Type type, const std::string &value_expr);
+        std::string print_cast(Type target_type, Type source_type, const std::string &value_expr);
+        std::string print_reinterpret_cast(Type type, const std::string &value_expr);
+
+        std::string print_assignment(Type t, const std::string &rhs) override;
+
+        using CodeGen_C::visit;
+        void visit(const Evaluate *op) override;
+        void visit(const Min *) override;
+        void visit(const Max *) override;
+        void visit(const Div *) override;
+        void visit(const Mod *) override;
+        void visit(const For *) override;
+        void visit(const Ramp *op) override;
+        void visit(const Broadcast *op) override;
+        void visit(const Call *op) override;
+        void visit(const Load *op) override;
+        void visit(const Store *op) override;
+        void visit(const Select *op) override;
+        void visit(const Allocate *op) override;
+        void visit(const Free *op) override;
+        void visit(const Cast *op) override;
+        void visit(const Atomic *op) override;
+        void visit(const FloatImm *op) override;
+
+        Scope<> groupshared_allocations;
+    };
+
+    std::ostringstream src_stream;
+    std::string cur_kernel_name;
+    CodeGen_D3D12Compute_C d3d12compute_c;
+};
 
 CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_Dev(Target t)
     : d3d12compute_c(src_stream, t) {
@@ -218,7 +310,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
     internal_assert((loop->for_type == ForType::GPUBlock) ||
                     (loop->for_type == ForType::GPUThread))
         << "kernel loop must be either gpu block or gpu thread\n";
-    internal_assert(is_zero(loop->min));
+    internal_assert(is_const_zero(loop->min));
 
     stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
            << " = " << simt_intrinsic(loop->name) << ";\n";
@@ -301,7 +393,7 @@ Expr is_ramp_one(const Expr &e) {
         return Expr();
     }
 
-    if (is_one(r->stride)) {
+    if (is_const_one(r->stride)) {
         return r->base;
     }
 
@@ -447,7 +539,7 @@ struct StoragePackUnpack {
 };
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
     // elements in a threadgroup shared buffer are always 32bits:
     // must reinterpret (and maybe unpack) bits.
@@ -567,7 +659,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
 
     Type value_type = op->value.type();
 
@@ -666,7 +758,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Select *op) {
     print_assignment(op->type, rhs.str());
 }
 
-static bool is_shared_allocation(const Allocate *op) {
+bool is_shared_allocation(const Allocate *op) {
     return op->memory_type == MemoryType::GPUShared;
 }
 
@@ -1061,7 +1153,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             if (loop->for_type != ForType::GPUThread) {
                 return loop->body.accept(this);
             }
-            internal_assert(is_zero(loop->min));
+            internal_assert(is_const_zero(loop->min));
             int index = thread_loop_workgroup_index(loop->name);
             user_assert(index >= 0) << "Invalid 'numthreads' index for loop variable '" << loop->name << "'.\n";
             // if 'numthreads' for a given dimension can't be determined at code
@@ -1277,6 +1369,12 @@ void CodeGen_D3D12Compute_Dev::dump() {
 
 std::string CodeGen_D3D12Compute_Dev::print_gpu_name(const std::string &name) {
     return name;
+}
+
+}  // namespace
+
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_D3D12Compute_Dev(const Target &target) {
+    return std::make_unique<CodeGen_D3D12Compute_Dev>(target);
 }
 
 }  // namespace Internal

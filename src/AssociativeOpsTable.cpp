@@ -38,7 +38,7 @@ enum class ValType {
     Float16 = 9,
     Float32 = 10,
     Float64 = 11,
-    All = 11,  // General type (including all previous types)
+    All = 12,  // General type (including all previous types)
 };
 
 ValType convert_halide_type_to_val_type(const Type &halide_t) {

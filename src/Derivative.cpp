@@ -770,11 +770,11 @@ void ReverseAccumulationVisitor::accumulate(const Expr &stub, Expr adjoint) {
         const Mul *mul_op = adjoint.as<Mul>();
         auto mul_select_with_zero = [&](const Expr &sel, const Expr &other) {
             const Select *sel_op = sel.as<Select>();
-            if (is_zero(sel_op->true_value)) {
+            if (is_const_zero(sel_op->true_value)) {
                 return select(sel_op->condition,
                               sel_op->true_value, sel_op->false_value * other);
             }
-            if (is_zero(sel_op->false_value)) {
+            if (is_const_zero(sel_op->false_value)) {
                 return select(sel_op->condition,
                               sel_op->true_value * other, sel_op->false_value);
             }
@@ -790,11 +790,11 @@ void ReverseAccumulationVisitor::accumulate(const Expr &stub, Expr adjoint) {
         const Div *div_op = adjoint.as<Div>();
         auto div_select_with_zero = [&](const Expr &sel, const Expr &other) {
             const Select *sel_op = sel.as<Select>();
-            if (is_zero(sel_op->true_value)) {
+            if (is_const_zero(sel_op->true_value)) {
                 return select(sel_op->condition,
                               sel_op->true_value, sel_op->false_value / other);
             }
-            if (is_zero(sel_op->false_value)) {
+            if (is_const_zero(sel_op->false_value)) {
                 return select(sel_op->condition,
                               sel_op->true_value / other, sel_op->false_value);
             }
@@ -895,7 +895,7 @@ void ReverseAccumulationVisitor::visit(const Div *op) {
     // multiply into it
     if (adjoint.as<Select>() != nullptr) {
         const Select *sel_op = adjoint.as<Select>();
-        if (is_zero(sel_op->true_value)) {
+        if (is_const_zero(sel_op->true_value)) {
             // d/da a / b = 1 / b
             accumulate(op->a, select(sel_op->condition,
                                      sel_op->true_value, sel_op->false_value / op->b));
@@ -904,7 +904,7 @@ void ReverseAccumulationVisitor::visit(const Div *op) {
                                      sel_op->true_value, -sel_op->false_value * op->a / (op->b * op->b)));
             return;
         }
-        if (is_zero(sel_op->false_value)) {
+        if (is_const_zero(sel_op->false_value)) {
             // d/da a / b = 1 / b
             accumulate(op->a, select(sel_op->condition,
                                      sel_op->true_value / op->b, sel_op->false_value));
