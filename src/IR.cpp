@@ -626,6 +626,7 @@ const char *const intrinsic_op_names[] = {
     "require_mask",
     "return_second",
     "rewrite_buffer",
+    "scatter_gather",
     "select_mask",
     "shift_left",
     "shift_right",

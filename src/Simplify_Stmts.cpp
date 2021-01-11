@@ -1,5 +1,6 @@
 #include "Simplify_Internal.h"
 
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 
@@ -387,6 +388,9 @@ Stmt Simplify::visit(const Block *op) {
     const IfThenElse *if_next = block_rest ? block_rest->first.as<IfThenElse>() : rest.as<IfThenElse>();
     Stmt if_rest = block_rest ? block_rest->rest : Stmt();
 
+    const Store *store_first = first.as<Store>();
+    const Store *store_next = block_rest ? block_rest->first.as<Store>() : rest.as<Store>();
+
     if (is_no_op(first) &&
         is_no_op(rest)) {
         return Evaluate::make(0);
@@ -410,6 +414,23 @@ Stmt Simplify::visit(const Block *op) {
         new_block = substitute(let_rest->name, new_var, new_block);
 
         return LetStmt::make(var_name, let_first->value, new_block);
+    } else if (store_first &&
+               store_next &&
+               store_first->name == store_next->name &&
+               equal(store_first->index, store_next->index) &&
+               equal(store_first->predicate, store_next->predicate) &&
+               is_pure(store_first->index) &&
+               is_pure(store_first->value) &&
+               is_pure(store_first->predicate) &&
+               !expr_uses_var(store_next->index, store_next->name) &&
+               !expr_uses_var(store_next->value, store_next->name) &&
+               !expr_uses_var(store_next->predicate, store_next->name)) {
+        // Second store clobbers first
+        if (block_rest) {
+            return Block::make(store_next, block_rest->rest);
+        } else {
+            return store_next;
+        }
     } else if (if_first &&
                if_next &&
                equal(if_first->condition, if_next->condition) &&

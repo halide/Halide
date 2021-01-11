@@ -538,6 +538,7 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
+        scatter_gather,
         select_mask,
         shift_left,
         shift_right,
