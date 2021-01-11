@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
                  Target::CUDA, Target::OpenCL, Target::OpenGLCompute,
                  Target::Debug});
     ts = t1.to_string();
-    if (ts != "arm-32-android-avx-avx2-cuda-debug-jit-opencl-opengl-openglcompute-sse41") {
+    if (ts != "arm-32-android-avx-avx2-cuda-debug-jit-opencl-openglcompute-sse41") {
         printf("to_string failure: %s\n", ts.c_str());
         return -1;
     }
