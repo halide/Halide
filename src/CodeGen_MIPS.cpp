@@ -9,7 +9,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_MIPS::CodeGen_MIPS(Target t)
+CodeGen_MIPS::CodeGen_MIPS(const Target &t)
     : CodeGen_Posix(t) {
 #if !defined(WITH_MIPS)
     user_error << "llvm build not configured with MIPS target enabled.\n";

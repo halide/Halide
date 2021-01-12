@@ -13,10 +13,12 @@
 #include "Argument.h"
 #include "JITModule.h"
 #include "Parameter.h"
-#include "Target.h"
 #include "Type.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 struct WasmModuleContents;

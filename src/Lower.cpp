@@ -34,7 +34,6 @@
 #include "IRPrinter.h"
 #include "InferArguments.h"
 #include "InjectHostDevBufferCopies.h"
-#include "InjectOpenGLIntrinsics.h"
 #include "Inline.h"
 #include "LICM.h"
 #include "LoopCarry.h"
@@ -68,7 +67,6 @@
 #include "UnpackBuffers.h"
 #include "UnrollLoops.h"
 #include "UnsafePromises.h"
-#include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
 #include "WrapCalls.h"
 
@@ -205,7 +203,6 @@ Module lower(const vector<Function> &output_funcs,
     bool will_inject_host_copies =
         (t.has_gpu_feature() ||
          t.has_feature(Target::OpenGLCompute) ||
-         t.has_feature(Target::OpenGL) ||
          t.has_feature(Target::HexagonDma) ||
          (t.arch != Target::Hexagon && (t.has_feature(Target::HVX))));
 
@@ -257,8 +254,7 @@ Module lower(const vector<Function> &output_funcs,
     // OpenGL relies on GPU var canonicalization occurring before
     // storage flattening.
     if (t.has_gpu_feature() ||
-        t.has_feature(Target::OpenGLCompute) ||
-        t.has_feature(Target::OpenGL)) {
+        t.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Canonicalizing GPU var names...\n";
         s = canonicalize_gpu_vars(s);
         debug(2) << "Lowering after canonicalizing GPU var names:\n"
@@ -309,13 +305,6 @@ Module lower(const vector<Function> &output_funcs,
         debug(1) << "Selecting a GPU API for extern stages...\n";
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API for extern stages:\n"
-                 << s << "\n\n";
-    }
-
-    if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Injecting OpenGL texture intrinsics...\n";
-        s = inject_opengl_intrinsics(s);
-        debug(2) << "Lowering after OpenGL intrinsics:\n"
                  << s << "\n\n";
     }
 
@@ -415,18 +404,6 @@ Module lower(const vector<Function> &output_funcs,
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
-
-    if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Detecting varying attributes...\n";
-        s = find_linear_expressions(s);
-        debug(2) << "Lowering after detecting varying attributes:\n"
-                 << s << "\n\n";
-
-        debug(1) << "Moving varying attribute expressions out of the shader...\n";
-        s = setup_gpu_vertex_buffer(s);
-        debug(2) << "Lowering after removing varying attributes:\n"
-                 << s << "\n\n";
-    }
 
     debug(1) << "Lowering unsafe promises...\n";
     s = lower_unsafe_promises(s, t);
