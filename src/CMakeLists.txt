@@ -460,6 +460,11 @@ if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
 endif ()
 
+option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
+if (TARGET_OPENGLCOMPUTE)
+    target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
+endif ()
+
 ##
 # Add autoschedulers to the build.
 ##
