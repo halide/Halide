@@ -20,7 +20,7 @@ public:
 protected:
     using CodeGen_Posix::visit;
 
-    void visit(const Cast *) override;
+    void init_module() override;
 
     std::string mcpu() const override;
     std::string mattrs() const override;
