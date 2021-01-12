@@ -424,7 +424,6 @@ SOURCE_FILES = \
   CodeGen_Metal_Dev.cpp \
   CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
-  CodeGen_OpenGL_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
@@ -595,7 +594,6 @@ HEADER_FILES = \
   CodeGen_Metal_Dev.h \
   CodeGen_MIPS.h \
   CodeGen_OpenCL_Dev.h \
-  CodeGen_OpenGL_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \

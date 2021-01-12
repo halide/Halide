@@ -1,6 +1,7 @@
 #include "CodeGen_OpenGLCompute_Dev.h"
+#include "CSE.h"
+#include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
-#include "CodeGen_OpenGL_Dev.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "IRMatch.h"
@@ -19,6 +20,484 @@ using std::string;
 using std::vector;
 
 namespace {
+
+char get_lane_suffix(int i) {
+    internal_assert(i >= 0 && i < 4);
+    return "rgba"[i];
+}
+
+/**
+  * This class handles GLSL arithmetic.
+  * TODO: combine this with CodeGen_OpenGLCompute_C, which is now the only subclass
+  * (unless it ends up being useful for Vulkan in the future?)
+  */
+class CodeGen_GLSLBase : public CodeGen_C {
+public:
+    CodeGen_GLSLBase(std::ostream &s, Target t);
+
+    std::string print_name(const std::string &name) override;
+    std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
+
+protected:
+    using CodeGen_C::visit;
+
+    void visit(const Cast *) override;
+
+    void visit(const FloatImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const IntImm *) override;
+
+    void visit(const Max *op) override;
+    void visit(const Min *op) override;
+    void visit(const Call *op) override;
+
+    void visit(const Mod *) override;
+
+    // these have specific functions
+    // in GLSL that operate on vectors
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GT *) override;
+    void visit(const GE *) override;
+
+    void visit(const Shuffle *) override;
+
+    Type map_type(const Type &);
+
+    std::map<std::string, std::string> builtin;
+
+    // empty for GL 3.x and GLCompute which do not care about this (due to implicit conversion)
+    // while GL 2.0 only support a small subset of builtin functions with ivec arguments
+    std::set<std::string> support_non_float_type_builtin;
+
+    // true for GL 3.x (GLSL >= 130 or ESSL >= 300) and GLCompute
+    // false for GL 2.x which does not support uint/uvec
+    bool support_native_uint = true;
+
+    // true for GL 2.1 and 3.x (GLSL == 120, >= 130) and GLCompute
+    // true for GL ES 3.1 with EXT_shader_implicit_conversions
+    // false for GL 2.0 and GL ES 3.0
+    bool support_int_to_float_implicit_conversion = true;
+
+    // it seems that only GLSL ES implicitly does not support rounding of integer division
+    // while GLSL specification does not talk about this issue
+    // see GLSL ES Specification 1.00, issues 10.28, Rounding of Integer Division
+    // see GLSL ES Specification 3.00, issues 12.33, Rounding of Integer Division
+    bool support_integer_division_rounding = true;
+};
+
+CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target)
+    : CodeGen_C(s, target) {
+    builtin["sin_f32"] = "sin";
+    builtin["sqrt_f32"] = "sqrt";
+    builtin["cos_f32"] = "cos";
+    builtin["exp_f32"] = "exp";
+    builtin["log_f32"] = "log";
+    builtin["abs_f32"] = "abs";
+    builtin["floor_f32"] = "floor";
+    builtin["ceil_f32"] = "ceil";
+    builtin["asin_f32"] = "asin";
+    builtin["acos_f32"] = "acos";
+    builtin["tan_f32"] = "tan";
+    builtin["atan_f32"] = "atan";
+    builtin["atan2_f32"] = "atan";  // also called atan in GLSL
+    builtin["sinh_f32"] = "sinh";
+    builtin["cosh_f32"] = "cosh";
+    builtin["tanh_f32"] = "tanh";
+    builtin["asinh_f32"] = "asinh";
+    builtin["acosh_f32"] = "acosh";
+    builtin["atanh_f32"] = "atanh";
+    builtin["min"] = "min";
+    builtin["max"] = "max";
+    builtin["mix"] = "mix";
+    builtin["mod"] = "mod";
+    builtin["abs"] = "abs";
+    builtin["isnan"] = "isnan";
+    builtin["round_f32"] = "roundEven";
+    builtin["fast_inverse_sqrt_f32"] = "inversesqrt";
+
+    // functions that produce bvecs
+    builtin["equal"] = "equal";
+    builtin["notEqual"] = "notEqual";
+    builtin["lessThan"] = "lessThan";
+    builtin["lessThanEqual"] = "lessThanEqual";
+    builtin["greaterThan"] = "greaterThan";
+    builtin["greaterThanEqual"] = "greaterThanEqual";
+}
+
+// Maps Halide types to appropriate GLSL types or emit error if no equivalent
+// type is available.
+Type CodeGen_GLSLBase::map_type(const Type &type) {
+    Type result = type;
+    if (type.is_scalar()) {
+        if (type.is_float()) {
+            user_assert(type.bits() <= 32)
+                << "GLSL: Can't represent a float with " << type.bits() << " bits.\n";
+            result = Float(32);
+        } else if (type.is_bool()) {
+            // unchanged
+        } else if (type.is_int() && type.bits() <= 32) {
+            result = Int(32);
+        } else if (type.is_uint() && type.bits() <= 32) {
+            if (support_native_uint) {
+                result = UInt(32);
+            } else {
+                if (type.bits() == 32) {
+                    // GLSL <= 120 doesn't have unsigned types, simply use int.
+                    // WARNING: Using int to represent unsigned int may result in
+                    // overflows and undefined behavior.
+                    result = Int(32);
+                } else {
+                    // Embed all other uints in a GLSL float. Probably not actually
+                    // valid for uint16 on systems with low float precision.
+                    result = Float(32);
+                }
+            }
+        } else {
+            user_error << "GLSL: Can't represent type '" << type << "'.\n";
+        }
+    } else {
+        user_assert(type.lanes() <= 4)
+            << "GLSL: vector types wider than 4 aren't supported\n";
+        user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
+            << "GLSL: Can't represent vector type '" << type << "'.\n";
+        Type scalar_type = type.element_of();
+        result = map_type(scalar_type).with_lanes(type.lanes());
+    }
+    return result;
+}
+
+void CodeGen_GLSLBase::visit(const FloatImm *op) {
+    ostringstream oss;
+    // Print integral numbers with trailing ".0". For fractional numbers use a
+    // precision of 9 digits, which should be enough to recover the binary
+    // float unambiguously from the decimal representation (if iostreams
+    // implements correct rounding).
+    const float truncated = (op->value < 0 ? std::ceil(op->value) : std::floor(op->value));
+    if (truncated == op->value) {
+        oss << std::fixed << std::setprecision(1) << op->value;
+    } else {
+        oss << std::setprecision(9) << op->value;
+    }
+    id = oss.str();
+}
+
+void CodeGen_GLSLBase::visit(const IntImm *op) {
+    id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
+}
+
+void CodeGen_GLSLBase::visit(const UIntImm *op) {
+    if (op->type == Bool()) {
+        if (op->value == 1) {
+            id = "true";
+        } else {
+            id = "false";
+        }
+    } else if (support_native_uint) {
+        id = std::to_string(op->value) + "u";
+    } else {
+        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
+    }
+}
+
+void CodeGen_GLSLBase::visit(const Max *op) {
+    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::PureExtern));
+}
+
+void CodeGen_GLSLBase::visit(const Min *op) {
+    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::PureExtern));
+}
+
+void CodeGen_GLSLBase::visit(const Mod *op) {
+    if (op->type.is_int() || op->type.is_uint()) {
+        // Just exploit the Euclidean identity
+        // FIXME: Why doesn't lower_euclidean_mod work for glsl?
+        // https://github.com/halide/Halide/issues/4979
+        Expr zero = make_zero(op->type);
+        Expr equiv = select(op->a == zero, zero,
+                            op->a - (op->a / op->b) * op->b);
+        equiv = common_subexpression_elimination(equiv);
+        print_expr(equiv);
+    } else {
+        print_expr(Call::make(op->type, "mod", {op->a, op->b}, Call::Extern));
+    }
+}
+
+void CodeGen_GLSLBase::visit(const Call *op) {
+    if (op->is_intrinsic(Call::lerp)) {
+        // Implement lerp using GLSL's mix() function, which always uses
+        // floating point arithmetic.
+        Expr zero_val = op->args[0];
+        Expr one_val = op->args[1];
+        Expr weight = op->args[2];
+
+        internal_assert(weight.type().is_uint() || weight.type().is_float());
+        if (weight.type().is_uint()) {
+            // Normalize integer weights to [0.0f, 1.0f] range.
+            internal_assert(weight.type().bits() < 32);
+            weight = Div::make(Cast::make(Float(32), weight),
+                               Cast::make(Float(32), weight.type().max()));
+        } else if (op->type.is_uint()) {
+            // Round float weights down to next multiple of (1/op->type.imax())
+            // to give same results as lerp based on integer arithmetic.
+            internal_assert(op->type.bits() < 32);
+            weight = floor(weight * op->type.max()) / op->type.max();
+        }
+
+        Type result_type = Float(32, op->type.lanes());
+        Expr e = Call::make(result_type, "mix", {zero_val, one_val, weight}, Call::Extern);
+
+        if (!op->type.is_float()) {
+            // Mirror rounding implementation of Halide's integer lerp.
+            e = Cast::make(op->type, floor(e + 0.5f));
+        }
+        print_expr(e);
+        return;
+    } else if (op->is_intrinsic(Call::absd)) {
+        internal_assert(op->args.size() == 2);
+        Expr a = op->args[0];
+        Expr b = op->args[1];
+        Expr e = cast(op->type, select(a < b, b - a, a - b));
+        print_expr(e);
+        return;
+    } else if (op->is_intrinsic(Call::return_second)) {
+        internal_assert(op->args.size() == 2);
+        // Simply discard the first argument, which is generally a call to
+        // 'halide_printf'.
+        print_assignment(op->type, print_expr(op->args[1]));
+        return;
+    } else if (op->name == "fast_inverse_f32") {
+        print_expr(make_one(op->type) / op->args[0]);
+        return;
+    } else if (op->name == "fast_inverse_sqrt_f32") {
+        print_expr(make_one(op->type) / sqrt(op->args[0]));
+        return;
+    } else if (op->name == "pow_f32") {
+        if (can_prove(op->args[0] > 0)) {
+            ostringstream rhs;
+            rhs << "pow(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
+            print_assignment(op->type, rhs.str());
+            return;
+        } else {
+            ostringstream base;
+            string a = print_expr(op->args[0]);
+            string b = print_expr(op->args[1]);
+            base << "pow(abs(" << a << "), " << b << ")";
+            string c = print_assignment(op->type, base.str());
+            Expr a_var = is_const(op->args[0]) ? op->args[0] : Variable::make(op->type, a);
+            Expr b_var = is_const(op->args[1]) ? op->args[1] : Variable::make(op->type, b);
+            Expr c_var = Variable::make(op->type, c);
+            // OpenGL isn't required to produce NaNs, so we return
+            // zero in the undefined case.
+            Expr equiv = select(a_var > 0 || b_var % 2 == 0, c_var,
+                                b_var % 2 == 1, -c_var,
+                                0.0f);
+            print_expr(simplify(equiv));
+            return;
+        }
+    } else if (op->is_intrinsic(Call::shift_right)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " >> " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::shift_left)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " << " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::bitwise_not)) {
+        print_assignment(op->type, "~" + print_expr(op->args[0]));
+    } else if (op->is_intrinsic(Call::bitwise_and)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " & " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::bitwise_or)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " | " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::bitwise_xor)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " ^ " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::div_round_to_zero)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " / " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
+        print_assignment(op->type, print_expr(op->args[0]) + " % " + print_expr(op->args[1]));
+    } else {
+        ostringstream rhs;
+        if (builtin.count(op->name) == 0) {
+            user_error << "GLSL: unknown function '" << op->name << "' encountered.\n";
+        }
+
+        bool need_cast = false;
+        const Type float_type = Float(32, op->type.lanes());
+        vector<Expr> new_args(op->args.size());
+
+        // For GL 2.0, Most GLSL builtins are only defined for float arguments,
+        // so we may have to introduce type casts around the arguments and the
+        // entire function call.
+        if (!support_int_to_float_implicit_conversion &&
+            !support_non_float_type_builtin.count(op->name)) {
+            need_cast = !op->type.is_float();
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (!op->args[i].type().is_float()) {
+                    new_args[i] = Cast::make(float_type, op->args[i]);
+                    need_cast = true;
+                } else {
+                    new_args[i] = op->args[i];
+                }
+            }
+        }
+
+        if (need_cast) {
+            Expr val = Call::make(float_type, op->name, new_args, op->call_type);
+            print_expr(simplify(Cast::make(op->type, val)));
+        } else {
+            rhs << builtin[op->name] << "(";
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (i > 0) {
+                    rhs << ", ";
+                }
+                rhs << print_expr(op->args[i]);
+            }
+            rhs << ")";
+            print_assignment(op->type, rhs.str());
+        }
+    }
+}
+
+string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option) {
+    ostringstream oss;
+    type = map_type(type);
+    if (type.is_scalar()) {
+        if (type.is_float()) {
+            oss << "float";
+        } else if (type.is_bool()) {
+            oss << "bool";
+        } else if (type.is_int()) {
+            oss << "int";
+        } else if (type.is_uint()) {
+            oss << "uint";
+        } else {
+            internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
+        }
+    } else {
+        if (type.is_float()) {
+            // no prefix for float vectors
+        } else if (type.is_bool()) {
+            oss << "b";
+        } else if (type.is_int()) {
+            oss << "i";
+        } else if (type.is_uint()) {
+            oss << "u";
+        } else {
+            internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
+        }
+        oss << "vec" << type.lanes();
+    }
+
+    if (space_option == AppendSpace) {
+        oss << " ";
+    }
+
+    return oss.str();
+}
+
+// The following comparisons are defined for ivec and vec
+// types, so we don't use call_builtin
+void CodeGen_GLSLBase::visit(const EQ *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "equal", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const NE *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "notEqual", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const LT *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "lessThan", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const LE *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "lessThanEqual", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const GT *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "greaterThan", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const GE *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "greaterThanEqual", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const Shuffle *op) {
+    // The halide Shuffle represents the llvm intrinisc
+    // shufflevector, however, for GLSL its use is limited to swizzling
+    // up to a four channel vec type.
+
+    internal_assert(op->vectors.size() == 1);
+
+    int shuffle_lanes = op->type.lanes();
+    internal_assert(shuffle_lanes <= 4);
+
+    string expr = print_expr(op->vectors[0]);
+
+    // Create a swizzle expression for the shuffle
+    string swizzle;
+    for (int i = 0; i != shuffle_lanes; ++i) {
+        int channel = op->indices[i];
+        internal_assert(channel < 4) << "Shuffle of invalid channel";
+        swizzle += get_lane_suffix(channel);
+    }
+
+    print_assignment(op->type, expr + "." + swizzle);
+}
+
+// Identifiers containing double underscores '__' are reserved in GLSL, so we
+// have to use a different name mangling scheme than in the C code generator.
+string CodeGen_GLSLBase::print_name(const string &name) {
+    const string mangled = CodeGen_C::print_name(name);
+    return replace_all(mangled, "__", "XX");
+}
+
+void CodeGen_GLSLBase::visit(const Cast *op) {
+    Type value_type = op->value.type();
+    // If both types are represented by the same GLSL type, no explicit cast
+    // is necessary.
+    if (map_type(op->type) == map_type(value_type)) {
+        Expr value = op->value;
+        if (value_type.code() == Type::Float) {
+            // float->int conversions may need explicit truncation if an
+            // integer type is embedded into a float. (Note: overflows are
+            // considered undefined behavior, so we do nothing about values
+            // that are out of range of the target type.)
+            if (op->type.code() == Type::UInt) {
+                value = simplify(floor(value));
+            } else if (op->type.code() == Type::Int) {
+                value = simplify(trunc(value));
+            }
+        }
+        // FIXME: Overflow is not UB for most Halide types
+        // https://github.com/halide/Halide/issues/4975
+        value.accept(this);
+    } else {
+        Type target_type = map_type(op->type);
+        print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
+    }
+}
 
 class CodeGen_OpenGLCompute_Dev : public CodeGen_GPU_Dev {
 public:
