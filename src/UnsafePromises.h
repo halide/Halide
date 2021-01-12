@@ -6,9 +6,11 @@
  */
 
 #include "Expr.h"
-#include "Target.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 /** Lower all unsafe promises into either assertions or unchecked

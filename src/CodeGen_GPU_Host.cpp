@@ -1,13 +1,19 @@
 #include <sstream>
 
+#include "CodeGen_ARM.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_MIPS.h"
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_PowerPC.h"
+#include "CodeGen_RISCV.h"
+#include "CodeGen_WebAssembly.h"
+#include "CodeGen_X86.h"
 #include "Debug.h"
 #include "DeviceArgument.h"
 #include "ExprUsesVar.h"
@@ -94,7 +100,7 @@ private:
 };
 
 template<typename CodeGen_CPU>
-CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
+CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(const Target &target)
     : CodeGen_CPU(target) {
     // For the default GPU, the order of preferences is: Metal,
     // OpenCL, CUDA, OpenGLCompute last.
@@ -164,7 +170,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     builder->SetInsertPoint(init_kernels_bb);
 
     for (auto &i : cgdev) {
-
         CodeGen_GPU_Dev *gpu_codegen = i.second.get();
         std::string api_unique_name = gpu_codegen->api_unique_name();
 

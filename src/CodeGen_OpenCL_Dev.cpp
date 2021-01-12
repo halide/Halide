@@ -28,7 +28,7 @@ namespace {
 
 class CodeGen_OpenCL_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_OpenCL_Dev(Target target);
+    CodeGen_OpenCL_Dev(const Target &target);
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single
@@ -107,7 +107,7 @@ protected:
     CodeGen_OpenCL_C clc;
 };
 
-CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t)
+CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(const Target &t)
     : clc(src_stream, t) {
 }
 

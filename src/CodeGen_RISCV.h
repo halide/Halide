@@ -15,7 +15,7 @@ class CodeGen_RISCV : public CodeGen_Posix {
 public:
     /** Create a mips code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    CodeGen_RISCV(Target);
+    CodeGen_RISCV(const Target &);
 
 protected:
     using CodeGen_Posix::visit;
