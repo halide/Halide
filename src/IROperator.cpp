@@ -2361,4 +2361,23 @@ Expr undef(Type t) {
                                 Internal::Call::PureIntrinsic);
 }
 
+namespace {
+Expr make_scatter_gather(const std::vector<Expr> &args) {
+    // There's currently no difference in the IR between a gather and
+    // a scatter. They're distinct just to make code more readable.
+    return Halide::Internal::Call::make(args[0].type(),
+                                        Halide::Internal::Call::scatter_gather,
+                                        args,
+                                        Halide::Internal::Call::PureIntrinsic);
+}
+}  // namespace
+
+Expr scatter(const std::vector<Expr> &args) {
+    return make_scatter_gather(args);
+}
+
+Expr gather(const std::vector<Expr> &args) {
+    return make_scatter_gather(args);
+}
+
 }  // namespace Halide

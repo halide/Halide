@@ -7,7 +7,6 @@
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeOpenCL.h"
-#include "HalideRuntimeOpenGL.h"
 #include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeQurt.h"
 #include "cpu_features.h"
@@ -148,16 +147,8 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_opencl_set_device_type,
     (void *)&halide_opencl_set_platform_name,
     (void *)&halide_opencl_wrap_cl_mem,
-    (void *)&halide_opengl_context_lost,
     (void *)&halide_opengl_create_context,
-    (void *)&halide_opengl_detach_texture,
-    (void *)&halide_opengl_device_interface,
     (void *)&halide_opengl_get_proc_address,
-    (void *)&halide_opengl_get_texture,
-    (void *)&halide_opengl_initialize_kernels,
-    (void *)&halide_opengl_run,
-    (void *)&halide_opengl_wrap_render_target,
-    (void *)&halide_opengl_wrap_texture,
     (void *)&halide_openglcompute_device_interface,
     (void *)&halide_openglcompute_initialize_kernels,
     (void *)&halide_openglcompute_run,

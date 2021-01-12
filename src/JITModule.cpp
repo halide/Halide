@@ -57,17 +57,31 @@ typedef struct CUctx_st *CUcontext;
 typedef struct cl_context_st *cl_context;
 typedef struct cl_command_queue_st *cl_command_queue;
 
-void load_opengl() {
+void load_opengl(bool needs_egl) {
 #if defined(__linux__)
     if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
         debug(1) << "OpenGL support code already linked in...\n";
     } else {
         debug(1) << "Looking for OpenGL support code...\n";
         string error;
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-        user_assert(error.empty()) << "Could not find libGL.so\n";
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
-        user_assert(error.empty()) << "Could not find libX11.so\n";
+        if (needs_egl) {
+            // NVIDIA EGL prefers users to load libOpenGL.so instead of libGL.so
+            // The way we're using it, it seems like libGL.so.1 is a valid fallback.
+            // See here for more details: https://developer.nvidia.com/blog/linking-opengl-server-side-rendering
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenGL.so.0", &error);
+            if (!error.empty()) {
+                debug(1) << "Could not find libOpenGL.so.0 when EGL requested. Falling back to libGL.so.1\n";
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
+            }
+            user_assert(error.empty()) << "Could not find libOpenGL.so.0 or libGL.so.1\n";
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libEGL.so.1", &error);
+            user_assert(error.empty()) << "Could not find libEGL.so.1\n";
+        } else {
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
+            user_assert(error.empty()) << "Could not find libGL.so\n";
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so.6", &error);
+            user_assert(error.empty()) << "Could not find libX11.so.6\n";
+        }
     }
 #elif defined(__APPLE__)
     if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
@@ -610,14 +624,12 @@ enum RuntimeKind {
     OpenCL,
     Metal,
     CUDA,
-    OpenGL,  // NOTE: this feature is deprecated and will be removed in Halide 12.
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
-    OpenGLDebug,  // NOTE: this feature is deprecated and will be removed in Halide 12.
     OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,
@@ -654,7 +666,6 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
         one_gpu.set_feature(Target::HVX, false);
-        one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
         string module_name;
@@ -688,27 +699,16 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             one_gpu.set_feature(Target::CUDA);
             module_name += "cuda";
             break;
-        case OpenGLDebug:
-            one_gpu.set_feature(Target::Debug);
-            one_gpu.set_feature(Target::OpenGL);
-            module_name = "debug_opengl";
-            load_opengl();
-            break;
-        case OpenGL:
-            one_gpu.set_feature(Target::OpenGL);
-            module_name += "opengl";
-            load_opengl();
-            break;
         case OpenGLComputeDebug:
             one_gpu.set_feature(Target::Debug);
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name = "debug_openglcompute";
-            load_opengl();
+            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case OpenGLCompute:
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name += "openglcompute";
-            load_opengl();
+            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
@@ -855,13 +855,6 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     }
     if (target.has_feature(Target::CUDA)) {
         auto kind = target.has_feature(Target::Debug) ? CUDADebug : CUDA;
-        JITModule m = make_module(for_module, target, kind, result, create);
-        if (m.compiled()) {
-            result.push_back(m);
-        }
-    }
-    if (target.has_feature(Target::OpenGL)) {
-        auto kind = target.has_feature(Target::Debug) ? OpenGLDebug : OpenGL;
         JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);

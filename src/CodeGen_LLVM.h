@@ -43,10 +43,9 @@ class GlobalVariable;
 #include "Target.h"
 
 namespace Halide {
-struct ExternSignature;
-}  // namespace Halide
 
-namespace Halide {
+struct ExternSignature;
+
 namespace Internal {
 
 /** A code generator abstract base class. Actual code generators
@@ -58,8 +57,7 @@ namespace Internal {
 class CodeGen_LLVM : public IRVisitor {
 public:
     /** Create an instance of CodeGen_LLVM suitable for the target. */
-    static CodeGen_LLVM *new_for_target(const Target &target,
-                                        llvm::LLVMContext &context);
+    static std::unique_ptr<CodeGen_LLVM> new_for_target(const Target &target, llvm::LLVMContext &context);
 
     ~CodeGen_LLVM() override;
 
@@ -88,7 +86,7 @@ public:
     }
 
 protected:
-    CodeGen_LLVM(Target t);
+    CodeGen_LLVM(const Target &t);
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{

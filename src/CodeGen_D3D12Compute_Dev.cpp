@@ -29,7 +29,7 @@ namespace {
 
 class CodeGen_D3D12Compute_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_D3D12Compute_Dev(Target target);
+    CodeGen_D3D12Compute_Dev(const Target &target);
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single
@@ -64,7 +64,7 @@ protected:
 
     class CodeGen_D3D12Compute_C : public CodeGen_C {
     public:
-        CodeGen_D3D12Compute_C(std::ostream &s, Target t)
+        CodeGen_D3D12Compute_C(std::ostream &s, const Target &t)
             : CodeGen_C(s, t) {
             integer_suffix_style = IntegerSuffixStyle::HLSL;
         }
@@ -115,7 +115,7 @@ protected:
     CodeGen_D3D12Compute_C d3d12compute_c;
 };
 
-CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_Dev(Target t)
+CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_Dev(const Target &t)
     : d3d12compute_c(src_stream, t) {
 }
 
@@ -1373,8 +1373,8 @@ std::string CodeGen_D3D12Compute_Dev::print_gpu_name(const std::string &name) {
 
 }  // namespace
 
-CodeGen_GPU_Dev *new_CodeGen_D3D12Compute_Dev(const Target &target) {
-    return new CodeGen_D3D12Compute_Dev(target);
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_D3D12Compute_Dev(const Target &target) {
+    return std::make_unique<CodeGen_D3D12Compute_Dev>(target);
 }
 
 }  // namespace Internal

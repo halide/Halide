@@ -10,8 +10,6 @@ namespace {
 class SelectGPUAPI : public IRMutator {
     using IRMutator::visit;
 
-    Target target;
-
     DeviceAPI default_api, parent_api;
 
     Expr visit(const Call *op) override {
@@ -43,8 +41,7 @@ class SelectGPUAPI : public IRMutator {
     }
 
 public:
-    SelectGPUAPI(Target t)
-        : target(t) {
+    SelectGPUAPI(const Target &t) {
         default_api = get_default_device_api_for_target(t);
         parent_api = DeviceAPI::Host;
     };
@@ -52,7 +49,7 @@ public:
 
 }  // namespace
 
-Stmt select_gpu_api(const Stmt &s, Target t) {
+Stmt select_gpu_api(const Stmt &s, const Target &t) {
     return SelectGPUAPI(t).mutate(s);
 }
 

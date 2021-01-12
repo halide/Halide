@@ -246,7 +246,13 @@ Target::Feature calculate_host_cuda_capability(Target t) {
     } else if (ver < 80) {
         return Target::CUDACapability75;
     } else {
+#if LLVM_VERSION >= 110
         return Target::CUDACapability80;
+#else
+        // We require LLVM11+ in order to generate for CUDACapability80,
+        // so don't ever return that capability here, even if present.
+        return Target::CUDACapability75;
+#endif
     }
 }
 
@@ -324,7 +330,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
     {"cl_atomics64", Target::CLAtomics64},
-    {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
     {"egl", Target::EGL},
     {"user_context", Target::UserContext},
@@ -655,7 +660,7 @@ bool Target::supported() const {
     bad |= has_feature(Target::Metal);
 #endif
 #if !defined(WITH_OPENGL)
-    bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
+    bad |= has_feature(Target::OpenGLCompute);
 #endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
@@ -753,7 +758,13 @@ int Target::get_cuda_capability_lower_bound() const {
         return 75;
     }
     if (has_feature(Target::CUDACapability80)) {
+#if LLVM_VERSION >= 110
         return 80;
+#else
+        // We require LLVM11+ in order to generate for CUDACapability80,
+        // so don't ever return that capability here, even if present.
+        return 75;
+#endif
     }
     return 20;
 }
@@ -762,14 +773,12 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return !has_feature(Metal) &&
-                   !has_feature(OpenGL) &&
                    !has_feature(OpenGLCompute) &&
                    !has_feature(D3D12Compute) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
             return (!has_feature(Metal) &&
                     !has_feature(OpenGLCompute) &&
-                    !has_feature(OpenGL) &&
                     !has_feature(D3D12Compute));
         }
     }
@@ -842,9 +851,6 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::OpenCL)) {
         return DeviceAPI::OpenCL;
     }
-    if (has_feature(Target::OpenGL)) {
-        return DeviceAPI::GLSL;
-    }
     if (has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     }
@@ -857,8 +863,6 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::CUDA;
     case DeviceAPI::OpenCL:
         return Target::OpenCL;
-    case DeviceAPI::GLSL:
-        return Target::OpenGL;
     case DeviceAPI::OpenGLCompute:
         return Target::OpenGLCompute;
     case DeviceAPI::Metal:
@@ -945,7 +949,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         Metal,
         NoNEON,
         OpenCL,
-        OpenGL,
         OpenGLCompute,
 
         // These features are actually intersection-y, but because targets only record the _highest_,
@@ -1061,9 +1064,15 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     if (cuda_capability < 75) {
         output.features.reset(CUDACapability75);
     }
+#if LLVM_VERSION >= 110
     if (cuda_capability < 80) {
         output.features.reset(CUDACapability80);
     }
+#else
+    // We require LLVM11+ in order to generate for CUDACapability80,
+    // so don't ever return that capability here, even if present.
+    output.features.reset(CUDACapability80);
+#endif
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
@@ -1105,7 +1114,6 @@ void target_test() {
         {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
-        {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
         {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
         {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
         {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},

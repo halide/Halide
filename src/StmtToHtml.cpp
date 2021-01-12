@@ -1,6 +1,7 @@
 #include "StmtToHtml.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "Module.h"
 #include "Scope.h"
 
 #include <cstdio>

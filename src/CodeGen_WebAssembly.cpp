@@ -16,7 +16,7 @@ using namespace llvm;
 using std::string;
 using std::vector;
 
-CodeGen_WebAssembly::CodeGen_WebAssembly(Target t)
+CodeGen_WebAssembly::CodeGen_WebAssembly(const Target &t)
     : CodeGen_Posix(t) {
 #if !defined(WITH_WEBASSEMBLY)
     user_error << "llvm build not configured with WebAssembly target enabled.\n";

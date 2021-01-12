@@ -41,7 +41,7 @@ namespace {
 class CodeGen_Hexagon : public CodeGen_Posix {
 public:
     /** Create a Hexagon code generator for the given Hexagon target. */
-    CodeGen_Hexagon(Target);
+    CodeGen_Hexagon(const Target &);
 
 protected:
     void compile_func(const LoweredFunc &f,
@@ -136,7 +136,7 @@ private:
     llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
 };
 
-CodeGen_Hexagon::CodeGen_Hexagon(Target t)
+CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
     : CodeGen_Posix(t) {
     user_assert(llvm_Hexagon_enabled)
         << "llvm build not configured with Hexagon target enabled.\n";
@@ -2303,15 +2303,15 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
 
 }  // namespace
 
-CodeGen_Posix *new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
-    CodeGen_Hexagon *ret = new CodeGen_Hexagon(target);
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
+    std::unique_ptr<CodeGen_Posix> ret(std::make_unique<CodeGen_Hexagon>(target));
     ret->set_context(context);
     return ret;
 }
 
 #else  // WITH_HEXAGON
 
-CodeGen_Posix *new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
     user_error << "hexagon not enabled for this build of Halide.\n";
 }
 

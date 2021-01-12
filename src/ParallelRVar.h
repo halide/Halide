@@ -7,10 +7,12 @@
  * definition across a reduction variable.
  */
 
-#include "Definition.h"
+#include <string>
 
 namespace Halide {
 namespace Internal {
+
+class Definition;
 
 /** Returns whether or not Halide can prove that it is safe to
  * parallelize an update definition across a specific variable. If
