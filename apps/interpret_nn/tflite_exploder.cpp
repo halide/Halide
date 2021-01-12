@@ -27,17 +27,17 @@
 */
 
 #include <fstream>
-#include <iostream>
-#include <sstream>
 #include <iomanip>
+#include <iostream>
 #include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
-#include "error_util.h"
-#include "file_util.h"
 #include "flatbuffers/flatbuffers.h"
 #include "tflite_schema_direct_generated.h"
+#include "util/error_util.h"
+#include "util/file_util.h"
 
 using interpret_nn::read_entire_file;
 using interpret_nn::write_entire_file;

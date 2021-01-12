@@ -169,9 +169,9 @@ public:
         check("vavg(v*.h,v*.h):rnd", hvx_width / 2, i16((i32(i16_1) + i32(i16_2) + 1) / 2));
         check("vavg(v*.w,v*.w)", hvx_width / 4, i32((i64(i32_1) + i64(i32_2)) / 2));
         check("vavg(v*.w,v*.w):rnd", hvx_width / 4, i32((i64(i32_1) + i64(i32_2) + 1) / 2));
-        check("vnavg(v*.ub,v*.ub)", hvx_width / 1, i8_sat((i16(u8_1) - i16(u8_2)) / 2));
-        check("vnavg(v*.h,v*.h)", hvx_width / 2, i16_sat((i32(i16_1) - i32(i16_2)) / 2));
-        check("vnavg(v*.w,v*.w)", hvx_width / 4, i32_sat((i64(i32_1) - i64(i32_2)) / 2));
+        check("vnavg(v*.ub,v*.ub)", hvx_width / 1, i8((i16(u8_1) - i16(u8_2)) / 2));
+        check("vnavg(v*.h,v*.h)", hvx_width / 2, i16((i32(i16_1) - i32(i16_2)) / 2));
+        check("vnavg(v*.w,v*.w)", hvx_width / 4, i32((i64(i32_1) - i64(i32_2)) / 2));
         if (isa_version >= 65) {
             check("vavg(v*.b,v*.b)", hvx_width / 1, i8((i16(i8_1) + i16(i8_2)) / 2));
             check("vavg(v*.uw,v*.uw)", hvx_width / 4, u32((u64(u32_1) + u64(u32_2)) / 2));
@@ -330,6 +330,9 @@ public:
 
         check("vround(v*.h,v*.h)", hvx_width / 1, u8_sat((i32(i16_1) + 128) / 256));
         check("vround(v*.h,v*.h)", hvx_width / 1, i8_sat((i32(i16_1) + 128) / 256));
+        // int32 is safe for overflow, allow non-widening rounding.
+        check("vround(v*.w,v*.w)", hvx_width / 2, u16_sat((i32_1 + 32768) / 65536));
+        check("vround(v*.w,v*.w)", hvx_width / 2, i16_sat((i32_1 + 32768) / 65536));
         check("vround(v*.w,v*.w)", hvx_width / 2, u16_sat((i64(i32_1) + 32768) / 65536));
         check("vround(v*.w,v*.w)", hvx_width / 2, i16_sat((i64(i32_1) + 32768) / 65536));
 
@@ -645,6 +648,53 @@ public:
         check("vnormamt(v*.h)", hvx_width / 2, max(count_leading_zeros(i16_1), count_leading_zeros(~i16_1)));
         check("vnormamt(v*.w)", hvx_width / 4, max(count_leading_zeros(i32_1), count_leading_zeros(~i32_1)));
         check("vpopcount(v*.h)", hvx_width / 2, popcount(u16_1));
+
+        int rfac = 4;
+        RDom r(0, rfac);
+        check("v*.uw = vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u16(in_u8(rfac * x + r))));
+        check("v*.uw = vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u16(in_u8(rfac * x + r)) * u8(r)));
+        check("v*.w  = vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i16(in_u8(rfac * x + r)) * i8(r)));
+        check("v*.uw = vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(u16(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
+        check("v*.w  = vrmpy(v*.ub,v*.b)", hvx_width / 4, sum(i16(in_u8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
+        check("v*.w  = vrmpy(v*.b,v*.b)", hvx_width / 4, sum(i16(in_i8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r))));
+        check("v*.uw = vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * 34));
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * u8(r)));
+        check("v*.w  += vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * i8(r)));
+        check("v*.w  = vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * (-1)));
+        check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
+        check("v*.w  += vrmpy(v*.ub,v*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
+        check("v*.w  += vrmpy(v*.b,v*.b)", hvx_width / 4, sum(i32(in_i8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
+        check("v*.w  = vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i16(in_u8(rfac * x + r)) * (-1)));
+        // Sliding window
+        // TODO: We can generate accumulative versions of below instructions.
+        check("v*:*.uw = vrmpy(v*:*.ub, r*.ub, #*)", hvx_width, sum(u32(in_u8(x + r))));
+        check("v*:*.uw = vrmpy(v*:*.ub, r*.ub, #*)", hvx_width, sum(u32(in_u8(x + r)) * 34));
+        check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(u32(in_u8(x + r)) * i8(r)));
+        check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(i32(in_u8(x + r)) * i8(-r)));
+        check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(i32(in_u8(x + r)) * (-1)));
+
+        rfac = 2;
+        RDom r2(0, rfac);
+        check("v*.h += vdmpy(v*.ub, r*.b)", hvx_width / 2, sum(i16(in_u8(rfac * x + r2))));
+        check("v*.h = vdmpy(v*.ub, r*.b)", hvx_width / 2, sum(i16(in_u8(rfac * x + r2)) * 34));
+        check("v*.w += vdmpy(v*.h, r*.b)", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * i8(r2)));
+        check("v*.w += vdmpy(v*.h, r*.b)", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * i8(r2)));
+        check("v*.w = vdmpy(v*.h, r*.b)", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * 15246));
+        check("v*.w = vdmpy(v*.h, r*.b)", hvx_width / 4, sum(i32(in_i16(rfac * x + r2)) * (-1246)));
+        // Sliding window
+        // TODO: Check for the crash
+        // check("v*:*.h = vdmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r2)) * i16(r2)));
+
+        rfac = 3;
+        RDom r3(0, rfac);
+        check("v*:*.h += vtmpy(v*:*.b, r*.b)", hvx_width, sum(i16(in_i8(x + r3))));
+        check("v*:*.h += vtmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r3))));
+        check("v*:*.w += vtmpy(v*:*.h, r*.b)", hvx_width, sum(i32(in_i16(x + r3))));
+        // TODO: This should work, a common stencil
+        //check("v*:*.h += vtmpy(v*:*.b, r*.b)", hvx_width, sum(i16(in_i8(x + r3)) * mux(r3, {1, 2, 1})));
+        //check("v*:*.h += vtmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r3)) * mux(r3, {1, 2, 1})));
+        //check("v*:*.w += vtmpy(v*:*.h, r*.b)", hvx_width, sum(i32(in_i16(x + r3)) * mux(r3, {1, 2, 1})));
     }
 
 private:
@@ -677,6 +727,11 @@ int main(int argc, char **argv) {
         test_hvx.filter = argv[1];
         test_hvx.set_num_threads(1);
     }
+
+    if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
+        test_hvx.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
+    }
+
     // Remove some features like simd_op_check.cpp used to do.
 
     // TODO: multithreading here is the cause of https://github.com/halide/Halide/issues/3669;

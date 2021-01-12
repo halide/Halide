@@ -97,9 +97,7 @@ ANDROID_NDK_HOST_PLATFORM ?= $(shell echo `uname` | tr '[:upper:]' '[:lower:]')
 ANDROID_API_VERSION ?= 26
 
 CXX-host ?= $(CXX)
-CXX-host-profile ?= $(CXX)
 CXX-host-opencl ?= $(CXX)
-CXX-host-opengl ?= $(CXX)
 CXX-host-cuda ?= $(CXX)
 CXX-host-metal ?= $(CXX)
 CXX-host-hvx_128 ?= $(CXX)
@@ -111,9 +109,7 @@ CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
 CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
 
 CXXFLAGS-host ?= $(CXXFLAGS)
-CXXFLAGS-host-profile ?= $(CXXFLAGS)
 CXXFLAGS-host-opencl ?= $(CXXFLAGS)
-CXXFLAGS-host-opengl ?= $(CXXFLAGS)
 CXXFLAGS-host-cuda ?= $(CXXFLAGS)
 CXXFLAGS-host-metal ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_128 ?= $(CXXFLAGS)
@@ -122,9 +118,7 @@ CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
 LDFLAGS-host ?= $(LDFLAGS)
-LDFLAGS-host-profile ?= $(LDFLAGS)
 LDFLAGS-host-opencl ?= $(LDFLAGS)
-LDFLAGS-host-opengl ?= $(LDFLAGS)
 LDFLAGS-host-cuda ?= $(LDFLAGS)
 LDFLAGS-host-metal ?= $(LDFLAGS)
 LDFLAGS-host-hvx_128 ?= $(LDFLAGS)
@@ -188,15 +182,6 @@ IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 
 IMAGE_IO_FLAGS = $(IMAGE_IO_LIBS) $(IMAGE_IO_CXX_FLAGS)
 
-PLATFORM_OPENGL_LDFLAGS=-lGL -lX11
-ifeq ($(UNAME), Darwin)
-PLATFORM_OPENGL_LDFLAGS=-framework OpenGL
-endif
-
-ifneq (, $(findstring opengl,$(HL_TARGET)))
-  OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
-endif
-
 ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation
 endif
@@ -209,40 +194,37 @@ HL_VIDEOPLAYER ?= mplayer
 
 # ------- RunGen/Benchmark support
 
-RUNARGS ?=
+# Really, .SECONDARY is what we want instead of .PRECIOUS (here and elsewhere),
+# but .SECONDARY doesn't accept wildcards
+.PRECIOUS: $(BIN)/%.registration.cpp
+$(BIN)/%.registration.cpp: $(BIN)/%.a
+	@echo $@ produced implicitly by $^
 
 .PRECIOUS: $(BIN)/%/RunGenMain.o
 $(BIN)/%/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
 	@mkdir -p $(@D)
 	$(CXX) -c $< $(CXXFLAGS) -fno-exceptions $(IMAGE_IO_CXX_FLAGS) -I$(BIN)/$* -o $@
 
-# Can't have multiple wildcards in Make, so we'll use a macro
-# to stamp out all the rules we need
-define DEFINE_RUNGEN
+.PRECIOUS: $(BIN)/%.rungen
+$(BIN)/%.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%.a $(BIN)/%.registration.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
-.PRECIOUS: $$(BIN)/%/$(1).registration.cpp
-$$(BIN)/%/$(1).registration.cpp: $$(BIN)/%/$(1).a
-	@echo $$@ produced implicitly by $$^
-
-.PRECIOUS: $$(BIN)/%/$(1).rungen
-$$(BIN)/%/$(1).rungen: $$(BIN)/%/RunGenMain.o $$(BIN)/%/$(1).a $$(BIN)/%/$(1).registration.cpp $(2)
-	$$(CXX) $$(CXXFLAGS) $$^ -o $$@ $$(IMAGE_IO_FLAGS) $$(LDFLAGS)
+RUNARGS ?=
 
 # Pseudo target that allows us to build-and-run in one step, e.g.
 #
 #     make bin/host/foo.run RUNARGS='input=a output=baz'
 #
-.PHONY: $$(BIN)/%/$(1).run
-$$(BIN)/%/$(1).run: $$(BIN)/%/$(1).rungen
-	@$$(CURDIR)/$$< $$(RUNARGS)
+.PHONY: $(BIN)/%.run
+$(BIN)/%.run: $(BIN)/%.rungen
+	@$(CURDIR)/$< $(RUNARGS)
 
 # Also allow 'foo.run' as a shortcut to mean host
-.PHONY: $(1).run
-$(1).run: $$(BIN)/host/$(1).rungen
-	@$$(CURDIR)/$$< $$(RUNARGS)
+.PHONY: %.run
+%.run: $(BIN)/host/%.rungen
+	@$(CURDIR)/$< $(RUNARGS)
 
-.PHONY: $(1).bench
-$(1).bench: $$(BIN)/$$(HL_TARGET)/$(1).rungen
-	@$$^ --benchmarks=all --estimate_all --parsable_output
+.PHONY: %.benchmark
+%.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
+	@$^ --benchmarks=all --estimate_all --parsable_output
 
-endef

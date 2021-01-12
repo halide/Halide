@@ -2,6 +2,8 @@
 #include "IROperator.h"
 #include "IRVisitor.h"
 
+#include <map>
+
 namespace Halide {
 namespace Internal {
 

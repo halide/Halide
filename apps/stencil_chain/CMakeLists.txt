@@ -35,7 +35,7 @@ if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb.png COPYONLY)
     add_test(NAME stencil_chain_process COMMAND stencil_chain_process rgb.png 10 out.png)
     set_tests_properties(stencil_chain_process PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS stencil_chain
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

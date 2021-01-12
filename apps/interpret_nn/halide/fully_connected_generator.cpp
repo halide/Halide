@@ -37,6 +37,8 @@ public:
         RDom rc(weights_.dim(0).min(), weights_.dim(0).extent());
         Func multiplied("multiplied");
         multiplied(c, b) = bias_(c);
+        // TODO: I don't think this is quite right vs. tflite implementation.
+        // Recheck carefully.
         multiplied(c, b) += i32(weights_zeroed(rc, c)) * i32(input_zeroed(c, b));
 
         // Saturate and narrow the output.

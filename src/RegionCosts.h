@@ -7,8 +7,9 @@
  * computing some function regions.
  */
 
-#include <limits>
-#include <set>
+#include <map>
+#include <string>
+#include <vector>
 
 #include "AutoScheduleUtils.h"
 #include "Interval.h"

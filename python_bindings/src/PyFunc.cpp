@@ -342,10 +342,6 @@ void define_func(py::module &m) {
 
             .def("bound_extent", &Func::bound_extent, py::arg("var"), py::arg("extent"))
 
-            .def("shader", &Func::shader, py::arg("x"), py::arg("y"), py::arg("c"), py::arg("device_api"))
-
-            .def("glsl", &Func::glsl, py::arg("x"), py::arg("y"), py::arg("c"))
-
             .def("align_storage", &Func::align_storage, py::arg("dim"), py::arg("alignment"))
 
             .def("fold_storage", &Func::fold_storage, py::arg("dim"), py::arg("extent"), py::arg("fold_forward") = true)

@@ -19,6 +19,8 @@ using std::map;
 using std::string;
 using std::vector;
 
+namespace {
+
 class InjectProfiling : public IRMutator {
 public:
     map<string, int> indices;  // maps from func name -> index in buffer.
@@ -291,6 +293,8 @@ private:
         return stmt;
     }
 };
+
+}  // namespace
 
 Stmt inject_profiling(Stmt s, const string &pipeline_name) {
     InjectProfiling profiling(pipeline_name);

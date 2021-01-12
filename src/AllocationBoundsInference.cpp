@@ -6,6 +6,8 @@
 #include "IROperator.h"
 #include "Simplify.h"
 
+#include <set>
+
 namespace Halide {
 namespace Internal {
 
@@ -13,6 +15,8 @@ using std::map;
 using std::set;
 using std::string;
 using std::vector;
+
+namespace {
 
 // Figure out the region touched of each buffer, and deposit them as
 // let statements outside of each realize node, or at the top level if
@@ -153,6 +157,8 @@ class StripDeclareBoxTouched : public IRMutator {
         }
     }
 };
+
+}  // namespace
 
 Stmt allocation_bounds_inference(Stmt s,
                                  const map<string, Function> &env,

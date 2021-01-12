@@ -509,10 +509,9 @@ struct Call : public ExprNode<Call> {
         div_round_to_zero,
         dynamic_shuffle,
         extract_mask_element,
-        glsl_texture_load,
-        glsl_texture_store,
-        glsl_varying,
         gpu_thread_barrier,
+        halving_add,
+        halving_sub,
         hvx_gather,
         hvx_scatter,
         hvx_scatter_acc,
@@ -538,6 +537,13 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
+        rounding_halving_add,
+        rounding_halving_sub,
+        rounding_shift_left,
+        rounding_shift_right,
+        saturating_add,
+        saturating_sub,
+        scatter_gather,
         select_mask,
         shift_left,
         shift_right,
@@ -548,6 +554,11 @@ struct Call : public ExprNode<Call> {
         stringify,
         undef,
         unsafe_promise_clamped,
+        widening_add,
+        widening_mul,
+        widening_shift_left,
+        widening_shift_right,
+        widening_sub,
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
@@ -744,7 +755,7 @@ struct Shuffle : public ExprNode<Shuffle> {
 
     /** Indices indicating which vector element to place into the
      * result. The elements are numbered by their position in the
-     * concatenation of the vector argumentss. */
+     * concatenation of the vector arguments. */
     std::vector<int> indices;
 
     static Expr make(const std::vector<Expr> &vectors,
@@ -760,7 +771,7 @@ struct Shuffle : public ExprNode<Shuffle> {
 
     /** Convenience constructor for making a shuffle representing a
      * broadcast of a vector. */
-    static Expr make_broadcast(Expr vector, int lanes);
+    static Expr make_broadcast(Expr vector, int factor);
 
     /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */
@@ -773,6 +784,14 @@ struct Shuffle : public ExprNode<Shuffle> {
     /** Check if this shuffle is an interleaving of the vector
      * arguments. */
     bool is_interleave() const;
+
+    /** Check if this shuffle can be represented as a broadcast.
+     * For example:
+     * A uint8 shuffle of with 4*n lanes and indices:
+     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
+     * can be represented as a uint32 broadcast with n lanes (factor = 4). */
+    bool is_broadcast() const;
+    int broadcast_factor() const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */

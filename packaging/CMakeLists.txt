@@ -163,6 +163,12 @@ endif ()
 install(EXPORT Halide_Targets
         DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
         NAMESPACE Halide::${LIB_TYPE}::
+        FILE Halide-Targets-ns-${LIB_TYPE}.cmake
+        COMPONENT Halide_Development)
+
+install(EXPORT Halide_Targets
+        DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+        NAMESPACE Halide::
         FILE Halide-Targets-${LIB_TYPE}.cmake
         COMPONENT Halide_Development)
 

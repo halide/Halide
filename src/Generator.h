@@ -2220,7 +2220,6 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD(Func, fold_storage)
     HALIDE_FORWARD_METHOD(Func, fuse)
-    HALIDE_FORWARD_METHOD(Func, glsl)
     HALIDE_FORWARD_METHOD(Func, gpu)
     HALIDE_FORWARD_METHOD(Func, gpu_blocks)
     HALIDE_FORWARD_METHOD(Func, gpu_single_thread)
@@ -2242,7 +2241,6 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, rvars)
     HALIDE_FORWARD_METHOD(Func, serial)
     HALIDE_FORWARD_METHOD(Func, set_estimate)
-    HALIDE_FORWARD_METHOD(Func, shader)
     HALIDE_FORWARD_METHOD(Func, specialize)
     HALIDE_FORWARD_METHOD(Func, specialize_fail)
     HALIDE_FORWARD_METHOD(Func, split)
@@ -2932,6 +2930,7 @@ protected:
     // Import a consistent list of Halide names that can be used in
     // Halide generators without qualification.
     using Expr = Halide::Expr;
+    using EvictionKey = Halide::EvictionKey;
     using ExternFuncArgument = Halide::ExternFuncArgument;
     using Func = Halide::Func;
     using GeneratorContext = Halide::GeneratorContext;

@@ -93,9 +93,6 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::OpenGLCompute:
         out << "<OpenGLCompute>";
         break;
-    case DeviceAPI::GLSL:
-        out << "<GLSL>";
-        break;
     case DeviceAPI::Metal:
         out << "<Metal>";
         break;
@@ -990,6 +987,10 @@ void IRPrinter::visit(const Shuffle *op) {
                << ", " << op->slice_stride()
                << ", " << op->indices.size()
                << ")";
+    } else if (op->is_broadcast()) {
+        stream << "broadcast(";
+        print_list(op->vectors);
+        stream << ", " << op->broadcast_factor() << ")";
     } else {
         stream << "shuffle(";
         print_list(op->vectors);
@@ -1011,7 +1012,7 @@ void IRPrinter::visit(const VectorReduce *op) {
            << op->op
            << ", "
            << op->value
-           << ")\n";
+           << ")";
 }
 
 void IRPrinter::visit(const Atomic *op) {

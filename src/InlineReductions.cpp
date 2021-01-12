@@ -15,6 +15,7 @@ using std::string;
 using std::vector;
 
 namespace Internal {
+namespace {
 
 class FindFreeVars : public IRMutator {
 public:
@@ -103,6 +104,8 @@ private:
         return expr;
     }
 };
+
+}  // namespace
 }  // namespace Internal
 
 Expr sum(Expr e, const std::string &name) {

@@ -4,11 +4,11 @@
 
 #include "HalideRuntime.h"
 
-#include "error_util.h"
-#include "file_util.h"
 #include "halide_benchmark.h"
-#include "interpreter.h"
-#include "tflite_parser.h"
+#include "interpreter/interpreter.h"
+#include "tflite/tflite_parser.h"
+#include "util/error_util.h"
+#include "util/file_util.h"
 
 namespace interpret_nn {
 
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
     }
 
     if (options.verbose && options.trace) {
-        std::cerr << "You cannot specify --trace and --verbose at the same time.\n";
+        LOG(ERROR) << "You cannot specify --trace and --verbose at the same time.\n";
         exit(-1);
     }
 

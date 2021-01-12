@@ -10,7 +10,11 @@
 #include "Util.h"
 #include "WasmExecutor.h"
 
-#if defined(__powerpc__) && defined(__linux__)
+#if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
+#if defined(__FreeBSD__)
+#include <machine/cpu.h>
+#include <sys/elf_common.h>
+#endif
 // This uses elf.h and must be included after "LLVM_Headers.h", which
 // uses llvm/support/Elf.h.
 #include <sys/auxv.h>
@@ -83,11 +87,17 @@ Target calculate_host_target() {
 #if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
 #else
-#if defined(__powerpc__) && defined(__linux__)
+#if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
     Target::Arch arch = Target::POWERPC;
 
+#if defined(__linux__)
     unsigned long hwcap = getauxval(AT_HWCAP);
     unsigned long hwcap2 = getauxval(AT_HWCAP2);
+#elif defined(__FreeBSD__)
+    unsigned long hwcap, hwcap2;
+    elf_aux_info(AT_HWCAP, &hwcap, sizeof(hwcap));
+    elf_aux_info(AT_HWCAP2, &hwcap2, sizeof(hwcap2));
+#endif
     bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
     bool have_vsx = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
     bool arch_2_07 = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
@@ -236,7 +246,13 @@ Target::Feature calculate_host_cuda_capability(Target t) {
     } else if (ver < 80) {
         return Target::CUDACapability75;
     } else {
+#if LLVM_VERSION >= 110
         return Target::CUDACapability80;
+#else
+        // We require LLVM11+ in order to generate for CUDACapability80,
+        // so don't ever return that capability here, even if present.
+        return Target::CUDACapability75;
+#endif
     }
 }
 
@@ -314,7 +330,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
     {"cl_atomics64", Target::CLAtomics64},
-    {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
     {"egl", Target::EGL},
     {"user_context", Target::UserContext},
@@ -354,6 +369,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"wasm_signext", Target::WasmSignExt},
     {"wasm_sat_float_to_int", Target::WasmSatFloatToInt},
     {"wasm_threads", Target::WasmThreads},
+    {"wasm_bulk_memory", Target::WasmBulkMemory},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
@@ -644,7 +660,7 @@ bool Target::supported() const {
     bad |= has_feature(Target::Metal);
 #endif
 #if !defined(WITH_OPENGL)
-    bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
+    bad |= has_feature(Target::OpenGLCompute);
 #endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
@@ -742,7 +758,13 @@ int Target::get_cuda_capability_lower_bound() const {
         return 75;
     }
     if (has_feature(Target::CUDACapability80)) {
+#if LLVM_VERSION >= 110
         return 80;
+#else
+        // We require LLVM11+ in order to generate for CUDACapability80,
+        // so don't ever return that capability here, even if present.
+        return 75;
+#endif
     }
     return 20;
 }
@@ -751,14 +773,12 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return !has_feature(Metal) &&
-                   !has_feature(OpenGL) &&
                    !has_feature(OpenGLCompute) &&
                    !has_feature(D3D12Compute) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
             return (!has_feature(Metal) &&
                     !has_feature(OpenGLCompute) &&
-                    !has_feature(OpenGL) &&
                     !has_feature(D3D12Compute));
         }
     }
@@ -831,9 +851,6 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::OpenCL)) {
         return DeviceAPI::OpenCL;
     }
-    if (has_feature(Target::OpenGL)) {
-        return DeviceAPI::GLSL;
-    }
     if (has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     }
@@ -846,8 +863,6 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::CUDA;
     case DeviceAPI::OpenCL:
         return Target::OpenCL;
-    case DeviceAPI::GLSL:
-        return Target::OpenGL;
     case DeviceAPI::OpenGLCompute:
         return Target::OpenGLCompute;
     case DeviceAPI::Metal:
@@ -925,17 +940,63 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (a) must be included if either target has the feature (union)
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
-    const std::array<Feature, 18> union_features = {{// These are true union features.
-                                                     CUDA, OpenCL, OpenGL, OpenGLCompute, Metal, D3D12Compute, NoNEON,
 
-                                                     // These features are actually intersection-y, but because targets only record the _highest_,
-                                                     // we have to put their union in the result and then take a lower bound.
-                                                     CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61, CUDACapability70, CUDACapability75, CUDACapability80,
-                                                     HVX_v62, HVX_v65, HVX_v66}};
+    // clang-format off
+    const std::array<Feature, 18> union_features = {{
+        // These are true union features.
+        CUDA,
+        D3D12Compute,
+        Metal,
+        NoNEON,
+        OpenCL,
+        OpenGLCompute,
 
-    const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
+        // These features are actually intersection-y, but because targets only record the _highest_,
+        // we have to put their union in the result and then take a lower bound.
+        CUDACapability30,
+        CUDACapability32,
+        CUDACapability35,
+        CUDACapability50,
+        CUDACapability61,
+        CUDACapability70,
+        CUDACapability75,
+        CUDACapability80,
+        HVX_v62,
+        HVX_v65,
+        HVX_v66,
+    }};
+    // clang-format on
 
-    const std::array<Feature, 12> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, HVX_shared_object, WasmSimd128, WasmSignExt, WasmSatFloatToInt, WasmThreads}};
+    // clang-format off
+    const std::array<Feature, 12> intersection_features = {{
+        ARMv7s,
+        AVX,
+        AVX2,
+        AVX512,
+        AVX512_Cannonlake,
+        AVX512_KNL,
+        AVX512_Skylake,
+        F16C,
+        FMA,
+        FMA4,
+        SSE41,
+        VSX,
+    }};
+    // clang-format on
+
+    // clang-format off
+    const std::array<Feature, 12> matching_features = {{
+        ASAN,
+        Debug,
+        HexagonDma,
+        HVX,
+        HVX_shared_object,
+        MSAN,
+        SoftFloatABI,
+        TSAN,
+        WasmThreads,
+    }};
+    // clang-format on
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;
@@ -1003,9 +1064,15 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     if (cuda_capability < 75) {
         output.features.reset(CUDACapability75);
     }
+#if LLVM_VERSION >= 110
     if (cuda_capability < 80) {
         output.features.reset(CUDACapability80);
     }
+#else
+    // We require LLVM11+ in order to generate for CUDACapability80,
+    // so don't ever return that capability here, even if present.
+    output.features.reset(CUDACapability80);
+#endif
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
@@ -1047,7 +1114,6 @@ void target_test() {
         {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
-        {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
         {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
         {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
         {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},

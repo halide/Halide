@@ -1339,6 +1339,11 @@ constexpr bool and_reduce(bool first, Args... rest) {
     return first && and_reduce(rest...);
 }
 
+// TODO: this can be replaced with std::min() once we require C++14 or later
+constexpr int const_min(int a, int b) {
+    return a < b ? a : b;
+}
+
 template<typename... Args>
 struct Intrin {
     struct pattern_tag {};
@@ -1395,11 +1400,46 @@ struct Intrin {
 
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState &state, halide_type_t type_hint) const {
+        Expr arg0 = std::get<0>(args).make(state, type_hint);
         if (intrin == Call::likely) {
-            return likely(std::get<0>(args).make(state, type_hint));
+            return likely(arg0);
         } else if (intrin == Call::likely_if_innermost) {
-            return likely_if_innermost(std::get<0>(args).make(state, type_hint));
+            return likely_if_innermost(arg0);
+        } else if (intrin == Call::abs) {
+            return abs(arg0);
         }
+
+        Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
+        if (intrin == Call::absd) {
+            return absd(arg0, arg1);
+        } else if (intrin == Call::widening_add) {
+            return widening_add(arg0, arg1);
+        } else if (intrin == Call::widening_sub) {
+            return widening_sub(arg0, arg1);
+        } else if (intrin == Call::widening_mul) {
+            return widening_mul(arg0, arg1);
+        } else if (intrin == Call::saturating_add) {
+            return saturating_add(arg0, arg1);
+        } else if (intrin == Call::saturating_sub) {
+            return saturating_sub(arg0, arg1);
+        } else if (intrin == Call::halving_add) {
+            return halving_add(arg0, arg1);
+        } else if (intrin == Call::halving_sub) {
+            return halving_sub(arg0, arg1);
+        } else if (intrin == Call::rounding_halving_add) {
+            return rounding_halving_add(arg0, arg1);
+        } else if (intrin == Call::rounding_halving_sub) {
+            return rounding_halving_sub(arg0, arg1);
+        } else if (intrin == Call::shift_left) {
+            return arg0 << arg1;
+        } else if (intrin == Call::shift_right) {
+            return arg0 >> arg1;
+        } else if (intrin == Call::rounding_shift_left) {
+            return rounding_shift_left(arg0, arg1);
+        } else if (intrin == Call::rounding_shift_right) {
+            return rounding_shift_right(arg0, arg1);
+        }
+
         internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
         return Expr();
     }
@@ -1423,6 +1463,59 @@ std::ostream &operator<<(std::ostream &s, const Intrin<Args...> &op) {
 template<typename... Args>
 HALIDE_ALWAYS_INLINE auto intrin(Call::IntrinsicOp intrinsic_op, Args... args) noexcept -> Intrin<decltype(pattern_arg(args))...> {
     return {intrinsic_op, pattern_arg(args)...};
+}
+
+template<typename A, typename B>
+auto widening_add(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widening_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widening_sub(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widening_sub, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widening_mul(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widening_mul, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto saturating_add(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::saturating_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto saturating_sub(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::saturating_sub, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto halving_add(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::halving_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto halving_sub(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::halving_sub, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto rounding_halving_add(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::rounding_halving_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto rounding_halving_sub(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::rounding_halving_sub, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto shift_left(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::shift_left, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto shift_right(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::shift_right, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto rounding_shift_left(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::rounding_shift_left, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto rounding_shift_right(A a, B b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::rounding_shift_right, pattern_arg(a), pattern_arg(b)};
 }
 
 template<typename A>
@@ -2116,6 +2209,88 @@ std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
 }
 
 template<typename A>
+struct IsInt {
+    struct pattern_tag {};
+    A a;
+    int bits;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = t.is_int() && (bits == 0 || t.bits() == bits);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    };
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto is_int(A a, int bits = 0) noexcept -> IsInt<decltype(pattern_arg(a))> {
+    return {pattern_arg(a), bits};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsInt<A> &op) {
+    s << "is_int(" << op.a;
+    if (op.bits > 0) {
+        s << ", " << op.bits;
+    }
+    s << ")";
+    return s;
+}
+
+template<typename A>
+struct IsUInt {
+    struct pattern_tag {};
+    A a;
+    int bits;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = t.is_uint() && (bits == 0 || t.bits() == bits);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    };
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto is_uint(A a, int bits = 0) noexcept -> IsUInt<decltype(pattern_arg(a))> {
+    return {pattern_arg(a), bits};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsUInt<A> &op) {
+    s << "is_uint(" << op.a;
+    if (op.bits > 0) {
+        s << ", " << op.bits;
+    }
+    s << ")";
+    return s;
+}
+
+template<typename A>
 struct IsScalar {
     struct pattern_tag {};
     A a;
@@ -2343,7 +2518,7 @@ struct Rewriter {
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, after, true, wildcard_type, output_type);
 #endif
-        if (before.template match<0>(instance, state)) {
+        if (before.template match<0>(unwrap(instance), state)) {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
@@ -2361,7 +2536,7 @@ struct Rewriter {
              typename = typename enable_if_pattern<Before>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after) noexcept {
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
-        if (before.template match<0>(instance, state)) {
+        if (before.template match<0>(unwrap(instance), state)) {
             result = after;
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
@@ -2382,7 +2557,7 @@ struct Rewriter {
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, IntLiteral(after), true, wildcard_type, output_type);
 #endif
-        if (before.template match<0>(instance, state)) {
+        if (before.template match<0>(unwrap(instance), state)) {
             result = make_const(output_type, after);
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
@@ -2412,7 +2587,7 @@ struct Rewriter {
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, after, pred, wildcard_type, output_type);
 #endif
-        if (before.template match<0>(instance, state) &&
+        if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
@@ -2435,7 +2610,7 @@ struct Rewriter {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
 
-        if (before.template match<0>(instance, state) &&
+        if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
             result = after;
 #if HALIDE_DEBUG_MATCHED_RULES
@@ -2460,7 +2635,7 @@ struct Rewriter {
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, IntLiteral(after), pred, wildcard_type, output_type);
 #endif
-        if (before.template match<0>(instance, state) &&
+        if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
             result = make_const(output_type, after);
 #if HALIDE_DEBUG_MATCHED_RULES
