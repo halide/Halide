@@ -5,8 +5,10 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
 
-    if (t.get_cuda_capability_lower_bound() < 50) {
-        printf("[SKIP] CUDA with capability 5.0 or greater required\n");
+    int cap = t.get_cuda_capability_lower_bound();
+    if (cap < 50 || cap >= 80) {
+        printf("[SKIP] CUDA with capability between 5.0 and 7.5 required\n");
+        // TODO: Use the shfl.sync intrinsics for cuda 8.0 and above
         return 0;
     }
 
