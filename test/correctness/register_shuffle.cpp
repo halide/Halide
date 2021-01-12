@@ -9,6 +9,7 @@ int main(int argc, char **argv) {
     if (cap < 50 || cap >= 80) {
         printf("[SKIP] CUDA with capability between 5.0 and 7.5 required\n");
         // TODO: Use the shfl.sync intrinsics for cuda 8.0 and above
+        // See issue #5630
         return 0;
     }
 
