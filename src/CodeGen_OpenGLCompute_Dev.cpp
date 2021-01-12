@@ -75,39 +75,39 @@ protected:
     void visit(const Evaluate *op) override;
 
     const std::map<std::string, std::string> builtin = {
-        {"sin_f32", "sin"},
-        {"sqrt_f32", "sqrt"},
-        {"cos_f32", "cos"},
-        {"exp_f32", "exp"},
-        {"log_f32", "log"},
-        {"abs_f32", "abs"},
-        {"floor_f32", "floor"},
-        {"ceil_f32", "ceil"},
-        {"asin_f32", "asin"},
-        {"acos_f32", "acos"},
-        {"tan_f32", "tan"},
-        {"atan_f32", "atan"},
-        {"atan2_f32", "atan"},  // also called atan in GLSL
-        {"sinh_f32", "sinh"},
-        {"cosh_f32", "cosh"},
-        {"tanh_f32", "tanh"},
-        {"asinh_f32", "asinh"},
-        {"acosh_f32", "acosh"},
-        {"atanh_f32", "atanh"},
-        {"min", "min"},
-        {"max", "max"},
-        {"mix", "mix"},
-        {"mod", "mod"},
         {"abs", "abs"},
-        {"isnan", "isnan"},
-        {"round_f32", "roundEven"},
-        {"fast_inverse_sqrt_f32", "inversesqrt"},
+        {"abs_f32", "abs"},
+        {"acos_f32", "acos"},
+        {"acosh_f32", "acosh"},
+        {"asin_f32", "asin"},
+        {"asinh_f32", "asinh"},
+        {"atan2_f32", "atan"},  // also called atan in GLSL
+        {"atan_f32", "atan"},
+        {"atanh_f32", "atanh"},
+        {"ceil_f32", "ceil"},
+        {"cos_f32", "cos"},
+        {"cosh_f32", "cosh"},
         {"equal", "equal"},
-        {"notEqual", "notEqual"},
-        {"lessThan", "lessThan"},
-        {"lessThanEqual", "lessThanEqual"},
+        {"exp_f32", "exp"},
+        {"fast_inverse_sqrt_f32", "inversesqrt"},
+        {"floor_f32", "floor"},
         {"greaterThan", "greaterThan"},
         {"greaterThanEqual", "greaterThanEqual"},
+        {"isnan", "isnan"},
+        {"lessThan", "lessThan"},
+        {"lessThanEqual", "lessThanEqual"},
+        {"log_f32", "log"},
+        {"max", "max"},
+        {"min", "min"},
+        {"mix", "mix"},
+        {"mod", "mod"},
+        {"notEqual", "notEqual"},
+        {"round_f32", "roundEven"},
+        {"sin_f32", "sin"},
+        {"sinh_f32", "sinh"},
+        {"sqrt_f32", "sqrt"},
+        {"tan_f32", "tan"},
+        {"tanh_f32", "tanh"},
         {"trunc_f32", "trunc"},
     };
     int workgroup_size[3] = {0, 0, 0};
@@ -395,6 +395,16 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
         }
         print_expr(e);
         return;
+    } else if (op->is_intrinsic(Call::abs)) {
+        internal_assert(op->args.size() == 1);
+        Expr a = op->args[0];
+        Type target_type = map_type(op->type);
+        if (op->type != Int(32)) {
+            print_assignment(target_type, print_type(target_type) + "(abs(" + print_expr(a) + "))");
+        } else {
+            print_assignment(target_type, "abs(" + print_expr(a) + ")");
+        }
+        return;
     } else if (op->is_intrinsic(Call::absd)) {
         internal_assert(op->args.size() == 2);
         Expr a = op->args[0];
@@ -454,14 +464,13 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         print_assignment(op->type, print_expr(op->args[0]) + " % " + print_expr(op->args[1]));
     } else {
-        ostringstream rhs;
-        if (builtin.count(op->name) == 0) {
+        auto it = builtin.find(op->name);
+        if (it == builtin.end()) {
             user_error << "GLSL: unknown function '" << op->name << "' encountered.\n";
         }
 
-        vector<Expr> new_args(op->args.size());
-
-        rhs << builtin.at(op->name) << "(";
+        ostringstream rhs;
+        rhs << it->second << "(";
         for (size_t i = 0; i < op->args.size(); i++) {
             if (i > 0) {
                 rhs << ", ";
@@ -477,7 +486,8 @@ void CodeGen_OpenGLCompute_C::visit(const Cast *op) {
     Type value_type = op->value.type();
     // If both types are represented by the same GLSL type, no explicit cast
     // is necessary.
-    if (map_type(op->type) == map_type(value_type)) {
+    Type target_type = map_type(op->type);
+    if (target_type == map_type(value_type)) {
         Expr value = op->value;
         if (value_type.code() == Type::Float) {
             // float->int conversions may need explicit truncation if an
@@ -494,7 +504,6 @@ void CodeGen_OpenGLCompute_C::visit(const Cast *op) {
         // https://github.com/halide/Halide/issues/4975
         value.accept(this);
     } else {
-        Type target_type = map_type(op->type);
         print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
     }
 }
