@@ -26,19 +26,19 @@ char get_lane_suffix(int i) {
     return "rgba"[i];
 }
 
-/**
-  * This class handles GLSL arithmetic.
-  * TODO: combine this with CodeGen_OpenGLCompute_C, which is now the only subclass
-  * (unless it ends up being useful for Vulkan in the future?)
-  */
-class CodeGen_GLSLBase : public CodeGen_C {
+class CodeGen_OpenGLCompute_C : public CodeGen_C {
 public:
-    CodeGen_GLSLBase(std::ostream &s, Target t);
+    CodeGen_OpenGLCompute_C(std::ostream &s, const Target &t);
+    void add_kernel(const Stmt &stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args);
+
+protected:
+    Type map_type(const Type &);
 
     std::string print_name(const std::string &name) override;
     std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
 
-protected:
     using CodeGen_C::visit;
 
     void visit(const Cast *) override;
@@ -49,7 +49,6 @@ protected:
 
     void visit(const Max *op) override;
     void visit(const Min *op) override;
-    void visit(const Call *op) override;
 
     void visit(const Mod *) override;
 
@@ -64,72 +63,63 @@ protected:
 
     void visit(const Shuffle *) override;
 
-    Type map_type(const Type &);
+    void visit(const For *) override;
+    void visit(const Ramp *op) override;
+    void visit(const Broadcast *op) override;
+    void visit(const Load *op) override;
+    void visit(const Store *op) override;
+    void visit(const Call *op) override;
+    void visit(const Allocate *op) override;
+    void visit(const Free *op) override;
+    void visit(const Select *op) override;
+    void visit(const Evaluate *op) override;
 
-    std::map<std::string, std::string> builtin;
-
-    // empty for GL 3.x and GLCompute which do not care about this (due to implicit conversion)
-    // while GL 2.0 only support a small subset of builtin functions with ivec arguments
-    std::set<std::string> support_non_float_type_builtin;
-
-    // true for GL 3.x (GLSL >= 130 or ESSL >= 300) and GLCompute
-    // false for GL 2.x which does not support uint/uvec
-    bool support_native_uint = true;
-
-    // true for GL 2.1 and 3.x (GLSL == 120, >= 130) and GLCompute
-    // true for GL ES 3.1 with EXT_shader_implicit_conversions
-    // false for GL 2.0 and GL ES 3.0
-    bool support_int_to_float_implicit_conversion = true;
-
-    // it seems that only GLSL ES implicitly does not support rounding of integer division
-    // while GLSL specification does not talk about this issue
-    // see GLSL ES Specification 1.00, issues 10.28, Rounding of Integer Division
-    // see GLSL ES Specification 3.00, issues 12.33, Rounding of Integer Division
-    bool support_integer_division_rounding = true;
+    const std::map<std::string, std::string> builtin = {
+        {"sin_f32", "sin"},
+        {"sqrt_f32", "sqrt"},
+        {"cos_f32", "cos"},
+        {"exp_f32", "exp"},
+        {"log_f32", "log"},
+        {"abs_f32", "abs"},
+        {"floor_f32", "floor"},
+        {"ceil_f32", "ceil"},
+        {"asin_f32", "asin"},
+        {"acos_f32", "acos"},
+        {"tan_f32", "tan"},
+        {"atan_f32", "atan"},
+        {"atan2_f32", "atan"},  // also called atan in GLSL
+        {"sinh_f32", "sinh"},
+        {"cosh_f32", "cosh"},
+        {"tanh_f32", "tanh"},
+        {"asinh_f32", "asinh"},
+        {"acosh_f32", "acosh"},
+        {"atanh_f32", "atanh"},
+        {"min", "min"},
+        {"max", "max"},
+        {"mix", "mix"},
+        {"mod", "mod"},
+        {"abs", "abs"},
+        {"isnan", "isnan"},
+        {"round_f32", "roundEven"},
+        {"fast_inverse_sqrt_f32", "inversesqrt"},
+        {"equal", "equal"},
+        {"notEqual", "notEqual"},
+        {"lessThan", "lessThan"},
+        {"lessThanEqual", "lessThanEqual"},
+        {"greaterThan", "greaterThan"},
+        {"greaterThanEqual", "greaterThanEqual"},
+        {"trunc_f32", "trunc"},
+    };
+    int workgroup_size[3] = {0, 0, 0};
 };
 
-CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target)
-    : CodeGen_C(s, target) {
-    builtin["sin_f32"] = "sin";
-    builtin["sqrt_f32"] = "sqrt";
-    builtin["cos_f32"] = "cos";
-    builtin["exp_f32"] = "exp";
-    builtin["log_f32"] = "log";
-    builtin["abs_f32"] = "abs";
-    builtin["floor_f32"] = "floor";
-    builtin["ceil_f32"] = "ceil";
-    builtin["asin_f32"] = "asin";
-    builtin["acos_f32"] = "acos";
-    builtin["tan_f32"] = "tan";
-    builtin["atan_f32"] = "atan";
-    builtin["atan2_f32"] = "atan";  // also called atan in GLSL
-    builtin["sinh_f32"] = "sinh";
-    builtin["cosh_f32"] = "cosh";
-    builtin["tanh_f32"] = "tanh";
-    builtin["asinh_f32"] = "asinh";
-    builtin["acosh_f32"] = "acosh";
-    builtin["atanh_f32"] = "atanh";
-    builtin["min"] = "min";
-    builtin["max"] = "max";
-    builtin["mix"] = "mix";
-    builtin["mod"] = "mod";
-    builtin["abs"] = "abs";
-    builtin["isnan"] = "isnan";
-    builtin["round_f32"] = "roundEven";
-    builtin["fast_inverse_sqrt_f32"] = "inversesqrt";
-
-    // functions that produce bvecs
-    builtin["equal"] = "equal";
-    builtin["notEqual"] = "notEqual";
-    builtin["lessThan"] = "lessThan";
-    builtin["lessThanEqual"] = "lessThanEqual";
-    builtin["greaterThan"] = "greaterThan";
-    builtin["greaterThanEqual"] = "greaterThanEqual";
+CodeGen_OpenGLCompute_C::CodeGen_OpenGLCompute_C(std::ostream &s, const Target &t)
+    : CodeGen_C(s, t) {
 }
 
 // Maps Halide types to appropriate GLSL types or emit error if no equivalent
 // type is available.
-Type CodeGen_GLSLBase::map_type(const Type &type) {
+Type CodeGen_OpenGLCompute_C::map_type(const Type &type) {
     Type result = type;
     if (type.is_scalar()) {
         if (type.is_float()) {
@@ -141,20 +131,7 @@ Type CodeGen_GLSLBase::map_type(const Type &type) {
         } else if (type.is_int() && type.bits() <= 32) {
             result = Int(32);
         } else if (type.is_uint() && type.bits() <= 32) {
-            if (support_native_uint) {
-                result = UInt(32);
-            } else {
-                if (type.bits() == 32) {
-                    // GLSL <= 120 doesn't have unsigned types, simply use int.
-                    // WARNING: Using int to represent unsigned int may result in
-                    // overflows and undefined behavior.
-                    result = Int(32);
-                } else {
-                    // Embed all other uints in a GLSL float. Probably not actually
-                    // valid for uint16 on systems with low float precision.
-                    result = Float(32);
-                }
-            }
+            result = UInt(32);
         } else {
             user_error << "GLSL: Can't represent type '" << type << "'.\n";
         }
@@ -169,7 +146,86 @@ Type CodeGen_GLSLBase::map_type(const Type &type) {
     return result;
 }
 
-void CodeGen_GLSLBase::visit(const FloatImm *op) {
+// Identifiers containing double underscores '__' are reserved in GLSL, so we
+// have to use a different name mangling scheme than in the C code generator.
+string CodeGen_OpenGLCompute_C::print_name(const string &name) {
+    const string mangled = CodeGen_C::print_name(name);
+    return replace_all(mangled, "__", "XX");
+}
+
+string CodeGen_OpenGLCompute_C::print_type(Type type, AppendSpaceIfNeeded space) {
+    ostringstream oss;
+    type = map_type(type);
+    if (type.is_scalar()) {
+        if (type.is_float()) {
+            oss << "float";
+        } else if (type.is_bool()) {
+            oss << "bool";
+        } else if (type.is_int()) {
+            oss << "int";
+        } else if (type.is_uint()) {
+            oss << "uint";
+        } else {
+            internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
+        }
+    } else {
+        if (type.is_float()) {
+            // no prefix for float vectors
+        } else if (type.is_bool()) {
+            oss << "b";
+        } else if (type.is_int()) {
+            oss << "i";
+        } else if (type.is_uint()) {
+            oss << "u";
+        } else {
+            internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
+        }
+        oss << "vec" << type.lanes();
+    }
+
+    if (space == AppendSpace) {
+        oss << " ";
+    }
+
+    return oss.str();
+}
+
+string simt_intrinsic(const string &name) {
+    if (ends_with(name, ".__thread_id_x")) {
+        return "gl_LocalInvocationID.x";
+    } else if (ends_with(name, ".__thread_id_y")) {
+        return "gl_LocalInvocationID.y";
+    } else if (ends_with(name, ".__thread_id_z")) {
+        return "gl_LocalInvocationID.z";
+    } else if (ends_with(name, ".__thread_id_w")) {
+        internal_error << "4-dimension loops with " << name << " are not supported\n";
+    } else if (ends_with(name, ".__block_id_x")) {
+        return "gl_WorkGroupID.x";
+    } else if (ends_with(name, ".__block_id_y")) {
+        return "gl_WorkGroupID.y";
+    } else if (ends_with(name, ".__block_id_z")) {
+        return "gl_WorkGroupID.z";
+    } else if (ends_with(name, ".__block_id_w")) {
+        internal_error << "4-dimension loops with " << name << " are not supported\n";
+    }
+    internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
+    return "";
+}
+
+int thread_loop_workgroup_index(const string &name) {
+    string ids[] = {".__thread_id_x",
+                    ".__thread_id_y",
+                    ".__thread_id_z",
+                    ".__thread_id_w"};
+    for (size_t i = 0; i < sizeof(ids) / sizeof(string); i++) {
+        if (ends_with(name, ids[i])) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void CodeGen_OpenGLCompute_C::visit(const FloatImm *op) {
     ostringstream oss;
     // Print integral numbers with trailing ".0". For fractional numbers use a
     // precision of 9 digits, which should be enough to recover the binary
@@ -184,33 +240,27 @@ void CodeGen_GLSLBase::visit(const FloatImm *op) {
     id = oss.str();
 }
 
-void CodeGen_GLSLBase::visit(const IntImm *op) {
-    id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
-}
-
-void CodeGen_GLSLBase::visit(const UIntImm *op) {
+void CodeGen_OpenGLCompute_C::visit(const UIntImm *op) {
     if (op->type == Bool()) {
         if (op->value == 1) {
             id = "true";
         } else {
             id = "false";
         }
-    } else if (support_native_uint) {
-        id = std::to_string(op->value) + "u";
     } else {
-        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
+        id = std::to_string(op->value) + "u";
     }
 }
 
-void CodeGen_GLSLBase::visit(const Max *op) {
+void CodeGen_OpenGLCompute_C::visit(const Max *op) {
     print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::PureExtern));
 }
 
-void CodeGen_GLSLBase::visit(const Min *op) {
+void CodeGen_OpenGLCompute_C::visit(const Min *op) {
     print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::PureExtern));
 }
 
-void CodeGen_GLSLBase::visit(const Mod *op) {
+void CodeGen_OpenGLCompute_C::visit(const Mod *op) {
     if (op->type.is_int() || op->type.is_uint()) {
         // Just exploit the Euclidean identity
         // FIXME: Why doesn't lower_euclidean_mod work for glsl?
@@ -225,8 +275,98 @@ void CodeGen_GLSLBase::visit(const Mod *op) {
     }
 }
 
-void CodeGen_GLSLBase::visit(const Call *op) {
-    if (op->is_intrinsic(Call::lerp)) {
+// The following comparisons are defined for ivec and vec
+// types, so we don't use call_builtin
+void CodeGen_OpenGLCompute_C::visit(const EQ *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "equal", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_OpenGLCompute_C::visit(const NE *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "notEqual", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_OpenGLCompute_C::visit(const LT *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "lessThan", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_OpenGLCompute_C::visit(const LE *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "lessThanEqual", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_OpenGLCompute_C::visit(const GT *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "greaterThan", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_OpenGLCompute_C::visit(const GE *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "greaterThanEqual", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_OpenGLCompute_C::visit(const Shuffle *op) {
+    // The halide Shuffle represents the llvm intrinisc
+    // shufflevector, however, for GLSL its use is limited to swizzling
+    // up to a four channel vec type.
+
+    internal_assert(op->vectors.size() == 1);
+
+    int shuffle_lanes = op->type.lanes();
+    internal_assert(shuffle_lanes <= 4);
+
+    string expr = print_expr(op->vectors[0]);
+
+    // Create a swizzle expression for the shuffle
+    string swizzle;
+    for (int i = 0; i != shuffle_lanes; ++i) {
+        int channel = op->indices[i];
+        internal_assert(channel < 4) << "Shuffle of invalid channel";
+        swizzle += get_lane_suffix(channel);
+    }
+
+    print_assignment(op->type, expr + "." + swizzle);
+}
+
+void CodeGen_OpenGLCompute_C::visit(const Call *op) {
+    if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
+
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
+        internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
+        auto fence_type = *fence_type_ptr;
+
+        stream << get_indent() << "barrier();\n";
+
+        // barrier() is an execution barrier; for memory behavior, we'll use the
+        // least-common-denominator groupMemoryBarrier(), because other fence types
+        // require extensions or GL 4.3 as a minumum.
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device ||
+            fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
+            stream << "groupMemoryBarrier();\n";
+        }
+        print_assignment(op->type, "0");
+    } else if (op->is_intrinsic(Call::lerp)) {
         // Implement lerp using GLSL's mix() function, which always uses
         // floating point arithmetic.
         Expr zero_val = op->args[0];
@@ -319,161 +459,21 @@ void CodeGen_GLSLBase::visit(const Call *op) {
             user_error << "GLSL: unknown function '" << op->name << "' encountered.\n";
         }
 
-        bool need_cast = false;
-        const Type float_type = Float(32, op->type.lanes());
         vector<Expr> new_args(op->args.size());
 
-        // For GL 2.0, Most GLSL builtins are only defined for float arguments,
-        // so we may have to introduce type casts around the arguments and the
-        // entire function call.
-        if (!support_int_to_float_implicit_conversion &&
-            !support_non_float_type_builtin.count(op->name)) {
-            need_cast = !op->type.is_float();
-            for (size_t i = 0; i < op->args.size(); i++) {
-                if (!op->args[i].type().is_float()) {
-                    new_args[i] = Cast::make(float_type, op->args[i]);
-                    need_cast = true;
-                } else {
-                    new_args[i] = op->args[i];
-                }
+        rhs << builtin.at(op->name) << "(";
+        for (size_t i = 0; i < op->args.size(); i++) {
+            if (i > 0) {
+                rhs << ", ";
             }
+            rhs << print_expr(op->args[i]);
         }
-
-        if (need_cast) {
-            Expr val = Call::make(float_type, op->name, new_args, op->call_type);
-            print_expr(simplify(Cast::make(op->type, val)));
-        } else {
-            rhs << builtin[op->name] << "(";
-            for (size_t i = 0; i < op->args.size(); i++) {
-                if (i > 0) {
-                    rhs << ", ";
-                }
-                rhs << print_expr(op->args[i]);
-            }
-            rhs << ")";
-            print_assignment(op->type, rhs.str());
-        }
+        rhs << ")";
+        print_assignment(op->type, rhs.str());
     }
 }
 
-string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option) {
-    ostringstream oss;
-    type = map_type(type);
-    if (type.is_scalar()) {
-        if (type.is_float()) {
-            oss << "float";
-        } else if (type.is_bool()) {
-            oss << "bool";
-        } else if (type.is_int()) {
-            oss << "int";
-        } else if (type.is_uint()) {
-            oss << "uint";
-        } else {
-            internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
-        }
-    } else {
-        if (type.is_float()) {
-            // no prefix for float vectors
-        } else if (type.is_bool()) {
-            oss << "b";
-        } else if (type.is_int()) {
-            oss << "i";
-        } else if (type.is_uint()) {
-            oss << "u";
-        } else {
-            internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
-        }
-        oss << "vec" << type.lanes();
-    }
-
-    if (space_option == AppendSpace) {
-        oss << " ";
-    }
-
-    return oss.str();
-}
-
-// The following comparisons are defined for ivec and vec
-// types, so we don't use call_builtin
-void CodeGen_GLSLBase::visit(const EQ *op) {
-    if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "equal", {op->a, op->b}, Call::Extern));
-    } else {
-        CodeGen_C::visit(op);
-    }
-}
-
-void CodeGen_GLSLBase::visit(const NE *op) {
-    if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "notEqual", {op->a, op->b}, Call::Extern));
-    } else {
-        CodeGen_C::visit(op);
-    }
-}
-
-void CodeGen_GLSLBase::visit(const LT *op) {
-    if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "lessThan", {op->a, op->b}, Call::Extern));
-    } else {
-        CodeGen_C::visit(op);
-    }
-}
-
-void CodeGen_GLSLBase::visit(const LE *op) {
-    if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "lessThanEqual", {op->a, op->b}, Call::Extern));
-    } else {
-        CodeGen_C::visit(op);
-    }
-}
-
-void CodeGen_GLSLBase::visit(const GT *op) {
-    if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "greaterThan", {op->a, op->b}, Call::Extern));
-    } else {
-        CodeGen_C::visit(op);
-    }
-}
-
-void CodeGen_GLSLBase::visit(const GE *op) {
-    if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "greaterThanEqual", {op->a, op->b}, Call::Extern));
-    } else {
-        CodeGen_C::visit(op);
-    }
-}
-
-void CodeGen_GLSLBase::visit(const Shuffle *op) {
-    // The halide Shuffle represents the llvm intrinisc
-    // shufflevector, however, for GLSL its use is limited to swizzling
-    // up to a four channel vec type.
-
-    internal_assert(op->vectors.size() == 1);
-
-    int shuffle_lanes = op->type.lanes();
-    internal_assert(shuffle_lanes <= 4);
-
-    string expr = print_expr(op->vectors[0]);
-
-    // Create a swizzle expression for the shuffle
-    string swizzle;
-    for (int i = 0; i != shuffle_lanes; ++i) {
-        int channel = op->indices[i];
-        internal_assert(channel < 4) << "Shuffle of invalid channel";
-        swizzle += get_lane_suffix(channel);
-    }
-
-    print_assignment(op->type, expr + "." + swizzle);
-}
-
-// Identifiers containing double underscores '__' are reserved in GLSL, so we
-// have to use a different name mangling scheme than in the C code generator.
-string CodeGen_GLSLBase::print_name(const string &name) {
-    const string mangled = CodeGen_C::print_name(name);
-    return replace_all(mangled, "__", "XX");
-}
-
-void CodeGen_GLSLBase::visit(const Cast *op) {
+void CodeGen_OpenGLCompute_C::visit(const Cast *op) {
     Type value_type = op->value.type();
     // If both types are represented by the same GLSL type, no explicit cast
     // is necessary.
@@ -499,152 +499,11 @@ void CodeGen_GLSLBase::visit(const Cast *op) {
     }
 }
 
-class CodeGen_OpenGLCompute_Dev : public CodeGen_GPU_Dev {
-public:
-    CodeGen_OpenGLCompute_Dev(const Target &target);
-
-    // CodeGen_GPU_Dev interface
-    void add_kernel(Stmt stmt,
-                    const std::string &name,
-                    const std::vector<DeviceArgument> &args) override;
-
-    void init_module() override;
-
-    std::vector<char> compile_to_src() override;
-
-    std::string get_current_kernel_name() override;
-
-    void dump() override;
-
-    std::string print_gpu_name(const std::string &name) override;
-
-    std::string api_unique_name() override {
-        return "openglcompute";
-    }
-    bool kernel_run_takes_types() const override {
-        return true;
-    }
-
-protected:
-    class CodeGen_OpenGLCompute_C : public CodeGen_GLSLBase {
-    public:
-        CodeGen_OpenGLCompute_C(std::ostream &s, const Target &t);
-        void add_kernel(const Stmt &stmt,
-                        const std::string &name,
-                        const std::vector<DeviceArgument> &args);
-
-    protected:
-        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
-
-        using CodeGen_GLSLBase::visit;
-        void visit(const For *) override;
-        void visit(const Ramp *op) override;
-        void visit(const Broadcast *op) override;
-        void visit(const Load *op) override;
-        void visit(const Store *op) override;
-        void visit(const Call *op) override;
-        void visit(const Allocate *op) override;
-        void visit(const Free *op) override;
-        void visit(const Select *op) override;
-        void visit(const Evaluate *op) override;
-        void visit(const IntImm *op) override;
-
-    public:
-        int workgroup_size[3];
-    };
-
-    std::ostringstream src_stream;
-    std::string cur_kernel_name;
-    CodeGen_OpenGLCompute_C glc;
-};
-
-CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(const Target &target)
-    : glc(src_stream, target) {
-}
-
-CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::CodeGen_OpenGLCompute_C(std::ostream &s, const Target &t)
-    : CodeGen_GLSLBase(s, t) {
-    builtin["trunc_f32"] = "trunc";
-}
-
-string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type, AppendSpaceIfNeeded space) {
-    Type mapped_type = map_type(type);
-    if (mapped_type.is_uint() && !mapped_type.is_bool()) {
-        string s = mapped_type.is_scalar() ? "uint" : "uvec" + std::to_string(mapped_type.lanes());
-        if (space == AppendSpace) {
-            s += " ";
-        }
-        return s;
-    } else {
-        return CodeGen_GLSLBase::print_type(type, space);
-    }
-}
-
-namespace {
-string simt_intrinsic(const string &name) {
-    if (ends_with(name, ".__thread_id_x")) {
-        return "gl_LocalInvocationID.x";
-    } else if (ends_with(name, ".__thread_id_y")) {
-        return "gl_LocalInvocationID.y";
-    } else if (ends_with(name, ".__thread_id_z")) {
-        return "gl_LocalInvocationID.z";
-    } else if (ends_with(name, ".__thread_id_w")) {
-        internal_error << "4-dimension loops with " << name << " are not supported\n";
-    } else if (ends_with(name, ".__block_id_x")) {
-        return "gl_WorkGroupID.x";
-    } else if (ends_with(name, ".__block_id_y")) {
-        return "gl_WorkGroupID.y";
-    } else if (ends_with(name, ".__block_id_z")) {
-        return "gl_WorkGroupID.z";
-    } else if (ends_with(name, ".__block_id_w")) {
-        internal_error << "4-dimension loops with " << name << " are not supported\n";
-    }
-    internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
-    return "";
-}
-
-int thread_loop_workgroup_index(const string &name) {
-    string ids[] = {".__thread_id_x",
-                    ".__thread_id_y",
-                    ".__thread_id_z",
-                    ".__thread_id_w"};
-    for (size_t i = 0; i < sizeof(ids) / sizeof(string); i++) {
-        if (ends_with(name, ids[i])) {
-            return i;
-        }
-    }
-    return -1;
-}
-}  // namespace
-
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
-    if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
-
-        const auto *fence_type_ptr = as_const_int(op->args[0]);
-        internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
-        auto fence_type = *fence_type_ptr;
-
-        stream << get_indent() << "barrier();\n";
-
-        // barrier() is an execution barrier; for memory behavior, we'll use the
-        // least-common-denominator groupMemoryBarrier(), because other fence types
-        // require extensions or GL 4.3 as a minumum.
-        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device ||
-            fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
-            stream << "groupMemoryBarrier();\n";
-        }
-        print_assignment(op->type, "0");
-    } else {
-        CodeGen_GLSLBase::visit(op);
-    }
-}
-
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) {
+void CodeGen_OpenGLCompute_C::visit(const For *loop) {
     user_assert(loop->for_type != ForType::GPULane)
         << "The OpenGLCompute backend does not support the gpu_lanes() scheduling directive.";
 
-    if (is_gpu_var(loop->name)) {
+    if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         internal_assert((loop->for_type == ForType::GPUBlock) ||
                         (loop->for_type == ForType::GPUThread))
             << "kernel loop must be either gpu block or gpu thread\n";
@@ -681,7 +540,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
     }
 }
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
+void CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
     ostringstream rhs;
     rhs << print_type(op->type) << "(";
 
@@ -699,14 +558,14 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
     print_assignment(op->base.type(), rhs.str());
 }
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *op) {
+void CodeGen_OpenGLCompute_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
     ostringstream oss;
     oss << print_type(op->type.with_lanes(op->lanes)) << "(" << id_value << ")";
     print_assignment(op->type.with_lanes(op->lanes), oss.str());
 }
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
+void CodeGen_OpenGLCompute_C::visit(const Load *op) {
     user_assert(is_const_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
     // TODO: support vectors
     // https://github.com/halide/Halide/issues/4975
@@ -722,7 +581,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
     print_assignment(op->type, oss.str());
 }
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
+void CodeGen_OpenGLCompute_C::visit(const Store *op) {
     user_assert(is_const_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
     // TODO: support vectors
     // https://github.com/halide/Halide/issues/4975
@@ -742,7 +601,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
     cache.clear();
 }
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Select *op) {
+void CodeGen_OpenGLCompute_C::visit(const Select *op) {
     ostringstream rhs;
     string true_val = print_expr(op->true_value);
     string false_val = print_expr(op->false_value);
@@ -753,6 +612,42 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Select *op)
         << " : " << false_val
         << ")";
     print_assignment(op->type, rhs.str());
+}
+
+class CodeGen_OpenGLCompute_Dev : public CodeGen_GPU_Dev {
+public:
+    CodeGen_OpenGLCompute_Dev(const Target &target);
+
+    // CodeGen_GPU_Dev interface
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args) override;
+
+    void init_module() override;
+
+    std::vector<char> compile_to_src() override;
+
+    std::string get_current_kernel_name() override;
+
+    void dump() override;
+
+    std::string print_gpu_name(const std::string &name) override;
+
+    std::string api_unique_name() override {
+        return "openglcompute";
+    }
+    bool kernel_run_takes_types() const override {
+        return true;
+    }
+
+protected:
+    std::ostringstream src_stream;
+    std::string cur_kernel_name;
+    CodeGen_OpenGLCompute_C glc;
+};
+
+CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(const Target &target)
+    : glc(src_stream, target) {
 }
 
 void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
@@ -781,9 +676,9 @@ public:
 };
 }  // namespace
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(const Stmt &s,
-                                                                    const string &name,
-                                                                    const vector<DeviceArgument> &args) {
+void CodeGen_OpenGLCompute_C::add_kernel(const Stmt &s,
+                                         const string &name,
+                                         const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding OpenGLCompute kernel " << name << "\n";
     cache.clear();
@@ -857,7 +752,7 @@ void CodeGen_OpenGLCompute_Dev::init_module() {
     cur_kernel_name = "";
 }
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *op) {
+void CodeGen_OpenGLCompute_C::visit(const Allocate *op) {
     debug(2) << "OpenGLCompute: Allocate " << op->name << " of type " << op->type << " on device\n";
 
     stream << get_indent();
@@ -890,20 +785,20 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     }
 }
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Free *op) {
+void CodeGen_OpenGLCompute_C::visit(const Free *op) {
     debug(2) << "OpenGLCompute: Free on device for " << op->name << "\n";
 
     allocations.pop(op->name);
 }
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Evaluate *op) {
+void CodeGen_OpenGLCompute_C::visit(const Evaluate *op) {
     if (is_const(op->value)) {
         return;
     }
     print_expr(op->value);
 }
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const IntImm *op) {
+void CodeGen_OpenGLCompute_C::visit(const IntImm *op) {
     if (op->type == Int(32)) {
         // GL seems to interpret some large int immediates as uints.
         id = "int(" + std::to_string(op->value) + ")";
