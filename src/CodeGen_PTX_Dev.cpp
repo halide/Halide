@@ -144,7 +144,11 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            arg_types[i] = llvm_type_of(UInt(8))->getPointerTo();
+            if (args[i].read && args[i].memory_type == MemoryType::GPUTexture) {
+                arg_types[i] = llvm_type_of(Int(64));
+            } else {
+                arg_types[i] = llvm_type_of(UInt(8))->getPointerTo();
+            }
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
         }
@@ -157,7 +161,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer && (args[i].write || args[i].memory_type != MemoryType::GPUTexture)) {
             function->addParamAttr(i, Attribute::NoAlias);
         }
     }
@@ -246,6 +250,46 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
         builder->CreateCall(barrier0);
         value = ConstantInt::get(i32_t, 0);
+    } else if (op->is_intrinsic(Call::image_load)) {
+        int num_args = (op->args.size() - 2) / 2;
+        user_assert(num_args >= 1 && num_args <= 2);
+
+        string res_desc = "";
+        user_assert(op->type.bits() == 32) << "ptx texture sampler only supports 32 bit results";
+        llvm::Type *element_type;
+        if (op->type.is_float()) {
+            res_desc = "f32";
+            element_type = llvm_type_of(Float(32));
+        } else {
+            res_desc = "s32";
+            element_type = llvm_type_of(Int(32));
+        }
+        // PTX returns a 4 element struct (not a vector!) regardless of
+        llvm::Type *res_type = llvm::StructType::get(element_type, element_type, element_type, element_type);
+
+        string coord_desc = "";
+        Type coord_type = op->args[2].type();
+        internal_assert(coord_type.bits() == 32) << "ptx texture sampler only supports 32 bit args";
+        if (coord_type.is_float()) {
+            coord_desc = ".f32";
+        } else if (coord_type.is_uint()) {
+            coord_desc = ".u32";
+        } else if (coord_type.is_int()) {
+            coord_desc = ".s32";
+        }
+        internal_assert(!coord_desc.empty()) << "unhandled coordinate type for ptx texture sampler " << coord_type;
+
+        string dim = std::to_string(num_args) + "d";
+        string intrinsic = "llvm.nvvm.tex.unified." + dim + ".v4" + res_desc + coord_desc;
+
+        vector<Value *> coords;
+        coords.push_back(codegen(Variable::make(Int(64), op->args[0].as<StringImm>()->value)));
+        for (size_t i = 2; i < op->args.size(); i += 2) {
+            internal_assert(op->args[i].type() == op->args[2].type()) << "all coordinates must be same type";
+            coords.push_back(codegen(op->args[i]));
+        }
+        llvm::CallInst *call = (llvm::CallInst *)call_intrin(res_type, 1, intrinsic, coords);
+        value = builder->CreateExtractValue(call, {0});
     } else {
         CodeGen_LLVM::visit(op);
     }
