@@ -29,7 +29,6 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeHexagonHost
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeMetal_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Compute_h[];
 
@@ -417,9 +416,6 @@ CodeGen_C::~CodeGen_C() {
             }
             if (target.has_feature(Target::OpenGLCompute)) {
                 stream << halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h << "\n";
-            }
-            if (target.has_feature(Target::OpenGL)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << "\n";
             }
             if (target.has_feature(Target::D3D12Compute)) {
                 stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << "\n";

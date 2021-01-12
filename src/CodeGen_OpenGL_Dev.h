@@ -134,7 +134,6 @@ protected:
     void visit(const Allocate *) override;
     void visit(const Free *) override;
 
-    void visit(const Call *) override;
     void visit(const AssertStmt *) override;
     void visit(const Ramp *op) override;
     void visit(const Broadcast *) override;

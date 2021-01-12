@@ -10,7 +10,6 @@
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeOpenCL.h"
-#include "HalideRuntimeOpenGL.h"
 #include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeQurt.h"
 

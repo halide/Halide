@@ -1974,16 +1974,6 @@ public:
                    DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
-    /** Schedule for execution using coordinate-based hardware api.
-     * GLSL is an example of this. Conceptually, this is
-     * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
-     * individual output pixels in parallel) and vectorization over 'c'
-     * (since GLSL/RS implicitly vectorizes the color channel). */
-    Func &shader(const Var &x, const Var &y, const Var &c, DeviceAPI device_api);
-
-    /** Schedule for execution as GLSL kernel. */
-    Func &glsl(const Var &x, const Var &y, const Var &c);
-
     /** Schedule for execution on Hexagon. When a loop is marked with
      * Hexagon, that loop is executed on a Hexagon DSP. */
     Func &hexagon(const VarOrRVar &x = Var::outermost());
