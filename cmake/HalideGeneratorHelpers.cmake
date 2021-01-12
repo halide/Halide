@@ -342,7 +342,7 @@ function(_Halide_add_targets_to_runtime TARGET)
 endfunction()
 
 function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
-    # TODO: verify that this is correct & necessary for OpenGLCompute
+    # TODO(https://github.com/halide/Halide/issues/5633): verify that this is correct & necessary for OpenGLCompute
     if ("${ARGN}" MATCHES "openglcompute")
         if ("${ARGN}" MATCHES "egl")
             find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)

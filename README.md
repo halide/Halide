@@ -336,7 +336,7 @@ an older XCode which does not default to libc++.
 
 # Halide OpenGL/GLSL backend
 
-TODO: update this for OpenGLCompute, which is staying
+TODO(https://github.com/halide/Halide/issues/5633): update this for OpenGLCompute, which is staying
 
 # Halide for Hexagon HVX
 

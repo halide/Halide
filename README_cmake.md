@@ -464,7 +464,7 @@ If the CMake version is lower than 3.18, the deprecated [`FindCUDA`][findcuda]
 module will be used instead. It reads the variable `CUDA_TOOLKIT_ROOT_DIR`
 instead of `CUDAToolkit_ROOT` above.
 
-TODO: update this section for OpenGLCompute, which needs some (but maybe not all) of this.
+TODO(https://github.com/halide/Halide/issues/5633): update this section for OpenGLCompute, which needs some (but maybe not all) of this.
 
 When targeting OpenGL, the [`FindOpenGL`][findopengl] and [`FindX11`][findx11]
 modules will be used to link AOT generated binaries. These modules can be
