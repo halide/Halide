@@ -1,10 +1,12 @@
 #include "ParallelRVar.h"
 #include "CSE.h"
 #include "Debug.h"
+#include "Definition.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Simplify.h"
 #include "Substitute.h"
 

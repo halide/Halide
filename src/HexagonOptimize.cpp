@@ -499,7 +499,7 @@ private:
     using IRMutator::visit;
 
     Scope<Interval> bounds;
-    Target target;
+    const Target &target;
 
     Expr visit(const Mul *op) override {
         static const vector<Pattern> scalar_muls = {
@@ -1138,8 +1138,8 @@ private:
     }
 
 public:
-    OptimizePatterns(Target t) {
-        target = t;
+    OptimizePatterns(const Target &t)
+        : target(t) {
     }
 };
 
@@ -2477,7 +2477,7 @@ Stmt scatter_gather_generator(Stmt s) {
     return s;
 }
 
-Stmt optimize_hexagon_instructions(Stmt s, Target t) {
+Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
     // We need to redo intrinsic matching due to simplification that has
     // happened after the end of target independent lowering.
     s = find_intrinsics(s);

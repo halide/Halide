@@ -43,10 +43,9 @@ class GlobalVariable;
 #include "Target.h"
 
 namespace Halide {
-struct ExternSignature;
-}  // namespace Halide
 
-namespace Halide {
+struct ExternSignature;
+
 namespace Internal {
 
 /** A code generator abstract base class. Actual code generators
@@ -87,7 +86,7 @@ public:
     }
 
 protected:
-    CodeGen_LLVM(Target t);
+    CodeGen_LLVM(const Target &t);
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{

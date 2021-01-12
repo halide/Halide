@@ -14,7 +14,7 @@ using std::vector;
 using namespace Halide::ConciseCasts;
 using namespace llvm;
 
-CodeGen_PowerPC::CodeGen_PowerPC(Target t)
+CodeGen_PowerPC::CodeGen_PowerPC(const Target &t)
     : CodeGen_Posix(t) {
 #if !defined(WITH_POWERPC)
     user_error << "llvm build not configured with PowerPC target enabled.\n";

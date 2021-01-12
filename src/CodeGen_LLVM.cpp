@@ -171,7 +171,7 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
 
 }  // namespace
 
-CodeGen_LLVM::CodeGen_LLVM(Target t)
+CodeGen_LLVM::CodeGen_LLVM(const Target &t)
     : function(nullptr), context(nullptr),
       builder(nullptr),
       value(nullptr),
@@ -241,7 +241,6 @@ std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target,
     // The awkward mapping from targets to code generators
     if (target.features_any_of({Target::CUDA,
                                 Target::OpenCL,
-                                Target::OpenGL,
                                 Target::OpenGLCompute,
                                 Target::Metal,
                                 Target::D3D12Compute})) {

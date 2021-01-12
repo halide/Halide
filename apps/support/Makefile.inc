@@ -98,7 +98,6 @@ ANDROID_API_VERSION ?= 26
 
 CXX-host ?= $(CXX)
 CXX-host-opencl ?= $(CXX)
-CXX-host-opengl ?= $(CXX)
 CXX-host-cuda ?= $(CXX)
 CXX-host-metal ?= $(CXX)
 CXX-host-hvx_128 ?= $(CXX)
@@ -111,7 +110,6 @@ CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
 
 CXXFLAGS-host ?= $(CXXFLAGS)
 CXXFLAGS-host-opencl ?= $(CXXFLAGS)
-CXXFLAGS-host-opengl ?= $(CXXFLAGS)
 CXXFLAGS-host-cuda ?= $(CXXFLAGS)
 CXXFLAGS-host-metal ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_128 ?= $(CXXFLAGS)
@@ -121,7 +119,6 @@ CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
 LDFLAGS-host ?= $(LDFLAGS)
 LDFLAGS-host-opencl ?= $(LDFLAGS)
-LDFLAGS-host-opengl ?= $(LDFLAGS)
 LDFLAGS-host-cuda ?= $(LDFLAGS)
 LDFLAGS-host-metal ?= $(LDFLAGS)
 LDFLAGS-host-hvx_128 ?= $(LDFLAGS)
@@ -184,15 +181,6 @@ IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 
 IMAGE_IO_FLAGS = $(IMAGE_IO_LIBS) $(IMAGE_IO_CXX_FLAGS)
-
-PLATFORM_OPENGL_LDFLAGS=-lGL -lX11
-ifeq ($(UNAME), Darwin)
-PLATFORM_OPENGL_LDFLAGS=-framework OpenGL
-endif
-
-ifneq (, $(findstring opengl,$(HL_TARGET)))
-  OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
-endif
 
 ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation
