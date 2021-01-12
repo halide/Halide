@@ -3,6 +3,7 @@
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
+#include "ConciseCasts.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
@@ -31,6 +32,8 @@ namespace Internal {
 
 using std::string;
 using std::vector;
+
+using namespace Halide::ConciseCasts;
 
 using namespace llvm;
 
@@ -229,6 +232,15 @@ void CodeGen_PTX_Dev::init_module() {
 #ifdef WITH_NVPTX
     module = get_initial_module_for_ptx_device(target, context);
 #endif
+
+    declare_intrin_overload("dp4a", Int(32), "dp4a_s32_s32", {Int(8, 4), Int(8, 4), Int(32)});
+    declare_intrin_overload("dp4a", Int(32), "dp4a_s32_u32", {Int(8, 4), UInt(8, 4), Int(32)});
+    declare_intrin_overload("dp4a", Int(32), "dp4a_u32_s32", {UInt(8, 4), Int(8, 4), Int(32)});
+    declare_intrin_overload("dp4a", UInt(32), "dp4a_u32_u32", {UInt(8, 4), UInt(8, 4), UInt(32)});
+    declare_intrin_overload("dp2a", Int(32), "dp2a_s32_s32", {Int(16, 4), Int(8, 4), Int(32)});
+    declare_intrin_overload("dp2a", Int(32), "dp2a_s32_u32", {Int(16, 4), UInt(8, 4), Int(32)});
+    declare_intrin_overload("dp2a", Int(32), "dp2a_u32_s32", {UInt(16, 4), Int(8, 4), Int(32)});
+    declare_intrin_overload("dp2a", UInt(32), "dp2a_u32_u32", {UInt(16, 4), UInt(8, 4), UInt(32)});
 }
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
@@ -246,6 +258,10 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
         builder->CreateCall(barrier0);
         value = ConstantInt::get(i32_t, 0);
+    } else if (op->name == "dp2a" || op->name == "dp4a") {
+        // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
+        value = call_overloaded_intrin(op->type, op->name, op->args);
+        internal_assert(value) << Expr(op) << "\n";
     } else {
         CodeGen_LLVM::visit(op);
     }
@@ -383,159 +399,131 @@ void CodeGen_PTX_Dev::visit(const Atomic *op) {
     CodeGen_LLVM::visit(op);
 }
 
+// The NVPTX backend generates really terrible code if loads aren't 32-bit. This
+// mutator replaces 8- or 16-bit loads aligned to 32-bits with 32-bit loads of fewer
+// lanes instead.
+class RewriteLoadsAs32Bit : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Load *op) override {
+        if (op->type.is_scalar() || op->type.bits() * op->type.lanes() < 32) {
+            return IRMutator::visit(op);
+        }
+
+        Expr index = mutate(op->index);
+        int sub_lanes = 32 / op->type.bits();
+        const Ramp *idx = index.as<Ramp>();
+        if (idx &&
+            is_const_one(op->predicate) &&
+            is_const_one(idx->stride) &&
+            op->alignment.modulus % sub_lanes == 0 &&
+            op->alignment.remainder % sub_lanes == 0) {
+            Expr new_idx = simplify(idx->base / sub_lanes);
+            int load_lanes = op->type.lanes() / sub_lanes;
+            if (op->type.lanes() > sub_lanes) {
+                new_idx = Ramp::make(new_idx, 1, load_lanes);
+            }
+            Expr new_load = Load::make(Int(32, load_lanes), op->name, new_idx, op->image, op->param, const_true(load_lanes), op->alignment / sub_lanes);
+            return reinterpret(op->type, new_load);
+        } else if (index.same_as(op->index)) {
+            return op;
+        } else {
+            return Load::make(op->type, op->name, op->index, op->image, op->param, op->predicate, op->alignment);
+        }
+    }
+};
+
 void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     // Pattern match 8/16-bit dot products
+    struct Pattern {
+        VectorReduce::Operator op;
+        int factor;
+        Expr pattern;
+        const char *name;
+        int flags;
+        enum {
+            SwapOps = 1 << 0,  // This happens before narrowing op 1 below.
+            NarrowOp1 = 1 << 1,
+        };
+    };
+    static Expr wild_i8x = Variable::make(Int(8, 0), "*");
+    static Expr wild_u8x = Variable::make(UInt(8, 0), "*");
+    static Expr wild_i16x = Variable::make(Int(16, 0), "*");
+    static Expr wild_u16x = Variable::make(UInt(16, 0), "*");
+    // TODO: Support rewriting to arbitrary calls in IRMatch and use that instead
+    // of expr_match here. That would probably allow avoiding the redundant swapping
+    // operands logic.
+    // clang-format off
+    static const Pattern patterns[] = {
+        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_i8x)), "dp4a"},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_u8x)), "dp4a"},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x, wild_i8x)), "dp4a"},
+        {VectorReduce::Add, 4, u32(widening_mul(wild_u8x, wild_u8x)), "dp4a"},
+        {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_i16x), "dp2a", Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_u16x), "dp2a", Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_i16x), "dp2a", Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a", Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_i16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_i16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
+        {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
+    };
+    // clang-format on
 
     const int input_lanes = op->value.type().lanes();
     const int factor = input_lanes / op->type.lanes();
-    const Mul *mul = op->value.as<Mul>();
-    if (op->op == VectorReduce::Add &&
-        mul &&
-        (factor % 4 == 0) &&
-        (op->type.element_of() == Int(32) ||
-         op->type.element_of() == UInt(32))) {
+
+    std::vector<Expr> matches;
+    for (const Pattern &p : patterns) {
+        if (p.op != op->op || factor % p.factor != 0) {
+            continue;
+        }
+        if (!expr_match(p.pattern, op->value, matches)) {
+            continue;
+        }
+        Expr a = matches[0];
+        Expr b = matches[1];
+        if (p.flags & Pattern::SwapOps) {
+            std::swap(a, b);
+        }
+        if (p.flags & Pattern::NarrowOp1) {
+            // This pattern needs the second operand to be narrowed further.
+            Expr b_narrow = lossless_cast(b.type().narrow(), b);
+            if (!b_narrow.defined()) {
+                b_narrow = lossless_cast(b.type().narrow().with_code(halide_type_uint), b);
+                if (!b_narrow.defined()) {
+                    continue;
+                }
+            }
+            b = b_narrow;
+        }
         Expr i = init;
         if (!i.defined()) {
-            i = cast(mul->type, 0);
-        }
-        // Try to narrow the multiply args to 8-bit
-        Expr a = mul->a, b = mul->b;
-        if (op->type.is_uint()) {
-            a = lossless_cast(UInt(8, input_lanes), a);
-            b = lossless_cast(UInt(8, input_lanes), b);
-        } else {
-            a = lossless_cast(Int(8, input_lanes), a);
-            b = lossless_cast(Int(8, input_lanes), b);
-            if (!a.defined()) {
-                // try uint
-                a = lossless_cast(UInt(8, input_lanes), mul->a);
-            }
-            if (!b.defined()) {
-                b = lossless_cast(UInt(8, input_lanes), mul->b);
-            }
-        }
-        // If we only managed to narrow one of them, try to narrow the
-        // other to 16-bit. Swap the args so that it's always 'a'.
-        Expr a_orig = mul->a;
-        if (a.defined() && !b.defined()) {
-            std::swap(a, b);
-            a_orig = mul->b;
-        }
-        if (b.defined() && !a.defined()) {
-            // Try 16-bit instead
-            a = lossless_cast(UInt(16, input_lanes), a_orig);
-            if (!a.defined() && !op->type.is_uint()) {
-                a = lossless_cast(Int(16, input_lanes), a_orig);
-            }
+            i = cast(op->value.type(), 0);
         }
 
-        if (a.defined() && b.defined()) {
-            std::ostringstream ss;
-            if (a.type().bits() == 8) {
-                ss << "dp4a";
-            } else {
-                ss << "dp2a";
+        vector<Expr> result;
+        for (int l = 0; l < op->type.lanes(); l++) {
+            // To compute a single lane of the output, we'll
+            // extract the appropriate slice of the args, which
+            // have been reinterpreted as 32-bit vectors, then
+            // call either dp4a or dp2a the appropriate number of
+            // times, and finally sum the result.
+            Expr i_slice = Shuffle::make_extract_element(i, l);
+            for (int i = 0; i < factor; i += p.factor) {
+                Expr a_slice = Shuffle::make_slice(a, i + l * factor, 1, p.factor);
+                Expr b_slice = Shuffle::make_slice(b, i + l * factor, 1, p.factor);
+                i_slice = Call::make(i_slice.type(), p.name, {a_slice, b_slice, i_slice}, Call::PureExtern);
             }
-            if (a.type().is_int()) {
-                ss << "_s32";
-            } else {
-                ss << "_u32";
-            }
-            if (b.type().is_int()) {
-                ss << "_s32";
-            } else {
-                ss << "_u32";
-            }
-            const int a_32_bit_words_per_sum = (factor * a.type().bits()) / 32;
-            const int b_32_bit_words_per_sum = (factor * b.type().bits()) / 32;
-            // Reinterpret a and b as 32-bit values with fewer
-            // lanes. If they're aligned dense loads we should just do a
-            // different load.
-            for (Expr *e : {&a, &b}) {
-                int sub_lanes = 32 / e->type().bits();
-                const Load *load = e->as<Load>();
-                const Ramp *idx = load ? load->index.as<Ramp>() : nullptr;
-                if (idx &&
-                    is_const_one(idx->stride) &&
-                    load->alignment.modulus % sub_lanes == 0 &&
-                    load->alignment.remainder % sub_lanes == 0) {
-                    Expr new_idx = simplify(idx->base / sub_lanes);
-                    int load_lanes = input_lanes / sub_lanes;
-                    if (input_lanes > sub_lanes) {
-                        new_idx = Ramp::make(new_idx, 1, load_lanes);
-                    }
-                    *e = Load::make(Int(32, load_lanes),
-                                    load->name,
-                                    new_idx,
-                                    load->image,
-                                    load->param,
-                                    const_true(load_lanes),
-                                    load->alignment / sub_lanes);
-                } else {
-                    *e = reinterpret(Int(32, input_lanes / sub_lanes), *e);
-                }
-            }
-            string name = ss.str();
-            vector<Expr> result;
-            for (int l = 0; l < op->type.lanes(); l++) {
-                // To compute a single lane of the output, we'll
-                // extract the appropriate slice of the args, which
-                // have been reinterpreted as 32-bit vectors, then
-                // call either dp4a or dp2a the appropriate number of
-                // times, and finally sum the result.
-                Expr i_slice, a_slice, b_slice;
-                if (i.type().is_scalar()) {
-                    i_slice = i;
-                } else {
-                    i_slice = Shuffle::make_extract_element(i, l);
-                }
-                if (a.type().is_scalar()) {
-                    a_slice = a;
-                } else {
-                    a_slice = Shuffle::make_slice(a, l * a_32_bit_words_per_sum, 1, a_32_bit_words_per_sum);
-                }
-                if (b.type().is_scalar()) {
-                    b_slice = b;
-                } else {
-                    b_slice = Shuffle::make_slice(b, l * b_32_bit_words_per_sum, 1, b_32_bit_words_per_sum);
-                }
-                for (int i = 0; i < b_32_bit_words_per_sum; i++) {
-                    if (a_slice.type().lanes() == b_slice.type().lanes()) {
-                        Expr a_lane, b_lane;
-                        if (b_slice.type().is_scalar()) {
-                            a_lane = a_slice;
-                            b_lane = b_slice;
-                        } else {
-                            a_lane = Shuffle::make_extract_element(a_slice, i);
-                            b_lane = Shuffle::make_extract_element(b_slice, i);
-                        }
-                        i_slice = Call::make(i_slice.type(), name,
-                                             {a_lane, b_lane, i_slice},
-                                             Call::PureExtern);
-                    } else {
-                        internal_assert(a_slice.type().lanes() == 2 * b_slice.type().lanes());
-                        Expr a_lane_lo, a_lane_hi, b_lane;
-                        if (b_slice.type().is_scalar()) {
-                            b_lane = b_slice;
-                        } else {
-                            b_lane = Shuffle::make_extract_element(b_slice, i);
-                        }
-                        a_lane_lo = Shuffle::make_extract_element(a_slice, 2 * i);
-                        a_lane_hi = Shuffle::make_extract_element(a_slice, 2 * i + 1);
-                        i_slice = Call::make(i_slice.type(), name,
-                                             {a_lane_lo, a_lane_hi, b_lane, i_slice},
-                                             Call::PureExtern);
-                    }
-                }
-                i_slice = simplify(i_slice);
-                i_slice = common_subexpression_elimination(i_slice);
-                result.push_back(i_slice);
-            }
-            // Concatenate the per-lane results to get the full vector result
-            Expr equiv = Shuffle::make_concat(result);
-            equiv.accept(this);
-            return;
+            i_slice = RewriteLoadsAs32Bit().mutate(i_slice);
+            i_slice = simplify(i_slice);
+            i_slice = common_subexpression_elimination(i_slice);
+            result.push_back(i_slice);
         }
+        // Concatenate the per-lane results to get the full vector result
+        Expr equiv = Shuffle::make_concat(result);
+        equiv.accept(this);
+        return;
     }
     CodeGen_LLVM::codegen_vector_reduce(op, init);
 }

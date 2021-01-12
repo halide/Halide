@@ -510,6 +510,8 @@ struct Call : public ExprNode<Call> {
         dynamic_shuffle,
         extract_mask_element,
         gpu_thread_barrier,
+        halving_add,
+        halving_sub,
         hvx_gather,
         hvx_scatter,
         hvx_scatter_acc,
@@ -535,6 +537,12 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
+        rounding_halving_add,
+        rounding_halving_sub,
+        rounding_shift_left,
+        rounding_shift_right,
+        saturating_add,
+        saturating_sub,
         scatter_gather,
         select_mask,
         shift_left,
@@ -546,6 +554,11 @@ struct Call : public ExprNode<Call> {
         stringify,
         undef,
         unsafe_promise_clamped,
+        widening_add,
+        widening_mul,
+        widening_shift_left,
+        widening_shift_right,
+        widening_sub,
         IntrinsicOpCount  // Sentinel: keep last.
     };
 

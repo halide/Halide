@@ -157,6 +157,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::shift_left) ||
                op->is_intrinsic(Call::shift_right)) {
         Expr a = mutate(op->args[0], nullptr);
+        // TODO: When simplifying b, it would be nice to specify the min/max useful bounds, so
+        // stronger simplifications could occur. For example, x >> min(-i8, 0) should be simplified
+        // to x >> -max(i8, 0) and then x << max(i8, 0). This isn't safe because -i8 can overflow.
         ExprInfo b_info;
         Expr b = mutate(op->args[1], &b_info);
 
@@ -209,6 +212,15 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
         }
 
+        // Rewrite shifts with negated RHSes as shifts of the other direction.
+        if (const Sub *sub = b.as<Sub>()) {
+            if (is_const_zero(sub->a)) {
+                result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
+                b = sub->b;
+                return mutate(Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic), bounds);
+            }
+        }
+
         if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
             internal_assert(result_op == op->name);
             return op;
@@ -240,6 +252,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return Mod::make(a, make_const(a.type(), ib + 1));
         } else if (const_uint(b, &ub) &&
                    b.type().is_max(ub)) {
+            return a;
+        } else if (const_int(b, &ib) &&
+                   ib == -1) {
             return a;
         } else if (const_uint(b, &ub) &&
                    is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
