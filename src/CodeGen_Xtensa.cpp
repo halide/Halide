@@ -17,48 +17,6 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
-// Stores information about allocations in TCM (tightly coupled memory).
-struct TcmAllocation {
-    string name;
-    Type type;
-    int32_t size;
-};
-
-class FindTcmAllocations : public IRVisitor {
-    using IRVisitor::visit;
-
-    int current_loop_level = 0;
-
-    void visit(const Allocate *op) override {
-        if (op->memory_type != MemoryType::VTCM) {
-            IRVisitor::visit(op);
-            return;
-        }
-
-        user_assert(current_loop_level == 0);
-
-        TcmAllocation tcm_alloc;
-        tcm_alloc.name = op->name;
-        tcm_alloc.type = op->type;
-
-        user_assert(!op->new_expr.defined()) << "can't handle new expression";
-        tcm_alloc.size = op->constant_allocation_size();
-        user_assert(tcm_alloc.size > 0) << "tcm alloc size should be > 0 " << op->extents.size() << " " << op->extents[0];
-
-        tcm_allocations.push_back(tcm_alloc);
-        IRVisitor::visit(op);
-    }
-
-    void visit(const For *op) override {
-        current_loop_level++;
-        IRVisitor::visit(op);
-        current_loop_level--;
-    }
-
-public:
-    std::vector<TcmAllocation> tcm_allocations;
-};
-
 void CodeGen_Xtensa::compile(const Module &module) {
     CodeGen_C::compile(module);
 }
@@ -103,24 +61,6 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f) {
     Stmt body = f.body;
     body = match_xtensa_patterns(body);
 
-    FindTcmAllocations find_tcm_allocs;
-    body.accept(&find_tcm_allocs);
-
-    if (!is_header_or_extern_decl()) {
-        stream << "namespace {\n";
-        for (const auto &alloc : find_tcm_allocs.tcm_allocations) {
-            string op_name = print_name(alloc.name);
-            string op_type = print_type(alloc.type, AppendSpace);
-
-            Type size_id_type = Int(32);
-            string size_id = print_expr(make_const(size_id_type, alloc.size));
-
-            stream << op_type << "__attribute__((aligned(64))) " << op_name
-                   << "[" << size_id << "] __attribute__((section(\".dram0.data\")));\n";
-        }
-        stream << "}\n";
-    }
-
     // Emit the function prototype
     if (f.linkage == LinkageType::Internal) {
         // If the function isn't public, mark it static.
@@ -164,6 +104,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f) {
                 stream << get_indent() << "halide_unused(_ucon);";
             }
 
+            stream << "ScopedDmaInitializer dma_initializer;\n";
             // Emit the body
             print(body);
 
@@ -1423,51 +1364,35 @@ HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_concat_from_native(const uint1x16_
 }
 // TODO(vksnk): this is disabled by default, because iDMA is not part of cstub
 // so we need to get git repo compiling with xt-tools first (b/173159625)
-#if 0
-#include <xtensa/idma.h>
 
-#define IMAGE_BUFFER_DEPTH 1
-
-namespace {
-IDMA_BUFFER_DEFINE(buffer, IMAGE_BUFFER_DEPTH, IDMA_1D_DESC);
-
-void idmaLogHandler(const char* str) { printf("libidma: %s", str); }
-
-void idmaErrCB(const idma_error_details_t* data) {
-  printf("ERROR CALLBACK: iDMA in Error\n");
-  idma_error_details_t* error = idma_error_details();
-  printf("COPY FAILED, Error 0x%x at desc:%p, PIF src/dst=%x/%x\n",
-         error->err_type, (void*)error->currDesc, error->srcAddr,
-         error->dstAddr);
-}
-
-void init_dma() {
-  idma_log_handler(idmaLogHandler);
-
-  idma_init(0, MAX_BLOCK_2, 16, TICK_CYCLES_2, 100000, idmaErrCB);
-
-  idma_init_loop(buffer, IDMA_1D_DESC, IMAGE_BUFFER_DEPTH, buffer, NULL);
-}
-}
-
-HALIDE_ALWAYS_INLINE int32_t halide_xtensa_copy_1d(void* dst, int32_t dst_base, void* src, int32_t src_base, int extent, int item_size) {
-    static bool is_initialized = false;
-    if (!is_initialized) {
-        init_dma();
-        is_initialized = true;
-        printf("Initialized DMA\n");
-    }
-    xthal_dcache_region_writeback_inv((uint8_t* )src + src_base * item_size, extent * item_size);
-    idma_copy_desc((uint8_t* )dst + dst_base * item_size, (uint8_t* )src + src_base * item_size, extent * item_size, 0);
-
-    return 0;
-}
-
-HALIDE_ALWAYS_INLINE int32_t halide_xtensa_wait_for_copy(int32_t id) {
-    idma_hw_wait_all();
-    return 0;
-}
+#ifdef __cplusplus
+extern "C" {
 #endif
+
+extern void *halide_tcm_malloc(void *user_context, size_t x);
+extern void halide_tcm_free(void *user_context, void *ptr);
+extern int halide_init_dma();
+extern int32_t halide_xtensa_copy_1d(void* dst, int32_t dst_base, void* src, int32_t src_base, int extent, int item_size);
+extern int32_t halide_xtensa_wait_for_copy(int32_t id);
+extern int halide_release_dma();
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+class ScopedDmaInitializer {
+  public:
+  ScopedDmaInitializer() {
+    int status = halide_init_dma();
+    printf("FROM DEVICE: IDMA Init with status %d\n", status);
+  }
+
+  ~ScopedDmaInitializer() {
+    halide_release_dma();
+    printf("FROM DEVICE: IDMA release \n");
+  }
+};
+
 )INLINE_CODE";
 
         // Fix: on at least one config (our arm32 buildbot running gcc 5.4),
@@ -2194,7 +2119,6 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
 
     // For sizes less than 8k, do a stack allocation
     bool on_stack = false;
-    bool in_global_static = false;
     int32_t constant_size;
     string size_id;
     Type size_id_type;
@@ -2209,6 +2133,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
             int64_t stack_bytes = constant_size * op->type.bytes();
+
             if (stack_bytes > ((int64_t(1) << 31) - 1)) {
                 user_error << "Total size for allocation "
                            << op->name << " is constant but exceeds 2^31 - 1.\n";
@@ -2220,9 +2145,6 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
                     (op->memory_type == MemoryType::Auto &&
                      can_allocation_fit_on_stack(stack_bytes))) {
                     on_stack = true;
-                }
-                if (op->memory_type == MemoryType::VTCM) {
-                    in_global_static = true;
                 }
             }
         } else {
@@ -2262,7 +2184,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         // If the allocation is on the stack, the only condition we can respect is
         // unconditional false (otherwise a non-constant-sized array declaration
         // will be generated).
-        if ((!on_stack && !in_global_static) || is_const_zero(op->condition)) {
+        if (!on_stack || is_const_zero(op->condition)) {
             Expr conditional_size = Select::make(op->condition,
                                                  Variable::make(size_id_type, size_id),
                                                  make_const(size_id_type, 0));
@@ -2274,14 +2196,21 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
 
-        if (!in_global_static) {
-            stream << get_indent() << op_type;
-        }
+        stream << get_indent() << op_type;
 
         if (on_stack) {
             stream << "__attribute__((aligned(64))) " << op_name
                    << "[" << size_id << "];\n";
-        } else if (in_global_static) {
+        } else if (op->memory_type == MemoryType::VTCM) {
+            stream << "*"
+                   << "__attribute__((aligned(64))) "
+                   //    << " __restrict "
+                   << op_name
+                   << " = ("
+                   << op_type
+                   << " *)halide_tcm_malloc(_ucon, sizeof("
+                   << op_type
+                   << ")*" << size_id << ");\n";
         } else {
             stream << "*"
                    << "__attribute__((aligned(64))) "
@@ -2296,11 +2225,17 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         }
     }
 
-    if (!on_stack && !in_global_static) {
+    if (!on_stack) {
         create_assertion(op_name, Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
+        string free_function = op->free_function.empty() ?
+                                   (op->memory_type != MemoryType::VTCM ? "halide_free" : "halide_tcm_free") :
+                                   op->free_function;
+
+        if (op->memory_type != MemoryType::VTCM) {
+        }
+
         stream << get_indent();
-        string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
         stream << "HalideFreeHelper " << op_name << "_free(_ucon, "
                << op_name << ", " << free_function << ");\n";
     }
