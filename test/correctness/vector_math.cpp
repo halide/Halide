@@ -356,7 +356,7 @@ bool test(int lanes, int seed) {
         // hypot() and hypotf() use approx-sqrt, which can vary substantially
         // on Intel vs AMD chips -- we need a looser tolerance here to allow
         // this test to pass on our AMD Ryzen 9 buildbots.
-        const auto bool close_enough_hypot = [](float x, float y) {
+        const auto close_enough_hypot = [](float x, float y) -> bool {
             return fabs(x - y) < 1e-2;
         };
         for (int y = 0; y < H; y++) {
