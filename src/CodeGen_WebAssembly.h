@@ -13,14 +13,14 @@ namespace Internal {
 /** A code generator that emits WebAssembly code from a given Halide stmt. */
 class CodeGen_WebAssembly : public CodeGen_Posix {
 public:
-    CodeGen_WebAssembly(Target);
+    CodeGen_WebAssembly(const Target &);
 
     static void test();
 
 protected:
     using CodeGen_Posix::visit;
 
-    void visit(const Cast *) override;
+    void init_module() override;
 
     std::string mcpu() const override;
     std::string mattrs() const override;

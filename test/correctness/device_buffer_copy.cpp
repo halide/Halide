@@ -214,8 +214,7 @@ int main(int argc, char **argv) {
     // Test copying between different device APIs. Probably will not
     // run on test infrastructure as we do not configure more than one
     // GPU API at a time. For now, special case CUDA and OpenCL as these are
-    // the most likely to be supported together. (OpenGL would be a candidate
-    // but buffer_copy support needs to be added.)
+    // the most likely to be supported together.
     if (target.has_feature(Target::CUDA) && target.has_feature(Target::OpenCL)) {
         printf("Test cross device copy device to device.\n");
         {

@@ -1,13 +1,18 @@
 #include <sstream>
 
+#include "CodeGen_ARM.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_MIPS.h"
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
-#include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_PowerPC.h"
+#include "CodeGen_RISCV.h"
+#include "CodeGen_WebAssembly.h"
+#include "CodeGen_X86.h"
 #include "Debug.h"
 #include "DeviceArgument.h"
 #include "ExprUsesVar.h"
@@ -16,7 +21,6 @@
 #include "LLVM_Headers.h"
 #include "Simplify.h"
 #include "Util.h"
-#include "VaryingAttributes.h"
 
 namespace Halide {
 namespace Internal {
@@ -95,16 +99,12 @@ private:
 };
 
 template<typename CodeGen_CPU>
-CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
+CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(const Target &target)
     : CodeGen_CPU(target) {
     // For the default GPU, the order of preferences is: Metal,
-    // OpenCL, CUDA, OpenGLCompute, and OpenGL last.
+    // OpenCL, CUDA, OpenGLCompute last.
     // The code is in reverse order to allow later tests to override
     // earlier ones.
-    if (target.has_feature(Target::OpenGL)) {
-        debug(1) << "Constructing OpenGL device codegen\n";
-        cgdev[DeviceAPI::GLSL] = std::make_unique<CodeGen_OpenGL_Dev>(target);
-    }
     if (target.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Constructing OpenGL Compute device codegen\n";
         cgdev[DeviceAPI::OpenGLCompute] = new_CodeGen_OpenGLCompute_Dev(target);
@@ -169,7 +169,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     builder->SetInsertPoint(init_kernels_bb);
 
     for (auto &i : cgdev) {
-
         CodeGen_GPU_Dev *gpu_codegen = i.second.get();
         std::string api_unique_name = gpu_codegen->api_unique_name();
 
@@ -250,27 +249,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_num_coords_dim0 = zero_int32;
         Value *gpu_num_coords_dim1 = zero_int32;
 
-        if (loop->device_api == DeviceAPI::GLSL) {
-
-            // GL draw calls that invoke the GLSL shader are issued for pairs of
-            // for-loops over spatial x and y dimensions. For each for-loop we create
-            // one scalar vertex attribute for the spatial dimension corresponding to
-            // that loop, plus one scalar attribute for each expression previously
-            // labeled as "glsl_varying"
-
-            // Pass variables created during setup_gpu_vertex_buffer to the
-            // dev run function call.
-            gpu_num_padded_attributes = codegen(Variable::make(Int(32), "glsl.num_padded_attributes"));
-            gpu_num_coords_dim0 = codegen(Variable::make(Int(32), "glsl.num_coords_dim0"));
-            gpu_num_coords_dim1 = codegen(Variable::make(Int(32), "glsl.num_coords_dim1"));
-
-            // Look up the allocation for the vertex buffer and cast it to the
-            // right type
-            gpu_vertex_buffer = codegen(Variable::make(type_of<float *>(), "glsl.vertex_buffer"));
-            gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
-                                                           CodeGen_LLVM::f32_t->getPointerTo());
-        }
-
         // compute a closure over the state passed into the kernel
         HostClosure c(loop->body, loop->name);
 
@@ -296,31 +274,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                           return a.is_buffer > b.is_buffer;
                       }
                   });
-
-        // Halide allows passing of scalar float and integer arguments. For
-        // OpenGL, pack these into vec4 uniforms and varying attributes
-        if (loop->device_api == DeviceAPI::GLSL) {
-
-            int num_uniform_floats = 0;
-
-            // The spatial x and y coordinates are passed in the first two
-            // scalar float varying slots
-            int num_varying_floats = 2;
-            int num_uniform_ints = 0;
-
-            // Pack scalar parameters into vec4
-            for (size_t i = 0; i < closure_args.size(); i++) {
-                if (closure_args[i].is_buffer) {
-                    continue;
-                } else if (ends_with(closure_args[i].name, ".varying")) {
-                    closure_args[i].packed_index = num_varying_floats++;
-                } else if (closure_args[i].type.is_float()) {
-                    closure_args[i].packed_index = num_uniform_floats++;
-                } else if (closure_args[i].type.is_int()) {
-                    closure_args[i].packed_index = num_uniform_ints++;
-                }
-            }
-        }
 
         for (size_t i = 0; i < closure_args.size(); i++) {
             if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {
