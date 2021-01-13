@@ -40,9 +40,7 @@ std::vector<DeviceArgument> HostClosure::arguments() {
 }
 
 void HostClosure::visit(const Call *op) {
-    if (op->is_intrinsic(Call::glsl_texture_load) ||
-        op->is_intrinsic(Call::image_load) ||
-        op->is_intrinsic(Call::glsl_texture_store) ||
+    if (op->is_intrinsic(Call::image_load) ||
         op->is_intrinsic(Call::image_store)) {
 
         // The argument to the call is either a StringImm or a broadcasted
@@ -64,12 +62,10 @@ void HostClosure::visit(const Call *op) {
                               MemoryType::GPUTexture :
                               MemoryType::Auto;
 
-        if (op->is_intrinsic(Call::glsl_texture_load) ||
-            op->is_intrinsic(Call::image_load)) {
+        if (op->is_intrinsic(Call::image_load)) {
             ref.read = true;
             ref.dimensions = (op->args.size() - 2) / 2;
-        } else if (op->is_intrinsic(Call::glsl_texture_store) ||
-                   op->is_intrinsic(Call::image_store)) {
+        } else if (op->is_intrinsic(Call::image_store)) {
             ref.write = true;
             ref.dimensions = op->args.size() - 3;
         }

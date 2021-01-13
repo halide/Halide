@@ -320,14 +320,6 @@ private:
         // Don't mutate scalars
         if (op->type.is_scalar()) {
             return op;
-        } else if (op->is_intrinsic(Call::glsl_texture_load)) {
-            // glsl_texture_load returns a <uint x 4> result. Deinterleave by
-            // wrapping the call in a shuffle_vector
-            std::vector<int> indices;
-            for (int i = 0; i < new_lanes; i++) {
-                indices.push_back(i * lane_stride + starting_lane);
-            }
-            return Shuffle::make({op}, indices);
         } else {
 
             // Vector calls are always parallel across the lanes, so we

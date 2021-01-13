@@ -1,9 +1,7 @@
 #ifndef HALIDE_IR_VISITOR_H
 #define HALIDE_IR_VISITOR_H
 
-#include <map>
 #include <set>
-#include <string>
 
 #include "IR.h"
 

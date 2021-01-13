@@ -624,14 +624,12 @@ enum RuntimeKind {
     OpenCL,
     Metal,
     CUDA,
-    OpenGL,  // NOTE: this feature is deprecated and will be removed in Halide 12.
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
-    OpenGLDebug,  // NOTE: this feature is deprecated and will be removed in Halide 12.
     OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,
@@ -668,7 +666,6 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
         one_gpu.set_feature(Target::HVX, false);
-        one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
         string module_name;
@@ -701,17 +698,6 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         case CUDA:
             one_gpu.set_feature(Target::CUDA);
             module_name += "cuda";
-            break;
-        case OpenGLDebug:
-            one_gpu.set_feature(Target::Debug);
-            one_gpu.set_feature(Target::OpenGL);
-            module_name = "debug_opengl";
-            load_opengl(one_gpu.has_feature(Target::EGL));
-            break;
-        case OpenGL:
-            one_gpu.set_feature(Target::OpenGL);
-            module_name += "opengl";
-            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case OpenGLComputeDebug:
             one_gpu.set_feature(Target::Debug);
@@ -869,13 +855,6 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     }
     if (target.has_feature(Target::CUDA)) {
         auto kind = target.has_feature(Target::Debug) ? CUDADebug : CUDA;
-        JITModule m = make_module(for_module, target, kind, result, create);
-        if (m.compiled()) {
-            result.push_back(m);
-        }
-    }
-    if (target.has_feature(Target::OpenGL)) {
-        auto kind = target.has_feature(Target::Debug) ? OpenGLDebug : OpenGL;
         JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
