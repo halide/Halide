@@ -231,124 +231,6 @@ bool is_const_power_of_two_integer(const Expr &e, int *bits) {
     return false;
 }
 
-// Requires constant values.
-// Handles casts and Imms
-uint64_t propagate_uint(const Expr &e);
-double propagate_float(const Expr &e);
-int64_t propagate_int(const Expr &e);
-
-uint64_t propagate_uint(const Expr &e) {
-    internal_assert(e.type().is_uint()) << "Attempted to propagate_uint on non-uint type " << e.type() << "\n";
-    if (const UIntImm *i = e.as<UIntImm>()) {
-        return i->value;
-    } else if (const Cast *c = e.as<Cast>()) {
-        Type to = c->type.element_of();
-        Type from = c->value.type().element_of();
-        uint64_t value = 0;
-        if (from.is_uint()) {
-            value = propagate_uint(c->value);
-        } else if (from.is_int()) {
-            int64_t as_int = propagate_int(c->value);
-            value = safe_numeric_cast<uint64_t>(as_int);
-        } else if (from.is_float()) {
-            double as_float = propagate_float(c->value);
-            // TODO: check std::isfinite?
-            value = safe_numeric_cast<uint64_t>(as_float);
-        } else {
-            internal_error << "propagate_uint doesn't recognize Cast inner type: " << e << "\n";
-        }
-        // (taken from UIntImm::make)
-        // Normalize the value by dropping the high bits
-        value <<= (64 - to.bits());
-        value >>= (64 - to.bits());
-        return value;
-    } else if (const Broadcast *b = e.as<Broadcast>()) {
-        return propagate_uint(b->value);
-    } else {
-        internal_error << "propagate_uint doesn't recognize Expr type: " << e << "\n";
-        return 0;
-    }
-    // TODO(rootjalex): handle Ramps.
-}
-
-int64_t propagate_int(const Expr &e) {
-    internal_assert(e.type().is_int()) << "Attempted to propagate_int on non-int type " << e.type() << "\n";
-    if (const IntImm *i = e.as<IntImm>()) {
-        return i->value;
-    } else if (const Cast *c = e.as<Cast>()) {
-        Type to = c->type.element_of();
-        Type from = c->value.type().element_of();
-        int64_t value = 0;
-        if (from.is_int()) {
-            value = propagate_int(c->value);
-        } else if (from.is_uint()) {
-            uint64_t as_uint = propagate_uint(c->value);
-            value = safe_numeric_cast<int64_t>(as_uint);
-        } else if (from.is_float()) {
-            double as_float = propagate_float(c->value);
-            // TODO: check std::isfinite?
-            value = safe_numeric_cast<int64_t>(as_float);
-        } else {
-            internal_error << "propagate_int doesn't recognize Cast inner type: " << e << "\n";
-        }
-        // Normalize the value by dropping the high bits
-        // (taken from IntImm::make)
-        value = (int64_t)(((uint64_t)value) << (64 - to.bits()));
-        value >>= (64 - to.bits());
-        return value;
-    } else if (const Broadcast *b = e.as<Broadcast>()) {
-        return propagate_int(b->value);
-    } else {
-        internal_error << "propagate_uint doesn't recognize Expr type: " << e << "\n";
-        return 0;
-    }
-    // TODO(rootjalex): handle Ramps.
-}
-
-double propagate_float(const Expr &e) {
-    internal_assert(e.type().is_float()) << "Attempted to propagate_float on non-float type " << e.type() << "\n";
-    if (const FloatImm *f = e.as<FloatImm>()) {
-        return f->value;
-    } else if (const Cast *c = e.as<Cast>()) {
-        Type to = c->type.element_of();
-        Type from = c->value.type().element_of();
-        double value = 0.0f;
-        if (from.is_float()) {
-            value = propagate_float(c->value);
-        } else if (from.is_uint()) {
-            uint64_t as_uint = propagate_uint(c->value);
-            value = safe_numeric_cast<double>(as_uint);
-        } else if (from.is_int()) {
-            int64_t as_int = propagate_int(c->value);
-            value = safe_numeric_cast<double>(as_int);
-        } else {
-            internal_error << "propagate_float doesn't recognize Cast inner type: " << e << "\n";
-        }
-        // (taken from FloatImm::make)
-        switch (to.bits()) {
-        case 16:
-            if (to.is_bfloat()) {
-                return (double)((bfloat16_t)value);
-            } else {
-                return (double)((float16_t)value);
-            }
-        case 32:
-            return (float)value;
-        case 64:
-            return value;
-        default:
-            internal_error << "FloatImm must be 16, 32, or 64-bit\n";
-        }
-        return value;
-    } else if (const Broadcast *b = e.as<Broadcast>()) {
-        return propagate_float(b->value);
-    } else {
-        internal_error << "propagate_uint doesn't recognize Expr type: " << e << "\n";
-        return 0.0f;
-    }
-    // TODO(rootjalex): handle ramps
-}
-
 bool is_positive_const(const Expr &e) {
     if (const IntImm *i = e.as<IntImm>()) {
         return i->value > 0;
@@ -361,23 +243,11 @@ bool is_positive_const(const Expr &e) {
     }
     if (const Cast *c = e.as<Cast>()) {
         Type to = c->type;
-        if (!to.is_int_or_uint() ||
-            lossless_cast(to, c->value).defined()) {
+        Type from = c->value.type();
+        if (!to.is_int_or_uint() || to.can_represent(from)) {
             // Either the cast does not lose information, or it's a
             // non-integral cast, so no overflow behavior to worry about.
             return is_positive_const(c->value);
-        } else {
-            // May need to deal with overflow behaviors.
-            // If e is a constant, then propagate it's value
-            // through a cast (or chain of casts).
-            if (is_const(e)) {
-                if (to.is_int()) {
-                    return propagate_int(e) > 0;
-                } else {
-                    // Must be uint.
-                    return propagate_uint(e) > 0;
-                }
-            }
         }
     }
     if (const Ramp *r = e.as<Ramp>()) {
@@ -399,18 +269,15 @@ bool is_negative_const(const Expr &e) {
     }
     if (const Cast *c = e.as<Cast>()) {
         Type to = c->type;
-        if (!to.is_int_or_uint() ||
-            lossless_cast(to, c->value).defined()) {
+        Type from = c->value.type();
+        if (to.is_uint()) {
+            // Early out.
+            return false;
+        }
+        if (!to.is_int_or_uint() || to.can_represent(from)) {
             // Either the cast does not lose information, or it's a
             // non-integral cast, so no overflow behavior to worry about.
             return is_negative_const(c->value);
-        } else {
-            // May need to deal with overflow behaviors.
-            // If e is a constant, then propagate it's value
-            // through a cast (or chain of casts).
-            if (is_const(e) && to.is_int()) {
-                return propagate_int(e) < 0;
-            }
         }
     }
     if (const Ramp *r = e.as<Ramp>()) {
