@@ -23,6 +23,7 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
+#include "FindIntrinsics.h"
 #include "FlattenNestedRamps.h"
 #include "Func.h"
 #include "Function.h"
@@ -420,6 +421,11 @@ Module lower(const vector<Function> &output_funcs,
     s = simplify(s);
     s = hoist_loop_invariant_values(s);
     debug(2) << "Lowering after removing dead allocations and hoisting loop invariant values:\n"
+             << s << "\n\n";
+
+    debug(1) << "Finding intrinsics...\n";
+    s = find_intrinsics(s);
+    debug(2) << "Lowering after finding intrinsics:\n"
              << s << "\n\n";
 
     debug(1) << "Lowering after final simplification:\n"

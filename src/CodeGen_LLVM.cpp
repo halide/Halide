@@ -21,6 +21,7 @@
 #include "Deinterleave.h"
 #include "EmulateFloat16Math.h"
 #include "ExprUsesVar.h"
+#include "FindIntrinsics.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "IntegerDivisionTable.h"
@@ -1336,7 +1337,8 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
     debug(4) << "Codegen: " << e.type() << ", " << e << "\n";
     value = nullptr;
     e.accept(this);
-    internal_assert(value) << "Codegen of an expr did not produce an llvm value\n";
+    internal_assert(value) << "Codegen of an expr did not produce an llvm value\n"
+                           << e;
 
     // Halide's type system doesn't distinguish between scalars and
     // vectors of size 1, so if a codegen method returned a vector of
@@ -2719,25 +2721,11 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
-    } else if (op->is_intrinsic(Call::mulhi_shr)) {
-        internal_assert(op->args.size() == 3);
-
-        Type ty = op->type;
-        Type wide_ty = ty.widen();
-
-        Expr p_wide = cast(wide_ty, op->args[0]) * cast(wide_ty, op->args[1]);
-        const UIntImm *shift = op->args[2].as<UIntImm>();
-        internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
-        value = codegen(cast(ty, p_wide >> (shift->value + ty.bits())));
-    } else if (op->is_intrinsic(Call::sorted_avg)) {
-        internal_assert(op->args.size() == 2);
-        // b > a, so the following works without widening:
-        // a + (b - a)/2
-        value = codegen(op->args[0] + (op->args[1] - op->args[0]) / 2);
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         // If we need to upgrade the type, do the entire lerp in the
         // upgraded type for better precision.
+        // TODO: This might be surprising behavior?
         Type t = upgrade_type_for_arithmetic(op->type);
         Type wt = upgrade_type_for_arithmetic(op->args[2].type());
         Expr e = lower_lerp(cast(t, op->args[0]),
@@ -2851,7 +2839,26 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
             }
         }
-
+    } else if (op->is_intrinsic(Call::saturating_add) || op->is_intrinsic(Call::saturating_sub)) {
+        internal_assert(op->args.size() == 2);
+        std::string intrin;
+        if (op->type.is_int()) {
+            intrin = "llvm.s";
+        } else {
+            internal_assert(op->type.is_uint());
+            intrin = "llvm.u";
+        }
+        if (op->is_intrinsic(Call::saturating_add)) {
+            intrin += "add.sat.";
+        } else {
+            internal_assert(op->is_intrinsic(Call::saturating_sub));
+            intrin += "sub.sat.";
+        }
+        if (op->type.lanes() > 1) {
+            intrin += "v" + std::to_string(op->type.lanes());
+        }
+        intrin += "i" + std::to_string(op->type.bits());
+        value = call_intrin(op->type, op->type.lanes(), intrin, op->args);
     } else if (op->is_intrinsic(Call::stringify)) {
         internal_assert(!op->args.empty());
 
@@ -3181,7 +3188,11 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (is_float16_transcendental(op)) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic()) {
-        internal_error << "Unknown intrinsic: " << op->name << "\n";
+        Expr lowered = lower_intrinsic(op);
+        if (!lowered.defined()) {
+            internal_error << "Unknown intrinsic " << op->name;
+        }
+        value = codegen(lowered);
     } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {
         internal_assert(op->args.size() == 2);
         Expr x = op->args[0];
@@ -4601,58 +4612,102 @@ Value *CodeGen_LLVM::get_user_context() const {
     return ctx;
 }
 
-void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types) {
-    llvm::Function *intrin = module->getFunction(impl_name);
+llvm::Function *CodeGen_LLVM::get_llvm_intrin(llvm::Type *ret_type, const std::string &name, const std::vector<llvm::Type *> &arg_types) {
+    llvm::Function *intrin = module->getFunction(name);
     if (!intrin) {
-        vector<llvm::Type *> llvm_arg_types(arg_types.size());
-        for (size_t i = 0; i < arg_types.size(); i++) {
-            llvm_arg_types[i] = llvm_type_of(arg_types[i]);
-        }
-
-        llvm::Type *llvm_ret_type = llvm_type_of(ret_type);
-        FunctionType *func_t = FunctionType::get(llvm_ret_type, llvm_arg_types, false);
-        intrin = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, impl_name, module.get());
+        FunctionType *func_t = FunctionType::get(ret_type, arg_types, false);
+        intrin = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
         intrin->setCallingConv(CallingConv::C);
     }
+    return intrin;
+}
+
+llvm::Function *CodeGen_LLVM::get_llvm_intrin(const Type &ret_type, const std::string &name, const std::vector<Type> &arg_types, bool scalars_are_vectors) {
+    llvm::Function *intrin = module->getFunction(name);
+    if (intrin) {
+        return intrin;
+    }
+
+    vector<llvm::Type *> llvm_arg_types(arg_types.size());
+    for (size_t i = 0; i < arg_types.size(); i++) {
+        llvm_arg_types[i] = llvm_type_of(arg_types[i]);
+        if (arg_types[i].is_scalar() && scalars_are_vectors) {
+            llvm_arg_types[i] = get_vector_type(llvm_arg_types[i], 1);
+        }
+    }
+
+    llvm::Type *llvm_ret_type = llvm_type_of(ret_type);
+    if (ret_type.is_scalar() && scalars_are_vectors) {
+        llvm_ret_type = get_vector_type(llvm_ret_type, 1);
+    }
+    return get_llvm_intrin(llvm_ret_type, name, llvm_arg_types);
+}
+
+void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors) {
+    llvm::Function *intrin = get_llvm_intrin(ret_type, impl_name, arg_types, scalars_are_vectors);
+    internal_assert(intrin);
     intrinsics[name].emplace_back(ret_type, std::move(arg_types), intrin);
 }
 
+void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, llvm::Function *impl, std::vector<Type> arg_types) {
+    internal_assert(impl);
+    intrinsics[name].emplace_back(ret_type, std::move(arg_types), impl);
+}
+
 Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args) {
+    constexpr int debug_level = 4;
+
+    debug(debug_level) << "call_overloaded_intrin: " << result_type << " " << name << "(";
+    for (const Expr &i : args) {
+        debug(debug_level) << ", " << i;
+    }
+    debug(debug_level) << ")\n";
+
     auto impls_i = intrinsics.find(name);
     if (impls_i == intrinsics.end()) {
-        debug(2) << "No intrinsic " << name << "\n";
+        debug(debug_level) << "No intrinsic " << name << "\n";
         return nullptr;
     }
 
     const Intrinsic *resolved = nullptr;
-    for (const Intrinsic &i : impls_i->second) {
-        if (i.arg_types.size() != args.size()) {
+    for (const Intrinsic &overload : impls_i->second) {
+        debug(debug_level) << "Considering candidate " << overload.result_type << "(";
+        for (const auto &i : overload.arg_types) {
+            debug(debug_level) << ", " << i;
+        }
+        debug(debug_level) << "\n";
+        if (overload.arg_types.size() != args.size()) {
+            debug(debug_level) << "Wrong number of arguments\n";
             continue;
         }
 
-        if (i.result_type.element_of() != result_type.element_of()) {
+        if (overload.result_type.element_of() != result_type.element_of()) {
+            debug(debug_level) << "Wrong result type\n";
             continue;
         }
 
         bool match = true;
-        for (int j = 0; j < (int)i.arg_types.size(); j++) {
-            if (i.arg_types[j].element_of() != args[j].type().element_of()) {
-                match = false;
-                break;
-            }
-
-            if (args[j].type().is_scalar()) {
-                // We can broadcast the argument.
-                // TODO: Should we prioritize overloads that don't need this?
-            } else if (i.arg_types[j].is_scalar()) {
-                if (args[j].type().is_vector()) {
+        for (int i = 0; i < (int)overload.arg_types.size(); i++) {
+            if (args[i].type().is_scalar()) {
+                // Allow lossless casting for scalar arguments, and
+                // allow broadcasting to vector arguments.
+                if (!lossless_cast(overload.arg_types[i].element_of(), args[i]).defined()) {
                     match = false;
+                    debug(debug_level) << "Cannot promote scalar argument " << i << "\n";
                     break;
                 }
             } else {
-                int required_lanes = result_type.lanes() * i.arg_types[j].lanes() / i.result_type.lanes();
-                if (required_lanes != args[j].type().lanes()) {
+                int required_lanes = result_type.lanes() * overload.arg_types[i].lanes() / overload.result_type.lanes();
+                if (required_lanes != args[i].type().lanes()) {
                     match = false;
+                    debug(debug_level) << "Need " << required_lanes << " lanes for argument " << i << "\n";
+                    break;
+                }
+
+                // Vector arguments must be exact.
+                if (overload.arg_types[i].element_of() != args[i].type().element_of()) {
+                    match = false;
+                    debug(debug_level) << "Vector types not equal " << i << "\n";
                     break;
                 }
             }
@@ -4662,27 +4717,45 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
         }
 
         if (!resolved) {
-            resolved = &i;
+            debug(debug_level) << "Resolved!\n";
+            resolved = &overload;
         } else {
             if (resolved->result_type.lanes() < result_type.lanes()) {
                 // The current match is smaller than the result type. Take the bigger intrinsic.
-                if (i.result_type.lanes() > resolved->result_type.lanes()) {
-                    resolved = &i;
+                if (overload.result_type.lanes() > resolved->result_type.lanes()) {
+                    debug(debug_level) << "Replaced with bigger intrinsic\n";
+                    resolved = &overload;
                 }
             } else {
                 // The current match is bigger than the result type. If the current candidate is also bigger,
                 // but smaller than the current match, take it instead.
-                if (i.result_type.lanes() >= result_type.lanes() && i.result_type.lanes() < resolved->result_type.lanes()) {
-                    resolved = &i;
+                if (overload.result_type.lanes() >= result_type.lanes() && overload.result_type.lanes() < resolved->result_type.lanes()) {
+                    debug(debug_level) << "Replaced with smaller intrinsic\n";
+                    resolved = &overload;
                 }
             }
         }
     }
 
     if (resolved) {
-        return call_intrin(result_type, resolved->result_type.lanes(), resolved->impl, args);
+        std::vector<Expr> promoted_args;
+        promoted_args.reserve(args.size());
+        for (size_t i = 0; i < args.size(); i++) {
+            Expr promoted_arg = args[i];
+            if (args[i].type().is_scalar()) {
+                promoted_arg = lossless_cast(resolved->arg_types[i].element_of(), promoted_arg);
+            }
+            if (resolved->arg_types[i].is_vector() && args[i].type().is_scalar() && result_type.lanes() > 1) {
+                // We're passing a scalar to a vector argument, broadcast it.
+                promoted_args.emplace_back(Broadcast::make(promoted_arg, result_type.lanes()));
+            } else {
+                promoted_args.emplace_back(promoted_arg);
+            }
+            internal_assert(promoted_args.back().defined());
+        }
+        return call_intrin(result_type, resolved->result_type.lanes(), resolved->impl, promoted_args);
     } else {
-        debug(2) << "Unresolved intrinsic " << name << "\n";
+        debug(debug_level) << "Unresolved intrinsic " << name << "\n";
     }
     return nullptr;
 }
@@ -4718,7 +4791,6 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
 Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
                                  const string &name, vector<Value *> arg_values) {
     llvm::Function *fn = module->getFunction(name);
-
     if (!fn) {
         vector<llvm::Type *> arg_types(arg_values.size());
         for (size_t i = 0; i < arg_values.size(); i++) {
@@ -4739,6 +4811,7 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
 
 Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
                                  llvm::Function *intrin, vector<Value *> arg_values) {
+    internal_assert(intrin);
     int arg_lanes = 1;
     if (result_type->isVectorTy()) {
         arg_lanes = get_vector_num_elements(result_type);
@@ -4786,6 +4859,15 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
         }
         Value *result = concat_vectors(results);
         return slice_vector(result, 0, arg_lanes);
+    }
+
+    llvm::FunctionType *intrin_type = intrin->getFunctionType();
+    for (int i = 0; i < (int)arg_values.size(); i++) {
+        if (arg_values[i]->getType() != intrin_type->getParamType(i)) {
+            // There can be some mismatches in types, such as when passing scalar Halide type T
+            // to LLVM vector type <1 x T>.
+            arg_values[i] = builder->CreateBitCast(arg_values[i], intrin_type->getParamType(i));
+        }
     }
 
     CallInst *call = builder->CreateCall(intrin, arg_values);

@@ -120,7 +120,7 @@ WITH_WEBASSEMBLY ?= $(findstring webassembly, $(LLVM_COMPONENTS))
 WITH_AMDGPU ?= $(findstring amdgpu, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
-WITH_OPENGL ?= not-empty
+WITH_OPENGLCOMPUTE ?= not-empty
 WITH_D3D12 ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
@@ -157,7 +157,7 @@ OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 METAL_CXX_FLAGS=$(if $(WITH_METAL), -DWITH_METAL, )
 METAL_LLVM_CONFIG_LIB=$(if $(WITH_METAL), , )
 
-OPENGL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL, )
+OPENGLCOMPUTE_CXX_FLAGS=$(if $(WITH_OPENGLCOMPUTE), -DWITH_OPENGLCOMPUTE, )
 
 D3D12_CXX_FLAGS=$(if $(WITH_D3D12), -DWITH_D3D12, )
 D3D12_LLVM_CONFIG_LIB=$(if $(WITH_D3D12), , )
@@ -205,7 +205,7 @@ CXX_FLAGS += $(AARCH64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
-CXX_FLAGS += $(OPENGL_CXX_FLAGS)
+CXX_FLAGS += $(OPENGLCOMPUTE_CXX_FLAGS)
 CXX_FLAGS += $(D3D12_CXX_FLAGS)
 CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
@@ -424,7 +424,6 @@ SOURCE_FILES = \
   CodeGen_Metal_Dev.cpp \
   CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
-  CodeGen_OpenGL_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
@@ -454,6 +453,7 @@ SOURCE_FILES = \
   Expr.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
+  FindIntrinsics.cpp \
   FlattenNestedRamps.cpp \
   Float16.cpp \
   Func.cpp \
@@ -595,7 +595,6 @@ HEADER_FILES = \
   CodeGen_Metal_Dev.h \
   CodeGen_MIPS.h \
   CodeGen_OpenCL_Dev.h \
-  CodeGen_OpenGL_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \
@@ -630,6 +629,7 @@ HEADER_FILES = \
   ExternFuncArgument.h \
   FastIntegerDivide.h \
   FindCalls.h \
+  FindIntrinsics.h \
   FlattenNestedRamps.h \
   Float16.h \
   Func.h \
@@ -2054,6 +2054,10 @@ ifneq (,$(findstring clang version 11.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 11.1,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring clang version 12.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2078,7 +2082,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 100 110 120))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 100 110 111 120))
 LLVM_OK=yes
 endif
 

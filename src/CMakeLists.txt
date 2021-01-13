@@ -33,7 +33,6 @@ set(HEADER_FILES
     CodeGen_Metal_Dev.h
     CodeGen_MIPS.h
     CodeGen_OpenCL_Dev.h
-    CodeGen_OpenGL_Dev.h
     CodeGen_OpenGLCompute_Dev.h
     CodeGen_Posix.h
     CodeGen_PowerPC.h
@@ -68,6 +67,7 @@ set(HEADER_FILES
     ExternFuncArgument.h
     FastIntegerDivide.h
     FindCalls.h
+    FindIntrinsics.h
     FlattenNestedRamps.h
     Float16.h
     Func.h
@@ -197,7 +197,6 @@ set(SOURCE_FILES
     CodeGen_Metal_Dev.cpp
     CodeGen_MIPS.cpp
     CodeGen_OpenCL_Dev.cpp
-    CodeGen_OpenGL_Dev.cpp
     CodeGen_OpenGLCompute_Dev.cpp
     CodeGen_Posix.cpp
     CodeGen_PowerPC.cpp
@@ -227,6 +226,7 @@ set(SOURCE_FILES
     Expr.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
+    FindIntrinsics.cpp
     FlattenNestedRamps.cpp
     Float16.cpp
     Func.cpp
@@ -458,6 +458,11 @@ endif ()
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
+endif ()
+
+option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
+if (TARGET_OPENGLCOMPUTE)
+    target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
 
 ##

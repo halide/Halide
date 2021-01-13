@@ -8,7 +8,6 @@
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
-#include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_PowerPC.h"
 #include "CodeGen_RISCV.h"
