@@ -659,7 +659,7 @@ bool Target::supported() const {
 #if !defined(WITH_METAL)
     bad |= has_feature(Target::Metal);
 #endif
-#if !defined(WITH_OPENGL)
+#if !defined(WITH_OPENGLCOMPUTE)
     bad |= has_feature(Target::OpenGLCompute);
 #endif
 #if !defined(WITH_D3D12)
