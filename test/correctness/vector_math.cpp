@@ -154,10 +154,10 @@ struct with_unsigned<int64_t> {
 
 template<typename A>
 bool test(int lanes, int seed) {
-    const int W = 320;
-    const int H = 16;
+    const int W = 16;
+    const int H = 1;
 
-    const int verbose = false;
+    const int verbose = true;
 
     printf("Testing %sx%d\n", string_of_type<A>(), lanes);
 
@@ -183,7 +183,7 @@ bool test(int lanes, int seed) {
         }
     }
     Var x, y;
-
+#if 0
     // Add
     {
         if (verbose) printf("Add\n");
@@ -351,7 +351,7 @@ bool test(int lanes, int seed) {
             }
         }
     }
-
+#endif
     // Extern function call
     {
         if (verbose) printf("External call to hypot\n");
@@ -368,6 +368,13 @@ bool test(int lanes, int seed) {
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 float correct = hypotf(1.1f, (float)input(x, y));
+#if 1
+                const bool c = close_enough_hypot(im8(x, y), correct);
+                std::ostringstream oss;
+                oss << type_of<A>();
+                printf("    im8(%d, %d) = %f instead of %f (input = %f, type = %s) CLOSE=%d\n",
+                       x, y, (double)im8(x, y), correct, (double)input(x, y), oss.str().c_str(), (int)c);
+#else
                 if (!close_enough_hypot(im8(x, y), correct)) {
                     std::ostringstream oss;
                     oss << type_of<A>();
@@ -375,10 +382,11 @@ bool test(int lanes, int seed) {
                            x, y, (double)im8(x, y), correct, (double)input(x, y), oss.str().c_str());
                     return false;
                 }
+#endif
             }
         }
     }
-
+#if 0
     // Div
     {
         if (verbose) printf("Division\n");
@@ -721,7 +729,7 @@ bool test(int lanes, int seed) {
             }
         }
     }
-
+#endif
     return true;
 }
 
@@ -731,7 +739,7 @@ int main(int argc, char **argv) {
     std::cout << "vector_math test seed: " << seed << std::endl;
 
     // Only native vector widths - llvm doesn't handle others well
-    Halide::Internal::ThreadPool<bool> pool;
+    Halide::Internal::ThreadPool<bool> pool(1);
     std::vector<std::future<bool>> futures;
     futures.push_back(pool.async(test<float>, 4, seed));
     futures.push_back(pool.async(test<float>, 8, seed));
