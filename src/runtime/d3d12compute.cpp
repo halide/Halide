@@ -2440,14 +2440,8 @@ volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 
 WEAK Halide::Internal::GPUCompilationCache<d3d12_device *, d3d12_library *> compilation_cache;
 
-WEAK d3d12_library *compile_kernel(void *user_context, const char *source, int source_size, int *error_ret) {
-    D3D12ContextHolder d3d12_context(user_context, true);
-    if (d3d12_context.error != 0) {
-        *error_ret = d3d12_context.error;
-        return nullptr;
-    }
-
-    d3d12_library *library = new_library_with_source(d3d12_context.device, source, source_size);
+WEAK d3d12_library *compile_kernel(d3d12_device *device, const char *source, int source_size, int *error_ret) {
+    d3d12_library *library = new_library_with_source(device, source, source_size);
     if (library == nullptr) {
         TRACEFATAL("D3D12Compute: new_library_with_source failed.");
         *error_ret = halide_error_code_out_of_memory;
@@ -2768,7 +2762,7 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
     int error = halide_error_code_generic_error;
     d3d12_library *library{};
     if (!compilation_cache.kernel_state_setup(user_context, state_ptr, d3d12_context.device,
-                                              library, compile_kernel, user_context,
+                                              library, compile_kernel, d3d12_context.device,
                                               source, source_size, &error)) {
         return error;
     }
