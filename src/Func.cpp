@@ -2454,35 +2454,6 @@ Func &Func::gpu_tile(const VarOrRVar &x, const VarOrRVar &y, const VarOrRVar &z,
     return *this;
 }
 
-Func &Func::shader(const Var &x, const Var &y, const Var &c, DeviceAPI device_api) {
-    invalidate_cache();
-
-    reorder(c, x, y);
-    // GLSL outputs must be stored interleaved
-    reorder_storage(c, x, y);
-
-    // TODO: Set appropriate constraints if this is the output buffer?
-
-    Stage(func, func.definition(), 0).gpu_blocks(x, y, device_api);
-
-    bool constant_bounds = false;
-    FuncSchedule &sched = func.schedule();
-    for (size_t i = 0; i < sched.bounds().size(); i++) {
-        if (c.name() == sched.bounds()[i].var) {
-            constant_bounds = is_const(sched.bounds()[i].min) &&
-                              is_const(sched.bounds()[i].extent);
-            break;
-        }
-    }
-    user_assert(constant_bounds)
-        << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
-    return *this;
-}
-
-Func &Func::glsl(const Var &x, const Var &y, const Var &c) {
-    return shader(x, y, c, DeviceAPI::GLSL).vectorize(c);
-}
-
 Func &Func::hexagon(const VarOrRVar &x) {
     invalidate_cache();
     Stage(func, func.definition(), 0).hexagon(x);

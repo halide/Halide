@@ -6,7 +6,6 @@
  */
 
 #include "CodeGen_Posix.h"
-#include "Target.h"
 
 namespace llvm {
 class JITEventListener;
@@ -50,7 +49,6 @@ protected:
     void visit(const NE *) override;
     void visit(const Select *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
-    void visit(const Mul *) override;
     // @}
 };
 

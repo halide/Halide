@@ -14,7 +14,6 @@
 #include "Closure.h"
 #include "Expr.h"
 #include "Scope.h"
-#include "Target.h"
 
 namespace llvm {
 class ConstantFolder;
@@ -33,6 +32,9 @@ class IRBuilder;
 }  // namespace llvm
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 /** The llvm type of a struct containing all of the externally referenced state of a Closure. */
@@ -125,7 +127,7 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to);
 std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module);
 
 /** Set the appropriate llvm Function attributes given a Target. */
-void set_function_attributes_for_target(llvm::Function *, Target);
+void set_function_attributes_for_target(llvm::Function *, const Target &);
 
 /** Save a copy of the llvm IR currently represented by the module as
  * data in the __LLVM,__bitcode section. Emulates clang's

@@ -15,11 +15,13 @@ class CodeGen_PowerPC : public CodeGen_Posix {
 public:
     /** Create a powerpc code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    CodeGen_PowerPC(Target);
+    CodeGen_PowerPC(const Target &);
 
     static void test();
 
 protected:
+    void init_module() override;
+
     std::string mcpu() const override;
     std::string mattrs() const override;
     bool use_soft_float_abi() const override;
@@ -27,16 +29,11 @@ protected:
 
     using CodeGen_Posix::visit;
 
-    /** Nodes for which we want to emit specific sse/avx intrinsics */
+    /** Nodes for which we want to emit specific PowerPC intrinsics */
     // @{
-    void visit(const Cast *) override;
     void visit(const Min *) override;
     void visit(const Max *) override;
     // @}
-
-    // Call an intrinsic as defined by a pattern. Dispatches to the
-private:
-    static const char *altivec_int_type_name(const Type &);
 };
 
 }  // namespace Internal

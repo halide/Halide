@@ -8,7 +8,6 @@
 #include "IREquality.h"
 #include "IROperator.h"
 
-#include <iostream>
 #include <utility>
 #include <vector>
 
