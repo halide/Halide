@@ -16,6 +16,9 @@ to an object file, or JIT-compile it and run it in the same process. Halide also
 provides a Python binding that provides full support for writing Halide embedded
 in Python without C++.
 
+(Note that *using* Halide requires C++11 or later, but *building* Halide
+requires C++17.)
+
 For more detail about what Halide is, see http://halide-lang.org.
 
 For API documentation see http://halide-lang.org/docs
