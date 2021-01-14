@@ -79,7 +79,7 @@ if __name__ == "__main__":
         extension = CUDAExtension(ext_name, sources,
                                   include_dirs=include_dirs,
                                   extra_objects=hl_libs,
-                                  libraries=["cuda"],  # Halide ops need the full cuda lib, not just the RT library 
+                                  libraries=["cuda"],  # Halide ops need the full cuda lib, not just the RT library
                                   extra_compile_args=compile_args)
     else:
         print("Generating CPU wrapper")
