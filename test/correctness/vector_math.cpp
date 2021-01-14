@@ -359,6 +359,23 @@ bool test(int lanes, int seed) {
         f8(x, y) = hypot(1.1f, cast<float>(input(x, y)));
         f8.vectorize(x, lanes);
         Buffer<float> im8 = f8.realize(W, H);
+#if 1
+        bool all_close = true;
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                float correct = hypotf(1.1f, (float)input(x, y));
+                const bool c = close_enough(im8(x, y), correct);
+                all_close &= c;
+                std::ostringstream oss;
+                oss << type_of<A>();
+                printf("    im8(%d, %d) = %f instead of %f (input = %f, type = %s) CLOSE=%d\n",
+                       x, y, (double)im8(x, y), correct, (double)input(x, y), oss.str().c_str(), (int)c);
+            }
+        }
+        if (!all_close) {
+            return false;
+        }
+#else
         // hypot() and hypotf() use approx-sqrt, which can vary substantially
         // on Intel vs AMD chips -- we need a looser tolerance here to allow
         // this test to pass on our AMD Ryzen 9 buildbots.
@@ -367,14 +384,6 @@ bool test(int lanes, int seed) {
         };
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                float correct = hypotf(1.1f, (float)input(x, y));
-#if 1
-                const bool c = close_enough_hypot(im8(x, y), correct);
-                std::ostringstream oss;
-                oss << type_of<A>();
-                printf("    im8(%d, %d) = %f instead of %f (input = %f, type = %s) CLOSE=%d\n",
-                       x, y, (double)im8(x, y), correct, (double)input(x, y), oss.str().c_str(), (int)c);
-#else
                 if (!close_enough_hypot(im8(x, y), correct)) {
                     std::ostringstream oss;
                     oss << type_of<A>();
@@ -382,9 +391,9 @@ bool test(int lanes, int seed) {
                            x, y, (double)im8(x, y), correct, (double)input(x, y), oss.str().c_str());
                     return false;
                 }
-#endif
             }
         }
+#endif
     }
 #if 0
     // Div
@@ -734,6 +743,8 @@ bool test(int lanes, int seed) {
 }
 
 int main(int argc, char **argv) {
+    std::cout << "Host is: " << get_host_target() << "\n";
+    std::cout << "HL_JIT_TARGET is: " << get_jit_target_from_environment() << "\n";
 
     int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
     std::cout << "vector_math test seed: " << seed << std::endl;
