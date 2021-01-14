@@ -154,8 +154,8 @@ struct with_unsigned<int64_t> {
 
 template<typename A>
 bool test(int lanes, int seed) {
-    const int W = 16;
-    const int H = 1;
+    const int W = 320;
+    const int H = 16;
 
     const int verbose = true;
 
@@ -368,8 +368,11 @@ bool test(int lanes, int seed) {
                 all_close &= c;
                 std::ostringstream oss;
                 oss << type_of<A>();
-                printf("    im8(%d, %d) = %f instead of %f (input = %f, type = %s) CLOSE=%d\n",
-                       x, y, (double)im8(x, y), correct, (double)input(x, y), oss.str().c_str(), (int)c);
+                if (!c) {
+                    printf("    im8(%d, %d) = %f instead of %f (input = %f, type = %s) CLOSE=%d\n",
+                           x, y, (double)im8(x, y), correct, (double)input(x, y), oss.str().c_str(), (int)c);
+                    return false;
+                }
             }
         }
         if (!all_close) {
