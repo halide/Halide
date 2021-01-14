@@ -163,7 +163,13 @@ bool test(int lanes, int seed) {
 
     // use std::mt19937 instead of rand() to ensure consistent behavior on all systems
     std::mt19937 rng(seed);
-    std::uniform_int_distribution<> dis(0, 1023);
+    // don't use std::uniform_int_distribution: implementations are not guaranteed to match
+    // behaviors, so we will vary slightly trying to repeat between test platforms.
+    // Instead, use bit-twiddling to get a predictable result.
+    const auto dis = [](std::mt19937 &r) -> int {
+        // 0..1023 inclusive, and close enough to uniform for our purposes.
+        return r() & 1023;
+    };
 
     Buffer<A> input(W + 16, H + 16);
     for (int y = 0; y < H + 16; y++) {
@@ -363,8 +369,10 @@ bool test(int lanes, int seed) {
             for (int x = 0; x < W; x++) {
                 float correct = hypotf(1.1f, (float)input(x, y));
                 if (!close_enough_hypot(im8(x, y), correct)) {
-                    printf("im8(%d, %d) = %f instead of %f\n",
-                           x, y, (double)im8(x, y), correct);
+                    std::ostringstream oss;
+                    oss << type_of<A>();
+                    printf("    im8(%d, %d) = %f instead of %f (input = %f, type = %s)\n",
+                           x, y, (double)im8(x, y), correct, (double)input(x, y), oss.str().c_str());
                     return false;
                 }
             }
